@@ -262,3 +262,50 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }
+
+// The requesting side takes back a request it sent (same people who may send
+// one: the section's HOD, or the Timetable Incharge for its course-year).
+// Only a request still waiting (PENDING) or already declined can go - an
+// allocated one has a real assignment behind it, which is removed from the
+// assignment itself.
+export async function DELETE(request: Request) {
+  try {
+    const session = await requireCollegeMember("HOD", "PANEL_MEMBER", "COLLEGE_STAFF");
+    const id = new URL(request.url).searchParams.get("id");
+    if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
+
+    const db = getAdminDb();
+    const collegeRef = db.collection("colleges").doc(session.collegeId);
+    const ref = collegeRef.collection("facultyAssignmentRequests").doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) return NextResponse.json({ error: "Request not found" }, { status: 404 });
+    const req = snap.data() as { status?: string; courseId?: string; year?: number; sectionId?: string; requestingDepartment?: string; requestedBy?: string };
+    if (req.status === "ALLOCATED") {
+      return NextResponse.json({ error: "This request is already allocated - remove the teaching assignment instead" }, { status: 409 });
+    }
+
+    if (session.role === "HOD") {
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      if (req.requestedBy !== session.uid && !canHodEditDepartment(scope, req.requestingDepartment ?? "")) {
+        return NextResponse.json({ error: "This request is not from your department or one of your sub-departments" }, { status: 403 });
+      }
+    } else {
+      const ok = req.courseId && req.year != null
+        && await isTimetableIncharge(db, session.collegeId, session.uid, req.courseId, req.year);
+      if (!ok) {
+        return NextResponse.json({ error: "You are not the Timetable Incharge for this course & year" }, { status: 403 });
+      }
+    }
+
+    await ref.delete();
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
+    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    console.error("[college/faculty-assignment-requests DELETE]", err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
+}

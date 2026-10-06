@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { getNoClassReason } from "@/lib/studentAttendance/classDay";
 import { getFacultyPeriodsForDate } from "@/lib/timetable/currentPeriod";
+import { dateInRanges, getAllocatedPeriodsForDate, loadFacultyAllocations } from "@/lib/studentAttendance/labAllocation";
 import type { StudentAttendanceSession, TeachingAssignment } from "@/types";
 
 // "Today" for attendance purposes is the college's calendar day (IST, Asia/Kolkata),
@@ -41,10 +42,18 @@ function collegeNowMinutes(): number {
   return Number(v("hour")) * 60 + Number(v("minute"));
 }
 
+// The faculty's own lab allocations, as the date picker on Mark Attendance needs them.
+function allocationSummaries(allocations: Awaited<ReturnType<typeof loadFacultyAllocations>>) {
+  return allocations.map((a) => ({
+    assignmentId: a.assignmentId, subjectName: a.subjectName, subjectCode: a.subjectCode,
+    courseName: a.courseName, year: a.year, sectionName: a.sectionName, ranges: a.ranges,
+  }));
+}
+
 // Returns ALL periods for today for this faculty, with isOpen gate computed server-side.
 // isOpen = now in [start,closeTime) IST (closeTime = the year's college end time) and date is today. Session is fetched if exists (DRAFT/SUBMITTED) for display.
 // This is a READ path — does NOT enforce window for reads (closed rows are shown read-only + "Contact Dept Office").
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await requireCollegeMember("PANEL_MEMBER");
     const db = getAdminDb();
@@ -54,12 +63,28 @@ export async function GET() {
     }
     const today = todayStrIST();
     const nowMinutes = collegeNowMinutes();
-    const [closedReason, slots] = await Promise.all([
-      getNoClassReason(db, session.collegeId, today),
-      getFacultyPeriodsForDate(db, session.collegeId, facultyMemberId, today),
+    // `?date=` is honoured only for a past date inside a lab allocation of this
+    // faculty member (see lib/studentAttendance/labAllocation.ts); anything else
+    // is today.
+    const dateParam = new URL(request.url).searchParams.get("date");
+    const allocations = await loadFacultyAllocations(db, session.collegeId, facultyMemberId);
+    const date = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) && dateParam < today && allocations.some((a) => dateInRanges(dateParam, a.ranges))
+      ? dateParam
+      : today;
+    const isToday = date === today;
+    const [closedReason, ownSlots, allocatedSlots] = await Promise.all([
+      getNoClassReason(db, session.collegeId, date),
+      // A past date is only ever the allocated lab periods, never the day's ordinary classes.
+      isToday ? getFacultyPeriodsForDate(db, session.collegeId, facultyMemberId, date) : Promise.resolve([]),
+      getAllocatedPeriodsForDate(db, session.collegeId, facultyMemberId, allocations, date),
     ]);
     // Holiday / summer break / non-working day: nothing to mark today.
-    if (closedReason) return NextResponse.json({ date: today, periods: [], noClassReason: closedReason });
+    if (closedReason) return NextResponse.json({ date, periods: [], allocations: allocationSummaries(allocations), noClassReason: closedReason });
+    const allocatedKeys = new Set(allocatedSlots.map((a) => `${a.slot.assignmentId}_${a.slot.periodNumber}`));
+    const slots = [
+      ...ownSlots,
+      ...allocatedSlots.filter((a) => !ownSlots.some((o) => o.slot.assignmentId === a.slot.assignmentId && o.slot.periodNumber === a.slot.periodNumber)),
+    ].sort((a, b) => toMinutes(a.startTime) - toMinutes(b.startTime));
 
     const collegeRef = db.collection("colleges").doc(session.collegeId);
     // One batched read for the assignment docs and one for today's sessions,
@@ -70,7 +95,7 @@ export async function GET() {
       const snaps = await db.getAll(...assignmentIds.map((id) => collegeRef.collection("teachingAssignments").doc(id)));
       for (const snap of snaps) if (snap.exists) assignMap.set(snap.id, snap.data() as TeachingAssignment);
     }
-    const sessionIds = slots.map((s) => `${s.slot.assignmentId}_${today}_${s.slot.periodNumber}`);
+    const sessionIds = slots.map((s) => `${s.slot.assignmentId}_${date}_${s.slot.periodNumber}`);
     const sessionMap = new Map<string, StudentAttendanceSession & { id: string }>();
     if (sessionIds.length > 0) {
       const snaps = await db.getAll(...sessionIds.map((id) => collegeRef.collection("studentAttendance").doc(id)));
@@ -81,10 +106,12 @@ export async function GET() {
 
     const periods = await Promise.all(
       slots.map(async ({ slot, startTime, endTime, closeTime }) => {
-        const isOpen = nowMinutes >= toMinutes(startTime) && nowMinutes < toMinutes(closeTime);
+        // An allocated lab period is open all day on its allocated dates.
+        const allocated = allocatedKeys.has(`${slot.assignmentId}_${slot.periodNumber}`);
+        const isOpen = allocated || (nowMinutes >= toMinutes(startTime) && nowMinutes < toMinutes(closeTime));
         // Where "now" sits against the period: not started yet, running, or over.
         const phase: "UPCOMING" | "OPEN" | "ENDED" = isOpen ? "OPEN" : nowMinutes < toMinutes(startTime) ? "UPCOMING" : "ENDED";
-        const id = `${slot.assignmentId}_${today}_${slot.periodNumber}`;
+        const id = `${slot.assignmentId}_${date}_${slot.periodNumber}`;
         const sess = sessionMap.get(id) ?? null;
         const assignment = assignMap.get(slot.assignmentId);
         return {
@@ -107,11 +134,12 @@ export async function GET() {
           isOpen,
           phase,
           labBatch: slot.labBatch ?? null,
+          allocated,
         };
       })
     );
 
-    return NextResponse.json({ date: today, periods });
+    return NextResponse.json({ date, periods, allocations: allocationSummaries(allocations) });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ClipboardList, Search, UserCog, Users } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TimetableGridEditor } from "@/components/timetable/TimetableGridEditor";
+import { LabAttendanceAllocation, TimetableViewSwitch, type AllocAssignment, type TimetableView } from "@/components/timetable/LabAttendanceAllocation";
 import { toast } from "@/hooks/useToast";
 import { yearSemesterLabel } from "@/lib/academic/format";
 import { ordinalYear } from "@/lib/timetable/gridModel";
@@ -35,6 +36,7 @@ export function InchargeTimetableWorkspace({ basePath }: { basePath: string }) {
   // Semesters are configured per course-year, filed under each section's own courseId.
   const [timings, setTimings] = useState<Record<string, CourseYearTiming | null>>({});
   const [loaded, setLoaded] = useState<{ courseId: string; year: string; sectionId: string; semester: number | null } | null>(null);
+  const [view, setView] = useState<TimetableView>("timetable");
 
   // Every section of every course-year this person is Incharge for. One request
   // per course-year: the sections API recognises a delegated Incharge only on a
@@ -70,13 +72,20 @@ export function InchargeTimetableWorkspace({ basePath }: { basePath: string }) {
         .sort((a, b) => a.name.localeCompare(b.name));
       setSections(list);
       setSectionId(list.length === 1 ? list[0].id : "");
-      const entries = await Promise.all(Array.from(new Set(list.map((s) => s.courseId))).map(async (id) => {
-        const t = await fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(id)}`)
+      const targetCourseIds = Array.from(new Set(list.map((s) => s.courseId))).filter(Boolean);
+      if (targetCourseIds.length > 0) {
+        const res = await fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(targetCourseIds.join(","))}`)
           .then((r) => r.json() as Promise<{ timings?: CourseYearTiming[] }>)
           .catch(() => ({ timings: [] as CourseYearTiming[] }));
-        return [id, (t.timings ?? []).find((x) => Number(x.year) === Number(year)) ?? null] as const;
-      }));
-      setTimings(Object.fromEntries(entries));
+        const fetchedTimings = res.timings ?? [];
+        const entries = targetCourseIds.map((id) => [
+          id,
+          fetchedTimings.find((x) => x.courseId === id && Number(x.year) === Number(year)) ?? null,
+        ] as const);
+        setTimings(Object.fromEntries(entries));
+      } else {
+        setTimings({});
+      }
     } catch {
       setSections([]);
       toast({ variant: "destructive", title: "Failed to load sections" });
@@ -140,6 +149,17 @@ export function InchargeTimetableWorkspace({ basePath }: { basePath: string }) {
     void loadSections(key);
   }
 
+  // The Teaching Assignments of every course-year this person is Incharge for - the labs among them can be allocated.
+  const loadInchargeAssignments = useCallback(async (): Promise<AllocAssignment[]> => {
+    const pairs = Array.from(new Map(incharges.map((i) => [`${i.courseId}|${i.year}`, i])).values());
+    const lists = await Promise.all(pairs.map((i) =>
+      fetch(`/api/college/teaching-assignments?courseId=${encodeURIComponent(i.courseId)}&year=${encodeURIComponent(String(i.year))}`)
+        .then((r) => r.json() as Promise<{ assignments?: AllocAssignment[] }>)
+        .then((d) => d.assignments ?? [])
+        .catch(() => [] as AllocAssignment[])));
+    return lists.flat();
+  }, [incharges]);
+
   function handleLoad() {
     const section = sections.find((s) => s.id === sectionId);
     if (!selected || !section) return;
@@ -165,6 +185,11 @@ export function InchargeTimetableWorkspace({ basePath }: { basePath: string }) {
         />
       ) : (
         <>
+          <TimetableViewSwitch value={view} onChange={setView} />
+          {view === "labs" ? (
+            <LabAttendanceAllocation loadAssignments={loadInchargeAssignments} />
+          ) : (
+          <>
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Find a section</CardTitle>
@@ -249,6 +274,8 @@ export function InchargeTimetableWorkspace({ basePath }: { basePath: string }) {
               <Users className="mx-auto mb-2 h-5 w-5 opacity-50" />
               Pick a course & year, a semester and a section above, then press Load Timetable.
             </div>
+          )}
+          </>
           )}
         </>
       )}

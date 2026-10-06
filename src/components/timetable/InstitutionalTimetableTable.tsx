@@ -9,6 +9,7 @@ import { buildSectionTimetablePdfHtml } from "@/lib/timetable/sectionTimetablePd
 import { downloadSectionTimetableXlsx } from "@/lib/timetable/timetableExport";
 import { resolveLogoUrl } from "@/lib/timetable/logoAsset";
 import { renderHtmlToPdf } from "@/lib/pdf/htmlToPdf";
+import { yearSemesterLabelIn } from "@/lib/academic/format";
 import {
   buildAllocationList,
   buildTimetableColumns,
@@ -72,7 +73,7 @@ export function InstitutionalTimetableTable({
   phone,
   logoUrl,
   academicYear = slots[0]?.academicYear ?? "",
-  semesterLabel,
+  semesterLabel: semesterLabelProp,
   classroom,
   classInchargeName,
   subjects = [],
@@ -96,6 +97,16 @@ export function InstitutionalTimetableTable({
   const [isExportingXlsx, setIsExportingXlsx] = useState(false);
 
   const subjectMap = useMemo(() => new Map(subjects.map((s) => [s.id, s])), [subjects]);
+
+  // A caller's own label wins; otherwise the semester these slots were placed
+  // under, when they all share one (so a download says which semester it is for).
+  const semesterLabel = useMemo(() => {
+    if (semesterLabelProp) return semesterLabelProp;
+    const sems = Array.from(new Set(slots.map((s) => s.semester).filter((n): n is number => typeof n === "number")));
+    if (sems.length !== 1) return undefined;
+    const inYear = (timing.semesters ?? []).map((x) => x.semester);
+    return `Sem ${yearSemesterLabelIn(Number(timing.year), inYear, sems[0])}`;
+  }, [semesterLabelProp, slots, timing]);
 
   // ── Days: the college's own working days, unioned with any day a slot
   // actually occupies so a slot published on a since-removed working day is
@@ -431,7 +442,15 @@ export function InstitutionalTimetableTable({
         {/* ── Timetable Grid (wide screens) ──────────────────────────────────── */}
         <div className="hidden lg:block">
           <div className="overflow-x-auto">
-            <table className="w-full text-xs border-collapse">
+            {/* Fixed layout: every period column is the same width whatever its
+                content; breaks share one narrow width. */}
+            <table className="w-full table-fixed text-xs border-collapse">
+              <colgroup>
+                <col style={{ width: 80 }} />
+                {columns.map((col) => (
+                  <col key={col.id} style={col.kind === "break" ? { width: 64 } : { width: 130 }} />
+                ))}
+              </colgroup>
               <thead>
                 <tr className="bg-muted/40 border-b">
                   <th className="border-r p-2.5 text-center font-bold text-foreground w-20 min-w-[70px] sticky left-0 z-[5] bg-muted/95 backdrop-blur">
@@ -445,7 +464,7 @@ export function InstitutionalTimetableTable({
                           className="border-r p-2 text-center font-semibold text-muted-foreground bg-muted/30 w-12"
                         >
                           {periodTimeRange(col.startTime, col.endTime) && (
-                            <div className="text-[9.5px] font-normal text-muted-foreground whitespace-nowrap mt-0.5">
+                            <div className="text-[9.5px] font-normal text-muted-foreground mt-0.5">
                               {periodTimeRange(col.startTime, col.endTime)}
                             </div>
                           )}

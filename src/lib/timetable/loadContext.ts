@@ -6,8 +6,10 @@ import type {
 import { DEFAULT_TIMETABLE_RULES } from "@/types";
 import { resolveCurrentSemester, matchesCurrentSemester } from "@/lib/college/semester";
 import { declaredBusyByFaculty } from "@/lib/timetable/declaredBusy";
+import { requestAssignmentIds } from "@/lib/teaching/requestAllocations";
 import { inheritedTimingCourseId } from "@/lib/timetable/sharedYearTiming";
 import { chunkValues, getInChunks } from "@/lib/firestore/inQuery";
+import { cachedCollectionDocs } from "@/lib/firestore/sharedReads";
 import type { Course, Department } from "@/types";
 
 // Everything the preflight and the solver need for one section, loaded once.
@@ -45,6 +47,13 @@ export interface TimetableContext {
    * a heads-up.
    */
   declaredBusyFaculty: Map<string, Set<string>>;
+  /**
+   * Assignments lent in through an Assignment Request the lending department has
+   * not yet closed with "Notify department & close" - still declaring busy
+   * periods, so the requesting side may not place them. A map from assignment id
+   * to the lending department's name (for the refusal message).
+   */
+  lentNotReady: Map<string, string>;
   // Resolved once from `timing` - null when this course-year has no
   // semesters configured (see CourseYearTiming.semesters). pinnedSlots and
   // busyFaculty above are already narrowed to this (via
@@ -140,12 +149,12 @@ export async function loadTimetableContext(
   // actually owns this year (see inheritedTimingCourseId, which returns null
   // for any year the department owns itself, so nothing else is affected).
   if (!timing) {
-    const [coursesSnap, deptsSnap] = await Promise.all([
-      collegeRef.collection("courses").get(),
-      collegeRef.collection("departments").get(),
+    const [courseDocs, deptDocs] = await Promise.all([
+      cachedCollectionDocs(db, collegeId, "courses"),
+      cachedCollectionDocs(db, collegeId, "departments"),
     ]);
-    const courses = coursesSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as Course[];
-    const departments = deptsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as (Department & { id: string })[];
+    const courses = courseDocs.map((d) => ({ id: d.id, ...d.data() })) as Course[];
+    const departments = deptDocs.map((d) => ({ id: d.id, ...d.data() })) as (Department & { id: string })[];
     const ownCourse = courses.find((c) => c.id === section.courseId);
     const inheritedId = ownCourse
       ? inheritedTimingCourseId(ownCourse, Number(section.year), departments, courses)
@@ -278,6 +287,12 @@ export async function loadTimetableContext(
   return {
     section, timing, rules, assignments, courseYearSubjects, subjectsById, pinnedSlots,
     busyFaculty, declaredBusyFaculty, currentSemester,
+    lentNotReady: new Map(
+      allocatedRequestsSnap.docs
+        .map((d) => d.data() as FacultyAssignmentRequest)
+        .filter((r) => !r.busyClosed)
+        .flatMap((r) => requestAssignmentIds(r).map((id) => [id, r.targetDepartmentName] as const)),
+    ),
   };
 }
 

@@ -7,6 +7,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { checkFacultyPeriodWindow, periodWindowMessage } from "@/lib/timetable/currentPeriod";
 import { resolveSubstituteSlotsForDate } from "@/lib/leave/periodCoverage";
+import { checkAllocatedAccess } from "@/lib/studentAttendance/labAllocation";
 import { getNoClassReason } from "@/lib/studentAttendance/classDay";
 import { applyOnDutyToEntries, loadOnDutyDay, presentCountOf } from "@/lib/studentAttendance/onDuty";
 import { fetchSectionStudentsCached } from "@/lib/students/sectionRosterCache";
@@ -129,7 +130,14 @@ export async function POST(request: Request) {
     // check the PATCH route re-runs before actually saving marks, so a
     // request can't be replayed/crafted for a period that hasn't started yet
     // or has already ended.
-    const windowCheck = await checkFacultyPeriodWindow(db, session.collegeId, facultyMemberId, assignmentId, date, now, Number.isInteger(body.periodNumber) ? body.periodNumber : undefined);
+    const requestedPeriod = Number.isInteger(body.periodNumber) ? body.periodNumber : undefined;
+    let windowCheck = await checkFacultyPeriodWindow(db, session.collegeId, facultyMemberId, assignmentId, date, now, requestedPeriod);
+    // Not inside its own period window: an HOD/Incharge may have opened this lab
+    // assignment for the faculty on this date (see lib/studentAttendance/labAllocation.ts).
+    if (!windowCheck.ok) {
+      const allocated = await checkAllocatedAccess(db, session.collegeId, facultyMemberId, assignmentId, date, requestedPeriod);
+      if (allocated.ok) windowCheck = allocated;
+    }
     if (!windowCheck.ok) {
       return NextResponse.json({ error: periodWindowMessage(windowCheck) }, { status: 403 });
     }

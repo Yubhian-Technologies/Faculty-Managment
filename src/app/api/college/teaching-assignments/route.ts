@@ -8,6 +8,7 @@ import { createAssignmentWithSlots } from "@/lib/teaching/createAssignment";
 import { deleteAssignmentWithSlots } from "@/lib/teaching/deleteAssignment";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { FieldPath } from "firebase-admin/firestore";
+import { cachedCollectionDocs } from "@/lib/firestore/sharedReads";
 import { requiredFacultyCount } from "@/lib/college/facultyRatio";
 import { getHodDepartmentScope, canHodEditDepartment, canHodManageAssignment, facultyManageableDepartmentNames } from "@/lib/departments/scope";
 import { canHodEditDepartmentYear, type DepartmentYearRow } from "@/lib/departments/managedBranches";
@@ -120,9 +121,9 @@ export async function GET(request: Request) {
       // Departments/courses are needed for the year-gate below regardless of
       // whether a managed/child query exists - the roster query further down
       // reuses the same gate for assignments outside this HOD's own scope.
-      const [deptsSnap, coursesSnap, rosterFacultySnap] = await Promise.all([
-        collegeRef.collection("departments").get(),
-        collegeRef.collection("courses").get(),
+      const [deptDocs, courseDocs, rosterFacultySnap] = await Promise.all([
+        cachedCollectionDocs(db, session.collegeId, "departments"),
+        cachedCollectionDocs(db, session.collegeId, "courses"),
         (() => {
           const rosterDeptNames = facultyManageableDepartmentNames(scope);
           return rosterDeptNames.length > 0
@@ -130,8 +131,8 @@ export async function GET(request: Request) {
             : Promise.resolve(null);
         })(),
       ]);
-      allDepartmentsForYearGate = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as (DepartmentYearRow & Pick<Department, "name">)[];
-      catalogIdByCourseId = new Map(coursesSnap.docs.map((d) => [d.id, (d.data() as { catalogId?: string }).catalogId]));
+      allDepartmentsForYearGate = deptDocs.map((d) => ({ id: d.id, ...(d.data() as object) })) as (DepartmentYearRow & Pick<Department, "name">)[];
+      catalogIdByCourseId = new Map(courseDocs.map((d) => [d.id, (d.data() as { catalogId?: string }).catalogId]));
       if (rosterFacultySnap) {
         // Only faculty currently available for work count as "my roster" for
         // the purposes of finding assignments they hold elsewhere (lent out)
@@ -588,6 +589,9 @@ export async function POST(request: Request) {
         subjectName: subject.name,
         subjectCode: subject.code,
         ...(subject.shortCode ? { shortCode: subject.shortCode } : {}),
+        // A hand-typed subject (subjects/custom) is real teaching load for the
+        // timetable but never belongs on the faculty resume.
+        ...((subject as { isCustom?: boolean }).isCustom ? { excludeFromResume: true } : {}),
         hoursPerWeek: body.hoursPerWeek != null ? Number(body.hoursPerWeek) : subject.hoursPerWeek,
         assignedBy: session.uid,
         assignedByName: session.role,

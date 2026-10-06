@@ -152,16 +152,24 @@ export function periodTimeRange(startTime?: string, endTime?: string): string | 
  * configured shortCode, then its code, then the read-time joined values, and
  * only falls back to deriving one from the name as a last resort.
  */
+// A hand-typed (custom) subject is filed under a generated code ("CUS-AB12C")
+// that means nothing to anyone - show its typed name wherever a code would go.
+// Older custom subjects/assignments still carry that generated code.
+const GENERATED_CODE = /^CUS-[A-Z0-9]{5}$/;
+export function readableCode(code: string | undefined, name: string | undefined): string | undefined {
+  return code && GENERATED_CODE.test(code) ? (name || code) : code;
+}
+
 export function slotShortCode(
   slot: TimetableSlot,
   subjects?: Map<string, Subject> | Subject[],
 ): string {
   const subject = subjects instanceof Map ? subjects.get(slot.subjectId) : subjects?.find((s) => s.id === slot.subjectId);
-  if (subject?.shortCode) return subject.shortCode;
-  if (subject?.code) return subject.code;
+  if (subject?.shortCode && !GENERATED_CODE.test(subject.shortCode)) return subject.shortCode;
+  if (subject?.code) return readableCode(subject.code, subject.name) as string;
   const joined = slot as TimetableSlot & { shortCode?: string; subjectCode?: string };
-  if (joined.shortCode) return joined.shortCode;
-  if (joined.subjectCode) return joined.subjectCode;
+  if (joined.shortCode && !GENERATED_CODE.test(joined.shortCode)) return joined.shortCode;
+  if (joined.subjectCode) return readableCode(joined.subjectCode, slot.subjectName) as string;
   const name = (slot.subjectName ?? "").trim();
   if (!name) return "—";
   if (name.length <= 10) return name.toUpperCase();
@@ -176,7 +184,7 @@ export function slotShortCode(
 export function slotSubjectCode(slot: TimetableSlot, subjects?: Map<string, Subject> | Subject[]): string {
   const subject = subjects instanceof Map ? subjects.get(slot.subjectId) : subjects?.find((s) => s.id === slot.subjectId);
   const joined = slot as TimetableSlot & { subjectCode?: string };
-  return subject?.code || joined.subjectCode || slotShortCode(slot, subjects);
+  return readableCode(subject?.code, subject?.name) || readableCode(joined.subjectCode, slot.subjectName) || slotShortCode(slot, subjects);
 }
 
 /** Who is actually teaching this slot right now - the substitute wins. */
@@ -300,9 +308,14 @@ export function timetableClassLine(parts: {
   sectionName?: string;
   departmentName?: string;
 }): string {
-  const semNumber = parts.semesterLabel?.match(/\d+/)?.[0];
+  // The LAST number: pickers label a semester "2-1" (year-semester), and the
+  // class line already shows the year, so it is the semester within the year.
+  const semNumber = parts.semesterLabel?.match(/\d+/g)?.pop();
   const semester = semNumber ? `${roman(Number(semNumber))} Sem` : parts.semesterLabel;
-  let section = (parts.sectionName ?? "").trim().replace(/[-_]+/g, " ");
+  // A branch-picker name carries the owning department's code first
+  // ("BSC-CSE-C" = Basic Science, CSE, C); the class line wants "CSE C".
+  const nameParts = (parts.sectionName ?? "").trim().split(/[-_\s]+/).filter(Boolean);
+  let section = (nameParts.length >= 3 ? nameParts.slice(1) : nameParts).join(" ");
   if (section && !/[A-Za-z]{2,}/.test(section) && parts.departmentName) {
     const initials = parts.departmentName.split(/[\s&]+/).filter((w) => /^[A-Za-z]/.test(w) && !/^(and|of)$/i.test(w)).map((w) => w[0].toUpperCase()).join("");
     section = `${initials} ${section}`;

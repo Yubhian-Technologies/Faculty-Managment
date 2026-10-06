@@ -45,11 +45,25 @@ interface TodayPeriod {
   // Split lab period (see TimetableSlot.labBatch) - roster is only this batch,
   // not the whole section, mirrors student-attendance/route.ts's own gate.
   labBatch: string | null;
+  // An HOD/Incharge opened this lab period for the date (see lib/studentAttendance/labAllocation.ts) - open all day, not just in its period window.
+  allocated?: boolean;
+}
+
+// A lab assignment the HOD/Incharge opened for this faculty on the listed date ranges.
+interface LabAllocationSummary {
+  assignmentId: string;
+  subjectName: string;
+  subjectCode: string;
+  courseName: string;
+  year: number;
+  sectionName: string;
+  ranges: { from: string; to: string }[];
 }
 
 interface TodayPeriodsResponse {
   date: string;
   periods: TodayPeriod[];
+  allocations?: LabAllocationSummary[];
 }
 
 function todayStr(): string {
@@ -172,6 +186,11 @@ export default function MarkAttendancePage() {
   useEffect(() => { periodsRef.current = periods; }, [periods]);
   const [noClassReason, setNoClassReason] = useState<string | null>(null);
   const [dateStr, setDateStr] = useState<string>(todayStr());
+  // null = today's own classes. A past date is only ever offered for a lab the
+  // HOD/Incharge allocated to this faculty member (see `allocations`).
+  const [viewDate, setViewDate] = useState<string | null>(null);
+  const viewDateRef = useRef<string | null>(null);
+  const [allocations, setAllocations] = useState<LabAllocationSummary[]>([]);
   const [isLoadingPeriods, setIsLoadingPeriods] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   // Mirrors expandedId for syncPendingSubmissions below, which needs to read
@@ -243,13 +262,15 @@ export default function MarkAttendancePage() {
 
   async function fetchTodayPeriods(): Promise<TodayPeriod[]> {
     try {
-      const res = await fetch("/api/college/student-attendance/today-periods");
+      const query = viewDateRef.current ? `?date=${encodeURIComponent(viewDateRef.current)}` : "";
+      const res = await fetch(`/api/college/student-attendance/today-periods${query}`);
       if (!res.ok) throw new Error("Failed to load periods");
       const json = (await res.json()) as TodayPeriodsResponse & { noClassReason?: string };
       setNoClassReason(json.noClassReason ?? null);
       const fetched = json.periods ?? [];
       setPeriods(fetched);
       setDateStr(json.date ?? todayStr());
+      setAllocations(json.allocations ?? []);
       return fetched;
     } catch {
       setPeriods([]);
@@ -271,6 +292,8 @@ export default function MarkAttendancePage() {
     function scheduleFrom(todayPeriods: TodayPeriod[]) {
       if (cancelled) return;
       if (timeoutId) clearTimeout(timeoutId);
+      // A past (allocated) date has no period clock to follow.
+      if (viewDateRef.current) return;
       const delay = nextPollDelayMs(todayPeriods);
       if (delay === null) return; // today's periods are all over - nothing left worth polling for
       timeoutId = setTimeout(() => { void tick(); }, delay);
@@ -323,6 +346,22 @@ export default function MarkAttendancePage() {
       return { draft, classNotes: queued.classNotes };
     }
     return { draft: Object.fromEntries(session.entries.map((e) => [e.studentId, e.status])), classNotes: session.classNotes ?? "" };
+  }
+
+  // Switches between today's own classes (null) and a past date opened for a lab allocation.
+  async function changeViewDate(next: string | null) {
+    const today = todayStr();
+    const target = next && next !== today ? next : null;
+    if (target && !allocations.some((a) => a.ranges.some((r) => target >= r.from && target <= r.to))) {
+      toast({ variant: "destructive", title: "Not allocated", description: "That date is not inside any date range allocated to you." });
+      return;
+    }
+    viewDateRef.current = target;
+    setViewDate(target);
+    setExpandedId(null);
+    setAttendanceSession(null);
+    setIsLoadingPeriods(true);
+    await fetchTodayPeriods();
   }
 
   async function handleOpenPeriod(p: TodayPeriod) {
@@ -484,6 +523,37 @@ export default function MarkAttendancePage() {
         <span className="text-xs text-muted-foreground">Date: {formatDateDDMMYYYY(dateStr)} (IST)</span>
       </div>
 
+      {allocations.length > 0 && (
+        <Card className="border-violet-200 bg-violet-50">
+          <CardContent className="space-y-3 py-4 text-sm text-violet-950">
+            <p className="font-medium">Lab attendance allocated to you</p>
+            <ul className="space-y-1 text-xs">
+              {allocations.map((a) => (
+                <li key={a.assignmentId}>
+                  <strong>{a.subjectName}{a.subjectCode ? ` (${a.subjectCode})` : ""}</strong> · {a.courseName} {ordinalYear(a.year)} · Section {a.sectionName}
+                  {" - "}
+                  {a.ranges.map((r) => (r.from === r.to ? formatDateDDMMYYYY(r.from) : `${formatDateDDMMYYYY(r.from)} to ${formatDateDDMMYYYY(r.to)}`)).join(", ")}
+                </li>
+              ))}
+            </ul>
+            <div className="flex flex-wrap items-center gap-2">
+              <Label htmlFor="alloc-date" className="text-xs">Mark for date</Label>
+              <input
+                id="alloc-date"
+                type="date"
+                className="h-9 rounded-md border bg-background px-2 text-sm"
+                value={viewDate ?? ""}
+                max={todayStr()}
+                onChange={(e) => void changeViewDate(e.target.value || null)}
+              />
+              {viewDate && (
+                <Button size="sm" variant="outline" onClick={() => void changeViewDate(null)}>Back to today</Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {queuedIds.size > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <span className="flex items-center gap-1.5">
@@ -502,7 +572,7 @@ export default function MarkAttendancePage() {
         <Card>
           <CardContent className="py-12 text-center text-sm text-muted-foreground">
             <CalendarClock className="mx-auto mb-3 h-8 w-8 text-muted-foreground/60" />
-            {noClassReason ? `No classes today - ${noClassReason}.` : "No class assigned for today."}
+            {viewDate ? (noClassReason ? `No classes on this date - ${noClassReason}.` : "No allocated lab period falls on this date - the lab has no class on that weekday.") : noClassReason ? `No classes today - ${noClassReason}.` : "No class assigned for today."}
           </CardContent>
         </Card>
       ) : (

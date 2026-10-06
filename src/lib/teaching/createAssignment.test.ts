@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createAssignmentWithSlots, type CreateAssignmentInput } from "./createAssignment";
+import { MAX_FACULTY_PER_SUBJECT, createAssignmentWithSlots, type CreateAssignmentInput } from "./createAssignment";
 import { FakeFirestore, asFirestore } from "@/test-support/fakeFirestore";
 
 const C = "colleges/c1";
@@ -38,25 +38,22 @@ describe("createAssignmentWithSlots - concurrency", () => {
     expect(doubled).toBeGreaterThan(0);
   });
 
-  it("two faculty racing for the same THEORY subject in a section: exactly one is assigned", async () => {
+  it("eight faculty racing for the same THEORY subject in a section: exactly the cap (6) are assigned", async () => {
     for (let seed = 1; seed <= 15; seed++) {
       const fake = new FakeFirestore({ latencyMs: 4, seed });
-      const [a, b] = await Promise.all([
-        createAssignmentWithSlots(input(fake, { facultyId: "f1" })),
-        createAssignmentWithSlots(input(fake, { facultyId: "f2" })),
-      ]);
-      expect(assignmentsOf(fake), `seed ${seed}`).toHaveLength(1);
-      expect([a.ok, b.ok].filter(Boolean), `seed ${seed}`).toHaveLength(1);
+      const results = await Promise.all(Array.from({ length: 8 }, (_, i) => createAssignmentWithSlots(input(fake, { facultyId: `f${i + 1}` }))));
+      expect(assignmentsOf(fake), `seed ${seed}`).toHaveLength(MAX_FACULTY_PER_SUBJECT);
+      expect(results.filter((r) => r.ok), `seed ${seed}`).toHaveLength(MAX_FACULTY_PER_SUBJECT);
     }
   });
 
-  it("three faculty racing for a LAB: exactly two are assigned (Batch 1 / Batch 2)", async () => {
-    for (let seed = 1; seed <= 15; seed++) {
-      const fake = new FakeFirestore({ latencyMs: 4, seed });
-      const results = await Promise.all(["f1", "f2", "f3"].map((f) => createAssignmentWithSlots(input(fake, { facultyId: f, isLab: true }))));
-      expect(assignmentsOf(fake), `seed ${seed}`).toHaveLength(2);
-      expect(results.filter((r) => r.ok), `seed ${seed}`).toHaveLength(2);
-    }
+  it("two faculty can share one subject in a section (theory or lab)", async () => {
+    const fake = new FakeFirestore({ latencyMs: 0, seed: 1 });
+    const a = await createAssignmentWithSlots(input(fake, { facultyId: "f1" }));
+    const b = await createAssignmentWithSlots(input(fake, { facultyId: "f2" }));
+    const c = await createAssignmentWithSlots(input(fake, { facultyId: "f3", isLab: true }));
+    expect([a.ok, b.ok, c.ok]).toEqual([true, true, true]);
+    expect(assignmentsOf(fake)).toHaveLength(3);
   });
 
   it("the same faculty double-clicking Add creates one assignment", async () => {

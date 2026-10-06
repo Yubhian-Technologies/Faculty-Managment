@@ -5,7 +5,10 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartmentId } from "@/lib/departments/scope";
-import { SubjectInstanceService } from "@/lib/subjects/services/SubjectInstanceService";
+import { SubjectInstanceService, teachingAssignmentUsesInstance } from "@/lib/subjects/services/SubjectInstanceService";
+import { cachedCollectionDocs } from "@/lib/firestore/sharedReads";
+import { getInChunks } from "@/lib/firestore/inQuery";
+import type { Course, Department, TeachingAssignment } from "@/types";
 
 // Maps a master Subject (courseId + regulation, department-independent)
 // into a specific semester FOR ONE DEPARTMENT as a concrete Subject Instance
@@ -209,21 +212,62 @@ export async function PATCH(request: Request) {
     const ref = getAdminDb().collection("colleges").doc(session.collegeId).collection("subjectSemesterAssignments").doc(body.id);
     const snap = await ref.get();
     if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    const cur = snap.data() as { lectureHours?: number; tutorialHours?: number; practicalHours?: number };
+    const cur = snap.data() as {
+      subjectId: string; departmentId?: string; semester: number; year?: number;
+      lectureHours?: number; tutorialHours?: number; practicalHours?: number;
+    };
 
     const lectureHours = body.lectureHours !== undefined ? Number(body.lectureHours) : cur.lectureHours ?? 0;
     const tutorialHours = body.tutorialHours !== undefined ? Number(body.tutorialHours) : cur.tutorialHours ?? 0;
     const practicalHours = body.practicalHours !== undefined ? Number(body.practicalHours) : cur.practicalHours ?? 0;
+    const hoursPerWeek = lectureHours + tutorialHours + practicalHours;
+
+    // Teaching assignments copy hoursPerWeek (it caps their timetable periods),
+    // so keep the ones relying on this instance in step - but never below the
+    // periods already placed, which would leave a timetable over its own cap.
+    const db = getAdminDb();
+    const collegeRef = db.collection("colleges").doc(session.collegeId);
+    const [taSnap, deptDocs, courseDocs] = await Promise.all([
+      collegeRef.collection("teachingAssignments").where("subjectId", "==", cur.subjectId).get(),
+      cachedCollectionDocs(db, session.collegeId, "departments"),
+      cachedCollectionDocs(db, session.collegeId, "courses"),
+    ]);
+    const departments = deptDocs.map((d) => ({ id: d.id, ...d.data() })) as (Department & { id: string })[];
+    const coursesById = new Map(courseDocs.map((d) => [d.id, d.data() as Pick<Course, "departmentId" | "catalogId">]));
+    const stale = taSnap.docs.filter((d) => {
+      const ta = d.data() as TeachingAssignment;
+      return ta.hoursPerWeek !== hoursPerWeek && !!cur.departmentId
+        && teachingAssignmentUsesInstance(ta, { departmentId: cur.departmentId, semester: cur.semester, year: cur.year }, departments, coursesById);
+    });
+    if (stale.length > 0) {
+      const slotDocs = await getInChunks(stale.map((d) => d.id), (chunk) => collegeRef.collection("timetableSlots").where("assignmentId", "in", chunk));
+      const placed = new Map<string, number>();
+      for (const s of slotDocs) {
+        const id = (s.data() as { assignmentId: string }).assignmentId;
+        placed.set(id, (placed.get(id) ?? 0) + 1);
+      }
+      const over = stale.filter((d) => (placed.get(d.id) ?? 0) > hoursPerWeek);
+      if (over.length > 0) {
+        const who = over.slice(0, 3).map((d) => { const t = d.data() as TeachingAssignment; return `${t.facultyName} (${t.sectionName ?? "-"}, ${placed.get(d.id)} periods)`; }).join("; ");
+        return NextResponse.json({ error: `Can't lower hours below the periods already placed on the timetable: ${who}. Remove those periods first.` }, { status: 409 });
+      }
+    }
+
     await ref.update({
       lectureHours,
       tutorialHours,
       practicalHours,
-      hoursPerWeek: lectureHours + tutorialHours + practicalHours,
+      hoursPerWeek,
       ...(body.credits !== undefined ? { credits: Number(body.credits) } : {}),
       isCustomized: true,
       updatedAt: new Date(),
     });
-    return NextResponse.json({ success: true });
+    for (let i = 0; i < stale.length; i += 400) {
+      const batch = db.batch();
+      for (const d of stale.slice(i, i + 400)) batch.update(d.ref, { hoursPerWeek, updatedAt: new Date() });
+      await batch.commit();
+    }
+    return NextResponse.json({ success: true, teachingAssignmentsUpdated: stale.length });
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
@@ -235,19 +279,60 @@ export async function PATCH(request: Request) {
   }
 }
 
-// Unassign - removes one subject instance from one department's semester mapping.
+// Unassign - removes subject instance, or hard deletes subject & all references everywhere if hardDelete=true.
 export async function DELETE(request: Request) {
   try {
-    // HOD is deliberately not in this list: curriculum assignment belongs to
-    // Academics/Principal, and the HOD Subjects page is read-only. No client in
-    // the app calls this write path as an HOD (every caller only GETs, above).
     const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACADEMICS");
     const { searchParams } = new URL(request.url);
     const subjectId = searchParams.get("subjectId");
     const departmentId = searchParams.get("departmentId");
     const semesterParam = searchParams.get("semester");
-    if (!subjectId || !departmentId || semesterParam == null) {
-      return NextResponse.json({ error: "subjectId, departmentId and semester are required" }, { status: 400 });
+    const hardDelete = searchParams.get("hardDelete") === "true";
+
+    if (!subjectId) {
+      return NextResponse.json({ error: "subjectId is required" }, { status: 400 });
+    }
+
+    const db = getAdminDb();
+    const collegeRef = db.collection("colleges").doc(session.collegeId);
+
+    if (hardDelete) {
+      // Hard delete everywhere: timetable slots, teaching assignments, subject instance assignments, master subject doc
+      const [slotsSnap, assignmentsSnap, instancesSnap] = await Promise.all([
+        collegeRef.collection("timetableSlots").where("subjectId", "==", subjectId).get(),
+        collegeRef.collection("teachingAssignments").where("subjectId", "==", subjectId).get(),
+        collegeRef.collection("subjectSemesterAssignments").where("subjectId", "==", subjectId).get(),
+      ]);
+
+      // 1. Delete timetable slots
+      for (let i = 0; i < slotsSnap.docs.length; i += 400) {
+        const batch = db.batch();
+        for (const doc of slotsSnap.docs.slice(i, i + 400)) batch.delete(doc.ref);
+        await batch.commit();
+      }
+
+      // 2. Delete teaching assignments
+      for (let i = 0; i < assignmentsSnap.docs.length; i += 400) {
+        const batch = db.batch();
+        for (const doc of assignmentsSnap.docs.slice(i, i + 400)) batch.delete(doc.ref);
+        await batch.commit();
+      }
+
+      // 3. Delete subject semester assignments
+      for (let i = 0; i < instancesSnap.docs.length; i += 400) {
+        const batch = db.batch();
+        for (const doc of instancesSnap.docs.slice(i, i + 400)) batch.delete(doc.ref);
+        await batch.commit();
+      }
+
+      // 4. Delete master subject document
+      await collegeRef.collection("subjects").doc(subjectId).delete();
+
+      return NextResponse.json({ success: true, hardDeleted: true });
+    }
+
+    if (!departmentId || semesterParam == null) {
+      return NextResponse.json({ error: "departmentId and semester are required" }, { status: 400 });
     }
     const semester = Number(semesterParam);
 
