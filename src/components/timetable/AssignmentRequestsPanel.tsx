@@ -52,6 +52,8 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
   const [isLoading, setIsLoading] = useState(true);
   const [tab, setTab] = useState<"incoming" | "outgoing">("incoming");
   const [pickedFaculty, setPickedFaculty] = useState<Record<string, string>>({});
+  // Allocated incoming requests whose faculty member is being swapped - see handleReallocate.
+  const [changingFaculty, setChangingFaculty] = useState<Record<string, boolean>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
 
   // Busy-periods builder (incoming, ALLOCATED requests) - lets the lending
@@ -133,6 +135,31 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
       await load();
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to allocate" });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleReallocate(reqId: string) {
+    const facultyId = pickedFaculty[reqId];
+    if (!facultyId) {
+      toast({ variant: "destructive", title: "Pick a faculty member first" });
+      return;
+    }
+    setBusyId(reqId);
+    try {
+      const res = await fetch(`/api/college/faculty-assignment-requests/${reqId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reallocate", facultyId }),
+      });
+      const json = await res.json() as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Failed to change faculty");
+      toast({ variant: "success", title: "Faculty changed - their timetable slots were updated too" });
+      setChangingFaculty((c) => ({ ...c, [reqId]: false }));
+      await load();
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to change faculty" });
     } finally {
       setBusyId(null);
     }
@@ -330,12 +357,18 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
                         r.busyClosed ? (
                           <div className="flex items-center gap-2">
                             <Badge variant="approved">Closed</Badge>
+                            <Button size="sm" variant="outline" onClick={() => setChangingFaculty((c) => ({ ...c, [r.id]: !c[r.id] }))}>
+                              <Pencil className="h-3.5 w-3.5 mr-1.5" />{changingFaculty[r.id] ? "Cancel" : "Change faculty"}
+                            </Button>
                             <Button size="sm" variant="outline" loading={notifyingId === r.id} onClick={() => void handleEdit(r)}>
                               <Pencil className="h-3.5 w-3.5 mr-1.5" />Edit
                             </Button>
                           </div>
                         ) : (
                           <div className="flex items-center gap-2">
+                            <Button size="sm" variant="outline" onClick={() => setChangingFaculty((c) => ({ ...c, [r.id]: !c[r.id] }))}>
+                              <Pencil className="h-3.5 w-3.5 mr-1.5" />{changingFaculty[r.id] ? "Cancel" : "Change faculty"}
+                            </Button>
                             <Button size="sm" variant="outline" onClick={() => void toggleBusyBuilder(r)}>
                               <CalendarDays className="h-3.5 w-3.5 mr-1.5" />
                               {busyBuilderOpenId === r.id ? "Hide" : "Mark busy periods"}
@@ -353,6 +386,23 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
                         </Button>
                       )}
                     </div>
+
+                    {tab === "incoming" && changingFaculty[r.id] && (
+                      <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/20 p-3">
+                        <Select
+                          value={pickedFaculty[r.id] ?? ""}
+                          onValueChange={(v) => setPickedFaculty((p) => ({ ...p, [r.id]: v }))}
+                        >
+                          <SelectTrigger className="w-64"><SelectValue placeholder={faculty.length ? "Select new faculty" : "No faculty in your department"} /></SelectTrigger>
+                          <SelectContent>
+                            {faculty.map((f) => <SelectItem key={f.id} value={f.id}>{facultyDisplayName(f)}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                        <Button size="sm" loading={busyId === r.id} onClick={() => void handleReallocate(r.id)}>
+                          Save new faculty
+                        </Button>
+                      </div>
+                    )}
 
                     {/* View: what was declared. Read-only once closed (and for the
                         requesting side), editable only through the builder below. */}
