@@ -14,7 +14,9 @@ import { renderHtmlToPdf } from "@/lib/pdf/htmlToPdf";
 import { yearSemesterLabelIn } from "@/lib/academic/format";
 import {
   buildAllocationList,
+  buildClassTimetableSubtitle,
   buildTimetableColumns,
+  latestEffectiveDate,
   ordinalYear,
   periodTimeRange,
   readableCode,
@@ -52,6 +54,7 @@ export interface InstitutionalTimetableTableProps {
   logoUrl?: string;
   academicYear?: string;
   semesterLabel?: string;
+  effectiveDate?: string;
   classroom?: string;
   classInchargeName?: string;
   subjects?: Subject[];
@@ -80,6 +83,7 @@ export function InstitutionalTimetableTable({
   logoUrl,
   academicYear = slots[0]?.academicYear ?? "",
   semesterLabel: semesterLabelProp,
+  effectiveDate: effectiveDateProp,
   classroom,
   classInchargeName,
   subjects = [],
@@ -185,6 +189,7 @@ export function InstitutionalTimetableTable({
       courseName,
       academicYear,
       semesterLabel,
+      effectiveDate: effectiveDateProp ?? latestEffectiveDate(filteredSlots),
       regulation: section?.regulation,
       section: section ?? undefined,
       classroom,
@@ -202,7 +207,7 @@ export function InstitutionalTimetableTable({
     [
       activeCollegeName, activeCollegeCode, activeAffiliation, activeAddress, activePhone,
       collegeInfo?.logoUrl, logoUrl, departmentName, courseName, academicYear, semesterLabel,
-      section, classroom, classInchargeName, visibleDays, timing, filteredSlots, subjects, assignments,
+      effectiveDateProp, section, classroom, classInchargeName, visibleDays, timing, filteredSlots, subjects, assignments,
     ]
   );
 
@@ -372,6 +377,13 @@ export function InstitutionalTimetableTable({
                 ]
                   .filter(Boolean)
                   .join(" · ")}
+              </p>
+              <p className="text-[11px] font-semibold text-primary/90 mt-0.5">
+                {buildClassTimetableSubtitle({
+                  academicYear,
+                  semesterLabel,
+                  effectiveDate: effectiveDateProp ?? latestEffectiveDate(filteredSlots),
+                })}
               </p>
             </div>
           </div>

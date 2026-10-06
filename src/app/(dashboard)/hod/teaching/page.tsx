@@ -274,9 +274,10 @@ export default function HODTeachingPage() {
                               const subjectName = slot.subjectName || assignment?.subjectName || "";
                               const shortCode = assignment?.shortCode;
                               const titleDisplay = shortCode ? `${subjectName} (${shortCode})` : subjectName;
+                              const isLab = assignment?.subjectType === "PRACTICAL" || Boolean(slot.labBatch) || /\b(lab|laboratory|practical)\b/i.test(subjectName);
 
                               return (
-                                <div key={`${slot.id ?? idx}`} className={`rounded-md border p-2 ${slot.substituteFacultyName || slot.substituteForName ? "bg-amber-50 border-amber-200" : "bg-primary/5 border-primary/20"}`}>
+                                <div key={`${slot.id ?? idx}`} className={`rounded-md border p-2 ${slot.substituteFacultyName || slot.substituteForName ? "bg-amber-50 border-amber-200" : isLab ? "bg-purple-100/90 border-purple-300 text-purple-950 dark:bg-purple-950/40 dark:border-purple-700 dark:text-purple-200" : "bg-primary/5 border-primary/20"}`}>
                                   {time && (
                                     <p className="text-[10px] font-medium text-muted-foreground/80 mb-0.5">
                                       {format12h(time.startTime)}&ndash;{format12h(time.endTime)}

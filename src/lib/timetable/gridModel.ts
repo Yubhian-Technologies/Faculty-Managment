@@ -9,6 +9,7 @@
 import type { DayOfWeek, Subject, TimetableSlot } from "@/types";
 import { DEFAULT_TIMETABLE_RULES } from "@/types";
 import { formatTime12h } from "./facultyTimetablePdf";
+import { istDateKey } from "@/lib/attendance/istTime";
 
 /** Every day of the week this app models, in timetable order. */
 export const ALL_DAYS: DayOfWeek[] = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
@@ -348,12 +349,10 @@ export function buildClassTimetableSubtitle(opts: {
     ? opts.semester
     : Number(opts.semesterLabel?.match(/\d+/g)?.pop()) || 1;
   const semType = semNum > 0 ? (semNum % 2 === 1 ? "Odd Semester" : "Even Semester") : "Semester";
-  // The date is asked for when the timetable is published; until then the line
-  // simply has no w.e.f part - no blank to fill in by hand.
-  const eff = opts.effectiveDate?.trim();
-  const iso = eff?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const eff = opts.effectiveDate?.trim() || istDateKey();
+  const iso = eff.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   const shown = iso ? `${iso[3]}-${iso[2]}-${iso[1]}` : eff;
-  return `Class Time Table for the Academic Year ${acadYear}, ${semType}${shown ? `, w.e.f ${shown}` : ""}`;
+  return `Class Time Table for the Academic Year ${acadYear}, ${semType}, w.e.f ${shown}`;
 }
 
 /**
@@ -412,11 +411,11 @@ export function isLabSlot(slot: TimetableSlot, subjects?: Map<string, Subject> |
   return /\b(lab|laboratory|practical)\b/i.test(slot.subjectName ?? "");
 }
 
-/** The effective date entered at publish time, carried on the published slots (latest wins). */
-export function latestEffectiveDate(slots: { effectiveDate?: string }[]): string | undefined {
+/** The effective date entered at publish time, carried on the published slots (latest wins, falls back to today IST). */
+export function latestEffectiveDate(slots: { effectiveDate?: string }[]): string {
   let best: string | undefined;
   for (const s of slots) if (s.effectiveDate && (!best || s.effectiveDate > best)) best = s.effectiveDate;
-  return best;
+  return best || istDateKey();
 }
 
 export function getHodSignatureLabel(deptNameOrCode?: string): string {

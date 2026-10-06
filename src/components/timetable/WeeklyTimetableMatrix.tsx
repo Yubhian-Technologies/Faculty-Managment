@@ -414,7 +414,7 @@ export function WeeklyTimetableMatrix({
                                     onClick={() => openSlotDetails(s, d, col)}
                                     className={`w-full text-left p-1 sm:p-1.5 rounded-md border transition-all text-xs focus:outline-none focus:ring-1 focus:ring-primary ${
                                       isLab
-                                        ? "bg-emerald-500/10 border-emerald-500/30 hover:bg-emerald-500/20 text-emerald-950 dark:text-emerald-200"
+                                        ? "bg-purple-500/15 border-purple-500/40 hover:bg-purple-500/25 text-purple-950 dark:text-purple-200 font-extrabold shadow-2xs"
                                         : isSub
                                         ? "bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/20 text-amber-950 dark:text-amber-200"
                                         : "bg-background hover:bg-muted/40 border-border text-foreground"
