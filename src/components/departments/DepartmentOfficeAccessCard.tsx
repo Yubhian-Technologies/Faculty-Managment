@@ -6,12 +6,13 @@ import { Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "@/hooks/useToast";
 import type { OfficeModuleGroup } from "@/lib/departments/officeAccess";
 
 // The HOD picks which of their modules the Department Office head can use.
 // Until they save, the office head has the HOD's whole sidebar (as before).
-interface Payload { department: string; hrefs: string[] | null; catalog: OfficeModuleGroup[] }
+interface Payload { department: string; hrefs: string[] | null; catalog: OfficeModuleGroup[]; editStudentAttendance?: boolean }
 
 const KEY = ["hod-department-office-access"];
 
@@ -28,6 +29,24 @@ export function DepartmentOfficeAccessCard() {
   });
   const [draft, setDraft] = useState<Set<string> | null>(null);
   const [saving, setSaving] = useState(false);
+  const [savingAttendance, setSavingAttendance] = useState(false);
+
+  async function setAttendanceAccess(next: boolean) {
+    setSavingAttendance(true);
+    try {
+      const res = await fetch("/api/college/department-office/access", {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ editStudentAttendance: next }),
+      });
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Could not save");
+      await qc.invalidateQueries({ queryKey: KEY });
+      toast({ variant: "success", title: next ? "Department Office can now edit student attendance" : "Department Office can no longer edit student attendance" });
+    } catch (e) {
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not save" });
+    } finally {
+      setSavingAttendance(false);
+    }
+  }
 
   if (isLoading || !data) return null;
   const all = data.catalog.flatMap((g) => g.items.map((i) => i.href));
@@ -59,6 +78,32 @@ export function DepartmentOfficeAccessCard() {
   }
 
   return (
+    <div className="space-y-6">
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Student attendance</CardTitle>
+        <CardDescription>
+          You can always correct your department&rsquo;s student attendance. Turn this on to let the office head do the same.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <label className="flex items-start gap-3 text-sm">
+          <Switch
+            checked={data.editStudentAttendance === true}
+            disabled={savingAttendance}
+            onCheckedChange={(next) => void setAttendanceAccess(next)}
+            aria-label="Allow the office head to edit student attendance"
+          />
+          <span>
+            <span className="font-medium">Allow the office head to edit student attendance</span>
+            <span className="block text-xs text-muted-foreground">
+              For your department only, and only for a past day (or today once the college day has ended). Every change is recorded
+              with the reason given. {data.editStudentAttendance === true ? "" : "Currently off."}
+            </span>
+          </span>
+        </label>
+      </CardContent>
+    </Card>
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Modules the office head can use</CardTitle>
@@ -96,5 +141,6 @@ export function DepartmentOfficeAccessCard() {
         </div>
       </CardContent>
     </Card>
+    </div>
   );
 }
