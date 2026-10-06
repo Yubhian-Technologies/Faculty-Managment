@@ -7,9 +7,9 @@ import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { DESIGNATION_LABELS, FACULTY_STATUS_LABELS, ROLE_LABELS, RELIGION_LABELS, CASTE_LABELS } from "@/types";
 import type { Religion, Caste } from "@/types";
 import { buildTeachingLoadRows, formatClassColumn, type TeachingLoadRow } from "@/lib/teaching/buildTeachingLoadRows";
-import { readPreviousTeachingAssignments, formatPassPercentage, PREVIOUS_TEACHING_SOURCE_LABELS } from "@/lib/faculty/previousTeaching";
+import { readPreviousTeachingAssignments, formatPassPercentage } from "@/lib/faculty/previousTeaching";
 import type { PreviousTeachingAssignment } from "@/types";
-import { allPreviousExperienceEntries, totalYearsOfExperience, experienceBreakdown, formatDuration } from "@/lib/faculty/experienceCalc";
+import { allPreviousExperienceEntries, totalYearsOfExperience, experienceBreakdown, formatDuration, durationBetween } from "@/lib/faculty/experienceCalc";
 
 type TimestampLike = { toDate?: () => Date; seconds?: number; _seconds?: number } | string | null | undefined;
 
@@ -264,41 +264,41 @@ export function docLinkRow(label: string, url?: string): string {
   }</div></div>`;
 }
 
-/** Renders one Teaching Load table - Academic Year / Year-Branch-Semester-Section /
- *  Subject / Hours Per Week (+ Student Pass % + Student Feedback % for past) - leaving cells
- *  blank where a given row's source doesn't carry that field. */
-function renderTeachingLoadTable(rows: TeachingLoadRow[], showPastColumns: boolean): string {
-  if (!rows.length) return "";
-  const body = rows
-    .map(
-      (r) =>
-        `<tr><td>${esc(r.academicYear)}</td><td>${esc(formatClassColumn(r))}</td><td>${esc(r.subject)}</td><td>${esc(r.hoursPerWeek)}</td>${showPastColumns ? `<td>${r.passPercentage != null ? `${esc(r.passPercentage)}%` : ""}</td><td>${r.studentFeedback != null ? `${esc(r.studentFeedback)}%` : ""}</td>` : ""}</tr>`
-    )
-    .join("");
-  const pastHeaders = showPastColumns ? "<th>Student Pass %</th><th>Student Feedback %</th>" : "";
-  return `<table class="data-table"><tr><th>Academic Year</th><th>Year / Branch / Semester / Section</th><th>Subject</th><th>Hours Per Week</th>${pastHeaders}</tr>${body}</table>`;
-}
-
-/** Renders the Current / Previous Teaching Assignments tables under their own
- *  labeled subheadings, kept visually separate rather than intermixed -
- *  Student Pass % only ever applies to (and is only shown on) the Previous table. */
-/** Free-text Previous Teaching Assignments table (every column as the faculty member/HOD typed it). */
-function renderPreviousTeachingTable(rows: PreviousTeachingAssignment[]): string {
-  if (!rows.length) return "";
-  const body = rows
-    .map((r) => `<tr><td>${esc(PREVIOUS_TEACHING_SOURCE_LABELS[r.source])}${r.source === "EXTERNAL" && r.collegeName ? ` - ${esc(r.collegeName)}` : ""}</td><td>${esc(r.academicYear)}</td><td>${esc(r.course)}</td><td>${esc(r.year)}</td><td>${esc(r.semester)}</td><td>${esc(r.subject)}</td><td>${esc(formatPassPercentage(r.passPercentage))}</td></tr>`)
-    .join("");
-  return `<table class="data-table"><tr><th>Internal / External</th><th>Academic Year</th><th>Course</th><th>Year</th><th>Semester</th><th>Subject</th><th>Passing %</th></tr>${body}</table>`;
-}
-
+/** Teaching Load as three tables: Current (this college, ongoing), Past Internal
+ *  (this college - past recorded in the system plus typed-in previous rows marked
+ *  Internal) and Past External (typed-in previous rows at another college, which
+ *  carry the College name). A table with no rows is left out; the feedback column
+ *  only appears when a past assignment has one. */
 function renderTeachingLoadGroups(groups: { current: TeachingLoadRow[]; past: TeachingLoadRow[] }, previous: PreviousTeachingAssignment[] = []): string {
-  const currentBlock = groups.current.length
-    ? `<div class="subheading">Current Teaching Assignments</div>${renderTeachingLoadTable(groups.current, false)}`
-    : "";
-  const pastBlock = groups.past.length || previous.length
-    ? `<div class="subheading">Previous Teaching Assignments</div>${renderPreviousTeachingTable(previous)}${renderTeachingLoadTable(groups.past, true)}`  // true = show Student Pass % + Feedback %
-    : "";
-  return currentBlock + pastBlock;
+  const showFeedback = groups.past.some((r) => r.studentFeedback != null);
+  const pct = (v: unknown) => (v != null && v !== "" ? `${esc(v)}%` : "");
+  const classOf = (r: PreviousTeachingAssignment) =>
+    [r.course, r.year, r.semester].map((v) => String(v ?? "").trim()).filter(Boolean).join(" / ");
+  const table = (headers: string[], rows: string[]) =>
+    `<table class="data-table"><tr>${headers.map((h) => `<th>${h}</th>`).join("")}</tr>${rows.join("")}</table>`;
+
+  const currentRows = groups.current.map(
+    (r) => `<tr><td>${esc(r.academicYear)}</td><td>${esc(formatClassColumn(r))}</td><td>${esc(r.subject)}</td></tr>`
+  );
+  const pastInternalRows = [
+    ...groups.past.map(
+      (r) => `<tr><td>${esc(r.academicYear)}</td><td>${esc(formatClassColumn(r))}</td><td>${esc(r.subject)}</td><td>${pct(r.passPercentage)}</td>${showFeedback ? `<td>${pct(r.studentFeedback)}</td>` : ""}</tr>`
+    ),
+    ...previous.filter((r) => r.source !== "EXTERNAL").map(
+      (r) => `<tr><td>${esc(r.academicYear)}</td><td>${esc(classOf(r))}</td><td>${esc(r.subject)}</td><td>${esc(formatPassPercentage(r.passPercentage))}</td>${showFeedback ? "<td></td>" : ""}</tr>`
+    ),
+  ];
+  const pastExternalRows = previous.filter((r) => r.source === "EXTERNAL").map(
+    (r) => `<tr><td>${esc(r.collegeName)}</td><td>${esc(r.academicYear)}</td><td>${esc(classOf(r))}</td><td>${esc(r.subject)}</td><td>${esc(formatPassPercentage(r.passPercentage))}</td></tr>`
+  );
+
+  const block = (title: string, headers: string[], rows: string[]) =>
+    rows.length ? `<div class="subheading">${title}</div>${table(headers, rows)}` : "";
+  return (
+    block("Current Teaching Assignments", ["Academic Year", "Year / Branch / Semester / Section", "Subject"], currentRows) +
+    block("Past Teaching Assignments - Internal", ["Academic Year", "Year / Branch / Semester / Section", "Subject", "Passing %", ...(showFeedback ? ["Student Feedback %"] : [])], pastInternalRows) +
+    block("Past Teaching Assignments - External", ["College", "Academic Year", "Course / Year / Semester", "Subject", "Passing %"], pastExternalRows)
+  );
 }
 
 /** Renders a section's heading + body together, or nothing at all when the
@@ -384,9 +384,9 @@ export function getResumeHTML(rawData: ResumeData): string {
     degreeEntry("Undergraduate", ap?.ugDetails) +
     (ap?.additionalUgDetails ?? []).map((d) => degreeEntry("Undergraduate", d)).join("");
   const educationExtras = bullets([
-    highestQualification && !ap?.phdDetails && !ap?.pgDetails && !ap?.ugDetails && `Highest Qualification: ${esc(highestQualification)}`,
-    (ap?.phdDetails?.status || ap?.phdDetails?.mode) && `Ph.D. Status: ${esc(ap?.phdDetails?.status) || "-"} (${esc(ap?.phdDetails?.mode) || "mode not recorded"})`,
-    (ap?.postdoctoralFellowshipDetails?.status || ap?.postdoctoralFellowshipDetails?.mode) && `Postdoctoral Status: ${esc(ap?.postdoctoralFellowshipDetails?.status) || "-"} (${esc(ap?.postdoctoralFellowshipDetails?.mode) || "mode not recorded"})`,
+    highestQualification && `Highest Qualification: ${esc(highestQualification)}`,
+    (ap?.phdDetails?.status || ap?.phdDetails?.mode) && `Ph.D. Status: ${[esc(ap?.phdDetails?.status), ap?.phdDetails?.mode ? `(${esc(ap.phdDetails.mode)})` : ""].filter(Boolean).join(" ")}`,
+    (ap?.postdoctoralFellowshipDetails?.status || ap?.postdoctoralFellowshipDetails?.mode) && `Postdoctoral Status: ${[esc(ap?.postdoctoralFellowshipDetails?.status), ap?.postdoctoralFellowshipDetails?.mode ? `(${esc(ap.postdoctoralFellowshipDetails.mode)})` : ""].filter(Boolean).join(" ")}`,
     ap?.netSletSetGateOthers === "YES" && ap?.qualifiedExam &&
       `${esc(ap.qualifiedExam)} Qualified${ap.qualifiedYear ? ` (${esc(ap.qualifiedYear)})` : ""}${ap.examScore ? ` - Exam Score: ${esc(ap.examScore)}` : ""}`,
   ]);
@@ -404,11 +404,23 @@ export function getResumeHTML(rawData: ResumeData): string {
   const externalExperienceDuration = totalYearsOfExperience(previousExperienceEntries, undefined);
   const totalExperienceYears = experienceBreakdown(previousExperienceEntries, data.joiningDate as Parameters<typeof formatDMY>[0]).total;
 
+  // Each experience entry's own Roles/Responsibilities, plus any legacy shared text no entry
+  // could hold (see FacultyProfileFields.teachingRolesResponsibilities).
+  const roleBullets = (label: string, entries: PreviousInstitution[] | undefined, unplaced: string | undefined) => [
+    ...(entries ?? [])
+      .filter((e) => e.rolesResponsibilities?.trim())
+      .map((e) => `${label} Roles/Responsibilities${e.institutionName ? ` (${esc(e.institutionName)})` : ""}: ${esc(e.rolesResponsibilities)}`),
+    unplaced?.trim() && `${label} Roles/Responsibilities: ${esc(unplaced)}`,
+  ];
+  const rolesBullets = bullets([
+    ...roleBullets("Academic", ap?.academicExperience, ap?.teachingRolesResponsibilities),
+    ...roleBullets("Industry", ap?.industryExperience, ap?.industryRolesResponsibilities),
+    ...roleBullets("Research", ap?.researchExperience, ap?.researchRolesResponsibilities),
+  ]);
   const experienceOverviewBullets = bullets([
     (hasJoiningDate || hasPreviousExperience) &&
       `Total Professional Experience: ${esc(totalExperienceYears)} years`,
     data.specialization && `Specialization: ${esc(data.specialization)}`,
-    docHighestQualification && `Highest Qualification: ${esc(docHighestQualification)}`,
   ]);
 
   const internalEntry = entry(
@@ -427,7 +439,7 @@ export function getResumeHTML(rawData: ResumeData): string {
   const internalSection = `<div class="subheading">Internal Experience</div>${internalContent}`;
 
   const externalBullets = bullets([
-    hasPreviousExperience && `External Experience: ${formatDuration(externalExperienceDuration)}`,
+    hasPreviousExperience && `Total External Experience: ${formatDuration(externalExperienceDuration)}`,
   ]);
   const externalEntries = previousExperienceEntries.length
     ? previousExperienceEntries
@@ -438,31 +450,25 @@ export function getResumeHTML(rawData: ResumeData): string {
           const to = pi.toDate ? formatDMY(pi.toDate) : (pi.toYear ? String(pi.toYear) : "");
           const range = from || to ? `${from} - ${to}` : "";
           const institution = pi.institutionName || "Previous Institution";
-          return entry(pi.place ? `${institution}, ${pi.place}` : institution, range, pi.designation || "");
+          // Same legacy year-only fallback as experienceCalc's rowDates (anchored to Jan 1).
+          const rowDuration = durationBetween(
+            pi.fromDate ?? (pi.fromYear ? `${pi.fromYear}-01-01` : undefined),
+            pi.toDate ?? (pi.toYear ? `${pi.toYear}-01-01` : undefined),
+          );
+          const hasDuration = rowDuration.years > 0 || rowDuration.months > 0 || rowDuration.days > 0;
+          return entry(pi.place ? `${institution}, ${pi.place}` : institution, range, pi.designation || "") +
+            bullets([hasDuration && `External Experience: ${formatDuration(rowDuration)}`]);
         })
         .join("")
     : `<div class="empty-note">No external experience recorded.</div>`;
   const externalSection = `<div class="subheading">External Experience</div>${externalBullets}${externalEntries}`;
 
-  const experienceBody = experienceOverviewBullets + internalSection + externalSection;
+  const experienceBody = experienceOverviewBullets + rolesBullets + internalSection + externalSection;
 
   // ── Teaching load ────────────────────────────────────────────────────────
   // Current and past assignments, kept as two separate tables - current
   // course/section assignments + the Module 2 course summary vs. structured
   // past assignments (past rows carry a pass %, current ones never do).
-  // Each experience entry's own Roles/Responsibilities, plus any legacy shared text no entry
-  // could hold (see FacultyProfileFields.teachingRolesResponsibilities).
-  const roleBullets = (label: string, entries: PreviousInstitution[] | undefined, unplaced: string | undefined) => [
-    ...(entries ?? [])
-      .filter((e) => e.rolesResponsibilities?.trim())
-      .map((e) => `${label} Roles/Responsibilities${e.institutionName ? ` (${esc(e.institutionName)})` : ""}: ${esc(e.rolesResponsibilities)}`),
-    unplaced?.trim() && `${label} Roles/Responsibilities: ${esc(unplaced)}`,
-  ];
-  const teachingLoadBullets = bullets([
-    ...roleBullets("Academic", ap?.academicExperience, ap?.teachingRolesResponsibilities),
-    ...roleBullets("Industry", ap?.industryExperience, ap?.industryRolesResponsibilities),
-    ...roleBullets("Research", ap?.researchExperience, ap?.researchRolesResponsibilities),
-  ]);
   const teachingLoadGroups = buildTeachingLoadRows({
     currentAssignments: data.teachingAssignments,
     staticCourses: ap?.teachingAssignment?.courses,
@@ -473,7 +479,7 @@ export function getResumeHTML(rawData: ResumeData): string {
     (r) => !/(nss|sports?)/i.test(`${r.subject ?? ""} ${r.courseName ?? ""}`),
   );
   const teachingLoadTables = renderTeachingLoadGroups(teachingLoadGroups, readPreviousTeachingAssignments(data));
-  const teachingLoadBody = teachingLoadBullets + teachingLoadTables;
+  const teachingLoadBody = teachingLoadTables;
 
   // ── Research publications ───────────────────────────────────────────────
   const publicationStatsBullets = bullets([
@@ -504,12 +510,6 @@ export function getResumeHTML(rawData: ResumeData): string {
         .join("")
     : "";
   const publicationsBody = publicationEntries + publicationStatsBullets;
-
-  // ── Mentorship & institutional contribution ─────────────────────────────
-  const labEntries = ap?.newLabsEstablished?.length
-    ? ap.newLabsEstablished.map((l) => entry(l.facilityDetails || "Facility Established", "") + bullets([l.outcomes && `Outcomes: ${esc(l.outcomes)}`])).join("")
-    : "";
-  const mentorshipBody = labEntries;
 
   // ── Personal & contact details ──────────────────────────────────────────
   const personalBody = detailTable(
@@ -578,7 +578,6 @@ export function getResumeHTML(rawData: ResumeData): string {
   ${on("experience") ? renderSection("Experience", experienceBody) : ""}
   ${on("teachingLoad") ? renderSection("Teaching Load", teachingLoadBody) : ""}
   ${on("research") ? renderSection("Research & Innovation", publicationsBody) : ""}
-  ${on("mentorship") ? renderSection("Mentorship & Institutional Contribution", mentorshipBody) : ""}
   ${on("otherInfo") ? renderSection("Other Information", otherInfoBody) : ""}
   ${on("financial") ? renderSection("Financial Standing", financialBody) : ""}
 
