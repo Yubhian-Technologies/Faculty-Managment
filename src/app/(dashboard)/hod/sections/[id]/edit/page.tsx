@@ -38,12 +38,13 @@ type SectionForm = {
   year: string;
   batch: string;
   regulation: string;
+  classroomNumber: string;
   facultyInchargeUid: string;
   facultyInchargeName: string;
 };
 
 const EMPTY_FORM: SectionForm = {
-  courseId: "", name: "", year: "", batch: "", regulation: "", facultyInchargeUid: "", facultyInchargeName: "",
+  courseId: "", name: "", year: "", batch: "", regulation: "", classroomNumber: "", facultyInchargeUid: "", facultyInchargeName: "",
 };
 
 type ClassLeaderUser = { uid: string; name: string; email: string };
@@ -183,6 +184,7 @@ export default function EditSectionPage() {
           year: String(s.year),
           batch: s.batch,
           regulation: s.regulation ?? "",
+          classroomNumber: s.classroomNumber ?? "",
           facultyInchargeUid: s.facultyInchargeUid ?? "",
           facultyInchargeName: s.facultyInchargeName ?? "",
         });
@@ -508,6 +510,7 @@ export default function EditSectionPage() {
           // rejects an HOD attempting to change it directly regardless.
           batch: form.batch,
           regulation: form.regulation || null,
+          classroomNumber: form.classroomNumber.trim() || null,
           facultyInchargeUid: form.facultyInchargeUid || null,
           facultyInchargeName: form.facultyInchargeName,
           // Only sent for a shared-first-year department; re-points the section
@@ -647,6 +650,16 @@ export default function EditSectionPage() {
                   Which curriculum the batch currently in this class follows. Update this when a new batch moves in.
                 </p>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Classroom Number</Label>
+              <Input
+                value={form.classroomNumber}
+                maxLength={40}
+                placeholder="e.g. B-204"
+                onChange={(e) => setF({ classroomNumber: e.target.value })}
+              />
             </div>
 
             <div className="space-y-2">

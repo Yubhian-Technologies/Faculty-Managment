@@ -20,6 +20,7 @@ import { LeaveVacationStaffCard } from "@/components/leave/LeaveVacationStaffCar
 import { LeaveTypeRulesCard } from "@/components/leave/LeaveTypeRulesCard";
 import { AttendanceNotPostedSettingsCard } from "@/components/attendance/AttendanceNotPostedSettingsCard";
 import type { FacultyNorms } from "@/types/core";
+import { subjectBlockKey } from "@/lib/timetable/subjectBlockSize";
 
 interface CollegeInfo {
   name: string;
@@ -40,8 +41,68 @@ export default function PrincipalSettingsPage() {
   const [newJoiningYears, setNewJoiningYears] = useState("1");
   const [maxTheoryPeriodsPerWeek, setMaxTheoryPeriodsPerWeek] = useState("4");
   const [maxPracticalPeriodsPerWeek, setMaxPracticalPeriodsPerWeek] = useState("6");
-  const [theoryBlockSize, setTheoryBlockSize] = useState("1");
-  const [labBlockSize, setLabBlockSize] = useState("3");
+
+  // Per-subject overrides: key -> slots, plus the subject catalog for the search picker.
+  const [subjectSlots, setSubjectSlots] = useState<Record<string, number>>({});
+  const [subjectOptions, setSubjectOptions] = useState<Record<string, string>>({}); // key -> label
+  const [subjectQuery, setSubjectQuery] = useState("");
+  const [subjectPickerOpen, setSubjectPickerOpen] = useState(false);
+
+  const [depts, setDepts] = useState<{ id: string; name: string; parentDepartmentId?: string }[]>([]);
+  const [subjectDepts, setSubjectDepts] = useState<Record<string, string[]>>({}); // key -> department ids
+  // Picking a department shows its subjects straight away: focusing the search
+  // box opens the list, and its blur handler closes it again.
+  const openSubjectList = () => document.getElementById("subj-search")?.focus();
+  const [deptFilter, setDeptFilter] = useState("");
+  const [subDeptFilter, setSubDeptFilter] = useState("");
+
+  useEffect(() => {
+    // Each lookup fails on its own - a dept/course error must not empty the subject search.
+    const json = <T,>(url: string) =>
+      fetch(url)
+        .then((r) => (r.ok ? (r.json() as Promise<T>) : ({} as T)))
+        .catch(() => ({} as T));
+    Promise.all([
+      json<{ subjects?: { name?: string; code?: string; courseId?: string; department?: string; departmentId?: string }[] }>("/api/college/subjects"),
+      json<{ departments?: { id: string; name: string; parentDepartmentId?: string }[] }>("/api/college/departments"),
+      json<{ courses?: { id: string; departmentId: string; mergedCourseIds?: string[] }[] }>("/api/college/courses"),
+    ])
+      .then(async ([{ subjects }, { departments }, { courses }]) => {
+        // A sub-department's subjects hang off its PARENT's course, so only the
+        // semester assignments (which carry the real departmentId) can tell them apart.
+        const courseIds = Array.from(new Set((courses ?? []).flatMap((c) => [c.id, ...(c.mergedCourseIds ?? [])])));
+        const assigned = await Promise.all(
+          courseIds.map((id) =>
+            json<{ assignments?: { subjectCode?: string; subjectName?: string; departmentId?: string }[] }>(
+              `/api/college/subject-semester-assignments?courseId=${encodeURIComponent(id)}`,
+            ),
+          ),
+        );
+        const deptList = departments ?? [];
+        const courseDept = new Map<string, string>();
+        for (const c of courses ?? []) for (const id of [c.id, ...(c.mergedCourseIds ?? [])]) courseDept.set(id, c.departmentId);
+        const deptByName = new Map(deptList.map((d) => [d.name, d.id]));
+        const opts: Record<string, string> = {};
+        const sd: Record<string, string[]> = {};
+        for (const s of subjects ?? []) {
+          const key = subjectBlockKey(s);
+          if (!key) continue;
+          if (!opts[key]) opts[key] = s.code ? `${s.name ?? s.code} (${s.code})` : (s.name ?? key);
+          const d = s.departmentId ?? (s.courseId ? courseDept.get(s.courseId) : undefined) ?? (s.department ? deptByName.get(s.department) : undefined);
+          if (d) (sd[key] ??= []).includes(d) || sd[key].push(d);
+        }
+        for (const { assignments } of assigned) {
+          for (const a of assignments ?? []) {
+            const key = subjectBlockKey({ code: a.subjectCode, name: a.subjectName });
+            if (key && a.departmentId && !(sd[key] ??= []).includes(a.departmentId)) sd[key].push(a.departmentId);
+          }
+        }
+        setDepts(deptList);
+        setSubjectDepts(sd);
+        setSubjectOptions(opts);
+      })
+      .catch(() => undefined); // picker just stays empty
+  }, []);
 
   useEffect(() => {
     Promise.all([
@@ -57,8 +118,7 @@ export default function PrincipalSettingsPage() {
         setNewJoiningYears(String(s.newJoiningYears ?? 1));
         setMaxTheoryPeriodsPerWeek(String(s.maxTheoryPeriodsPerWeek ?? 4));
         setMaxPracticalPeriodsPerWeek(String(s.maxPracticalPeriodsPerWeek ?? 6));
-        setTheoryBlockSize(String(s.theoryBlockSize ?? 1));
-        setLabBlockSize(String(s.labBlockSize ?? 3));
+        setSubjectSlots(s.subjectBlockSizes ?? {});
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load settings" }))
       .finally(() => setIsLoading(false));
@@ -71,8 +131,6 @@ export default function PrincipalSettingsPage() {
     const njy = Number(newJoiningYears);
     const mtp = Number(maxTheoryPeriodsPerWeek);
     const mpp = Number(maxPracticalPeriodsPerWeek);
-    const tbs = Number(theoryBlockSize);
-    const lbs = Number(labBlockSize);
 
     if (
       !sfr || sfr < 1 ||
@@ -80,9 +138,7 @@ export default function PrincipalSettingsPage() {
       !dmf || dmf < 1 ||
       njy < 0 ||
       !mtp || mtp < 1 ||
-      !mpp || mpp < 1 ||
-      !tbs || tbs < 1 ||
-      !lbs || lbs < 1
+      !mpp || mpp < 1
     ) {
       toast({ variant: "destructive", title: "Please enter valid numeric settings" });
       return;
@@ -100,8 +156,7 @@ export default function PrincipalSettingsPage() {
           newJoiningYears: njy,
           maxTheoryPeriodsPerWeek: mtp,
           maxPracticalPeriodsPerWeek: mpp,
-          theoryBlockSize: tbs,
-          labBlockSize: lbs,
+          subjectBlockSizes: subjectSlots,
         } satisfies Partial<FacultyNorms>),
       });
       if (!res.ok) throw new Error();
@@ -200,35 +255,105 @@ export default function PrincipalSettingsPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 pt-2 border-t">
-            <div className="space-y-2">
-              <Label htmlFor="tbs">Theory Continuous Slots</Label>
-              <Input
-                id="tbs"
-                type="number"
-                min={1}
-                max={10}
-                value={theoryBlockSize}
-                onChange={(e) => setTheoryBlockSize(stripLeadingZeros(e.target.value))}
-              />
-              <p className="text-[11px] text-muted-foreground">Default: 1 period</p>
+          <div className="space-y-2 pt-2 border-t">
+            <Label htmlFor="subj-search">Custom continuous slots for a specific subject</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <select
+                aria-label="Filter by department"
+                className="h-9 rounded-md border bg-background px-2 text-sm"
+                value={deptFilter}
+                onChange={(e) => { setDeptFilter(e.target.value); setSubDeptFilter(""); openSubjectList(); }}
+              >
+                <option value="">All departments</option>
+                {depts.filter((d) => !d.parentDepartmentId).map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+              <select
+                aria-label="Filter by sub-department"
+                className="h-9 rounded-md border bg-background px-2 text-sm"
+                value={subDeptFilter}
+                disabled={!deptFilter}
+                onChange={(e) => { setSubDeptFilter(e.target.value); openSubjectList(); }}
+              >
+                <option value="">All sub-departments</option>
+                {depts.filter((d) => d.parentDepartmentId === deptFilter).map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="lbs">Practical / Lab Continuous Slots</Label>
+            <div className="relative">
               <Input
-                id="lbs"
-                type="number"
-                min={1}
-                max={10}
-                value={labBlockSize}
-                onChange={(e) => setLabBlockSize(stripLeadingZeros(e.target.value))}
+                id="subj-search"
+                placeholder="Search subject by name or code..."
+                autoComplete="off"
+                value={subjectQuery}
+                onChange={(e) => { setSubjectQuery(e.target.value); setSubjectPickerOpen(true); }}
+                onFocus={() => setSubjectPickerOpen(true)}
+                onBlur={() => setTimeout(() => setSubjectPickerOpen(false), 150)}
               />
-              <p className="text-[11px] text-muted-foreground">Default: 3 continuous periods</p>
+              {subjectPickerOpen && (
+                <ul className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-md border bg-popover shadow-md">
+                  {Object.keys(subjectOptions).length === 0 && (
+                    <li className="px-3 py-2 text-sm text-muted-foreground">No subjects loaded</li>
+                  )}
+                  {Object.entries(subjectOptions)
+                    .filter(([k, label]) => {
+                      if (k in subjectSlots || !label.toLowerCase().includes(subjectQuery.trim().toLowerCase())) return false;
+                      if (!deptFilter) return true;
+                      // Department alone = itself + its sub-departments; a sub-department = just that one.
+                      const allowed = subDeptFilter
+                        ? [subDeptFilter]
+                        : [deptFilter, ...depts.filter((d) => d.parentDepartmentId === deptFilter).map((d) => d.id)];
+                      return (subjectDepts[k] ?? []).some((d) => allowed.includes(d));
+                    })
+                    .slice(0, 50)
+                    .map(([k, label]) => (
+                      <li key={k}>
+                        <button
+                          type="button"
+                          className="w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => {
+                            setSubjectSlots((p) => ({ ...p, [k]: 2 }));
+                            setSubjectQuery("");
+                            setSubjectPickerOpen(false);
+                          }}
+                        >
+                          {label}
+                        </button>
+                      </li>
+                    ))}
+                </ul>
+              )}
             </div>
+            {Object.entries(subjectSlots).map(([k, n]) => (
+              <div key={k} className="flex items-center gap-3 rounded-md border px-3 py-2">
+                <span className="flex-1 text-sm">{subjectOptions[k] ?? k}</span>
+                <Input
+                  type="number"
+                  min={1}
+                  max={10}
+                  className="w-20"
+                  value={n}
+                  onChange={(e) => setSubjectSlots((p) => ({ ...p, [k]: Number(e.target.value) }))}
+                />
+                <span className="text-xs text-muted-foreground">slots</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSubjectSlots((p) => Object.fromEntries(Object.entries(p).filter(([x]) => x !== k)))}
+                >
+                  Remove
+                </Button>
+              </div>
+            ))}
+            <p className="text-[11px] text-muted-foreground">Overrides the Theory / Practical value above for that subject only. Save to apply.</p>
           </div>
 
           <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
-            <span className="font-semibold text-foreground">Rule:</span> When placing a subject on the timetable grid, <strong>THEORY</strong> allocates {theoryBlockSize || 1} slot(s) and <strong>PRACTICAL / LAB</strong> allocates {labBlockSize || 3} continuous slot(s). Other subject types remain unrestricted (1 slot).
+            <span className="font-semibold text-foreground">Rule:</span> A subject takes 1 slot when placed on the timetable grid, unless you set custom continuous slots for it above.
           </div>
         </CardContent>
       </Card>

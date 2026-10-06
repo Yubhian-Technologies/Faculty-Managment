@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
+import { subjectBlockKey } from "@/lib/timetable/subjectBlockSize";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { loadTimetableContext } from "@/lib/timetable/loadContext";
@@ -302,11 +303,10 @@ export async function PATCH(request: Request) {
         }
         const subject = ctx.subjectsById.get(assignment.subjectId);
         const subjectType = subject?.type ?? "THEORY";
-        const blockSize = subjectType === "PRACTICAL"
-          ? Math.max(1, ctx.rules.labBlockSize ?? 3)
-          : subjectType === "THEORY"
-            ? Math.max(1, ctx.rules.theoryBlockSize ?? 1)
-            : 1;
+        const override = subject ? ctx.rules.subjectBlockSizes?.[subjectBlockKey(subject)] : undefined;
+        // No theory/lab default any more: a subject takes 1 period unless the
+        // Principal set custom continuous slots for it in Settings.
+        const blockSize = Math.max(1, override ?? 1);
 
         // Same gate as timetable-slots/route.ts's manual pin path - a split
         // period (two+ subjects/faculty sharing one cell) only makes sense for

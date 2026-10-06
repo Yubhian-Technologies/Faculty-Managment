@@ -611,6 +611,9 @@ export async function POST(request: Request) {
         subjectName: subject.name,
         subjectCode: subject.code,
         ...(subject.shortCode ? { shortCode: subject.shortCode } : {}),
+        // A hand-typed subject (subjects/custom) is real teaching load for the
+        // timetable but never belongs on the faculty resume.
+        ...((subject as { isCustom?: boolean }).isCustom ? { excludeFromResume: true } : {}),
         hoursPerWeek: body.hoursPerWeek != null ? Number(body.hoursPerWeek) : subject.hoursPerWeek,
         assignedBy: session.uid,
         assignedByName: session.role,

@@ -24,6 +24,7 @@ import { formatTime12h } from "@/lib/timetable/facultyTimetablePdf";
 import {
   buildTimetableColumns,
   periodTimeRange,
+  readableCode,
   resolveTimetableDays,
   slotFacultyName,
   slotShortCode,
@@ -563,7 +564,7 @@ export function WeeklyTimetableMatrix({
                           {slot.subjectName}
                         </h4>
                         <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground">
-                          {slot.subjectCode && <span>{slot.subjectCode}</span>}
+                          {slot.subjectCode && <span>{readableCode(slot.subjectCode, slot.subjectName)}</span>}
                           {slot.labBatch && (
                             <span className="font-sans font-semibold text-emerald-600 dark:text-emerald-400">
                               · {slot.labBatch}
@@ -623,7 +624,7 @@ export function WeeklyTimetableMatrix({
             <div className="space-y-4 pt-2">
               <div className="p-3 rounded-lg border bg-muted/30 space-y-1">
                 <p className="text-xs font-mono text-primary font-bold">
-                  {selectedSlot.shortCode || selectedSlot.subjectCode || "Subject"}
+                  {readableCode(selectedSlot.shortCode, selectedSlot.subjectName) || readableCode(selectedSlot.subjectCode, selectedSlot.subjectName) || "Subject"}
                 </p>
                 <h3 className="font-bold text-base text-foreground leading-tight">
                   {selectedSlot.subjectName}

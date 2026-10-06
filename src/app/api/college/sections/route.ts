@@ -373,6 +373,7 @@ export async function POST(request: Request) {
       departmentId?: string;
       secondaryDepartment?: string;
       regulation?: string;
+      classroomNumber?: string;
     };
 
     if (!body.courseId || !body.name?.trim() || !body.year || !body.batch?.trim()) {
@@ -709,6 +710,7 @@ export async function POST(request: Request) {
       year: Number(body.year),
       batch,
       ...(regulation ? { regulation } : {}),
+      ...(body.classroomNumber?.trim() ? { classroomNumber: body.classroomNumber.trim().slice(0, 40) } : {}),
       facultyInchargeUid,
       facultyInchargeName: body.facultyInchargeName ?? "",
       studentCount: body.studentCount != null ? Math.max(0, Number(body.studentCount)) : 0,

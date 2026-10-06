@@ -152,16 +152,24 @@ export function periodTimeRange(startTime?: string, endTime?: string): string | 
  * configured shortCode, then its code, then the read-time joined values, and
  * only falls back to deriving one from the name as a last resort.
  */
+// A hand-typed (custom) subject is filed under a generated code ("CUS-AB12C")
+// that means nothing to anyone - show its typed name wherever a code would go.
+// Older custom subjects/assignments still carry that generated code.
+const GENERATED_CODE = /^CUS-[A-Z0-9]{5}$/;
+export function readableCode(code: string | undefined, name: string | undefined): string | undefined {
+  return code && GENERATED_CODE.test(code) ? (name || code) : code;
+}
+
 export function slotShortCode(
   slot: TimetableSlot,
   subjects?: Map<string, Subject> | Subject[],
 ): string {
   const subject = subjects instanceof Map ? subjects.get(slot.subjectId) : subjects?.find((s) => s.id === slot.subjectId);
-  if (subject?.shortCode) return subject.shortCode;
-  if (subject?.code) return subject.code;
+  if (subject?.shortCode && !GENERATED_CODE.test(subject.shortCode)) return subject.shortCode;
+  if (subject?.code) return readableCode(subject.code, subject.name) as string;
   const joined = slot as TimetableSlot & { shortCode?: string; subjectCode?: string };
-  if (joined.shortCode) return joined.shortCode;
-  if (joined.subjectCode) return joined.subjectCode;
+  if (joined.shortCode && !GENERATED_CODE.test(joined.shortCode)) return joined.shortCode;
+  if (joined.subjectCode) return readableCode(joined.subjectCode, slot.subjectName) as string;
   const name = (slot.subjectName ?? "").trim();
   if (!name) return "—";
   if (name.length <= 10) return name.toUpperCase();
@@ -176,7 +184,7 @@ export function slotShortCode(
 export function slotSubjectCode(slot: TimetableSlot, subjects?: Map<string, Subject> | Subject[]): string {
   const subject = subjects instanceof Map ? subjects.get(slot.subjectId) : subjects?.find((s) => s.id === slot.subjectId);
   const joined = slot as TimetableSlot & { subjectCode?: string };
-  return subject?.code || joined.subjectCode || slotShortCode(slot, subjects);
+  return readableCode(subject?.code, subject?.name) || readableCode(joined.subjectCode, slot.subjectName) || slotShortCode(slot, subjects);
 }
 
 /** Who is actually teaching this slot right now - the substitute wins. */
