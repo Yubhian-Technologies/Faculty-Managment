@@ -13,7 +13,6 @@ import { DAY_LABELS } from "@/types";
 import { formatTime12h } from "./facultyTimetablePdf";
 import { loadExcelLogo } from "./logoAsset";
 import {
-  allocationNeedsOfficialCode,
   buildAllocationList,
   buildTimetableColumns,
   timetableClassLine,
@@ -291,11 +290,8 @@ export async function buildSectionTimetableXlsxBuffer(opts: SectionTimetableXlsx
     r++; // spacer
     putAcross("Allocation of Subjects", { bold: true, size: 12 });
 
-    const officialCodeCol = allocationNeedsOfficialCode(allocation);
-    const headings = officialCodeCol
-      ? ["Code", "Subject Code", "Subject", "Name of Faculty", "Faculty Initials"]
-      : ["Code", "Subject", "Name of Faculty", "Faculty Initials"];
-    const weights = officialCodeCol ? [2, 2, 4, 3, 2] : [2, 4, 3, 2];
+    const headings = ["Subject", "Name of Faculty"];
+    const weights = [3, 2];
     const groups = splitColumns(lastCol, weights);
     const mergeable = lastCol >= headings.length;
 
@@ -313,10 +309,7 @@ export async function buildSectionTimetableXlsxBuffer(opts: SectionTimetableXlsx
     r++;
     for (const a of allocation) {
       const subject = a.labBatches.length ? `${a.name} (${a.labBatches.join(", ")})` : a.name;
-      const values = officialCodeCol
-        ? [a.shortCode, a.code, subject, a.faculty, ""]
-        : [a.shortCode, subject, a.faculty, ""];
-      writeRow(r, values, false);
+      writeRow(r, [subject, a.faculty], false);
       sheet.getRow(r).height = 20;
       r++;
     }

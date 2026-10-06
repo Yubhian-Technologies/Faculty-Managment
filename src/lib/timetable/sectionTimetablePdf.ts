@@ -11,7 +11,6 @@ import { DAY_LABELS } from "@/types";
 import { escapeHtml, formatTime12h } from "./facultyTimetablePdf";
 import { resolveLogoUrl } from "./logoAsset";
 import {
-  allocationNeedsOfficialCode,
   buildAllocationList,
   buildTimetableColumns,
   timetableClassLine,
@@ -240,7 +239,6 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
   // First column is the same code the grid prints, so every cell can be
   // matched to its subject and faculty.
   const allocation = buildAllocationList(slots, { subjects: subjectMap, assignments });
-  const officialCodeCol = allocationNeedsOfficialCode(allocation);
   const allocationHtml = allocation.length
     ? `
   <div class="section">
@@ -248,22 +246,16 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
   <table class="allocation" cellspacing="0" cellpadding="0">
     <thead>
       <tr>
-        <th class="cell left" style="width:15%"><div class="fx fx-left">Code</div></th>
-        ${officialCodeCol ? `<th class="cell left" style="width:15%"><div class="fx fx-left">Subject Code</div></th>` : ""}
         <th class="cell left"><div class="fx fx-left">Subject</div></th>
-        <th class="cell left" style="width:30%"><div class="fx fx-left">Name of Faculty</div></th>
-        <th class="cell left" style="width:15%"><div class="fx fx-left">Faculty Initials</div></th>
+        <th class="cell left" style="width:40%"><div class="fx fx-left">Name of Faculty</div></th>
       </tr>
     </thead>
     <tbody>
       ${allocation
         .map(
           (a) => `<tr>
-        <td class="cell left"><div class="fx fx-left">${escapeHtml(a.shortCode)}</div></td>
-        ${officialCodeCol ? `<td class="cell left"><div class="fx fx-left">${escapeHtml(a.code)}</div></td>` : ""}
         <td class="cell left"><div class="fx fx-left">${escapeHtml(a.name)}${a.labBatches.length ? ` (${escapeHtml(a.labBatches.join(", "))})` : ""}</div></td>
         <td class="cell left"><div class="fx fx-left">${escapeHtml(a.faculty)}</div></td>
-        <td class="cell left"><div class="fx fx-left">&nbsp;</div></td>
       </tr>`
         )
         .join("")}
