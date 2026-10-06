@@ -18,13 +18,16 @@ import { toast } from "@/hooks/useToast";
 import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { formatDate } from "@/lib/utils";
 import { DESIGNATION_LABELS, EMPLOYEE_CATEGORY_LABELS } from "@/types";
-import type { FacultyMember } from "@/types";
+import type { FacultyMember, HonorificCatalogItem } from "@/types";
 
 // Sentinel for the "Others" row - matches hod/faculty/new/page.tsx's own
 // highest-qualification picker.
 const OTHER_QUALIFICATION = "__OTHER__";
+// Sentinel for "no honorific" - Radix Select rejects "" as a value.
+const NO_HONORIFIC = "__none__";
 
 interface IdentityForm {
+  honorific: string;
   legalName: string;
   apaarFacultyId: string;
   aicteFacultyId: string;
@@ -35,6 +38,7 @@ interface IdentityForm {
 }
 
 const EMPTY_FORM: IdentityForm = {
+  honorific: "",
   legalName: "", apaarFacultyId: "", aicteFacultyId: "", highestQualification: "", specialization: "", email: "", mobileNo: "",
 };
 
@@ -59,6 +63,19 @@ export default function EditMyProfileIdentityPage() {
   const [form, setForm] = useState<IdentityForm>(EMPTY_FORM);
   const [qualIsOther, setQualIsOther] = useState(false);
   const [extraPhones, setExtraPhones] = useState<{ label?: string; number: string }[]>([]);
+  const [honorificOptions, setHonorificOptions] = useState<string[]>([]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch("/api/college/honorifics");
+        const data = await res.json() as { items?: HonorificCatalogItem[] };
+        setHonorificOptions((data.items ?? []).filter((h) => h.isActive).map((h) => h.name));
+      } catch {
+        // Non-fatal - the picker just stays empty until the catalog loads.
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     fetch("/api/college/faculty/me")
@@ -79,6 +96,7 @@ export default function EditMyProfileIdentityPage() {
         const highestQualification = normalizeHighestQualification(m.highestQualification);
         setQualIsOther(!!highestQualification && !(HIGHEST_QUALIFICATION_OPTIONS as readonly string[]).includes(highestQualification));
         setForm({
+          honorific: m.honorific ?? "",
           legalName: m.legalName ?? "",
           apaarFacultyId: m.apaarFacultyId ?? "",
           aicteFacultyId: m.aicteFacultyId ?? "",
@@ -127,6 +145,7 @@ export default function EditMyProfileIdentityPage() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          honorific: form.honorific,
           legalName: form.legalName.trim().toUpperCase(),
           apaarFacultyId: form.apaarFacultyId.trim(),
           aicteFacultyId: form.aicteFacultyId.trim(),
@@ -183,14 +202,29 @@ export default function EditMyProfileIdentityPage() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Full Name (as per SSC) *</Label>
-              <Input
-                value={form.legalName}
-                onChange={(e) => set({ legalName: e.target.value.toUpperCase() })}
-                placeholder="FULL NAME IN CAPITALS"
-                className="uppercase"
-              />
+            <div className="flex gap-3">
+              <div className="space-y-2 w-28 shrink-0">
+                <Label>Honorific</Label>
+                <Select
+                  value={form.honorific || NO_HONORIFIC}
+                  onValueChange={(v) => set({ honorific: v === NO_HONORIFIC ? "" : v })}
+                >
+                  <SelectTrigger><SelectValue placeholder="-" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_HONORIFIC}>None</SelectItem>
+                    {honorificOptions.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2 flex-1">
+                <Label>Full Name (as per SSC) *</Label>
+                <Input
+                  value={form.legalName}
+                  onChange={(e) => set({ legalName: e.target.value.toUpperCase() })}
+                  placeholder="FULL NAME IN CAPITALS"
+                  className="uppercase"
+                />
+              </div>
             </div>
             <div className="space-y-2">
               <Label>APAAR Faculty ID</Label>
