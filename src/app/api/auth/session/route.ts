@@ -9,7 +9,7 @@ import { signSession } from "@/lib/auth/sessionToken";
 import { orderHeldRoles } from "@/lib/roles/seatRoles";
 import { activeDelegatedRoles } from "@/lib/leave/roleDelegation";
 import { migrateUserDoc } from "@/lib/faculty/fieldRenames";
-import { isFacultyCapableRole, isReadOnlyFacultyCollege } from "@/lib/auth/readOnlyAccess";
+import { isFacultyCapableRole } from "@/lib/auth/readOnlyAccess";
 import { isFacultyExited } from "@/lib/auth/readOnlyFacultyLookup";
 
 export async function POST(request: Request) {
@@ -181,13 +181,13 @@ export async function POST(request: Request) {
     let roles = role === "UNKNOWN" ? [role] : orderHeldRoles(role, [...seatRoles, ...delegatedRoles]);
 
     // A RESIGNED/RETIRED faculty member signs in normally but is READ-ONLY (see
-    // lib/auth/readOnlyAccess.ts): derived from facultyMembers.status, only for a
-    // college that has the switch on (zero extra reads otherwise). They hold no
+    // lib/auth/readOnlyAccess.ts): derived from facultyMembers.status, in every
+    // college (only faculty-capable roles cost the one lookup). They hold no
     // seat, so the roles carried in the cookie and sent to the client are just
     // their own role - the seat menus/pages disappear. The API guards re-check the
     // status live on every request regardless, so this only keeps the UI honest.
     let readOnlyAccess = false;
-    if (collegeId && profile && role !== "UNKNOWN" && isReadOnlyFacultyCollege(collegeId) && isFacultyCapableRole(profile.role as string)) {
+    if (collegeId && profile && role !== "UNKNOWN" && isFacultyCapableRole(profile.role as string)) {
       try { readOnlyAccess = await isFacultyExited(db, collegeId, decoded.uid); } catch { /* non-fatal - the guards enforce it anyway */ }
     }
     if (readOnlyAccess) {

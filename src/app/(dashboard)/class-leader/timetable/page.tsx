@@ -13,6 +13,7 @@ import { InstitutionalTimetableTable } from "@/components/timetable/Institutiona
 import { ordinalYear } from "@/lib/timetable/gridModel";
 import { toRoman, formatAcademicShortNotation } from "@/lib/academic/format";
 import type { Course, Department, Section, CourseYearTiming, TimetableSlot, SubjectType, Subject, TeachingAssignment, DayOfWeek } from "@/types";
+import { yearSemesterLabelIn } from "@/lib/academic/format";
 
 type TimetableSlotRow = TimetableSlot & { id: string; subjectType?: SubjectType };
 
@@ -185,7 +186,7 @@ export default function ClassLeaderTimetablePage() {
                       className="h-7 text-xs px-3"
                       onClick={() => changeSemester(sem.semester)}
                     >
-                      {toRoman(sem.semester)} Sem
+                      {yearSemesterLabelIn(Number(section.year), availableSemesters.map((x) => x.semester), sem.semester)}
                     </Button>
                   ))}
                 </div>

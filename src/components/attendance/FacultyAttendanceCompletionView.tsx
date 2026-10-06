@@ -305,9 +305,9 @@ export function FacultyAttendanceCompletionView({ title, description, hodScoped 
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">{p.submittedAtDisplay ?? "—"}</td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        {p.status === "NOT_MARKED" && (
+                        {hodScoped && (p.status === "NOT_MARKED" || p.status === "ON_TIME" || p.status === "LATE") && (
                           <Button size="sm" variant="outline" onClick={() => setCorrectingPeriod(p)}>
-                            Post on Behalf
+                            {p.status === "NOT_MARKED" ? "Post on Behalf" : "Edit"}
                           </Button>
                         )}
                       </td>

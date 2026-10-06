@@ -98,7 +98,7 @@ describe("under query-range-blind isolation", () => {
       const fake = weak(seed);
       fake.seed(`${C}/teachingAssignments/a1`, { sectionId: "s1" });
       fake.seed(`${C}/teachingAssignments/a2`, { sectionId: "s1" });
-      const base = { db: asFirestore(fake), collegeId: "c1", courseId: "co1", year: 1, sectionId: "s1", subjectName: "S", department: "CSE", day: "MON", periodNumber: 1, semester: null, currentAcademicYear: "2026-27", maxPeriodsPerFacultyPerDay: 6, isLiveSlot: makeLiveSlotPredicate(lookup, "2026-27"), writer: "h", facultyName: "F" };
+      const base = { db: asFirestore(fake), collegeId: "c1", courseId: "co1", year: 1, sectionId: "s1", subjectName: "S", department: "CSE", day: "MON", periodNumber: 1, semester: null, currentAcademicYear: "2026-27", isLiveSlot: makeLiveSlotPredicate(lookup, "2026-27"), writer: "h", facultyName: "F" };
       const [a, b] = await Promise.all([
         pinSlotWithChecks({ ...base, assignmentId: "a1", facultyId: "f1", subjectId: "A" }),
         pinSlotWithChecks({ ...base, assignmentId: "a2", facultyId: "f2", subjectId: "B" }),
@@ -117,7 +117,7 @@ describe("under query-range-blind isolation", () => {
         pinSlotWithChecks({
           db: asFirestore(fake), collegeId: "c1", assignmentId: "a1", facultyId: "f1", facultyName: "F", courseId: "co1", year: 1,
           sectionId: "s1", subjectId: "A", subjectName: "S", department: "CSE", day: "MON", periodNumber: 1, semester: null,
-          currentAcademicYear: "2026-27", maxPeriodsPerFacultyPerDay: 6,
+          currentAcademicYear: "2026-27",
           isLiveSlot: makeLiveSlotPredicate(lookup, "2026-27"), writer: "h",
         }),
       ]);

@@ -10,14 +10,14 @@ import { toast } from "@/hooks/useToast";
 import { FileUpload } from "@/components/shared/FileUpload";
 import type { EmployeeScope, CircularRecipientKind } from "@/types/circular";
 
-const STUDENT_YEARS = [1, 2, 3, 4];
-
 export function CircularForm({ onCreated }: { onCreated?: (id: string) => void }) {
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
   const [messageFromOptions, setMessageFromOptions] = useState<string[]>(["Management", "Principal", "Dean", "HOD"]);
   const [recipientKind, setRecipientKind] = useState<CircularRecipientKind>("STAFF");
   const [employeeType, setEmployeeType] = useState<EmployeeScope>("ALL");
   const [targetYears, setTargetYears] = useState<number[]>([]);
+  // The years that actually exist in this college (from its own sections) - not a fixed 1-4.
+  const [studentYears, setStudentYears] = useState<number[]>([]);
   const [deptIds, setDeptIds] = useState<string[]>([]);
   const [date, setDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [subject, setSubject] = useState("");
@@ -31,6 +31,9 @@ export function CircularForm({ onCreated }: { onCreated?: (id: string) => void }
     fetch("/api/college/circular-settings").then((r) => r.json()).then((j) => { if (j.settings?.messageFromOptions?.length) setMessageFromOptions(j.settings.messageFromOptions); }).catch(() => {});
     fetch("/api/college/departments").then((r) => r.json()).then((j) => setDepartments(j.departments ?? j.data ?? [])).catch(() => {});
     fetch("/api/college/sections").then((r) => r.json()).then((j) => {
+      if (Array.isArray(j.sections)) {
+        setStudentYears(Array.from(new Set((j.sections as { year?: number }[]).map((s) => Number(s.year)).filter((y) => Number.isInteger(y) && y >= 1))).sort((a, b) => a - b));
+      }
       // fallback for colleges without departments collection populated — derive from sections
       if (departments.length === 0 && j.sections) {
         const map = new Map<string, string>();
@@ -104,7 +107,7 @@ export function CircularForm({ onCreated }: { onCreated?: (id: string) => void }
             <div>
               <Label>Academic year (empty = all)</Label>
               <div className="mt-1 flex flex-wrap gap-2">
-                {STUDENT_YEARS.map((y) => (
+                {studentYears.map((y) => (
                   <label key={y} className="flex items-center gap-1.5 rounded border px-2 py-1 text-sm">
                     <input type="checkbox" checked={targetYears.includes(y)} onChange={(e) => setTargetYears((prev) => e.target.checked ? [...prev, y] : prev.filter((x) => x !== y))} />
                     Year {y}

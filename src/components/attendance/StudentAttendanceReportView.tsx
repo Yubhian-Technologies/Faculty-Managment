@@ -11,9 +11,10 @@ import { toast } from "@/hooks/useToast";
 import { exportToCSV } from "@/lib/utils";
 import { formatPercent } from "@/lib/studentAttendance/percentage";
 import { applyStudentFilters, NO_FILTERS, type StudentReportFilters } from "@/lib/studentAttendance/reportFilters";
-import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
+import { offeredYears } from "@/lib/college/departmentYears";
 import type { Course, Department, SectionListItem } from "@/types";
-import { yearSemesterLabel } from "@/lib/academic/format";
+import { semesterLabel, semestersInYear, yearOfSemester } from "@/lib/college/courseYears";
+import { useCourseSemesterPlan } from "@/hooks/useCourseSemesterPlan";
 
 const ALL = "__all__";
 // Below this a student is in shortage; colours the percentages in the tables.
@@ -175,23 +176,21 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
 
   const deptDoc = useMemo(() => departmentDocs.find((d) => d.name === department), [departmentDocs, department]);
 
+  // The picked course's own Course doc (its semester setup decides the semester options below).
+  const courseDoc = useMemo(
+    () => inCourse.map(courseOf).find((c) => !!c) ?? courseDocs.find((c) => c.name.toLowerCase() === course.toLowerCase()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [inCourse, courseDocs, course]
+  );
+  const semesterPlan = useCourseSemesterPlan(courseDoc);
+
   // The years this department actually runs, per Principal/College Admin's
-  // Departments screen. A SUB-department almost never carries years of its own
-  // - that screen will not let an HOD set them on a child - so they live on the
-  // common parent (Basic Science holds year 1; Basic Science - English,
-  // - Physics, - Chemistry all run that year under it). Falling back to the
-  // parent is the same rule managerTeachingYears already applies in
-  // lib/departments/managedBranches.ts.
-  const assignedYears = useMemo(() => {
-    const yearsOf = (d: Department | undefined) =>
-      d ? resolveDepartmentCourseScope(d, catalogId).assignedYears.filter((y) => Number.isFinite(y) && y >= 1) : [];
-    const own = yearsOf(deptDoc);
-    if (own.length > 0) return own;
-    const parentDoc = deptDoc?.parentDepartmentId
-      ? departmentDocs.find((d) => d.id === deptDoc.parentDepartmentId)
-      : undefined;
-    return yearsOf(parentDoc);
-  }, [deptDoc, departmentDocs, catalogId]);
+  // Departments screen - its own, or its parent's for a sub-department that
+  // carries none. See lib/college/departmentYears.ts for why.
+  const assignedYears = useMemo(
+    () => offeredYears(deptDoc, departmentDocs, catalogId, []),
+    [deptDoc, departmentDocs, catalogId]
+  );
 
   // The sections this department's report covers. Normally just its own, but a
   // department that MANAGES branches for a shared year owns no sections under
@@ -234,12 +233,14 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
     // Faculty see only the years they personally hold a section in.
     if (onlyOwnYears) years = years.filter((y) => sectionYears.includes(y));
 
+    // Which semesters a year has, and how they are numbered, come from the course's own semester setup
+    // (semesterPlan); a course without one gets the labelled two-per-year fallback.
     return Array.from(new Set(years))
       .sort((a, b) => a - b)
-      .flatMap((y) => [y * 2 - 1, y * 2].map((sem) => ({ key: String(sem), label: yearSemesterLabel(sem) })));
-  }, [inDepartment, assignedYears, onlyOwnYears]);
-  // Semester n belongs to year ceil(n / 2).
-  const semesterYear = semesterKey ? Math.ceil(Number(semesterKey) / 2) : 0;
+      .flatMap((y) => semestersInYear(semesterPlan, y).map((sem) => ({ key: String(sem), label: semesterLabel(semesterPlan, sem) })));
+  }, [inDepartment, assignedYears, onlyOwnYears, semesterPlan]);
+  // The year the picked semester belongs to.
+  const semesterYear = semesterKey ? yearOfSemester(semesterPlan, Number(semesterKey)) : 0;
   const sectionOptions = useMemo(
     () => inDepartment.filter((x) => Number(x.year) === semesterYear).sort((a, b) => a.name.localeCompare(b.name)),
     [inDepartment, semesterYear]

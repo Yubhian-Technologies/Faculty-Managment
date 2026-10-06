@@ -69,7 +69,7 @@ describe.skipIf(!EMULATOR)("no new seat for a RESIGNED/RETIRED person (real Fire
     await user("exited2", "PANEL_MEMBER"); await fac("fx2", "exited2", "RETIRED");
   }
 
-  beforeEach(async () => { await seed(); authCalls.n = 0; delete process.env.READ_ONLY_FACULTY_COLLEGES; who.uid = "hod"; who.role = "HOD"; vi.spyOn(console, "error").mockImplementation(() => {}); });
+  beforeEach(async () => { await seed(); authCalls.n = 0; who.uid = "hod"; who.role = "HOD"; vi.spyOn(console, "error").mockImplementation(() => {}); });
 
   const assign = async (seatId: string, uid: string | null) => {
     const { assignSeat } = await import("@/lib/roles/seats");
@@ -77,8 +77,7 @@ describe.skipIf(!EMULATOR)("no new seat for a RESIGNED/RETIRED person (real Fire
     catch (e) { return { ok: false as const, status: (e as { status?: number }).status, message: (e as Error).message }; }
   };
 
-  it("switch ON: appointing a RESIGNED/RETIRED person is refused (409) and NOTHING existing changes", async () => {
-    process.env.READ_ONLY_FACULTY_COLLEGES = C;
+  it("appointing a RESIGNED/RETIRED person is refused (409) and NOTHING existing changes", async () => {
     const before = await dump();
     const r1 = await assign("sEmptyHod", "exited");          // the 4-seat holder asking for a 5th
     const r2 = await assign("sEmptyAcad", "exited2");        // a retired person who holds nothing
@@ -89,34 +88,30 @@ describe.skipIf(!EMULATOR)("no new seat for a RESIGNED/RETIRED person (real Fire
     expect(authCalls.n).toBe(0);
   });
 
-  it("switch ON: existing holders are never removed or edited by the check - the exited 4-seat holder keeps all 4", async () => {
-    process.env.READ_ONLY_FACULTY_COLLEGES = C;
+  it("existing holders are never removed or edited by the check - the exited 4-seat holder keeps all 4", async () => {
     await assign("sEmptyHod", "exited");
     for (const id of ["s1", "s2", "s3", "s4"]) expect(((await col("roleSeats").doc(id).get()).data() as { holderUid: string }).holderUid, id).toBe("exited");
     expect(((await col("users").doc("exited").get()).data() as { seatRoles: string[] }).seatRoles).toEqual(["HOD", "VICE_PRINCIPAL", "ACADEMICS"]);
   });
 
-  it("switch ON: vacating an exited holder's seat still works (the check only guards NEW appointments)", async () => {
-    process.env.READ_ONLY_FACULTY_COLLEGES = C;
+  it("vacating an exited holder's seat still works (the check only guards NEW appointments)", async () => {
     expect((await assign("s1", null)).ok).toBe(true);
     expect(((await col("roleSeats").doc("s1").get()).data() as { holderUid: string | null }).holderUid).toBeNull();
     expect(((await col("departments").doc("dIT").get()).data() as { hodUid: string }).hodUid).toBe("");
   });
 
-  it("switch ON: ACTIVE people and a login with no faculty record can still be appointed", async () => {
-    process.env.READ_ONLY_FACULTY_COLLEGES = C;
+  it("ACTIVE people and a login with no faculty record can still be appointed", async () => {
     expect((await assign("sEmptyHod", "active")).ok).toBe(true);
     expect((await assign("sEmptyAcad", "nofaculty")).ok).toBe(true);
     expect(((await col("roleSeats").doc("sEmptyHod").get()).data() as { holderUid: string }).holderUid).toBe("active");
   });
 
-  it("switch OFF (default / other colleges): the old behaviour is untouched - even a RESIGNED person can be appointed", async () => {
-    expect((await assign("sEmptyHod", "exited")).ok).toBe(true);
-    expect(((await col("roleSeats").doc("sEmptyHod").get()).data() as { holderUid: string }).holderUid).toBe("exited");
+  it("another college id or a stale env variable changes nothing: a RESIGNED person is refused everywhere", async () => {
+    process.env.READ_ONLY_FACULTY_COLLEGES = "some-other-college";
+    expect((await assign("sEmptyHod", "exited")).ok).toBe(false);
   });
 
   it("Department Office POST: an exited faculty member is refused (409) and no account is changed; an ACTIVE one is appointed", async () => {
-    process.env.READ_ONLY_FACULTY_COLLEGES = C;
     const { POST } = await import("@/app/api/college/department-office/route");
     const post = (uid: string) => POST(new Request("http://x", { method: "POST", body: JSON.stringify({ uid }) }));
     const before = await dump();
@@ -130,14 +125,7 @@ describe.skipIf(!EMULATOR)("no new seat for a RESIGNED/RETIRED person (real Fire
     expect(((await col("users").doc("active").get()).data() as { seatRoles: string[] }).seatRoles).toEqual(["DEPARTMENT_OFFICE"]);
   });
 
-  it("Department Office POST with the switch OFF behaves as before (an exited person can be appointed)", async () => {
-    const { POST } = await import("@/app/api/college/department-office/route");
-    const res = await POST(new Request("http://x", { method: "POST", body: JSON.stringify({ uid: "exited2" }) }));
-    expect(res.status).toBe(200);
-  });
-
   it("exiting a Department Office head removes the post (and only the post): the account is not disabled or rewritten", async () => {
-    process.env.READ_ONLY_FACULTY_COLLEGES = C;
     await col("users").doc("active").update({ seatRoles: ["DEPARTMENT_OFFICE"] });
     const { vacateSeatsOnExit } = await import("@/lib/faculty/vacateSeatsOnExit");
     const r = await vacateSeatsOnExit(db(), C, "active", { name: "ACTIVE", status: "RESIGNED" }, ACTOR);

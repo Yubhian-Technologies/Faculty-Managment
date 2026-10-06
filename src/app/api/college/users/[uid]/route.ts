@@ -258,10 +258,17 @@ export async function PATCH(
       }
     }
 
-    // Empty string clears the photo - everything else must be a real upload of ours.
+    // Empty string clears the photo - everything else must be a real upload of
+    // ours. The value already on the record always passes: the edit forms load
+    // the stored URL into their state and send it back on every save, so a
+    // PATCH that does not touch the photo still carries it, and re-validating
+    // a value we persisted ourselves rejected the save with "Invalid photo
+    // URL" having changed nothing.
+    const existingPhotoUrl = (targetSnap.data() as { profilePhotoUrl?: string } | undefined)?.profilePhotoUrl ?? "";
     if (
       body.profilePhotoUrl !== undefined &&
       body.profilePhotoUrl !== "" &&
+      body.profilePhotoUrl !== existingPhotoUrl &&
       (!body.profilePhotoUrl.startsWith("https://firebasestorage.googleapis.com/") ||
         !body.profilePhotoUrl.includes(encodeURIComponent(`profile-photos/${uid}_`)))
     ) {

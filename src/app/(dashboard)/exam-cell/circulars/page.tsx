@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/useToast";
 import { formatDate, formatDMY } from "@/lib/utils";
 import type { Course, ExamCircular } from "@/types";
+import { useCourseSemesterPlan } from "@/hooks/useCourseSemesterPlan";
 
 export default function ExamCellCircularsPage() {
   const [circulars, setCirculars] = useState<ExamCircular[]>([]);
@@ -329,13 +330,19 @@ function NoticeFormDialog({
 
   const courseNameOptions = useMemo(() => [...new Set(courses.map((c) => c.name))].sort(), [courses]);
 
-  // Semesters, not years - a 4-year B.Tech runs 1/8..8/8, two semesters per
-  // year. There's no department dimension in this form, so this deliberately
-  // doesn't scope years the way Exam Configuration does.
+  // Semesters, not years - a 4-year B.Tech with two semesters a year runs 1/8..8/8. How many a course
+  // has comes from its own semester setup (useCourseSemesterPlan), taking the longest course of this
+  // name. There's no department dimension in this form, so this deliberately doesn't scope years the
+  // way Exam Configuration does.
+  const longestCourse = useMemo(
+    () => courses.filter((c) => c.name === courseName).sort((a, b) => b.durationYears - a.durationYears)[0] ?? null,
+    [courses, courseName]
+  );
+  const semesterPlan = useCourseSemesterPlan(longestCourse);
   const totalSemesters = useMemo(() => {
     if (circular && circular.courseName === courseName) return circular.totalSemesters;
-    return Math.max(0, ...courses.filter((c) => c.name === courseName).map((c) => c.durationYears * 2));
-  }, [courses, courseName, circular]);
+    return semesterPlan.semesters.length;
+  }, [semesterPlan, courseName, circular]);
   const semesterOptions = useMemo(() => Array.from({ length: totalSemesters || 0 }, (_, i) => i + 1), [totalSemesters]);
 
   function reset() {

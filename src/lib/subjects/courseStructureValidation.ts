@@ -199,16 +199,12 @@ export function resolveImportCategory(raw: string, custom: CategoryDefinition[] 
   return { kind: "unknown" };
 }
 
-// Two rows (or a row and an existing master) describe the same subject.
-export function sameSubjectIdentity(
-  a: Pick<CourseStructureRow, "name" | "category" | "lectureHours" | "tutorialHours" | "practicalHours">,
-  b: Pick<CourseStructureRow, "name" | "category" | "lectureHours" | "tutorialHours" | "practicalHours">
-): boolean {
-  return normalizeWords(a.name) === normalizeWords(b.name)
-    && String(a.category).toUpperCase() === String(b.category).toUpperCase()
-    && a.lectureHours === b.lectureHours
-    && a.tutorialHours === b.tutorialHours
-    && a.practicalHours === b.practicalHours;
+// Master identity: a code alone no longer identifies a subject - the same code
+// may be used for different subjects (name, category or L-T-P differ).
+export function subjectIdentityKey(
+  r: Pick<CourseStructureRow, "code" | "name" | "category" | "lectureHours" | "tutorialHours" | "practicalHours">
+): string {
+  return [r.code, normalizeWords(r.name), String(r.category).toUpperCase(), r.lectureHours, r.tutorialHours, r.practicalHours].join("|");
 }
 
 export function missingRequiredColumns(mappedKeys: Iterable<string>): string[] {
@@ -369,27 +365,14 @@ export function validateCourseStructureRows(
   }
 
   // ── Cross-row consistency ──────────────────────────────────────────────
-  // One code = one subject. The same subject may legitimately appear in
-  // more than one semester (a year-long subject), but never twice in the
-  // same semester, and never as two different subjects under one code.
-  const firstByCode = new Map<string, CourseStructureRow>();
+  // The same subject may appear in more than one semester (a year-long
+  // subject), but never twice in the same semester. A code may be shared by
+  // different subjects.
   const seenSlot = new Map<string, CourseStructureRow>();
   const nameInSemester = new Map<string, CourseStructureRow>();
   const shortInSemester = new Map<string, CourseStructureRow>();
   for (const r of rows) {
-    const first = firstByCode.get(r.code);
-    if (!first) firstByCode.set(r.code, r);
-    else if (!sameSubjectIdentity(first, r)) {
-      errors.push({
-        row: r.rowNumber,
-        field: "code",
-        message: r.codeSource === "derived" && first.codeSource === "derived"
-          ? `"${r.name}" and "${first.name}" (row ${first.rowNumber}) both produce the code ${r.code}. Add a Subject Code column with distinct codes.`
-          : `Code ${r.code} is already used by row ${first.rowNumber} for a different subject ("${first.name}").`,
-      });
-      continue;
-    }
-    const slotKey = `${r.code}|${r.year}|${r.semester}`;
+    const slotKey = `${subjectIdentityKey(r)}|${r.year}|${r.semester}`;
     const dup = seenSlot.get(slotKey);
     if (dup) {
       errors.push({ row: r.rowNumber, field: "code", message: `Duplicate of row ${dup.rowNumber} (same subject, Year ${r.year} Semester ${r.semester}).` });

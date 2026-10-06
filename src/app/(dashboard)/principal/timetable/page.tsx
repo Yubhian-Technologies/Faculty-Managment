@@ -10,11 +10,11 @@ import { FacultyLeisureFilter } from "@/components/timetable/FacultyLeisureFilte
 import { currentWeekDates } from "@/lib/utils";
 import { isoDateKey } from "@/lib/leave/dayCounter";
 import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
-import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
+import { resolveTaughtYears } from "@/lib/college/taughtYears";
 import { InstitutionalTimetableTable } from "@/components/timetable/InstitutionalTimetableTable";
 import { ordinalYear } from "@/lib/timetable/gridModel";
 import type { Course, Department, Section, CourseYearTiming, TimetableSlot, Subject, DayOfWeek } from "@/types";
-import { yearSemesterLabel } from "@/lib/academic/format";
+import { yearSemesterLabelIn } from "@/lib/academic/format";
 
 // Read-only view of PUBLISHED timetables for the Principal and Vice Principal.
 // Reads `timetableSlots`, which only ever contains published slots - drafts live
@@ -138,8 +138,10 @@ export default function PrincipalTimetablePage() {
     if (!course) return [];
     const courseYears = Array.from({ length: course.durationYears }, (_, i) => i + 1);
     const dept = departments.find((d) => d.id === departmentId);
-    const assigned = dept ? resolveDepartmentCourseScope(dept, course.catalogId).assignedYears : [];
-    return assigned.length > 0 ? courseYears.filter((y) => assigned.includes(y)) : courseYears;
+    // Own years, or - for a sub-department that has none of its own - its parent's. An empty result means the
+    // department isn't configured: no years (never every year of the course).
+    const assigned = dept ? resolveTaughtYears(dept, departments, course.catalogId).years : [];
+    return courseYears.filter((y) => assigned.includes(y));
   })();
 
   const visibleSections = sections;
@@ -279,7 +281,7 @@ export default function PrincipalTimetablePage() {
            >
              <option value="">Select semester</option>
              {semesterOptions.map((s) => (
-               <option key={s} value={s}>{yearSemesterLabel(s)}</option>
+               <option key={s} value={s}>{yearSemesterLabelIn(Number(year), semesterOptions, s)}</option>
              ))}
            </select>
          </div>
@@ -344,7 +346,7 @@ export default function PrincipalTimetablePage() {
           courseName={courseName}
           departmentName={departments.find((d) => d.id === departmentId)?.name}
           academicYear={slots[0]?.academicYear}
-          semesterLabel={semester ? `Sem ${yearSemesterLabel(Number(semester))}` : undefined}
+          semesterLabel={semester ? `Sem ${yearSemesterLabelIn(Number(year), semesterOptions, Number(semester))}` : undefined}
           workingDays={workingDays}
           weekStart={weekStart}
           onWeekChange={setWeekStart}

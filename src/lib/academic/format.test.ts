@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toRoman, yearSemesterLabel } from "./format";
+import { toRoman, yearSemesterLabel, yearSemesterLabelIn } from "./format";
 
 describe("yearSemesterLabel", () => {
   // The whole point: semesters are STORED running across the course, but
@@ -60,5 +60,39 @@ describe("toRoman", () => {
     expect(toRoman(11)).toBe("11");
     expect(toRoman(null)).toBe("");
     expect(toRoman(undefined)).toBe("");
+  });
+});
+
+describe("yearSemesterLabelIn", () => {
+  // The bug this exists for: second year's semesters are stored as [1,2] at
+  // most colleges, so dividing the number by two read them as first year's.
+  it("labels within-year numbering by the year it belongs to", () => {
+    expect(yearSemesterLabelIn(2, [1, 2], 1)).toBe("2-1");
+    expect(yearSemesterLabelIn(2, [1, 2], 2)).toBe("2-2");
+    expect(yearSemesterLabelIn(4, [1, 2], 2)).toBe("4-2");
+  });
+
+  // ...and the other convention, in use at two course-years, must still work.
+  it("labels course-wide numbering the same way", () => {
+    expect(yearSemesterLabelIn(3, [5, 6], 5)).toBe("3-1");
+    expect(yearSemesterLabelIn(3, [5, 6], 6)).toBe("3-2");
+    expect(yearSemesterLabelIn(2, [3, 4], 3)).toBe("2-1");
+  });
+
+  it("handles a year split into more than two", () => {
+    expect(yearSemesterLabelIn(2, [1, 2, 3], 3)).toBe("2-3");
+  });
+
+  it("sorts and de-duplicates before taking the position", () => {
+    expect(yearSemesterLabelIn(2, [2, 1, 2], 2)).toBe("2-2");
+  });
+
+  // A stale pick must not render an empty label.
+  it("falls back when the semester is not in that year's list", () => {
+    expect(yearSemesterLabelIn(2, [1, 2], 7)).toBe("4-1");
+  });
+
+  it("falls back when the year is unusable", () => {
+    expect(yearSemesterLabelIn(0, [1, 2], 3)).toBe("2-1");
   });
 });

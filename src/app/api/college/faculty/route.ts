@@ -12,6 +12,7 @@ import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/fir
 import { getHodDepartmentScope, getDepartmentTreeNames, canHodManageFacultyDepartment, facultyManageableDepartmentNames } from "@/lib/departments/scope";
 import { LEGACY_TECHNICAL_DESIGNATIONS } from "@/lib/designations/config";
 import { resolveDesignation } from "@/lib/designations/validate";
+import { resolveHonorific } from "@/lib/honorifics/validate";
 import { experienceBreakdown, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { degreeTypeError } from "@/lib/faculty/degreeType";
@@ -297,6 +298,7 @@ export async function POST(request: Request) {
       academicProfile?: Record<string, unknown>;
       technicalProfile?: Record<string, unknown>;
       profilePhotoUrl?: string;
+      honorific?: string;
     } & PersonalDetailsInput;
 
     const {
@@ -344,8 +346,13 @@ export async function POST(request: Request) {
     }
     // The name used everywhere this record is displayed/copied from (login
     // account, teaching assignments, sections, etc.) - Full Name (as per SSC)
-    // is the only identity/display name (required above).
-    const finalName = body.legalName.trim();
+    // is the only identity/display name (required above), honorific-prefixed
+    // via facultyDisplayName() same as every other display of this record.
+    // Safe to read the raw body.honorific here (not yet validated against
+    // the catalog) - every use of finalName below happens after the
+    // honorific-validation block further down, which already returns 400
+    // before reaching any of them if it's invalid.
+    const finalName = facultyDisplayName({ legalName: body.legalName, honorific: body.honorific });
     // Uploaded before the record exists (under a temp id), so we can only check
     // it came from our own upload endpoint, not that it names this specific id.
     if (profilePhotoUrl !== undefined && !profilePhotoUrl.startsWith("https://firebasestorage.googleapis.com/")) {
@@ -365,6 +372,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: designationResult.error }, { status: 400 });
     }
     const resolvedDesignation = designationResult.name;
+
+    // Honorific is optional - only validated against the catalog
+    // (colleges/{id}/honorifics) when one was actually given.
+    let resolvedHonorific: string | undefined;
+    if (body.honorific?.trim()) {
+      const honorificResult = await resolveHonorific(db, collegeId, body.honorific);
+      if ("error" in honorificResult) {
+        return NextResponse.json({ error: honorificResult.error }, { status: 400 });
+      }
+      resolvedHonorific = honorificResult.name;
+    }
 
     // Resolve the owning department. A parent HOD may add faculty straight into
     // one of their sub-departments by naming it; anything else falls back to
@@ -477,6 +495,7 @@ export async function POST(request: Request) {
           .filter((p) => p.number);
         return numbers.length > 0 ? { additionalPhoneNumbers: numbers } : {};
       })()),
+      ...(resolvedHonorific ? { honorific: resolvedHonorific } : {}),
       designation: resolvedDesignation,
       employeeCategory,
       highestQualification: normalizeHighestQualification(highestQualification),

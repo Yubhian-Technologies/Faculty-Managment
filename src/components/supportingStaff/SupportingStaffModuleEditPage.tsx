@@ -13,7 +13,7 @@ import { SUPPORTING_STAFF_MODULES, type SupportingStaffModuleKey } from "@/lib/s
 import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
-import { migrateSupportingStaffDoc } from "@/lib/faculty/fieldRenames";
+import { supportingStaffModulePatchBody, supportingStaffRecordFromDoc } from "@/lib/supportingStaff/moduleRecord";
 
 interface Props {
   // Where this staff category's own list/detail pages live - the only thing
@@ -50,48 +50,7 @@ export function SupportingStaffModuleEditPage({ basePath }: Props) {
           router.push(basePath);
           return;
         }
-        const m = migrateSupportingStaffDoc(data.staff);
-        setRecord({
-          gender: (m.gender as string) ?? "",
-          dateOfBirth: (m.dateOfBirth as string) ?? undefined,
-          legalName: (m.legalName as string) ?? "",
-          nameAsPerAadhar: (m.nameAsPerAadhar as string) ?? "",
-          nameAsPerPan: (m.nameAsPerPan as string) ?? "",
-          fatherName: (m.fatherName as string) ?? "",
-          motherName: (m.motherName as string) ?? "",
-          religion: m.religion as never,
-          caste: m.caste as never,
-          subCaste: (m.subCaste as string) ?? "",
-          aadharNo: (m.aadharNo as string) ?? "",
-          panNo: (m.panNo as string) ?? "",
-          passportNo: (m.passportNo as string) ?? "",
-          bankAccountNumber: (m.bankAccountNumber as string) ?? "",
-          ifscCode: (m.ifscCode as string) ?? "",
-          bankName: (m.bankName as string) ?? "",
-          bankBranch: (m.bankBranch as string) ?? "",
-          bankOtherDetails: (m.bankOtherDetails as string) ?? "",
-          emergencyContactName: (m.emergencyContactName as string) ?? "",
-          emergencyContactRelation: (m.emergencyContactRelation as string) ?? "",
-          emergencyContactMobileNo: (m.emergencyContactMobileNo as string) ?? "",
-          ratificationStatus: (m.ratificationStatus as string) ?? "",
-          ratificationProceedingsNumber: (m.ratificationProceedingsNumber as string) ?? "",
-          ratificationDate: (m.ratificationDate as string) ?? undefined,
-          maritalStatus: (m.maritalStatus as string) ?? "",
-          spouseName: (m.spouseName as string) ?? "",
-          numberOfChildren: m.numberOfChildren as number | undefined,
-          temporaryAddress: (m.temporaryAddress as string) ?? "",
-          permanentAddressSameAsTemporary: (m.permanentAddressSameAsTemporary as boolean) ?? false,
-          permanentAddress: (m.permanentAddress as string) ?? "",
-          bloodGroup: (m.bloodGroup as string) ?? "",
-          motherTongue: (m.motherTongue as string) ?? "",
-          languagesKnown: (m.languagesKnown as string[]) ?? [],
-          height: (m.height as string) ?? "",
-          weightKg: m.weightKg as number | undefined,
-          pfNumber: (m.pfNumber as string) ?? "",
-          uanNumber: (m.uanNumber as string) ?? "",
-          esiNumber: (m.esiNumber as string) ?? "",
-          supportingStaffProfile: (m.supportingStaffProfile as SupportingStaffEditRecord["supportingStaffProfile"]) ?? {},
-        });
+        setRecord(supportingStaffRecordFromDoc(data.staff));
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load staff record" }))
       .finally(() => setLoading(false));
@@ -111,28 +70,7 @@ export function SupportingStaffModuleEditPage({ basePath }: Props) {
     }
     setSaving(true);
     try {
-      const body: Record<string, unknown> =
-        moduleKey === "personal"
-          ? {
-              gender: record.gender, dateOfBirth: record.dateOfBirth, legalName: record.legalName,
-              nameAsPerAadhar: record.nameAsPerAadhar, nameAsPerPan: record.nameAsPerPan,
-              fatherName: record.fatherName, motherName: record.motherName, religion: record.religion,
-              caste: record.caste, subCaste: record.subCaste, aadharNo: record.aadharNo, panNo: record.panNo,
-              passportNo: record.passportNo,
-              bankAccountNumber: record.bankAccountNumber, ifscCode: record.ifscCode,
-              bankName: record.bankName, bankBranch: record.bankBranch, bankOtherDetails: record.bankOtherDetails,
-              emergencyContactName: record.emergencyContactName, emergencyContactRelation: record.emergencyContactRelation,
-              emergencyContactMobileNo: record.emergencyContactMobileNo, ratificationStatus: record.ratificationStatus,
-              ratificationProceedingsNumber: record.ratificationProceedingsNumber,
-              ratificationDate: record.ratificationDate, maritalStatus: record.maritalStatus, spouseName: record.spouseName,
-              numberOfChildren: record.numberOfChildren,
-              temporaryAddress: record.temporaryAddress, permanentAddressSameAsTemporary: record.permanentAddressSameAsTemporary,
-              permanentAddress: record.permanentAddress, bloodGroup: record.bloodGroup,
-              motherTongue: record.motherTongue, languagesKnown: record.languagesKnown,
-              height: record.height, weightKg: record.weightKg,
-              pfNumber: record.pfNumber, uanNumber: record.uanNumber, esiNumber: record.esiNumber,
-            }
-          : { supportingStaffProfile: record.supportingStaffProfile };
+      const body = supportingStaffModulePatchBody(moduleKey, record);
 
       const res = await fetch(`/api/college/supporting-staff/${staffId}`, {
         method: "PATCH",

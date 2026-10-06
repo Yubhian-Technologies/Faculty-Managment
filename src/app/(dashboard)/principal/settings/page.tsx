@@ -14,6 +14,7 @@ import { HiringTermsSettingsCard } from "@/components/hiring/HiringTermsSettings
 import { AcademicYearSettingsCard } from "@/components/academics/AcademicYearSettingsCard";
 import { FinancialYearSettingsCard } from "@/components/academics/FinancialYearSettingsCard";
 import { DesignationCatalogCard } from "@/components/academics/DesignationCatalogCard";
+import { HonorificsCatalogCard } from "@/components/academics/HonorificsCatalogCard";
 import { LeaveApprovalRoutingCard } from "@/components/leave/LeaveApprovalRoutingCard";
 import { LeaveVacationStaffCard } from "@/components/leave/LeaveVacationStaffCard";
 import { LeaveTypeRulesCard } from "@/components/leave/LeaveTypeRulesCard";
@@ -242,6 +243,8 @@ export default function PrincipalSettingsPage() {
           that college leadership had no card for. */}
       <DesignationCatalogCard category="TECHNICAL" />
       <DesignationCatalogCard category="NON_TECHNICAL" />
+
+      <HonorificsCatalogCard />
 
       <HiringTermsSettingsCard />
 

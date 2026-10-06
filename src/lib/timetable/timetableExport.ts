@@ -247,6 +247,7 @@ export async function buildSectionTimetableXlsxBuffer(opts: SectionTimetableXlsx
   sheet.pageSetup.printTitlesRow = `${headerRowIndex}:${headerRowIndex}`;
 
   // ── Grid body: the subject code only, like the printed timetable ─────────
+  const firstBodyRow = r;
   for (const day of days) {
     const row = sheet.getRow(r);
     row.getCell(1).value = DAY_LABELS[day] ?? day;
@@ -270,6 +271,18 @@ export async function buildSectionTimetableXlsxBuffer(opts: SectionTimetableXlsx
     row.height = Math.max(28, maxLines * LINE_HEIGHT + 6);
     r++;
   }
+  // A break column reads as one continuous band: no horizontal lines between
+  // its day rows, only the column's outer edges.
+  columns.forEach((col, i) => {
+    if (col.kind !== "break") return;
+    for (let row = firstBodyRow; row < r; row++) {
+      sheet.getCell(row, i + 2).border = {
+        left: BORDER.left,
+        right: BORDER.right,
+        ...(row === r - 1 ? { bottom: BORDER.bottom } : {}),
+      };
+    }
+  });
 
   // ── Allocation of subjects, under the grid, using merged column groups so the
   //    grid's own column widths are never changed ──────────────────────────

@@ -143,6 +143,33 @@ export async function PATCH(
           await batch.commit();
         }
       }
+
+      // Cascade to semester assignments (Academics pickers read these).
+      // SubjectSemesterAssignment holds its own copies of subject metadata for fast picker reads.
+      const assignmentInstanceFields: Record<string, unknown> = { updatedAt: now };
+      if (newHours != null) {
+        assignmentInstanceFields.lectureHours = updates.lectureHours ?? 0;
+        assignmentInstanceFields.tutorialHours = updates.tutorialHours ?? 0;
+        assignmentInstanceFields.practicalHours = updates.practicalHours ?? 0;
+        assignmentInstanceFields.hoursPerWeek = newHours;
+      }
+      if (newName != null) assignmentInstanceFields.subjectName = newName;
+      if (newCode != null) assignmentInstanceFields.subjectCode = newCode;
+      if (newShortCode != null) assignmentInstanceFields.shortCode = newShortCode;
+
+      if (Object.keys(assignmentInstanceFields).length > 1) {
+        const instanceSnap = await db
+          .collection("colleges").doc(session.collegeId)
+          .collection("subjectSemesterAssignments")
+          .where("subjectId", "==", id)
+          .get();
+        for (let i = 0; i < instanceSnap.docs.length; i += 400) {
+          const chunk = instanceSnap.docs.slice(i, i + 400);
+          const batch = db.batch();
+          for (const doc of chunk) batch.update(doc.ref, assignmentInstanceFields);
+          await batch.commit();
+        }
+      }
     }
 
     return NextResponse.json({ success: true });

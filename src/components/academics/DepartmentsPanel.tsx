@@ -34,6 +34,7 @@ function DepartmentDrillDown({ departments, rootId, onExit }: {
   rootId: string;
   onExit: () => void;
 }) {
+  const router = useRouter();
   const [path, setPath] = useState<string[]>([rootId]);
   const [openSectionId, setOpenSectionId] = useState<string | null>(null);
   const [sections, setSections] = useState<Section[]>([]);
@@ -91,6 +92,14 @@ function DepartmentDrillDown({ departments, rootId, onExit }: {
           ))}
         </div>
         <div className="flex gap-2">
+          {/* Sub-department cards below (children.map) are navigation-only -
+              nothing in this drill-down previously linked to the edit form,
+              so a sub-department's name/code could never actually be
+              changed once inside it. Mirrors the top-level grid's own Edit
+              pencil (same /edit route, works for any department id). */}
+          <Button variant="outline" size="sm" onClick={() => router.push(`/principal/departments/${current.id}/edit`)}>
+            <Pencil className="h-4 w-4 mr-1" />Edit
+          </Button>
           <Button variant="outline" size="sm" onClick={goBack}>
             <ArrowLeft className="h-4 w-4 mr-1" />Back
           </Button>

@@ -26,6 +26,24 @@ export async function isTimetableIncharge(
   return (snap.data() as TimetableIncharge).uid === uid;
 }
 
+// Whether `uid` holds a Timetable Incharge delegation for ANY course-year in
+// the college - the same single-document check api/college/faculty/
+// my-assignments uses to decide what the sidebar shows, so the server and the
+// menu can never disagree about who counts as an Incharge.
+export async function isTimetableInchargeAnywhere(
+  db: Firestore,
+  collegeId: string,
+  uid: string
+): Promise<boolean> {
+  const snap = await db
+    .collection("colleges").doc(collegeId)
+    .collection("timetableIncharges")
+    .where("uid", "==", uid)
+    .limit(1)
+    .get();
+  return !snap.empty;
+}
+
 // Whether `uid` is the Timetable Incharge for ANY course-year in
 // `departmentName` - used where the action isn't tied to one specific
 // course-year (e.g. fulfilling an incoming Faculty Assignment Request: the

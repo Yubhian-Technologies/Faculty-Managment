@@ -345,7 +345,7 @@ export default function MarkAttendancePage() {
       const res = await fetch("/api/college/student-attendance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ assignmentId: p.assignmentId, date: dateStr }),
+        body: JSON.stringify({ assignmentId: p.assignmentId, date: dateStr, periodNumber: p.periodNumber }),
       });
       const json = (await res.json()) as { session?: StudentAttendanceSession; error?: string };
       if (!res.ok || !json.session) {

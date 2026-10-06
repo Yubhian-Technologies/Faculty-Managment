@@ -4,7 +4,7 @@ import { activeDelegatedRoles } from "@/lib/leave/roleDelegation";
 import { ROLE_SCOPE } from "@/types/core";
 import type { UserRole } from "@/types/core";
 import {
-  isAllowedReadOnlyRequest, isFacultyCapableRole, isReadMethod, isReadOnlyFacultyCollege, METHOD_HEADER, PATH_HEADER,
+  isAllowedReadOnlyRequest, isFacultyCapableRole, isReadMethod, METHOD_HEADER, PATH_HEADER,
 } from "@/lib/auth/readOnlyAccess";
 import { isFacultyExited } from "@/lib/auth/readOnlyFacultyLookup";
 
@@ -15,8 +15,7 @@ import { isFacultyExited } from "@/lib/auth/readOnlyFacultyLookup";
 // person is assigned"), so guards re-read the person's own record - briefly
 // cached, so a burst of requests costs one read, not one per request.
 const TTL_MS = 20_000;
-// `readOnly` is set only for a college that has the read-only-faculty switch ON
-// (readOnlyAccess.ts) and a login linked to a RESIGNED/RETIRED faculty record:
+// `readOnly` is set only for a login linked to a RESIGNED/RETIRED faculty record:
 //   "YES"     - their facultyMembers.status says so (the only source of truth);
 //   "UNKNOWN" - the status lookup failed and there is no recent answer to reuse,
 //               so WRITES are denied (fail closed) while reads carry on as before.
@@ -79,10 +78,9 @@ async function resolveLiveRoleInfo(session: SessionLike): Promise<CacheEntry> {
       let realRole = rawRole === "COLLEGE_ADMIN" || rawRole === "DEPARTMENT_OFFICE" ? rawRole : session.role;
       if ((u.seatRoles ?? []).includes("COLLEGE_ADMIN")) realRole = "COLLEGE_ADMIN";
       const entry: CacheEntry = { at: Date.now(), held, realRole };
-      // Read-only faculty: only when the college has the switch on, the account
-      // is active and can be a faculty login. Any other login/college skips this
-      // entirely - no extra read.
-      if (held.length > 0 && isReadOnlyFacultyCollege(session.collegeId) && isFacultyCapableRole(rawRole)) {
+      // Read-only faculty (every college): the account is active and can be a faculty login. Any
+      // other login skips this entirely - no extra read.
+      if (held.length > 0 && isFacultyCapableRole(rawRole)) {
         try {
           if (await isFacultyExited(getAdminDb(), session.collegeId, session.uid)) entry.readOnly = "YES";
         } catch (statusErr) {

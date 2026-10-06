@@ -1,4 +1,4 @@
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDMY } from "@/lib/utils";
 import { isResumeSectionEnabled, type ResumeSectionKey } from "@/lib/pdf/resumeSections";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { facultyMobileNo } from "@/lib/faculty/mobileNo";
@@ -379,12 +379,6 @@ export function getResumeHTML(rawData: ResumeData): string {
   const educationBody = educationEntries + educationExtras;
 
   // ── Professional experience ─────────────────────────────────────────────
-  const experienceEntry = entry(
-    designationLabel || roleLabel || "Faculty",
-    data.collegeName || "",
-    data.department || "",
-    data.joiningDate ? `${formatDate(data.joiningDate as Parameters<typeof formatDate>[0])} - ${data.isActive === false ? "Left" : "Present"}` : ""
-  );
   // Internal (time served since Date of Joining) / External (Academic +
   // Industry + Research Experience entries combined) - computed live the
   // same way as the faculty profile page (FacultyProfileHub) and CSV export,
@@ -392,31 +386,51 @@ export function getResumeHTML(rawData: ResumeData): string {
   const previousExperienceEntries = allPreviousExperienceEntries(ap);
   const hasPreviousExperience = previousExperienceEntries.length > 0;
   const hasJoiningDate = !!data.joiningDate;
-  const internalExperienceDuration = totalYearsOfExperience(undefined, data.joiningDate as Parameters<typeof formatDate>[0]);
+  const internalExperienceDuration = totalYearsOfExperience(undefined, data.joiningDate as Parameters<typeof formatDMY>[0]);
   const externalExperienceDuration = totalYearsOfExperience(previousExperienceEntries, undefined);
-  const totalExperienceYears = experienceBreakdown(previousExperienceEntries, data.joiningDate as Parameters<typeof formatDate>[0]).total;
-  const experienceBullets = bullets([
+  const totalExperienceYears = experienceBreakdown(previousExperienceEntries, data.joiningDate as Parameters<typeof formatDMY>[0]).total;
+
+  const experienceOverviewBullets = bullets([
     (hasJoiningDate || hasPreviousExperience) &&
       `Total Professional Experience: ${esc(totalExperienceYears)} years`,
-    hasJoiningDate && `Internal Experience: ${formatDuration(internalExperienceDuration)}`,
-    hasPreviousExperience && `External Experience: ${formatDuration(externalExperienceDuration)}`,
     data.specialization && `Specialization: ${esc(data.specialization)}`,
     docHighestQualification && `Highest Qualification: ${esc(docHighestQualification)}`,
   ]);
-  const academicExperienceEntries = ap?.academicExperience?.length
-    ? ap.academicExperience
+
+  const internalEntry = entry(
+    designationLabel || roleLabel || "Faculty",
+    data.collegeName || "",
+    data.department || "",
+    data.joiningDate ? `${formatDMY(data.joiningDate)} - ${data.isActive === false ? "Left" : "Present"}` : ""
+  );
+  const internalBullets = bullets([
+    hasJoiningDate && `Internal Experience: ${formatDuration(internalExperienceDuration)}`,
+  ]);
+  const hasInternalData = hasJoiningDate || !!data.collegeName || !!designationLabel;
+  const internalContent = hasInternalData
+    ? `${internalEntry}${internalBullets}`
+    : `<div class="empty-note">No internal experience recorded.</div>`;
+  const internalSection = `<div class="subheading">Internal Experience</div>${internalContent}`;
+
+  const externalBullets = bullets([
+    hasPreviousExperience && `External Experience: ${formatDuration(externalExperienceDuration)}`,
+  ]);
+  const externalEntries = previousExperienceEntries.length
+    ? previousExperienceEntries
         .map((pi) => {
           // Prefers the real dates; falls back to the legacy year-only value
           // for a record that hasn't been re-saved under the new shape yet.
-          const from = pi.fromDate ?? (pi.fromYear ? String(pi.fromYear) : "");
-          const to = pi.toDate ?? (pi.toYear ? String(pi.toYear) : "");
+          const from = pi.fromDate ? formatDMY(pi.fromDate) : (pi.fromYear ? String(pi.fromYear) : "");
+          const to = pi.toDate ? formatDMY(pi.toDate) : (pi.toYear ? String(pi.toYear) : "");
           const range = from || to ? `${from} - ${to}` : "";
           const institution = pi.institutionName || "Previous Institution";
           return entry(pi.place ? `${institution}, ${pi.place}` : institution, range, pi.designation || "");
         })
         .join("")
-    : "";
-  const experienceBody = experienceEntry + experienceBullets + academicExperienceEntries;
+    : `<div class="empty-note">No external experience recorded.</div>`;
+  const externalSection = `<div class="subheading">External Experience</div>${externalBullets}${externalEntries}`;
+
+  const experienceBody = experienceOverviewBullets + internalSection + externalSection;
 
   // ── Teaching load ────────────────────────────────────────────────────────
   // Current and past assignments, kept as two separate tables - current
@@ -484,13 +498,13 @@ export function getResumeHTML(rawData: ResumeData): string {
     detail("Status", statusLabel) +
     detail(
       data.status === "INTERVIEW_DONE" ? "Expected to Join" : "Date of Joining",
-      data.joiningDate ? formatDate(data.joiningDate as Parameters<typeof formatDate>[0]) : ""
+      data.joiningDate ? formatDMY(data.joiningDate) : ""
     ) +
-    detail("Date of Birth", data.dateOfBirth ? formatDate(data.dateOfBirth as Parameters<typeof formatDate>[0]) : "") +
+    detail("Date of Birth", data.dateOfBirth ? formatDMY(data.dateOfBirth) : "") +
     detail("Gender", data.gender) +
     detail("Blood Group", data.bloodGroup) +
     detail("Marital Status", data.maritalStatus) +
-    detail("Full Name (as per SSC)", data.legalName) +
+    detail("Full Name (as per SSC)", facultyDisplayName(data) || data.legalName) +
     detail("Father Name", data.fatherName) +
     detail("Mother Name", data.motherName) +
     detail("Spouse Name", data.spouseName) +
@@ -543,14 +557,14 @@ export function getResumeHTML(rawData: ResumeData): string {
 
   ${on("personal") ? renderSection("Personal & Contact Details", personalBody) : ""}
   ${on("education") ? renderSection("Education", educationBody) : ""}
-  ${on("experience") ? renderSection("Previous Experience", experienceBody) : ""}
+  ${on("experience") ? renderSection("Experience", experienceBody) : ""}
   ${on("teachingLoad") ? renderSection("Teaching Load", teachingLoadBody) : ""}
   ${on("research") ? renderSection("Research & Innovation", publicationsBody) : ""}
   ${on("mentorship") ? renderSection("Mentorship & Institutional Contribution", mentorshipBody) : ""}
   ${on("otherInfo") ? renderSection("Other Information", otherInfoBody) : ""}
   ${on("financial") ? renderSection("Financial Standing", financialBody) : ""}
 
-  <div class="footer">Generated on ${esc(formatDate(new Date()))} - Confidential, for internal institutional use only.</div>
+  <div class="footer">Generated on ${esc(formatDMY(new Date()))} - Confidential, for internal institutional use only.</div>
 </div>
 </body>
 </html>`;

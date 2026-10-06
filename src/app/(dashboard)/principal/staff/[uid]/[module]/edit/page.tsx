@@ -13,6 +13,7 @@ import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
 import { migrateUserDoc, migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { personalRecordFromDoc, personalPatchBody } from "@/lib/faculty/personalRecord";
+import { toDateInputValue } from "@/lib/utils";
 import { diffAcademicProfile, isEmptyChanges } from "@/lib/faculty/academicProfileChanges";
 
 // research/financial are excluded from the hub entirely for this flow (see
@@ -54,7 +55,7 @@ export default function PrincipalStaffModuleEditPage() {
         }
         setRecord({
           gender: (m.gender as string) ?? "",
-          dateOfBirth: (m.dateOfBirth as string) ?? undefined,
+          dateOfBirth: toDateInputValue(m.dateOfBirth as never) || undefined,
           legalName: (m.legalName as string) ?? "",
           fatherName: (m.fatherName as string) ?? "",
           motherName: (m.motherName as string) ?? "",
@@ -74,7 +75,7 @@ export default function PrincipalStaffModuleEditPage() {
           emergencyContactMobileNo: (m.emergencyContactMobileNo as string) ?? "",
           ratificationStatus: (m.ratificationStatus as string) ?? "",
           ratificationProceedingsNumber: (m.ratificationProceedingsNumber as string) ?? "",
-          ratificationDate: (m.ratificationDate as string) ?? undefined,
+          ratificationDate: toDateInputValue(m.ratificationDate as never) || undefined,
           maritalStatus: (m.maritalStatus as string) ?? "",
           spouseName: (m.spouseName as string) ?? "",
           numberOfChildren: m.numberOfChildren as number | undefined,

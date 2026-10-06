@@ -13,10 +13,12 @@ import { getFacultyIdCandidates, resolveLoginUidForFacultyMember } from "@/lib/f
 import { resolveDepartmentCourseScope, regulationsForCourseYearByBatch, regulationsForBatchStartYear, isDeclaredFeederFor } from "@/lib/college/academicStructure";
 import { parseBatchStartYear, deriveBatch, parseAcademicYearStart, currentAcademicStartYear } from "@/lib/college/academicSession";
 import { deriveHodScope } from "@/lib/departments/hodScope";
+import { notConfiguredMessage } from "@/lib/college/taughtYears";
 import { isNameOrChildAmong } from "@/lib/departments/codeOrNameResolver";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
 import type { Department, DepartmentCourseScope } from "@/types";
 import { loadDepartmentIndex, stampDepartmentIds } from "@/lib/departments/stampIds";
+import { loadEffectiveTiming } from "@/lib/college/semester";
 import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
 
 export async function GET(request: Request) {
@@ -272,12 +274,15 @@ export async function GET(request: Request) {
        for (const s of sections) {
          courseYearKeySet.add(`${s.courseId as string}|${s.year as number}`);
        }
+       // loadEffectiveTiming, not the section's own course alone: a shared first
+       // year is configured once on the manager's course (Basic Science), while
+       // the branch's sections store the BRANCH's course id - an exact-id lookup
+       // dropped every such section whenever a semester was requested.
        const courseYearTimings = await Promise.all(
-         Array.from(courseYearKeySet).map((k) => {
+         Array.from(courseYearKeySet).map(async (k) => {
            const [cId, yStr] = k.split("|");
-           return db.collection("colleges").doc(session.collegeId)
-             .collection("courseYearTimings").where("courseId", "==", cId).where("year", "==", Number(yStr)).get()
-             .then((snap) => { const r: number[] = []; for (const d of snap.docs) { const t = d.data() as { semesters?: { semester: number }[] }; if (t.semesters) for (const s of t.semesters) r.push(s.semester); } return r; });
+           const timing = await loadEffectiveTiming(db, session.collegeId, cId, Number(yStr));
+           return (timing?.semesters ?? []).map((s) => s.semester);
          })
        );
        const validKeys = new Set(courseYearKeySet);
@@ -573,7 +578,9 @@ export async function POST(request: Request) {
             assignedYears = resolveDepartmentCourseScope(parentDoc, course.catalogId).assignedYears;
           }
         }
-        if (assignedYears.length > 0 && !assignedYears.includes(Number(body.year))) {
+        // An EMPTY list is NOT "unrestricted" (lib/college/taughtYears.ts): a department with no Years
+        // Taught for this course can't host any year here, except one its shared-year manager teaches.
+        if (!assignedYears.includes(Number(body.year))) {
           // A real branch (e.g. IT) reached through a sub-department's managed
           // grouping (BS-Maths managing IT + CSBS) never carries the shared
           // first year in its OWN "Years Taught" - that's configured on the
@@ -589,7 +596,11 @@ export async function POST(request: Request) {
           const allowedViaManager = manager?.years.includes(Number(body.year)) ?? false;
           if (!allowedViaManager) {
             return NextResponse.json(
-              { error: `Your department is not assigned to teach Year ${body.year}` },
+              {
+                error: assignedYears.length === 0
+                  ? notConfiguredMessage(dept, body.year, course.name)
+                  : `Your department is not assigned to teach Year ${body.year}`,
+              },
               { status: 400 }
             );
           }

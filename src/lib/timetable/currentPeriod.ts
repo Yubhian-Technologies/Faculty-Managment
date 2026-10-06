@@ -79,14 +79,19 @@ async function resolvePeriodWindow(
   collegeRef: FirebaseFirestore.DocumentReference,
   slot: Pick<TimetableSlot, "courseId" | "year" | "periodNumber" | "semester">,
   cache: TimingCache = new Map(),
-): Promise<{ startTime: string; endTime: string } | null> {
+): Promise<{ startTime: string; endTime: string; closeTime: string } | null> {
   const timingId = `${slot.courseId}_year${slot.year}`;
   const timing = await loadTiming(collegeRef, timingId, cache);
   if (!timing) return null;
   if (!matchesCurrentSemester(slot.semester, resolveCurrentSemester(timing))) return null;
   const periods = timing.periods?.length ? timing.periods : defaultPeriodTimings(timing);
   const period = periods.find((p) => p.period === slot.periodNumber);
-  return period ? { startTime: period.startTime, endTime: period.endTime } : null;
+  if (!period) return null;
+  // Attendance for a period stays postable until the course-year's college end
+  // time (never earlier than the period's own end). endTime itself is unchanged:
+  // on-time/late and not-posted reporting still measure against the period end.
+  const closeTime = timing.collegeEndTime && toMinutes(timing.collegeEndTime) > toMinutes(period.endTime) ? timing.collegeEndTime : period.endTime;
+  return { startTime: period.startTime, endTime: period.endTime, closeTime };
 }
 
 export interface CurrentPeriodSlot {
@@ -114,6 +119,7 @@ export async function getCurrentTimetableSlot(
   const collegeRef = db.collection("colleges").doc(collegeId);
   const slotsSnap = await collegeRef.collection("timetableSlots")
     .where("facultyId", "==", facultyMemberId)
+    .where("day", "==", day)
     .get();
   const ownTodaySlots = slotsSnap.docs
     .map((d) => ({ id: d.id, ...d.data() }) as TimetableSlot & { id: string })
@@ -153,6 +159,7 @@ export interface FacultyPeriodOnDate {
   slot: TimetableSlot & { id: string };
   startTime: string; // "HH:MM" 24h, resolved from the slot's own CourseYearTiming
   endTime: string;
+  closeTime: string; // when posting closes: the year's college end time (>= endTime)
 }
 
 /**
@@ -189,6 +196,7 @@ export async function getFacultyPeriodsForDate(
   const collegeRef = db.collection("colleges").doc(collegeId);
   const slotsSnap = await collegeRef.collection("timetableSlots")
     .where("facultyId", "==", facultyId)
+    .where("day", "==", day)
     .get();
   const ownDaySlots = slotsSnap.docs
     .map((s) => ({ id: s.id, ...s.data() }) as TimetableSlot & { id: string })
@@ -277,6 +285,7 @@ export async function checkFacultyPeriodWindow(
   const slotsSnap = await collegeRef.collection("timetableSlots")
     .where("facultyId", "==", facultyMemberId)
     .where("assignmentId", "==", assignmentId)
+    .where("day", "==", day)
     .get();
   // A single assignment can occupy more than one TimetableSlot on the same
   // day (e.g. a 3-period lab block, or a subject taught twice on the same
@@ -306,7 +315,7 @@ export async function checkFacultyPeriodWindow(
   }
   if (todaySlots.length === 0) return { ok: false, reason: "NOT_SCHEDULED" };
 
-  const resolved: { slot: TimetableSlot & { id: string }; startTime: string; endTime: string }[] = [];
+  const resolved: { slot: TimetableSlot & { id: string }; startTime: string; endTime: string; closeTime: string }[] = [];
   const timingCache: TimingCache = new Map();
   const windows = await Promise.all(todaySlots.map((slot) => resolvePeriodWindow(collegeRef, slot, timingCache)));
   todaySlots.forEach((slot, i) => {
@@ -316,24 +325,25 @@ export async function checkFacultyPeriodWindow(
   if (resolved.length === 0) return { ok: false, reason: "NOT_SCHEDULED" };
   resolved.sort((a, b) => toMinutes(a.startTime) - toMinutes(b.startTime));
 
-  const active = resolved.find(
-    (r) => nowMinutes >= toMinutes(r.startTime) && nowMinutes < toMinutes(r.endTime)
-  );
+  // Postable from the period's start until the year's college end time. A
+  // saved session pins its own period (expectedPeriodNumber); a new one takes
+  // the period running now, else the latest one already started.
+  const candidates = expectedPeriodNumber != null ? resolved.filter((r) => r.slot.periodNumber === expectedPeriodNumber) : resolved;
+  if (candidates.length === 0) return { ok: false, reason: "NOT_SCHEDULED" };
+  const open = candidates.filter((r) => nowMinutes >= toMinutes(r.startTime) && nowMinutes < toMinutes(r.closeTime));
+  const active = open.find((r) => nowMinutes < toMinutes(r.endTime)) ?? open[open.length - 1];
   if (active) {
-    if (expectedPeriodNumber != null && active.slot.periodNumber !== expectedPeriodNumber) {
-      return { ok: false, reason: "PERIOD_MISMATCH", activePeriodNumber: active.slot.periodNumber };
-    }
     return { ok: true, slot: active.slot, startTime: active.startTime, endTime: active.endTime };
   }
 
-  // Not in any of today's periods for this assignment - report the nearest
-  // boundary so the error reads naturally ("hasn't started" vs. "ended at").
-  const first = resolved[0];
-  const last = resolved[resolved.length - 1];
+  // Not postable - report the nearest boundary so the error reads naturally
+  // ("hasn't started" vs. "closed at").
+  const first = candidates[0];
+  const last = candidates[candidates.length - 1];
   if (nowMinutes < toMinutes(first.startTime)) {
     return { ok: false, reason: "OUTSIDE_WINDOW", startTime: first.startTime, endTime: first.endTime, phase: "BEFORE" };
   }
-  return { ok: false, reason: "OUTSIDE_WINDOW", startTime: last.startTime, endTime: last.endTime, phase: "AFTER" };
+  return { ok: false, reason: "OUTSIDE_WINDOW", startTime: last.startTime, endTime: last.closeTime, phase: "AFTER" };
 }
 
 /** Human-readable reason for an API error response, from a failed check above. */
@@ -346,7 +356,7 @@ export function periodWindowMessage(check: Exclude<PeriodWindowCheck, { ok: true
     case "OUTSIDE_WINDOW":
       return check.phase === "BEFORE"
         ? `This period has not started yet (${check.startTime}–${check.endTime}).`
-        : `Attendance period ended at ${check.endTime}.`;
+        : `Attendance closed at ${check.endTime}.`;
     case "PERIOD_MISMATCH":
       return `This period has ended - Period ${check.activePeriodNumber} is now in session. Please reload to mark its attendance.`;
   }

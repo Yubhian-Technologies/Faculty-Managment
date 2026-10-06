@@ -339,20 +339,34 @@ export default function DepartmentDetailPage() {
             : "Loading…"
         }
         actions={
-          <Button
-            variant="outline"
-            onClick={() =>
-              router.push(
-                // From a sub-department, "back" means its parent, not the top list.
-                parentDepartment
-                  ? `/principal/departments/${parentDepartment.id}`
-                  : "/principal/departments"
-              )
-            }
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            {parentDepartment ? `Back to ${parentDepartment.name}` : "Back to Departments"}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() =>
+                router.push(
+                  // From a sub-department, "back" means its parent, not the top list.
+                  parentDepartment
+                    ? `/principal/departments/${parentDepartment.id}`
+                    : "/principal/departments"
+                )
+              }
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              {parentDepartment ? `Back to ${parentDepartment.name}` : "Back to Departments"}
+            </Button>
+            {/* Name/code (and, for a sub-department, its Sub-HOD/managed
+                branches) can only be edited here - this page's own
+                Sub-Departments card (below) and the DepartmentsPanel drill-
+                down on /principal/courses both only ever navigate INTO a
+                sub-department, never to its edit form, so without this
+                button there was no reachable path to rename one at all,
+                despite the edit form itself fully supporting it. */}
+            {department && (
+              <Button variant="outline" onClick={() => router.push(`/principal/departments/${department.id}/edit`)}>
+                <Pencil className="h-4 w-4 mr-2" />Edit Department
+              </Button>
+            )}
+          </div>
         }
       />
 
@@ -380,13 +394,25 @@ export default function DepartmentDetailPage() {
             <CardContent>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {subDepartments.map((sub) => (
+                  <div key={sub.id} className="relative">
+                  {/* Edit sits NEXT to the card button (not inside it) - a button can't contain a button. */}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-2 top-2 h-7 w-7 z-10"
+                    title="Edit sub-department (name, code, structure)"
+                    aria-label={`Edit ${sub.name}`}
+                    onClick={() => router.push(`/principal/departments/${sub.id}/edit`)}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
                   <button
-                    key={sub.id}
                     type="button"
                     onClick={() => router.push(`/principal/departments/${sub.id}`)}
-                    className="rounded-lg border p-3 text-left transition-colors hover:border-primary/50"
+                    className="h-full w-full rounded-lg border p-3 text-left transition-colors hover:border-primary/50"
                   >
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 pr-8">
                       <Badge variant="secondary" className="text-xs font-mono shrink-0">{sub.code}</Badge>
                       {!sub.isActive && <Badge variant="outline" className="text-xs">Inactive</Badge>}
                     </div>
@@ -412,6 +438,7 @@ export default function DepartmentDetailPage() {
                     )}
                     <p className="mt-2 text-xs text-primary">Open &amp; add courses →</p>
                   </button>
+                  </div>
                 ))}
               </div>
             </CardContent>

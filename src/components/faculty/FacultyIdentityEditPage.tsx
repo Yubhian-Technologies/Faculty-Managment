@@ -30,13 +30,16 @@ import { personalRecordFromDoc, personalPatchBody } from "@/lib/faculty/personal
 import { diffAcademicProfile, isEmptyChanges } from "@/lib/faculty/academicProfileChanges";
 import { degreeTypeError } from "@/lib/faculty/degreeType";
 import { EMPLOYEE_CATEGORY_LABELS, FACULTY_STATUS_LABELS, MANUALLY_SELECTABLE_FACULTY_STATUS_VALUES, FACULTY_STATUS_DATE_FIELD, FACULTY_STATUS_DATE_LABELS } from "@/types";
-import type { DesignationCatalogItem, Designation, EmployeeCategory, FacultyStatus } from "@/types";
+import type { DesignationCatalogItem, Designation, EmployeeCategory, FacultyStatus, HonorificCatalogItem } from "@/types";
 
 // Sentinel for the "Others" row - matches hod/faculty/new/page.tsx's own
 // highest-qualification picker.
 const OTHER_QUALIFICATION = "__OTHER__";
+// Sentinel for "no honorific" - matches hod/faculty/new/page.tsx's own picker.
+const NO_HONORIFIC = "__none__";
 
 interface IdentityForm {
+  honorific: string;
   legalName: string;
   apaarFacultyId: string;
   designation: Designation | "";
@@ -54,7 +57,7 @@ interface IdentityForm {
 }
 
 const EMPTY_FORM: IdentityForm = {
-  legalName: "", apaarFacultyId: "", designation: "", employeeCategory: "", status: "ACTIVE",
+  honorific: "", legalName: "", apaarFacultyId: "", designation: "", employeeCategory: "", status: "ACTIVE",
   resignedDate: "", retiredDate: "", retainershipDate: "",
   highestQualification: "", specialization: "", joiningDate: "", aicteFacultyId: "",
   email: "", mobileNo: "",
@@ -142,6 +145,7 @@ export function FacultyIdentityEditPage({
         const highestQualification = normalizeHighestQualification(m.highestQualification);
         setQualIsOther(!!highestQualification && !(HIGHEST_QUALIFICATION_OPTIONS as readonly string[]).includes(highestQualification));
         setForm({
+          honorific: (m.honorific as string) ?? "",
           legalName: (m.legalName as string) ?? "",
           apaarFacultyId: (m.apaarFacultyId as string) ?? "",
           designation: (m.designation as Designation) ?? "",
@@ -256,6 +260,18 @@ export function FacultyIdentityEditPage({
       }
     })();
   }, []);
+  const [honorificOptions, setHonorificOptions] = useState<string[]>([]);
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch("/api/college/honorifics");
+        const data = await res.json() as { items?: HonorificCatalogItem[] };
+        setHonorificOptions((data.items ?? []).filter((h) => h.isActive).map((h) => h.name));
+      } catch {
+        // Non-fatal - the picker just stays empty until the catalog loads.
+      }
+    })();
+  }, []);
 
   function set(patch: Partial<IdentityForm>) {
     setForm((f) => ({ ...f, ...patch }));
@@ -308,6 +324,7 @@ export function FacultyIdentityEditPage({
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          honorific: form.honorific,
           legalName: form.legalName.trim().toUpperCase(),
           apaarFacultyId: form.apaarFacultyId.trim(),
           designation: form.designation,
@@ -391,14 +408,29 @@ export function FacultyIdentityEditPage({
                   <Label>Employee ID</Label>
                   <Input value={employeeId} disabled />
                 </div>
-                <div className="space-y-2">
-                  <Label>Full Name (as per SSC) *</Label>
-                  <Input
-                    value={form.legalName}
-                    onChange={(e) => set({ legalName: e.target.value.toUpperCase() })}
-                    placeholder="FULL NAME IN CAPITALS"
-                    className="uppercase"
-                  />
+                <div className="flex gap-3">
+                  <div className="space-y-2 w-28 shrink-0">
+                    <Label>Honorific</Label>
+                    <Select
+                      value={form.honorific || NO_HONORIFIC}
+                      onValueChange={(v) => set({ honorific: v === NO_HONORIFIC ? "" : v })}
+                    >
+                      <SelectTrigger><SelectValue placeholder="-" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NO_HONORIFIC}>None</SelectItem>
+                        {honorificOptions.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2 flex-1">
+                    <Label>Full Name (as per SSC) *</Label>
+                    <Input
+                      value={form.legalName}
+                      onChange={(e) => set({ legalName: e.target.value.toUpperCase() })}
+                      placeholder="FULL NAME IN CAPITALS"
+                      className="uppercase"
+                    />
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label>APAAR Faculty ID</Label>

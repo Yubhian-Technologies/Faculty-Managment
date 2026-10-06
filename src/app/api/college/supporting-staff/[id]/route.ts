@@ -13,6 +13,8 @@ import { unitLabelForHeadRole } from "@/lib/attendance/collegeStaffUnits";
 import { resolveDesignation } from "@/lib/designations/validate";
 import { designationLabel } from "@/lib/designations/config";
 import { syncLinkedLoginName } from "@/lib/roles/loginSync";
+import { supportingStaffPersonalUpdate } from "@/lib/supportingStaff/personalUpdate";
+import type { PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
 import { normalizeSupportingStaffProfile } from "@/lib/faculty/academicProfileCompat";
 import { migrateSupportingStaffDoc } from "@/lib/faculty/fieldRenames";
@@ -135,7 +137,7 @@ export async function PATCH(
       profilePhotoUrl: string;
       joiningLetterUrl: string;
       appointmentLetterUrl: string;
-    }>;
+    } & Pick<PersonalDetailsInput, "motherTongue" | "languagesKnown" | "height" | "weightKg" | "pfNumber" | "uanNumber" | "esiNumber">>;
 
     const db = getAdminDb();
     const ref = db.collection("colleges").doc(session.collegeId).collection("supportingStaff").doc(id);
@@ -176,11 +178,20 @@ export async function PATCH(
       }
     }
 
+    // The value already on the record always passes - the edit form loads the
+    // stored URL into its state and sends it back on every save, so a PATCH
+    // that does not touch the photo still carries it. Re-validating a value we
+    // persisted ourselves is what made Save fail with "Invalid photo URL"
+    // having changed nothing (see api/college/faculty/[id]).
+    const existingPhotoUrl = (snap.data() as { profilePhotoUrl?: string }).profilePhotoUrl ?? "";
+    const staffUserUid = (snap.data() as { userUid?: string }).userUid ?? "";
     if (
       body.profilePhotoUrl !== undefined &&
       body.profilePhotoUrl !== "" &&
+      body.profilePhotoUrl !== existingPhotoUrl &&
       (!body.profilePhotoUrl.startsWith("https://firebasestorage.googleapis.com/") ||
-        !body.profilePhotoUrl.includes(encodeURIComponent(`profile-photos/${id}_`)))
+        ![id, staffUserUid].filter(Boolean).some((owner) =>
+          body.profilePhotoUrl!.includes(encodeURIComponent(`profile-photos/${owner}_`))))
     ) {
       return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
     }
@@ -251,6 +262,15 @@ export async function PATCH(
 
     if (body.panNo !== undefined) updates.panNo = body.panNo.toUpperCase();
     if (body.ifscCode !== undefined) updates.ifscCode = body.ifscCode.toUpperCase();
+
+    // Mother Tongue, Languages Known, Height, Weight, PF / UAN / ESI Number: shown in the Personal Details editor and
+    // stored by Add, but this route never listed them, so an edit silently dropped them. Same builder as Add.
+    {
+      const personal = supportingStaffPersonalUpdate(body as PersonalDetailsInput);
+      for (const key of ["motherTongue", "languagesKnown", "height", "weightKg", "pfNumber", "uanNumber", "esiNumber"]) {
+        if (key in personal) updates[key] = personal[key];
+      }
+    }
 
     if (body.numberOfChildren !== undefined) updates.numberOfChildren = Number(body.numberOfChildren);
     if (body.permanentAddressSameAsTemporary !== undefined) updates.permanentAddressSameAsTemporary = body.permanentAddressSameAsTemporary;

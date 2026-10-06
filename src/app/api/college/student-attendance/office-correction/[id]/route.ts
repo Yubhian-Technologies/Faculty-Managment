@@ -11,6 +11,7 @@ import { resolvePeriodCompletionStatus } from "@/lib/attendance/periodAttendance
 import { istDateFromParts } from "@/lib/attendance/istTime";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { mergeMarkUpdates } from "@/lib/studentAttendance/onDuty";
+import { applyTallyDeltaInTx, tallyWritesEnabled } from "@/lib/studentAttendance/dayTally";
 import type { StudentAttendanceEntry, StudentAttendanceMark, StudentAttendanceSession } from "@/types";
 
 const VALID_MARKS: StudentAttendanceMark[] = ["PRESENT", "ABSENT"];
@@ -35,7 +36,7 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL");
+    const session = await requireCollegeMember("HOD");
     const body = (await readJsonBody(request)) as {
       entries?: { studentId: string; status: StudentAttendanceMark | null }[];
       classNotes?: string;
@@ -51,9 +52,9 @@ export async function PATCH(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
     const existing = snap.data() as StudentAttendanceSession;
-    if (existing.status === "SUBMITTED") {
-      return NextResponse.json({ error: "Attendance has already been submitted and cannot be edited" }, { status: 409 });
-    }
+    // A SUBMITTED record may be corrected here (HOD/dept office only); it stays
+    // SUBMITTED and every save is audited with a mandatory reason.
+    const wasSubmitted = existing.status === "SUBMITTED";
 
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
@@ -110,7 +111,7 @@ export async function PATCH(
       update.classNotes = body.classNotes.trim();
     }
 
-    if (body.submit) {
+    if (body.submit || wasSubmitted) {
       if (markedCount < existing.totalStudents || existing.totalStudents === 0) {
         return NextResponse.json({ error: "Please mark attendance for all students before submitting" }, { status: 400 });
       }
@@ -124,8 +125,11 @@ export async function PATCH(
       }
       const markerSnap = await collegeRef.collection("users").doc(session.uid).get();
       update.status = "SUBMITTED";
-      update.submittedAt = now;
-      update.postedBy = "OFFICE";
+      // A corrected record keeps the faculty's original submission time/attribution.
+      if (!wasSubmitted) {
+        update.submittedAt = now;
+        update.postedBy = "OFFICE";
+      }
       update.correctedByUid = session.uid;
       update.correctedByName = (markerSnap.data() as { name?: string } | undefined)?.name ?? "";
       update.correctionReason = reason;
@@ -136,12 +140,24 @@ export async function PATCH(
         performedBy: session.uid,
         performedByName: update.correctedByName,
         targetId: id,
-        details: { facultyId: existing.facultyId, facultyName: existing.facultyName, date: existing.date, periodNumber: existing.periodNumber, subjectName: existing.subjectName, reason },
+        details: { facultyId: existing.facultyId, facultyName: existing.facultyName, date: existing.date, periodNumber: existing.periodNumber, subjectName: existing.subjectName, reason, previouslySubmitted: wasSubmitted },
         timestamp: now,
       });
     }
 
-    await ref.update(update);
+    if (tallyWritesEnabled()) {
+      // The tally delta is taken against the document as it is NOW, so a faculty
+      // submit that landed after the read above can't leave the counts wrong.
+      await db.runTransaction(async (tx) => {
+        const freshSnap = await tx.get(ref);
+        if (!freshSnap.exists) throw new Error("NOT_FOUND");
+        const fresh = freshSnap.data() as StudentAttendanceSession;
+        tx.update(ref, update);
+        applyTallyDeltaInTx(tx, db, session.collegeId, fresh, { ...fresh, ...update, entries } as StudentAttendanceSession);
+      });
+    } else {
+      await ref.update(update);
+    }
     return NextResponse.json({ session: { ...existing, ...update, id } });
   } catch (err) {
     const badBody = badBodyResponse(err);

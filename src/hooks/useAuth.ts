@@ -48,6 +48,8 @@ export function useAuth() {
         let serverReadOnly = false;
         // Departments of an HOD seat handed over for someone's leave (live today).
         let serverDelegatedDepartments: string[] = [];
+        // Whether the server actually answered - if it did not, we do not know, and must not claim "not read-only".
+        let sessionAnswered = false;
 
         // Users created via REST API have no JWT custom claims.
         // Call session API (uses Admin SDK, bypasses Firestore rules) to resolve role.
@@ -73,6 +75,7 @@ export function useAuth() {
               serverRoles = data.roles as UserRole[] | undefined;
               serverReadOnly = data.readOnlyAccess === true;
               serverDelegatedDepartments = data.delegatedDepartments ?? [];
+              sessionAnswered = true;
             }
           } catch { /* non-fatal */ }
         } else {
@@ -96,6 +99,7 @@ export function useAuth() {
               serverDelegatedDepartments = data.delegatedDepartments ?? [];
               serverRealRole = data.realRole;
               serverReadOnly = data.readOnlyAccess === true;
+              sessionAnswered = true;
             }
           } catch { /* non-fatal - falls back to the primary role only */ }
         }
@@ -190,7 +194,9 @@ export function useAuth() {
                   email: serverEmail ?? profile.email,
                   realRole: (realRole as UserRole | undefined) ?? profile.role,
                   roles: serverRoles,
-                  ...(serverReadOnly ? { readOnlyAccess: true } : {}),
+                  // Stated explicitly once the server has answered, so authStore.setUser can tell "not
+                  // read-only" (false) from "unknown" (undefined - keeps what the store already knows).
+                  ...(sessionAnswered ? { readOnlyAccess: serverReadOnly } : {}),
                 }
               : {
                   uid: firebaseUser.uid,
@@ -200,7 +206,7 @@ export function useAuth() {
                   role: role as UserRole,
                   realRole: (realRole as UserRole | undefined) ?? (role as UserRole),
                   roles: serverRoles,
-                  ...(serverReadOnly ? { readOnlyAccess: true } : {}),
+                  ...(sessionAnswered ? { readOnlyAccess: serverReadOnly } : {}),
                   isActive: true,
                   createdAt: {} as never,
                 }

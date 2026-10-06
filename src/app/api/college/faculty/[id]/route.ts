@@ -20,6 +20,7 @@ import {
 import { PROMOTION_HISTORY_KEY, DESIGNATION_MANAGED_BY_HISTORY_MESSAGE } from "@/lib/faculty/promotionHistory";
 import { designationKey } from "@/lib/designations/config";
 import { resolveDesignation } from "@/lib/designations/validate";
+import { resolveHonorific } from "@/lib/honorifics/validate";
 import { syncLinkedLoginName } from "@/lib/roles/loginSync";
 import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { withLegacyFacultyKeysDeleted } from "@/lib/faculty/legacyKeyDeletes";
@@ -28,7 +29,7 @@ import { normalizeHighestQualification } from "@/lib/faculty/highestQualificatio
 import { FieldValue } from "firebase-admin/firestore";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { actorOf } from "@/lib/audit/actorOf";
-import { isReadOnlyFacultyCollege, isReadOnlyFacultyStatus } from "@/lib/auth/readOnlyAccess";
+import { isReadOnlyFacultyStatus } from "@/lib/auth/readOnlyAccess";
 import { vacateSeatsOnExit, type VacateSeatsResult } from "@/lib/faculty/vacateSeatsOnExit";
 import type { Designation, EmployeeCategory, FacultyStatus, TrainingEntry } from "@/types";
 import {
@@ -95,6 +96,7 @@ export async function PATCH(
       phone: string; // legacy alias of mobileNo, accepted for one release (see mobileNoFromBody)
       additionalPhoneNumbers: { label?: string; number: string }[];
       collegeEmail: string;
+      honorific: string;
       designation: Designation;
       highestQualification: string;
       specialization: string;
@@ -141,12 +143,33 @@ export async function PATCH(
       }
     }
 
-    // Empty string clears the photo - everything else must be a real upload of ours.
+    // Empty string clears the photo - everything else must be a real upload of
+    // ours. Two things this must NOT reject:
+    //
+    //  - The photo already on the record. The edit form loads the stored URL
+    //    into its state and sends it back on every save, so a PATCH that does
+    //    not touch the photo still carries it. Re-validating a value we
+    //    persisted ourselves is what made "Save Changes" fail with "Invalid
+    //    photo URL" for anyone who had a photo, having changed nothing.
+    //
+    //  - A photo uploaded against the person's LOGIN uid rather than this
+    //    faculty doc's id. Both are legitimate: api/upload/profile-photo keys
+    //    the path on `targetId || session.uid`, so a faculty member uploading
+    //    their own photo gets a uid-keyed path while a Principal uploading it
+    //    for them gets a doc-keyed one. 23 of the 24 faculty photos in the
+    //    live colleges are uid-keyed, so accepting only the doc id rejected
+    //    almost every real record.
+    const existingPhotoUrl = (snap.data() as { profilePhotoUrl?: string }).profilePhotoUrl ?? "";
+    const facultyUserUid = (snap.data() as { userUid?: string }).userUid ?? "";
+    const photoUrlIsOurs = (url: string) =>
+      url.startsWith("https://firebasestorage.googleapis.com/") &&
+      [id, facultyUserUid].filter(Boolean).some((owner) => url.includes(encodeURIComponent(`profile-photos/${owner}_`)));
+
     if (
       body.profilePhotoUrl !== undefined &&
       body.profilePhotoUrl !== "" &&
-      (!body.profilePhotoUrl.startsWith("https://firebasestorage.googleapis.com/") ||
-        !body.profilePhotoUrl.includes(encodeURIComponent(`profile-photos/${id}_`)))
+      body.profilePhotoUrl !== existingPhotoUrl &&
+      !photoUrlIsOurs(body.profilePhotoUrl)
     ) {
       return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
     }
@@ -260,6 +283,23 @@ export async function PATCH(
       updates.highestQualification = normalizeHighestQualification(updates.highestQualification);
     }
 
+    // Honorific is optional and clearable (unlike Designation, blanking it
+    // out is allowed - it just means "no honorific recorded"). A non-blank
+    // value is still held to this college's own catalog (colleges/{id}/
+    // honorifics), same as the create route (POST /api/college/faculty).
+    if (body.honorific !== undefined) {
+      const rawHonorific = body.honorific.trim();
+      if (!rawHonorific) {
+        updates.honorific = "";
+      } else {
+        const honorificResult = await resolveHonorific(db, session.collegeId, rawHonorific);
+        if ("error" in honorificResult) {
+          return NextResponse.json({ error: honorificResult.error }, { status: 400 });
+        }
+        updates.honorific = honorificResult.name;
+      }
+    }
+
     // Extra contact numbers beyond the primary Mobile No - cleaned/filtered
     // the same way the create route does. Writing [] (not omitting the key)
     // is how a caller clears every extra number back out.
@@ -340,14 +380,24 @@ export async function PATCH(
     // the doc never carries both.
     await ref.update(withLegacyFacultyKeysDeleted(updates, FieldValue.delete()));
 
-    // The record's display name is legalName only (facultyDisplayName()) -
-    // Name (as per PAN) never feeds it. Recomputed from the POST-update value
-    // (this PATCH's legalName, falling back to what was already on the doc) so
-    // a rename is detected and propagated correctly.
-    const before = snap.data() as { legalName?: string; userUid?: string };
-    const newDisplayName = facultyDisplayName({ legalName: body.legalName !== undefined ? body.legalName : before.legalName });
+    // The record's display name is legalName, honorific-prefixed
+    // (facultyDisplayName()) - Name (as per PAN) never feeds it. Recomputed
+    // from the POST-update values (this PATCH's legalName/honorific, each
+    // falling back to what was already on the doc) so a rename OR an
+    // honorific-only change is detected and propagated correctly - a prior
+    // version only ever looked at legalName, so adding/changing just the
+    // Honorific here never reached the linked login (and everything
+    // downstream of it: roleSeats.holderName, departments.hodName, every
+    // "HOD: ..." card) even though facultyDisplayName() itself already
+    // supported it.
+    const before = snap.data() as { legalName?: string; honorific?: string; userUid?: string };
+    const newHonorific = updates.honorific !== undefined ? (updates.honorific as string) : before.honorific;
+    const newDisplayName = facultyDisplayName({
+      legalName: body.legalName !== undefined ? body.legalName : before.legalName,
+      honorific: newHonorific,
+    });
     const oldDisplayName = facultyDisplayName(before);
-    const displayNameChanged = body.legalName !== undefined && newDisplayName !== oldDisplayName;
+    const displayNameChanged = newDisplayName !== oldDisplayName;
 
     // Best-effort: if this faculty record has a linked system login, keep their
     // name/photo in sync there too - the login doc (colleges/{id}/users) is what
@@ -426,8 +476,7 @@ export async function PATCH(
     // RESIGNED/RETIRED = a read-only login (lib/auth/readOnlyAccess.ts - derived
     // from this very status, nothing else is stored). Being read-only also means
     // holding no seat, so every seat they hold is vacated through the normal seat
-    // flow (lib/faculty/vacateSeatsOnExit.ts). Only when the college has the switch
-    // on, and on ANY save of a person whose status IS RESIGNED/RETIRED - not only
+    // flow (lib/faculty/vacateSeatsOnExit.ts). In every college, and on ANY save of a person whose status IS RESIGNED/RETIRED - not only
     // the save that changes it - so a vacate that failed, or was skipped for an admin
     // to resolve, is retried by simply saving the record again (it is idempotent: a
     // person holding no seat costs one read and changes nothing). The reverse (back
@@ -440,7 +489,7 @@ export async function PATCH(
     const previousFacultyData = snap.data() as { status?: string; seatVacateStatus?: string };
     const resultingStatus = body.status ?? previousFacultyData.status;
     const enteredExit = body.status !== undefined && body.status !== previousFacultyData.status && isReadOnlyFacultyStatus(body.status);
-    if (isReadOnlyFacultyStatus(resultingStatus) && isReadOnlyFacultyCollege(session.collegeId) && before.userUid) {
+    if (isReadOnlyFacultyStatus(resultingStatus) && before.userUid) {
       try {
         const seatActor = await actorOf(db, session.collegeId, session.uid, session.email);
         const outcome = await vacateSeatsOnExit(

@@ -17,7 +17,7 @@ import { deriveHodScope, buildCourseGroups, managerEffectiveYears } from "@/lib/
 import { fedYears } from "@/lib/college/academicStructure";
 import { matchesCurrentSemester } from "@/lib/college/semester";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
-import { yearSemesterLabel } from "@/lib/academic/format";
+import { yearSemesterLabelIn } from "@/lib/academic/format";
 import type {
   Course, CourseYearTiming, Department, SectionListItem, Subject, SubjectSemesterAssignment,
   TeachingAssignment, FacultyMember, FacultyAssignmentRequest,
@@ -243,48 +243,21 @@ export default function TeachingAssignmentsPage() {
     const assigned = new Set<number>();
     // A year some OTHER department already claims as a feeder FOR one of
     // `relevant` (e.g. Basic Science owning year 1 of a shared-first-year
-    // B.Tech) is never this HOD's own to staff, even when nothing here ends
-    // up "assigned" and the fallback below would otherwise offer every year -
-    // see fedYears.
+    // B.Tech) is never this HOD's own to staff - see fedYears. Nothing
+    // assigned means no years (never "every year": lib/college/taughtYears.ts).
     const excluded = new Set<number>();
     for (const d of relevant) {
       for (const y of managerEffectiveYears(d, departments, course.catalogId)) assigned.add(y);
       for (const y of fedYears(d, departments, course.catalogId)) excluded.add(y);
     }
     const courseYears = Array.from({ length: course.durationYears }, (_, i) => i + 1);
-    const base = assigned.size > 0 ? courseYears.filter((y) => assigned.has(y)) : courseYears;
-    return base.filter((y) => !excluded.has(y));
+    return courseYears.filter((y) => assigned.has(y) && !excluded.has(y));
   }, [course, subDepartmentOptions, scope.ownDept, departments]);
 
   // Keyed on the course ids, not just the group: if the scope-wide course fetch
   // lands after a year was already picked, the id set grows and this key changes
   // rather than leaving the earlier, incomplete result cached forever.
   const key = `${activeCourseIds.join("|")}_${year}`;
-  // Everything this HOD may actually edit for the chosen course+year: their own
-  // department's sections plus every sub-department's (a main HOD runs the whole
-  // tree). Only genuinely cross-listed sections from an unrelated department
-  // stay "secondary" and are excluded, since those are view-only.
-  const editableSections = useMemo(
-    () => (sectionsCache[key] ?? []).filter((s) => s.accessLevel !== "secondary"),
-    [sectionsCache, key]
-  );
-
-  // Picking a sub-department also brings in the branches it manages: BS-ENGLISH
-  // runs the shared first year for CIVIL and IT, so those sections are its
-  // even though each one's own `department` names the branch.
-  const filterDepartmentNames = useMemo(() => {
-    if (!departmentFilter) return null;
-    const d = departments.find((x) => x.name === departmentFilter);
-    return new Set<string>([departmentFilter, ...(d?.managedDepartments ?? [])]);
-  }, [departmentFilter, departments]);
-
-  const sections = useMemo(
-    () =>
-      filterDepartmentNames
-        ? editableSections.filter((s) => filterDepartmentNames.has(s.department))
-        : editableSections,
-    [editableSections, filterDepartmentNames]
-  );
   const subjects = useMemo(() => subjectsCache[key] ?? [], [subjectsCache, key]);
   const semesterAssignments = useMemo(() => semesterAssignmentsCache[key] ?? [], [semesterAssignmentsCache, key]);
   const timings = useMemo(() => timingsCache[key] ?? [], [timingsCache, key]);
@@ -331,6 +304,36 @@ const effectiveSemester = semesterOptions.length === 0
   // known (or known to be absent) once they are, so Load waits for them.
   const timingsLoaded = key in timingsCache;
 
+  // ensureCourseYearData files sections under the semester-suffixed key when a
+  // semester is in play (the sections API narrows by it), so read the same one.
+  const sectionsCacheKey = effectiveSemester != null ? fetchKey : key;
+
+  // Everything this HOD may actually edit for the chosen course+year: their own
+  // department's sections plus every sub-department's (a main HOD runs the whole
+  // tree). Only genuinely cross-listed sections from an unrelated department
+  // stay "secondary" and are excluded, since those are view-only.
+  const editableSections = useMemo(
+    () => (sectionsCache[sectionsCacheKey] ?? []).filter((s) => s.accessLevel !== "secondary"),
+    [sectionsCache, sectionsCacheKey]
+  );
+
+  // Picking a sub-department also brings in the branches it manages: BS-ENGLISH
+  // runs the shared first year for CIVIL and IT, so those sections are its
+  // even though each one's own `department` names the branch.
+  const filterDepartmentNames = useMemo(() => {
+    if (!departmentFilter) return null;
+    const d = departments.find((x) => x.name === departmentFilter);
+    return new Set<string>([departmentFilter, ...(d?.managedDepartments ?? [])]);
+  }, [departmentFilter, departments]);
+
+  const sections = useMemo(
+    () =>
+      filterDepartmentNames
+        ? editableSections.filter((s) => filterDepartmentNames.has(s.department))
+        : editableSections,
+    [editableSections, filterDepartmentNames]
+  );
+
   // ensureCourseYearData's own subjects fetch (below) is unfiltered -
   // effectiveSemester isn't known yet the first time it runs. Once a real
   // semester resolves, narrow subjectsCache[key] down to only subjects
@@ -353,6 +356,7 @@ const effectiveSemester = semesterOptions.length === 0
     if (semesterFilteredKeys.current.has(filterKey)) return;
     semesterFilteredKeys.current.add(filterKey);
     void (async () => {
+      try {
       // Subjects fetched by catalogId when available, not per-courseId union -
       // a master subject is department-independent (see /api/college/subjects
       // GET's own doc-comment), physically filed under whichever ONE
@@ -395,8 +399,13 @@ const effectiveSemester = semesterOptions.length === 0
         next.add(filterKey);
         return next;
       });
+      } catch {
+        // Let Reload try again instead of leaving "Unstaffed Subjects" loading forever.
+        semesterFilteredKeys.current.delete(filterKey);
+        toast({ variant: "destructive", title: "Failed to load subjects for this semester" });
+      }
     })();
-  }, [key, year, activeCourseIds, effectiveSemester, course, courses]);
+  }, [applied, key, year, activeCourseIds, effectiveSemester, course, courses]);
 
   // Queried once per course-doc id and merged, since the sections/timings
   // APIs take a single courseId and one programme spans several docs.
@@ -508,7 +517,14 @@ const effectiveSemester = semesterOptions.length === 0
     if (!applied || activeCourseIds.length === 0 || !year) return;
     if (fetchedKeys.current.has(fetchKey)) return;
     fetchedKeys.current.add(fetchKey);
-    void (async () => { await ensureCourseYearData(activeCourseIds, key, year, effectiveSemester, course?.catalogId); })();
+    void (async () => {
+      try {
+        await ensureCourseYearData(activeCourseIds, key, year, effectiveSemester, course?.catalogId);
+      } catch {
+        fetchedKeys.current.delete(fetchKey);
+        toast({ variant: "destructive", title: "Failed to load sections and subjects" });
+      }
+    })();
     // ensureCourseYearData is redefined every render but reads only its
     // arguments and the caches it guards on, so it is deliberately not a dep.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -666,42 +682,11 @@ const effectiveSemester = semesterOptions.length === 0
   // through the lend flow below, same as any genuinely outside department.
   const availableFacultyForAssign = faculty;
 
-  // Names already inside this HOD's own department tree (own department and
-  // its real sub-departments) - excluded below since their faculty are
-  // already directly assignable (availableFacultyForAssign above), so
-  // offering a lend-request to one would just be a redundant, slower path to
-  // the same result (or, for the HOD's own department, a request to
-  // themselves). Grouped/managed branches (e.g. CSE, IT) deliberately stay
-  // OUT of this set - their faculty are never directly assignable, so the
-  // lend flow is the actual path to staff them, for a sub-HOD and the main
-  // HOD alike.
-  const ownScopeNames = useMemo(() => {
-    const names = new Set<string>();
-    if (scope.ownDept) names.add(scope.ownDept.name);
-    for (const c of scope.groupingChildren) names.add(c.name);
-    return names;
-  }, [scope]);
-
-  // Every department in the college is askable except this HOD's own scope
-  // above - only a genuinely unrelated department (with its own separate HOD
-  // to fulfill the request) makes sense to ask. Sub-departments are NOT
-  // excluded as a class: a true sub-department (e.g. BS-Chemistry, BS-Physics
-  // under parent Basic Science) runs its own faculty roster under its own
-  // HOD login exactly like a top-level department does (see
-  // canHodManageFacultyDepartment/ownDepartmentNames, lib/departments/
-  // scope.ts) - a sub-HOD stuck for a subject their own sub-department can't
-  // cover (e.g. BS-English) needs to be able to ask a SIBLING sub-department
-  // (BS-Chemistry, BS-Physics), not just an unrelated top-level department.
-  // ownScopeNames already excludes this HOD's own department and its own
-  // true children, so a sub-department only shows up here when it's a
-  // genuinely different one this HOD has no direct access to - the backend
-  // (faculty-assignment-requests POST/GET) already routes a request to any
-  // department by id/name regardless of level, this was purely a front-end
-  // gap.
-  const requestSection = sections.find((s) => s.id === assignForm.sectionId);
+  // Every department and sub-department in the college is askable, none hidden -
+  // including this HOD's own and the section's own department.
   const requestableDepartments = useMemo(
-    () => departments.filter((d) => d.name !== requestSection?.department && !ownScopeNames.has(d.name)),
-    [departments, requestSection, ownScopeNames]
+    () => departments,
+    [departments]
   );
 
   async function handleAssign(e: React.FormEvent) {
@@ -884,7 +869,7 @@ const effectiveSemester = semesterOptions.length === 0
                 <Select value={String(effectiveSemester ?? "")} onValueChange={(v) => { setApplied(null); setSelectedSemester(Number(v)); }}>
                   <SelectTrigger><SelectValue placeholder="Select semester" /></SelectTrigger>
                   <SelectContent>
-                    {semesterOptions.map((s) => <SelectItem key={s} value={String(s)}>{yearSemesterLabel(s)}</SelectItem>)}
+                    {semesterOptions.map((s) => <SelectItem key={s} value={String(s)}>{yearSemesterLabelIn(Number(year), semesterOptions, s)}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>

@@ -394,7 +394,10 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
                               >
                                 <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
                                 <SelectContent>
-                                  {[1, 2, 3, 4].map((y) => <SelectItem key={y} value={String(y)}>{ordinalYear(y)}</SelectItem>)}
+                                  {/* The years this course has timings for, plus the request's own year - never an assumed 1-4. */}
+                                  {Array.from(new Set([...(timingsByRequest[r.id] ?? []).map((t) => Number(t.year)).filter(Boolean), r.year]))
+                                    .sort((a, b) => a - b)
+                                    .map((y) => <SelectItem key={y} value={String(y)}>{ordinalYear(y)}</SelectItem>)}
                                 </SelectContent>
                               </Select>
                             </div>

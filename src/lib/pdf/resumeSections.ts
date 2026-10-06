@@ -8,7 +8,7 @@
 export const RESUME_SECTIONS = [
   { key: "personal", label: "Personal & Contact Details" },
   { key: "education", label: "Education" },
-  { key: "experience", label: "Previous Experience" },
+  { key: "experience", label: "Experience" },
   { key: "teachingLoad", label: "Teaching Load" },
   { key: "research", label: "Research & Innovation" },
   { key: "mentorship", label: "Mentorship & Institutional Contribution" },

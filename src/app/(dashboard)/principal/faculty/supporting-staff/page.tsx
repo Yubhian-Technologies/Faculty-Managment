@@ -112,8 +112,14 @@ export default function PrincipalSupportingStaffViewPage() {
       key: "actions",
       header: "",
       render: (row) => (
-        <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); router.push(`/principal/faculty/supporting-staff/${row.id}`); }}>
-          <Eye className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">View</span>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 w-8 p-0"
+          title="View profile"
+          onClick={(e) => { e.stopPropagation(); router.push(`/principal/faculty/supporting-staff/${row.id}`); }}
+        >
+          <Eye className="h-4 w-4" /><span className="sr-only">View</span>
         </Button>
       ),
     },

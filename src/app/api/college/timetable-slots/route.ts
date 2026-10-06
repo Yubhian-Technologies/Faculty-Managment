@@ -251,7 +251,6 @@ export async function POST(request: Request) {
       allowSplit: body.allowSplit,
       semester: assignmentSemester,
       currentAcademicYear,
-      maxPeriodsPerFacultyPerDay: rules.maxPeriodsPerFacultyPerDay,
       isLiveSlot: makeLiveSlotPredicate(timingLookup, currentAcademicYear),
       stamp: (data) => stampDepartmentIds(data, deptIndex),
       writer: session.uid,

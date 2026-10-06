@@ -18,7 +18,7 @@ import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
 // A Timetable Incharge (see TimetableIncharge in src/types/core.ts) can send
 // these too, for their own delegated course-year.
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await requireCollegeMember(
       "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACADEMICS", "PANEL_MEMBER", "COLLEGE_STAFF",
@@ -49,6 +49,21 @@ export async function GET() {
           if (seen.has(d.id)) continue;
           seen.add(d.id);
           requests.push({ id: d.id, ...d.data() });
+        }
+      }
+      // Timetable editor only: allocated lends onto the section this Incharge
+      // is delegated, even when someone else raised them (same as the HOD path).
+      const incharSectionId = new URL(request.url).searchParams.get("sectionId");
+      if (incharSectionId) {
+        const sec = (await db.collection("colleges").doc(session.collegeId).collection("sections").doc(incharSectionId).get())
+          .data() as { courseId?: string; year?: number } | undefined;
+        if (sec?.courseId && sec.year != null && await isTimetableIncharge(db, session.collegeId, session.uid, sec.courseId, sec.year)) {
+          const allocatedSnap = await coll.where("sectionId", "==", incharSectionId).where("status", "==", "ALLOCATED").get();
+          for (const d of allocatedSnap.docs) {
+            if (seen.has(d.id)) continue;
+            seen.add(d.id);
+            requests.push({ id: d.id, ...d.data() });
+          }
         }
       }
       requests.sort((a, b) => {
@@ -89,6 +104,25 @@ export async function GET() {
         if (seen.has(d.id)) continue;
         seen.add(d.id);
         requests.push({ id: d.id, ...d.data() });
+      }
+    }
+    // Timetable editor only: every allocated lend onto this section, not just
+    // the ones this person raised. Placing a lent-in subject is the section's
+    // HOD / Sub-HOD's job, and the request may have been raised by someone
+    // else in that department - without it the subject never reaches their
+    // "Add a subject" picker. Gated by the same rule as the draft route
+    // (canHodEditDepartment on the section's department).
+    const sectionId = new URL(request.url).searchParams.get("sectionId");
+    if (sectionId) {
+      const sectionSnap = await db.collection("colleges").doc(session.collegeId).collection("sections").doc(sectionId).get();
+      const sectionDepartment = (sectionSnap.data() as { department?: string } | undefined)?.department;
+      if (sectionDepartment && canHodEditDepartment(scope, sectionDepartment)) {
+        const allocatedSnap = await coll.where("sectionId", "==", sectionId).where("status", "==", "ALLOCATED").get();
+        for (const d of allocatedSnap.docs) {
+          if (seen.has(d.id)) continue;
+          seen.add(d.id);
+          requests.push({ id: d.id, ...d.data() });
+        }
       }
     }
     requests.sort((a, b) => {
@@ -153,10 +187,6 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "You are not the Timetable Incharge for this course & year" }, { status: 403 });
       }
     }
-    if (targetDept.name === section.department) {
-      return NextResponse.json({ error: "Pick a different department - this one already owns the section" }, { status: 400 });
-    }
-
     const existingSnap = await collegeRef.collection("teachingAssignments")
       .where("sectionId", "==", sectionId).where("subjectId", "==", subjectId).get();
     if (existingSnap.docs.some((d) => !(d.data() as { isPast?: boolean }).isPast)) {

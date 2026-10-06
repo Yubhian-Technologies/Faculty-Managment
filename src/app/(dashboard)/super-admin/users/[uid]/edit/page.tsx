@@ -228,14 +228,14 @@ export default function EditUserPage() {
 
   if (loading) {
     return (
-      <div className="max-w-xl">
+      <div className="w-full">
         <PageHeader title="Edit User" description="Loading…" />
       </div>
     );
   }
 
   return (
-    <div className="max-w-xl">
+    <div className="w-full">
       <PageHeader title="Edit User" description={email} />
 
       {isCollegeScoped ? (

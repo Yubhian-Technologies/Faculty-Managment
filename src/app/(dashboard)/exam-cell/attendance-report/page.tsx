@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { FileDown, FileSpreadsheet, Search } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,8 @@ import { renderHtmlToPdf } from "@/lib/pdf/htmlToPdf";
 import { formatPercent } from "@/lib/studentAttendance/percentage";
 import ExcelJS from "exceljs";
 import type { Course, Department } from "@/types";
+import { useCourseSemesterPlan } from "@/hooks/useCourseSemesterPlan";
+import { semesterLabel } from "@/lib/college/courseYears";
 
 // A student below this is flagged - the near-universal exam-eligibility
 // threshold in Indian engineering colleges. Purely a display cue; the actual
@@ -49,14 +51,11 @@ function escapeHtml(value: string): string {
 
 interface SectionOption { id: string; name: string }
 
-// Semester numbers (1..durationYears*2), same convention as Circulars' own
-// semester field. Attendance/rosters are only ever tracked per academic Year
-// though (see attendance-percentage-report/route.ts) - so picking either
-// semester of a year (e.g. 3 or 4) resolves to the same underlying Year and
-// returns the same report; see yearForSemester below.
-function yearForSemester(semester: number): number {
-  return Math.ceil(semester / 2);
-}
+// Semester numbers come from the course's own semester setup (useCourseSemesterPlan - its
+// courseYearTimings, with a labelled 2-per-year fallback), same convention as Circulars' own
+// semester field. Attendance/rosters are only ever tracked per academic Year though (see
+// attendance-percentage-report/route.ts) - so picking any semester of a year (e.g. 3 or 4)
+// resolves to the same underlying Year and returns the same report; see yearForSemester below.
 
 export default function ExamCellAttendanceReportPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -114,11 +113,9 @@ export default function ExamCellAttendanceReportPage() {
     [courses, courseName, departmentId]
   );
 
-  const totalSemesters = (resolvedCourse?.durationYears ?? 0) * 2;
-  const semesterOptions = useMemo(
-    () => Array.from({ length: totalSemesters }, (_, i) => i + 1),
-    [totalSemesters]
-  );
+  const semesterPlan = useCourseSemesterPlan(resolvedCourse);
+  const semesterOptions = semesterPlan.semesters;
+  const yearForSemester = useCallback((semester: number): number => semesterPlan.yearOf(semester) ?? 0, [semesterPlan]);
 
   function resetDownstream(from: "course" | "department" | "semester") {
     if (from === "course") { setDepartmentId(""); setSemester(""); setSectionId(""); }
@@ -152,7 +149,7 @@ export default function ExamCellAttendanceReportPage() {
         setIsLoadingSections(false);
       }
     })();
-  }, [resolvedCourse, departmentId, semester, selectedDepartment]);
+  }, [resolvedCourse, departmentId, semester, selectedDepartment, yearForSemester]);
 
   // Accepts explicit From/To overrides so the "Below 75%" quick filter can
   // set the fields and run in the same click - reading `minPct`/`maxPct`
@@ -211,10 +208,10 @@ export default function ExamCellAttendanceReportPage() {
     const sectionName = sectionId ? sectionOptions.find((s) => s.id === sectionId)?.name : null;
     return [
       `${resolvedCourse.name} - ${selectedDepartment.name}`,
-      `Sem ${semester}/${resolvedCourse.durationYears * 2}`,
+      `Sem ${semesterLabel(semesterPlan, Number(semester))}`,
       sectionName ? `Section ${sectionName}` : "All Sections",
     ].join(" - ");
-  }, [resolvedCourse, selectedDepartment, semester, sectionId, sectionOptions]);
+  }, [resolvedCourse, selectedDepartment, semester, sectionId, sectionOptions, semesterPlan]);
 
   function downloadPdf() {
     if (!rows || rows.length === 0) return;
@@ -293,7 +290,7 @@ export default function ExamCellAttendanceReportPage() {
               <SelectTrigger><SelectValue placeholder="Select semester" /></SelectTrigger>
               <SelectContent>
                 {semesterOptions.map((s) => (
-                  <SelectItem key={s} value={String(s)}>{s}/{totalSemesters}</SelectItem>
+                  <SelectItem key={s} value={String(s)}>{semesterLabel(semesterPlan, s)}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

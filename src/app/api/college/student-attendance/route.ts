@@ -20,7 +20,7 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("PANEL_MEMBER");
-    const body = (await readJsonBody(request)) as { assignmentId?: string; date?: string };
+    const body = (await readJsonBody(request)) as { assignmentId?: string; date?: string; periodNumber?: number };
     const assignmentId = body.assignmentId?.trim();
     const date = body.date?.trim();
 
@@ -33,21 +33,25 @@ export async function POST(request: Request) {
 
     // No attendance on a day the college isn't teaching (holiday, summer
     // break, a day outside its configured working days).
-    const closedReason = await getNoClassReason(db, session.collegeId, date);
+    // The three independent first reads run together; their results are then
+    // checked in the original order.
+    const [closedReason, assignmentSnap, facultyMemberId] = await Promise.all([
+      getNoClassReason(db, session.collegeId, date),
+      collegeRef.collection("teachingAssignments").doc(assignmentId).get(),
+      resolveFacultyMemberId(db, session.collegeId, session.uid),
+    ]);
     if (closedReason) {
       return NextResponse.json({ error: `No classes today - ${closedReason}.` }, { status: 403 });
     }
 
     // Only load a subject this faculty member is currently (not historically)
     // assigned to teach — prevents loading an arbitrary assignment's roster.
-    const assignmentSnap = await collegeRef.collection("teachingAssignments").doc(assignmentId).get();
     if (!assignmentSnap.exists) {
       return NextResponse.json({ error: "Teaching assignment not found" }, { status: 404 });
     }
     const assignment = assignmentSnap.data() as TeachingAssignment;
     // teachingAssignments.facultyId is the facultyMembers doc id, not the
     // login uid (see resolveFacultyMemberId) — resolve before comparing.
-    const facultyMemberId = await resolveFacultyMemberId(db, session.collegeId, session.uid);
     if (assignment.isPast) {
       return NextResponse.json({ error: "You are not assigned to teach this subject" }, { status: 403 });
     }
@@ -125,7 +129,7 @@ export async function POST(request: Request) {
     // check the PATCH route re-runs before actually saving marks, so a
     // request can't be replayed/crafted for a period that hasn't started yet
     // or has already ended.
-    const windowCheck = await checkFacultyPeriodWindow(db, session.collegeId, facultyMemberId, assignmentId, date, now);
+    const windowCheck = await checkFacultyPeriodWindow(db, session.collegeId, facultyMemberId, assignmentId, date, now, Number.isInteger(body.periodNumber) ? body.periodNumber : undefined);
     if (!windowCheck.ok) {
       return NextResponse.json({ error: periodWindowMessage(windowCheck) }, { status: 403 });
     }
@@ -158,26 +162,23 @@ export async function POST(request: Request) {
     // sortStudentsForList, not rollNumber.localeCompare: a student imported
     // without a roll number sorts last by name instead of throwing here and
     // making the whole class impossible to take attendance for.
-    const students = sortStudentsForList(await fetchSectionStudentsCached(collegeRef, {
-      department,
-      sectionName,
-      year,
-      courseId,
-      labBatch,
-    }));
+    // Roster, academic year and the on-duty day are independent reads: fetched
+    // together (the roster is the long pole, the other two ride along for free).
+    const [rosterDocs, academicYear, onDutyDay] = await Promise.all([
+      fetchSectionStudentsCached(collegeRef, { department, sectionName, year, courseId, labBatch }),
+      resolveCollegeAcademicYear(db, session.collegeId, now),
+      loadOnDutyDay(db, session.collegeId, date),
+    ]);
+    const students = sortStudentsForList(rosterDocs);
 
     // Which academic year this session belongs to - a Section is a year-slot a
     // new cohort occupies each year, so reports select sessions by it (audit
     // F-24). Sessions written before this existed carry none and are placed by
     // their date when read.
-    const academicYear = await resolveCollegeAcademicYear(db, session.collegeId, now);
-
     // Students who are officially away for this period (an approved permission,
     // an event, ...) arrive already marked ON_DUTY: one document read for the
     // whole college-day, however many students are away. Resolved here, outside
     // the transaction, like the roster itself.
-    const onDutyDay = await loadOnDutyDay(db, session.collegeId, date);
-
     // Wrap the whole DRAFT-create in a transaction so a concurrent
     // submission can't silently discard an in-flight roster merge. The
     // roster itself is fetched outside the transaction (two collection

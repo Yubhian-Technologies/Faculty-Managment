@@ -11,7 +11,7 @@ import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { isFacultyAvailable } from "@/types";
 import { matchesCurrentSemester, resolveCurrentSemester } from "@/lib/college/semester";
 import {
-  expandDeclaredBusy, loadUserRole, requesterRequestsLink, requesterTimetableLink,
+  expandDeclaredBusy, loadUserRole, notifyLendRecipients, requesterRequestsLink, requesterTimetableLink,
 } from "@/lib/timetable/declaredBusy";
 import type { CourseYearTiming, DayOfWeek, FacultyAssignmentRequest, TimetableDraft, TimetableSlot } from "@/types";
 
@@ -185,17 +185,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (reqData.status !== "ALLOCATED") {
         return NextResponse.json({ error: "This request hasn't been allocated yet" }, { status: 409 });
       }
-      const requesterRole = await loadUserRole(db, session.collegeId, reqData.requestedBy);
       // A second close (after an Edit) tells the requester the periods changed.
       const isUpdate = reqData.busyClosedAt != null;
       await reqRef.update({ busyClosed: true, busyClosedAt: now, updatedAt: now });
-      await notify(
-        db, session.collegeId, reqData.requestedBy, "FACULTY_ASSIGNMENT_ALLOCATED",
+      await notifyLendRecipients(
+        db, session.collegeId, reqData, "FACULTY_ASSIGNMENT_ALLOCATED",
         isUpdate ? "Busy periods updated" : "Ready to schedule",
         isUpdate
           ? `${reqData.targetDepartmentName} updated ${reqData.allocatedFacultyName ?? "the allocated faculty"}'s busy periods for ${reqData.subjectName} (Section ${reqData.sectionName}) - check your Timetable page`
           : `${reqData.targetDepartmentName} shared ${reqData.allocatedFacultyName ?? "the allocated faculty"}'s busy periods for ${reqData.subjectName} (Section ${reqData.sectionName}) - you can now place it on your Timetable page`,
-        requesterTimetableLink(requesterRole, reqData)
       );
       return NextResponse.json({ ok: true });
     }
@@ -232,9 +230,21 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     // An Incharge (no HOD scope tree) may only offer up faculty from the
     // exact department the request targeted - an HOD may also reach into a
     // sub-department's own faculty, same as before.
+    // The Incharge's own picker (faculty GET, includeParent) also offers the
+    // target department's PARENT roster - a sub-department's faculty mostly
+    // sit there - so allocation accepts the same set, like the Sub-HOD can.
+    let inchargeDepartments = [reqData.targetDepartmentName];
+    if (!scope) {
+      const deptSnap = await collegeRef.collection("departments").where("name", "==", reqData.targetDepartmentName).limit(1).get();
+      const parentId = (deptSnap.docs[0]?.data() as { parentDepartmentId?: string } | undefined)?.parentDepartmentId;
+      if (parentId) {
+        const parentName = (await collegeRef.collection("departments").doc(parentId).get()).data()?.name as string | undefined;
+        if (parentName) inchargeDepartments = [...inchargeDepartments, parentName];
+      }
+    }
     const facultyInScope = scope
       ? canHodEditDepartment(scope, faculty.department ?? "")
-      : faculty.department === reqData.targetDepartmentName;
+      : inchargeDepartments.includes(faculty.department ?? "");
     if (!facultyInScope) {
       return NextResponse.json({ error: "That faculty member isn't in your department" }, { status: 403 });
     }
