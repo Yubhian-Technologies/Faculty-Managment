@@ -14,6 +14,8 @@ import {
   buildAllocationList,
   buildTimetableColumns,
   timetableClassLine,
+  buildClassTimetableSubtitle,
+  getHodSignatureLabel,
   resolveTimetableDays,
   slotShortCode,
 } from "./gridModel";
@@ -139,18 +141,26 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
     : "";
 
   // One plain line naming the class this timetable belongs to.
+  const resolvedRoom = opts.classroom || section?.classroomNumber || (section as { classroom?: string })?.classroom;
   const classLine = escapeHtml(timetableClassLine({
     courseName: resolvedCourse,
     year: section?.year,
     semesterLabel,
     sectionName: section?.name,
     departmentName: resolvedDepartment,
+    classroom: resolvedRoom,
   }));
   const inchargeLine = resolvedIncharge ? `Class In-charge: ${escapeHtml(resolvedIncharge)}` : "";
 
   // Always a logo: the college's own, else the bundled Vishnu logo.
   const resolvedLogo = resolveLogoUrl(logoUrl);
   const logoTd = `<td class="logo-cell"><img src="${escapeHtml(resolvedLogo)}" alt="${escapeHtml(collegeName)} logo"></td>`;
+
+  const subtitleText = buildClassTimetableSubtitle({
+    academicYear: opts.academicYear,
+    semesterLabel,
+    effectiveDate: opts.effectiveDate,
+  });
 
   const headerHtml = `
   <table class="letterhead" cellspacing="0" cellpadding="0">
@@ -164,8 +174,9 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
     </tr>
   </table>
   <div class="doc-title">${escapeHtml(title || "TIME TABLE")}</div>
+  <div class="class-line" style="font-size:9.5pt;font-weight:600;margin-bottom:2px;">${escapeHtml(subtitleText)}</div>
   ${classLine ? `<div class="class-line">${classLine}</div>` : ""}
-  ${inchargeLine ? `<div class="class-line">${inchargeLine}</div>` : ""}`;
+  ${inchargeLine ? `<div class="class-line" style="font-weight:600;color:#1e3a8a;">${inchargeLine}</div>` : ""}`;
 
   // ── Grid ──────────────────────────────────────────────────────────────────
   const timeStack = (start?: string, end?: string) =>
@@ -201,9 +212,11 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
           const inner = cellSlots
             .map((s) => {
               const sub = s.substituteFacultyName;
+              const room = s.classroom ? (/^room/i.test(s.classroom.trim()) ? s.classroom.trim() : `Room: ${s.classroom.trim()}`) : null;
               return `<div class="slot">
                 <div class="slot-code">${escapeHtml(slotShortCode(s, subjectMap))}</div>
                 ${s.labBatch ? `<div class="slot-note">${escapeHtml(s.labBatch)}</div>` : ""}
+                ${room ? `<div class="slot-note">${escapeHtml(room)}</div>` : ""}
                 ${sub ? `<div class="slot-note">Sub: ${escapeHtml(sub)}</div>` : ""}
               </div>`;
             })
@@ -264,15 +277,13 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
   </div>`
     : "";
 
-  // Optional - off unless a caller asks for it.
-  const signatureHtml = showSignatures
-    ? `
-  <div class="signature-row">
-    <div class="signature-block"><div class="signature-line"></div>Class In-charge</div>
-    <div class="signature-block"><div class="signature-line"></div>${escapeHtml(signatureLabels?.incharge ?? "Timetable Incharge")}</div>
-    <div class="signature-block"><div class="signature-line"></div>${escapeHtml(signatureLabels?.principal ?? "Principal")}</div>
-  </div>`
-    : "";
+  const hodLabel = getHodSignatureLabel(resolvedDepartment);
+  const signatureHtml = `
+  <div class="signature-row" style="margin-top:24px;display:flex;justify-content:space-between;align-items:flex-end;">
+    <div class="signature-block" style="flex:1;text-align:center;"><div class="signature-line"></div>TimeTable In-Charge</div>
+    <div class="signature-block" style="flex:1;text-align:center;"><div class="signature-line"></div>${escapeHtml(hodLabel)}</div>
+    <div class="signature-block" style="flex:1;text-align:center;"><div class="signature-line"></div>PRINCIPAL</div>
+  </div>`;
 
   const documentTitle = title || "TIME TABLE";
   return `<!DOCTYPE html>

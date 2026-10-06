@@ -307,25 +307,71 @@ export function timetableClassLine(parts: {
   semesterLabel?: string;
   sectionName?: string;
   departmentName?: string;
+  classroom?: string;
 }): string {
   // The LAST number: pickers label a semester "2-1" (year-semester), and the
   // class line already shows the year, so it is the semester within the year.
   const semNumber = parts.semesterLabel?.match(/\d+/g)?.pop();
   const semester = semNumber ? `${roman(Number(semNumber))} Sem` : parts.semesterLabel;
   // A branch-picker name carries the owning department's code first
-  // ("BSC-CSE-C" = Basic Science, CSE, C); the class line wants "CSE C".
+  // ("BSC-CSE-C" = Basic Science, CSE, C); the class line wants "CSE-C".
   const nameParts = (parts.sectionName ?? "").trim().split(/[-_\s]+/).filter(Boolean);
-  let section = (nameParts.length >= 3 ? nameParts.slice(1) : nameParts).join(" ");
-  if (section && !/[A-Za-z]{2,}/.test(section) && parts.departmentName) {
+  let sectionParts = nameParts.length >= 3 ? nameParts.slice(1) : nameParts;
+  if (sectionParts.length === 1 && !/[A-Za-z]{2,}/.test(sectionParts[0]) && parts.departmentName) {
     const initials = parts.departmentName.split(/[\s&]+/).filter((w) => /^[A-Za-z]/.test(w) && !/^(and|of)$/i.test(w)).map((w) => w[0].toUpperCase()).join("");
-    section = `${initials} ${section}`;
+    sectionParts = [initials, sectionParts[0]];
   }
-  return [
+  const section = sectionParts.join("-");
+
+  const base = [
     parts.year != null ? roman(parts.year) : undefined,
     parts.courseName ? shortCourseName(parts.courseName) : undefined,
     semester,
     section || undefined,
   ].filter(Boolean).join(" ");
+
+  if (parts.classroom?.trim()) {
+    const roomStr = /^room/i.test(parts.classroom.trim()) ? parts.classroom.trim() : `Room: ${parts.classroom.trim()}`;
+    return base ? `${base}  |  ${roomStr}` : roomStr;
+  }
+  return base;
+}
+
+export function buildClassTimetableSubtitle(opts: {
+  academicYear?: string;
+  semester?: number;
+  semesterLabel?: string;
+  effectiveDate?: string;
+}): string {
+  const acadYear = opts.academicYear || "2026-2027";
+  const semNum = typeof opts.semester === "number"
+    ? opts.semester
+    : Number(opts.semesterLabel?.match(/\d+/g)?.pop()) || 1;
+  const semType = semNum > 0 ? (semNum % 2 === 1 ? "Odd Semester" : "Even Semester") : "Semester";
+  const wefDate = opts.effectiveDate?.trim() ? `w.e.f ${opts.effectiveDate.trim()}` : "w.e.f ____________";
+  return `Class Time Table for the Academic Year ${acadYear}, ${semType}, ${wefDate}`;
+}
+
+export function getHodSignatureLabel(deptNameOrCode?: string): string {
+  if (!deptNameOrCode?.trim()) return "HOD";
+  const str = deptNameOrCode.trim();
+  if (/^[A-Z]{2,6}$/.test(str)) return `HOD-${str}`;
+  const codeMap: Record<string, string> = {
+    "computer science": "CSE",
+    "electronics": "ECE",
+    "mechanical": "ME",
+    "civil": "CIVIL",
+    "electrical": "EEE",
+    "information technology": "IT",
+    "basic science": "BS&H",
+    "pharmacy": "PHARM",
+  };
+  const lower = str.toLowerCase();
+  for (const [key, code] of Object.entries(codeMap)) {
+    if (lower.includes(key)) return `HOD-${code}`;
+  }
+  const initials = str.split(/[\s&]+/).filter((w) => /^[A-Za-z]/.test(w) && !/^(and|of|department)$/i.test(w)).map((w) => w[0].toUpperCase()).join("");
+  return initials ? `HOD-${initials}` : "HOD";
 }
 
 export function ordinalYear(year: number): string {

@@ -28,9 +28,39 @@ import { DAY_LABELS } from "@/types";
 
 const DAYS: DayOfWeek[] = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
 
-function ordinalYear(year: number) {
-  const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
-  return `${year}${suffix} Year`;
+function toRomanYear(y: number): string {
+  const ROMAN = ["", "I", "II", "III", "IV", "V", "VI"];
+  return ROMAN[y] ?? String(y);
+}
+
+function shortCourseName(c?: string): string {
+  if (!c) return "";
+  const name = c.trim();
+  if (/^(bachelor of technology|b\.?\s?tech)\b/i.test(name)) return "B.Tech";
+  if (/^(master of technology|m\.?\s?tech)\b/i.test(name)) return "M.Tech";
+  if (/^(bachelor of engineering|b\.?\s?e)\.?$/i.test(name)) return "B.E";
+  if (/^(master of business administration|mba)$/i.test(name)) return "MBA";
+  if (/^(master of computer applications|mca)$/i.test(name)) return "MCA";
+  return name;
+}
+
+function formatTeachingShorthand(parts: {
+  courseName?: string;
+  year?: number;
+  semester?: number | string;
+  sectionName?: string;
+}): string {
+  const yearStr = parts.year != null ? toRomanYear(parts.year) : "";
+  const courseStr = shortCourseName(parts.courseName);
+  const semNum = typeof parts.semester === "number" ? parts.semester : (parts.semester ? Number(parts.semester.toString().match(/\d+/g)?.pop()) || parts.semester : undefined);
+  const semStr = semNum != null ? (typeof semNum === "number" ? `${toRomanYear(Number(semNum))} Sem` : `${semNum} Sem`) : "";
+
+  // Strip BS/BSE/BSC prefix tags (e.g. "BSE-ME-A" -> "ME-A", "BSC-CSE-C" -> "CSE-C")
+  let sec = (parts.sectionName ?? "").trim().replace(/^BS[EC]?[-_]/i, "");
+  if (sec) sec = `Section ${sec}`;
+
+  const classPrefix = [yearStr, courseStr, semStr].filter(Boolean).join(" ");
+  return [classPrefix, sec].filter(Boolean).join(" - ");
 }
 
 export default function TeachingLoadPage() {
@@ -216,16 +246,19 @@ export default function TeachingLoadPage() {
                           <div className="space-y-1.5">
                             {cellSlots.map((slot, idx) => {
                               const assignment = assignmentById.get(slot.assignmentId);
-                              // Resolved from this slot's OWN course+year, not a shared
-                              // row-level time - a period "3" in a 1st Year section can
-                              // run a different clock time than period "3" in a 3rd
-                              // Year one, so this must vary cell by cell, not row by row.
                               const time = periodTimeFor(slot.courseId, slot.year, slot.periodNumber);
-                              const subline = [
-                                assignment?.courseName,
-                                assignment?.year ? ordinalYear(assignment.year) : null,
-                                assignment?.sectionName ? `Section ${assignment.sectionName}` : null,
-                              ].filter(Boolean).join(" · ");
+                              const courseByIdMap = new Map(courses.map((c) => [c.id, c]));
+                              const resolvedCourseName = assignment?.courseName || courseByIdMap.get(slot.courseId || "")?.name;
+                              const subline = formatTeachingShorthand({
+                                courseName: resolvedCourseName,
+                                year: assignment?.year ?? slot.year,
+                                semester: assignment?.timetableSemester ?? assignment?.semester,
+                                sectionName: assignment?.sectionName,
+                              });
+                              const subjectName = slot.subjectName || assignment?.subjectName || "";
+                              const shortCode = assignment?.shortCode;
+                              const titleDisplay = shortCode ? `${subjectName} (${shortCode})` : subjectName;
+
                               return (
                                 <div key={`${slot.id ?? idx}`} className={`rounded-md border p-2 ${slot.substituteFacultyName || slot.substituteForName ? "bg-amber-50 border-amber-200" : "bg-primary/5 border-primary/20"}`}>
                                   {time && (
@@ -233,7 +266,7 @@ export default function TeachingLoadPage() {
                                       {formatTime12h(time.startTime)}&ndash;{formatTime12h(time.endTime)}
                                     </p>
                                   )}
-                                  <p className="text-xs font-semibold leading-tight">{assignment?.shortCode || slot.subjectName}</p>
+                                  <p className="text-xs font-semibold leading-tight">{titleDisplay}</p>
                                   {slot.substituteFacultyName ? (
                                     <p className="text-[11px] font-medium text-amber-700 mt-0.5">
                                       Covered by {slot.substituteFacultyName}{slot.substituteDate ? ` (${formatDMY(slot.substituteDate)})` : ""}
@@ -245,7 +278,11 @@ export default function TeachingLoadPage() {
                                   ) : (
                                     subline && <p className="text-[11px] text-muted-foreground mt-0.5">{subline}</p>
                                   )}
-                                  {slot.classroom && <p className="text-[11px] text-muted-foreground">{slot.classroom}</p>}
+                                  {slot.classroom && (
+                                    <p className="text-[11px] text-muted-foreground mt-0.5 font-medium">
+                                      {/^room/i.test(slot.classroom.trim()) ? slot.classroom.trim() : `Room: ${slot.classroom.trim()}`}
+                                    </p>
+                                  )}
                                 </div>
                               );
                             })}
