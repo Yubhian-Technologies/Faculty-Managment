@@ -65,6 +65,9 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
   const [busyBuilderOpenId, setBusyBuilderOpenId] = useState<string | null>(null);
   // The request whose "+ Add another faculty" picker is open.
   const [addingAnotherId, setAddingAnotherId] = useState<string | null>(null);
+  // Which allocated faculty member is being swapped on a request: "reqId:facultyId" -> the new faculty id picked.
+  const [changePick, setChangePick] = useState<Record<string, string>>({});
+  const [changingKey, setChangingKey] = useState<string | null>(null);
   // Every year's own CourseYearTiming for the request's course, keyed by
   // request id - lets the Incharge pick a Year explicitly (defaulting to the
   // request's own) rather than being locked to whatever year the request
@@ -140,6 +143,32 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
       await load();
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to allocate" });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleChangeFaculty(reqId: string, fromFacultyId: string) {
+    const key = `${reqId}:${fromFacultyId}`;
+    const facultyId = changePick[key];
+    if (!facultyId) {
+      toast({ variant: "destructive", title: "Pick the new faculty member first" });
+      return;
+    }
+    setBusyId(reqId);
+    try {
+      const res = await fetch(`/api/college/faculty-assignment-requests/${reqId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reallocate", fromFacultyId, facultyId }),
+      });
+      const json = await res.json() as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Failed to change faculty");
+      toast({ variant: "success", title: "Faculty changed - timetable slots updated" });
+      setChangingKey(null);
+      await load();
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to change faculty" });
     } finally {
       setBusyId(null);
     }
@@ -404,6 +433,11 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
                                 {mine.length === 0 ? "no busy periods" : `${mine.length} busy period${mine.length === 1 ? "" : "s"}`}
                               </span>
                             </p>
+                            {tab === "incoming" && (
+                              <Button size="sm" variant="outline" onClick={() => setChangingKey(changingKey === `${r.id}:${a.facultyId}` ? null : `${r.id}:${a.facultyId}`)}>
+                                <Pencil className="h-3.5 w-3.5 mr-1.5" />Change faculty
+                              </Button>
+                            )}
                             {tab === "incoming" && !r.busyClosed && (
                               <Button size="sm" variant="outline" onClick={() => void toggleBusyBuilder(r, a)}>
                                 <CalendarDays className="h-3.5 w-3.5 mr-1.5" />
@@ -411,6 +445,24 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
                               </Button>
                             )}
                           </div>
+
+                          {tab === "incoming" && changingKey === `${r.id}:${a.facultyId}` && (
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Select
+                                value={changePick[`${r.id}:${a.facultyId}`] ?? ""}
+                                onValueChange={(v) => setChangePick((p) => ({ ...p, [`${r.id}:${a.facultyId}`]: v }))}
+                              >
+                                <SelectTrigger className="w-64"><SelectValue placeholder={pickable.length ? "Select the new faculty" : "No other faculty available"} /></SelectTrigger>
+                                <SelectContent>
+                                  {pickable.map((f) => <SelectItem key={f.id} value={f.id}>{facultyDisplayName(f)}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                              <Button size="sm" loading={busyId === r.id} disabled={!changePick[`${r.id}:${a.facultyId}`]} onClick={() => void handleChangeFaculty(r.id, a.facultyId)}>
+                                Save new faculty
+                              </Button>
+                              <Button size="sm" variant="ghost" onClick={() => setChangingKey(null)}>Cancel</Button>
+                            </div>
+                          )}
 
                           {/* View: what was declared. Read-only once closed (and for the
                               requesting side), editable only through the builder below. */}
