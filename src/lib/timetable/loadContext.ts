@@ -8,6 +8,7 @@ import { resolveCurrentSemester, matchesCurrentSemester } from "@/lib/college/se
 import { declaredBusyByFaculty } from "@/lib/timetable/declaredBusy";
 import { inheritedTimingCourseId } from "@/lib/timetable/sharedYearTiming";
 import { chunkValues, getInChunks } from "@/lib/firestore/inQuery";
+import { cachedCollectionDocs } from "@/lib/firestore/sharedReads";
 import type { Course, Department } from "@/types";
 
 // Everything the preflight and the solver need for one section, loaded once.
@@ -140,12 +141,12 @@ export async function loadTimetableContext(
   // actually owns this year (see inheritedTimingCourseId, which returns null
   // for any year the department owns itself, so nothing else is affected).
   if (!timing) {
-    const [coursesSnap, deptsSnap] = await Promise.all([
-      collegeRef.collection("courses").get(),
-      collegeRef.collection("departments").get(),
+    const [courseDocs, deptDocs] = await Promise.all([
+      cachedCollectionDocs(db, collegeId, "courses"),
+      cachedCollectionDocs(db, collegeId, "departments"),
     ]);
-    const courses = coursesSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as Course[];
-    const departments = deptsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as (Department & { id: string })[];
+    const courses = courseDocs.map((d) => ({ id: d.id, ...d.data() })) as Course[];
+    const departments = deptDocs.map((d) => ({ id: d.id, ...d.data() })) as (Department & { id: string })[];
     const ownCourse = courses.find((c) => c.id === section.courseId);
     const inheritedId = ownCourse
       ? inheritedTimingCourseId(ownCourse, Number(section.year), departments, courses)
