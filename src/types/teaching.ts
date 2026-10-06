@@ -221,6 +221,14 @@ export interface TeachingAssignment {
 
 export type FacultyAssignmentRequestStatus = "PENDING" | "ALLOCATED" | "DECLINED";
 
+export interface RequestAllocation {
+  facultyId: string;
+  facultyName: string;
+  teachingAssignmentId: string;
+  busyPeriods: { day: DayOfWeek; period: number; year?: number }[];
+  allocatedBy?: string;
+}
+
 export interface FacultyAssignmentRequest {
   id: string;
   collegeId: string;
@@ -256,6 +264,17 @@ export interface FacultyAssignmentRequest {
   // stored, which are read in the requesting section's own numbering. Entries
   // for another year are mapped by clock time - see lib/timetable/declaredBusy.ts.
   busyPeriods?: { day: DayOfWeek; period: number; year?: number }[];
+  // A request may be fulfilled by MORE THAN ONE faculty (the lender allocates one,
+  // marks their busy periods, adds another, ...). `allocations` holds every one;
+  // `allocatedFacultyId/Name`, `teachingAssignmentId` and `busyPeriods` above keep
+  // mirroring the FIRST, so a request allocated before this existed (single
+  // faculty, no `allocations`) reads exactly as before - see
+  // lib/teaching/requestAllocations.ts, which every reader goes through.
+  // `allocatedFacultyIds` / `teachingAssignmentIds` are query helpers
+  // (array-contains) kept in step with `allocations`.
+  allocations?: RequestAllocation[];
+  allocatedFacultyIds?: string[];
+  teachingAssignmentIds?: string[];
   // The lending side is done with the busy-periods step: set by "Notify &
   // close" (notify_timetable_updated), cleared by "Edit" (reopen_busy_periods).
   // While closed the declared periods are view-only; they keep blocking the
@@ -382,6 +401,8 @@ export interface TimetableRules {
   maxConsecutivePeriodsPerFaculty: number;
   /** No longer enforced - a subject may repeat any number of times in a day. Kept so stored rules docs still type-check. */
   maxPeriodsPerSubjectPerDay: number;
+  /** Contiguous periods a THEORY subject occupies when placed (default 1). */
+  theoryBlockSize?: number;
   /** Contiguous periods a PRACTICAL subject occupies (e.g. a 3-hour lab). */
   labBlockSize: number;
   /** When false, a lab block may not straddle lunch or a short break. */
@@ -398,6 +419,7 @@ export const DEFAULT_TIMETABLE_RULES: TimetableRules = {
   maxPeriodsPerFacultyPerDay: 4,
   maxConsecutivePeriodsPerFaculty: 3,
   maxPeriodsPerSubjectPerDay: 1,
+  theoryBlockSize: 1,
   labBlockSize: 3,
   allowLabAcrossBreaks: false,
   preferTheoryInMorning: true,

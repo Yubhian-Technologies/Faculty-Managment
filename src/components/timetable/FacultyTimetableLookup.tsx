@@ -120,8 +120,14 @@ export function FacultyTimetableLookup({ ownOnly = false, embedded = false }: { 
   const periodTimes = schedule?.periods ?? [];
 
   const slotsByCell = useMemo(() => {
-    const map = new Map<string, ScheduleSlot>();
-    for (const s of schedule?.slots ?? []) map.set(`${s.day}:${s.periodNumber}`, s);
+    // Every slot in a cell, not one: the same faculty may teach the same
+    // subject to two sections in the same period, and both must show.
+    const map = new Map<string, ScheduleSlot[]>();
+    for (const s of schedule?.slots ?? []) {
+      const key = `${s.day}:${s.periodNumber}`;
+      const list = map.get(key);
+      if (list) list.push(s); else map.set(key, [s]);
+    }
     return map;
   }, [schedule]);
 
@@ -211,31 +217,36 @@ export function FacultyTimetableLookup({ ownOnly = false, embedded = false }: { 
                       {DAY_LABELS[d]}
                     </td>
                     {periodTimes.map((p) => {
-                      const slot = slotsByCell.get(`${d}:${p.period}`);
+                      const cellSlots = slotsByCell.get(`${d}:${p.period}`) ?? [];
                       return (
                         <td key={p.period} className="p-1.5 align-top">
-                          {slot ? (
-                            // Its own period number, year and section. The
-                            // subject, course and department are what the
-                            // section's own timetable is for - here the
-                            // question is just "is this hour taken, and by
-                            // whose class".
-                            <div
-                              className={`flex items-start gap-1 rounded-md border bg-red-50 px-1.5 py-1.5 ${
-                                slot.isDraft ? "border-dashed border-red-300" : "border-red-300"
-                              }`}
-                              title={[slot.departmentName, slot.courseName, slot.subjectName].filter(Boolean).join(" · ")}
-                            >
-                              <X className="h-3.5 w-3.5 shrink-0 text-red-600 mt-[1px]" />
-                              {/* Compact "III · CSE-A": roman year and the section
-                                  name, on one line. The period is the column
-                                  heading (P1, P2, ...), not repeated here.
-                                  Declared busy slots show their target department. */}
-                              <p className="min-w-0 text-[11px] font-semibold text-red-800 leading-snug">
-                                {slot.isDeclared
-                                  ? `Marked busy${slot.declaredFor ? ` for ${slot.declaredFor}` : ""}`
-                                  : [toRoman(slot.year), slot.sectionName || null].filter(Boolean).join(" · ")}
-                              </p>
+                          {cellSlots.length > 0 ? (
+                            <div className="space-y-1">
+                              {cellSlots.map((slot, i) => (
+                                // Its own period number, year and section. The
+                                // subject, course and department are what the
+                                // section's own timetable is for - here the
+                                // question is just "is this hour taken, and by
+                                // whose class".
+                                <div
+                                  key={i}
+                                  className={`flex items-start gap-1 rounded-md border bg-red-50 px-1.5 py-1.5 ${
+                                    slot.isDraft ? "border-dashed border-red-300" : "border-red-300"
+                                  }`}
+                                  title={[slot.departmentName, slot.courseName, slot.subjectName].filter(Boolean).join(" · ")}
+                                >
+                                  <X className="h-3.5 w-3.5 shrink-0 text-red-600 mt-[1px]" />
+                                  {/* Compact "III · CSE-A": roman year and the section
+                                      name, on one line. The period is the column
+                                      heading (P1, P2, ...), not repeated here.
+                                      Declared busy slots show their target department. */}
+                                  <p className="min-w-0 text-[11px] font-semibold text-red-800 leading-snug">
+                                    {slot.isDeclared
+                                      ? `Marked busy${slot.declaredFor ? ` for ${slot.declaredFor}` : ""}`
+                                      : [toRoman(slot.year), slot.sectionName || null].filter(Boolean).join(" · ")}
+                                  </p>
+                                </div>
+                              ))}
                             </div>
                           ) : (
                             <div className="rounded-md border border-dashed px-2 py-1.5 text-center text-[11px] text-emerald-700 bg-emerald-50/50">

@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TimetableInchargePanel } from "@/components/timetable/TimetableInchargePanel";
 import { TimetableGridEditor } from "@/components/timetable/TimetableGridEditor";
+import { LabAttendanceAllocation, TimetableViewSwitch, type AllocAssignment, type TimetableView } from "@/components/timetable/LabAttendanceAllocation";
 import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import {
@@ -46,6 +47,13 @@ interface LoadedSection {
   semester: number | null;
 }
 
+// The HOD's (and a Sub-HOD's) own Teaching Assignments - the labs among them are what can be allocated.
+async function loadHodAssignments(): Promise<AllocAssignment[]> {
+  const res = await fetch("/api/college/teaching-assignments?dept=true");
+  const json = (await res.json()) as { assignments?: AllocAssignment[] };
+  return json.assignments ?? [];
+}
+
 function SectionTimetable() {
   const myDepartments = useMyDepartments();
   // Optional deep link (?courseId=&year=) - preselects the filters only; the
@@ -66,6 +74,7 @@ function SectionTimetable() {
   const [isLoadingSections, setIsLoadingSections] = useState(false);
   const [isLoadingTimings, setIsLoadingTimings] = useState(false);
   const [loaded, setLoaded] = useState<LoadedSection | null>(null);
+  const [view, setView] = useState<TimetableView>("timetable");
 
   useEffect(() => {
     Promise.all([
@@ -262,7 +271,7 @@ function SectionTimetable() {
     setLoaded(null);
   }
   function changeSemester(next: string) {
-    setSemester(next === "all" ? null : Number(next));
+    setSemester(Number(next));
     setSectionId("");
     setLoaded(null);
   }
@@ -277,7 +286,11 @@ function SectionTimetable() {
     setLoaded({ courseId: section.courseId, year, sectionId: section.id, semester });
   }
 
-  const canLoad = !!selectedCourse && !!year && !!sectionId && !isLoadingSections;
+  // Same rule as hod/timetable-view: with semesters configured, one must be
+  // picked. "All" would silently resolve to whichever semester today falls in
+  // and show/seed a blank timetable if the slots were published under another.
+  const canLoad = !!selectedCourse && !!year && !!sectionId && !isLoadingSections
+    && (semesterOptions.length === 0 || semester != null);
 
   return (
     <div className="space-y-6">
@@ -285,6 +298,13 @@ function SectionTimetable() {
         title="Timetable"
         description="Pick a course, year, semester and section, then load that section's timetable to build or publish it"
       />
+
+      <TimetableViewSwitch value={view} onChange={setView} />
+
+      {view === "labs" ? (
+        <LabAttendanceAllocation loadAssignments={loadHodAssignments} />
+      ) : (
+      <>
 
       <Card>
         <CardHeader>
@@ -343,15 +363,14 @@ function SectionTimetable() {
               <div className="space-y-1.5">
                 <Label htmlFor="tt-semester">Semester</Label>
                 <Select
-                  value={semester != null ? String(semester) : "all"}
+                  value={semester != null ? String(semester) : ""}
                   onValueChange={changeSemester}
                   disabled={!year || isLoadingTimings || semesterOptions.length === 0}
                 >
                   <SelectTrigger id="tt-semester">
-                    <SelectValue placeholder={!year ? "Select a year" : isLoadingTimings ? "Loading semesters…" : semesterOptions.length === 0 ? "No semesters" : "All semesters"} />
+                    <SelectValue placeholder={!year ? "Select a year" : isLoadingTimings ? "Loading semesters…" : semesterOptions.length === 0 ? "No semesters" : "Select semester"} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All semesters</SelectItem>
                     {semesterOptions.map((n) => (
                       <SelectItem key={n} value={String(n)}>{yearSemesterLabel(n)}</SelectItem>
                     ))}
@@ -430,6 +449,8 @@ function SectionTimetable() {
             Pick a course, year, semester and section above, then press Load Timetable.
           </div>
         )
+      )}
+      </>
       )}
     </div>
   );

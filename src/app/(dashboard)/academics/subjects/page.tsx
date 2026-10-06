@@ -8,13 +8,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
-import { ArrowLeft, Edit2, Trash2 } from "lucide-react";
+import { ArrowLeft, Edit2, Trash2, BookOpen } from "lucide-react";
 import type { Subject } from "@/types";
 
 // Academics > Subjects. View and manage subjects assigned to departments
-// by year and semester. Filter all at once, CRUD on cards.
+// by year and semester in a horizontal table with CRUD & bulk delete capabilities.
 
 type CourseOption = { id: string; name: string; catalogId?: string; isActive?: boolean };
 type DepartmentOption = { id: string; name: string; parentDepartmentId?: string };
@@ -40,12 +41,19 @@ export default function SubjectsPage() {
   const [assignments, setAssignments] = useState<AssignmentWithMaster[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
+  const [hasLoaded, setHasLoaded] = useState(false);
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const [editForm, setEditForm] = useState<EditForm | null>(null);
   const [editError, setEditError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+
   const [deleting, setDeleting] = useState<any>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [showBulkConfirm, setShowBulkConfirm] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -58,16 +66,21 @@ export default function SubjectsPage() {
         const all = d.departments ?? [];
         setCourses(courses);
         setDepartments(all);
-        if (courses[0]) setCourseKey(courses[0].catalogId ?? `name:${courses[0].name}`);
-        const first = all.find((x) => !x.parentDepartmentId);
-        if (first) setDeptId(first.id);
+        const firstCourseKey = courses[0] ? (courses[0].catalogId ?? `name:${courses[0].name}`) : "";
+        if (firstCourseKey) setCourseKey(firstCourseKey);
+        const firstDept = all.find((x) => !x.parentDepartmentId);
+        const firstDeptId = firstDept ? firstDept.id : "";
+        if (firstDeptId) setDeptId(firstDeptId);
+
+        if (firstCourseKey && firstDeptId) {
+          void fetchAssignments(firstCourseKey, firstDeptId, "", "1", "1", courses);
+        }
       } catch {
         setLoadError("Couldn't load courses or departments.");
       }
     })();
   }, []);
 
-  // One entry per programme: each department keeps its own Course doc for the same catalog programme.
   const courseGroups = useMemo(() => {
     const groups = new Map<string, { key: string; name: string; ids: string[] }>();
     for (const c of courses) {
@@ -82,14 +95,31 @@ export default function SubjectsPage() {
   const subDepartments = useMemo(() => departments.filter((d) => d.parentDepartmentId === deptId), [departments, deptId]);
   const activeDeptId = subDeptId || deptId;
 
-  async function handleLoad() {
-    const group = courseGroups.find((g) => g.key === courseKey);
-    if (!group || !activeDeptId) { setLoadError("Please select course and department."); return; }
+  async function fetchAssignments(
+    cKey: string,
+    aDeptId: string,
+    sDeptId: string,
+    yr: string,
+    sem: string,
+    courseList = courses
+  ) {
+    const groups = new Map<string, { key: string; name: string; ids: string[] }>();
+    for (const c of courseList) {
+      const key = c.catalogId ?? `name:${c.name}`;
+      const g = groups.get(key) ?? { key, name: c.name, ids: [] };
+      g.ids.push(c.id);
+      groups.set(key, g);
+    }
+    const group = groups.get(cKey);
+    const targetDeptId = sDeptId || aDeptId;
+    if (!group || !targetDeptId) { setLoadError("Please select course and department."); return; }
+
     setIsLoading(true);
     setLoadError("");
+    setSelectedIds(new Set());
     try {
       const responses = await Promise.all(group.ids.map((id) => fetch(
-        `/api/college/subject-semester-assignments?courseId=${encodeURIComponent(id)}&departmentId=${encodeURIComponent(activeDeptId)}&year=${year}&semester=${semester}`
+        `/api/college/subject-semester-assignments?courseId=${encodeURIComponent(id)}&departmentId=${encodeURIComponent(targetDeptId)}&year=${yr}&semester=${sem}`
       )));
       const merged = new Map<string, any>();
       for (const res of responses) {
@@ -97,7 +127,6 @@ export default function SubjectsPage() {
         if (!res.ok) throw new Error(body.error ?? "Failed to load");
         for (const a of body.assignments ?? []) merged.set(a.id, a);
       }
-      // An instance already carries its own name/code/category/hours/credits.
       setAssignments(Array.from(merged.values())
         .sort((a, b) => String(a.subjectCode).localeCompare(String(b.subjectCode)))
         .map((a) => ({
@@ -108,7 +137,30 @@ export default function SubjectsPage() {
       setLoadError(err instanceof Error ? err.message : "Failed to load subjects.");
     } finally {
       setIsLoading(false);
+      setHasLoaded(true);
     }
+  }
+
+  function handleLoad() {
+    void fetchAssignments(courseKey, deptId, subDeptId, year, semester);
+  }
+
+  const allSelected = assignments.length > 0 && selectedIds.size === assignments.length;
+  const someSelected = selectedIds.size > 0 && selectedIds.size < assignments.length;
+
+  function toggleSelectAll() {
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(assignments.map((item) => item.assignment.id)));
+    }
+  }
+
+  function toggleSelectOne(id: string) {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedIds(next);
   }
 
   function openEdit(item: AssignmentWithMaster) {
@@ -154,11 +206,11 @@ export default function SubjectsPage() {
     setIsDeleting(true);
     try {
       const res = await fetch(
-        `/api/college/subject-semester-assignments?subjectId=${encodeURIComponent(deleting.subjectId)}&departmentId=${encodeURIComponent(deleting.departmentId)}&semester=${deleting.semester}`,
+        `/api/college/subject-semester-assignments?subjectId=${encodeURIComponent(deleting.subjectId)}&departmentId=${encodeURIComponent(deleting.departmentId)}&semester=${deleting.semester}&hardDelete=true`,
         { method: "DELETE" }
       );
       if (!res.ok) { const json = await res.json() as { error?: string }; toast({ variant: "destructive", title: json.error ?? "Couldn't delete" }); return; }
-      toast({ variant: "success", title: "Subject removed" });
+      toast({ variant: "success", title: "Subject deleted everywhere" });
       await handleLoad();
     } catch {
       toast({ variant: "destructive", title: "Network error." });
@@ -166,6 +218,50 @@ export default function SubjectsPage() {
       setIsDeleting(false);
       setDeleting(null);
     }
+  }
+
+  async function handleBulkDelete() {
+    if (selectedIds.size === 0) return;
+    setIsBulkDeleting(true);
+    const selectedItems = assignments.filter((item) => selectedIds.has(item.assignment.id));
+    
+    const results = await Promise.allSettled(
+      selectedItems.map(async (item) => {
+        const del = item.assignment;
+        const res = await fetch(
+          `/api/college/subject-semester-assignments?subjectId=${encodeURIComponent(del.subjectId)}&departmentId=${encodeURIComponent(del.departmentId)}&semester=${del.semester}&hardDelete=true`,
+          { method: "DELETE" }
+        );
+        if (!res.ok) {
+          const json = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new Error(json.error ?? "Failed to delete");
+        }
+      })
+    );
+
+    const successCount = results.filter((r) => r.status === "fulfilled").length;
+    const failResults = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+    const failCount = failResults.length;
+
+    setIsBulkDeleting(false);
+    setShowBulkConfirm(false);
+    setSelectedIds(new Set());
+
+    if (successCount > 0) {
+      toast({
+        variant: failCount > 0 ? "default" : "success",
+        title: `Deleted ${successCount} subject(s) everywhere${failCount > 0 ? `, ${failCount} failed` : ""}`,
+        description: failCount > 0 ? failResults[0]?.reason?.message : undefined,
+      });
+    } else if (failCount > 0) {
+      toast({
+        variant: "destructive",
+        title: `Failed to delete subjects`,
+        description: failResults[0]?.reason?.message || "Check permissions.",
+      });
+    }
+
+    await handleLoad();
   }
 
   return (
@@ -226,75 +322,135 @@ export default function SubjectsPage() {
         </CardContent>
       </Card>
 
-      {/* Subjects Grid */}
+      {/* Error display */}
       {loadError && <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">{loadError}</div>}
 
-      {isLoading ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-48 rounded-lg border bg-muted/30 animate-pulse" />
-          ))}
+      {/* Bulk Action Toolbar */}
+      {assignments.length > 0 && (
+        <div className="flex items-center justify-between gap-3 p-3 bg-card rounded-lg border">
+          <div className="flex items-center gap-3 text-sm">
+            <Checkbox
+              checked={allSelected ? true : someSelected ? "indeterminate" : false}
+              onCheckedChange={toggleSelectAll}
+              aria-label="Select all subjects"
+            />
+            <span className="font-medium text-xs text-muted-foreground">
+              {selectedIds.size > 0 ? `${selectedIds.size} of ${assignments.length} selected` : `${assignments.length} total subjects`}
+            </span>
+          </div>
+          {selectedIds.size > 0 && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setShowBulkConfirm(true)}
+            >
+              <Trash2 className="h-4 w-4 mr-1.5" />
+              Delete Selected ({selectedIds.size})
+            </Button>
+          )}
         </div>
+      )}
+
+      {/* Horizontal Table Layout */}
+      {isLoading ? (
+        <div className="h-64 rounded-lg border bg-muted/30 animate-pulse" />
       ) : assignments.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-sm text-muted-foreground">
-            Select filters and click Load to view subjects.
+            <BookOpen className="h-8 w-8 mx-auto mb-2 text-muted-foreground/60" />
+            {hasLoaded ? "No subjects are added." : "Select filters and click Load to view subjects."}
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {assignments.map((item) => (
-            <Card key={item.assignment.id} className="flex flex-col">
-              <CardContent className="flex flex-col flex-1 p-4 space-y-3">
-                {/* Header */}
-                <div>
-                  <div className="inline-flex items-center justify-center h-6 min-w-[1.5rem] px-1.5 rounded bg-muted text-xs font-mono font-semibold text-muted-foreground mb-1">
-                    {item.master.code}
-                  </div>
-                  <p className="font-semibold text-sm">{item.master.name}</p>
-                  {item.master.shortCode && <p className="text-xs text-muted-foreground">{item.master.shortCode}</p>}
-                </div>
+        <div className="overflow-x-auto rounded-lg border bg-card">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="bg-muted/50 border-b text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                <th className="p-3 w-10 text-center">
+                  <Checkbox
+                    checked={allSelected ? true : someSelected ? "indeterminate" : false}
+                    onCheckedChange={toggleSelectAll}
+                    aria-label="Select all"
+                  />
+                </th>
+                <th className="p-3 w-28">Code</th>
+                <th className="p-3 min-w-[180px]">Subject Name</th>
+                <th className="p-3 w-28">Category</th>
+                <th className="p-3 w-16 text-center">L</th>
+                <th className="p-3 w-16 text-center">T</th>
+                <th className="p-3 w-16 text-center">P</th>
+                <th className="p-3 w-24 text-center">Total Hrs</th>
+                <th className="p-3 w-20 text-center">Credits</th>
+                <th className="p-3 w-24 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {assignments.map((item) => {
+                const isSelected = selectedIds.has(item.assignment.id);
+                const lec = item.assignment.lectureHours ?? item.master.lectureHours ?? 0;
+                const tut = item.assignment.tutorialHours ?? item.master.tutorialHours ?? 0;
+                const prac = item.assignment.practicalHours ?? item.master.practicalHours ?? 0;
+                const totalHours = lec + tut + prac;
+                const credits = item.assignment.credits ?? item.master.credits ?? 0;
 
-                {/* L-T-P */}
-                <div className="grid grid-cols-3 gap-2 text-xs">
-                  <div className="space-y-0.5">
-                    <p className="text-muted-foreground">Lecture</p>
-                    <p className="font-semibold">{item.assignment.lectureHours ?? item.master.lectureHours ?? 0}</p>
-                  </div>
-                  <div className="space-y-0.5">
-                    <p className="text-muted-foreground">Tutorial</p>
-                    <p className="font-semibold">{item.assignment.tutorialHours ?? item.master.tutorialHours ?? 0}</p>
-                  </div>
-                  <div className="space-y-0.5">
-                    <p className="text-muted-foreground">Practical</p>
-                    <p className="font-semibold">{item.assignment.practicalHours ?? item.master.practicalHours ?? 0}</p>
-                  </div>
-                </div>
-
-                {/* Credits & Category */}
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div>
-                    <p className="text-muted-foreground">Credits</p>
-                    <p className="font-semibold">{item.assignment.credits ?? item.master.credits ?? 0}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Category</p>
-                    <p className="font-semibold">{item.master.category ?? "—"}</p>
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div className="flex gap-2 pt-2">
-                  <Button size="sm" variant="outline" className="flex-1" onClick={() => openEdit(item)}>
-                    <Edit2 className="h-3.5 w-3.5 mr-1" />Edit
-                  </Button>
-                  <Button size="sm" variant="ghost" className="text-red-600" onClick={() => setDeleting(item.assignment)}>
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                return (
+                  <tr
+                    key={item.assignment.id}
+                    className={`transition-colors hover:bg-muted/40 ${isSelected ? "bg-primary/5" : ""}`}
+                  >
+                    <td className="p-3 text-center">
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={() => toggleSelectOne(item.assignment.id)}
+                        aria-label={`Select ${item.master.name}`}
+                      />
+                    </td>
+                    <td className="p-3 font-mono font-medium text-xs">
+                      <span className="inline-block px-2 py-0.5 rounded bg-muted text-foreground font-semibold">
+                        {item.master.code}
+                      </span>
+                    </td>
+                    <td className="p-3">
+                      <p className="font-semibold text-foreground">{item.master.name}</p>
+                      {item.master.shortCode && (
+                        <p className="text-xs text-muted-foreground font-mono">{item.master.shortCode}</p>
+                      )}
+                    </td>
+                    <td className="p-3 text-xs text-muted-foreground">
+                      {item.master.category || "—"}
+                    </td>
+                    <td className="p-3 text-center font-medium">{lec}</td>
+                    <td className="p-3 text-center font-medium">{tut}</td>
+                    <td className="p-3 text-center font-medium">{prac}</td>
+                    <td className="p-3 text-center font-bold text-foreground">{totalHours}</td>
+                    <td className="p-3 text-center font-semibold text-primary">{credits}</td>
+                    <td className="p-3 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 w-8 p-0"
+                          onClick={() => openEdit(item)}
+                          title="Edit Subject"
+                        >
+                          <Edit2 className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => setDeleting(item.assignment)}
+                          title="Remove Subject"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -330,16 +486,28 @@ export default function SubjectsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Dialog */}
+      {/* Single Delete Dialog */}
       <ConfirmDialog
         open={!!deleting}
         onOpenChange={(open) => !open && setDeleting(null)}
-        title={`Remove ${deleting?.subjectCode}?`}
-        description="This will remove it from the department's curriculum for this semester."
-        confirmLabel="Remove"
+        title={`Delete ${deleting?.subjectCode} everywhere?`}
+        description="This will permanently delete this subject from the college catalog, along with all department assignments, teaching assignments, and timetable slots everywhere."
+        confirmLabel="Delete Everywhere"
         variant="destructive"
         loading={isDeleting}
         onConfirm={() => void handleDelete()}
+      />
+
+      {/* Bulk Delete Dialog */}
+      <ConfirmDialog
+        open={showBulkConfirm}
+        onOpenChange={(open) => !open && setShowBulkConfirm(false)}
+        title={`Delete ${selectedIds.size} selected subject(s) everywhere?`}
+        description="This will permanently delete all selected subjects from the college catalog, along with all department assignments, teaching assignments, and timetable slots everywhere."
+        confirmLabel="Delete Everywhere"
+        variant="destructive"
+        loading={isBulkDeleting}
+        onConfirm={() => void handleBulkDelete()}
       />
     </div>
   );

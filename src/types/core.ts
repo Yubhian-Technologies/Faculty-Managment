@@ -927,6 +927,10 @@ export interface FacultyNorms {
   studentFacultyRatio: number;
   teachingHoursPerWeek: number;
   defaultMinFacultyPerDept: number;
+  maxTheoryPeriodsPerWeek?: number;
+  maxPracticalPeriodsPerWeek?: number;
+  theoryBlockSize?: number;
+  labBlockSize?: number;
   positionNorms: PositionNorm[];
   // Years of service a "new joining" employee (leave profile: CL + OD only)
   // must complete before converting into their vacation/non-vacation leave
@@ -3205,6 +3209,8 @@ export type AuditAction =
   | "TEACHING_ASSIGNMENT_UPDATED"
   | "TEACHING_ASSIGNMENT_DELETED"
   | "TIMETABLE_PUBLISHED"
+  | "TIMETABLE_RESET"
+  | "LAB_ATTENDANCE_ALLOCATED"
   // Supporting Staff module
   | "SUPPORTING_STAFF_CREATED"
   | "SUPPORTING_STAFF_UPDATED"
