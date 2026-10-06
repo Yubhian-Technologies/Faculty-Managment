@@ -219,15 +219,21 @@ export default function TeachingLoadPage() {
             </Button>
           </div>
         </div>
-        <div className="overflow-x-auto rounded-lg border">
-          <table className="w-full text-sm border-collapse">
+        <div className="overflow-x-auto md:overflow-x-visible rounded-lg border">
+          <table className="w-full text-xs md:table-fixed border-collapse">
+            <colgroup>
+              <col style={{ width: "55px" }} />
+              {DAYS.map((d) => (
+                <col key={d} style={{ width: "auto" }} />
+              ))}
+            </colgroup>
             <thead>
               <tr className="bg-muted/50">
-                <th className="p-2.5 text-left font-medium text-muted-foreground border-b w-24">Period</th>
+                <th className="p-2 text-center font-bold text-muted-foreground border-b w-[55px]">Period</th>
                 {DAYS.map((d, i) => (
-                  <th key={d} className="p-2.5 text-left font-medium text-muted-foreground border-b min-w-35">
-                    <p className="text-[10px] font-normal whitespace-nowrap">{formatDMY(weekDates[i])}</p>
-                    {DAY_LABELS[d]}
+                  <th key={d} className="p-1.5 text-center font-bold text-foreground border-b">
+                    <p className="text-[9px] font-normal text-muted-foreground truncate">{formatDMY(weekDates[i])}</p>
+                    <div>{DAY_LABELS[d]}</div>
                   </th>
                 ))}
               </tr>

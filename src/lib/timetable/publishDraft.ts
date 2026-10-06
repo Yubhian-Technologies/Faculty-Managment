@@ -178,6 +178,7 @@ export async function publishSectionDraft(input: PublishInput): Promise<PublishO
         semester,
         academicYear: currentAcademicYear,
         ...(input.effectiveDate ? { effectiveDate: input.effectiveDate } : {}),
+        ...(s.mergeWithNext ? { mergeWithNext: true } : {}),
         createdAt: now,
         updatedAt: now,
       });

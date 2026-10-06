@@ -1069,6 +1069,24 @@ const effectiveSemester = semesterOptions.length === 0
         </CardContent>
       </Card>
 
+      {/* Department-level, outside the section form: the subject is added for the
+          department's semester and then picked like any regular subject. */}
+      {applied && (
+        <CustomSubjectAdder
+          departments={departments.filter((d) => sections.some((s) => s.department === d.name))}
+          courseIdFor={(deptId) => {
+            const name = departments.find((d) => d.id === deptId)?.name;
+            return sections.find((s) => s.department === name)?.courseId ?? activeCourseIds[0] ?? "";
+          }}
+          year={Number(year)}
+          semester={effectiveSemester}
+          onAdded={({ subject, assignment }) => {
+            setSubjectsCache((c) => ({ ...c, [key]: [...(c[key] ?? []).filter((x) => x.id !== subject.id), subject] }));
+            setSemesterAssignmentsCache((c) => ({ ...c, [key]: [...(c[key] ?? []).filter((x) => x.id !== assignment.id), assignment] }));
+          }}
+        />
+      )}
+
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-base">Unstaffed Subjects</CardTitle></CardHeader>
@@ -1174,16 +1192,6 @@ const effectiveSemester = semesterOptions.length === 0
                       ))}
                     </SelectContent>
                   </Select>
-                  <CustomSubjectAdder
-                    courseId={sections.find((s) => s.id === assignForm.sectionId)?.courseId ?? activeCourseIds[0] ?? ""}
-                    sectionId={assignForm.sectionId}
-                    semester={effectiveSemester}
-                    onAdded={({ subject, assignment }) => {
-                      setSubjectsCache((c) => ({ ...c, [key]: [...(c[key] ?? []).filter((x) => x.id !== subject.id), subject] }));
-                      setSemesterAssignmentsCache((c) => ({ ...c, [key]: [...(c[key] ?? []).filter((x) => x.id !== assignment.id), assignment] }));
-                      setAssignForm((f) => ({ ...f, subjectId: subject.id }));
-                    }}
-                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Faculty</Label>

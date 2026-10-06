@@ -18,41 +18,42 @@ import type { Department } from "@/types";
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_STAFF");
-    const body = (await readJsonBody(request)) as { courseId?: string; sectionId?: string; semester?: number; name?: string };
+    // Added for a DEPARTMENT (+ year + semester), not for any one section: every
+    // section of that department then picks it from the normal Subject list.
+    const body = (await readJsonBody(request)) as { courseId?: string; departmentId?: string; year?: number; semester?: number; name?: string };
     const name = body.name?.trim() ?? "";
     const semester = Number(body.semester);
-    if (!body.courseId || !body.sectionId || !name || !Number.isInteger(semester) || semester < 1) {
-      return NextResponse.json({ error: "courseId, sectionId, semester and a subject name are required" }, { status: 400 });
+    const yearNum = Number(body.year);
+    if (!body.courseId || !body.departmentId || !name || !Number.isInteger(yearNum) || yearNum < 1 || !Number.isInteger(semester) || semester < 1) {
+      return NextResponse.json({ error: "courseId, departmentId, year, semester and a subject name are required" }, { status: 400 });
     }
     if (name.length > 80) return NextResponse.json({ error: "Subject name is too long" }, { status: 400 });
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
-    const [courseSnap, sectionSnap, deptsSnap] = await Promise.all([
+    const [courseSnap, deptsSnap] = await Promise.all([
       collegeRef.collection("courses").doc(body.courseId).get(),
-      collegeRef.collection("sections").doc(body.sectionId).get(),
       collegeRef.collection("departments").get(),
     ]);
     if (!courseSnap.exists) return NextResponse.json({ error: "Course not found" }, { status: 404 });
-    if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found" }, { status: 404 });
     const course = courseSnap.data() as { name: string; catalogId?: string };
-    const section = sectionSnap.data() as { year: number; department: string };
     const allDepartments = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as (DepartmentYearRow & Pick<Department, "name">)[];
+    const dept = allDepartments.find((d) => d.id === body.departmentId);
+    if (!dept) return NextResponse.json({ error: "Department not found" }, { status: 404 });
+    // What the rest of this handler reads: the department's name and the year.
+    const section = { year: yearNum, department: dept.name };
 
-    // Same scope rules as staffing a section (teaching-assignments POST).
+    // Same scope rules as staffing a section of that department (teaching-assignments POST).
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       if (!canHodEditDepartmentYear(scope, allDepartments, section.department, section.year, course.catalogId)) {
-        return NextResponse.json({ error: "Section is not in your department, one of your sub-departments, or a year your department manages" }, { status: 403 });
+        return NextResponse.json({ error: "That department is not yours, one of your sub-departments, or a year your department manages" }, { status: 403 });
       }
     } else if (session.role === "PANEL_MEMBER" || session.role === "COLLEGE_STAFF") {
       if (!(await isTimetableIncharge(db, session.collegeId, session.uid, body.courseId, section.year))) {
         return NextResponse.json({ error: "You are not the Timetable Incharge for this course & year" }, { status: 403 });
       }
     }
-
-    const dept = allDepartments.find((d) => d.name === section.department);
-    if (!dept) return NextResponse.json({ error: "Section's department not found" }, { status: 404 });
 
     // One subject per department + year + semester + name, shared by every
     // section of that department (they all pick it from the normal subject

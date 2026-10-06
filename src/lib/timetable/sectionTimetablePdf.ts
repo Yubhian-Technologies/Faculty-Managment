@@ -17,7 +17,6 @@ import {
   buildClassTimetableSubtitle,
   getHodSignatureLabel,
   continuousSpans,
-  isLabSlot,
   latestEffectiveDate,
   resolveTimetableDays,
   slotShortCode, mergeCoTaughtSlots,} from "./gridModel";
@@ -55,8 +54,6 @@ export interface SectionTimetablePdfOptions {
   assignments?: TeachingAssignment[];
   lunchBreak?: { afterPeriod: number; durationMinutes: number };
   shortBreaks?: { afterPeriod: number; durationMinutes: number }[];
-  /** Draw back-to-back periods with the same subject as one wide cell. */
-  mergeContinuous?: boolean;
   /** Show faculty/batches of one subject in a period as one entry (default true); false lists each separately. */
   mergeCoTaught?: boolean;
   /** Show the Class In-charge / Timetable In-charge / Principal signature block. */
@@ -204,9 +201,8 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
 
   const bodyRows = gridDays
     .map((day, dayIndex) => {
-      const { spans, skipped } = opts.mergeContinuous
-        ? continuousSpans(columns, (p) => slots.filter((s) => s.day === day && s.periodNumber === p))
-        : { spans: new Map<number, number>(), skipped: new Set<number>() };
+      // Cells merged in the timetable editor print as one wide cell.
+      const { spans, skipped } = continuousSpans(columns, (p) => slots.filter((s) => s.day === day && s.periodNumber === p));
       const cells = columns
         .map((col, colIdx) => {
           if (skipped.has(colIdx)) return "";
@@ -225,7 +221,7 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
             .map((s) => {
               const sub = s.substituteFacultyName;
               const room = s.classroom ? (/^room/i.test(s.classroom.trim()) ? s.classroom.trim() : `Room: ${s.classroom.trim()}`) : null;
-              return `<div class="slot${isLabSlot(s, subjectMap) ? " slot-lab" : ""}">
+              return `<div class="slot">
                 <div class="slot-code">${escapeHtml(slotShortCode(s, subjectMap))}</div>
                 ${s.labBatch ? `<div class="slot-note">${escapeHtml(s.labBatch)}</div>` : ""}
                 ${room ? `<div class="slot-note">${escapeHtml(room)}</div>` : ""}
@@ -359,8 +355,6 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
        the neighbouring one. */
     .slot { text-align: center; }
     .slot + .slot { margin-top: 3px; }
-    /* Lab / practical periods are tinted so they stand out from theory. */
-    .slot-lab { background: #ede9fe; -webkit-print-color-adjust: exact; print-color-adjust: exact; padding: 2px 3px; border-radius: 2px; }
     .slot-code { font-size: ${slotPt.toFixed(1)}pt; overflow-wrap: anywhere; word-break: break-word; line-height: 1.2; }
     .slot-note { font-size: 7pt; color: #333; overflow-wrap: anywhere; line-height: 1.2; }
 

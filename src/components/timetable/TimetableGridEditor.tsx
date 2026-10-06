@@ -21,7 +21,7 @@ import { formatDMY } from "@/lib/utils";
 import { formatTime12h } from "@/lib/timetable/facultyTimetablePdf";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { buildRows, defaultPeriodTimings } from "@/lib/timetable/buildGrid";
-import { ordinalYear, readableCode, resolveTimetableDays } from "@/lib/timetable/gridModel";
+import { continuousSpans, ordinalYear, readableCode, resolveTimetableDays } from "@/lib/timetable/gridModel";
 import { InstitutionalTimetableTable } from "@/components/timetable/InstitutionalTimetableTable";
 import { requestAssignmentIds } from "@/lib/teaching/requestAllocations";
 import type {
@@ -119,6 +119,9 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
   const [selected, setSelected] = useState<DraftSlot | null>(null);
   const [busy, setBusy] = useState<null | "publish" | "discard" | "move" | "blank" | "reset">(null);
   const [confirmPublish, setConfirmPublish] = useState(false);
+  // Off by default: when on, back-to-back periods holding the same subject (a
+  // multi-period lab) are drawn as ONE wide cell instead of repeating it.
+  const [mergeContinuous, setMergeContinuous] = useState(false);
   // "w.e.f" date printed on the timetable, asked for in the publish dialog.
   const [effectiveDate, setEffectiveDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [confirmDiscard, setConfirmDiscard] = useState(false);
@@ -235,6 +238,14 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
   }, [loadAll]);
 
   const rows = timing ? buildRows(timing) : [];
+  // Which period cells of a day to draw as one wide cell (see mergeContinuous).
+  const spansFor = (d: DayOfWeek) =>
+    mergeContinuous
+      ? continuousSpans(
+          rows.map((r) => (r.kind === "period" ? { kind: "period", periodNumber: r.period } : { kind: "break" })),
+          (p) => cellEntriesFor(d, p).map((e) => e.slot) as TimetableSlot[],
+        )
+      : { spans: new Map<number, number>(), skipped: new Set<number>() };
   // A manually-started draft legitimately has zero slots, so toolbar visibility
   // keys off the draft existing - not off it having content.
   const hasDraft = Boolean(draft);
@@ -1001,6 +1012,15 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
           )}
           {mode === "draft" && (
             <div className="ml-auto flex flex-wrap items-center gap-2">
+              <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  className="h-3.5 w-3.5"
+                  checked={mergeContinuous}
+                  onChange={(e) => setMergeContinuous(e.target.checked)}
+                />
+                Merge continuous periods
+              </label>
               <Button size="sm" variant={isEditing ? "default" : "outline"} onClick={() => { setIsEditing((v) => !v); setSelected(null); }}>
                 {isEditing ? <><X className="h-4 w-4 mr-1.5" />Done editing</> : "Edit"}
               </Button>
@@ -1081,32 +1101,39 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
           subjects={subjects}
         />
       ) : (
-        <div className="overflow-x-auto rounded-lg border">
-          <table className="w-full text-sm border-collapse">
+        <div className="overflow-x-auto md:overflow-x-visible rounded-lg border">
+          <table className="w-full text-xs md:table-fixed border-collapse">
+            <colgroup>
+              <col style={{ width: "60px" }} />
+              {rows.map((row, idx) => (
+                <col
+                  key={row.kind === "period" ? `p_${row.period}` : `b_${idx}`}
+                  style={{ width: row.kind === "period" ? "auto" : "40px" }}
+                />
+              ))}
+            </colgroup>
             <thead>
               <tr className="bg-muted/50">
-                <th className="p-2.5 text-left font-medium text-muted-foreground border-b w-20 sticky left-0 z-[5] bg-muted/95 backdrop-blur">
+                <th className="p-2 text-center font-bold text-foreground border-b w-[60px] sticky left-0 z-[5] bg-muted/95 backdrop-blur">
                   Day
                 </th>
                 {rows.map((row, idx) => {
                   if (row.kind === "lunch" || row.kind === "short") {
-                    const Icon = row.kind === "lunch" ? Utensils : Coffee;
-                    const label = row.kind === "lunch" ? "Lunch Break" : "Short Break";
+                    const label = row.kind === "lunch" ? "L" : "B";
                     return (
-                      <th key={`break_${idx}`} className="p-2 text-center font-medium border-b bg-amber-50/60 min-w-[70px]">
+                      <th key={`break_${idx}`} className="p-1 text-center font-medium border-b bg-amber-50/60 w-[40px]">
                         <span className="flex flex-col items-center gap-0.5 text-amber-700">
-                          <Icon className="h-3.5 w-3.5" />
-                          <span className="text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap">{label}</span>
-                          <span className="text-[9.5px] font-normal text-amber-700/80">{row.durationMinutes} min</span>
+                          <span className="text-[10px] font-bold uppercase">{label}</span>
+                          <span className="text-[8.5px] font-normal text-amber-700/80">{row.durationMinutes}m</span>
                         </span>
                       </th>
                     );
                   }
                   return (
-                    <th key={`period_${row.period}`} className="p-2.5 text-center font-medium text-muted-foreground border-b min-w-[110px]">
-                      Period {row.period}
+                    <th key={`period_${row.period}`} className="p-1.5 text-center font-bold text-muted-foreground border-b">
+                      <div>P{row.period}</div>
                       {row.startTime && row.endTime && (
-                        <p className="text-[10px] font-normal whitespace-nowrap">
+                        <p className="text-[9px] font-normal truncate mt-0.5" title={`${formatTime12h(row.startTime)}–${formatTime12h(row.endTime)}`}>
                           {formatTime12h(row.startTime)}&ndash;{formatTime12h(row.endTime)}
                         </p>
                       )}
@@ -1122,6 +1149,9 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
                     {DAY_LABELS[d]}
                   </td>
                   {rows.map((row, idx) => {
+                    const { spans, skipped } = spansFor(d);
+                    // Swallowed by the wider cell to its left.
+                    if (skipped.has(idx)) return null;
                     if (row.kind === "lunch" || row.kind === "short") {
                       return (
                         <td key={`break_${idx}`} className="p-2 text-center bg-amber-50/30 text-amber-700/40 font-mono">
@@ -1151,7 +1181,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
                     const canAddAnother = mode === "draft" && isEditing;
 
                     return (
-                      <td key={`period_${row.period}`} className="p-2 align-top">
+                      <td key={`period_${row.period}`} colSpan={spans.get(idx) ?? 1} className="p-2 align-top">
                         <div className="space-y-1">
                             {entries.map((entry, entryIdx) => {
                               // Faculty of one subject sharing this cell: one block, subject once.
@@ -1193,7 +1223,12 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
                                   }}
                                   className={[
                                     "w-full text-left rounded-md border p-2 transition-colors",
-                                    isLocked ? "bg-muted border-border" : "bg-primary/5 border-primary/20",
+                                    isLocked
+                                      ? "bg-muted border-border"
+                                      // Lab / practical periods stand out from theory.
+                                      : assignments.find((a) => a.id === slot.assignmentId)?.subjectType === "PRACTICAL" || ("labBatch" in slot && slot.labBatch)
+                                        ? "bg-violet-100 border-violet-300"
+                                        : "bg-primary/5 border-primary/20",
                                     isSelected ? "ring-2 ring-primary" : "",
                                     clickable ? "hover:border-primary cursor-pointer" : "cursor-default",
                                   ].join(" ")}

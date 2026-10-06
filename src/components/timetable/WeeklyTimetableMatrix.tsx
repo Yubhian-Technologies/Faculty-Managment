@@ -270,12 +270,18 @@ export function WeeklyTimetableMatrix({
       {/* ── Mode 1: Interactive Full-Week Matrix Grid ── */}
       {viewMode === "grid" && (
         <div className="rounded-xl border bg-card shadow-xs overflow-hidden">
-          {/* Scrollable Container with sticky Day Column */}
-          <div className="overflow-x-auto relative no-scrollbar">
-            <table className="w-full text-xs border-collapse min-w-[720px] lg:min-w-full" role="grid" aria-label="Weekly Timetable Matrix">
+          {/* Container with responsive non-scrollable layout on desktop */}
+          <div className="overflow-x-auto md:overflow-x-visible relative no-scrollbar">
+            <table className="w-full table-fixed text-xs border-collapse" role="grid" aria-label="Weekly Timetable Matrix">
+              <colgroup>
+                <col style={{ width: "65px" }} />
+                {columns.map((col) => (
+                  <col key={col.id} style={{ width: col.kind === "break" ? "40px" : "auto" }} />
+                ))}
+              </colgroup>
               <thead>
                 <tr className="bg-muted/50 border-b">
-                  <th className="border-r p-2.5 text-center font-bold text-foreground w-20 min-w-[80px] sticky left-0 z-10 bg-muted/95 backdrop-blur shadow-xs">
+                  <th className="border-r p-2 text-center font-bold text-foreground w-[65px] sticky left-0 z-10 bg-muted/95 backdrop-blur shadow-xs">
                     Day
                   </th>
                   {columns.map((col) => {
@@ -283,13 +289,13 @@ export function WeeklyTimetableMatrix({
                       return (
                         <th
                           key={col.id}
-                          className="border-r p-2 text-center font-semibold text-muted-foreground bg-muted/20 min-w-[70px] max-w-[80px]"
+                          className="border-r p-1 text-center font-semibold text-muted-foreground bg-muted/20 w-[40px]"
                         >
                           <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                            {col.label}
+                            {col.breakKind === "lunch" ? "L" : "B"}
                           </div>
                           {periodTimeRange(col.startTime, col.endTime) && (
-                            <div className="text-[9px] font-normal text-muted-foreground/80 mt-0.5 whitespace-nowrap">
+                            <div className="text-[9px] font-normal text-muted-foreground/80 mt-0.5 truncate" title={periodTimeRange(col.startTime, col.endTime)}>
                               {periodTimeRange(col.startTime, col.endTime)}
                             </div>
                           )}
@@ -302,18 +308,18 @@ export function WeeklyTimetableMatrix({
                     return (
                       <th
                         key={col.id}
-                        className={`border-r p-2.5 text-center min-w-[110px] transition-colors ${
+                        className={`border-r p-1.5 text-center transition-colors ${
                           isLivePeriod ? "bg-primary/10 border-b-2 border-b-primary font-bold text-primary" : "text-foreground"
                         }`}
                       >
                         <div className="flex items-center justify-center gap-1">
-                          <span className="font-bold">Period {col.periodNumber}</span>
+                          <span className="font-bold">P{col.periodNumber}</span>
                           {isLivePeriod && (
                             <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping inline-block" title="Live Now" />
                           )}
                         </div>
                         {periodTimeRange(col.startTime, col.endTime) && (
-                          <div className="text-[10px] font-normal text-muted-foreground mt-0.5 whitespace-nowrap">
+                          <div className="text-[9px] font-normal text-muted-foreground mt-0.5 truncate" title={periodTimeRange(col.startTime, col.endTime)}>
                             {periodTimeRange(col.startTime, col.endTime)}
                           </div>
                         )}
@@ -335,15 +341,15 @@ export function WeeklyTimetableMatrix({
                       {/* Sticky Day Column */}
                       <th
                         scope="row"
-                        className={`border-r p-2.5 text-center font-bold sticky left-0 z-10 backdrop-blur shadow-xs ${
+                        className={`border-r p-2 text-center font-bold sticky left-0 z-10 backdrop-blur shadow-xs ${
                           isToday
                             ? "bg-primary text-primary-foreground font-extrabold"
                             : "bg-muted/80 text-foreground"
                         }`}
                       >
-                        <div className="text-xs uppercase tracking-wider">{d}</div>
+                        <div className="text-xs uppercase tracking-wider">{d.slice(0, 3)}</div>
                         {isToday && (
-                          <span className="inline-block mt-0.5 text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-primary-foreground text-primary leading-tight">
+                          <span className="inline-block mt-0.5 text-[8px] font-bold px-1 py-0.2 rounded-full bg-primary-foreground text-primary leading-tight">
                             Today
                           </span>
                         )}
@@ -358,10 +364,10 @@ export function WeeklyTimetableMatrix({
                             <td
                               key={col.id}
                               rowSpan={visibleDays.length}
-                              className="border-r p-1 text-center align-middle bg-muted/15 w-12 select-none"
+                              className="border-r p-1 text-center align-middle bg-muted/15 w-[40px] select-none"
                               aria-label={col.label}
                             >
-                              <span className="inline-block text-[11px] font-bold uppercase tracking-[0.2em] text-muted-foreground [writing-mode:vertical-rl] rotate-180">
+                              <span className="inline-block text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground [writing-mode:vertical-rl] rotate-180">
                                 {col.breakKind === "lunch" ? "Lunch Break" : "Short Break"}
                               </span>
                             </td>
@@ -378,7 +384,7 @@ export function WeeklyTimetableMatrix({
                           return (
                             <td
                               key={col.id}
-                              className={`border-r p-2 text-center text-muted-foreground/40 text-[11px] ${
+                              className={`border-r p-1 text-center text-muted-foreground/40 text-[11px] ${
                                 isLiveCell ? "bg-emerald-500/10 ring-1 ring-emerald-500/40" : ""
                               }`}
                             >
@@ -390,11 +396,11 @@ export function WeeklyTimetableMatrix({
                         return (
                           <td
                             key={col.id}
-                            className={`border-r p-1.5 align-top transition-colors ${
+                            className={`border-r p-1 align-top transition-colors ${
                               isLiveCell ? "bg-emerald-500/10 ring-2 ring-emerald-500/50" : ""
                             }`}
                           >
-                            <div className="space-y-1.5">
+                            <div className="space-y-1">
                               {cellSlots.map((s, idx) => {
                                 const shortCode = slotShortCode(s, subjectMap);
                                 const isSub = Boolean(s.substituteFacultyName);
@@ -406,7 +412,7 @@ export function WeeklyTimetableMatrix({
                                     key={s.id || idx}
                                     type="button"
                                     onClick={() => openSlotDetails(s, d, col)}
-                                    className={`w-full text-left p-2 rounded-lg border transition-all text-xs focus:outline-none focus:ring-2 focus:ring-primary ${
+                                    className={`w-full text-left p-1 sm:p-1.5 rounded-md border transition-all text-xs focus:outline-none focus:ring-1 focus:ring-primary ${
                                       isLab
                                         ? "bg-emerald-500/10 border-emerald-500/30 hover:bg-emerald-500/20 text-emerald-950 dark:text-emerald-200"
                                         : isSub
@@ -415,34 +421,34 @@ export function WeeklyTimetableMatrix({
                                     }`}
                                     aria-label={`${shortCode} on ${DAY_LABELS[d]} Period ${col.periodNumber}`}
                                   >
-                                    <div className="flex items-center justify-between gap-1">
-                                      <span className="font-bold text-xs truncate">{shortCode}</span>
+                                    <div className="flex items-center justify-between gap-0.5">
+                                      <span className="font-extrabold text-[10px] sm:text-xs truncate uppercase">{shortCode}</span>
                                       {isLab && (
                                         <FlaskConical className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
                                       )}
                                     </div>
 
                                     {s.labBatch && (
-                                      <p className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">
+                                      <p className="text-[9px] font-semibold text-emerald-700 dark:text-emerald-300 truncate">
                                         {s.labBatch}
                                       </p>
                                     )}
 
                                     {faculty && (
-                                      <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                                      <p className="text-[9.5px] text-muted-foreground truncate mt-0.5 hidden sm:block">
                                         {faculty}
                                       </p>
                                     )}
 
                                     {s.classroom && (
-                                      <div className="flex items-center gap-1 text-[10px] text-muted-foreground/80 mt-1">
-                                        <MapPin className="h-2.5 w-2.5 shrink-0" />
+                                      <div className="hidden sm:flex items-center gap-0.5 text-[9px] text-muted-foreground/80 mt-0.5">
+                                        <MapPin className="h-2 w-2 shrink-0" />
                                         <span className="truncate">{s.classroom}</span>
                                       </div>
                                     )}
 
                                     {isLiveCell && (
-                                      <div className="mt-1 pt-1 border-t border-emerald-500/20 flex items-center gap-1 text-[9px] font-bold text-emerald-600 dark:text-emerald-400">
+                                      <div className="mt-0.5 pt-0.5 border-t border-emerald-500/20 flex items-center gap-1 text-[8px] font-bold text-emerald-600 dark:text-emerald-400">
                                         <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                                         <span>LIVE</span>
                                       </div>

@@ -357,10 +357,13 @@ export function buildClassTimetableSubtitle(opts: {
 }
 
 /**
- * Which period columns to draw as one wide cell: back-to-back PERIOD columns
- * (no break between them) whose slots are the same subject / faculty / batch /
- * room. Returns the colSpan keyed by the first column's index, and the indexes
- * of the columns it swallows. Break columns never merge and never get merged over.
+ * Which period columns to draw as one wide cell. Merging is a CHOICE made in the
+ * timetable editor (the user selects the cells): the slots of the earlier period
+ * carry `mergeWithNext`. A pair only merges when that flag is set AND the two
+ * columns are back-to-back PERIODS (no break between) holding the same subject /
+ * faculty / batch / room. Returns the colSpan keyed by the first column's index,
+ * and the indexes of the columns it swallows. Break columns never merge and never
+ * get merged over.
  */
 export function continuousSpans(
   columns: { kind: string; periodNumber?: number }[],
@@ -382,8 +385,12 @@ export function continuousSpans(
     if (skipped.has(i)) continue;
     const s = sig(i);
     if (s == null) continue;
+    const flagged = (k: number) => {
+      const c = columns[k];
+      return c?.periodNumber != null && slotsAt(c.periodNumber).some((x) => x.mergeWithNext);
+    };
     let j = i + 1;
-    while (sig(j) === s) j++;
+    while (flagged(j - 1) && sig(j) === s) j++;
     if (j - i > 1) {
       spans.set(i, j - i);
       for (let k = i + 1; k < j; k++) skipped.add(k);
