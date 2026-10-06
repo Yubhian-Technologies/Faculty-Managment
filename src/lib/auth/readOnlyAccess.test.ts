@@ -2,8 +2,7 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import {
-  isAllowedReadOnlyPage, isAllowedReadOnlyRequest, isFacultyCapableRole, isReadOnlyFacultyCollege, isReadOnlyFacultyStatus,
-  readOnlyFacultyColleges,
+  isAllowedReadOnlyPage, isAllowedReadOnlyRequest, isFacultyCapableRole, isReadOnlyFacultyStatus,
 } from "@/lib/auth/readOnlyAccess";
 
 describe("which statuses are read-only", () => {
@@ -16,17 +15,11 @@ describe("which statuses are read-only", () => {
   });
 });
 
-describe("the college switch (default OFF)", () => {
-  it("is off for everyone when the variable is empty or unset", () => {
-    expect(isReadOnlyFacultyCollege("fffeab8b168a4b449dea", "")).toBe(false);
-    expect(readOnlyFacultyColleges(undefined).size).toBe(0);
-  });
-  it("is on only for the listed colleges (comma-separated, spaces ignored)", () => {
-    expect(isReadOnlyFacultyCollege("vit", "vit, other")).toBe(true);
-    expect(isReadOnlyFacultyCollege("other", "vit, other")).toBe(true);
-    expect(isReadOnlyFacultyCollege("someone-else", "vit, other")).toBe(false);
-    expect(isReadOnlyFacultyCollege("", "vit")).toBe(false);
-    expect(isReadOnlyFacultyCollege(undefined, "vit")).toBe(false);
+describe("who is looked up", () => {
+  it("there is no per-college switch any more: the module exports none", async () => {
+    const mod = await import("@/lib/auth/readOnlyAccess") as Record<string, unknown>;
+    expect(mod.isReadOnlyFacultyCollege).toBeUndefined();
+    expect(mod.readOnlyFacultyColleges).toBeUndefined();
   });
   it("only faculty-capable roles are ever looked up", () => {
     for (const r of ["PANEL_MEMBER", "HOD", "DEPARTMENT_OFFICE"]) expect(isFacultyCapableRole(r)).toBe(true);

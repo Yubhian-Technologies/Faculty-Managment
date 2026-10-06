@@ -161,14 +161,13 @@ export function StudentPromotionsPanel({ showHeader = true }: { showHeader?: boo
   // this course's own duration, not the college-wide highest open academic
   // year - a 4-year B.Tech section must graduate at year 4 even if some other
   // course on campus (e.g. a 5-year Pharm.D) keeps year 5 "open" college-wide.
-  // Falls back to the old college-wide heuristic only if the section's course
-  // can't be resolved (e.g. deleted course), so this never regresses to "no
-  // graduation option at all".
-  const maxActiveYear = openYears.length > 0 ? Math.max(...openYears.map((y) => y.yearNumber)) : 4;
+  // Falls back to the college-wide highest open year only if the section's course
+  // can't be resolved (e.g. deleted course). With neither, the last year is unknown
+  // and nothing is treated as final - never an assumed 4-year course.
+  const maxActiveYear = openYears.length > 0 ? Math.max(...openYears.map((y) => y.yearNumber)) : undefined;
+  const lastYear = sourceCourse?.durationYears ?? maxActiveYear;
   const nextYear = sourceSection ? sourceSection.year + 1 : null;
-  const isFinalYear = sourceSection
-    ? sourceSection.year >= (sourceCourse?.durationYears ?? maxActiveYear)
-    : false;
+  const isFinalYear = sourceSection && lastYear != null ? sourceSection.year >= lastYear : false;
 
   // A cohort can only move up when the next year has exactly the same sections
   // (same course + department) - otherwise a section has nowhere to go, or an

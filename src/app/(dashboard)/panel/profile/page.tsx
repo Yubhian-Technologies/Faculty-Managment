@@ -5,6 +5,8 @@ import Link from "next/link";
 import { Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ProfilePhotoUpload } from "@/components/shared/ProfilePhotoUpload";
+import { Avatar } from "@/components/shared/Avatar";
+import { useReadOnlyAccess } from "@/hooks/useReadOnlyAccess";
 import { ChangePasswordDialog } from "@/components/shared/ChangePasswordDialog";
 import { PublicProfileLinkButton } from "@/components/shared/PublicProfileLinkButton";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,6 +18,8 @@ import { MyResumeDownloadButton } from "@/components/faculty/MyResumeDownloadBut
 
 export default function FacultyProfilePage() {
   const { user } = useAuth();
+  // RESIGNED/RETIRED: view only - no edit, photo change/removal or password change.
+  const readOnly = useReadOnlyAccess();
   // The faculty member's own FacultyMember record - see the doc-comment on
   // GET /api/college/faculty/me. Drives the same fields grid the HOD sees on
   // this faculty member's detail page (hod/faculty/[id]).
@@ -43,7 +47,7 @@ export default function FacultyProfilePage() {
         actions={
           <div className="flex gap-2">
             <MyResumeDownloadButton />
-            <ChangePasswordDialog />
+            {!readOnly && <ChangePasswordDialog />}
             <PublicProfileLinkButton />
           </div>
         }
@@ -51,7 +55,7 @@ export default function FacultyProfilePage() {
       <Card>
         <CardContent className="p-6 space-y-6">
           <div className="flex items-center gap-4 flex-wrap">
-            <ProfilePhotoUpload name={user.name} photoUrl={user.profilePhotoUrl} />
+            {readOnly ? <Avatar name={user.name} photoUrl={user.profilePhotoUrl} size="lg" /> : <ProfilePhotoUpload name={user.name} photoUrl={user.profilePhotoUrl} />}
             <FacultyStatusBadge status={faculty?.status} />
           </div>
           {/* Same fields grid the HOD sees on this faculty member's own
@@ -59,7 +63,7 @@ export default function FacultyProfilePage() {
               behind what the HOD can already see about them. */}
           {noRecordMessage && <p className="text-sm text-muted-foreground rounded-md border bg-muted/20 p-3">{noRecordMessage}</p>}
           <FacultyIdentityFacts faculty={faculty ?? {}} />
-          {faculty && (
+          {faculty && !readOnly && (
             <div className="flex justify-end pt-4 border-t">
               <Button asChild>
                 <Link href="/panel/profile/edit"><Pencil className="h-4 w-4 mr-2" />Edit Details</Link>

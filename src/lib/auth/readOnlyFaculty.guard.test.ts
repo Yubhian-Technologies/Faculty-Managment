@@ -57,7 +57,6 @@ async function allowed(roles: string[]): Promise<boolean> {
 
 beforeEach(async () => {
   process.env.SESSION_SECRET = "test-secret";
-  delete process.env.READ_ONLY_FACULTY_COLLEGES;
   cookieJar.clear(); reqHeaders.clear(); store.clear();
   reads.users = 0; reads.faculty = 0; failFaculty.on = false;
   forgetHeldRoles(C, "u1");
@@ -67,47 +66,37 @@ beforeEach(async () => {
 });
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); delete process.env.READ_ONLY_FACULTY_COLLEGES; });
 
-describe("switch OFF (default): nothing changes for anyone, and no extra reads", () => {
-  it("a RESIGNED faculty with a seat behaves exactly as before, with ZERO faculty lookups", async () => {
+describe("every college, no switch", () => {
+  it("a RESIGNED faculty with a seat is read-only in ANY college id - there is no env variable that can turn it off", async () => {
+    process.env.READ_ONLY_FACULTY_COLLEGES = "some-other-college"; // the old switch is ignored
     setFaculty("RESIGNED");
     request("POST", "/api/college/students");
-    expect(await allowed(["HOD"])).toBe(true);      // seat authority still there (feature off)
-    expect(await allowed(["PANEL_MEMBER"])).toBe(true);
-    expect(reads.faculty).toBe(0);
-  });
-
-  it("another college's switch (VIT only) leaves this college untouched: still no lookups", async () => {
-    process.env.READ_ONLY_FACULTY_COLLEGES = "some-other-college";
-    setFaculty("RESIGNED");
-    request("PATCH", "/api/college/students/s1");
-    expect(await allowed(["HOD"])).toBe(true);
-    expect(reads.faculty).toBe(0);
+    expect(await allowed(["HOD"])).toBe(false);
+    expect(await allowed(["PANEL_MEMBER"])).toBe(false);
+    expect(reads.faculty).toBeGreaterThan(0);
   });
 });
 
-describe("switch ON, ACTIVE faculty: unchanged", () => {
+describe("ACTIVE faculty: unchanged", () => {
   it("keeps every role/seat and can write", async () => {
-    process.env.READ_ONLY_FACULTY_COLLEGES = C;
     setFaculty("ACTIVE");
     request("POST", "/api/college/students");
     expect(await allowed(["HOD"])).toBe(true);
     expect(await allowed(["PANEL_MEMBER"])).toBe(true);
   });
   it.each(["ON_LEAVE", "RETAINERSHIP", "INTERVIEW_DONE"])("%s is not read-only", async (status) => {
-    process.env.READ_ONLY_FACULTY_COLLEGES = C;
     setFaculty(status);
     request("POST", "/api/college/attendance/check-in");
     expect(await allowed(["PANEL_MEMBER"])).toBe(true);
   });
   it("a login with no linked faculty record is not read-only", async () => {
-    process.env.READ_ONLY_FACULTY_COLLEGES = C;
     request("POST", "/api/college/students");
     expect(await allowed(["PANEL_MEMBER"])).toBe(true);
   });
 });
 
-describe("switch ON, RESIGNED / RETIRED faculty: read-only", () => {
-  beforeEach(() => { process.env.READ_ONLY_FACULTY_COLLEGES = C; });
+describe("RESIGNED / RETIRED faculty: read-only", () => {
+  
 
   it.each(["RESIGNED", "RETIRED"])("%s can read their own allowed data as a plain faculty member", async (status) => {
     setFaculty(status);
@@ -181,8 +170,7 @@ describe("switch ON, RESIGNED / RETIRED faculty: read-only", () => {
 });
 
 describe("only faculty-capable logins are ever looked up", () => {
-  it("a College Office login costs no faculty lookup even with the switch on", async () => {
-    process.env.READ_ONLY_FACULTY_COLLEGES = C;
+  it("a College Office login costs no faculty lookup even ", async () => {
     store.set(`colleges/${C}/users/u1`, { role: "COLLEGE_OFFICE", seatRoles: [], isActive: true });
     await sess({ role: "COLLEGE_OFFICE", roles: ["COLLEGE_OFFICE"] });
     request("POST", "/api/college/students");
@@ -190,7 +178,6 @@ describe("only faculty-capable logins are ever looked up", () => {
     expect(reads.faculty).toBe(0);
   });
   it("an inactive account is still simply denied (existing behaviour), with no lookup", async () => {
-    process.env.READ_ONLY_FACULTY_COLLEGES = C;
     setUser({ isActive: false });
     request("GET", "/api/college/faculty/me");
     expect(await allowed(["PANEL_MEMBER"])).toBe(false);
@@ -198,9 +185,8 @@ describe("only faculty-capable logins are ever looked up", () => {
   });
 });
 
-describe("read cost with the switch ON", () => {
+describe("read cost", () => {
   it("one faculty lookup per person per 20 s window, however many requests", async () => {
-    process.env.READ_ONLY_FACULTY_COLLEGES = C;
     setFaculty("ACTIVE");
     request("GET", "/api/college/faculty/me");
     for (let i = 0; i < 10; i++) await requireCollegeMember("PANEL_MEMBER");
@@ -210,7 +196,7 @@ describe("read cost with the switch ON", () => {
 });
 
 describe("when the status lookup fails (fail closed)", () => {
-  beforeEach(() => { process.env.READ_ONLY_FACULTY_COLLEGES = C; });
+  
 
   it("with no earlier answer: writes are denied, reads carry on as before", async () => {
     setFaculty("ACTIVE");

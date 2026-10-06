@@ -22,11 +22,13 @@ import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { buildRows, defaultPeriodTimings } from "@/lib/timetable/buildGrid";
 import { ordinalYear, readableCode, resolveTimetableDays } from "@/lib/timetable/gridModel";
 import { InstitutionalTimetableTable } from "@/components/timetable/InstitutionalTimetableTable";
+import { requestAssignmentIds } from "@/lib/teaching/requestAllocations";
 import type {
   Course, SectionListItem, CourseYearTiming, TimetableSlot, DayOfWeek, DraftSlot, TimetableDraft,
   TeachingAssignment, FacultyAssignmentRequest, PeriodTiming, Subject,
 } from "@/types";
 import { DAY_LABELS, DEFAULT_TIMETABLE_RULES } from "@/types";
+import { courseYearNumbers } from "@/lib/college/courseYears";
 
 /** What the grid is currently showing. */
 type Mode = "published" | "draft";
@@ -114,9 +116,10 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
   const [typeFilter, setTypeFilter] = useState<"ALL" | "THEORY" | "PRACTICAL">("ALL");
   const [isEditing, setIsEditing] = useState(false);
   const [selected, setSelected] = useState<DraftSlot | null>(null);
-  const [busy, setBusy] = useState<null | "publish" | "discard" | "move" | "blank">(null);
+  const [busy, setBusy] = useState<null | "publish" | "discard" | "move" | "blank" | "reset">(null);
   const [confirmPublish, setConfirmPublish] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
   // Manual timetabling: the section's assignments feed the add-subject picker,
   // and `addingAt` holds the empty cell the HOD clicked.
   const [assignments, setAssignments] = useState<TeachingAssignment[]>([]);
@@ -140,6 +143,10 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
   // never see a lent-in subject in "Add a subject" at all, even though
   // they're the one who's supposed to place it now.
   const [lentInAssignmentIds, setLentInAssignmentIds] = useState<Set<string>>(new Set());
+  // Lent-in assignments the lending department hasn't yet closed with "Notify
+  // & close" (request.busyClosed) - still declaring busy periods, so not ready
+  // to be placed. Held back from "Add a subject" until they close it.
+  const [notReadyLentInIds, setNotReadyLentInIds] = useState<Set<string>>(new Set());
   // Editing state for the "Edit Period Timings" dialog - each period's own
   // start/end, within the college day the Principal already set
   // (timing.collegeStartTime/collegeEndTime). `period` numbers are always
@@ -180,7 +187,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
           .then((r) => r.json() as Promise<{ assignments: TeachingAssignment[] }>),
         fetch("/api/college/faculty?availableOnly=true")
           .then((r) => r.json() as Promise<{ faculty: { id: string; accessLevel?: string }[] }>),
-        fetch("/api/college/faculty-assignment-requests")
+        fetch(`/api/college/faculty-assignment-requests?sectionId=${encodeURIComponent(sectionId)}`)
           .then((r) => r.json() as Promise<{ requests: FacultyAssignmentRequest[] }>),
       ]);
 
@@ -194,10 +201,16 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
       setDraft(draftData.draft ?? null);
       setAssignments((assignData.assignments ?? []).filter((a) => !a.isPast));
       setMyFacultyIds(new Set((facultyData.faculty ?? []).filter((f) => f.accessLevel !== "secondary").map((f) => f.id)));
+      // A request can hold several allocated faculty - every one of their assignments counts.
       setLentInAssignmentIds(new Set(
         (requestsData.requests ?? [])
-          .filter((r) => r.sectionId === sectionId && r.teachingAssignmentId)
-          .map((r) => r.teachingAssignmentId as string)
+          .filter((r) => r.sectionId === sectionId)
+          .flatMap((r) => requestAssignmentIds(r))
+      ));
+      setNotReadyLentInIds(new Set(
+        (requestsData.requests ?? [])
+          .filter((r) => r.sectionId === sectionId && r.status === "ALLOCATED" && !r.busyClosed)
+          .flatMap((r) => requestAssignmentIds(r))
       ));
       // An unpublished draft is what the HOD most likely came here to act on.
       if (draftData.draft && draftData.draft.status === "DRAFT") setModeState("draft");
@@ -264,9 +277,9 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
     ? fulfillingAssignmentId
       ? [fulfillingAssignmentId]
       : assignments
-          .filter((a) => myFacultyIds.has(a.facultyId) || lentInAssignmentIds.has(a.id))
+          .filter((a) => (myFacultyIds.has(a.facultyId) || lentInAssignmentIds.has(a.id)) && !notReadyLentInIds.has(a.id))
           .map((a) => a.id)
-    : assignments.map((a) => a.id);
+    : assignments.filter((a) => !notReadyLentInIds.has(a.id)).map((a) => a.id);
   // Same restriction, applied to the "Add a subject" picker - also excludes
   // whatever's already occupying the target cell (rawCellEntriesFor, not the
   // Theory/Practical-filtered cellEntriesFor - a cell hidden by the view
@@ -398,6 +411,24 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
     }
   }
 
+  /** Deletes one pinned (live, manually placed) period. A pinned lab block is one slot per period, so each is removed on its own. */
+  async function handleRemovePinned(slotId: string, subjectName: string) {
+    if (!window.confirm(`Remove the pinned period for ${subjectName}? This changes the live timetable immediately.`)) return;
+    setBusy("move");
+    try {
+      const res = await fetch(`/api/college/timetable-slots/${encodeURIComponent(slotId)}`, { method: "DELETE" });
+      if (!res.ok) {
+        const json = (await res.json().catch(() => ({}))) as { error?: string };
+        toast({ variant: "destructive", title: "Could not remove", description: json.error });
+        return;
+      }
+      setSlots((prev) => prev.filter((x) => (x as TimetableSlot & { id?: string }).id !== slotId));
+      toast({ title: "Pinned period removed" });
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function handleRemove(slot: DraftSlot) {
     setBusy("move");
     try {
@@ -498,6 +529,33 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
     } finally {
       setBusy(null);
       setConfirmDiscard(false);
+    }
+  }
+
+  // Deletes the section's whole timetable - published slots, draft and the
+  // teaching assignments behind them - so Teaching Assignments and every
+  // faculty's Teaching Load start fresh.
+  async function handleReset() {
+    setBusy("reset");
+    try {
+      const res = await fetch(`/api/college/timetable/reset?sectionId=${encodeURIComponent(sectionId)}${semesterQuery}`, { method: "DELETE" });
+      const json = (await res.json().catch(() => ({}))) as { error?: string; removedAssignments?: number; removedSlots?: number };
+      if (!res.ok) {
+        toast({ variant: "destructive", title: json.error ?? "Could not delete the timetable" });
+        return;
+      }
+      toast({
+        variant: "success",
+        title: "Timetable deleted",
+        description: `${json.removedAssignments ?? 0} teaching assignment(s) and ${json.removedSlots ?? 0} period(s) removed.`,
+      });
+      setIsEditing(false);
+      setSelected(null);
+      await loadAll();
+      setModeState("published");
+    } finally {
+      setBusy(null);
+      setConfirmReset(false);
     }
   }
 
@@ -672,7 +730,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
                 </tr>
               </thead>
               <tbody>
-                {Array.from({ length: course?.durationYears ?? 4 }, (_, i) => i + 1).map((y) => {
+                {courseYearNumbers(course?.durationYears ?? Math.max(0, ...allTimings.map((t) => Number(t.year) || 0))).map((y) => {
                   const t = allTimings.find((at) => Number(at.year) === y);
                   const isCurrentYear = y === Number(year);
                   const isExpanded = expandedTimingYears.has(y);
@@ -769,7 +827,10 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
               straight to the draft, already in edit mode - rather than
               needing the HOD to first discover the Draft toggle above. */}
           {mode === "published" && !isCrossDepartment && (
-            <div className="ml-auto">
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <Button size="sm" variant="outline" onClick={() => setConfirmReset(true)} className="text-destructive hover:text-destructive">
+                <Trash2 className="h-4 w-4 mr-1.5" />Delete entire timetable
+              </Button>
               <Button
                 size="sm"
                 variant="outline"
@@ -790,6 +851,11 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
               {!isCrossDepartment && (
                 <Button size="sm" variant="outline" onClick={() => setConfirmDiscard(true)} className="text-destructive hover:text-destructive">
                   <Trash2 className="h-4 w-4 mr-1.5" />Discard
+                </Button>
+              )}
+              {!isCrossDepartment && (
+                <Button size="sm" variant="outline" onClick={() => setConfirmReset(true)} className="text-destructive hover:text-destructive">
+                  <Trash2 className="h-4 w-4 mr-1.5" />Delete entire timetable
                 </Button>
               )}
               <Button
@@ -924,7 +990,13 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
                                 selected.assignmentId === dSlot.assignmentId &&
                                 selected.day === dSlot.day &&
                                 selected.periodNumber === dSlot.periodNumber;
-                              const clickable = mode === "draft" && isEditing && !isLocked;
+                              // The section's own HOD may select (and so remove) a placement locked only
+                              // because its teaching assignment no longer exists - otherwise those stale
+                              // cells could never be cleared short of discarding the whole draft - and may
+                              // remove a pinned (live, manually placed) slot. Anyone else's slot seen
+                              // cross-department stays locked.
+                              const clickable = mode === "draft" && isEditing && (!isLocked || !isCrossDepartment);
+                              const pinnedId = isPinned && !isCrossDepartment ? (slot as TimetableSlot & { id?: string }).id : undefined;
                               const substituteFacultyName = "substituteFacultyName" in slot ? slot.substituteFacultyName : undefined;
 
                               return (
@@ -980,6 +1052,21 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
                                       className="mt-1.5 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium text-destructive hover:bg-destructive/10"
                                     >
                                       <Trash2 className="h-3 w-3" />Remove
+                                    </span>
+                                  )}
+                                  {pinnedId && mode === "draft" && isEditing && (
+                                    <span
+                                      role="button"
+                                      tabIndex={0}
+                                      onClick={(e) => { e.stopPropagation(); void handleRemovePinned(pinnedId, slot.subjectName); }}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter" || e.key === " ") {
+                                          e.preventDefault(); e.stopPropagation(); void handleRemovePinned(pinnedId, slot.subjectName);
+                                        }
+                                      }}
+                                      className="mt-1.5 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium text-destructive hover:bg-destructive/10"
+                                    >
+                                      <Trash2 className="h-3 w-3" />Remove pinned
                                     </span>
                                   )}
                                 </button>
@@ -1162,6 +1249,16 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
         variant="destructive"
         loading={busy === "discard"}
         onConfirm={handleDiscard}
+      />
+      <ConfirmDialog
+        open={confirmReset}
+        onOpenChange={setConfirmReset}
+        title="Delete the entire timetable?"
+        description="This removes the published timetable, the draft every teaching assignment for this section and semester, and its open assignment requests, so Teaching Assignments and each faculty's Teaching Load start fresh. This cannot be undone."
+        confirmLabel="Delete everything"
+        variant="destructive"
+        loading={busy === "reset"}
+        onConfirm={handleReset}
       />
       </>
     </div>

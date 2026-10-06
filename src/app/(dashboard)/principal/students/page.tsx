@@ -17,6 +17,7 @@ import { StudentStrengthDashboard } from "@/components/students/StudentStrengthD
 import { StudentsViewTabs } from "@/components/students/StudentsViewTabs";
 import { GraduatedStudentsView } from "@/components/students/GraduatedStudentsView";
 import type { StudentListItem, Department, AcademicYear, Course } from "@/types";
+import { selectableYears } from "@/lib/college/courseYears";
 
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -83,9 +84,7 @@ export default function PrincipalStudentsPage() {
           .sort((a, b) => a.localeCompare(b))
       );
       const configured = (yearsRes.academicYears ?? []).map((y) => y.yearNumber).filter(Boolean);
-      const maxCourseDuration = loadedCourses.reduce((max, c) => Math.max(max, Number(c.durationYears) || 0), 0);
-      const capped = maxCourseDuration > 0 ? configured.filter((y) => y <= maxCourseDuration) : configured;
-      setYears(capped.length > 0 ? capped : [1, 2, 3, 4]);
+      setYears(selectableYears(configured, loadedCourses));
     } catch {
       toast({ variant: "destructive", title: "Failed to load filter options" });
     } finally {

@@ -137,28 +137,12 @@ describe("publishSectionDraft - section cells are re-validated (F-23)", () => {
   });
 });
 
-describe("publishSectionDraft - faculty double-booking is judged by period number (publish's existing rule)", () => {
-  it("refuses the same faculty, same day, same period NUMBER in another section", async () => {
+describe("publishSectionDraft - faculty in two sections at the same time is allowed", () => {
+  it("publishes the same faculty, same day, same period NUMBER in another section", async () => {
     const fake = new FakeFirestore();
     section(fake, "s1", 1, [ds("a1", "f1", "MON", 2)]);
     liveSlot(fake, "other", { sectionId: "s2", courseId: "co1", year: 2, facultyId: "f1", assignmentId: "x", day: "MON", periodNumber: 2 });
-    const r = await publishSectionDraft(input(fake, "s1", 1));
-    expect(r).toMatchObject({ ok: false, status: 409 });
-    expect((r as { issues: string[] }).issues[0]).toBe("F1 is now booked for another section at MON period 2. Regenerate this timetable.");
-  });
-
-  it("does NOT compare clock times: a different period number that overlaps on the clock is allowed", async () => {
-    const fake = new FakeFirestore();
-    section(fake, "s1", 1, [ds("a1", "f1", "MON", 3)]); // Y1 P3 10:40-11:30
-    liveSlot(fake, "other", { sectionId: "s2", courseId: "co1", year: 2, facultyId: "f1", assignmentId: "x", day: "MON", periodNumber: 2 }); // Y2 P2 10:20-11:10
-    expect((await publishSectionDraft(input(fake, "s1", 1))).ok).toBe(true);
-  });
-
-  it("ignores another session's or semester's slot for the same faculty (history, not a clash)", async () => {
-    const fake = new FakeFirestore();
-    section(fake, "s1", 1, [ds("a1", "f1", "MON", 1)]);
-    liveSlot(fake, "last", { sectionId: "s2", courseId: "co1", year: 2, facultyId: "f1", assignmentId: "x", day: "MON", periodNumber: 1, academicYear: "2025-26" });
-    expect((await publishSectionDraft(input(fake, "s1", 1))).ok).toBe(true);
+    expect(await publishSectionDraft(input(fake, "s1", 1))).toMatchObject({ ok: true, published: 1 });
   });
 });
 
@@ -179,19 +163,14 @@ describe("publishSectionDraft - concurrency (F-21)", () => {
     expect(doubled).toBeGreaterThan(0);
   });
 
-  it("two sections publishing the same faculty in the same period together: exactly one goes live", async () => {
+  it("two sections publishing the same faculty in the same period together: both go live", async () => {
     for (let seed = 1; seed <= 15; seed++) {
       const fake = new FakeFirestore({ latencyMs: 4, seed });
       section(fake, "s1", 1, [ds("a1", "f1", "MON", 2)]);
       section(fake, "s2", 2, [ds("a2", "f1", "MON", 2)]);
       const [a, b] = await Promise.all([publishSectionDraft(input(fake, "s1", 1)), publishSectionDraft(input(fake, "s2", 2))]);
-      expect([a.ok, b.ok].filter(Boolean), `seed ${seed}`).toHaveLength(1);
-      expect(fake.list(`${C}/timetableSlots`), `seed ${seed}`).toHaveLength(1);
-      const loser = [a, b].find((r) => !r.ok) as { ok: false; status: number };
-      expect(loser.status).toBe(409);
-      // The loser's draft stays a draft, untouched.
-      const loserSection = a.ok ? "s2" : "s1";
-      expect(fake.read(`${C}/timetableDrafts/${loserSection}`)!.status).toBe("DRAFT");
+      expect(a.ok && b.ok, `seed ${seed}`).toBe(true);
+      expect(fake.list(`${C}/timetableSlots`), `seed ${seed}`).toHaveLength(2);
     }
   });
 

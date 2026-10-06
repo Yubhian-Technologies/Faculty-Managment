@@ -182,11 +182,10 @@ export default function HODSubjectsPage() {
   const selectedDeptName = deptOptions.find((d) => d.id === selectedDeptId)?.name ?? "";
   // Never the raw 1..durationYears span - only the years the Principal
   // actually assigned this HOD's own scope for this course (per-course
-  // override included, via managerEffectiveYears). A year some OTHER
-  // department already claims as a feeder for this scope (fedYears) is
-  // excluded even from the "nothing assigned yet" fallback, so an
-  // unconfigured department doesn't wrongly offer a shared year that
-  // structurally belongs to someone else.
+  // override included, via managerEffectiveYears). Nothing assigned means no
+  // years - never "every year of the course" (lib/college/taughtYears.ts). A
+  // year some OTHER department already claims as a feeder for this scope
+  // (fedYears) is excluded.
   const yearOptions = useMemo(() => {
     if (!selectedCourse) return [];
     const courseYears = Array.from({ length: selectedCourse.durationYears }, (_, i) => i + 1);
@@ -196,8 +195,7 @@ export default function HODSubjectsPage() {
       for (const y of managerEffectiveYears(d, departments, selectedCourse.catalogId)) assigned.add(y);
       for (const y of fedYears(d, departments, selectedCourse.catalogId)) excluded.add(y);
     }
-    const base = assigned.size > 0 ? courseYears.filter((y) => assigned.has(y)) : courseYears;
-    return base.filter((y) => !excluded.has(y));
+    return courseYears.filter((y) => assigned.has(y) && !excluded.has(y));
   }, [selectedCourse, ownScopeDepartments, departments]);
   const selectedYear = pickedYear || (yearOptions.length > 0 ? String(yearOptions[0]) : "");
 

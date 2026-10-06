@@ -13,6 +13,7 @@ import { getFacultyIdCandidates, resolveLoginUidForFacultyMember } from "@/lib/f
 import { resolveDepartmentCourseScope, regulationsForCourseYearByBatch, regulationsForBatchStartYear, isDeclaredFeederFor } from "@/lib/college/academicStructure";
 import { parseBatchStartYear, deriveBatch, parseAcademicYearStart, currentAcademicStartYear } from "@/lib/college/academicSession";
 import { deriveHodScope } from "@/lib/departments/hodScope";
+import { notConfiguredMessage } from "@/lib/college/taughtYears";
 import { isNameOrChildAmong } from "@/lib/departments/codeOrNameResolver";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
 import type { Department, DepartmentCourseScope } from "@/types";
@@ -583,7 +584,9 @@ export async function POST(request: Request) {
             assignedYears = resolveDepartmentCourseScope(parentDoc, course.catalogId).assignedYears;
           }
         }
-        if (assignedYears.length > 0 && !assignedYears.includes(Number(body.year))) {
+        // An EMPTY list is NOT "unrestricted" (lib/college/taughtYears.ts): a department with no Years
+        // Taught for this course can't host any year here, except one its shared-year manager teaches.
+        if (!assignedYears.includes(Number(body.year))) {
           // A real branch (e.g. IT) reached through a sub-department's managed
           // grouping (BS-Maths managing IT + CSBS) never carries the shared
           // first year in its OWN "Years Taught" - that's configured on the
@@ -599,7 +602,11 @@ export async function POST(request: Request) {
           const allowedViaManager = manager?.years.includes(Number(body.year)) ?? false;
           if (!allowedViaManager) {
             return NextResponse.json(
-              { error: `Your department is not assigned to teach Year ${body.year}` },
+              {
+                error: assignedYears.length === 0
+                  ? notConfiguredMessage(dept, body.year, course.name)
+                  : `Your department is not assigned to teach Year ${body.year}`,
+              },
               { status: 400 }
             );
           }

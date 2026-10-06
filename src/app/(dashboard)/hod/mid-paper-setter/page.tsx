@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Search, UserPlus } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -12,19 +12,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Pagination } from "@/components/shared/Pagination";
 import { usePagination } from "@/hooks/usePagination";
 import { toast } from "@/hooks/useToast";
-import type { Course, CourseYearTiming, MidNumber, MidPaperAssignment, Subject } from "@/types";
-import { semesterOptionsFromTimings } from "@/lib/college/semesterOptions";
+import type { Course, MidNumber, MidPaperAssignment, Subject } from "@/types";
+import { useCourseSemesterPlan } from "@/hooks/useCourseSemesterPlan";
+import { semesterLabel } from "@/lib/college/courseYears";
 
 interface FacultyOption { id: string; name: string }
 
 // Subjects/rosters are only ever tracked per academic Year, not per true
 // semester - see attendance-percentage-report/route.ts's own note. Picking
-// either semester of a year (e.g. 3 or 4) resolves to the same Year and
+// any semester of a year (e.g. 3 or 4) resolves to the same Year and
 // shows the same subject list, same convention as the Attendance Reports
-// page's own Semester picker.
-function yearForSemester(semester: number): number {
-  return Math.ceil(semester / 2);
-}
+// page's own Semester picker. Which semesters a course has, and the year each
+// belongs to, come from its own semester setup (useCourseSemesterPlan).
 
 export default function MidPaperSetterPage() {
   const [courses, setCourses] = useState<Course[]>([]);
@@ -83,31 +82,9 @@ export default function MidPaperSetterPage() {
 
   const courseNameOptions = useMemo(() => [...new Set(courses.map((c) => c.name))].sort(), [courses]);
   const resolvedCourse = useMemo(() => courses.find((c) => c.name === courseName) ?? null, [courses, courseName]);
-  const totalSemesters = (resolvedCourse?.durationYears ?? 0) * 2;
-  // The course's real semesters, from its own Course-Year Timings. This used to
-  // be `durationYears * 2` labelled "3/8", which guesses both the count (a
-  // course-year has however many Office/Principal configured, not always two)
-  // and the label (the stored number means different things at different
-  // colleges - see lib/college/semesterOptions.ts).
-  const [timings, setTimings] = useState<CourseYearTiming[]>([]);
-  useEffect(() => {
-    const id = resolvedCourse?.id;
-    if (!id) { setTimings([]); return; }
-    let cancelled = false;
-    void (async () => {
-      try {
-        const t = await fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(id)}`)
-          .then((r) => r.json() as Promise<{ timings?: CourseYearTiming[] }>);
-        if (!cancelled) setTimings(t.timings ?? []);
-      } catch {
-        if (!cancelled) setTimings([]);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [resolvedCourse?.id]);
-
-  const semesterChoices = useMemo(() => semesterOptionsFromTimings(timings), [timings]);
-
+  const semesterPlan = useCourseSemesterPlan(resolvedCourse);
+  const semesterOptions = semesterPlan.semesters;
+  const yearForSemester = useCallback((semester: number): number => semesterPlan.yearOf(semester) ?? 0, [semesterPlan]);
 
   function resetDownstream(from: "course" | "semester" | "subject") {
     setFacultyLoadedFor("");
@@ -142,7 +119,7 @@ export default function MidPaperSetterPage() {
         setIsLoadingSubjects(false);
       }
     })();
-  }, [resolvedCourse, semester]);
+  }, [resolvedCourse, semester, yearForSemester]);
 
   async function loadFaculty() {
     if (!subjectId) return;
@@ -209,7 +186,7 @@ export default function MidPaperSetterPage() {
             <Select value={semester} onValueChange={(v) => { setSemester(v); resetDownstream("semester"); }} disabled={!resolvedCourse}>
               <SelectTrigger><SelectValue placeholder="Select semester" /></SelectTrigger>
               <SelectContent>
-                {semesterChoices.map((o) => <SelectItem key={`${o.year}-${o.semester}`} value={String(o.semester)}>{o.label}</SelectItem>)}
+                {semesterOptions.map((s) => <SelectItem key={s} value={String(s)}>{semesterLabel(semesterPlan, s)}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>

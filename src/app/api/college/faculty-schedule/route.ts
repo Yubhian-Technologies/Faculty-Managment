@@ -7,9 +7,13 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { resolveCurrentSemester, matchesCurrentSemester } from "@/lib/college/semester";
+import { isTimetableInchargeAnywhere } from "@/lib/departments/timetableIncharge";
 import { isFacultyAvailable } from "@/types";
 import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
+import { requestAllocations } from "@/lib/teaching/requestAllocations";
 import type { CourseYearTiming, FacultyAssignmentRequest, PeriodTiming, Section, TimetableDraft, TimetableSlot } from "@/types";
+
+const LOOKUP_ROLES_OTHER_THAN_STAFF = ["HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER"];
 
 // A deliberately narrow, read-only cross-department lookup: unlike
 // /api/college/faculty and /api/college/courses (which reject a department
@@ -25,6 +29,18 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const departmentId = searchParams.get("departmentId");
     const db = getAdminDb();
+
+    // Supporting staff may use this lookup only while they hold a Timetable
+    // Incharge delegation (it exists to check a faculty's week before an
+    // Assignment Request / busy-period declaration, which is the Incharge's
+    // job). The gate bites only when COLLEGE_STAFF is the caller's sole
+    // qualifying role: anyone who also holds HOD, Principal, VP, Super Admin
+    // or Faculty keeps exactly the access that role already gave them.
+    const heldRoles = session.roles ?? [session.role];
+    const onlyStaff = session.role === "COLLEGE_STAFF" && !heldRoles.some((r) => LOOKUP_ROLES_OTHER_THAN_STAFF.includes(r));
+    if (onlyStaff && !(await isTimetableInchargeAnywhere(db, session.collegeId, session.uid))) {
+      return NextResponse.json({ error: "The Faculty Timetable is available to a Timetable Incharge only" }, { status: 403 });
+    }
     const collegeRef = db.collection("colleges").doc(session.collegeId);
     // `me=1`: the caller's own schedule - resolved server-side from the
     // session, so a faculty never has to (or can) pick anyone.
@@ -66,7 +82,12 @@ export async function GET(request: Request) {
         // become timetable slots, so without this the lookup showed the
         // faculty as free (or as having nothing booked at all) in hours the
         // timetable editor itself refuses to place them in.
-        collegeRef.collection("facultyAssignmentRequests").where("allocatedFacultyId", "==", facultyId).get(),
+        // A request can hold several allocated faculty (allocatedFacultyIds); an older
+        // one only has allocatedFacultyId - both are looked up, then merged.
+        Promise.all([
+          collegeRef.collection("facultyAssignmentRequests").where("allocatedFacultyIds", "array-contains", facultyId).get(),
+          collegeRef.collection("facultyAssignmentRequests").where("allocatedFacultyId", "==", facultyId).get(),
+        ]).then(([a, b]) => ({ docs: Array.from(new Map([...a.docs, ...b.docs].map((d) => [d.id, d])).values()) })),
       ]);
       const rawSlots = slotsSnap.docs.map((d) => d.data() as TimetableSlot);
 
@@ -94,7 +115,9 @@ export async function GET(request: Request) {
       for (const d of requestsSnap.docs) {
         const r = d.data() as FacultyAssignmentRequest;
         if (r.status !== "ALLOCATED") continue;
-        for (const bp of r.busyPeriods ?? []) {
+        // This faculty's own busy periods on the request (not the other faculty's).
+        const mine = requestAllocations(r).find((a) => a.facultyId === facultyId);
+        for (const bp of mine?.busyPeriods ?? []) {
           draftSlots.push({
             day: bp.day, periodNumber: bp.period, subjectName: r.subjectName,
             courseId: r.courseId, year: bp.year ?? r.year, sectionId: "",

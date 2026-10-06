@@ -18,7 +18,7 @@ import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
 // A Timetable Incharge (see TimetableIncharge in src/types/core.ts) can send
 // these too, for their own delegated course-year.
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await requireCollegeMember(
       "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACADEMICS", "PANEL_MEMBER", "COLLEGE_STAFF",
@@ -49,6 +49,21 @@ export async function GET() {
           if (seen.has(d.id)) continue;
           seen.add(d.id);
           requests.push({ id: d.id, ...d.data() });
+        }
+      }
+      // Timetable editor only: allocated lends onto the section this Incharge
+      // is delegated, even when someone else raised them (same as the HOD path).
+      const incharSectionId = new URL(request.url).searchParams.get("sectionId");
+      if (incharSectionId) {
+        const sec = (await db.collection("colleges").doc(session.collegeId).collection("sections").doc(incharSectionId).get())
+          .data() as { courseId?: string; year?: number } | undefined;
+        if (sec?.courseId && sec.year != null && await isTimetableIncharge(db, session.collegeId, session.uid, sec.courseId, sec.year)) {
+          const allocatedSnap = await coll.where("sectionId", "==", incharSectionId).where("status", "==", "ALLOCATED").get();
+          for (const d of allocatedSnap.docs) {
+            if (seen.has(d.id)) continue;
+            seen.add(d.id);
+            requests.push({ id: d.id, ...d.data() });
+          }
         }
       }
       requests.sort((a, b) => {
@@ -89,6 +104,25 @@ export async function GET() {
         if (seen.has(d.id)) continue;
         seen.add(d.id);
         requests.push({ id: d.id, ...d.data() });
+      }
+    }
+    // Timetable editor only: every allocated lend onto this section, not just
+    // the ones this person raised. Placing a lent-in subject is the section's
+    // HOD / Sub-HOD's job, and the request may have been raised by someone
+    // else in that department - without it the subject never reaches their
+    // "Add a subject" picker. Gated by the same rule as the draft route
+    // (canHodEditDepartment on the section's department).
+    const sectionId = new URL(request.url).searchParams.get("sectionId");
+    if (sectionId) {
+      const sectionSnap = await db.collection("colleges").doc(session.collegeId).collection("sections").doc(sectionId).get();
+      const sectionDepartment = (sectionSnap.data() as { department?: string } | undefined)?.department;
+      if (sectionDepartment && canHodEditDepartment(scope, sectionDepartment)) {
+        const allocatedSnap = await coll.where("sectionId", "==", sectionId).where("status", "==", "ALLOCATED").get();
+        for (const d of allocatedSnap.docs) {
+          if (seen.has(d.id)) continue;
+          seen.add(d.id);
+          requests.push({ id: d.id, ...d.data() });
+        }
       }
     }
     requests.sort((a, b) => {
@@ -225,6 +259,53 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     console.error("[college/faculty-assignment-requests POST]", err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
+}
+
+// The requesting side takes back a request it sent (same people who may send
+// one: the section's HOD, or the Timetable Incharge for its course-year).
+// Only a request still waiting (PENDING) or already declined can go - an
+// allocated one has a real assignment behind it, which is removed from the
+// assignment itself.
+export async function DELETE(request: Request) {
+  try {
+    const session = await requireCollegeMember("HOD", "PANEL_MEMBER", "COLLEGE_STAFF");
+    const id = new URL(request.url).searchParams.get("id");
+    if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
+
+    const db = getAdminDb();
+    const collegeRef = db.collection("colleges").doc(session.collegeId);
+    const ref = collegeRef.collection("facultyAssignmentRequests").doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) return NextResponse.json({ error: "Request not found" }, { status: 404 });
+    const req = snap.data() as { status?: string; courseId?: string; year?: number; sectionId?: string; requestingDepartment?: string; requestedBy?: string };
+    if (req.status === "ALLOCATED") {
+      return NextResponse.json({ error: "This request is already allocated - remove the teaching assignment instead" }, { status: 409 });
+    }
+
+    if (session.role === "HOD") {
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      if (req.requestedBy !== session.uid && !canHodEditDepartment(scope, req.requestingDepartment ?? "")) {
+        return NextResponse.json({ error: "This request is not from your department or one of your sub-departments" }, { status: 403 });
+      }
+    } else {
+      const ok = req.courseId && req.year != null
+        && await isTimetableIncharge(db, session.collegeId, session.uid, req.courseId, req.year);
+      if (!ok) {
+        return NextResponse.json({ error: "You are not the Timetable Incharge for this course & year" }, { status: 403 });
+      }
+    }
+
+    await ref.delete();
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
+    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    console.error("[college/faculty-assignment-requests DELETE]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }

@@ -210,13 +210,11 @@ export function managedBranchYearsMap(departments: Department[], catalogId?: str
  * `catalogId`, else the flat fields (resolveDepartmentCourseScope) -
  * intersected with the course's own span, never the raw 1..durationYears,
  * which is what let Teaching Assignments offer years the department doesn't
- * run. Falls back to the full span when nothing is assigned anywhere, so an
- * unconfigured college isn't locked out - but a year some OTHER department
- * has already claimed as a feeder FOR one of `relevantDepartments`
- * (fedYears) is excluded from that fallback too, since assignedYears going
- * unconfigured is exactly the case where "show every year" would otherwise
- * incorrectly include one this department structurally can never teach
- * itself (e.g. a common first year owned by Basic Science). `catalogId`
+ * run. When nothing is assigned anywhere the answer is NO years - an empty
+ * Years Taught means "not configured", never "teaches every year"
+ * (lib/college/taughtYears.ts); the caller shows its own "set Years Taught
+ * first" state. A year some OTHER department has claimed as a feeder FOR one
+ * of `relevantDepartments` (fedYears) is excluded. `catalogId`
  * omitted (a legacy, pre-catalog course - see CourseGroup) falls back to
  * each department's flat fields only, unchanged from before per-course
  * overrides existed.
@@ -239,7 +237,7 @@ export function yearsInScope(
       for (const y of managedBranchYears.get(d.name) ?? []) assigned.add(y);
     }
   }
-  const base = assigned.size > 0 ? courseYears.filter((y) => assigned.has(y)) : courseYears;
+  const base = courseYears.filter((y) => assigned.has(y));
   return base.filter((y) => !excluded.has(y));
 }
 

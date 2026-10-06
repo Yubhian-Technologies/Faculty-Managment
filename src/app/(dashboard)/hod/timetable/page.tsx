@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TimetableInchargePanel } from "@/components/timetable/TimetableInchargePanel";
 import { TimetableGridEditor } from "@/components/timetable/TimetableGridEditor";
+import { LabAttendanceAllocation, TimetableViewSwitch, type AllocAssignment, type TimetableView } from "@/components/timetable/LabAttendanceAllocation";
 import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import {
@@ -46,6 +47,13 @@ interface LoadedSection {
   semester: number | null;
 }
 
+// The HOD's (and a Sub-HOD's) own Teaching Assignments - the labs among them are what can be allocated.
+async function loadHodAssignments(): Promise<AllocAssignment[]> {
+  const res = await fetch("/api/college/teaching-assignments?dept=true");
+  const json = (await res.json()) as { assignments?: AllocAssignment[] };
+  return json.assignments ?? [];
+}
+
 function SectionTimetable() {
   const myDepartments = useMyDepartments();
   // Optional deep link (?courseId=&year=) - preselects the filters only; the
@@ -66,6 +74,7 @@ function SectionTimetable() {
   const [isLoadingSections, setIsLoadingSections] = useState(false);
   const [isLoadingTimings, setIsLoadingTimings] = useState(false);
   const [loaded, setLoaded] = useState<LoadedSection | null>(null);
+  const [view, setView] = useState<TimetableView>("timetable");
 
   useEffect(() => {
     Promise.all([
@@ -290,6 +299,13 @@ function SectionTimetable() {
         description="Pick a course, year, semester and section, then load that section's timetable to build or publish it"
       />
 
+      <TimetableViewSwitch value={view} onChange={setView} />
+
+      {view === "labs" ? (
+        <LabAttendanceAllocation loadAssignments={loadHodAssignments} />
+      ) : (
+      <>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Find a section</CardTitle>
@@ -433,6 +449,8 @@ function SectionTimetable() {
             Pick a course, year, semester and section above, then press Load Timetable.
           </div>
         )
+      )}
+      </>
       )}
     </div>
   );

@@ -13,6 +13,7 @@ import {
 } from "@/lib/departments/managedBranches";
 import { validateAssignedYears, validateSecondaryDepartmentNames, ensureAssignedYearsOpen } from "@/lib/departments/courseScopeValidation";
 import { cascadeDepartmentRename } from "@/lib/departments/renameCascade";
+import { checkYearsEdit } from "@/lib/departments/yearDependents";
 import { canonicalDepartmentCode, canonicalDepartmentName, findDepartmentConflict } from "@/lib/departments/resolve";
 import { claimDepartmentKeys, departmentKeyConflictMessage, releaseDepartmentKeys } from "@/lib/departments/departmentKeys";
 import { assignSeat, ensureHodSeatForDepartment, hodSeatHoldersByDepartment, renameDepartmentSeat, retireDepartmentSeat, SeatError, seatsCol } from "@/lib/roles/seats";
@@ -703,7 +704,7 @@ export async function PATCH(request: Request) {
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       const targetSnap = await deptRef.get();
-      const targetDept = targetSnap.data() as { parentDepartmentId?: string } | undefined;
+      const targetDept = targetSnap.data() as { parentDepartmentId?: string; name?: string; code?: string } | undefined;
       if (!targetDept?.parentDepartmentId || !scope.ownDepartmentIds.includes(targetDept.parentDepartmentId)) {
         return NextResponse.json({ error: "You can only manage your own sub-departments" }, { status: 403 });
       }
@@ -719,6 +720,28 @@ export async function PATCH(request: Request) {
         );
       }
       const restricted: typeof rawUpdates = {};
+      // An HOD may rename their OWN sub-department (name only - the short code, deactivation and nesting stay
+      // Principal/VP-only). Same appointee fence as the Sub-HOD above: a Department Office head can't. The rename
+      // itself runs the normal path below (uniqueness check, lock docs, cascade into every stored copy).
+      if (typeof rawUpdates.name === "string" && rawUpdates.name.trim() !== "" && canonicalDepartmentName(rawUpdates.name) !== targetDept?.name) {
+        if (isDepartmentOffice(session)) {
+          return NextResponse.json({ error: "Only the Head of Department can rename a sub-department" }, { status: 403 });
+        }
+        restricted.name = rawUpdates.name;
+      }
+      // ...and its short code (same rules: own sub-department, never a Department Office head). The code is only
+      // READ from the department doc everywhere (labels, import lookups) - no row stores a copy - and the uniqueness
+      // lock is swapped atomically with the write below, so nothing filed under the department is affected.
+      if (typeof rawUpdates.code === "string" && canonicalDepartmentCode(rawUpdates.code) !== targetDept?.code) {
+        if (isDepartmentOffice(session)) {
+          return NextResponse.json({ error: "Only the Head of Department can change a sub-department's short code" }, { status: 403 });
+        }
+        const nextCode = canonicalDepartmentCode(rawUpdates.code);
+        if (!nextCode || nextCode.length > 10) {
+          return NextResponse.json({ error: "Short code must be 1-10 characters" }, { status: 400 });
+        }
+        restricted.code = rawUpdates.code;
+      }
       if ("secondaryDepartments" in rawUpdates) restricted.secondaryDepartments = rawUpdates.secondaryDepartments;
       if ("managedDepartments" in rawUpdates) restricted.managedDepartments = rawUpdates.managedDepartments;
       updates = restricted;
@@ -922,6 +945,14 @@ export async function PATCH(request: Request) {
       }
 
       if ("clear" in courseScope && courseScope.clear) {
+        // Clearing the per-course override falls back to the flat Years Taught - refuse when that leaves the
+        // department with none (an empty scope must never become "all years"), or strands data.
+        const clearRefusal = await checkYearsEdit(db, session.collegeId, deptId, (d) => {
+          const { [courseScope.catalogId]: _dropped, ...rest } = d.courseScopes ?? {};
+          void _dropped;
+          return { ...d, courseScopes: rest };
+        });
+        if (clearRefusal) return NextResponse.json({ ...clearRefusal.body }, { status: clearRefusal.status });
         // Same overlapping-path guard as below - dropping the whole entry
         // conflicts with a sibling dot-path write the cascade above may have
         // already queued for this exact catalogId.
@@ -929,7 +960,17 @@ export async function PATCH(request: Request) {
         courseScopePatch[`courseScopes.${courseScope.catalogId}`] = FieldValue.delete();
       } else if ("assignedYears" in courseScope) {
         const durationYears = (courseSnap.docs[0].data() as { durationYears?: number }).durationYears ?? 0;
+        if (!Array.isArray(courseScope.assignedYears)) {
+          return NextResponse.json({ error: "assignedYears must be a list of years" }, { status: 400 });
+        }
         const years = Array.from(new Set(courseScope.assignedYears.map(Number).filter((y) => Number.isFinite(y))));
+        // An empty list is not a way to say "all years" (lib/college/taughtYears.ts) - pick the years, or clear.
+        if (years.length === 0) {
+          return NextResponse.json({ error: "Select at least one year this department teaches this course" }, { status: 400 });
+        }
+        if (years.some((y) => !Number.isInteger(y) || y < 1)) {
+          return NextResponse.json({ error: "Years must be whole numbers starting from 1" }, { status: 400 });
+        }
         const tooLong = years.filter((y) => y > durationYears);
         if (tooLong.length > 0) {
           return NextResponse.json(
@@ -937,6 +978,14 @@ export async function PATCH(request: Request) {
             { status: 400 }
           );
         }
+        // Refuse to remove a year that sections / students / assignments / slots / subject assignments /
+        // timings / exam configurations are still filed under (and never leave a department with none).
+        const yearsRefusal = await checkYearsEdit(db, session.collegeId, deptId, (d) => ({
+          ...d,
+          courseScopes: { ...(d.courseScopes ?? {}), [courseScope.catalogId]: { assignedYears: years, secondaryDepartments: d.courseScopes?.[courseScope.catalogId]?.secondaryDepartments ?? d.secondaryDepartments ?? [] } },
+        }));
+        if (yearsRefusal) return NextResponse.json({ ...yearsRefusal.body }, { status: yearsRefusal.status });
+
         // Opens whichever of these years the college hasn't already opened -
         // Years Taught no longer requires pre-opening them one at a time via
         // the old "+ Add Year" button before a longer course's later years
@@ -1042,6 +1091,12 @@ export async function PATCH(request: Request) {
     if (updates.assignedYears) {
       const yearsError = await validateAssignedYears(db, session.collegeId, updates.assignedYears);
       if (yearsError) return NextResponse.json({ error: yearsError }, { status: 400 });
+    }
+    // The legacy flat Years Taught gets the same protection as the per-course one.
+    if (updates.assignedYears !== undefined) {
+      const flatYears = updates.assignedYears;
+      const flatRefusal = await checkYearsEdit(db, session.collegeId, deptId, (d) => ({ ...d, assignedYears: flatYears }));
+      if (flatRefusal) return NextResponse.json({ ...flatRefusal.body }, { status: flatRefusal.status });
     }
 
     // Promote a sub-department back to top-level (see the field's own doc

@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -175,27 +175,33 @@ export default function EditDepartmentPage() {
 
   if (loading) {
     return (
-      <div className="max-w-xl">
+      <div className="w-full max-w-4xl mx-auto space-y-6 pb-12">
         <PageHeader title="Edit Department" description="Loading…" />
       </div>
     );
   }
 
+  // Same page shape as Add Department (principal/departments/new): wide container, then Department Details,
+  // Core Departments and Structure as separate cards. Only the layout is shared - every field, check and save below
+  // is the Edit page's own, unchanged. (Courses are managed from the department's own page, so Add's Courses card
+  // has no counterpart here.)
   return (
-    <div className="max-w-xl">
+    <div className="w-full max-w-4xl mx-auto space-y-6 pb-12">
       <PageHeader
         title="Edit Department"
         description={department?.name}
       />
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Department Details</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Department Details</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="dept-name">Department Name *</Label>
+              <Label htmlFor="dept-name">
+                Department Name * <span className="font-normal text-muted-foreground">(as per AICTE)</span>
+              </Label>
               <Input
                 id="dept-name"
                 {...register("name")}
@@ -227,7 +233,17 @@ export default function EditDepartmentPage() {
                 <Link href="/principal/role-assignments" className="text-primary underline underline-offset-2">Role Assignments</Link>.
               </p>
             </div>
+          </CardContent>
+        </Card>
 
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Core Departments</CardTitle>
+            <CardDescription>
+              Which departments this department&apos;s students move on to.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
             <YearsTaughtAndSecondaryFields
               showYears={false}
               assignedYears={[]}
@@ -242,71 +258,79 @@ export default function EditDepartmentPage() {
               secondaryDepartments={secondaryDepartments}
               onToggleSecondaryDepartment={toggleSecondaryDepartment}
             />
+          </CardContent>
+        </Card>
 
-            {!department?.parentDepartmentId && (
-              <div className="space-y-3 rounded-md border p-3">
-                <div className="flex items-start gap-2">
-                  <Checkbox
-                    id="dept-is-freshman"
-                    checked={isFreshman}
-                    onCheckedChange={(v) => setIsFreshman(v === true)}
-                  />
-                  <div className="space-y-1">
-                    <Label htmlFor="dept-is-freshman" className="font-normal">Freshman&apos;s Department</Label>
-                    <p className="text-xs text-muted-foreground">
-                      Tick this if the department is the shared first year - where students sit in year 1 before
-                      moving on to their branch. It gets a &quot;Freshman&apos;s Department&quot; badge, and
-                      year-1 students can only be filed under it (or its sub-departments). Unticking it stops
-                      the department being treated as a shared first year, even if it teaches year 1 and has
-                      sub-departments.
-                    </p>
-                  </div>
+        {!department?.parentDepartmentId && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Structure</CardTitle>
+              <CardDescription>
+                How this department is organised and where its students begin.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-start gap-2">
+                <Checkbox
+                  id="dept-is-freshman"
+                  checked={isFreshman}
+                  onCheckedChange={(v) => setIsFreshman(v === true)}
+                />
+                <div className="space-y-1">
+                  <Label htmlFor="dept-is-freshman" className="font-normal">Freshman&apos;s Department</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Tick this if the department is the shared first year - where students sit in year 1 before
+                    moving on to their branch. It gets a &quot;Freshman&apos;s Department&quot; badge, and
+                    year-1 students can only be filed under it (or its sub-departments). Unticking it stops
+                    the department being treated as a shared first year, even if it teaches year 1 and has
+                    sub-departments.
+                  </p>
                 </div>
-
-                <div className="flex items-start gap-2 border-t pt-3">
-                  <Checkbox
-                    id="dept-has-subdepts"
-                    checked={hasSubDepartments}
-                    onCheckedChange={(v) => setHasSubDepartments(v === true)}
-                  />
-                  <div className="space-y-1">
-                    <Label htmlFor="dept-has-subdepts" className="font-normal">Has sub-departments</Label>
-                    <p className="text-xs text-muted-foreground">
-                      Tick this if the department is divided into smaller departments. Its HOD then gets a
-                      &quot;Sub-Departments&quot; page where they can add each one and give it a head.
-                    </p>
-                  </div>
-                </div>
-
-                {hasSubDepartments && (
-                  <div className="flex items-start gap-2 ml-6 pt-3 border-t">
-                    <Checkbox
-                      id="dept-parent-runs-own-sections"
-                      checked={parentRunsOwnSections}
-                      onCheckedChange={(v) => setParentRunsOwnSections(v === true)}
-                    />
-                    <div className="space-y-1">
-                      <Label htmlFor="dept-parent-runs-own-sections" className="font-normal">
-                        This department also has its own sections/students, separate from its sub-departments
-                      </Label>
-                      <p className="text-xs text-muted-foreground">
-                        Leave this ON if the department teaches its own classes as well as having
-                        sub-departments. Turn it OFF if it only organises its sub-departments and never has
-                        students of its own - the students belong to the sub-departments instead.
-                      </p>
-                    </div>
-                  </div>
-                )}
               </div>
-            )}
 
-            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
-              <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
-              <Button type="submit" loading={isSubmitting}>Save Changes</Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+              <div className="flex items-start gap-2 border-t pt-3">
+                <Checkbox
+                  id="dept-has-subdepts"
+                  checked={hasSubDepartments}
+                  onCheckedChange={(v) => setHasSubDepartments(v === true)}
+                />
+                <div className="space-y-1">
+                  <Label htmlFor="dept-has-subdepts" className="font-normal">Has sub-departments</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Tick this if the department is divided into smaller departments. Its HOD then gets a
+                    &quot;Sub-Departments&quot; page where they can add each one and give it a head.
+                  </p>
+                </div>
+              </div>
+
+              {hasSubDepartments && (
+                <div className="flex items-start gap-2 ml-6 border-t pt-3">
+                  <Checkbox
+                    id="dept-parent-runs-own-sections"
+                    checked={parentRunsOwnSections}
+                    onCheckedChange={(v) => setParentRunsOwnSections(v === true)}
+                  />
+                  <div className="space-y-1">
+                    <Label htmlFor="dept-parent-runs-own-sections" className="font-normal">
+                      This department also has its own sections/students, separate from its sub-departments
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Leave this ON if the department teaches its own classes as well as having
+                      sub-departments. Turn it OFF if it only organises its sub-departments and never has
+                      students of its own - the students belong to the sub-departments instead.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
+          <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
+          <Button type="submit" loading={isSubmitting}>Save Changes</Button>
+        </div>
+      </form>
 
       <ConfirmDialog
         open={!!existingSectionsWarning}

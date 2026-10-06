@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/hooks/useToast";
 import { formatDMY } from "@/lib/utils";
 import type { Course, ExamMidSchedule, ExamMidSettings } from "@/types";
+import { useCourseSemesterPlan } from "@/hooks/useCourseSemesterPlan";
 
 // Local calendar date, not toISOString() (that's UTC - would read as
 // yesterday for anyone east of UTC late at night). Same helper as Circulars.
@@ -203,12 +204,17 @@ function MidScheduleFormDialog({
 
   const courseNameOptions = useMemo(() => [...new Set(courses.map((c) => c.name))].sort(), [courses]);
 
-  // Semesters, not years - no department dimension in this form, same
-  // convention as Circulars' NoticeFormDialog.
+  // Semesters, not years - no department dimension in this form, same convention as Circulars'
+  // NoticeFormDialog: the longest course of this name, semesters from its own setup.
+  const longestCourse = useMemo(
+    () => courses.filter((c) => c.name === courseName).sort((a, b) => b.durationYears - a.durationYears)[0] ?? null,
+    [courses, courseName]
+  );
+  const semesterPlan = useCourseSemesterPlan(longestCourse);
   const totalSemesters = useMemo(() => {
     if (schedule && schedule.courseName === courseName) return schedule.totalSemesters;
-    return Math.max(0, ...courses.filter((c) => c.name === courseName).map((c) => c.durationYears * 2));
-  }, [courses, courseName, schedule]);
+    return semesterPlan.semesters.length;
+  }, [semesterPlan, courseName, schedule]);
   const semesterOptions = useMemo(() => Array.from({ length: totalSemesters || 0 }, (_, i) => i + 1), [totalSemesters]);
   const midOptions = useMemo(() => Array.from({ length: midCount }, (_, i) => i + 1), [midCount]);
 

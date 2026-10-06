@@ -13,7 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
-import type { CourseYearTiming, DayOfWeek, FacultyAssignmentRequest, FacultyMember } from "@/types";
+import type { CourseYearTiming, DayOfWeek, FacultyAssignmentRequest, FacultyMember, RequestAllocation } from "@/types";
+import { requestAllocations } from "@/lib/teaching/requestAllocations";
 import { DAY_LABELS } from "@/types";
 
 const WORKING_DAYS: DayOfWeek[] = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
@@ -59,7 +60,11 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
   // instead of navigating away to place the timetable themselves (see
   // FacultyAssignmentRequest.busyPeriods and loadTimetableContext's merge of
   // it into busyFaculty). Only one request's builder is open at a time.
+  // Keyed `${requestId}::${facultyId}` - a request can have several allocated faculty,
+  // each with their own busy periods.
   const [busyBuilderOpenId, setBusyBuilderOpenId] = useState<string | null>(null);
+  // The request whose "+ Add another faculty" picker is open.
+  const [addingAnotherId, setAddingAnotherId] = useState<string | null>(null);
   // Every year's own CourseYearTiming for the request's course, keyed by
   // request id - lets the Incharge pick a Year explicitly (defaulting to the
   // request's own) rather than being locked to whatever year the request
@@ -71,7 +76,7 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
   const [pickerDay, setPickerDay] = useState<DayOfWeek>("MON");
   const [pickerYear, setPickerYear] = useState(1);
   const [pickerPeriod, setPickerPeriod] = useState(1);
-  const [busySavingId, setBusySavingId] = useState<string | null>(null);
+  const [busySavingId, setBusySavingId] = useState<string | null>(null); // composite key, like busyBuilderOpenId
   const [notifyingId, setNotifyingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -129,7 +134,9 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
       });
       const json = await res.json() as { error?: string };
       if (!res.ok) throw new Error(json.error ?? "Failed to allocate");
-      toast({ variant: "success", title: "Faculty assigned - the requester can now place it on their timetable" });
+      toast({ variant: "success", title: "Faculty allocated", description: "Mark their busy periods, add another faculty if needed, then Notify department & close." });
+      setPickedFaculty((p) => ({ ...p, [reqId]: "" }));
+      setAddingAnotherId(null);
       await load();
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to allocate" });
@@ -156,18 +163,21 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
     }
   }
 
-  /** Opens (or closes) one request's busy-periods builder, lazily fetching that course-year's period times on first open. */
-  async function toggleBusyBuilder(r: FacultyAssignmentRequest) {
-    if (busyBuilderOpenId === r.id) {
+  const busyKey = (r: FacultyAssignmentRequest, a: RequestAllocation) => `${r.id}::${a.facultyId}`;
+
+  /** Opens (or closes) one allocated faculty's busy-periods builder, lazily fetching that course-year's period times on first open. */
+  async function toggleBusyBuilder(r: FacultyAssignmentRequest, a: RequestAllocation) {
+    const key = busyKey(r, a);
+    if (busyBuilderOpenId === key) {
       setBusyBuilderOpenId(null);
       return;
     }
-    setBusyBuilderOpenId(r.id);
+    setBusyBuilderOpenId(key);
     setPickerDay("MON");
     setPickerYear(Number(r.year) || 1);
     setPickerPeriod(1);
-    if (!(r.id in busyDraftByRequest)) {
-      setBusyDraftByRequest((prev) => ({ ...prev, [r.id]: r.busyPeriods ?? [] }));
+    if (!(key in busyDraftByRequest)) {
+      setBusyDraftByRequest((prev) => ({ ...prev, [key]: a.busyPeriods ?? [] }));
     }
     if (!(r.id in timingsByRequest)) {
       setLoadingTimingId(r.id);
@@ -183,39 +193,40 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
     }
   }
 
-  /** Writes the full busy-periods list for one request straight through - every add/remove below is saved immediately, no separate "Save" step. */
-  async function persistBusyPeriods(r: FacultyAssignmentRequest, next: { day: DayOfWeek; period: number; year?: number }[]) {
-    const previous = busyDraftByRequest[r.id] ?? [];
-    setBusyDraftByRequest((prev) => ({ ...prev, [r.id]: next }));
-    setBusySavingId(r.id);
+  /** Writes the full busy-periods list for one allocated faculty straight through - every add/remove below is saved immediately, no separate "Save" step. */
+  async function persistBusyPeriods(r: FacultyAssignmentRequest, a: RequestAllocation, next: { day: DayOfWeek; period: number; year?: number }[]) {
+    const key = busyKey(r, a);
+    const previous = busyDraftByRequest[key] ?? [];
+    setBusyDraftByRequest((prev) => ({ ...prev, [key]: next }));
+    setBusySavingId(key);
     try {
       const res = await fetch(`/api/college/faculty-assignment-requests/${r.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "set_busy_periods", busyPeriods: next }),
+        body: JSON.stringify({ action: "set_busy_periods", facultyId: a.facultyId, busyPeriods: next }),
       });
       const json = await res.json() as { error?: string; busyPeriods?: { day: DayOfWeek; period: number; year?: number }[]; conflicts?: string[] };
       if (!res.ok) throw new Error(json.error ?? "Failed to update busy periods");
       if (json.conflicts?.length) {
         toast({ variant: "destructive", title: `Clashes with ${r.requestingDepartment}'s timetable: ${json.conflicts.join(", ")}`, description: "They have been notified to move it." });
       }
-      if (json.busyPeriods) setBusyDraftByRequest((prev) => ({ ...prev, [r.id]: json.busyPeriods! }));
+      if (json.busyPeriods) setBusyDraftByRequest((prev) => ({ ...prev, [key]: json.busyPeriods! }));
     } catch (err) {
-      setBusyDraftByRequest((prev) => ({ ...prev, [r.id]: previous }));
+      setBusyDraftByRequest((prev) => ({ ...prev, [key]: previous }));
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to update busy periods" });
     } finally {
       setBusySavingId(null);
     }
   }
 
-  function addBusyPeriod(r: FacultyAssignmentRequest) {
-    const current = busyDraftByRequest[r.id] ?? [];
+  function addBusyPeriod(r: FacultyAssignmentRequest, a: RequestAllocation) {
+    const current = busyDraftByRequest[busyKey(r, a)] ?? [];
     if (current.some((bp) => bp.day === pickerDay && bp.period === pickerPeriod && bp.year === pickerYear)) return;
-    void persistBusyPeriods(r, [...current, { day: pickerDay, period: pickerPeriod, year: pickerYear }]);
+    void persistBusyPeriods(r, a, [...current, { day: pickerDay, period: pickerPeriod, year: pickerYear }]);
   }
 
-  function removeBusyPeriod(r: FacultyAssignmentRequest, idx: number) {
-    void persistBusyPeriods(r, (busyDraftByRequest[r.id] ?? []).filter((_, i) => i !== idx));
+  function removeBusyPeriod(r: FacultyAssignmentRequest, a: RequestAllocation, idx: number) {
+    void persistBusyPeriods(r, a, (busyDraftByRequest[busyKey(r, a)] ?? []).filter((_, i) => i !== idx));
   }
 
   /** The lending side's own "ready to schedule" nudge - see the route's own doc-comment on notify_timetable_updated. */
@@ -239,7 +250,7 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
     }
   }
 
-  /** Edit after close: reopens the builder (view-only until now) - Notify & close again when done. */
+  /** Edit after close: reopens the request (view-only until now) so busy periods can change or another faculty can be added - Notify & close again when done. */
   async function handleEdit(r: FacultyAssignmentRequest) {
     setNotifyingId(r.id);
     try {
@@ -250,9 +261,9 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
       });
       const json = await res.json() as { error?: string };
       if (!res.ok) throw new Error(json.error ?? "Failed to reopen");
+      // Drop any cached drafts for this request so each builder re-reads what was saved.
+      setBusyDraftByRequest((prev) => Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith(`${r.id}::`))));
       await load();
-      setBusyDraftByRequest((prev) => ({ ...prev, [r.id]: r.busyPeriods ?? [] }));
-      await toggleBusyBuilder({ ...r, busyClosed: false });
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to reopen" });
     } finally {
@@ -314,18 +325,24 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
                   {statusBadge(r.status)}
                 </div>
 
-                {r.status === "ALLOCATED" && (
-                  <div className="space-y-2">
+                {r.status === "ALLOCATED" && (() => {
+                  const allocs = requestAllocations(r);
+                  const takenIds = new Set(allocs.map((x) => x.facultyId));
+                  const pickable = faculty.filter((f) => !takenIds.has(f.id));
+                  return (
+                  <div className="space-y-3">
                     <div className="flex items-center justify-between gap-3 flex-wrap">
                       <p className="text-xs text-muted-foreground">
-                        Allocated: <span className="text-foreground font-medium">{r.allocatedFacultyName}</span>
-                        {tab === "outgoing" && " - place it on your own Timetable page once the lending department shares its busy periods (or notifies you it's fully free)"}
+                        Allocated ({allocs.length}): <span className="text-foreground font-medium">{allocs.map((x) => x.facultyName).join(", ")}</span>
+                        {tab === "outgoing" && (r.busyClosed
+                          ? " - the lending department has shared the busy periods, so you can place it on your own Timetable page"
+                          : ` - waiting for ${r.targetDepartmentName} to share the busy periods and notify you; you can place it on your Timetable page after that`)}
                       </p>
                       {/* The lending side never places the requester's periods
-                          themselves - they only declare when the allocated
-                          faculty is already busy, then the requester places
-                          the subject via their own Timetable page's "Add a
-                          subject" flow, which is blocked from those cells. */}
+                          themselves - they allocate one or more faculty, declare
+                          when each is already busy, and close ONCE; only then does
+                          the requester place the subject via their own Timetable
+                          page's "Add a subject" flow, blocked from those cells. */}
                       {tab === "incoming" ? (
                         r.busyClosed ? (
                           <div className="flex items-center gap-2">
@@ -336,137 +353,183 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
                           </div>
                         ) : (
                           <div className="flex items-center gap-2">
-                            <Button size="sm" variant="outline" onClick={() => void toggleBusyBuilder(r)}>
-                              <CalendarDays className="h-3.5 w-3.5 mr-1.5" />
-                              {busyBuilderOpenId === r.id ? "Hide" : "Mark busy periods"}
+                            <Button size="sm" variant="outline" onClick={() => setAddingAnotherId(addingAnotherId === r.id ? null : r.id)}>
+                              <Plus className="h-3.5 w-3.5 mr-1.5" />Add another faculty
                             </Button>
-                            <Button size="sm" variant="outline" loading={notifyingId === r.id} onClick={() => void handleNotify(r)}>
+                            <Button size="sm" loading={notifyingId === r.id} onClick={() => void handleNotify(r)}>
                               <Send className="h-3.5 w-3.5 mr-1.5" />Notify department &amp; close
                             </Button>
                           </div>
                         )
-                      ) : (
+                      ) : r.busyClosed ? (
                         <Button size="sm" variant="outline" asChild>
                           <Link href={timetableHrefFor(r)}>
                             <CalendarDays className="h-3.5 w-3.5 mr-1.5" />Place on your timetable
                           </Link>
                         </Button>
+                      ) : (
+                        <Button size="sm" variant="outline" disabled title={`Available once ${r.targetDepartmentName} notifies you`}>
+                          <CalendarDays className="h-3.5 w-3.5 mr-1.5" />Place on your timetable
+                        </Button>
                       )}
                     </div>
 
-                    {/* View: what was declared. Read-only once closed (and for the
-                        requesting side), editable only through the builder below. */}
-                    {(r.busyClosed || tab === "outgoing") && (
-                      <div className="rounded-md border bg-muted/20 p-3 space-y-1.5">
-                        <p className="text-xs font-medium">Busy periods declared for {r.allocatedFacultyName ?? "this faculty"}</p>
-                        {(r.busyPeriods ?? []).length === 0 ? (
-                          <p className="text-xs text-muted-foreground">None - the faculty is free for every period.</p>
-                        ) : (
-                          <div className="flex flex-wrap gap-1.5">
-                            {(r.busyPeriods ?? []).map((bp) => (
-                              <span key={`${bp.day}_${bp.period}_${bp.year ?? ""}`} className="rounded-full border bg-background px-2 py-1 text-[11px]">
-                                {bp.year ? `${ordinalYear(bp.year)} · ` : ""}{DAY_LABELS[bp.day]} P{bp.period}
-                              </span>
-                            ))}
-                          </div>
-                        )}
+                    {tab === "incoming" && !r.busyClosed && addingAnotherId === r.id && (
+                      <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/20 p-3">
+                        <Select
+                          value={pickedFaculty[r.id] ?? ""}
+                          onValueChange={(v) => setPickedFaculty((p) => ({ ...p, [r.id]: v }))}
+                        >
+                          <SelectTrigger className="w-64"><SelectValue placeholder={pickable.length ? "Select another faculty" : "No other faculty available"} /></SelectTrigger>
+                          <SelectContent>
+                            {pickable.map((f) => <SelectItem key={f.id} value={f.id}>{facultyDisplayName(f)}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                        <Button size="sm" loading={busyId === r.id} disabled={!pickedFaculty[r.id]} onClick={() => void handleAllocate(r.id)}>
+                          Allocate
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setAddingAnotherId(null)}>Cancel</Button>
                       </div>
                     )}
 
-                    {tab === "incoming" && !r.busyClosed && busyBuilderOpenId === r.id && (() => {
-                      const activeTiming = (timingsByRequest[r.id] ?? []).find((t) => Number(t.year) === pickerYear) ?? null;
-                      const saving = busySavingId === r.id;
+                    {allocs.map((a) => {
+                      const key = busyKey(r, a);
+                      const mine = a.busyPeriods ?? [];
                       return (
-                        <div className="rounded-md border bg-muted/20 p-3 space-y-3">
-                          <p className="text-xs text-muted-foreground">
-                            Mark when {r.allocatedFacultyName ?? "this faculty"} already has other classes, by Year, Day
-                            and Period - each one saves immediately. {r.requestingDepartment} will be blocked from
-                            placing this subject at any period marked busy here; once you&apos;re done, use Notify
-                            department &amp; close so they know to go add it to their timetable.
-                          </p>
-
-                          <div className="flex flex-wrap items-end gap-2">
-                            <div className="space-y-1">
-                              <p className="text-[11px] text-muted-foreground">Year</p>
-                              <Select
-                                value={String(pickerYear)}
-                                onValueChange={(v) => { setPickerYear(Number(v)); setPickerPeriod(1); }}
-                              >
-                                <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                  {[1, 2, 3, 4].map((y) => <SelectItem key={y} value={String(y)}>{ordinalYear(y)}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-[11px] text-muted-foreground">Day</p>
-                              <Select value={pickerDay} onValueChange={(v) => setPickerDay(v as DayOfWeek)}>
-                                <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                  {WORKING_DAYS.map((d) => <SelectItem key={d} value={d}>{DAY_LABELS[d]}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-[11px] text-muted-foreground">Period</p>
-                              <Select
-                                value={String(pickerPeriod)}
-                                onValueChange={(v) => setPickerPeriod(Number(v))}
-                                disabled={!activeTiming}
-                              >
-                                <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                  {Array.from({ length: activeTiming?.numberOfPeriods ?? 0 }, (_, i) => i + 1).map((p) => (
-                                    <SelectItem key={p} value={String(p)}>
-                                      P{p}{(() => { const t = activeTiming?.periods?.find((x) => x.period === p); return t ? ` (${t.startTime}-${t.endTime})` : ""; })()}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              loading={saving}
-                              disabled={!activeTiming || saving}
-                              onClick={() => addBusyPeriod(r)}
-                            >
-                              <Plus className="h-3.5 w-3.5 mr-1" />Add
-                            </Button>
-                          </div>
-                          {!activeTiming && (
-                            <p className="text-xs text-muted-foreground">
-                              {loadingTimingId === r.id ? "Loading…" : `${ordinalYear(pickerYear)} has no period timings configured yet.`}
+                        <div key={a.facultyId} className="rounded-md border bg-muted/20 p-3 space-y-2">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <p className="text-xs font-medium">
+                              {a.facultyName || "Faculty"}
+                              <span className="ml-2 font-normal text-muted-foreground">
+                                {mine.length === 0 ? "no busy periods" : `${mine.length} busy period${mine.length === 1 ? "" : "s"}`}
+                              </span>
                             </p>
+                            {tab === "incoming" && !r.busyClosed && (
+                              <Button size="sm" variant="outline" onClick={() => void toggleBusyBuilder(r, a)}>
+                                <CalendarDays className="h-3.5 w-3.5 mr-1.5" />
+                                {busyBuilderOpenId === key ? "Hide" : "Mark busy periods"}
+                              </Button>
+                            )}
+                          </div>
+
+                          {/* View: what was declared. Read-only once closed (and for the
+                              requesting side), editable only through the builder below. */}
+                          {(r.busyClosed || tab === "outgoing") && (
+                            mine.length === 0 ? (
+                              <p className="text-xs text-muted-foreground">None - the faculty is free for every period.</p>
+                            ) : (
+                              <div className="flex flex-wrap gap-1.5">
+                                {mine.map((bp) => (
+                                  <span key={`${bp.day}_${bp.period}_${bp.year ?? ""}`} className="rounded-full border bg-background px-2 py-1 text-[11px]">
+                                    {bp.year ? `${ordinalYear(bp.year)} · ` : ""}{DAY_LABELS[bp.day]} P{bp.period}
+                                  </span>
+                                ))}
+                              </div>
+                            )
                           )}
 
-                          {(busyDraftByRequest[r.id] ?? []).length > 0 && (
-                            <div className="flex flex-wrap gap-1.5">
-                              {(busyDraftByRequest[r.id] ?? []).map((bp, idx) => (
-                                <span
-                                  key={`${bp.day}_${bp.period}_${bp.year ?? ""}`}
-                                  className="inline-flex items-center gap-1 rounded-full border bg-background px-2 py-1 text-[11px]"
-                                >
-                                  {bp.year ? `${ordinalYear(bp.year)} · ` : ""}{DAY_LABELS[bp.day]} P{bp.period}
-                                  <button
+                          {tab === "incoming" && !r.busyClosed && busyBuilderOpenId === key && (() => {
+                            const activeTiming = (timingsByRequest[r.id] ?? []).find((t) => Number(t.year) === pickerYear) ?? null;
+                            const saving = busySavingId === key;
+                            const draft = busyDraftByRequest[key] ?? mine;
+                            return (
+                              <div className="space-y-3 border-t pt-3">
+                                <p className="text-xs text-muted-foreground">
+                                  Mark when {a.facultyName || "this faculty"} already has other classes, by Year, Day
+                                  and Period - each one saves immediately. {r.requestingDepartment} will be blocked from
+                                  placing this subject at any period marked busy here. When every faculty is done, use Notify
+                                  department &amp; close once so they know to go add it to their timetable.
+                                </p>
+
+                                <div className="flex flex-wrap items-end gap-2">
+                                  <div className="space-y-1">
+                                    <p className="text-[11px] text-muted-foreground">Year</p>
+                                    <Select
+                                      value={String(pickerYear)}
+                                      onValueChange={(v) => { setPickerYear(Number(v)); setPickerPeriod(1); }}
+                                    >
+                                      <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                                      <SelectContent>
+                                        {/* The years this course has timings for, plus the request's own year - never an assumed 1-4. */}
+                                        {Array.from(new Set([...(timingsByRequest[r.id] ?? []).map((t) => Number(t.year)).filter(Boolean), r.year]))
+                                          .sort((x, y) => x - y)
+                                          .map((y) => <SelectItem key={y} value={String(y)}>{ordinalYear(y)}</SelectItem>)}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <p className="text-[11px] text-muted-foreground">Day</p>
+                                    <Select value={pickerDay} onValueChange={(v) => setPickerDay(v as DayOfWeek)}>
+                                      <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                                      <SelectContent>
+                                        {WORKING_DAYS.map((d) => <SelectItem key={d} value={d}>{DAY_LABELS[d]}</SelectItem>)}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <p className="text-[11px] text-muted-foreground">Period</p>
+                                    <Select
+                                      value={String(pickerPeriod)}
+                                      onValueChange={(v) => setPickerPeriod(Number(v))}
+                                      disabled={!activeTiming}
+                                    >
+                                      <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+                                      <SelectContent>
+                                        {Array.from({ length: activeTiming?.numberOfPeriods ?? 0 }, (_, i) => i + 1).map((p) => (
+                                          <SelectItem key={p} value={String(p)}>
+                                            P{p}{(() => { const t = activeTiming?.periods?.find((x) => x.period === p); return t ? ` (${t.startTime}-${t.endTime})` : ""; })()}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <Button
                                     type="button"
-                                    disabled={saving}
-                                    onClick={() => removeBusyPeriod(r, idx)}
-                                    className="text-muted-foreground hover:text-destructive disabled:opacity-50"
-                                    aria-label={`Remove ${DAY_LABELS[bp.day]} period ${bp.period}`}
+                                    size="sm"
+                                    variant="outline"
+                                    loading={saving}
+                                    disabled={!activeTiming || saving}
+                                    onClick={() => addBusyPeriod(r, a)}
                                   >
-                                    <X className="h-3 w-3" />
-                                  </button>
-                                </span>
-                              ))}
-                            </div>
-                          )}
+                                    <Plus className="h-3.5 w-3.5 mr-1" />Add
+                                  </Button>
+                                </div>
+                                {!activeTiming && (
+                                  <p className="text-xs text-muted-foreground">
+                                    {loadingTimingId === r.id ? "Loading…" : `${ordinalYear(pickerYear)} has no period timings configured yet.`}
+                                  </p>
+                                )}
+
+                                {draft.length > 0 && (
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {draft.map((bp, idx) => (
+                                      <span
+                                        key={`${bp.day}_${bp.period}_${bp.year ?? ""}`}
+                                        className="inline-flex items-center gap-1 rounded-full border bg-background px-2 py-1 text-[11px]"
+                                      >
+                                        {bp.year ? `${ordinalYear(bp.year)} · ` : ""}{DAY_LABELS[bp.day]} P{bp.period}
+                                        <button
+                                          type="button"
+                                          disabled={saving}
+                                          onClick={() => removeBusyPeriod(r, a, idx)}
+                                          className="text-muted-foreground hover:text-destructive disabled:opacity-50"
+                                          aria-label={`Remove ${DAY_LABELS[bp.day]} period ${bp.period}`}
+                                        >
+                                          <X className="h-3 w-3" />
+                                        </button>
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
                       );
-                    })()}
+                    })}
                   </div>
-                )}
+                  );
+                })()}
                 {r.status === "DECLINED" && r.declineReason && (
                   <p className="text-xs text-muted-foreground">Reason: {r.declineReason}</p>
                 )}

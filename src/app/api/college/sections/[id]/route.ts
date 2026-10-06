@@ -8,6 +8,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment, canHodEditDepartmentId } from "@/lib/departments/scope";
 import { canHodExclusivelyOwnDepartmentYear, type DepartmentYearRow } from "@/lib/departments/managedBranches";
+import { notConfiguredMessage } from "@/lib/college/taughtYears";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
@@ -176,9 +177,14 @@ export async function PATCH(
               allowedYears = resolveDepartmentCourseScope(parentSnap.data() as typeof deptDoc, course.catalogId).assignedYears;
             }
           }
-          if (allowedYears.length > 0 && !allowedYears.includes(targetYear)) {
+          // Empty = not configured, NOT unrestricted (lib/college/taughtYears.ts).
+          if (!allowedYears.includes(targetYear)) {
             return NextResponse.json(
-              { error: `"${sectionDept}" is not assigned to teach Year ${targetYear} for ${course.name}` },
+              {
+                error: allowedYears.length === 0
+                  ? notConfiguredMessage(sectionDept, targetYear, course.name)
+                  : `"${sectionDept}" is not assigned to teach Year ${targetYear} for ${course.name}`,
+              },
               { status: 400 }
             );
           }
@@ -305,8 +311,16 @@ export async function PATCH(
           assignedYears = resolveDepartmentCourseScope(parentSnap.data() as typeof targetDept, course?.catalogId).assignedYears;
         }
       }
-      if (targetYear != null && assignedYears.length > 0 && !assignedYears.includes(Number(targetYear))) {
-        return NextResponse.json({ error: `"${targetDeptName}" is not assigned to teach Year ${targetYear}` }, { status: 400 });
+      // Empty = not configured, NOT unrestricted (lib/college/taughtYears.ts).
+      if (targetYear != null && !assignedYears.includes(Number(targetYear))) {
+        return NextResponse.json(
+          {
+            error: assignedYears.length === 0
+              ? notConfiguredMessage(targetDeptName, targetYear, course?.name)
+              : `"${targetDeptName}" is not assigned to teach Year ${targetYear}`,
+          },
+          { status: 400 }
+        );
       }
 
       // Per-course override aware, same as assignedYears above - a department

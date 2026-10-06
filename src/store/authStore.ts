@@ -37,14 +37,24 @@ export const useAuthStore = create<AuthState>()(
       // long-stale college's data instead of nothing. Reset it whenever the
       // incoming user is a different uid than whoever was signed in before;
       // keep it when it's the same uid (an ordinary reload/token refresh).
+      //
+      // Read-only access (RESIGNED/RETIRED faculty - see FMSUser.readOnlyAccess) is decided by
+      // /api/auth/session and carried by the user object. Plenty of callers replace the user with
+      // a copy that never heard of it (a fresh Firestore profile, a photo/name update, the login
+      // page), which used to silently DROP the flag - the banner, the hidden menu and the hidden
+      // edit buttons all vanished until the next reload. So when the same person is set again and
+      // the incoming user does not say either way (undefined), a flag already in the store is
+      // kept. useAuth always states it explicitly (true/false) after asking the server, so a
+      // reinstatement still clears it.
       setUser: (user) =>
-        set((state) => ({
-          user,
-          selectedCollegeId:
-            user && state.user && user.uid === state.user.uid
-              ? state.selectedCollegeId
-              : null,
-        })),
+        set((state) => {
+          const sameUser = !!user && !!state.user && user.uid === state.user.uid;
+          const keepReadOnly = sameUser && user!.readOnlyAccess === undefined && state.user!.readOnlyAccess === true;
+          return {
+            user: keepReadOnly ? { ...user!, readOnlyAccess: true, roles: state.user!.roles } : user,
+            selectedCollegeId: sameUser ? state.selectedCollegeId : null,
+          };
+        }),
       setFirebaseToken: (firebaseToken) => set({ firebaseToken }),
       setLoading: (isLoading) => set({ isLoading }),
       setSelectedCollegeId: (selectedCollegeId) => set({ selectedCollegeId }),

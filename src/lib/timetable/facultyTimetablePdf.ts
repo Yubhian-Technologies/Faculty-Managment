@@ -73,9 +73,7 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
   ).join("");
 
   const bodyRows = periods.map((period) => {
-    const rowSlots = days
-      .map((d) => slots.find((s) => s.day === d && s.periodNumber === period))
-      .filter((s): s is TimetableSlot & { id: string } => !!s);
+    const rowSlots = slots.filter((s) => s.periodNumber === period && days.includes(s.day));
     const rowTimes = new Set(
       rowSlots
         .map((s) => periodTimeFor(s.courseId, s.year, period))
@@ -90,30 +88,35 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
       : "";
 
     const cells = days.map((d) => {
-      const slot = slots.find((s) => s.day === d && s.periodNumber === period);
-      if (!slot) {
+      // Every slot in the cell: one faculty can hold two sections in the same period.
+      const cellSlots = slots.filter((s) => s.day === d && s.periodNumber === period);
+      if (cellSlots.length === 0) {
         return `<td style="border:1px solid #000;padding:2px;vertical-align:middle;text-align:center;"><span style="color:#888;font-weight:700;font-size:10pt;">${EN_DASH}</span></td>`;
       }
-      const assignment = assignmentById.get(slot.assignmentId);
-      const courseCode = assignment?.courseId ? courseCodeById.get(assignment.courseId) : undefined;
-      const sectionLabel = assignment?.sectionName
-        ? sectionDisplayLabel({ department: assignment.department, name: assignment.sectionName, secondaryDepartments: [] }, departments)
-        : null;
-      const subline = [
-        courseCode ?? assignment?.courseName,
-        assignment?.year ? romanYear(assignment.year) : null,
-        sectionLabel,
-      ].filter(Boolean).join(" · ");
+      const blocks = cellSlots.map((slot, i) => {
+        const assignment = assignmentById.get(slot.assignmentId);
+        const courseCode = assignment?.courseId ? courseCodeById.get(assignment.courseId) : undefined;
+        const sectionLabel = assignment?.sectionName
+          ? sectionDisplayLabel({ department: assignment.department, name: assignment.sectionName, secondaryDepartments: [] }, departments)
+          : null;
+        const subline = [
+          courseCode ?? assignment?.courseName,
+          assignment?.year ? romanYear(assignment.year) : null,
+          sectionLabel,
+        ].filter(Boolean).join(" · ");
 
-      const classLine = subline
-        ? `<div style="font-size:9pt;font-weight:900;color:#000;line-height:1.2;text-transform:uppercase;">${escapeHtml(subline)}</div>`
-        : "";
-      const subjectLine = `<div style="font-size:8.5pt;font-weight:800;color:#000;margin-top:2px;line-height:1.2;">${escapeHtml(readable(assignment?.shortCode, assignment?.subjectName) || readable(assignment?.subjectCode, assignment?.subjectName) || slot.subjectName)}</div>`;
-      const roomLine = slot.classroom
-        ? `<div style="font-size:7.5pt;font-weight:600;color:#222;margin-top:2px;">Room: ${escapeHtml(slot.classroom)}</div>`
-        : "";
+        const classLine = subline
+          ? `<div style="font-size:9pt;font-weight:900;color:#000;line-height:1.2;text-transform:uppercase;">${escapeHtml(subline)}</div>`
+          : "";
+        const subjectLine = `<div style="font-size:8.5pt;font-weight:800;color:#000;margin-top:2px;line-height:1.2;">${escapeHtml(readable(assignment?.shortCode, assignment?.subjectName) || readable(assignment?.subjectCode, assignment?.subjectName) || slot.subjectName)}</div>`;
+        const roomLine = slot.classroom
+          ? `<div style="font-size:7.5pt;font-weight:600;color:#222;margin-top:2px;">Room: ${escapeHtml(slot.classroom)}</div>`
+          : "";
+        const divider = i > 0 ? "border-top:1px dashed #888;margin-top:3px;padding-top:3px;" : "";
+        return `<div style="display:flex;flex-direction:column;justify-content:center;align-items:center;${divider}">${classLine}${subjectLine}${roomLine}</div>`;
+      }).join("");
 
-      return `<td style="border:1px solid #000;padding:4px 3px;vertical-align:middle;text-align:center;height:18mm;"><div style="display:flex;flex-direction:column;justify-content:center;align-items:center;">${classLine}${subjectLine}${roomLine}</div></td>`;
+      return `<td style="border:1px solid #000;padding:4px 3px;vertical-align:middle;text-align:center;height:18mm;">${blocks}</td>`;
     }).join("");
 
     return `<tr><td style="border:1px solid #000;padding:5px 2px;font-size:9pt;font-weight:800;text-align:center;background:#f0f0f0;vertical-align:middle;width:10%;">Period ${period}${rowTimeLabel}</td>${cells}</tr>`;
