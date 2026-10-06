@@ -931,6 +931,8 @@ export interface FacultyNorms {
   maxPracticalPeriodsPerWeek?: number;
   theoryBlockSize?: number;
   labBlockSize?: number;
+  /** Per-subject continuous-slot overrides, keyed by subjectBlockKey(); beats theory/lab block size. */
+  subjectBlockSizes?: Record<string, number>;
   positionNorms: PositionNorm[];
   // Years of service a "new joining" employee (leave profile: CL + OD only)
   // must complete before converting into their vacation/non-vacation leave
@@ -2772,6 +2774,8 @@ export interface Section {
   // is later edited to for a different batch passing through the same slot.
   // Optional/lenient like Subject.regulation - absent means unrestricted.
   regulation?: string;
+  // The room this section's class sits in (e.g. "B-204"). Free text, optional.
+  classroomNumber?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

@@ -2,6 +2,7 @@
 
 import { MAX_FACULTY_PER_SUBJECT } from "@/lib/teaching/facultyCap";
 import { useEffect, useMemo, useState } from "react";
+import { CustomSubjectAdder } from "@/components/timetable/CustomSubjectAdder";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Plus, Send, Trash2, X } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -599,6 +600,16 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
                     ))}
                   </SelectContent>
                 </Select>
+                <CustomSubjectAdder
+                  courseId={courseId}
+                  sectionId={assignForm.sectionId}
+                  semester={effectiveSemester}
+                  onAdded={({ subject, assignment }) => {
+                    setMasterSubjects((p) => [...p, subject]);
+                    setSemesterAssignments((p) => [...p, assignment]);
+                    setAssignForm((f) => ({ ...f, subjectId: subject.id }));
+                  }}
+                />
               </div>
               <div className="space-y-2">
                 <Label>Faculty</Label>

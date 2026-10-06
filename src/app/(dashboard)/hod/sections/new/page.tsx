@@ -34,6 +34,7 @@ type SectionForm = {
   year: string;
   batch: string;
   regulation: string;
+  classroomNumber: string;
   facultyInchargeUid: string;
   facultyInchargeName: string;
 };
@@ -56,6 +57,7 @@ export default function NewSectionPage() {
     year: "",
     batch: "",
     regulation: "",
+    classroomNumber: "",
     facultyInchargeUid: "",
     facultyInchargeName: "",
   });
@@ -441,6 +443,7 @@ export default function NewSectionPage() {
           year: Number(form.year),
           batch: form.batch,
           regulation: form.regulation || undefined,
+          classroomNumber: form.classroomNumber.trim() || undefined,
           facultyInchargeUid: form.facultyInchargeUid || null,
           facultyInchargeName: form.facultyInchargeName,
           ...(isBranchMode && !isManagedBranchMode ? { secondaryDepartment: effectiveBranch } : {}),
@@ -725,6 +728,16 @@ export default function NewSectionPage() {
                     : "Set by the batch - which curriculum this class follows for its whole run."}
                 </p>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Classroom Number</Label>
+              <Input
+                value={form.classroomNumber}
+                maxLength={40}
+                placeholder="e.g. B-204"
+                onChange={(e) => setF({ classroomNumber: e.target.value })}
+              />
             </div>
 
             <div className="space-y-2">

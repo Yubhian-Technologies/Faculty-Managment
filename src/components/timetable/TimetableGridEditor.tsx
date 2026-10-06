@@ -20,7 +20,7 @@ import { formatDMY } from "@/lib/utils";
 import { formatTime12h } from "@/lib/timetable/facultyTimetablePdf";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { buildRows, defaultPeriodTimings } from "@/lib/timetable/buildGrid";
-import { ordinalYear, resolveTimetableDays } from "@/lib/timetable/gridModel";
+import { ordinalYear, readableCode, resolveTimetableDays } from "@/lib/timetable/gridModel";
 import { InstitutionalTimetableTable } from "@/components/timetable/InstitutionalTimetableTable";
 import { requestAssignmentIds } from "@/lib/teaching/requestAllocations";
 import type {
@@ -1018,9 +1018,9 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
                                 >
                                   <p className="text-xs font-bold leading-tight flex items-center gap-1 uppercase tracking-wide">
                                     {isLocked && <Lock className="h-3 w-3 shrink-0 text-muted-foreground" />}
-                                    {("subjectCode" in slot && slot.subjectCode) || ("shortCode" in slot && (slot as unknown as { shortCode?: string }).shortCode) || slot.subjectName}
+                                    {("subjectCode" in slot && readableCode(slot.subjectCode, slot.subjectName)) || ("shortCode" in slot && (slot as unknown as { shortCode?: string }).shortCode) || slot.subjectName}
                                   </p>
-                                  {("subjectCode" in slot && slot.subjectCode && slot.subjectCode !== slot.subjectName) && (
+                                  {("subjectCode" in slot && readableCode(slot.subjectCode, slot.subjectName) && readableCode(slot.subjectCode, slot.subjectName) !== slot.subjectName) && (
                                     <p className="text-[10px] font-medium text-muted-foreground line-clamp-1 mt-0.5" title={slot.subjectName}>
                                       {slot.subjectName}
                                     </p>
@@ -1125,7 +1125,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
             <DialogDescription>
               {isSplitTarget
                 ? `This period already has a subject - only a lab (Practical) subject can be added alongside it.`
-                : `Pick a subject assigned to this section. Its faculty comes along automatically; labs take ${DEFAULT_TIMETABLE_RULES.labBlockSize} continuous periods.`}
+                : `Pick a subject assigned to this section. Its faculty comes along automatically; a subject with custom continuous slots (set in Settings) takes that many periods.`}
             </DialogDescription>
           </DialogHeader>
 

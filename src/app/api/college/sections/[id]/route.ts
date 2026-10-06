@@ -87,6 +87,7 @@ export async function PATCH(
       departmentId?: string;
       secondaryDepartment?: string | null;
       regulation?: string | null;
+      classroomNumber?: string | null;
     };
 
     const db = getAdminDb();
@@ -199,6 +200,11 @@ export async function PATCH(
     // same validation as create (sections/route.ts POST): must be offered
     // (per the course's catalog entry, narrowed to the section's own year)
     // for the year this section actually ends up at. "" / null clears it.
+    if (body.classroomNumber !== undefined) {
+      // "" / null clears it.
+      updates.classroomNumber = body.classroomNumber?.trim().slice(0, 40) || null;
+    }
+
     if (body.regulation !== undefined) {
       let regulation = body.regulation?.trim() || null;
       if (regulation) {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { CustomSubjectAdder } from "@/components/timetable/CustomSubjectAdder";
 import Link from "next/link";
 import { Search, Trash2, Send, Plus, X } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -1085,6 +1086,16 @@ const effectiveSemester = semesterOptions.length === 0
                       ))}
                     </SelectContent>
                   </Select>
+                  <CustomSubjectAdder
+                    courseId={sections.find((s) => s.id === assignForm.sectionId)?.courseId ?? activeCourseIds[0] ?? ""}
+                    sectionId={assignForm.sectionId}
+                    semester={effectiveSemester}
+                    onAdded={({ subject, assignment }) => {
+                      setSubjectsCache((c) => ({ ...c, [key]: [...(c[key] ?? []), subject] }));
+                      setSemesterAssignmentsCache((c) => ({ ...c, [key]: [...(c[key] ?? []), assignment] }));
+                      setAssignForm((f) => ({ ...f, subjectId: subject.id }));
+                    }}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Faculty</Label>

@@ -192,6 +192,7 @@ export interface ResumeData {
     subjectName?: string;
     subjectCode?: string;
     hoursPerWeek?: number;
+    excludeFromResume?: boolean;
     assignmentAcademicYear?: string;
     assignmentSemester?: string;
     isPast?: boolean;
@@ -454,6 +455,10 @@ export function getResumeHTML(rawData: ResumeData): string {
     staticCourses: ap?.teachingAssignment?.courses,
     department: data.department,
   });
+  // NSS / Sports aren't teaching load - hide them from the resume's current rows.
+  teachingLoadGroups.current = teachingLoadGroups.current.filter(
+    (r) => !/\b(nss|sports?)\b/i.test(`${r.subject ?? ""} ${r.courseName ?? ""}`),
+  );
   const teachingLoadTables = renderTeachingLoadGroups(teachingLoadGroups);
   const teachingLoadBody = teachingLoadBullets + teachingLoadTables;
 
