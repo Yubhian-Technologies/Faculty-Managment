@@ -14,6 +14,10 @@ import {
   buildAllocationList,
   buildTimetableColumns,
   timetableClassLine,
+  buildClassTimetableSubtitle,
+  getHodSignatureLabel,
+  continuousSpans,
+  latestEffectiveDate,
   resolveTimetableDays,
   slotShortCode, mergeCoTaughtSlots,} from "./gridModel";
 
@@ -50,6 +54,8 @@ export interface SectionTimetablePdfOptions {
   assignments?: TeachingAssignment[];
   lunchBreak?: { afterPeriod: number; durationMinutes: number };
   shortBreaks?: { afterPeriod: number; durationMinutes: number }[];
+  /** Show faculty/batches of one subject in a period as one entry (default true); false lists each separately. */
+  mergeCoTaught?: boolean;
   /** Show the Class In-charge / Timetable In-charge / Principal signature block. */
   showSignatures?: boolean;
   /** Name under the rightmost signature, e.g. "Principal". Defaults to "Principal". */
@@ -138,18 +144,26 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
     : "";
 
   // One plain line naming the class this timetable belongs to.
+  const resolvedRoom = opts.classroom || section?.classroomNumber || (section as { classroom?: string })?.classroom;
   const classLine = escapeHtml(timetableClassLine({
     courseName: resolvedCourse,
     year: section?.year,
     semesterLabel,
     sectionName: section?.name,
     departmentName: resolvedDepartment,
+    classroom: resolvedRoom,
   }));
   const inchargeLine = resolvedIncharge ? `Class In-charge: ${escapeHtml(resolvedIncharge)}` : "";
 
   // Always a logo: the college's own, else the bundled Vishnu logo.
   const resolvedLogo = resolveLogoUrl(logoUrl);
   const logoTd = `<td class="logo-cell"><img src="${escapeHtml(resolvedLogo)}" alt="${escapeHtml(collegeName)} logo"></td>`;
+
+  const subtitleText = buildClassTimetableSubtitle({
+    academicYear: opts.academicYear,
+    semesterLabel,
+    effectiveDate: opts.effectiveDate ?? latestEffectiveDate(slots),
+  });
 
   const headerHtml = `
   <table class="letterhead" cellspacing="0" cellpadding="0">
@@ -163,8 +177,9 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
     </tr>
   </table>
   <div class="doc-title">${escapeHtml(title || "TIME TABLE")}</div>
+  <div class="class-line" style="font-size:9.5pt;font-weight:600;margin-bottom:2px;">${escapeHtml(subtitleText)}</div>
   ${classLine ? `<div class="class-line">${classLine}</div>` : ""}
-  ${inchargeLine ? `<div class="class-line">${inchargeLine}</div>` : ""}`;
+  ${inchargeLine ? `<div class="class-line" style="font-weight:600;color:#1e3a8a;">${inchargeLine}</div>` : ""}`;
 
   // ── Grid ──────────────────────────────────────────────────────────────────
   const timeStack = (start?: string, end?: string) =>
@@ -186,8 +201,11 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
 
   const bodyRows = gridDays
     .map((day, dayIndex) => {
+      // Cells merged in the timetable editor print as one wide cell.
+      const { spans, skipped } = continuousSpans(columns, (p) => slots.filter((s) => s.day === day && s.periodNumber === p));
       const cells = columns
-        .map((col) => {
+        .map((col, colIdx) => {
+          if (skipped.has(colIdx)) return "";
           // One tall cell spanning every day row (no horizontal rules inside
           // it), titled vertically - emitted on the first row only.
           if (col.kind === "break") {
@@ -196,19 +214,23 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
             return `<td class="cell break-cell" rowspan="${gridDays.length}"><div class="vtext">${title}</div></td>`;
           }
           // Faculty of one subject sharing the period print the subject once.
-          const cellSlots = mergeCoTaughtSlots(slots.filter((s) => s.day === day && s.periodNumber === col.periodNumber));
+          const rawCell = slots.filter((s) => s.day === day && s.periodNumber === col.periodNumber);
+          const cellSlots = opts.mergeCoTaught === false ? rawCell : mergeCoTaughtSlots(rawCell);
           if (cellSlots.length === 0) return `<td class="cell"><div class="fx">&nbsp;</div></td>`;
           const inner = cellSlots
             .map((s) => {
               const sub = s.substituteFacultyName;
+              const room = s.classroom ? (/^room/i.test(s.classroom.trim()) ? s.classroom.trim() : `Room: ${s.classroom.trim()}`) : null;
               return `<div class="slot">
                 <div class="slot-code">${escapeHtml(slotShortCode(s, subjectMap))}</div>
                 ${s.labBatch ? `<div class="slot-note">${escapeHtml(s.labBatch)}</div>` : ""}
+                ${room ? `<div class="slot-note">${escapeHtml(room)}</div>` : ""}
                 ${sub ? `<div class="slot-note">Sub: ${escapeHtml(sub)}</div>` : ""}
               </div>`;
             })
             .join("");
-          return `<td class="cell"><div class="fx">${inner}</div></td>`;
+          const span = spans.get(colIdx);
+          return `<td class="cell"${span ? ` colspan="${span}"` : ""}><div class="fx">${inner}</div></td>`;
         })
         .join("");
       return `<tr><th class="cell day-cell"><div class="fx fx-left">${escapeHtml(DAY_LABELS[day] ?? day)}</div></th>${cells}</tr>`;
@@ -264,15 +286,16 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
   </div>`
     : "";
 
-  // Optional - off unless a caller asks for it.
-  const signatureHtml = showSignatures
-    ? `
-  <div class="signature-row">
-    <div class="signature-block"><div class="signature-line"></div>Class In-charge</div>
-    <div class="signature-block"><div class="signature-line"></div>${escapeHtml(signatureLabels?.incharge ?? "Timetable Incharge")}</div>
-    <div class="signature-block"><div class="signature-line"></div>${escapeHtml(signatureLabels?.principal ?? "Principal")}</div>
-  </div>`
-    : "";
+  // HOD-<short code of the section's own (managed) department>, never the
+  // managing sub-department's - a CSE section signs as HOD-CSE even when
+  // Basic Science - Chemistry runs it.
+  const hodLabel = getHodSignatureLabel(section?.department || resolvedDepartment);
+  const signatureHtml = `
+  <div class="signature-row" style="margin-top:24px;display:flex;justify-content:space-between;align-items:flex-end;">
+    <div class="signature-block" style="flex:1;text-align:center;">TimeTable In-Charge</div>
+    <div class="signature-block" style="flex:1;text-align:center;">${escapeHtml(hodLabel)}</div>
+    <div class="signature-block" style="flex:1;text-align:center;">PRINCIPAL</div>
+  </div>`;
 
   const documentTitle = title || "TIME TABLE";
   return `<!DOCTYPE html>
@@ -344,7 +367,6 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
 
     .signature-row { display: flex; justify-content: space-around; margin-top: 48px; }
     .signature-block { text-align: center; width: 26%; font-size: 9pt; }
-    .signature-line { border-top: 1px solid #000; margin-bottom: 4px; }
   </style>
 </head>
 <body>

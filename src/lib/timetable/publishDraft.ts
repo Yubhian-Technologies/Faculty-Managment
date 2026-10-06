@@ -39,6 +39,8 @@ export interface PublishInput {
   isLiveSlot: (slot: SlotIdentity) => boolean;
   publishedByName: string;
   writer: string;
+  /** "w.e.f" date (YYYY-MM-DD) printed on the timetable; stored on the slots and the draft. */
+  effectiveDate?: string;
 }
 
 // A transaction holds at most 500 writes; leave room for the guards and draft.
@@ -175,11 +177,14 @@ export async function publishSectionDraft(input: PublishInput): Promise<PublishO
         isPinned: false,
         semester,
         academicYear: currentAcademicYear,
+        ...(input.effectiveDate ? { effectiveDate: input.effectiveDate } : {}),
+        ...(s.mergeWithNext ? { mergeWithNext: true } : {}),
         createdAt: now,
         updatedAt: now,
       });
     });
     tx.update(draftRef, {
+      ...(input.effectiveDate ? { effectiveDate: input.effectiveDate } : {}),
       status: "PUBLISHED",
       semester,
       academicYear: currentAcademicYear,

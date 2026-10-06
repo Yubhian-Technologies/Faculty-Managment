@@ -468,11 +468,14 @@ export function getResumeHTML(rawData: ResumeData): string {
     staticCourses: ap?.teachingAssignment?.courses,
     department: data.department,
   });
-  // NSS / Sports aren't teaching load - hide them from the resume's current rows.
-  teachingLoadGroups.current = teachingLoadGroups.current.filter(
-    (r) => !/\b(nss|sports?)\b/i.test(`${r.subject ?? ""} ${r.courseName ?? ""}`),
-  );
-  const teachingLoadTables = renderTeachingLoadGroups(teachingLoadGroups, readPreviousTeachingAssignments(data));
+  // NSS / Sports / Skill Building aren't teaching load - hide them from both the
+  // current and the previous rows ("SKILL-BUILDING", "Skill Building", "NSS/Sports"...).
+  const NOT_TEACHING_LOAD = /\b(nss|sports?)\b|skill[\s_-]*building/i;
+  const keep = (r: { subject?: string; courseName?: string }) => !NOT_TEACHING_LOAD.test(`${r.subject ?? ""} ${r.courseName ?? ""}`);
+  teachingLoadGroups.current = teachingLoadGroups.current.filter(keep);
+  teachingLoadGroups.past = teachingLoadGroups.past.filter(keep);
+  const previousTeaching = readPreviousTeachingAssignments(data).filter((p) => !NOT_TEACHING_LOAD.test(p.subject ?? ""));
+  const teachingLoadTables = renderTeachingLoadGroups(teachingLoadGroups, previousTeaching);
   const teachingLoadBody = teachingLoadBullets + teachingLoadTables;
 
   // ── Research publications ───────────────────────────────────────────────

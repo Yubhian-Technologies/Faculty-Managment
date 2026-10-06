@@ -51,7 +51,7 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
   const [requests, setRequests] = useState<FacultyAssignmentRequest[]>([]);
   const [faculty, setFaculty] = useState<FacultyMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [tab, setTab] = useState<"incoming" | "outgoing">("incoming");
+  const [tab, setTab] = useState<"incoming" | "outgoing" | "completed">("incoming");
   const [pickedFaculty, setPickedFaculty] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -116,8 +116,13 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
     void (async () => { await load(); })();
   }, [load]);
 
-  const incoming = requests.filter((r) => r.requestedBy !== user?.uid);
-  const outgoing = requests.filter((r) => r.requestedBy === user?.uid);
+  // Finished: declined, or allocated and closed by the lending side (busy periods
+  // shared + notified). Those live in their own tab so the other two only hold
+  // requests that still need someone to act.
+  const isCompleted = (r: FacultyAssignmentRequest) => r.status === "DECLINED" || (r.status === "ALLOCATED" && !!r.busyClosed);
+  const incoming = requests.filter((r) => r.requestedBy !== user?.uid && !isCompleted(r));
+  const outgoing = requests.filter((r) => r.requestedBy === user?.uid && !isCompleted(r));
+  const completed = requests.filter(isCompleted);
 
   async function handleAllocate(reqId: string) {
     const facultyId = pickedFaculty[reqId];
@@ -271,7 +276,7 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
     }
   }
 
-  const visible = tab === "incoming" ? incoming : outgoing;
+  const visible = tab === "incoming" ? incoming : tab === "outgoing" ? outgoing : completed;
 
   return (
     <div className="space-y-6">
@@ -282,10 +287,11 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
 
       <SegmentedTabs
         value={tab}
-        onChange={(k) => setTab(k as "incoming" | "outgoing")}
+        onChange={(k) => setTab(k as "incoming" | "outgoing" | "completed")}
         options={[
           { key: "incoming", label: `Requests to us (${incoming.length})` },
           { key: "outgoing", label: `Our requests (${outgoing.length})` },
+          { key: "completed", label: `Completed (${completed.length})` },
         ]}
       />
 
@@ -295,17 +301,23 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
         </div>
       ) : visible.length === 0 ? (
         <EmptyState
-          icon={tab === "incoming" ? <Inbox className="h-8 w-8" /> : <Send className="h-8 w-8" />}
-          title={tab === "incoming" ? "No requests to your department yet" : "You haven't requested any faculty yet"}
+          icon={tab === "outgoing" ? <Send className="h-8 w-8" /> : <Inbox className="h-8 w-8" />}
+          title={tab === "incoming" ? "No requests to your department yet" : tab === "outgoing" ? "You haven't requested any faculty yet" : "Nothing completed yet"}
           description={
             tab === "incoming"
               ? "When another department needs a faculty member for a shared subject, it'll show up here."
-              : "Send one from the Teaching Assignments page when your own faculty pool has nobody free for a subject."
+              : tab === "outgoing"
+                ? "Send one from the Teaching Assignments page when your own faculty pool has nobody free for a subject."
+                : "Requests that are declined, or allocated and closed, move here."
           }
         />
       ) : (
         <div className="space-y-3">
-          {visible.map((r) => (
+          {visible.map((r) => {
+            // Which side THIS request is on for the viewer - the Completed tab
+            // mixes both directions, so it can't come from the active tab.
+            const dir = r.requestedBy !== user?.uid ? "incoming" : "outgoing";
+            return (
             <Card key={r.id}>
               <CardContent className="p-4 space-y-3">
                 <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -317,7 +329,7 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
                       {r.courseName} · {ordinalYear(r.year)} · Section {r.sectionName} · {r.hoursPerWeek} hrs/wk
                     </p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {tab === "incoming"
+                      {dir === "incoming"
                         ? `${r.requestedByName} (${r.requestingDepartment}) asked ${r.targetDepartmentName} to lend a faculty member`
                         : `Sent to ${r.targetDepartmentName}`}
                     </p>
@@ -334,7 +346,7 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
                     <div className="flex items-center justify-between gap-3 flex-wrap">
                       <p className="text-xs text-muted-foreground">
                         Allocated ({allocs.length}): <span className="text-foreground font-medium">{allocs.map((x) => x.facultyName).join(", ")}</span>
-                        {tab === "outgoing" && (r.busyClosed
+                        {dir === "outgoing" && (r.busyClosed
                           ? " - the lending department has shared the busy periods, so you can place it on your own Timetable page"
                           : ` - waiting for ${r.targetDepartmentName} to share the busy periods and notify you; you can place it on your Timetable page after that`)}
                       </p>
@@ -343,7 +355,7 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
                           when each is already busy, and close ONCE; only then does
                           the requester place the subject via their own Timetable
                           page's "Add a subject" flow, blocked from those cells. */}
-                      {tab === "incoming" ? (
+                      {dir === "incoming" ? (
                         r.busyClosed ? (
                           <div className="flex items-center gap-2">
                             <Badge variant="approved">Closed</Badge>
@@ -375,14 +387,14 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
                     </div>
 
                     {/* The requesting department only gets to place these once this is closed. */}
-                    {tab === "incoming" && !r.busyClosed && (
+                    {dir === "incoming" && !r.busyClosed && (
                       <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
                         {r.requestingDepartment} cannot see {allocs.length === 1 ? "this subject" : "these faculty"} in their timetable yet. Mark any busy periods
                         {allocs.length > 1 ? " for each faculty" : ""}, then press <strong>Notify department &amp; close</strong> - until then it stays waiting.
                       </p>
                     )}
 
-                    {tab === "incoming" && !r.busyClosed && addingAnotherId === r.id && (
+                    {dir === "incoming" && !r.busyClosed && addingAnotherId === r.id && (
                       <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/20 p-3">
                         <Select
                           value={pickedFaculty[r.id] ?? ""}
@@ -412,7 +424,7 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
                                 {mine.length === 0 ? "no busy periods" : `${mine.length} busy period${mine.length === 1 ? "" : "s"}`}
                               </span>
                             </p>
-                            {tab === "incoming" && !r.busyClosed && (
+                            {dir === "incoming" && !r.busyClosed && (
                               <Button size="sm" variant="outline" onClick={() => void toggleBusyBuilder(r, a)}>
                                 <CalendarDays className="h-3.5 w-3.5 mr-1.5" />
                                 {busyBuilderOpenId === key ? "Hide" : "Mark busy periods"}
@@ -422,7 +434,7 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
 
                           {/* View: what was declared. Read-only once closed (and for the
                               requesting side), editable only through the builder below. */}
-                          {(r.busyClosed || tab === "outgoing") && (
+                          {(r.busyClosed || dir === "outgoing") && (
                             mine.length === 0 ? (
                               <p className="text-xs text-muted-foreground">None - the faculty is free for every period.</p>
                             ) : (
@@ -436,7 +448,7 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
                             )
                           )}
 
-                          {tab === "incoming" && !r.busyClosed && busyBuilderOpenId === key && (() => {
+                          {dir === "incoming" && !r.busyClosed && busyBuilderOpenId === key && (() => {
                             const activeTiming = (timingsByRequest[r.id] ?? []).find((t) => Number(t.year) === pickerYear) ?? null;
                             const saving = busySavingId === key;
                             const draft = busyDraftByRequest[key] ?? mine;
@@ -542,7 +554,7 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
                   <p className="text-xs text-muted-foreground">Reason: {r.declineReason}</p>
                 )}
 
-                {tab === "incoming" && r.status === "PENDING" && (
+                {dir === "incoming" && r.status === "PENDING" && (
                   <div className="flex flex-wrap items-center gap-2 pt-1">
                     <Select
                       value={pickedFaculty[r.id] ?? ""}
@@ -563,7 +575,8 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
                 )}
               </CardContent>
             </Card>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
