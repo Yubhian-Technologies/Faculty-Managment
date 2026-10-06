@@ -911,7 +911,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
                     return (
                       <td key={`period_${row.period}`} className="p-2 align-top">
                         <div className="space-y-1">
-                            {entries.map((entry) => {
+                            {entries.map((entry, entryIdx) => {
                               const { slot, isPinned } = entry;
                               const dSlot = !isPinned && mode === "draft" ? (slot as DraftSlot) : undefined;
                               // A placed period this HOD doesn't own (e.g. a subject lent in
@@ -929,7 +929,8 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
 
                               return (
                                 <button
-                                  key={slot.assignmentId}
+                                  // A split lab period holds several entries of ONE assignment in a cell.
+                                  key={`${slot.assignmentId}_${entryIdx}`}
                                   type="button"
                                   disabled={!clickable || busy !== null}
                                   onClick={() => {
