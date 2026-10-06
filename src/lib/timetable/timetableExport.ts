@@ -41,6 +41,8 @@ export interface SectionTimetableXlsxOptions {
   classroom?: string;
   classInchargeName?: string;
   effectiveDate?: string;
+  /** Show faculty/batches of one subject in a period as one entry (default true). */
+  mergeCoTaught?: boolean;
   days: DayOfWeek[];
   periods: number[];
   periodTimings: PeriodTiming[];
@@ -263,7 +265,8 @@ export async function buildSectionTimetableXlsxBuffer(opts: SectionTimetableXlsx
     columns.forEach((col, i) => {
       if (col.kind === "break") return;
       // Faculty of one subject sharing the period print the subject once.
-      const cellSlots = mergeCoTaughtSlots(slots.filter((s) => s.day === day && s.periodNumber === col.periodNumber));
+      const rawCell = slots.filter((s) => s.day === day && s.periodNumber === col.periodNumber);
+      const cellSlots = opts.mergeCoTaught === false ? rawCell : mergeCoTaughtSlots(rawCell);
       if (cellSlots.length === 0) return;
       const blocks = cellSlots.map((s) =>
         [

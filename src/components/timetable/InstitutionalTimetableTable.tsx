@@ -99,6 +99,10 @@ export function InstitutionalTimetableTable({
   // Off by default: when on, back-to-back periods holding the same subject
   // (e.g. a 3-period lab) are drawn as ONE wide cell instead of repeating it.
   const [mergeContinuous, setMergeContinuous] = useState(false);
+  // On (the default): faculty/batches of one subject sharing a period show as ONE
+  // entry with a single title. Off: each stays its own entry.
+  const [mergeCoTaught, setMergeCoTaught] = useState(true);
+  const cellEntries = (cell: TimetableSlot[]) => (mergeCoTaught ? mergeCoTaughtSlots(cell) : cell);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isExportingXlsx, setIsExportingXlsx] = useState(false);
 
@@ -190,11 +194,12 @@ export function InstitutionalTimetableTable({
       subjects,
       assignments,
       mergeContinuous,
+      mergeCoTaught,
     }),
     [
       activeCollegeName, activeCollegeCode, activeAffiliation, activeAddress, activePhone,
       collegeInfo?.logoUrl, logoUrl, departmentName, courseName, academicYear, semesterLabel,
-      section, classroom, classInchargeName, visibleDays, timing, filteredSlots, subjects, assignments, mergeContinuous,
+      section, classroom, classInchargeName, visibleDays, timing, filteredSlots, subjects, assignments, mergeContinuous, mergeCoTaught,
     ]
   );
 
@@ -296,6 +301,16 @@ export function InstitutionalTimetableTable({
               onChange={(e) => setMergeContinuous(e.target.checked)}
             />
             Merge continuous periods
+          </label>
+
+          <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground cursor-pointer select-none">
+            <input
+              type="checkbox"
+              className="h-3.5 w-3.5"
+              checked={mergeCoTaught}
+              onChange={(e) => setMergeCoTaught(e.target.checked)}
+            />
+            Merge co-taught entries
           </label>
 
           <div className="flex items-center gap-1.5">
@@ -411,7 +426,7 @@ export function InstitutionalTimetableTable({
                   }
 
                   // Faculty of one subject sharing the period show as one entry, subject once.
-                  const periodSlots = mergeCoTaughtSlots(filteredSlots.filter(
+                  const periodSlots = cellEntries(filteredSlots.filter(
                     (s) => s.day === d && s.periodNumber === col.periodNumber
                   ));
                   const range = periodTimeRange(col.startTime, col.endTime);
@@ -537,7 +552,7 @@ export function InstitutionalTimetableTable({
                           );
                         }
 
-                        const periodSlots = mergeCoTaughtSlots(filteredSlots.filter(
+                        const periodSlots = cellEntries(filteredSlots.filter(
                           (s) => s.day === d && s.periodNumber === col.periodNumber
                         ));
 

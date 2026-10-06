@@ -57,6 +57,8 @@ export interface SectionTimetablePdfOptions {
   shortBreaks?: { afterPeriod: number; durationMinutes: number }[];
   /** Draw back-to-back periods with the same subject as one wide cell. */
   mergeContinuous?: boolean;
+  /** Show faculty/batches of one subject in a period as one entry (default true); false lists each separately. */
+  mergeCoTaught?: boolean;
   /** Show the Class In-charge / Timetable In-charge / Principal signature block. */
   showSignatures?: boolean;
   /** Name under the rightmost signature, e.g. "Principal". Defaults to "Principal". */
@@ -216,7 +218,8 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
             return `<td class="cell break-cell" rowspan="${gridDays.length}"><div class="vtext">${title}</div></td>`;
           }
           // Faculty of one subject sharing the period print the subject once.
-          const cellSlots = mergeCoTaughtSlots(slots.filter((s) => s.day === day && s.periodNumber === col.periodNumber));
+          const rawCell = slots.filter((s) => s.day === day && s.periodNumber === col.periodNumber);
+          const cellSlots = opts.mergeCoTaught === false ? rawCell : mergeCoTaughtSlots(rawCell);
           if (cellSlots.length === 0) return `<td class="cell"><div class="fx">&nbsp;</div></td>`;
           const inner = cellSlots
             .map((s) => {
