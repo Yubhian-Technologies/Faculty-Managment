@@ -7,6 +7,10 @@ import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
 // Period rows) and, until this was extracted, kept two independently-edited
 // copies of the exact same PDF-building code.
 
+// A custom subject's generated code ("CUS-AB12C") reads as its typed name instead.
+const readable = (code: string | undefined, name: string | undefined) =>
+  code && /^CUS-[A-Z0-9]{5}$/.test(code) ? (name || code) : code;
+
 /** "09:00" -> "9:00 AM" - display only. */
 export function formatTime12h(hhmm: string): string {
   const [h, m] = hhmm.split(":").map(Number);
@@ -104,7 +108,7 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
       const classLine = subline
         ? `<div style="font-size:9pt;font-weight:900;color:#000;line-height:1.2;text-transform:uppercase;">${escapeHtml(subline)}</div>`
         : "";
-      const subjectLine = `<div style="font-size:8.5pt;font-weight:800;color:#000;margin-top:2px;line-height:1.2;">${escapeHtml(assignment?.shortCode || assignment?.subjectCode || slot.subjectName)}</div>`;
+      const subjectLine = `<div style="font-size:8.5pt;font-weight:800;color:#000;margin-top:2px;line-height:1.2;">${escapeHtml(readable(assignment?.shortCode, assignment?.subjectName) || readable(assignment?.subjectCode, assignment?.subjectName) || slot.subjectName)}</div>`;
       const roomLine = slot.classroom
         ? `<div style="font-size:7.5pt;font-weight:600;color:#222;margin-top:2px;">Room: ${escapeHtml(slot.classroom)}</div>`
         : "";
@@ -123,9 +127,9 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
     return `<tr>
       <td style="border:1px solid #000;padding:3px;text-align:center;">${i + 1}</td>
       <td style="border:1px solid #000;padding:3px 6px;"><strong>${escapeHtml(classStr)}</strong></td>
-      <td style="border:1px solid #000;padding:3px 6px;"><strong>${escapeHtml(a.subjectCode ?? "—")}</strong></td>
+      <td style="border:1px solid #000;padding:3px 6px;"><strong>${escapeHtml(readable(a.subjectCode, a.subjectName) ?? "—")}</strong></td>
       <td style="border:1px solid #000;padding:3px 6px;"><strong>${escapeHtml(a.subjectName ?? "—")}</strong></td>
-      <td style="border:1px solid #000;padding:3px;text-align:center;"><strong>${escapeHtml(a.shortCode ?? a.subjectCode ?? "—")}</strong></td>
+      <td style="border:1px solid #000;padding:3px;text-align:center;"><strong>${escapeHtml(readable(a.shortCode, a.subjectName) ?? readable(a.subjectCode, a.subjectName) ?? "—")}</strong></td>
       <td style="border:1px solid #000;padding:3px;text-align:center;">${escapeHtml(a.subjectType ?? "Theory")}</td>
       <td style="border:1px solid #000;padding:3px;text-align:center;"><strong>${a.hoursPerWeek ?? "—"}</strong></td>
     </tr>`;

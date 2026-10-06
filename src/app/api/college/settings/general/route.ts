@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { sanitizeSubjectBlockSizes } from "@/lib/timetable/subjectBlockSize";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
@@ -204,11 +205,24 @@ export async function PUT(request: Request) {
       leaveBlackoutWindows = checked.windows;
     }
 
+    // Sent whole, plain replace (a deep merge could never remove an entry).
+    let subjectBlockSizes: Record<string, number> | undefined;
+    if (body.subjectBlockSizes !== undefined) {
+      const checked = sanitizeSubjectBlockSizes(body.subjectBlockSizes);
+      if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: 400 });
+      subjectBlockSizes = checked.value;
+    }
+
     await collegeSettingsRef(db, collegeId).set(settings, { merge: true });
-    await db.collection("colleges").doc(collegeId).collection("settings").doc("timetableRules").set({
+    const rulesRef = db.collection("colleges").doc(collegeId).collection("settings").doc("timetableRules");
+    await rulesRef.set({
       theoryBlockSize: settings.theoryBlockSize,
       labBlockSize: settings.labBlockSize,
     }, { merge: true });
+    if (subjectBlockSizes) {
+      await rulesRef.update({ subjectBlockSizes });
+      await collegeSettingsRef(db, collegeId).update({ subjectBlockSizes });
+    }
     if (leaveApprovalRouting) {
       await collegeSettingsRef(db, collegeId).update({ leaveApprovalRouting });
     }

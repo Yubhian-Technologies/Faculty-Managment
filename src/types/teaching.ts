@@ -386,6 +386,8 @@ export interface TimetableRules {
   theoryBlockSize?: number;
   /** Contiguous periods a PRACTICAL subject occupies (e.g. a 3-hour lab). */
   labBlockSize: number;
+  /** Per-subject overrides of the above, keyed by subjectBlockKey(). */
+  subjectBlockSizes?: Record<string, number>;
   /** When false, a lab block may not straddle lunch or a short break. */
   allowLabAcrossBreaks: boolean;
   // Soft preferences
