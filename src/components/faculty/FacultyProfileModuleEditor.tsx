@@ -6,9 +6,10 @@ import {
   QualificationFields, ExperienceFields, ResearchFields,
   MentorshipFields, FinancialFields, OthersFields,
 } from "@/components/faculty/AcademicProfileModuleFields";
+import { PreviousTeachingAssignmentsEditor } from "@/components/faculty/PreviousTeachingAssignmentsEditor";
 import type { ProfileModuleKey } from "@/lib/faculty/profileModules";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
-import type { FacultyProfileFields, CollegeType } from "@/types";
+import type { FacultyProfileFields, CollegeType, PreviousTeachingAssignment } from "@/types";
 
 // The record shape every per-module edit page holds in local state -
 // PersonalDetailsFields' fields live at the top level (matching the host doc,
@@ -29,6 +30,10 @@ interface Props {
   includeTeachingAssignment?: boolean;
   teachingRows?: StagedTeachingRow[];
   onTeachingRowsChange?: (rows: StagedTeachingRow[]) => void;
+  // Free-text Previous Teaching Assignments. With onTeachingRowsChange the HOD-side editor lists them under "Previous";
+  // without it (a faculty member editing their own Teaching Load) only this part is editable.
+  previousTeachingRecords?: PreviousTeachingAssignment[];
+  onPreviousTeachingRecordsChange?: (rows: PreviousTeachingAssignment[]) => void;
   // School-type colleges show a different qualifications list instead of
   // UG/PG/PhD - see QualificationFields.
   collegeType?: CollegeType;
@@ -67,7 +72,8 @@ interface Props {
 // always PATCH the whole academicProfile object back intact - those PATCH
 // routes replace the field wholesale rather than deep-merging.
 export function FacultyProfileModuleEditor({
-  moduleKey, record, onChange, facultyId, includeTeachingAssignment = true, teachingRows = [], onTeachingRowsChange, collegeType,
+  moduleKey, record, onChange, facultyId, includeTeachingAssignment = true, teachingRows = [], onTeachingRowsChange,
+  previousTeachingRecords, onPreviousTeachingRecordsChange, collegeType,
   requiredPersonalFields, department, hideLegalName = false, ratificationHistory = false,
 }: Props) {
   const academicProfile = record.academicProfile ?? {};
@@ -113,11 +119,18 @@ export function FacultyProfileModuleEditor({
     case "others":
       return <OthersFields value={academicProfile} onChange={(ap) => onChange({ academicProfile: ap })} />;
     case "teaching-load":
-      return onTeachingRowsChange ? (
-        <TeachingAssignmentsEditor value={teachingRows} onChange={onTeachingRowsChange} department={department} />
-      ) : (
-        <p className="text-sm text-muted-foreground">Teaching assignments aren&apos;t editable here.</p>
-      );
+      if (onTeachingRowsChange) {
+        return (
+          <TeachingAssignmentsEditor
+            value={teachingRows} onChange={onTeachingRowsChange} department={department}
+            previousRecords={previousTeachingRecords} onPreviousRecordsChange={onPreviousTeachingRecordsChange}
+          />
+        );
+      }
+      if (onPreviousTeachingRecordsChange) {
+        return <PreviousTeachingAssignmentsEditor value={previousTeachingRecords ?? []} onChange={onPreviousTeachingRecordsChange} />;
+      }
+      return <p className="text-sm text-muted-foreground">Teaching assignments aren&apos;t editable here.</p>;
     default:
       return <p className="text-sm text-muted-foreground">Unknown section.</p>;
   }

@@ -9,6 +9,7 @@ import {
 import { ResearchInnovationModule } from "@/components/faculty/ResearchInnovationModule";
 import { TeachingLoadTable } from "@/components/faculty/TeachingLoadTable";
 import { buildTeachingLoadRows } from "@/lib/teaching/buildTeachingLoadRows";
+import { readPreviousTeachingAssignments } from "@/lib/faculty/previousTeaching";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { PersonalDetailsSource } from "@/components/shared/PersonalDetailsView";
 import type { ProfileModuleKey } from "@/lib/faculty/profileModules";
@@ -89,6 +90,7 @@ export function FacultyProfileModuleContent({ moduleKey, faculty, teachingAssign
         {moduleKey === "others" && <OthersModule profile={faculty.academicProfile} />}
         {moduleKey === "teaching-load" && (
           <TeachingLoadTable
+            previous={readPreviousTeachingAssignments(faculty as { previousTeachingAssignments?: unknown })}
             groups={buildTeachingLoadRows({
               currentAssignments: teachingAssignments,
               staticCourses: faculty.academicProfile?.teachingAssignment?.courses,

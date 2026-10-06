@@ -85,7 +85,7 @@ export function AcademicProfileFields({ value: rawValue, onChange, includeTeachi
               <div className="space-y-2">
                 <Label>NET/SLET/SET/GATE/Others</Label>
                 <Select value={value.netSletSetGateOthers ?? ""} onValueChange={(v) => set("netSletSetGateOthers", v as FacultyProfileFields["netSletSetGateOthers"])}>
-                  <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                  <SelectTrigger onClear={value.netSletSetGateOthers ? () => set("netSletSetGateOthers", undefined) : undefined}><SelectValue placeholder="Select" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="YES">Yes</SelectItem>
                     <SelectItem value="NO">No</SelectItem>
@@ -98,7 +98,7 @@ export function AcademicProfileFields({ value: rawValue, onChange, includeTeachi
                 <div className="space-y-2">
                   <Label>Qualified Exam</Label>
                   <Select value={value.qualifiedExam ?? ""} onValueChange={(v) => set("qualifiedExam", v as FacultyProfileFields["qualifiedExam"])}>
-                    <SelectTrigger><SelectValue placeholder="Select exam" /></SelectTrigger>
+                    <SelectTrigger onClear={value.qualifiedExam ? () => set("qualifiedExam", undefined) : undefined}><SelectValue placeholder="Select exam" /></SelectTrigger>
                     <SelectContent>
                       {Object.entries(QUALIFYING_EXAM_LABELS).map(([k, lbl]) => <SelectItem key={k} value={k}>{lbl}</SelectItem>)}
                     </SelectContent>
@@ -165,7 +165,7 @@ export function AcademicProfileFields({ value: rawValue, onChange, includeTeachi
             <div className="space-y-2">
               <Label>NOC Obtained</Label>
               <Select value={item.nocObtained ?? ""} onValueChange={(v) => update({ nocObtained: v as PreviousInstitution["nocObtained"] })}>
-                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                <SelectTrigger onClear={item.nocObtained ? () => update({ nocObtained: undefined }) : undefined}><SelectValue placeholder="Select" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="YES">Yes</SelectItem>
                   <SelectItem value="NO">No</SelectItem>
@@ -364,7 +364,7 @@ export function AcademicProfileFields({ value: rawValue, onChange, includeTeachi
             <div className="space-y-2">
               <Label>Membership Validity</Label>
               <Select value={item.membershipValidity ?? ""} onValueChange={(v) => update({ membershipValidity: v as MembershipValidity })}>
-                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                <SelectTrigger onClear={item.membershipValidity ? () => update({ membershipValidity: undefined }) : undefined}><SelectValue placeholder="Select" /></SelectTrigger>
                 <SelectContent>
                   {Object.entries(MEMBERSHIP_VALIDITY_LABELS).map(([k, label]) => (
                     <SelectItem key={k} value={k}>{label}</SelectItem>
@@ -415,7 +415,7 @@ export function AcademicProfileFields({ value: rawValue, onChange, includeTeachi
             <div className="space-y-2">
               <Label>State / National / International</Label>
               <Select value={item.stateNationalInternational ?? ""} onValueChange={(v) => update({ stateNationalInternational: v as AwardLevel })}>
-                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                <SelectTrigger onClear={item.stateNationalInternational ? () => update({ stateNationalInternational: undefined }) : undefined}><SelectValue placeholder="Select" /></SelectTrigger>
                 <SelectContent>
                   {Object.entries(AWARD_LEVEL_LABELS).map(([k, label]) => (
                     <SelectItem key={k} value={k}>{label}</SelectItem>

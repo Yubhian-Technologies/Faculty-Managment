@@ -19,7 +19,7 @@ export interface PersonalDetailsInput {
   aadharNo?: string;
   panNo?: string;
   passportNo?: string;
-  differentlyAbled?: boolean;
+  differentlyAbled?: boolean | null; // null = answer cleared (stored as null, read back as unset)
   differentlyAbledDetails?: string;
   bankAccountNumber?: string;
   ifscCode?: string;

@@ -1145,6 +1145,19 @@ export const FACULTY_STATUS_DATE_LABELS: Record<FacultyStatusDateField, string> 
   retainershipDate: "Retainership Date",
 };
 
+export type PreviousTeachingSource = "INTERNAL" | "EXTERNAL";
+export interface PreviousTeachingAssignment {
+  id: string;
+  source: PreviousTeachingSource;
+  collegeName?: string; // External only
+  academicYear: string; // e.g. "2024-2025"
+  course: string;       // e.g. "B.Tech"
+  year: string;         // e.g. "1st", "2nd"
+  semester: string;     // e.g. "I", "II"
+  subject: string;
+  passPercentage: string; // free text, e.g. "85" or "85%"
+}
+
 export interface FacultyMember {
   id: string;
   collegeId: string;
@@ -1264,6 +1277,10 @@ export interface FacultyMember {
   // totalYearsOfExperience/allPreviousExperienceEntries in
   // src/lib/faculty/experienceCalc.ts), so they can never go stale.
   academicProfile?: FacultyProfileFields; // Modules 1-5 extended profile
+  // Teaching taken earlier, at this college ("Internal") or another one ("External") - every field free text, entered
+  // by the HOD or by the faculty member themselves (Teaching Load > Previous Teaching Assignments). Separate from the
+  // teachingAssignments collection (current/structured assignments), which is not touched by it.
+  previousTeachingAssignments?: PreviousTeachingAssignment[];
 
   joiningLetterUrl?: string; // Firebase Storage URL for the signed joining letter (uploaded by HOD)
   appointmentLetterUrl?: string; // Firebase Storage URL for the appointment order (uploaded by HOD)

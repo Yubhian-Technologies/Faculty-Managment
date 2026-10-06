@@ -20,6 +20,7 @@ import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 import { validateYearForCourseDuration } from "@/lib/students/rosterValidation";
 import { ChunkedBatch, ChunkedBatchError } from "@/lib/firestore/chunkedBatch";
 import { createRollRegistry, rollNumberTakenMessage } from "@/lib/students/rollNumberUniqueness";
+import { normalizeStudentMobile, studentMobileProblem, studentMobileTakenMessage, reserveStudentMobile, releaseStudentMobile, isStudentMobileTaken } from "@/lib/students/studentMobile";
 import type { Section, StudentRecord } from "@/types";
 
 // Bulk, multi-section roster upload (College Office only - the route guard below) - unlike college/students/import (single sectionId for the
@@ -45,6 +46,9 @@ interface AcceptedRow {
   historyRef: FirebaseFirestore.DocumentReference;
   historyData: Record<string, unknown>;
   claimCreated: boolean;
+  // The row's Student Mobile No (10 digits, "" when none) and whether its claim was taken - see lib/students/studentMobile.ts.
+  mobile: string;
+  mobileClaimed: boolean;
   chunkIndex: number;
 }
 
@@ -351,6 +355,10 @@ export async function POST(request: Request) {
     const existingAdmissionNos = new Set<string>();
     const existingHallTicketNos = new Set<string>();
     const existingEmails = new Set<string>();
+    // Student Mobile No (10 digits) -> who holds it in THIS college (other colleges are covered by the global claim below).
+    // Required and unique per student: the Office enrols students before roll numbers exist and later maps Roll Nos onto
+    // students by this number.
+    const existingMobiles = new Map<string, { name?: string; rollNumber?: string }>();
     for (const d of existingDocs) {
       const s = d.data() as Record<string, unknown>;
       const admissionNo = typeof s.admissionNo === "string" ? s.admissionNo.trim().toLowerCase() : "";
@@ -359,6 +367,8 @@ export async function POST(request: Request) {
       if (hallTicketNo) existingHallTicketNos.add(hallTicketNo);
       const email = typeof s.email === "string" ? s.email.trim().toLowerCase() : "";
       if (email) existingEmails.add(email);
+      const mobile = normalizeStudentMobile(s.mobileNo);
+      if (mobile && !existingMobiles.has(mobile)) existingMobiles.set(mobile, { name: s.name as string | undefined, rollNumber: s.rollNumber as string | undefined });
     }
     function findIdentityDuplicate(row: BulkImportRow): string | null {
       const admissionNo = row.admissionNo?.trim().toLowerCase();
@@ -376,6 +386,8 @@ export async function POST(request: Request) {
       if (hallTicketNo) existingHallTicketNos.add(hallTicketNo);
       const email = row.email?.trim().toLowerCase();
       if (email) existingEmails.add(email);
+      const mobile = normalizeStudentMobile(row.mobileNo);
+      if (mobile) existingMobiles.set(mobile, { name: row.name?.trim(), rollNumber: row.rollNumber?.trim() });
     }
 
     const now = new Date();
@@ -385,7 +397,8 @@ export async function POST(request: Request) {
     const accepted: AcceptedRow[] = [];
 
     for (let i = 0; i < body.records.length; i++) {
-      const row = body.records[i];
+      // A copy: the row's mobile number is replaced by its 10-digit form below.
+      const row = { ...body.records[i] };
       const rowNum = i + 2;
 
       // The login password, when the row has one, is checked before anything about
@@ -412,6 +425,17 @@ export async function POST(request: Request) {
       const identityDuplicateError = findIdentityDuplicate(row);
       if (identityDuplicateError) { failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: identityDuplicateError }); continue; }
 
+      // Student Mobile No is REQUIRED: a real 10-digit number that no other student - in this or any other college - holds
+      // (nor an earlier row of this file). Checked here against this college's students and this file; claimed atomically
+      // (which also covers every other college) before the write below.
+      const typedMobile = row.mobileNo === undefined || row.mobileNo === null ? "" : String(row.mobileNo).trim();
+      const mobileProblem = studentMobileProblem(typedMobile);
+      if (mobileProblem) { failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: mobileProblem }); continue; }
+      const mobile10 = normalizeStudentMobile(typedMobile);
+      const mobileHolder = existingMobiles.get(mobile10);
+      if (mobileHolder) { failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: studentMobileTakenMessage(mobile10, mobileHolder) }); continue; }
+      row.mobileNo = mobile10;
+
       // Department is optional at the row level (HOD's own template has no
       // such column at all) but, when present, both disambiguates the section
       // lookup for a whole-college roster and accepts the department's short
@@ -420,7 +444,7 @@ export async function POST(request: Request) {
       if (row.department?.trim()) {
         departmentName = resolveDepartment(row.department);
         if (!departmentName) {
-          failed.push({ row: rowNum, rollNumber: row.rollNumber, error: `Department "${row.department}" not found` });
+          failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: `Department "${row.department}" not found` });
           continue;
         }
       }
@@ -559,13 +583,10 @@ export async function POST(request: Request) {
         const yearDurationError = validateYearForCourseDuration(Number(row.year), resolvedCourseDoc?.durationYears, resolvedCourse);
         if (yearDurationError) { failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: yearDurationError }); continue; }
 
-        // De-dupe by roll (required, unique college-wide - see below).
+        // De-dupe by roll (unique college-wide - see below). Roll Number is OPTIONAL: the Office often enrols students
+        // before roll numbers exist and sets them later (matched by Student Mobile No). A roll-less row is de-duped by
+        // its mobile number above, and by the name + corroborating-detail check below.
         const roll = row.rollNumber?.trim() ?? "";
-        // Roll Number is the student's unique identity - required on every
-        // imported row, unassigned or placed alike. (The roll-less name+detail
-        // duplicate matching below now only ever guards against re-importing a
-        // legacy roll-less student, which a new row can no longer be.)
-        if (!roll) { failed.push({ row: rowNum, rollNumber: "-", error: "Roll Number is required" }); continue; }
         const nameLower = row.name.trim().toLowerCase();
         const year = Number(row.year);
         const nameKey = `${nameLower}::${departmentName!.toLowerCase()}::${year}`;
@@ -578,7 +599,7 @@ export async function POST(request: Request) {
         const rollKey = `${roll}::${departmentName}::${year}`;
         // A roll number is unique across the whole college - held by ANY
         // student already saved, or by an earlier row of this same file.
-        const unassignedRollHolder = rollRegistry.holder(roll);
+        const unassignedRollHolder = roll ? rollRegistry.holder(roll) : undefined;
         if (unassignedRollHolder) {
           failed.push({ row: rowNum, rollNumber: roll, error: rollNumberTakenMessage(roll, unassignedRollHolder.name) });
           continue;
@@ -612,7 +633,7 @@ export async function POST(request: Request) {
             { ...row, rollNumber: roll, secondaryDepartment: unassignedSecondary, course: resolvedCourse },
             now
           ),
-          historyRef: history.ref, historyData: history.data as Record<string, unknown>, claimCreated: false, chunkIndex: 0,
+          historyRef: history.ref, historyData: history.data as Record<string, unknown>, claimCreated: false, mobile: mobile10, mobileClaimed: false, chunkIndex: 0,
         });
         if (roll) {
           existingUnassignedRolls.add(rollKey);
@@ -629,9 +650,8 @@ export async function POST(request: Request) {
         continue;
       }
 
-      // Section-based (placed) rows still require a roll number - it's the
-      // per-section identity/de-dupe key the rest of the flow relies on.
-      if (!row.rollNumber?.trim()) { failed.push({ row: rowNum, rollNumber: "-", error: "Roll Number is required" }); continue; }
+      // Roll Number is optional for a placed row too (see the unassigned path above) - when present it is the per-section
+      // identity/de-dupe key; when absent the row is identified by its Student Mobile No.
 
       // Resolved early (before section lookup) because it's also used to
       // pick between multiple same-named sections that only differ by which
@@ -640,7 +660,7 @@ export async function POST(request: Request) {
       if (row.secondaryDepartment?.trim()) {
         requestedSecondaryDept = resolveDepartment(row.secondaryDepartment);
         if (!requestedSecondaryDept) {
-          failed.push({ row: rowNum, rollNumber: row.rollNumber, error: `Core Department "${row.secondaryDepartment}" not found` });
+          failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: `Core Department "${row.secondaryDepartment}" not found` });
           continue;
         }
       }
@@ -670,7 +690,7 @@ export async function POST(request: Request) {
         }
         let matches = Array.from(tried.values());
         if (matches.length === 0) {
-          failed.push({ row: rowNum, rollNumber: row.rollNumber, error: `No section named "${row.section}" (Year ${row.year}) found owned by or cross-listed to ${departmentName} - create the section first, or check the Department/Section spelling` });
+          failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: `No section named "${row.section}" (Year ${row.year}) found owned by or cross-listed to ${departmentName} - create the section first, or check the Department/Section spelling` });
           continue;
         }
         if (matches.length > 1) {
@@ -682,14 +702,14 @@ export async function POST(request: Request) {
           if (narrowed.length === 1) matches = narrowed;
         }
         if (matches.length > 1) {
-          failed.push({ row: rowNum, rollNumber: row.rollNumber, error: `Multiple sections named "${row.section}" (Year ${row.year}) exist under ${departmentName} - add or correct this row's Core Department to say which one` });
+          failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: `Multiple sections named "${row.section}" (Year ${row.year}) exist under ${departmentName} - add or correct this row's Core Department to say which one` });
           continue;
         }
         section = matches[0];
       } else {
         const candidates = sectionsByNameYear.get(sectionNameYearKey) ?? [];
         if (candidates.length === 0) {
-          failed.push({ row: rowNum, rollNumber: row.rollNumber, error: `Section ${row.section} (Year ${row.year}) not found` });
+          failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: `Section ${row.section} (Year ${row.year}) not found` });
           continue;
         } else if (candidates.length === 1) {
           section = candidates[0];
@@ -705,7 +725,7 @@ export async function POST(request: Request) {
           if (narrowed.length === 1) {
             section = narrowed[0];
           } else {
-            failed.push({ row: rowNum, rollNumber: row.rollNumber, error: `Multiple sections named "${row.section}" (Year ${row.year}) exist across departments - add a Department value to this row to disambiguate` });
+            failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: `Multiple sections named "${row.section}" (Year ${row.year}) exist across departments - add a Department value to this row to disambiguate` });
             continue;
           }
         }
@@ -722,11 +742,11 @@ export async function POST(request: Request) {
       if (!secondaryDept && sectionSecondaryDepts.length === 1) {
         secondaryDept = sectionSecondaryDepts[0];
       } else if (!secondaryDept && sectionSecondaryDepts.length > 1) {
-        failed.push({ row: rowNum, rollNumber: row.rollNumber, error: `Section ${section.name} is cross-listed to multiple departments (${sectionSecondaryDepts.join(", ")}) - add a Core Department value to this row to say which one` });
+        failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: `Section ${section.name} is cross-listed to multiple departments (${sectionSecondaryDepts.join(", ")}) - add a Core Department value to this row to say which one` });
         continue;
       }
       if (secondaryDept && secondaryDept.toLowerCase() === section.department.trim().toLowerCase()) {
-        failed.push({ row: rowNum, rollNumber: row.rollNumber, error: "Core Department cannot be the same as the section's department" });
+        failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: "Core Department cannot be the same as the section's department" });
         continue;
       }
       // The section a row resolves to (by name/department/year) can be a real
@@ -736,20 +756,20 @@ export async function POST(request: Request) {
       // facts against each other: a section only "is" a given secondaryDept
       // if it's the section's own department or one it's cross-listed to.
       if (secondaryDept && !sectionSecondaryDepts.some((d) => d.toLowerCase() === secondaryDept.toLowerCase())) {
-        failed.push({ row: rowNum, rollNumber: row.rollNumber, error: `Section ${section.name} is not cross-listed to "${secondaryDept}" - check this row's Section/Department columns` });
+        failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: `Section ${section.name} is not cross-listed to "${secondaryDept}" - check this row's Section/Department columns` });
         continue;
       }
 
-      const roll = row.rollNumber.trim();
+      const roll = (row.rollNumber ?? "").trim();
       // Unique across the whole college, not just this section - held by any
       // saved student or an earlier row of this same file.
-      const placedRollHolder = rollRegistry.holder(roll);
+      const placedRollHolder = roll ? rollRegistry.holder(roll) : undefined;
       if (placedRollHolder) {
         failed.push({ row: rowNum, rollNumber: roll, error: rollNumberTakenMessage(roll, placedRollHolder.name) });
         continue;
       }
       const dedupeKey = rollDedupeKey(roll, section.department, section.courseId, section.name, section.year);
-      if (existingRolls.has(dedupeKey)) {
+      if (roll && existingRolls.has(dedupeKey)) {
         failed.push({ row: rowNum, rollNumber: roll, error: "Roll number already exists in this section" });
         continue;
       }
@@ -764,17 +784,17 @@ export async function POST(request: Request) {
       // different, unrelated same-named section happened to match the
       // department+name+year search first.
       if (!row.course?.trim()) {
-        failed.push({ row: rowNum, rollNumber: row.rollNumber, error: "Course is required" });
+        failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: "Course is required" });
         continue;
       }
       const resolvedPlacedCourse = resolveCourse(section.department, row.course);
       const resolvedPlacedCourseId = resolvedPlacedCourse ? resolveCourseId(section.department, resolvedPlacedCourse, section.year) : undefined;
       if (!resolvedPlacedCourse || !resolvedPlacedCourseId) {
-        failed.push({ row: rowNum, rollNumber: row.rollNumber, error: `Course "${row.course}" is not offered by ${section.department}` });
+        failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: `Course "${row.course}" is not offered by ${section.department}` });
         continue;
       }
       if (resolvedPlacedCourseId !== section.courseId) {
-        failed.push({ row: rowNum, rollNumber: row.rollNumber, error: `Course "${resolvedPlacedCourse}" does not match section ${section.name}'s actual course (${section.courseName ?? "unknown"}) - check this row's Section/Course columns` });
+        failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: `Course "${resolvedPlacedCourse}" does not match section ${section.name}'s actual course (${section.courseName ?? "unknown"}) - check this row's Section/Course columns` });
         continue;
       }
       const placedCourse = resolvedPlacedCourse;
@@ -790,34 +810,61 @@ export async function POST(request: Request) {
       accepted.push({
         rowNum, roll, name: row.name.trim(), password: loginPassword, docRef,
         doc: buildStudentDoc(section, { ...row, secondaryDepartment: secondaryDept || undefined, course: placedCourse }, now),
-        historyRef: history.ref, historyData: history.data as Record<string, unknown>, claimCreated: false, chunkIndex: 0,
+        historyRef: history.ref, historyData: history.data as Record<string, unknown>, claimCreated: false, mobile: mobile10, mobileClaimed: false, chunkIndex: 0,
       });
-      existingRolls.add(dedupeKey);
-      rollRegistry.claim(roll, row.name.trim());
+      if (roll) {
+        existingRolls.add(dedupeKey);
+        rollRegistry.claim(roll, row.name.trim());
+      }
       registerIdentityValues(row);
     }
 
-    // Roll numbers are unique across ALL colleges. Each accepted row claims its roll
-    // in the global registry (atomically, a few at a time); a row whose roll is held
-    // by a student of ANOTHER college is rejected here, and nothing of it is written.
+    // Student Mobile Nos and Roll Numbers are both unique across ALL colleges. Each accepted row claims its mobile and
+    // its roll (when it has one) atomically, a few rows at a time; a row whose number is held by someone else is
+    // rejected here and nothing of it is written (a mobile claimed first is given back).
     const claimed: AcceptedRow[] = [];
-    for (let i = 0; i < accepted.length; i += 10) {
-      const group = accepted.slice(i, i + 10);
-      await Promise.all(
-        group.map(async (a) => {
-          const claim = await claimStudentRoll(db, { roll: a.roll, collegeId, studentDocId: a.docRef.id, name: a.name }, now);
-          if (!claim.ok) {
-            failed.push({
-              row: a.rowNum,
-              rollNumber: a.roll,
-              error: claim.code === "TAKEN" ? rollTakenMessage(a.roll, claim.holder) : "Roll Number must contain letters or digits",
-            });
-            return;
-          }
-          a.claimCreated = claim.created;
-          claimed.push(a);
-        })
-      );
+    // If anything unexpected goes wrong part-way, every claim already taken is given back first - otherwise a claim
+    // for a student that was never written would block a retry of the same rows for a while.
+    try {
+      for (let i = 0; i < accepted.length; i += 10) {
+        const group = accepted.slice(i, i + 10);
+        await Promise.all(
+          group.map(async (a) => {
+            if (a.mobile) {
+              try {
+                await reserveStudentMobile(db, collegeId, a.mobile, a.docRef.id);
+                a.mobileClaimed = true;
+              } catch (mobileErr) {
+                if (!isStudentMobileTaken(mobileErr)) throw mobileErr;
+                failed.push({ row: a.rowNum, rollNumber: a.roll || "-", error: mobileErr.userMessage });
+                return;
+              }
+            }
+            if (a.roll) {
+              const claim = await claimStudentRoll(db, { roll: a.roll, collegeId, studentDocId: a.docRef.id, name: a.name }, now);
+              if (!claim.ok) {
+                if (a.mobileClaimed) await releaseStudentMobile(db, collegeId, a.mobile, a.docRef.id);
+                failed.push({
+                  row: a.rowNum,
+                  rollNumber: a.roll,
+                  error: claim.code === "TAKEN" ? rollTakenMessage(a.roll, claim.holder) : "Roll Number must contain letters or digits",
+                });
+                return;
+              }
+              a.claimCreated = claim.created;
+            }
+            claimed.push(a);
+          })
+        );
+      }
+    } catch (claimErr) {
+      await Promise.all([
+        ...accepted.filter((a) => a.mobileClaimed).map((a) => releaseStudentMobile(db, collegeId, a.mobile, a.docRef.id)),
+        ...accepted.filter((a) => a.claimCreated).map((a) =>
+          releaseStudentRoll(db, a.roll, collegeId, a.docRef.id).catch((e) => console.error("[students/import-excel] could not release roll claim", a.roll, e))
+        ),
+      ]);
+      throw claimErr;
     }
     claimed.sort((x, y) => x.rowNum - y.rowNum);
 
@@ -836,11 +883,12 @@ export async function POST(request: Request) {
       } catch (commitErr) {
         const failedChunks = commitErr instanceof ChunkedBatchError ? new Set(commitErr.failedChunkIndexes) : null;
         const lost = failedChunks ? claimed.filter((a) => failedChunks.has(a.chunkIndex)) : claimed;
-        await Promise.all(
-          lost.filter((a) => a.claimCreated).map((a) =>
+        await Promise.all([
+          ...lost.filter((a) => a.claimCreated).map((a) =>
             releaseStudentRoll(db, a.roll, collegeId, a.docRef.id).catch((e) => console.error("[students/import-excel] could not release roll claim", a.roll, e))
-          )
-        );
+          ),
+          ...lost.filter((a) => a.mobileClaimed).map((a) => releaseStudentMobile(db, collegeId, a.mobile, a.docRef.id)),
+        ]);
         if (!failedChunks) throw commitErr;
         for (const a of lost) failed.push({ row: a.rowNum, rollNumber: a.roll, error: "Could not be saved - please import this row again" });
         saved = claimed.filter((a) => !failedChunks.has(a.chunkIndex));
