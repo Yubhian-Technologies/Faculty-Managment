@@ -33,8 +33,8 @@ import { selectableYears } from "@/lib/college/courseYears";
 // The Office only knows a fresh student's basic details and which branch
 // (department) they're admitted into - section is still assigned later by the
 // department (the sub-HOD divides students into sections), so it's
-// deliberately NOT a column here. Roll Number IS a required column - the
-// student's unique identity, checked for uniqueness across the whole college.
+// deliberately NOT a column here. Roll Number is an OPTIONAL column (unique across
+// all colleges when given); Student Mobile No is REQUIRED and unique across all colleges.
 //
 // "Branch" is still accepted as an alternate header for Department. "Course"
 // is NOT: the admission sheet carries both columns (programme in one, branch
@@ -108,8 +108,9 @@ const LOCKED_KEY_SET = new Set(["department", "year", "secondaryDepartment"]);
 const LOCKED_TEMPLATE_COLUMNS = [...COLUMNS.filter((c) => !LOCKED_KEY_SET.has(c.key)), PASSWORD_COLUMN];
 
 const HINTS = [
-  "Course, Department and Current year of Study are selected once above — they are not columns in the file. Roll No and Name are the required fields in the file.",
-  "Roll No is the student's unique identity and their login username: it is required on every row and must not be used by any other student in ANY college (or by another row in the same file) - upper/lower case, spaces and dashes don't make a roll different. A row with a missing or already-used Roll No is skipped.",
+  "Course, Department and Current year of Study are selected once above — they are not columns in the file. Name and Student Mobile No are the required fields in the file.",
+  "Roll No is optional - leave it blank if roll numbers aren't issued yet and set them later. When filled in it is the student's login username and must not be used by any other student in ANY college (or by another row in the same file) - upper/lower case, spaces and dashes don't make a roll different. A row with an already-used Roll No is skipped. A student needs a Roll No before a login can be created.",
+  "Student Mobile No is required: a 10-digit number (starting 6-9) that no other student in ANY college has - \"+91\", spaces and dashes are ignored. It is how roll numbers are matched to students later. A row with a missing, invalid or already-used Student Mobile No is skipped.",
   "Login Password (optional): when a row has one, that student's login is created with exactly this password (at least 8 characters, no leading/trailing space) and they sign in with their Roll No and it. It is never saved anywhere readable; students can change it, and you can reset it later. Leave it blank to create logins afterwards from the Students list.",
   "Name (as per SSC): enter the name exactly as it appears on the student's SSC (10th) certificate - this is the name used on statutory/academic paperwork.",
   "Section is NOT collected here - the department assigns it later (the sub-HOD divides students into sections). Every student is imported as \"unassigned\" until then.",
@@ -270,8 +271,8 @@ export default function OfficeStudentImportPage() {
   async function handleFixSave() {
     if (!fixTarget) return;
     const form = fixTarget.form;
-    if (!form.rollNumber?.trim()) { setFixError("Roll No is required"); return; }
     if (!form.name?.trim()) { setFixError("Name is required"); return; }
+    if (!form.mobileNo?.trim()) { setFixError("Student Mobile No is required"); return; }
     if (!form.course) { setFixError("Course is required"); return; }
     if (!form.department) { setFixError("Department is required"); return; }
     if (!form.year) { setFixError("Current year of Study is required"); return; }

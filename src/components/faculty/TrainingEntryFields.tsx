@@ -455,7 +455,7 @@ export function TrainingEntryFields({ item: rawItem, update, ownerFacultyId, own
           <div className="space-y-2">
             <Label>Certification Type</Label>
             <Select value={item.certificationType ?? ""} onValueChange={(v) => update({ certificationType: v as CertificationType })}>
-              <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+              <SelectTrigger onClear={item.certificationType ? () => update({ certificationType: undefined }) : undefined}><SelectValue placeholder="Select" /></SelectTrigger>
               <SelectContent>
                 {Object.entries(CERTIFICATION_TYPE_LABELS).map(([k, label]) => (
                   <SelectItem key={k} value={k}>{label}</SelectItem>
@@ -480,7 +480,11 @@ export function TrainingEntryFields({ item: rawItem, update, ownerFacultyId, own
                 remark: v === "PARTICIPATED" ? item.remark : undefined,
               })}
             >
-              <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+              <SelectTrigger
+                onClear={item.participatedOrConducted && item.type !== "PLACEMENT_TRAINING" && item.type !== "ALUMNI_TALK"
+                  ? () => update({ participatedOrConducted: undefined, nameOfTheFacultyCoordinator: "", coConductingFaculty: undefined })
+                  : undefined}
+              ><SelectValue placeholder="Select" /></SelectTrigger>
               <SelectContent>
                 {Object.entries(TRAINING_PARTICIPATION_ROLE_LABELS).map(([k, label]) => (
                   <SelectItem key={k} value={k}>{label}</SelectItem>
@@ -514,7 +518,7 @@ export function TrainingEntryFields({ item: rawItem, update, ownerFacultyId, own
         <div className="space-y-2">
           <Label>National / International</Label>
           <Select value={item.nationalInternational ?? ""} onValueChange={(v) => update({ nationalInternational: v as TrainingProgramLevel })}>
-            <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+            <SelectTrigger onClear={item.nationalInternational ? () => update({ nationalInternational: undefined }) : undefined}><SelectValue placeholder="Select" /></SelectTrigger>
             <SelectContent>
               {Object.entries(TRAINING_PROGRAM_LEVEL_LABELS).map(([k, label]) => (
                 <SelectItem key={k} value={k}>{label}</SelectItem>
@@ -526,7 +530,7 @@ export function TrainingEntryFields({ item: rawItem, update, ownerFacultyId, own
         <div className="space-y-2">
           <Label>Mode of the Program</Label>
           <Select value={item.modeOfTheProgram ?? ""} onValueChange={(v) => update({ modeOfTheProgram: v as TrainingProgramMode })}>
-            <SelectTrigger><SelectValue placeholder="Select mode" /></SelectTrigger>
+            <SelectTrigger onClear={item.modeOfTheProgram ? () => update({ modeOfTheProgram: undefined }) : undefined}><SelectValue placeholder="Select mode" /></SelectTrigger>
             <SelectContent>
               {Object.entries(TRAINING_PROGRAM_MODE_LABELS).map(([k, label]) => (
                 <SelectItem key={k} value={k}>{label}</SelectItem>
@@ -539,7 +543,7 @@ export function TrainingEntryFields({ item: rawItem, update, ownerFacultyId, own
         <div className="sm:col-span-2 space-y-2 rounded-lg border p-3">
             <Label>Beneficiaries</Label>
             <Select value={item.beneficiaries ?? ""} onValueChange={(v) => update({ beneficiaries: v as TrainingBeneficiaryType })}>
-              <SelectTrigger className="w-44"><SelectValue placeholder="Students / Faculty" /></SelectTrigger>
+              <SelectTrigger className="w-44" onClear={item.beneficiaries ? () => update({ beneficiaries: undefined }) : undefined}><SelectValue placeholder="Students / Faculty" /></SelectTrigger>
               <SelectContent>
                 {Object.entries(TRAINING_BENEFICIARY_TYPE_LABELS)
                   .filter(([k]) => allowedBeneficiaryTypes.includes(k as TrainingBeneficiaryType))

@@ -4,6 +4,7 @@ import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { isEmployeeIdReserved, reserveEmployeeId } from "@/lib/firestore/employeeIdKeys";
 import { NextResponse } from "next/server";
+import { resolvePreviousTeachingUpdate } from "@/lib/faculty/previousTeaching";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb, getAdminAuth } from "@/lib/firebase/admin";
 import { employeeIdTaken, employeeIdTakenMessage } from "@/lib/firestore/employeeIds";
@@ -113,6 +114,10 @@ export async function PATCH(
       // ({ set, remove }) - see academicProfileChanges.ts. Never combined with it.
       academicProfileChanges: unknown;
       technicalProfile: Record<string, unknown>;
+      // Free-text Previous Teaching Assignments (see lib/faculty/previousTeaching.ts). `...LoadedIds` = the ids the editor
+      // had loaded: rows someone else added since are kept, only rows the editor removed are dropped.
+      previousTeachingAssignments: unknown;
+      previousTeachingAssignmentsLoadedIds: unknown;
       profilePhotoUrl: string;
       joiningLetterUrl: string;
       appointmentLetterUrl: string;
@@ -335,6 +340,9 @@ export async function PATCH(
       updates.academicProfile = ap;
     }
     if (body.technicalProfile !== undefined) updates.technicalProfile = body.technicalProfile;
+    const previousTeaching = resolvePreviousTeachingUpdate(body, snap.data() as { previousTeachingAssignments?: unknown }, () => crypto.randomUUID());
+    if (previousTeaching.kind === "error") return NextResponse.json({ error: previousTeaching.error }, { status: 400 });
+    if (previousTeaching.kind === "set") updates.previousTeachingAssignments = previousTeaching.value;
 
     // Date fields
     if (body.joiningDate) updates.joiningDate = new Date(body.joiningDate);

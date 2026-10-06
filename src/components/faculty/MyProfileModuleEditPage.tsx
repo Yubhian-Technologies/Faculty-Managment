@@ -13,6 +13,9 @@ import { getUserById } from "@/lib/firestore/users";
 import { FacultyProfileModuleEditor, type FacultyEditRecord } from "@/components/faculty/FacultyProfileModuleEditor";
 import { getMissingRequiredPersonalFields, STAFF_REQUIRED_PERSONAL_FIELDS, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
 import { PROFILE_MODULES, SELF_EDIT_DISABLED_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileModules";
+import { readPreviousTeachingAssignments } from "@/lib/faculty/previousTeaching";
+import { savePreviousTeachingAssignments, samePreviousTeaching } from "@/lib/faculty/savePreviousTeaching";
+import type { PreviousTeachingAssignment } from "@/types";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
 import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
@@ -81,10 +84,14 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint, sectionScoped
   // (switched-on colleges only - see GET /api/college/faculty/me). Then every save goes to
   // PATCH /api/college/faculty/me, section-scoped, instead of the login-side patchEndpoint.
   const [viaFacultyRecord, setViaFacultyRecord] = useState(false);
+  // Teaching Load: a person with a real faculty record enters their own Previous Teaching Assignments here.
+  const [hasFacultyRecord, setHasFacultyRecord] = useState(false);
+  const [previousRecords, setPreviousRecords] = useState<PreviousTeachingAssignment[]>([]);
+  const [originalPrevious, setOriginalPrevious] = useState<PreviousTeachingAssignment[]>([]);
 
   useEffect(() => {
     fetch("/api/college/faculty/me")
-      .then((r) => r.json() as Promise<{ faculty?: Record<string, unknown> | null; message?: string; editViaFacultyRecord?: boolean }>)
+      .then((r) => r.json() as Promise<{ faculty?: Record<string, unknown> | null; message?: string; editViaFacultyRecord?: boolean; facultyRecord?: boolean }>)
       .then((d) => {
         if (!d.faculty) {
           setUnlinkedMessage(d.message ?? "No profile record was found for your login.");
@@ -93,6 +100,12 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint, sectionScoped
         const m = migrateFacultyDoc(d.faculty as Record<string, unknown>);
         const academicProfile = (m.academicProfile as FacultyEditRecord["academicProfile"]) ?? {};
         const viaFaculty = d.editViaFacultyRecord === true;
+        if (d.facultyRecord === true) {
+          const previous = readPreviousTeachingAssignments(m as { previousTeachingAssignments?: unknown });
+          setHasFacultyRecord(true);
+          setPreviousRecords(previous);
+          setOriginalPrevious(previous);
+        }
         setViaFacultyRecord(viaFaculty);
         setRecordId(typeof d.faculty.id === "string" ? d.faculty.id : "");
         setOriginalAcademicProfile(academicProfile);
@@ -108,6 +121,23 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint, sectionScoped
   }
 
   async function handleSave() {
+    if (moduleKey === "teaching-load") {
+      if (samePreviousTeaching(previousRecords, originalPrevious)) {
+        toast({ variant: "success", title: "No changes to save" });
+        router.push(`${basePath}/${moduleKey}`);
+        return;
+      }
+      setSaving(true);
+      const prevError = await savePreviousTeachingAssignments("/api/college/faculty/me", previousRecords, originalPrevious.map((r) => r.id));
+      setSaving(false);
+      if (prevError) {
+        toast({ variant: "destructive", title: "Previous teaching assignments not saved", description: prevError });
+        return;
+      }
+      toast({ variant: "success", title: "Saved" });
+      router.push(`${basePath}/${moduleKey}`);
+      return;
+    }
     if (moduleKey === "personal") {
       const missing = getMissingRequiredPersonalFields(record, requiredPersonalFields);
       if (missing.length > 0) {
@@ -169,7 +199,9 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint, sectionScoped
 
   if (!moduleDef) return <p className="text-sm text-muted-foreground">Unknown section.</p>;
 
-  if (SELF_EDIT_DISABLED_MODULES.includes(moduleKey)) {
+  // Teaching Load is self-editable only for a real faculty record (judged once loaded).
+  const selfEditBlocked = moduleKey === "teaching-load" ? !loading && !hasFacultyRecord : SELF_EDIT_DISABLED_MODULES.includes(moduleKey);
+  if (selfEditBlocked) {
     return (
       <div className="space-y-6">
         <PageHeader
@@ -208,6 +240,8 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint, sectionScoped
               record={record}
               onChange={patch}
               facultyId={recordId}
+              previousTeachingRecords={previousRecords}
+              onPreviousTeachingRecordsChange={setPreviousRecords}
               includeTeachingAssignment={false}
               collegeType={collegeType}
               requiredPersonalFields={requiredPersonalFields}

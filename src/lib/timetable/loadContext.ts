@@ -287,11 +287,14 @@ export async function loadTimetableContext(
   return {
     section, timing, rules, assignments, courseYearSubjects, subjectsById, pinnedSlots,
     busyFaculty, declaredBusyFaculty, currentSemester,
+    // Only a lent-in subject nobody has placed yet is held back: one already on the timetable (placed
+    // before this rule, or by the lending department) stays editable.
     lentNotReady: new Map(
       allocatedRequestsSnap.docs
         .map((d) => d.data() as FacultyAssignmentRequest)
         .filter((r) => !r.busyClosed)
-        .flatMap((r) => requestAssignmentIds(r).map((id) => [id, r.targetDepartmentName] as const)),
+        .flatMap((r) => requestAssignmentIds(r).map((id) => [id, r.targetDepartmentName] as const))
+        .filter(([id]) => !ownSlotsSnap.docs.some((d) => (d.data() as { assignmentId?: string }).assignmentId === id)),
     ),
   };
 }

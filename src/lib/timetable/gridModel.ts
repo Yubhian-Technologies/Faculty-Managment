@@ -9,6 +9,7 @@
 import type { DayOfWeek, Subject, TimetableSlot } from "@/types";
 import { DEFAULT_TIMETABLE_RULES } from "@/types";
 import { formatTime12h } from "./facultyTimetablePdf";
+import { istDateKey } from "@/lib/attendance/istTime";
 
 /** Every day of the week this app models, in timetable order. */
 export const ALL_DAYS: DayOfWeek[] = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
@@ -307,25 +308,144 @@ export function timetableClassLine(parts: {
   semesterLabel?: string;
   sectionName?: string;
   departmentName?: string;
+  classroom?: string;
 }): string {
   // The LAST number: pickers label a semester "2-1" (year-semester), and the
   // class line already shows the year, so it is the semester within the year.
   const semNumber = parts.semesterLabel?.match(/\d+/g)?.pop();
   const semester = semNumber ? `${roman(Number(semNumber))} Sem` : parts.semesterLabel;
   // A branch-picker name carries the owning department's code first
-  // ("BSC-CSE-C" = Basic Science, CSE, C); the class line wants "CSE C".
+  // ("BSC-CSE-C" = Basic Science, CSE, C); the class line wants "CSE-C".
   const nameParts = (parts.sectionName ?? "").trim().split(/[-_\s]+/).filter(Boolean);
-  let section = (nameParts.length >= 3 ? nameParts.slice(1) : nameParts).join(" ");
-  if (section && !/[A-Za-z]{2,}/.test(section) && parts.departmentName) {
+  let sectionParts = nameParts.length >= 3 ? nameParts.slice(1) : nameParts;
+  if (sectionParts.length === 1 && !/[A-Za-z]{2,}/.test(sectionParts[0]) && parts.departmentName) {
     const initials = parts.departmentName.split(/[\s&]+/).filter((w) => /^[A-Za-z]/.test(w) && !/^(and|of)$/i.test(w)).map((w) => w[0].toUpperCase()).join("");
-    section = `${initials} ${section}`;
+    sectionParts = [initials, sectionParts[0]];
   }
-  return [
+  const section = sectionParts.join("-");
+
+  const base = [
     parts.year != null ? roman(parts.year) : undefined,
     parts.courseName ? shortCourseName(parts.courseName) : undefined,
     semester,
     section || undefined,
   ].filter(Boolean).join(" ");
+
+  if (parts.classroom?.trim()) {
+    const roomStr = /^room/i.test(parts.classroom.trim()) ? parts.classroom.trim() : `Room: ${parts.classroom.trim()}`;
+    return base ? `${base}  |  ${roomStr}` : roomStr;
+  }
+  return base;
+}
+
+export function buildClassTimetableSubtitle(opts: {
+  academicYear?: string;
+  semester?: number;
+  semesterLabel?: string;
+  effectiveDate?: string;
+}): string {
+  const acadYear = opts.academicYear || "2026-2027";
+  const semNum = typeof opts.semester === "number"
+    ? opts.semester
+    : Number(opts.semesterLabel?.match(/\d+/g)?.pop()) || 1;
+  const semType = semNum > 0 ? (semNum % 2 === 1 ? "Odd Semester" : "Even Semester") : "Semester";
+  const eff = opts.effectiveDate?.trim() || istDateKey();
+  const iso = eff.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const shown = iso ? `${iso[3]}-${iso[2]}-${iso[1]}` : eff;
+  return `Class Time Table for the Academic Year ${acadYear}, ${semType}, w.e.f ${shown}`;
+}
+
+/**
+ * Which period columns to draw as one wide cell. Merging is a CHOICE made in the
+ * timetable editor (the user selects the cells): the slots of the earlier period
+ * carry `mergeWithNext`. A pair only merges when that flag is set AND the two
+ * columns are back-to-back PERIODS (no break between) holding the same subject /
+ * faculty / batch / room. Returns the colSpan keyed by the first column's index,
+ * and the indexes of the columns it swallows. Break columns never merge and never
+ * get merged over.
+ */
+export function continuousSpans(
+  columns: { kind: string; periodNumber?: number }[],
+  slotsAt: (periodNumber: number) => TimetableSlot[],
+): { spans: Map<number, number>; skipped: Set<number> } {
+  const sig = (i: number): string | null => {
+    const col = columns[i];
+    if (!col || col.kind === "break" || col.periodNumber == null) return null;
+    const here = slotsAt(col.periodNumber);
+    if (here.length === 0) return null;
+    return here
+      .map((s) => [s.subjectId, s.assignmentId, s.labBatch ?? "", s.classroom ?? "", s.substituteFacultyName ?? ""].join("|"))
+      .sort()
+      .join("||");
+  };
+  const spans = new Map<number, number>();
+  const skipped = new Set<number>();
+  for (let i = 0; i < columns.length; i++) {
+    if (skipped.has(i)) continue;
+    const s = sig(i);
+    if (s == null) continue;
+    const flagged = (k: number) => {
+      const c = columns[k];
+      return c?.periodNumber != null && slotsAt(c.periodNumber).some((x) => x.mergeWithNext);
+    };
+    let j = i + 1;
+    while (flagged(j - 1) && sig(j) === s) j++;
+    if (j - i > 1) {
+      spans.set(i, j - i);
+      for (let k = i + 1; k < j; k++) skipped.add(k);
+    }
+  }
+  return { spans, skipped };
+}
+
+/**
+ * Whether a slot is a lab / practical period (coloured differently on every
+ * timetable view). The subject's type decides when it's known; a lab batch
+ * label always means lab; with no type at all, a "lab"/"practical" name does.
+ */
+export function isLabSlot(slot: TimetableSlot, subjects?: Map<string, Subject> | Subject[]): boolean {
+  if (slot.labBatch) return true;
+  const subject = subjects instanceof Map ? subjects.get(slot.subjectId) : subjects?.find((s) => s.id === slot.subjectId);
+  const type = subject?.type ?? (slot as TimetableSlot & { subjectType?: string }).subjectType;
+  if (type) return type === "PRACTICAL";
+  return /\b(lab|laboratory|practical)\b/i.test(slot.subjectName ?? "");
+}
+
+/** The effective date entered at publish time, carried on the published slots (latest wins, falls back to today IST). */
+export function latestEffectiveDate(slots: { effectiveDate?: string }[]): string {
+  let best: string | undefined;
+  for (const s of slots) if (s.effectiveDate && (!best || s.effectiveDate > best)) best = s.effectiveDate;
+  return best || istDateKey();
+}
+
+export function getHodSignatureLabel(deptNameOrCode?: string): string {
+  if (!deptNameOrCode?.trim()) return "HOD";
+  const str = deptNameOrCode.trim();
+  if (/^[A-Z]{2,6}$/.test(str)) return `HOD-${str}`;
+  // Most specific names first - "computer science and business system" must not
+  // fall into the plain "computer science" (CSE) entry, nor "electronics and
+  // electrical" into "electronics" (ECE).
+  const codeMap: Record<string, string> = {
+    "computer science and business": "CSBS",
+    "electronics and electrical": "EEE",
+    "electronics and communication": "ECE",
+    "artificial intelligence and machine": "AIML",
+    "artificial intelligence and data": "AIDS",
+    "computer science": "CSE",
+    "electronics": "ECE",
+    "mechanical": "ME",
+    "civil": "CIVIL",
+    "electrical": "EEE",
+    "information technology": "IT",
+    "basic science": "BS&H",
+    "pharmacy": "PHARM",
+  };
+  const lower = str.toLowerCase();
+  for (const [key, code] of Object.entries(codeMap)) {
+    if (lower.includes(key)) return `HOD-${code}`;
+  }
+  const initials = str.split(/[\s&]+/).filter((w) => /^[A-Za-z]/.test(w) && !/^(and|of|department)$/i.test(w)).map((w) => w[0].toUpperCase()).join("");
+  return initials ? `HOD-${initials}` : "HOD";
 }
 
 export function ordinalYear(year: number): string {
@@ -341,4 +461,46 @@ export function ordinalYear(year: number): string {
  */
 export function allocationNeedsOfficialCode(allocation: AllocationEntry[]): boolean {
   return allocation.some((a) => a.code && a.code !== a.shortCode);
+}
+
+/** The slot fields cell-merging reads and rewrites. */
+interface MergeableSlot {
+  subjectId?: string;
+  subjectName?: string;
+  facultyName?: string;
+  substituteFacultyName?: string;
+  substituteForName?: string;
+  substituteDate?: string;
+  labBatch?: string;
+}
+
+/**
+ * Several faculty of ONE subject in the same cell (co-teaching, or a lab split into batches
+ * with a faculty each) become ONE entry: the subject appears once, with every faculty listed
+ * ("A, B") and every batch ("Batch 1, Batch 2"). Entries of different subjects stay separate,
+ * in their original order. A cover for one of the faculty shows under their name as
+ * "Sub: <name>". Used by every on-screen timetable and both downloads, so a cell reads the
+ * same wherever it is shown.
+ */
+export function mergeCoTaughtSlots<T extends MergeableSlot>(cellSlots: T[]): T[] {
+  const groups = new Map<string, T[]>();
+  for (const s of cellSlots) {
+    const key = s.subjectId || s.subjectName || `__${groups.size}`;
+    groups.set(key, [...(groups.get(key) ?? []), s]);
+  }
+  return Array.from(groups.values()).map((group) => {
+    if (group.length === 1) return group[0];
+    const unique = (values: (string | undefined)[]) => Array.from(new Set(values.filter((v): v is string => !!v)));
+    const faculty = unique(group.map((g) => (g.substituteFacultyName ? `Sub: ${g.substituteFacultyName}` : g.facultyName)));
+    const batches = unique(group.map((g) => g.labBatch));
+    return {
+      ...group[0],
+      facultyName: faculty.join(", "),
+      labBatch: batches.length > 0 ? batches.join(", ") : undefined,
+      // The names above already carry any cover; a merged entry is not itself "a substitution".
+      substituteFacultyName: undefined,
+      substituteForName: undefined,
+      substituteDate: undefined,
+    };
+  });
 }

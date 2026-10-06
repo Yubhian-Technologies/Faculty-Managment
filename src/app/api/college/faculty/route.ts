@@ -15,6 +15,7 @@ import { resolveDesignation } from "@/lib/designations/validate";
 import { resolveHonorific } from "@/lib/honorifics/validate";
 import { experienceBreakdown, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
+import { normalizePreviousTeachingAssignments } from "@/lib/faculty/previousTeaching";
 import { degreeTypeError } from "@/lib/faculty/degreeType";
 import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { mobileNoFromBody } from "@/lib/faculty/mobileNo";
@@ -297,6 +298,7 @@ export async function POST(request: Request) {
       retainershipDate?: string;
       academicProfile?: Record<string, unknown>;
       technicalProfile?: Record<string, unknown>;
+      previousTeachingAssignments?: unknown;
       profilePhotoUrl?: string;
       honorific?: string;
     } & PersonalDetailsInput;
@@ -334,6 +336,13 @@ export async function POST(request: Request) {
     if (statusDateField && !body[statusDateField]?.trim()) {
       return NextResponse.json({ error: `${FACULTY_STATUS_DATE_LABELS[statusDateField]} is required` }, { status: 400 });
     }
+    // Previous Teaching Assignments (free text) - validated before anything is created, so a bad row cannot leave a half-made login.
+    const previousTeachingResult = body.previousTeachingAssignments === undefined
+      ? { ok: true as const, value: [] }
+      : normalizePreviousTeachingAssignments(body.previousTeachingAssignments, () => crypto.randomUUID());
+    if (!previousTeachingResult.ok) return NextResponse.json({ error: previousTeachingResult.error }, { status: 400 });
+    const previousTeaching = previousTeachingResult.value;
+
     const degreeErr = degreeTypeError(body.academicProfile);
     if (degreeErr) return NextResponse.json({ error: degreeErr }, { status: 400 });
     // Matches the mandatory field set the bulk-import template and Add
@@ -518,6 +527,7 @@ export async function POST(request: Request) {
       userUid: uid,
       ...(body.academicProfile ? { academicProfile: normalizeAcademicProfile(body.academicProfile) } : {}),
       ...(body.technicalProfile ? { technicalProfile: body.technicalProfile } : {}),
+      ...(previousTeaching.length > 0 ? { previousTeachingAssignments: previousTeaching } : {}),
       ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
       ...buildPersonalDetailsUpdate(body),
       createdAt: now,

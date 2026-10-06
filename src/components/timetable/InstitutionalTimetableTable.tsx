@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { FileDown, FileSpreadsheet, Printer, Loader2 } from "lucide-react";
+import { FileDown, FileSpreadsheet, Printer, Loader2, FlaskConical, LayoutGrid, CalendarDays, ListFilter, Info, MapPin, User, UserCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import { WeekNavigator } from "@/components/timetable/WeekNavigator";
 import { buildSectionTimetablePdfHtml } from "@/lib/timetable/sectionTimetablePdf";
@@ -12,13 +14,19 @@ import { renderHtmlToPdf } from "@/lib/pdf/htmlToPdf";
 import { yearSemesterLabelIn } from "@/lib/academic/format";
 import {
   buildAllocationList,
+  buildClassTimetableSubtitle,
   buildTimetableColumns,
+  latestEffectiveDate,
   ordinalYear,
   periodTimeRange,
+  readableCode,
   resolveTimetableDays,
   slotFacultyName,
   slotShortCode,
   type TimetableColumn,
+  mergeCoTaughtSlots,
+  continuousSpans,
+  isLabSlot,
 } from "@/lib/timetable/gridModel";
 import type {
   CourseYearTiming,
@@ -46,6 +54,7 @@ export interface InstitutionalTimetableTableProps {
   logoUrl?: string;
   academicYear?: string;
   semesterLabel?: string;
+  effectiveDate?: string;
   classroom?: string;
   classInchargeName?: string;
   subjects?: Subject[];
@@ -74,6 +83,7 @@ export function InstitutionalTimetableTable({
   logoUrl,
   academicYear = slots[0]?.academicYear ?? "",
   semesterLabel: semesterLabelProp,
+  effectiveDate: effectiveDateProp,
   classroom,
   classInchargeName,
   subjects = [],
@@ -93,8 +103,17 @@ export function InstitutionalTimetableTable({
   const activeAddress = address ?? (collegeInfo?.address || "");
   const activePhone = phone ?? (collegeInfo?.phone || "");
 
+  // Faculty/batches of one subject sharing a period show as ONE entry, subject once.
+  // (Merging periods into one cell is chosen per cell in the timetable editor and
+  // carried on the slots - see continuousSpans - so there is nothing to toggle here.)
+  const cellEntries = (cell: TimetableSlot[]) => mergeCoTaughtSlots(cell);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isExportingXlsx, setIsExportingXlsx] = useState(false);
+
+  // Mobile view modes: "matrix" (compact short-code grid across all days), "day" (day-by-day tabs), "list" (full vertical list)
+  const [mobileViewMode, setMobileViewMode] = useState<"matrix" | "day" | "list">("matrix");
+  const [activeMobileDayTab, setActiveMobileDayTab] = useState<DayOfWeek>("MON");
+  const [selectedMobileSlot, setSelectedMobileSlot] = useState<{ slot: TimetableSlot; day: DayOfWeek; col: TimetableColumn } | null>(null);
 
   const subjectMap = useMemo(() => new Map(subjects.map((s) => [s.id, s])), [subjects]);
 
@@ -170,6 +189,7 @@ export function InstitutionalTimetableTable({
       courseName,
       academicYear,
       semesterLabel,
+      effectiveDate: effectiveDateProp ?? latestEffectiveDate(filteredSlots),
       regulation: section?.regulation,
       section: section ?? undefined,
       classroom,
@@ -187,7 +207,7 @@ export function InstitutionalTimetableTable({
     [
       activeCollegeName, activeCollegeCode, activeAffiliation, activeAddress, activePhone,
       collegeInfo?.logoUrl, logoUrl, departmentName, courseName, academicYear, semesterLabel,
-      section, classroom, classInchargeName, visibleDays, timing, filteredSlots, subjects, assignments,
+      effectiveDateProp, section, classroom, classInchargeName, visibleDays, timing, filteredSlots, subjects, assignments,
     ]
   );
 
@@ -358,6 +378,13 @@ export function InstitutionalTimetableTable({
                   .filter(Boolean)
                   .join(" · ")}
               </p>
+              <p className="text-[11px] font-semibold text-primary/90 mt-0.5">
+                {buildClassTimetableSubtitle({
+                  academicYear,
+                  semesterLabel,
+                  effectiveDate: effectiveDateProp ?? latestEffectiveDate(filteredSlots),
+                })}
+              </p>
             </div>
           </div>
           <div className="shrink-0">
@@ -367,104 +394,324 @@ export function InstitutionalTimetableTable({
           </div>
         </div>
 
-        {/* ── Week view: day-by-day sections, fully visible, no scrolling ───── */}
-        <div className="lg:hidden divide-y divide-border">
-          {visibleDays.map((d) => (
-            <section key={d} aria-label={DAY_LABELS[d] ?? d}>
-              <h4 className="px-4 pt-3 pb-1 text-xs font-bold uppercase tracking-wider text-foreground">
-                {DAY_LABELS[d] ?? d}
-              </h4>
-              <ul className="px-4 pb-3 space-y-1">
-                {columns.map((col) => {
-                  if (col.kind === "break") {
+        {/* ── Mobile View Controls (phones & small screens) ── */}
+        <div className="md:hidden p-2 bg-muted/40 border-b flex items-center justify-between gap-2">
+          <div className="inline-flex rounded-lg border p-0.5 bg-background shadow-2xs">
+            <Button
+              type="button"
+              size="sm"
+              variant={mobileViewMode === "matrix" ? "default" : "ghost"}
+              className="h-7 text-[11px] font-semibold px-2.5 gap-1"
+              onClick={() => setMobileViewMode("matrix")}
+            >
+              <LayoutGrid className="h-3 w-3" />
+              <span>Compact</span>
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={mobileViewMode === "day" ? "default" : "ghost"}
+              className="h-7 text-[11px] font-semibold px-2.5 gap-1"
+              onClick={() => setMobileViewMode("day")}
+            >
+              <CalendarDays className="h-3 w-3" />
+              <span>Day Tabs</span>
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={mobileViewMode === "list" ? "default" : "ghost"}
+              className="h-7 text-[11px] font-semibold px-2.5 gap-1"
+              onClick={() => setMobileViewMode("list")}
+            >
+              <ListFilter className="h-3 w-3" />
+              <span>List</span>
+            </Button>
+          </div>
+          <span className="text-[10px] text-muted-foreground font-medium">Tap cell for details</span>
+        </div>
+
+        {/* ── Mobile View Mode 1: Compact Short-Code Matrix (All Days x All Periods) ── */}
+        {mobileViewMode === "matrix" && (
+          <div className="md:hidden overflow-x-auto no-scrollbar">
+            <table className="w-full text-xs border-collapse min-w-[340px]">
+              <thead>
+                <tr className="bg-muted/50 border-b text-[10px] font-bold text-muted-foreground">
+                  <th className="p-1 text-center w-10 border-r sticky left-0 z-10 bg-muted/95">Day</th>
+                  {columns.map((col) => {
+                    if (col.kind === "break") {
+                      return (
+                        <th key={col.id} className="p-1 text-center border-r bg-muted/30 w-8">
+                          {col.breakKind === "lunch" ? "L" : "B"}
+                        </th>
+                      );
+                    }
+                    return (
+                      <th key={col.id} className="p-1 text-center border-r font-extrabold text-foreground min-w-[42px]">
+                        P{col.periodNumber}
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {visibleDays.map((d) => (
+                  <tr key={d} className="border-b hover:bg-muted/10">
+                    <th scope="row" className="p-1 text-center font-bold text-[10px] border-r sticky left-0 z-10 bg-muted/90 uppercase">
+                      {d.slice(0, 3)}
+                    </th>
+                    {columns.map((col) => {
+                      if (col.kind === "break") {
+                        return (
+                          <td key={col.id} className="p-0.5 text-center border-r bg-muted/20 text-[9px] font-mono text-muted-foreground/60 select-none">
+                            |
+                          </td>
+                        );
+                      }
+                      const periodSlots = cellEntries(filteredSlots.filter(
+                        (s) => s.day === d && s.periodNumber === col.periodNumber
+                      ));
+
+                      if (periodSlots.length === 0) {
+                        return (
+                          <td key={col.id} className="p-1 text-center border-r text-[10px] text-muted-foreground/30 font-mono select-none">
+                            —
+                          </td>
+                        );
+                      }
+
+                      return (
+                        <td key={col.id} className="p-0.5 border-r align-top">
+                          <div className="space-y-0.5">
+                            {periodSlots.map((s, idx) => {
+                              const shortCode = slotShortCode(s, subjectMap);
+                              const isSub = Boolean(s.substituteFacultyName);
+                              const isLab = isLabSlot(s, subjectMap);
+
+                              return (
+                                <button
+                                  key={s.id || idx}
+                                  type="button"
+                                  onClick={() => setSelectedMobileSlot({ slot: s, day: d, col })}
+                                  className={`w-full p-1 rounded border text-center transition-all focus:outline-none focus:ring-1 focus:ring-primary ${
+                                    isLab
+                                      ? "bg-violet-500/15 border-violet-500/30 text-violet-950 dark:text-violet-200 font-extrabold"
+                                      : isSub
+                                      ? "bg-amber-500/15 border-amber-500/30 text-amber-950 dark:text-amber-200 font-bold"
+                                      : "bg-primary/10 border-primary/25 text-foreground font-bold"
+                                  }`}
+                                  aria-label={`${shortCode} details`}
+                                >
+                                  <div className="text-[10px] font-extrabold uppercase truncate leading-tight">
+                                    {shortCode}
+                                  </div>
+                                  {s.labBatch && (
+                                    <div className="text-[8px] font-semibold text-violet-700 dark:text-violet-300 leading-none">
+                                      {s.labBatch}
+                                    </div>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* ── Mobile View Mode 2: Day Tabs (Mon-Sat selector) ── */}
+        {mobileViewMode === "day" && (
+          <div className="md:hidden p-3 space-y-3">
+            {/* Day selector pills */}
+            <div className="flex items-center gap-1 overflow-x-auto pb-1 no-scrollbar">
+              {visibleDays.map((d) => (
+                <Button
+                  key={d}
+                  type="button"
+                  size="sm"
+                  variant={activeMobileDayTab === d ? "default" : "outline"}
+                  className="h-7 text-xs font-semibold px-2.5 shrink-0"
+                  onClick={() => setActiveMobileDayTab(d)}
+                >
+                  {DAY_LABELS[d] || d}
+                </Button>
+              ))}
+            </div>
+
+            {/* Selected day's period list */}
+            <div className="space-y-2">
+              {columns.map((col) => {
+                if (col.kind === "break") {
+                  return (
+                    <div key={col.id} className="flex items-center gap-2 py-1 text-[11px] text-muted-foreground">
+                      <span className="h-px flex-1 bg-border" />
+                      <span className="font-semibold uppercase tracking-wider text-[10px]">
+                        {col.label} {periodTimeRange(col.startTime, col.endTime) && `(${periodTimeRange(col.startTime, col.endTime)})`}
+                      </span>
+                      <span className="h-px flex-1 bg-border" />
+                    </div>
+                  );
+                }
+
+                const periodSlots = cellEntries(filteredSlots.filter(
+                  (s) => s.day === activeMobileDayTab && s.periodNumber === col.periodNumber
+                ));
+
+                return (
+                  <div key={col.id} className="p-2.5 rounded-lg border bg-card flex items-start gap-3">
+                    <div className="w-16 shrink-0 text-left">
+                      <span className="font-bold text-xs text-foreground block">Period {col.periodNumber}</span>
+                      {periodTimeRange(col.startTime, col.endTime) && (
+                        <span className="text-[10px] text-muted-foreground block">{periodTimeRange(col.startTime, col.endTime)}</span>
+                      )}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      {periodSlots.length === 0 ? (
+                        <span className="text-xs text-muted-foreground/40 font-mono">Free Period</span>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {periodSlots.map((s, idx) => {
+                            const shortCode = slotShortCode(s, subjectMap);
+                            const faculty = slotFacultyName(s);
+                            const isLab = isLabSlot(s, subjectMap);
+
+                            return (
+                              <button
+                                key={s.id || idx}
+                                type="button"
+                                onClick={() => setSelectedMobileSlot({ slot: s, day: activeMobileDayTab, col })}
+                                className="w-full text-left p-2 rounded-md border bg-muted/20 hover:bg-muted/40 transition-colors"
+                              >
+                                <div className="flex items-center justify-between gap-1">
+                                  <span className="font-bold text-xs text-foreground">{s.subjectName}</span>
+                                  <Badge variant={isLab ? "secondary" : "outline"} className="text-[10px]">
+                                    {shortCode}
+                                  </Badge>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground mt-1">
+                                  {faculty && <span>Faculty: {faculty}</span>}
+                                  {s.classroom && <span>· Room {s.classroom}</span>}
+                                  {s.labBatch && <span className="font-semibold text-violet-600">· {s.labBatch}</span>}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── Mobile View Mode 3: Full Vertical List View ── */}
+        {mobileViewMode === "list" && (
+          <div className="md:hidden divide-y divide-border">
+            {visibleDays.map((d) => (
+              <section key={d} aria-label={DAY_LABELS[d] ?? d}>
+                <h4 className="px-4 pt-3 pb-1 text-xs font-bold uppercase tracking-wider text-foreground">
+                  {DAY_LABELS[d] ?? d}
+                </h4>
+                <ul className="px-4 pb-3 space-y-1">
+                  {columns.map((col) => {
+                    if (col.kind === "break") {
+                      return (
+                        <li
+                          key={col.id}
+                          className="flex items-center gap-2 py-1 text-[11px] text-muted-foreground"
+                          aria-label={col.label}
+                        >
+                          <span className="h-px flex-1 bg-border" aria-hidden="true" />
+                          <span className="shrink-0 font-medium">
+                            {col.label}
+                            {periodTimeRange(col.startTime, col.endTime) && ` · ${periodTimeRange(col.startTime, col.endTime)}`}
+                          </span>
+                          <span className="h-px flex-1 bg-border" aria-hidden="true" />
+                        </li>
+                      );
+                    }
+
+                    const periodSlots = cellEntries(filteredSlots.filter(
+                      (s) => s.day === d && s.periodNumber === col.periodNumber
+                    ));
+                    const range = periodTimeRange(col.startTime, col.endTime);
+
                     return (
                       <li
                         key={col.id}
-                        className="flex items-center gap-2 py-1 text-[11px] text-muted-foreground"
-                        aria-label={col.label}
+                        className="flex items-baseline gap-3 rounded-md px-2 py-1.5 hover:bg-muted/40"
                       >
-                        <span className="h-px flex-1 bg-border" aria-hidden="true" />
-                        <span className="shrink-0 font-medium">
-                          {col.label}
-                          {periodTimeRange(col.startTime, col.endTime) && ` · ${periodTimeRange(col.startTime, col.endTime)}`}
+                        <span className="w-24 shrink-0 text-[11px] font-semibold text-muted-foreground">
+                          Period {col.periodNumber}
+                          {range && <span className="block font-normal">{range}</span>}
                         </span>
-                        <span className="h-px flex-1 bg-border" aria-hidden="true" />
+                        <div className="min-w-0 flex-1">
+                          {periodSlots.length === 0 ? (
+                            <span className="text-[11px] text-muted-foreground/50">Free</span>
+                          ) : (
+                            periodSlots.map((s, idx) => {
+                              const shortCode = slotShortCode(s, subjectMap);
+                              const isSub = Boolean(s.substituteFacultyName);
+                              const faculty = slotFacultyName(s);
+                              return (
+                                <p
+                                  key={s.id || idx}
+                                  className="text-xs text-foreground leading-snug cursor-pointer hover:underline"
+                                  onClick={() => setSelectedMobileSlot({ slot: s, day: d, col })}
+                                  title={`${s.subjectName}${faculty ? ` · ${faculty}` : ""}${s.classroom ? ` · Room ${s.classroom}` : ""}`}
+                                >
+                                  <span className="font-bold">{shortCode}</span>
+                                  {s.labBatch && <span className="text-muted-foreground"> · {s.labBatch}</span>}
+                                  {faculty && <span className="text-muted-foreground"> · {faculty}</span>}
+                                  {isSub && <span className="text-amber-700 dark:text-amber-400 font-medium"> · Sub: {s.substituteFacultyName}</span>}
+                                  {s.classroom && <span className="text-muted-foreground"> · Room {s.classroom}</span>}
+                                </p>
+                              );
+                            })
+                          )}
+                        </div>
                       </li>
                     );
-                  }
+                  })}
+                </ul>
+              </section>
+            ))}
+          </div>
+        )}
 
-                  const periodSlots = filteredSlots.filter(
-                    (s) => s.day === d && s.periodNumber === col.periodNumber
-                  );
-                  const range = periodTimeRange(col.startTime, col.endTime);
-
-                  return (
-                    <li
-                      key={col.id}
-                      className="flex items-baseline gap-3 rounded-md px-2 py-1.5 hover:bg-muted/40"
-                    >
-                      <span className="w-24 shrink-0 text-[11px] font-semibold text-muted-foreground">
-                        Period {col.periodNumber}
-                        {range && <span className="block font-normal">{range}</span>}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        {periodSlots.length === 0 ? (
-                          <span className="text-[11px] text-muted-foreground/50">Free</span>
-                        ) : (
-                          periodSlots.map((s, idx) => {
-                            const shortCode = slotShortCode(s, subjectMap);
-                            const isSub = Boolean(s.substituteFacultyName);
-                            const faculty = slotFacultyName(s);
-                            return (
-                              <p
-                                key={s.id || idx}
-                                className="text-xs text-foreground leading-snug"
-                                title={`${s.subjectName}${faculty ? ` · ${faculty}` : ""}${s.classroom ? ` · Room ${s.classroom}` : ""}`}
-                              >
-                                <span className="font-bold">{shortCode}</span>
-                                {s.labBatch && <span className="text-muted-foreground"> · {s.labBatch}</span>}
-                                {faculty && <span className="text-muted-foreground"> · {faculty}</span>}
-                                {isSub && <span className="text-amber-700 dark:text-amber-400 font-medium"> · Sub: {s.substituteFacultyName}</span>}
-                                {s.classroom && <span className="text-muted-foreground"> · Room {s.classroom}</span>}
-                              </p>
-                            );
-                          })
-                        )}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-          ))}
-        </div>
-
-        {/* ── Timetable Grid (wide screens) ──────────────────────────────────── */}
-        <div className="hidden lg:block">
-          <div className="overflow-x-auto">
-            {/* Fixed layout: every period column is the same width whatever its
-                content; breaks share one narrow width. */}
+        {/* ── Timetable Grid (Desktop & Tablet: NON-SCROLLABLE layout) ──────────────────────────────────── */}
+        <div className="hidden md:block">
+          <div className="w-full">
+            {/* Table layout: table-fixed with proportional column widths so no horizontal scroll */}
             <table className="w-full table-fixed text-xs border-collapse">
               <colgroup>
-                <col style={{ width: 80 }} />
+                <col style={{ width: "65px" }} />
                 {columns.map((col) => (
-                  <col key={col.id} style={col.kind === "break" ? { width: 64 } : { width: 130 }} />
+                  <col key={col.id} style={{ width: col.kind === "break" ? "40px" : "auto" }} />
                 ))}
               </colgroup>
               <thead>
                 <tr className="bg-muted/40 border-b">
-                  <th className="border-r p-2.5 text-center font-bold text-foreground w-20 min-w-[70px] sticky left-0 z-[5] bg-muted/95 backdrop-blur">
-                    Day of<br />week
+                  <th className="border-r p-2 text-center font-bold text-foreground w-[65px] sticky left-0 z-[5] bg-muted/95 backdrop-blur">
+                    Day
                   </th>
                   {columns.map((col) => {
                     if (col.kind === "break") {
                       return (
                         <th
                           key={col.id}
-                          className="border-r p-2 text-center font-semibold text-muted-foreground bg-muted/30 w-12"
+                          className="border-r p-1 text-center font-semibold text-muted-foreground bg-muted/30 w-[40px]"
                         >
                           {periodTimeRange(col.startTime, col.endTime) && (
-                            <div className="text-[9.5px] font-normal text-muted-foreground mt-0.5">
+                            <div className="text-[9px] font-normal text-muted-foreground mt-0.5">
                               {periodTimeRange(col.startTime, col.endTime)}
                             </div>
                           )}
@@ -476,11 +723,11 @@ export function InstitutionalTimetableTable({
                     return (
                       <th
                         key={col.id}
-                        className="border-r p-2 text-center font-bold text-foreground min-w-[92px]"
+                        className="border-r p-1.5 text-center font-bold text-foreground"
                       >
-                        <div>Period {col.periodNumber}</div>
+                        <div>P{col.periodNumber}</div>
                         {range && (
-                          <div className="text-[9.5px] font-normal text-muted-foreground whitespace-nowrap mt-0.5">
+                          <div className="text-[9px] font-normal text-muted-foreground truncate mt-0.5" title={range}>
                             {range}
                           </div>
                         )}
@@ -491,13 +738,17 @@ export function InstitutionalTimetableTable({
               </thead>
               <tbody>
                 {days.map((d, dayIndex) => {
+                  // Cells the user chose to merge in the editor are drawn as one wide cell.
+                  const { spans, skipped } = continuousSpans(columns, (p) => filteredSlots.filter((s) => s.day === d && s.periodNumber === p));
                   return (
                     <tr key={d} className="border-b last:border-b-0 hover:bg-muted/10">
-                      <td className="border-r p-2.5 text-center font-bold text-foreground sticky left-0 z-[5] backdrop-blur bg-muted/90">
+                      <td className="border-r p-2 text-center font-bold text-foreground sticky left-0 z-[5] backdrop-blur bg-muted/90">
                         {DAY_LABELS[d]?.slice(0, 3) ?? d}
                       </td>
 
-                      {columns.map((col) => {
+                      {columns.map((col, colIdx) => {
+                        // Swallowed by the wider cell to its left (see continuousSpans).
+                        if (skipped.has(colIdx)) return null;
                         if (col.kind === "break") {
                           // One tall cell across every day row, titled vertically.
                           if (dayIndex > 0) return null;
@@ -505,29 +756,29 @@ export function InstitutionalTimetableTable({
                             <td
                               key={col.id}
                               rowSpan={days.length}
-                              className="border-r bg-muted/25 text-center align-middle w-12"
+                              className="border-r bg-muted/25 text-center align-middle w-[40px]"
                             >
-                              <span className="inline-block text-[11px] font-bold uppercase tracking-[0.2em] text-muted-foreground [writing-mode:vertical-rl] rotate-180">
+                              <span className="inline-block text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground [writing-mode:vertical-rl] rotate-180">
                                 {col.breakKind === "lunch" ? "Lunch Break" : "Short Break"}
                               </span>
                             </td>
                           );
                         }
 
-                        const periodSlots = filteredSlots.filter(
+                        const periodSlots = cellEntries(filteredSlots.filter(
                           (s) => s.day === d && s.periodNumber === col.periodNumber
-                        );
+                        ));
 
                         if (periodSlots.length === 0) {
                           return (
-                            <td key={col.id} className="border-r p-2 text-center text-muted-foreground/30 font-mono">
+                            <td key={col.id} className="border-r p-1.5 text-center text-muted-foreground/30 font-mono">
                               —
                             </td>
                           );
                         }
 
                         return (
-                          <td key={col.id} className="border-r p-2 text-center align-middle">
+                          <td key={col.id} colSpan={spans.get(colIdx) ?? 1} className="border-r p-1 align-middle">
                             <div className="flex flex-col items-center justify-center gap-1">
                               {periodSlots.map((s, idx) => {
                                 const shortCode = slotShortCode(s, subjectMap);
@@ -537,26 +788,30 @@ export function InstitutionalTimetableTable({
                                 return (
                                   <div
                                     key={s.id || idx}
-                                    className={`w-full rounded px-1.5 py-1 text-center transition-all ${
+                                    onClick={() => setSelectedMobileSlot({ slot: s, day: d, col })}
+                                    className={`w-full rounded px-1 py-1 text-center transition-all cursor-pointer ${
                                       isSub
                                         ? "bg-amber-100 text-amber-900 border border-amber-300"
-                                        : "bg-primary/5 hover:bg-primary/10 border border-primary/20 text-foreground"
+                                        : isLabSlot(s, subjectMap)
+                                          // Lab / practical periods stand out from theory.
+                                          ? "bg-violet-100 hover:bg-violet-200 border border-violet-300 text-violet-950 dark:bg-violet-950/40 dark:border-violet-700 dark:text-violet-100"
+                                          : "bg-primary/5 hover:bg-primary/10 border border-primary/20 text-foreground"
                                     }`}
                                     title={`${s.subjectName}${faculty ? ` · ${faculty}` : ""}${s.classroom ? ` · Room ${s.classroom}` : ""}`}
                                   >
-                                    <div className="font-extrabold text-[11px] tracking-wide text-foreground uppercase">
+                                    <div className="font-extrabold text-[10px] sm:text-[11px] tracking-wide text-foreground uppercase truncate">
                                       {shortCode}
                                     </div>
                                     {s.labBatch && (
-                                      <div className="text-[9px] font-semibold text-muted-foreground">{s.labBatch}</div>
+                                      <div className="text-[8.5px] font-semibold text-muted-foreground truncate">{s.labBatch}</div>
                                     )}
                                     {faculty && (
-                                      <div className="text-[9.5px] font-medium text-muted-foreground truncate max-w-[95px] mx-auto mt-0.5">
+                                      <div className="text-[9px] font-medium text-muted-foreground truncate max-w-full mx-auto mt-0.5">
                                         {faculty}
                                       </div>
                                     )}
                                     {isSub && (
-                                      <div className="text-[9px] font-semibold text-amber-800 mt-0.5">
+                                      <div className="text-[8.5px] font-semibold text-amber-800 mt-0.5 truncate">
                                         Sub: {s.substituteFacultyName}
                                       </div>
                                     )}
@@ -603,6 +858,73 @@ export function InstitutionalTimetableTable({
           </div>
         )}
       </div>
+
+      {/* ── Interactive Period Details Dialog ── */}
+      <Dialog open={Boolean(selectedMobileSlot)} onOpenChange={(open) => !open && setSelectedMobileSlot(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between gap-2 text-base">
+              <span>Period Details</span>
+              {selectedMobileSlot && isLabSlot(selectedMobileSlot.slot, subjectMap) && (
+                <Badge variant="secondary" className="gap-1 text-xs">
+                  <FlaskConical className="h-3.5 w-3.5" /> Practical / Lab
+                </Badge>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedMobileSlot && DAY_LABELS[selectedMobileSlot.day]} · Period {selectedMobileSlot?.slot.periodNumber}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedMobileSlot && (
+            <div className="space-y-4 pt-2">
+              <div className="p-3 rounded-lg border bg-muted/30 space-y-1">
+                <p className="text-xs font-mono text-primary font-bold">
+                  {readableCode(slotShortCode(selectedMobileSlot.slot, subjectMap), selectedMobileSlot.slot.subjectName) || slotShortCode(selectedMobileSlot.slot, subjectMap) || "Subject"}
+                </p>
+                <h3 className="font-bold text-base text-foreground leading-tight">
+                  {selectedMobileSlot.slot.subjectName}
+                </h3>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="p-2.5 rounded-lg border bg-card">
+                  <span className="text-muted-foreground block text-[11px]">Timing</span>
+                  <span className="font-semibold text-foreground text-sm">
+                    {periodTimeRange(selectedMobileSlot.col.startTime, selectedMobileSlot.col.endTime) || `Period ${selectedMobileSlot.slot.periodNumber}`}
+                  </span>
+                </div>
+
+                <div className="p-2.5 rounded-lg border bg-card">
+                  <span className="text-muted-foreground block text-[11px]">Classroom / Location</span>
+                  <span className="font-semibold text-foreground text-sm">
+                    {selectedMobileSlot.slot.classroom ? `Room ${selectedMobileSlot.slot.classroom}` : "To be announced"}
+                  </span>
+                </div>
+
+                <div className="p-2.5 rounded-lg border bg-card col-span-2">
+                  <span className="text-muted-foreground block text-[11px]">Faculty In-Charge</span>
+                  <p className="font-semibold text-foreground text-sm mt-0.5">
+                    {slotFacultyName(selectedMobileSlot.slot) || "Not assigned yet"}
+                  </p>
+                  {selectedMobileSlot.slot.substituteFacultyName && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-1 font-medium">
+                      Substitute: {selectedMobileSlot.slot.substituteFacultyName}
+                    </p>
+                  )}
+                </div>
+
+                {selectedMobileSlot.slot.labBatch && (
+                  <div className="p-2.5 rounded-lg border bg-card col-span-2">
+                    <span className="text-muted-foreground block text-[11px]">Lab Batch</span>
+                    <span className="font-semibold text-foreground text-sm">{selectedMobileSlot.slot.labBatch}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

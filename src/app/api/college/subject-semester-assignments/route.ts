@@ -199,6 +199,19 @@ export async function PATCH(request: Request) {
       tutorialHours?: number;
       practicalHours?: number;
       credits?: number;
+      // Subject-level fields already saved on the master subject (PATCH
+      // subjects/[id]); mirrored onto every assignment row of that subject so
+      // the Academics table, which reads these copies, doesn't show stale values.
+      snapshot?: {
+        subjectName?: string;
+        subjectCode?: string;
+        shortCode?: string;
+        category?: string;
+        customCategory?: string | null;
+        type?: string;
+        serialNumber?: number;
+        totalHoursPerSemester?: number | null;
+      };
     };
     if (!body.id) return NextResponse.json({ error: "id is required" }, { status: 400 });
 
@@ -266,6 +279,27 @@ export async function PATCH(request: Request) {
       const batch = db.batch();
       for (const d of stale.slice(i, i + 400)) batch.update(d.ref, { hoursPerWeek, updatedAt: new Date() });
       await batch.commit();
+    }
+
+    const snap2 = body.snapshot;
+    if (snap2) {
+      const fields: Record<string, unknown> = {};
+      if (snap2.subjectName != null) fields.subjectName = String(snap2.subjectName).trim();
+      if (snap2.subjectCode != null) fields.subjectCode = String(snap2.subjectCode).toUpperCase().trim();
+      if (snap2.shortCode != null) fields.shortCode = String(snap2.shortCode).trim().toUpperCase();
+      if (snap2.category != null) fields.category = snap2.category;
+      if ("customCategory" in snap2) fields.customCategory = snap2.customCategory ?? null;
+      if (snap2.type != null) fields.type = snap2.type;
+      if (snap2.serialNumber != null) fields.serialNumber = Number(snap2.serialNumber);
+      if ("totalHoursPerSemester" in snap2) fields.totalHoursPerSemester = snap2.totalHoursPerSemester ?? null;
+      if (Object.keys(fields).length > 0) {
+        const rows = await collegeRef.collection("subjectSemesterAssignments").where("subjectId", "==", cur.subjectId).get();
+        for (let i = 0; i < rows.docs.length; i += 400) {
+          const batch = db.batch();
+          for (const d of rows.docs.slice(i, i + 400)) batch.update(d.ref, { ...fields, updatedAt: new Date() });
+          await batch.commit();
+        }
+      }
     }
     return NextResponse.json({ success: true, teachingAssignmentsUpdated: stale.length });
   } catch (err) {

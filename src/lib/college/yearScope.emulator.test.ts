@@ -71,7 +71,7 @@ describe.skipIf(!EMULATOR)("Years Taught: empty is not 'all', removals respect d
   };
   const postStudent = async (body: Record<string, unknown>) => {
     const { POST } = await import("@/app/api/college/students/route");
-    return POST(new Request("http://x", { method: "POST", body: JSON.stringify({ name: "Asha", rollNumber: roll(), ...body }) }));
+    return POST(new Request("http://x", { method: "POST", body: JSON.stringify({ name: "Asha", rollNumber: roll(), mobileNo: `97000${String(Math.floor(Math.random() * 1e5)).padStart(5, "0")}`, ...body }) }));
   };
   const patchDept = async (body: Record<string, unknown>) => {
     const { PATCH } = await import("@/app/api/college/departments/route");

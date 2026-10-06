@@ -12,7 +12,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import { ArrowLeft, Edit2, Trash2, BookOpen } from "lucide-react";
-import type { Subject } from "@/types";
+import type { Subject, SubjectCategory } from "@/types";
+import { SUBJECT_TYPE_LABELS } from "@/types";
+import { CategoryField } from "@/components/academics/CategoryField";
 
 // Academics > Subjects. View and manage subjects assigned to departments
 // by year and semester in a horizontal table with CRUD & bulk delete capabilities.
@@ -22,6 +24,17 @@ type DepartmentOption = { id: string; name: string; parentDepartmentId?: string 
 type AssignmentWithMaster = { assignment: any; master: Subject };
 type EditForm = {
   assignmentId?: string;
+  subjectId: string;
+  // Subject-level: saved on the master subject, so they change it in every department.
+  name: string;
+  code: string;
+  shortCode: string;
+  serialNumber: string;
+  category: string;
+  customCategory: string;
+  type: string;
+  totalHoursPerSemester: string;
+  // This department's own hours/credits for the semester.
   lectureHours: string;
   tutorialHours: string;
   practicalHours: string;
@@ -165,8 +178,18 @@ export default function SubjectsPage() {
 
   function openEdit(item: AssignmentWithMaster) {
     setEditError("");
+    const a = item.assignment;
     setEditForm({
-      assignmentId: item.assignment.id,
+      assignmentId: a.id,
+      subjectId: a.subjectId,
+      name: a.subjectName ?? item.master.name ?? "",
+      code: a.subjectCode ?? item.master.code ?? "",
+      shortCode: a.shortCode ?? item.master.shortCode ?? "",
+      serialNumber: a.serialNumber != null ? String(a.serialNumber) : "",
+      category: a.category ?? item.master.category ?? "",
+      customCategory: a.customCategory ?? "",
+      type: a.type ?? "THEORY",
+      totalHoursPerSemester: a.totalHoursPerSemester != null ? String(a.totalHoursPerSemester) : "",
       lectureHours: String(item.assignment.lectureHours ?? item.master.lectureHours ?? 0),
       tutorialHours: String(item.assignment.tutorialHours ?? item.master.tutorialHours ?? 0),
       practicalHours: String(item.assignment.practicalHours ?? item.master.practicalHours ?? 0),
@@ -178,7 +201,29 @@ export default function SubjectsPage() {
     if (!editForm?.assignmentId) return;
     setIsSaving(true);
     setEditError("");
+    if (!editForm.name.trim() || !editForm.code.trim()) { setIsSaving(false); setEditError("Name and code are required."); return; }
+    if (editForm.category === "OTHER" && !editForm.customCategory.trim()) { setIsSaving(false); setEditError("Enter a name for the custom category."); return; }
     try {
+      // 1) The subject itself (name, code, category, ...) - also re-labels the
+      // teaching assignments and timetable slots that use it.
+      const totalSem = editForm.totalHoursPerSemester.trim() === "" ? null : Number(editForm.totalHoursPerSemester);
+      const master = {
+        name: editForm.name.trim(),
+        code: editForm.code.trim(),
+        shortCode: editForm.shortCode.trim(),
+        type: editForm.type,
+        totalHoursPerSemester: totalSem,
+        ...(editForm.serialNumber.trim() !== "" ? { serialNumber: Number(editForm.serialNumber) } : {}),
+        ...(editForm.category ? { category: editForm.category, customCategory: editForm.customCategory.trim() } : {}),
+      };
+      const mres = await fetch(`/api/college/subjects/${encodeURIComponent(editForm.subjectId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(master),
+      });
+      if (!mres.ok) { const json = await mres.json() as { error?: string }; setEditError(json.error ?? "Failed to save the subject."); return; }
+
+      // 2) This department's hours/credits, plus the subject copies kept on every assignment row.
       const res = await fetch(`/api/college/subject-semester-assignments`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -188,6 +233,15 @@ export default function SubjectsPage() {
           tutorialHours: Number(editForm.tutorialHours) || 0,
           practicalHours: Number(editForm.practicalHours) || 0,
           credits: Number(editForm.credits) || 0,
+          snapshot: {
+            subjectName: master.name,
+            subjectCode: master.code,
+            shortCode: master.shortCode,
+            type: master.type,
+            totalHoursPerSemester: master.totalHoursPerSemester,
+            ...(master.serialNumber != null ? { serialNumber: master.serialNumber } : {}),
+            ...(master.category ? { category: master.category, customCategory: master.customCategory || null } : {}),
+          },
         }),
       });
       if (!res.ok) { const json = await res.json() as { error?: string }; setEditError(json.error ?? "Failed to save."); return; }
@@ -456,10 +510,55 @@ export default function SubjectsPage() {
 
       {/* Edit Dialog */}
       <Dialog open={!!editForm} onOpenChange={(open) => !open && setEditForm(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>Edit Subject Hours</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Edit Subject</DialogTitle></DialogHeader>
           {editForm && (
             <div className="grid gap-3">
+              <p className="text-xs text-muted-foreground rounded-md border bg-muted/40 p-2">
+                Name, code, short code, S.No, category, type and total hours change this subject in <strong>every</strong> department.
+                Lecture / tutorial / practical hours and credits apply to <strong>this department</strong> only.
+              </p>
+              <div className="space-y-1.5">
+                <Label>Subject Name</Label>
+                <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Code</Label>
+                  <Input value={editForm.code} onChange={(e) => setEditForm({ ...editForm, code: e.target.value })} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Short Code</Label>
+                  <Input value={editForm.shortCode} onChange={(e) => setEditForm({ ...editForm, shortCode: e.target.value })} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>S.No.</Label>
+                  <Input type="number" min={0} value={editForm.serialNumber} onChange={(e) => setEditForm({ ...editForm, serialNumber: e.target.value })} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Type</Label>
+                  <select
+                    className={SELECT_CLASS}
+                    value={editForm.type}
+                    onChange={(e) => setEditForm({ ...editForm, type: e.target.value })}
+                  >
+                    {Object.entries(SUBJECT_TYPE_LABELS).map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Category</Label>
+                <CategoryField
+                  category={editForm.category as SubjectCategory | ""}
+                  customCategory={editForm.customCategory}
+                  onCategoryChange={(c) => setEditForm({ ...editForm, category: c })}
+                  onCustomCategoryChange={(v) => setEditForm({ ...editForm, customCategory: v })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Total Hours per Semester</Label>
+                <Input type="number" min={0} placeholder="Optional" value={editForm.totalHoursPerSemester} onChange={(e) => setEditForm({ ...editForm, totalHoursPerSemester: e.target.value })} />
+              </div>
               <div className="space-y-1.5">
                 <Label>Lecture Hours</Label>
                 <Input type="number" min={0} value={editForm.lectureHours} onChange={(e) => setEditForm({ ...editForm, lectureHours: e.target.value })} />

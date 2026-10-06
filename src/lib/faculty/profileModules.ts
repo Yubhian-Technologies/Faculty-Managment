@@ -36,6 +36,14 @@ export const PROFILE_MODULES: Record<ProfileModuleKey, ProfileModuleDef> = {
 // feature).
 export const SELF_EDIT_DISABLED_MODULES: ProfileModuleKey[] = ["financial", "teaching-load", "research"];
 
+// Teaching Load is the one exception: the current assignments stay HOD/Principal-assigned, but a person with a real
+// facultyMembers record enters their own Previous Teaching Assignments there (PATCH /api/college/faculty/me). Used by
+// the shared My Profile pages only - every other page keeps reading SELF_EDIT_DISABLED_MODULES as before.
+export function isSelfEditDisabled(moduleKey: ProfileModuleKey, hasFacultyRecord: boolean): boolean {
+  if (moduleKey === "teaching-load") return !hasFacultyRecord;
+  return SELF_EDIT_DISABLED_MODULES.includes(moduleKey);
+}
+
 // Faculty is teaching staff only now (Technical designations - Lab
 // Assistant/Programmer/System Administrator/Network Engineer - live in the
 // Supporting Staff module instead, see src/lib/designations/config.ts), so

@@ -7,7 +7,7 @@ import { ArrowLeft, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { FacultyProfileModuleContent } from "@/components/faculty/FacultyProfileModuleContent";
-import { PROFILE_MODULES, SELF_EDIT_DISABLED_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileModules";
+import { PROFILE_MODULES, isSelfEditDisabled, type ProfileModuleKey } from "@/lib/faculty/profileModules";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { useReadOnlyAccess } from "@/hooks/useReadOnlyAccess";
 import type { FacultyMember, TeachingAssignment } from "@/types";
@@ -29,15 +29,18 @@ export function MyProfileModulePage({ basePath, hideLegalName = false, ratificat
   const [faculty, setFaculty] = useState<MyFaculty | null>(null);
   const [teachingAssignments, setTeachingAssignments] = useState<TeachingAssignment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  // True when the details come from a real facultyMembers record - only then can they enter their own Previous Teaching Assignments.
+  const [hasFacultyRecord, setHasFacultyRecord] = useState(false);
   // Why there is no record, when the server says so (a Faculty login with no linked faculty record).
   const [noRecordMessage, setNoRecordMessage] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/college/faculty/me")
-      .then((r) => r.json() as Promise<{ faculty: MyFaculty | null; teachingAssignments?: TeachingAssignment[]; message?: string }>)
+      .then((r) => r.json() as Promise<{ faculty: MyFaculty | null; teachingAssignments?: TeachingAssignment[]; message?: string; facultyRecord?: boolean }>)
       .then((d) => {
         setFaculty(d.faculty);
         setTeachingAssignments(d.teachingAssignments ?? []);
+        setHasFacultyRecord(d.facultyRecord === true);
         setNoRecordMessage(d.message ?? null);
       })
       .catch(() => setFaculty(null))
@@ -55,7 +58,7 @@ export function MyProfileModulePage({ basePath, hideLegalName = false, ratificat
             <Button variant="outline" asChild>
               <Link href={basePath}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
             </Button>
-            {!readOnly && !SELF_EDIT_DISABLED_MODULES.includes(moduleKey) && (
+            {!readOnly && !isSelfEditDisabled(moduleKey, hasFacultyRecord) && (
               <Button asChild>
                 <Link href={`${basePath}/${moduleKey}/edit`}><Pencil className="h-4 w-4 mr-2" />Edit</Link>
               </Button>

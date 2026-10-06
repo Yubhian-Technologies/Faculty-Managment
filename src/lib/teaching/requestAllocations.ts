@@ -53,14 +53,20 @@ export function requestAssignmentIds(r: RequestLike): string[] {
 /**
  * The lending department's name when `assignmentId` was lent in through an
  * Assignment Request that department has not yet closed ("Notify department &
- * close"), else null. The requesting side may not place such an assignment yet.
+ * close") AND has no period on the timetable yet, else null. The requesting side may not place such an assignment yet.
  */
 export async function openLendDepartment(db: Firestore, collegeId: string, sectionId: string, assignmentId: string): Promise<string | null> {
   const snap = await db.collection("colleges").doc(collegeId).collection("facultyAssignmentRequests")
     .where("sectionId", "==", sectionId).where("status", "==", "ALLOCATED").get();
   for (const d of snap.docs) {
     const r = d.data() as FacultyAssignmentRequest;
-    if (!r.busyClosed && requestAssignmentIds(r).includes(assignmentId)) return r.targetDepartmentName ?? "The lending department";
+    if (!r.busyClosed && requestAssignmentIds(r).includes(assignmentId)) {
+      // Already placed on the timetable (before this rule, or by the lender): not held back.
+      const placed = await db.collection("colleges").doc(collegeId).collection("timetableSlots")
+        .where("assignmentId", "==", assignmentId).limit(1).get();
+      if (!placed.empty) return null;
+      return r.targetDepartmentName ?? "The lending department";
+    }
   }
   return null;
 }
