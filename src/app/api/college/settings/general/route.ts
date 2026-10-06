@@ -62,6 +62,10 @@ export async function PUT(request: Request) {
       studentFacultyRatio: Number(body.studentFacultyRatio ?? current.studentFacultyRatio),
       teachingHoursPerWeek: Number(body.teachingHoursPerWeek ?? current.teachingHoursPerWeek),
       defaultMinFacultyPerDept: Number(body.defaultMinFacultyPerDept ?? current.defaultMinFacultyPerDept),
+      maxTheoryPeriodsPerWeek: Number(body.maxTheoryPeriodsPerWeek ?? current.maxTheoryPeriodsPerWeek ?? 4),
+      maxPracticalPeriodsPerWeek: Number(body.maxPracticalPeriodsPerWeek ?? current.maxPracticalPeriodsPerWeek ?? 6),
+      theoryBlockSize: Number(body.theoryBlockSize ?? current.theoryBlockSize ?? 1),
+      labBlockSize: Number(body.labBlockSize ?? current.labBlockSize ?? 3),
       positionNorms: body.positionNorms ?? current.positionNorms,
       newJoiningYears: Number(body.newJoiningYears ?? current.newJoiningYears),
       academicYearStartMonth: Number(body.academicYearStartMonth ?? current.academicYearStartMonth ?? 4),
@@ -87,6 +91,18 @@ export async function PUT(request: Request) {
     }
     if (!Number.isFinite(settings.newJoiningYears) || settings.newJoiningYears < 0 || settings.newJoiningYears > 100) {
       issues.push("newJoiningYears must be a finite number between 0 and 100");
+    }
+    if (!Number.isFinite(settings.maxTheoryPeriodsPerWeek!) || settings.maxTheoryPeriodsPerWeek! < 1 || settings.maxTheoryPeriodsPerWeek! > 50) {
+      issues.push("maxTheoryPeriodsPerWeek must be a finite number between 1 and 50");
+    }
+    if (!Number.isFinite(settings.maxPracticalPeriodsPerWeek!) || settings.maxPracticalPeriodsPerWeek! < 1 || settings.maxPracticalPeriodsPerWeek! > 50) {
+      issues.push("maxPracticalPeriodsPerWeek must be a finite number between 1 and 50");
+    }
+    if (!Number.isFinite(settings.theoryBlockSize!) || settings.theoryBlockSize! < 1 || settings.theoryBlockSize! > 10) {
+      issues.push("theoryBlockSize must be a finite number between 1 and 10");
+    }
+    if (!Number.isFinite(settings.labBlockSize!) || settings.labBlockSize! < 1 || settings.labBlockSize! > 10) {
+      issues.push("labBlockSize must be a finite number between 1 and 10");
     }
     // The day the academic year begins. The YEAR is never stored - it is
     // derived from today against this cutoff (see currentAcademicStartYear),
@@ -189,6 +205,10 @@ export async function PUT(request: Request) {
     }
 
     await collegeSettingsRef(db, collegeId).set(settings, { merge: true });
+    await db.collection("colleges").doc(collegeId).collection("settings").doc("timetableRules").set({
+      theoryBlockSize: settings.theoryBlockSize,
+      labBlockSize: settings.labBlockSize,
+    }, { merge: true });
     if (leaveApprovalRouting) {
       await collegeSettingsRef(db, collegeId).update({ leaveApprovalRouting });
     }

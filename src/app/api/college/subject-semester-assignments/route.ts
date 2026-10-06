@@ -279,19 +279,60 @@ export async function PATCH(request: Request) {
   }
 }
 
-// Unassign - removes one subject instance from one department's semester mapping.
+// Unassign - removes subject instance, or hard deletes subject & all references everywhere if hardDelete=true.
 export async function DELETE(request: Request) {
   try {
-    // HOD is deliberately not in this list: curriculum assignment belongs to
-    // Academics/Principal, and the HOD Subjects page is read-only. No client in
-    // the app calls this write path as an HOD (every caller only GETs, above).
     const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACADEMICS");
     const { searchParams } = new URL(request.url);
     const subjectId = searchParams.get("subjectId");
     const departmentId = searchParams.get("departmentId");
     const semesterParam = searchParams.get("semester");
-    if (!subjectId || !departmentId || semesterParam == null) {
-      return NextResponse.json({ error: "subjectId, departmentId and semester are required" }, { status: 400 });
+    const hardDelete = searchParams.get("hardDelete") === "true";
+
+    if (!subjectId) {
+      return NextResponse.json({ error: "subjectId is required" }, { status: 400 });
+    }
+
+    const db = getAdminDb();
+    const collegeRef = db.collection("colleges").doc(session.collegeId);
+
+    if (hardDelete) {
+      // Hard delete everywhere: timetable slots, teaching assignments, subject instance assignments, master subject doc
+      const [slotsSnap, assignmentsSnap, instancesSnap] = await Promise.all([
+        collegeRef.collection("timetableSlots").where("subjectId", "==", subjectId).get(),
+        collegeRef.collection("teachingAssignments").where("subjectId", "==", subjectId).get(),
+        collegeRef.collection("subjectSemesterAssignments").where("subjectId", "==", subjectId).get(),
+      ]);
+
+      // 1. Delete timetable slots
+      for (let i = 0; i < slotsSnap.docs.length; i += 400) {
+        const batch = db.batch();
+        for (const doc of slotsSnap.docs.slice(i, i + 400)) batch.delete(doc.ref);
+        await batch.commit();
+      }
+
+      // 2. Delete teaching assignments
+      for (let i = 0; i < assignmentsSnap.docs.length; i += 400) {
+        const batch = db.batch();
+        for (const doc of assignmentsSnap.docs.slice(i, i + 400)) batch.delete(doc.ref);
+        await batch.commit();
+      }
+
+      // 3. Delete subject semester assignments
+      for (let i = 0; i < instancesSnap.docs.length; i += 400) {
+        const batch = db.batch();
+        for (const doc of instancesSnap.docs.slice(i, i + 400)) batch.delete(doc.ref);
+        await batch.commit();
+      }
+
+      // 4. Delete master subject document
+      await collegeRef.collection("subjects").doc(subjectId).delete();
+
+      return NextResponse.json({ success: true, hardDeleted: true });
+    }
+
+    if (!departmentId || semesterParam == null) {
+      return NextResponse.json({ error: "departmentId and semester are required" }, { status: 400 });
     }
     const semester = Number(semesterParam);
 

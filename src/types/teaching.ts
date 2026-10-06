@@ -382,6 +382,8 @@ export interface TimetableRules {
   maxConsecutivePeriodsPerFaculty: number;
   /** No longer enforced - a subject may repeat any number of times in a day. Kept so stored rules docs still type-check. */
   maxPeriodsPerSubjectPerDay: number;
+  /** Contiguous periods a THEORY subject occupies when placed (default 1). */
+  theoryBlockSize?: number;
   /** Contiguous periods a PRACTICAL subject occupies (e.g. a 3-hour lab). */
   labBlockSize: number;
   /** When false, a lab block may not straddle lunch or a short break. */
@@ -398,6 +400,7 @@ export const DEFAULT_TIMETABLE_RULES: TimetableRules = {
   maxPeriodsPerFacultyPerDay: 4,
   maxConsecutivePeriodsPerFaculty: 3,
   maxPeriodsPerSubjectPerDay: 1,
+  theoryBlockSize: 1,
   labBlockSize: 3,
   allowLabAcrossBreaks: false,
   preferTheoryInMorning: true,
