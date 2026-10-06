@@ -40,6 +40,7 @@ function makeContext(overrides: Partial<TimetableContext> = {}): TimetableContex
     pinnedSlots: [],
     busyFaculty: new Map(),
     declaredBusyFaculty: new Map(),
+    lentNotReady: new Map(),
     currentSemester: null,
     ...overrides,
   };

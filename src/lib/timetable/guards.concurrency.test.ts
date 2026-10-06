@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FakeFirestore, asFirestore } from "@/test-support/fakeFirestore";
-import { createAssignmentWithSlots, type CreateAssignmentInput } from "@/lib/teaching/createAssignment";
+import { MAX_FACULTY_PER_SUBJECT, createAssignmentWithSlots, type CreateAssignmentInput } from "@/lib/teaching/createAssignment";
 import { deleteAssignmentWithSlots } from "@/lib/teaching/deleteAssignment";
 import { pinSlotWithChecks } from "./pinSlot";
 import { publishSectionDraft } from "./publishDraft";
@@ -59,23 +59,12 @@ describe("under query-range-blind isolation", () => {
     expect(doubled).toBeGreaterThan(0);
   });
 
-  it("assignment creation: two faculty for one theory subject -> exactly one", async () => {
+  it("assignment creation: eight faculty for one subject -> exactly the cap", async () => {
     for (let seed = 1; seed <= 20; seed++) {
       const fake = weak(seed);
-      const [a, b] = await Promise.all([
-        createAssignmentWithSlots(assignmentInput(fake, { facultyId: "f1", subjectId: "sub1" })),
-        createAssignmentWithSlots(assignmentInput(fake, { facultyId: "f2", subjectId: "sub1" })),
-      ]);
-      expect([a.ok, b.ok].filter(Boolean), `seed ${seed}`).toHaveLength(1);
-      expect(fake.list(`${C}/teachingAssignments`), `seed ${seed}`).toHaveLength(1);
-    }
-  });
-
-  it("assignment creation: three faculty for a lab -> exactly two", async () => {
-    for (let seed = 1; seed <= 20; seed++) {
-      const fake = weak(seed);
-      const r = await Promise.all(["f1", "f2", "f3"].map((f) => createAssignmentWithSlots(assignmentInput(fake, { facultyId: f, subjectId: "lab", isLab: true }))));
-      expect(r.filter((x) => x.ok), `seed ${seed}`).toHaveLength(2);
+      const r = await Promise.all(Array.from({ length: 8 }, (_, i) => createAssignmentWithSlots(assignmentInput(fake, { facultyId: `f${i + 1}`, subjectId: "sub1" }))));
+      expect(r.filter((x) => x.ok), `seed ${seed}`).toHaveLength(MAX_FACULTY_PER_SUBJECT);
+      expect(fake.list(`${C}/teachingAssignments`), `seed ${seed}`).toHaveLength(MAX_FACULTY_PER_SUBJECT);
     }
   });
 
@@ -126,7 +115,7 @@ describe("under query-range-blind isolation", () => {
     }
   });
 
-  it("publish: the same faculty in the same period of two sections -> exactly one section goes live", async () => {
+  it("publish: the same faculty in the same period of two sections -> both go live (no faculty clash rule)", async () => {
     type DS = { assignmentId: string; facultyId: string; facultyName: string; subjectId: string; subjectName: string; subjectType: string; day: string; periodNumber: number };
     const ds = (a: string, day: string, p: number): DS => ({ assignmentId: a, facultyId: "f1", facultyName: "F1", subjectId: "s" + a, subjectName: "S", subjectType: "THEORY", day, periodNumber: p });
     for (let seed = 1; seed <= 20; seed++) {
@@ -142,8 +131,8 @@ describe("under query-range-blind isolation", () => {
         publishedByName: "h", writer: "h",
       });
       const [a, b] = await Promise.all([pub("s1", 1), pub("s2", 2)]);
-      expect([a.ok, b.ok].filter(Boolean), `seed ${seed}`).toHaveLength(1);
-      expect(fake.list(`${C}/timetableSlots`), `seed ${seed}`).toHaveLength(1);
+      expect([a.ok, b.ok].filter(Boolean), `seed ${seed}`).toHaveLength(2);
+      expect(fake.list(`${C}/timetableSlots`), `seed ${seed}`).toHaveLength(2);
     }
   });
 

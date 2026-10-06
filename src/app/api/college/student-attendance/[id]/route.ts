@@ -7,6 +7,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { checkFacultyPeriodWindow, periodWindowMessage } from "@/lib/timetable/currentPeriod";
 import { mergeMarkUpdates } from "@/lib/studentAttendance/onDuty";
+import { checkAllocatedAccess } from "@/lib/studentAttendance/labAllocation";
 import { applyTallyDeltaInTx } from "@/lib/studentAttendance/dayTally";
 import type { StudentAttendanceEntry, StudentAttendanceMark, StudentAttendanceSession } from "@/types";
 
@@ -78,8 +79,13 @@ export async function PATCH(
     const windowCheck = await checkFacultyPeriodWindow(
       db, session.collegeId, facultyMemberId, existing.assignmentId, existing.date, new Date(), existing.periodNumber
     );
+    // An allocated lab session (an HOD/Incharge opened it for these dates, see
+    // lib/studentAttendance/labAllocation.ts) is not bound to the period clock.
     if (!windowCheck.ok) {
-      return NextResponse.json({ error: periodWindowMessage(windowCheck) }, { status: 403 });
+      const allocated = await checkAllocatedAccess(db, session.collegeId, facultyMemberId, existing.assignmentId, existing.date, existing.periodNumber);
+      if (!allocated.ok) {
+        return NextResponse.json({ error: periodWindowMessage(windowCheck) }, { status: 403 });
+      }
     }
 
     if (body.entries) {

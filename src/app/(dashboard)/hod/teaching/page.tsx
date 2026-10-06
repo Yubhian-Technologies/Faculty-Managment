@@ -249,36 +249,44 @@ export default function HODTeachingPage() {
                 <tr key={period} className="border-b last:border-b-0">
                   <td className="p-2.5 font-medium text-muted-foreground">{period}</td>
                   {DAYS.map((d) => {
-                    const slot = displaySlots.find((s) => s.day === d && s.periodNumber === period);
-                    const assignment = slot ? assignmentById.get(slot.assignmentId) : undefined;
-                    const time = slot ? periodTimeFor(slot.courseId, slot.year, slot.periodNumber) : undefined;
-                    const subline = [
-                      assignment?.courseName,
-                      assignment?.year ? ordinalYear(assignment.year) : null,
-                      assignment?.sectionName ? `Section ${assignment.sectionName}` : null,
-                    ].filter(Boolean).join(" · ");
+                    // Every slot in the cell, not the first: one faculty can hold
+                    // two sections in the same period (e.g. a combined class).
+                    const cellSlots = displaySlots.filter((s) => s.day === d && s.periodNumber === period);
                     return (
                       <td key={d} className="p-2 align-top">
-                        {slot ? (
-                          <div className={`rounded-md border p-2 ${slot.substituteFacultyName || slot.substituteForName ? "bg-amber-50 border-amber-200" : "bg-primary/5 border-primary/20"}`}>
-                            {time && (
-                              <p className="text-[10px] font-medium text-muted-foreground/80 mb-0.5">
-                                {format12h(time.startTime)}&ndash;{format12h(time.endTime)}
-                              </p>
-                            )}
-                            <p className="text-xs font-semibold leading-tight">{assignment?.shortCode || slot.subjectName}</p>
-                            {slot.substituteFacultyName ? (
-                              <p className="text-[11px] font-medium text-amber-700 mt-0.5">
-                                Covered by {slot.substituteFacultyName}{slot.substituteDate ? ` (${formatDMY(slot.substituteDate)})` : ""}
-                              </p>
-                            ) : slot.substituteForName ? (
-                              <p className="text-[11px] font-medium text-amber-700 mt-0.5">
-                                Substituting for {slot.substituteForName}{slot.substituteDate ? ` (${formatDMY(slot.substituteDate)})` : ""}
-                              </p>
-                            ) : (
-                              subline && <p className="text-[11px] text-muted-foreground mt-0.5">{subline}</p>
-                            )}
-                            {slot.classroom && <p className="text-[11px] text-muted-foreground">{slot.classroom}</p>}
+                        {cellSlots.length > 0 ? (
+                          <div className="space-y-1.5">
+                            {cellSlots.map((slot, idx) => {
+                              const assignment = assignmentById.get(slot.assignmentId);
+                              const time = periodTimeFor(slot.courseId, slot.year, slot.periodNumber);
+                              const subline = [
+                                assignment?.courseName,
+                                assignment?.year ? ordinalYear(assignment.year) : null,
+                                assignment?.sectionName ? `Section ${assignment.sectionName}` : null,
+                              ].filter(Boolean).join(" · ");
+                              return (
+                                <div key={`${slot.id ?? idx}`} className={`rounded-md border p-2 ${slot.substituteFacultyName || slot.substituteForName ? "bg-amber-50 border-amber-200" : "bg-primary/5 border-primary/20"}`}>
+                                  {time && (
+                                    <p className="text-[10px] font-medium text-muted-foreground/80 mb-0.5">
+                                      {format12h(time.startTime)}&ndash;{format12h(time.endTime)}
+                                    </p>
+                                  )}
+                                  <p className="text-xs font-semibold leading-tight">{assignment?.shortCode || slot.subjectName}</p>
+                                  {slot.substituteFacultyName ? (
+                                    <p className="text-[11px] font-medium text-amber-700 mt-0.5">
+                                      Covered by {slot.substituteFacultyName}{slot.substituteDate ? ` (${formatDMY(slot.substituteDate)})` : ""}
+                                    </p>
+                                  ) : slot.substituteForName ? (
+                                    <p className="text-[11px] font-medium text-amber-700 mt-0.5">
+                                      Substituting for {slot.substituteForName}{slot.substituteDate ? ` (${formatDMY(slot.substituteDate)})` : ""}
+                                    </p>
+                                  ) : (
+                                    subline && <p className="text-[11px] text-muted-foreground mt-0.5">{subline}</p>
+                                  )}
+                                  {slot.classroom && <p className="text-[11px] text-muted-foreground">{slot.classroom}</p>}
+                                </div>
+                              );
+                            })}
                           </div>
                         ) : (
                           <div className="rounded-md border border-dashed p-2 text-center text-[11px] text-muted-foreground">-</div>

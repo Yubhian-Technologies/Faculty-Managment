@@ -112,3 +112,37 @@ export interface StudentAttendanceSession {
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
+
+// ─── Lab attendance allocation ───
+// An HOD / Sub-HOD / Timetable Incharge opens a lab assignment's student
+// attendance for its own faculty on chosen date ranges, outside the normal
+// "today, inside the period window" rule (see lib/studentAttendance/
+// labAllocation.ts). One doc per teaching assignment - doc id IS the
+// assignmentId - so setting it again replaces the ranges.
+export interface LabAttendanceDateRange {
+  from: string; // "YYYY-MM-DD", inclusive
+  to: string;   // "YYYY-MM-DD", inclusive
+}
+
+export interface LabAttendanceAllocation {
+  id: string; // = assignmentId
+  collegeId: string;
+  assignmentId: string;
+  // The assignment's own faculty (facultyMembers doc id) - the one who may mark.
+  facultyId: string;
+  facultyName: string;
+  department: string;
+  courseId: string;
+  courseName: string;
+  year: number;
+  sectionId: string;
+  sectionName: string;
+  subjectId: string;
+  subjectName: string;
+  subjectCode: string;
+  ranges: LabAttendanceDateRange[];
+  allocatedBy: string;
+  allocatedByName: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}

@@ -1,6 +1,8 @@
 import { FieldValue, type Firestore } from "firebase-admin/firestore";
 import { notify } from "@/lib/notify";
 import { bumpGuards, lockGuards, sectionGuard } from "@/lib/timetable/guards";
+import { allocationFields, requestAllocations } from "@/lib/teaching/requestAllocations";
+import type { FacultyAssignmentRequest } from "@/types";
 
 // Removing a teaching assignment removes its timetable slots with it. Both
 // deletes route handlers (DELETE /teaching-assignments?id= and
@@ -58,16 +60,28 @@ export async function deleteAssignmentWithSlots(
 async function reopenAllocatedRequests(db: Firestore, collegeId: string, assignmentId: string): Promise<void> {
   try {
     const collegeRef = db.collection("colleges").doc(collegeId);
-    const snap = await collegeRef.collection("facultyAssignmentRequests")
-      .where("teachingAssignmentId", "==", assignmentId).get();
-    for (const d of snap.docs) {
-      const r = d.data() as {
-        status?: string; targetDepartmentId?: string; targetDepartmentName?: string;
-        subjectName?: string; sectionName?: string; requestedByName?: string;
-      };
+    const requests = collegeRef.collection("facultyAssignmentRequests");
+    // A request may hold several allocated faculty (teachingAssignmentIds), or be
+    // an older single-faculty one (teachingAssignmentId only) - find both.
+    const [byList, byFirst] = await Promise.all([
+      requests.where("teachingAssignmentIds", "array-contains", assignmentId).get(),
+      requests.where("teachingAssignmentId", "==", assignmentId).get(),
+    ]);
+    const docs = new Map([...byList.docs, ...byFirst.docs].map((d) => [d.id, d]));
+    for (const d of docs.values()) {
+      const r = d.data() as FacultyAssignmentRequest;
       if (r.status !== "ALLOCATED") continue;
+      const remaining = requestAllocations(r).filter((a) => a.teachingAssignmentId !== assignmentId);
+      // Other faculty are still allocated: only this one leaves the request.
+      if (remaining.length > 0) {
+        await d.ref.update({ ...allocationFields(remaining), updatedAt: new Date() });
+        continue;
+      }
       await d.ref.update({
         status: "PENDING",
+        allocations: FieldValue.delete(),
+        allocatedFacultyIds: FieldValue.delete(),
+        teachingAssignmentIds: FieldValue.delete(),
         allocatedFacultyId: FieldValue.delete(),
         allocatedFacultyName: FieldValue.delete(),
         allocatedBy: FieldValue.delete(),
