@@ -466,7 +466,7 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
                             )}
                           </div>
 
-                          {tab === "incoming" && changingKey === `${r.id}:${a.facultyId}` && (
+                          {dir === "incoming" && changingKey === `${r.id}:${a.facultyId}` && (
                             <div className="flex flex-wrap items-center gap-2">
                               <Select
                                 value={changePick[`${r.id}:${a.facultyId}`] ?? ""}
