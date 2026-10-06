@@ -1,4 +1,5 @@
 import type { Firestore } from "firebase-admin/firestore";
+import { normalizeStudentMobile } from "@/lib/students/studentMobile";
 
 // The students a bulk import has to compare its rows against - and ONLY those.
 //
@@ -7,8 +8,8 @@ import type { Firestore } from "firebase-admin/firestore";
 // college in six 500-row files read the whole roster six times. What it
 // actually compares a row with is small and known from the rows themselves:
 //   - anyone already holding one of the roll numbers in the file,
-//   - anyone already holding one of the file's Admission / Hall Ticket numbers
-//     or emails,
+//   - anyone already holding one of the file's Admission / Hall Ticket numbers,
+//     emails or Student Mobile Nos,
 //   - the still-UNASSIGNED students of the departments and years the file names
 //     (the name-based "same person" check applies to unassigned rows only).
 // Each of those is a plain equality / `in` query, served by Firestore's
@@ -30,6 +31,7 @@ export interface ImportRowKeys {
   admissionNo?: string;
   hallTicketNo?: string;
   email?: string;
+  mobileNo?: string;
 }
 
 export interface ExistingStudentDoc {
@@ -83,6 +85,7 @@ export async function loadExistingStudentsForImport(
   const admission = new Set<string>();
   const hallTicket = new Set<string>();
   const emails = new Set<string>();
+  const mobiles = new Set<string>();
   const departments = new Set<string>();
   const years = new Set<number>();
   for (const row of rows) {
@@ -94,6 +97,10 @@ export async function loadExistingStudentsForImport(
     for (const s of spellings(row.admissionNo)) admission.add(s);
     for (const s of spellings(row.hallTicketNo)) hallTicket.add(s);
     for (const s of spellings(row.email)) emails.add(s);
+    // Stored as the 10 digits (see studentMobile.ts); the typed form is looked up too for numbers saved as typed.
+    const mobile = normalizeStudentMobile(row.mobileNo);
+    if (mobile) mobiles.add(mobile);
+    if (row.mobileNo?.trim()) mobiles.add(row.mobileNo.trim());
     for (const raw of [row.department, row.secondaryDepartment]) {
       const name = raw?.trim() ? resolveDepartment(raw) : undefined;
       if (name) departments.add(name);
@@ -106,6 +113,7 @@ export async function loadExistingStudentsForImport(
   lookupIn("admissionNo", admission);
   lookupIn("hallTicketNo", hallTicket);
   lookupIn("email", emails);
+  lookupIn("mobileNo", mobiles);
 
   // Unassigned students of the named departments, per year (under either the
   // department or the secondary department field - see the importer's note on why).

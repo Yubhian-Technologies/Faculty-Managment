@@ -55,10 +55,10 @@ export interface RosterField {
 
 export const ROSTER_FIELDS: RosterField[] = [
   // Roll No leads - it's what a physical roster/attendance sheet is
-  // organised by. It is the student's unique identity: REQUIRED on every add
-  // and import, and unique across the whole college (like a faculty member's
-  // employee id) - see lib/students/rollNumberUniqueness.ts.
-  { key: "rollNumber", label: "Roll No", kind: "text", sample: "Required; the student's unique roll / registration number - must not be used by any other student in the college", required: true, primary: true, aliases: ["Roll Number"], placeholder: "24A91A0501" },
+  // organised by. OPTIONAL: the Office often enrols students before roll numbers exist and sets them later (matched
+  // by Student Mobile No). When given it is unique across the whole college (like a faculty member's employee id)
+  // - see lib/students/rollNumberUniqueness.ts. A login needs one.
+  { key: "rollNumber", label: "Roll No", kind: "text", sample: "Optional; the student's unique roll / registration number - must not be used by any other student. Leave blank if not issued yet (needed before a login can be created)", primary: true, aliases: ["Roll Number"], placeholder: "24A91A0501" },
   { key: "name", label: "Name (as per SSC)", kind: "text", sample: "Required; full name exactly as on SSC (10th) certificate", required: true, primary: true, aliases: ["Name", "Student Name", "Full Name"], placeholder: "P. Sai Kumar" },
   { key: "studentType", label: "Student Type", kind: "select", sample: "Optional: Regular / Lateral - defaults to Regular when left blank", primary: true, options: ["Regular", "Lateral"] },
   // Course/Department/Academic Year are always primary identity fields (the
@@ -102,7 +102,7 @@ export const ROSTER_FIELDS: RosterField[] = [
   { key: "motherContactNo", label: "Mother Contact Number", kind: "text", sample: "Optional; phone/text", aliases: ["Mother Phone", "Mother Mobile", "Mother Contact"], placeholder: "9876543211" },
   { key: "guardianName", label: "Guardian Name (if any)", kind: "text", sample: "Optional; only when someone other than a parent is this student's guardian", aliases: ["Guardian"] },
   { key: "guardianContact", label: "Guardian Contact Number", kind: "text", sample: "Optional; phone/text", aliases: ["Guardian Contact", "Parent Contact", "Guardian Phone", "Parent Phone"], placeholder: "9876543212" },
-  { key: "mobileNo", label: "Student Mobile No", kind: "text", sample: "Optional; phone/text" },
+  { key: "mobileNo", label: "Student Mobile No", kind: "text", sample: "Required; 10-digit mobile starting 6-9 - must be different for every student in every college (it is how roll numbers are matched to students later)", required: true, placeholder: "9876543210" },
   { key: "landLineNo", label: "Land Line No", kind: "text", sample: "Optional; text" },
   { key: "email", label: "Email", kind: "text", sample: "Optional; must contain @", aliases: ["Email ID"], placeholder: "student@example.com" },
   { key: "aadharNo", label: "Aadhar Card No.", kind: "text", sample: "Optional; text", aliases: ["Aadhar No"] },
