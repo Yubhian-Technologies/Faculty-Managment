@@ -10,6 +10,7 @@ import { resolveCurrentSemester, matchesCurrentSemester } from "@/lib/college/se
 import { isTimetableInchargeAnywhere } from "@/lib/departments/timetableIncharge";
 import { isFacultyAvailable } from "@/types";
 import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
+import { requestAllocations } from "@/lib/teaching/requestAllocations";
 import type { CourseYearTiming, FacultyAssignmentRequest, PeriodTiming, Section, TimetableDraft, TimetableSlot } from "@/types";
 
 const LOOKUP_ROLES_OTHER_THAN_STAFF = ["HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER"];
@@ -81,7 +82,12 @@ export async function GET(request: Request) {
         // become timetable slots, so without this the lookup showed the
         // faculty as free (or as having nothing booked at all) in hours the
         // timetable editor itself refuses to place them in.
-        collegeRef.collection("facultyAssignmentRequests").where("allocatedFacultyId", "==", facultyId).get(),
+        // A request can hold several allocated faculty (allocatedFacultyIds); an older
+        // one only has allocatedFacultyId - both are looked up, then merged.
+        Promise.all([
+          collegeRef.collection("facultyAssignmentRequests").where("allocatedFacultyIds", "array-contains", facultyId).get(),
+          collegeRef.collection("facultyAssignmentRequests").where("allocatedFacultyId", "==", facultyId).get(),
+        ]).then(([a, b]) => ({ docs: Array.from(new Map([...a.docs, ...b.docs].map((d) => [d.id, d])).values()) })),
       ]);
       const rawSlots = slotsSnap.docs.map((d) => d.data() as TimetableSlot);
 
@@ -109,7 +115,9 @@ export async function GET(request: Request) {
       for (const d of requestsSnap.docs) {
         const r = d.data() as FacultyAssignmentRequest;
         if (r.status !== "ALLOCATED") continue;
-        for (const bp of r.busyPeriods ?? []) {
+        // This faculty's own busy periods on the request (not the other faculty's).
+        const mine = requestAllocations(r).find((a) => a.facultyId === facultyId);
+        for (const bp of mine?.busyPeriods ?? []) {
           draftSlots.push({
             day: bp.day, periodNumber: bp.period, subjectName: r.subjectName,
             courseId: r.courseId, year: bp.year ?? r.year, sectionId: "",

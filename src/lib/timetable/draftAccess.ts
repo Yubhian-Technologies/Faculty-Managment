@@ -1,7 +1,8 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { draftDocId, matchesCurrentSemester } from "@/lib/college/semester";
 import type { TimetableContext } from "@/lib/timetable/loadContext";
-import type { DraftSlot, TimetableDraft, TimetableSlot } from "@/types";
+import type { DraftSlot, FacultyAssignmentRequest, TimetableDraft, TimetableSlot } from "@/types";
+import { requestAssignmentIds } from "@/lib/teaching/requestAllocations";
 
 // Shared department-scope/lending checks and draft-document access, used by
 // every route that reads or writes a section's TimetableDraft - the hand-edit
@@ -20,12 +21,16 @@ export async function findAllocatedRequestsForSection(
   db: FirebaseFirestore.Firestore,
   collegeId: string,
   sectionId: string,
-): Promise<{ targetDepartmentName?: string; teachingAssignmentId?: string }[]> {
+): Promise<{ targetDepartmentName?: string; teachingAssignmentIds: string[] }[]> {
   const snap = await db.collection("colleges").doc(collegeId).collection("facultyAssignmentRequests")
     .where("sectionId", "==", sectionId)
     .where("status", "==", "ALLOCATED")
     .get();
-  return snap.docs.map((d) => d.data() as { targetDepartmentName?: string; teachingAssignmentId?: string });
+  // A request can hold several allocated faculty - every one of their assignments counts.
+  return snap.docs.map((d) => {
+    const r = d.data() as FacultyAssignmentRequest;
+    return { targetDepartmentName: r.targetDepartmentName, teachingAssignmentIds: requestAssignmentIds(r) };
+  });
 }
 
 // `myNames` is either an HOD's own department scope (ownDepartmentNames) or
@@ -43,7 +48,7 @@ export async function isCrossDepartmentLender(
   if (myNames.length === 0) return false;
   const allocated = await findAllocatedRequestsForSection(db, collegeId, sectionId);
   return allocated.some(
-    (r) => myNames.includes(r.targetDepartmentName ?? "") && (!assignmentId || r.teachingAssignmentId === assignmentId),
+    (r) => myNames.includes(r.targetDepartmentName ?? "") && (!assignmentId || r.teachingAssignmentIds.includes(assignmentId)),
   );
 }
 

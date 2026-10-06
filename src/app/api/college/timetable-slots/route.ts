@@ -4,6 +4,7 @@ import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { pinSlotWithChecks } from "@/lib/timetable/pinSlot";
+import { openLendDepartment } from "@/lib/teaching/requestAllocations";
 import { loadTimingLookup } from "@/lib/timetable/facultyOverlap";
 import { makeLiveSlotPredicate } from "@/lib/timetable/liveSlots";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -224,6 +225,13 @@ export async function POST(request: Request) {
       if (!ok) {
         return NextResponse.json({ error: "You are not the Timetable Incharge for this course & year" }, { status: 403 });
       }
+    }
+
+    // A faculty lent in through an Assignment Request can't be placed until the lending
+    // department has shared their busy periods and closed the request.
+    const lendingDept = await openLendDepartment(db, session.collegeId, assignment.sectionId, assignmentId);
+    if (lendingDept) {
+      return NextResponse.json({ error: `${lendingDept} hasn't finished this allocation yet - you can place ${assignment.facultyName || "this faculty"} once they notify you` }, { status: 409 });
     }
 
     // This assignment's own course-year semester - stamped onto the new slot

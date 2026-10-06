@@ -1,3 +1,4 @@
+import { requestAllocations } from "@/lib/teaching/requestAllocations";
 import type { Firestore } from "firebase-admin/firestore";
 import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
 import { resolveBranchYearOwner, type DepartmentYearRow } from "@/lib/departments/managedBranches";
@@ -57,18 +58,21 @@ export function expandDeclaredBusy(
 
 /** facultyId -> declared-busy cells, for one section's ALLOCATED requests. */
 export function declaredBusyByFaculty(
-  requests: Pick<FacultyAssignmentRequest, "allocatedFacultyId" | "busyPeriods">[],
+  requests: Pick<FacultyAssignmentRequest, "allocations" | "allocatedFacultyId" | "allocatedFacultyName" | "allocatedBy" | "teachingAssignmentId" | "busyPeriods">[],
   sectionYear: number,
   sectionTiming: CourseYearTiming | null,
   timingForYear: (year: number) => CourseYearTiming | null,
 ): Map<string, Set<string>> {
   const out = new Map<string, Set<string>>();
   for (const req of requests) {
-    if (!req.allocatedFacultyId || !req.busyPeriods?.length) continue;
-    const cells = expandDeclaredBusy(req.busyPeriods, sectionYear, sectionTiming, timingForYear);
-    const existing = out.get(req.allocatedFacultyId) ?? new Set<string>();
-    for (const c of cells) existing.add(c);
-    out.set(req.allocatedFacultyId, existing);
+    // Every faculty allocated to the request carries their own busy periods.
+    for (const a of requestAllocations(req)) {
+      if (!a.facultyId || !a.busyPeriods?.length) continue;
+      const cells = expandDeclaredBusy(a.busyPeriods, sectionYear, sectionTiming, timingForYear);
+      const existing = out.get(a.facultyId) ?? new Set<string>();
+      for (const c of cells) existing.add(c);
+      out.set(a.facultyId, existing);
+    }
   }
   return out;
 }
@@ -85,11 +89,12 @@ export async function loadDeclaredBusyForSection(
   const collegeRef = db.collection("colleges").doc(collegeId);
   const reqSnap = await collegeRef.collection("facultyAssignmentRequests")
     .where("sectionId", "==", section.id).where("status", "==", "ALLOCATED").get();
-  const requests = reqSnap.docs.map((d) => d.data() as FacultyAssignmentRequest).filter((r) => r.busyPeriods?.length);
+  const requests = reqSnap.docs.map((d) => d.data() as FacultyAssignmentRequest)
+    .filter((r) => requestAllocations(r).some((a) => a.busyPeriods?.length));
   if (requests.length === 0) return new Map();
 
   const years = new Set<number>([Number(section.year)]);
-  for (const r of requests) for (const bp of r.busyPeriods ?? []) if (bp.year != null) years.add(Number(bp.year));
+  for (const r of requests) for (const a of requestAllocations(r)) for (const bp of a.busyPeriods ?? []) if (bp.year != null) years.add(Number(bp.year));
   const timings = new Map<number, CourseYearTiming | null>();
   await Promise.all(Array.from(years).map(async (y) => {
     const snap = await collegeRef.collection("courseYearTimings").doc(`${section.courseId}_year${y}`).get();
