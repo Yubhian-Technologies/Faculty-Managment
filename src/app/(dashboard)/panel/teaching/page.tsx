@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { FileDown, FileSpreadsheet, Printer } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
+import { SubjectColorPicker } from "@/components/timetable/SubjectColorPicker";
+import { HIGHLIGHT_COLORS, highlightFor, type SubjectHighlights } from "@/lib/timetable/highlightColors";
 import { toast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
 import { useCollegeInfo } from "@/hooks/useCollegeInfo";
@@ -134,12 +136,37 @@ export default function TeachingLoadPage() {
     })();
   }, [weekStart]);
 
+  const nonTeachingAssignmentIds = new Set(
+    assignments
+      .filter((a) => a.isNonTeachingLoad || a.excludeFromResume || (a as any).subjectType === "NON_TEACHING")
+      .map((a) => a.id)
+  );
   const assignmentById = new Map(assignments.map((a) => [a.id, a]));
-  const maxPeriod = timetableSlots.reduce((max, s) => Math.max(max, s.periodNumber), 0);
+  const filteredSlots = timetableSlots.filter(
+    (s) => !nonTeachingAssignmentIds.has(s.assignmentId) && s.subjectType !== "NON_TEACHING" && !(s as any).isNonTeachingLoad
+  );
+  const maxPeriod = filteredSlots.reduce((max, s) => Math.max(max, s.periodNumber), 0);
   const periods = Array.from({ length: maxPeriod }, (_, i) => i + 1);
-  const displaySlots = typeFilter === "ALL" ? timetableSlots : timetableSlots.filter((s) => s.subjectType === typeFilter);
+  const displaySlots = typeFilter === "ALL" ? filteredSlots : filteredSlots.filter((s) => s.subjectType === typeFilter);
 
-  // Each course-year's own period-by-period breakdown, resolved once up
+  // Subject color highlight state
+  const [highlights, setHighlights] = useState<SubjectHighlights>({});
+
+  const uniqueSubjects = useMemo(() => {
+    const map = new Map<string, { code: string; name: string; isLab: boolean }>();
+    for (const s of displaySlots) {
+      const a = assignmentById.get(s.assignmentId);
+      const code = (a?.shortCode || a?.subjectCode || (s as any).subjectCode || s.subjectId || "").toUpperCase().trim();
+      const name = a?.subjectName || s.subjectName || code;
+      if (code && !map.has(code)) {
+        const isLab = a?.subjectType === "PRACTICAL" || Boolean(s.labBatch) || /\b(lab|laboratory|practical)\b/i.test(name);
+        map.set(code, { code, name, isLab });
+      }
+    }
+    return Array.from(map.values());
+  }, [displaySlots, assignmentById]);
+
+    // Each course-year's own period-by-period breakdown, resolved once up
   // front (falls back to the plain numberOfPeriods/periodDurationMinutes
   // formula for a course-year the HOD hasn't broken down yet - same
   // fallback the HOD/Principal Timetable pages use).
@@ -170,6 +197,7 @@ export default function TeachingLoadPage() {
       const courseCodeById = new Map(courses.map((c) => [c.id, c.code || c.name]));
       const html = buildFacultyTimetablePdfHtml({
         facultyName: user?.name ?? "",
+        departmentName: user?.department,
         semesterLabel: semesterNums.length > 0 ? semesterNums.join(", ") : "—",
         weekStart,
         weekEnd: weekDates[weekDates.length - 1],
@@ -182,8 +210,9 @@ export default function TeachingLoadPage() {
         departments,
         formatDMY,
         college,
+        highlightColors: highlights,
       });
-      await renderHtmlToPdf(html, `Semester-Timetable-${isoDateKey(weekStart)}.pdf`);
+      await renderHtmlToPdf(html, `Faculty-Teaching-Load-${isoDateKey(weekStart)}.pdf`);
       toast({ title: "Timetable downloaded", description: "Saved as PDF" });
     } catch (err) {
       console.error(err);
@@ -238,6 +267,7 @@ export default function TeachingLoadPage() {
     const courseCodeById = new Map(courses.map((c) => [c.id, c.code || c.name]));
     const html = buildFacultyTimetablePdfHtml({
       facultyName: user?.name ?? "",
+      departmentName: user?.department,
       semesterLabel: semesterNums.length > 0 ? semesterNums.join(", ") : "—",
       weekStart,
       weekEnd: weekDates[weekDates.length - 1],
@@ -250,6 +280,7 @@ export default function TeachingLoadPage() {
       departments,
       formatDMY,
       college,
+      highlightColors: highlights,
     });
     const printWindow = window.open("", "_blank");
     if (!printWindow) {
@@ -299,6 +330,8 @@ export default function TeachingLoadPage() {
                 {t === "ALL" ? "All" : t === "THEORY" ? "Theory" : "Practical"}
               </Button>
             ))}
+
+            <SubjectColorPicker subjects={uniqueSubjects} value={highlights} onChange={setHighlights} />
             <Button size="sm" variant="outline" onClick={downloadPdf} disabled={isExportingPdf}>
               <FileDown className="h-3.5 w-3.5 mr-1.5" />
               {isExportingPdf ? "Generating PDF..." : "PDF"}
@@ -358,10 +391,17 @@ export default function TeachingLoadPage() {
                               const subjectName = slot.subjectName || assignment?.subjectName || "";
                               const shortCode = assignment?.shortCode;
                               const titleDisplay = shortCode ? `${subjectName} (${shortCode})` : subjectName;
-                              const isLab = assignment?.subjectType === "PRACTICAL" || Boolean(slot.labBatch) || /\b(lab|laboratory|practical)\b/i.test(subjectName);
+                              const codeKey = (shortCode || assignment?.subjectCode || (slot as any).subjectCode || slot.subjectId || "").toUpperCase().trim();
+                              
+                              const nameKey = (subjectName || "").toUpperCase().trim();
+                              const hl = Object.keys(highlights).length > 0
+                                ? highlightFor(highlights, codeKey, nameKey, (slot.subjectId || "").toUpperCase().trim())
+                                : (assignment?.subjectType === "PRACTICAL" || Boolean(slot.labBatch) || /(lab|laboratory|practical)/i.test(subjectName)) ? HIGHLIGHT_COLORS.purple : null;
+                              const isSubstitute = Boolean(slot.substituteFacultyName || slot.substituteForName);
 
                               return (
-                                <div key={`${slot.id ?? idx}`} className={`rounded-md border p-2 ${slot.substituteFacultyName || slot.substituteForName ? "bg-amber-50 border-amber-200" : isLab ? "bg-purple-100/90 border-purple-300 text-purple-950 dark:bg-purple-950/40 dark:border-purple-700 dark:text-purple-200" : "bg-primary/5 border-primary/20"}`}>
+                                <div key={`${slot.id ?? idx}`} className={`rounded-md border p-2 transition-all ${isSubstitute ? "bg-amber-50 border-amber-200" : hl ? "font-medium" : "bg-primary/5 border-primary/20"}`}
+                                  style={!isSubstitute && hl ? { background: hl.bg, borderColor: hl.border, color: hl.text } : undefined}>
                                   {time && (
                                     <p className="text-[10px] font-medium text-muted-foreground/80 mb-0.5">
                                       {formatTime12h(time.startTime)}&ndash;{formatTime12h(time.endTime)}

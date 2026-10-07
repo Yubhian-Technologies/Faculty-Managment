@@ -241,7 +241,19 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         return NextResponse.json({ error: "Not allowed to edit student details" }, { status: 403 });
       }
 
-      await studentRef.update({ profilePhotoUrl: body.profilePhotoUrl.trim() || null, updatedAt: new Date() });
+      // The student record is the source of truth; the student's login (users/{uid} + systemUsers, what the top-bar
+      // avatar reads) mirrors it, so both are written in ONE batch - an Office-set photo used to leave the login's
+      // avatar stale.
+      const photo = body.profilePhotoUrl.trim();
+      const now = new Date();
+      const batch = db.batch();
+      batch.update(studentRef, { profilePhotoUrl: photo || null, updatedAt: now });
+      if (student.uid) {
+        const loginRef = collegeRef.collection("users").doc(student.uid);
+        if ((await loginRef.get()).exists) batch.update(loginRef, { profilePhotoUrl: photo, updatedAt: now });
+        batch.set(db.collection("systemUsers").doc(student.uid), { profilePhotoUrl: photo }, { merge: true });
+      }
+      await batch.commit();
       await auditStudentChange(db, session, "STUDENT_PHOTO_UPDATED", student, id);
       return NextResponse.json({ ok: true });
     }

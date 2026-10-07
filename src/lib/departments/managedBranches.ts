@@ -338,7 +338,9 @@ export type SectionHodVisibility = "primary" | "secondary" | "hidden";
  *                 nothing else, so these are not theirs to see at all.
  */
 export function classifySectionForHod<T extends DepartmentYearRow & { name?: string }>(
-  scope: { ownDepartmentNames: string[]; childDepartmentNames: string[]; managedDepartmentNames?: string[] },
+  // Extra scope fields (managedDepartmentNames, ...) are accepted and deliberately ignored: being
+  // GROUPED under a manager never grants sight of a year the manager does not teach.
+  scope: { ownDepartmentNames: string[]; childDepartmentNames: string[] },
   departments: T[],
   departmentName: string,
   year: number,
@@ -346,11 +348,8 @@ export function classifySectionForHod<T extends DepartmentYearRow & { name?: str
 ): SectionHodVisibility {
   const owner = resolveBranchYearOwner(departments, departmentName, year, catalogId);
   if (scope.ownDepartmentNames.includes(owner) || scope.childDepartmentNames.includes(owner)) return "primary";
-  if (
-    scope.childDepartmentNames.includes(departmentName) ||
-    (scope.managedDepartmentNames && scope.managedDepartmentNames.includes(departmentName))
-  ) {
-    return "secondary";
-  }
-  return "hidden";
+  // Only a TRUE child keeps a read-only view of the year its shared-year manager runs. A branch
+  // reached only through managedDepartments is the manager's for the managed year(s) and for
+  // nothing else - its other years belong to the branch's own HOD (see the doc comment above).
+  return scope.childDepartmentNames.includes(departmentName) ? "secondary" : "hidden";
 }
