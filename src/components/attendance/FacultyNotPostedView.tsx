@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -45,6 +45,11 @@ export function FacultyNotPostedView({
   const [departments, setDepartments] = useState<Department[]>([]);
   const [selectedDepartmentId, setSelectedDepartmentId] = useState("");
   const [courses, setCourses] = useState<Course[]>([]);
+  // Every department in the college, by id - only to NAME the department a
+  // course belongs to below. `departments` above is deliberately narrowed to
+  // this HOD's own tree, and a feeder course belongs to a department outside
+  // it, so that list cannot name them.
+  const [departmentNameById, setDepartmentNameById] = useState<Record<string, string>>({});
   const [isLoadingCourses, setIsLoadingCourses] = useState(false);
   const [selectedCourseId, setSelectedCourseId] = useState("");
 
@@ -66,6 +71,7 @@ export function FacultyNotPostedView({
       .then((r) => r.json() as Promise<{ departments: Department[] }>)
       .then((d) => {
         const active = (d.departments ?? []).filter((dep) => dep.isActive);
+        setDepartmentNameById(Object.fromEntries((d.departments ?? []).map((dep) => [dep.id, dep.name])));
         // An HOD sees their own department(s) plus the sub-departments beneath them.
         const ownIds = hodOwnDepartments ? new Set(active.filter((dep) => hodOwnDepartments.includes(dep.name)).map((dep) => dep.id)) : null;
         const scoped = ownIds ? active.filter((dep) => ownIds.has(dep.id) || (!!dep.parentDepartmentId && ownIds.has(dep.parentDepartmentId))) : active;
@@ -102,6 +108,15 @@ export function FacultyNotPostedView({
   }, [departmentId]);
 
   const courseId = selectedCourseId || (hodScoped && courses.length === 1 ? courses[0].id : "");
+  const duplicateCourseNames = useMemo(() => {
+    const seen = new Set<string>();
+    const dupes = new Set<string>();
+    for (const c of courses) {
+      if (seen.has(c.name)) dupes.add(c.name);
+      seen.add(c.name);
+    }
+    return dupes;
+  }, [courses]);
   const showDepartment = !hodScoped || departments.length !== 1;
   const allDepartments = departmentId === ALL;
   const showCourse = !!departmentId && !allDepartments && (!hodScoped || courses.length !== 1);
@@ -210,7 +225,19 @@ export function FacultyNotPostedView({
                   </SelectTrigger>
                   <SelectContent>
                     {courses.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                        {/* The API returns this department's own course AND any
+                            feeder department's course of the same programme -
+                            deliberately, since they are different course docs
+                            with their own sections. Rendering the bare name put
+                            two identical-looking rows in the list with no way
+                            to tell them apart; the owner is shown only when a
+                            name is actually ambiguous. */}
+                        {duplicateCourseNames.has(c.name) && departmentNameById[c.departmentId] && (
+                          <span className="text-muted-foreground"> · {departmentNameById[c.departmentId]}</span>
+                        )}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
