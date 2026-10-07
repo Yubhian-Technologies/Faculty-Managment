@@ -501,14 +501,14 @@ export default function SubjectsPage() {
           <div className="space-y-1.5">
             <Label htmlFor="course">Course</Label>
             <select id="course" className={SELECT_CLASS} value={courseKey} onChange={(e) => setCourseKey(e.target.value)}>
-              <option value="">Select…</option>
+              <option value="">Select course</option>
               {courseGroups.map((g) => <option key={g.key} value={g.key}>{g.name}</option>)}
             </select>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="dept">Department</Label>
             <select id="dept" className={SELECT_CLASS} value={deptId} onChange={(e) => { setDeptId(e.target.value); setSubDeptId(""); }}>
-              <option value="">Select…</option>
+              <option value="">Select department</option>
               {topDepartments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </div>
@@ -524,14 +524,14 @@ export default function SubjectsPage() {
           <div className="space-y-1.5">
             <Label htmlFor="yr">Year</Label>
             <select id="yr" className={SELECT_CLASS} value={yearValue} onChange={(e) => setYear(e.target.value)}>
-              <option value="">Select…</option>
+              <option value="">Select year</option>
               {yearOptions.map((y) => <option key={y} value={String(y)}>Year {y}</option>)}
             </select>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="sem">Semester</Label>
             <select id="sem" className={SELECT_CLASS} value={semesterValue} onChange={(e) => setSemester(e.target.value)}>
-              <option value="">Select…</option>
+              <option value="">Select semester</option>
               {/* The label is the course's own year-semester position - "1-1",
                   "1-2", "1-3" where a year has three - and nothing else. */}
               {semesterOptions.map((s) => <option key={s} value={String(s)}>{semesterLabel(plan, s)}</option>)}
