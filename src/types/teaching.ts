@@ -332,6 +332,8 @@ export interface TimetableSlot {
   day: DayOfWeek;
   periodNumber: number;         // resolved against that course-year's CourseYearTiming for clock time
   classroom?: string;
+  /** Display-only, attached on read from the slot's TeachingAssignment.cellColor - never stored on the slot. */
+  cellColor?: string;
   // Free-text lab sub-group label (e.g. "Batch 1") for a PRACTICAL subject
   // split across parallel sessions - set only at creation time, via the
   // per-row "Lab Batch" field in TeachingAssignmentsEditor (see

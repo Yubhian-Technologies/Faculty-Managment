@@ -89,6 +89,9 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
   // even before myFacultyIds has loaded.
   const fulfillingAssignmentId = searchParams.get("assignmentId") || null;
 
+  // "Subject colors" picker: the subject + colour chosen, applied on Add.
+  const [colorPickId, setColorPickId] = useState("");
+  const [colorPickColor, setColorPickColor] = useState<keyof typeof SUBJECT_COLORS | "">("");
   const [course, setCourse] = useState<Course | null>(null);
   const [section, setSection] = useState<SectionListItem | null>(null);
   const [timing, setTiming] = useState<CourseYearTiming | null>(null);
@@ -249,6 +252,8 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
   const setCellColor = async (assignmentId: string, color: string | null) => {
     const prev = assignments;
     setAssignments((list) => list.map((a) => (a.id === assignmentId ? { ...a, cellColor: color ?? undefined } : a)));
+    // Published slots carry the colour too (see timetable-slots GET) - keep the Published view in step.
+    setSlots((list) => list.map((s) => (s.assignmentId === assignmentId ? { ...s, cellColor: color ?? undefined } : s)));
     const res = await fetch("/api/college/timetable/subject-color", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -256,11 +261,15 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
     });
     if (!res.ok) {
       setAssignments(prev);
+      setSlots((list) => list.map((s) => (s.assignmentId === assignmentId ? { ...s, cellColor: prev.find((a) => a.id === assignmentId)?.cellColor } : s)));
       const err = (await res.json().catch(() => ({}))) as { error?: string };
       toast({ variant: "destructive", title: err.error ?? "Could not save the color" });
     }
   };
 
+  // Most assignments were saved without a shortCode - the subject itself has it.
+  const subjectLabel = (a: TeachingAssignment) =>
+    a.shortCode || subjects.find((s) => s.id === a.subjectId)?.shortCode || readableCode(a.subjectCode, a.subjectName) || a.subjectName;
   const rows = timing ? buildRows(timing) : [];
   // Which period cells of a day are drawn as one wide cell (the ones merged via "Merge cells").
   const spansFor = (d: DayOfWeek) =>
@@ -1174,23 +1183,46 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
       {mode === "draft" && isEditing && assignments.length > 0 && (
         <div className="space-y-1.5 rounded-md border p-3">
           <p className="text-xs font-semibold">Subject colors</p>
-          {assignments.map((a) => (
-            <div key={a.id} className="flex flex-wrap items-center gap-2 text-xs">
-              <span className="min-w-[120px] font-medium">{readableCode(a.subjectCode, a.subjectName) || a.shortCode || a.subjectName}</span>
-              {(Object.keys(SUBJECT_COLORS) as (keyof typeof SUBJECT_COLORS)[]).map((k) => (
-                <button
-                  key={k}
-                  type="button"
-                  aria-label={`${a.subjectName}: ${k}`}
-                  onClick={() => void setCellColor(a.id, k)}
-                  className={`h-5 w-5 rounded-full ${SUBJECT_COLORS[k].dot} ${a.cellColor === k ? "ring-2 ring-primary ring-offset-1" : ""}`}
-                />
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <select
+              className="h-8 min-w-[180px] rounded-md border bg-background px-2 text-xs"
+              value={colorPickId}
+              onChange={(e) => setColorPickId(e.target.value)}
+              aria-label="Subject"
+            >
+              <option value="">Select subject</option>
+              {assignments.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {subjectLabel(a)}{a.sectionName ? ` · ${a.sectionName}` : ""}
+                </option>
               ))}
-              {a.cellColor && (
-                <button type="button" className="text-muted-foreground underline" onClick={() => void setCellColor(a.id, null)}>
-                  Clear
-                </button>
-              )}
+            </select>
+            {(Object.keys(SUBJECT_COLORS) as (keyof typeof SUBJECT_COLORS)[]).map((k) => (
+              <button
+                key={k}
+                type="button"
+                aria-label={`Colour ${k}`}
+                onClick={() => setColorPickColor(k)}
+                className={`h-5 w-5 rounded-full ${SUBJECT_COLORS[k].dot} ${colorPickColor === k ? "ring-2 ring-primary ring-offset-1" : ""}`}
+              />
+            ))}
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!colorPickId || !colorPickColor}
+              onClick={() => { if (colorPickId && colorPickColor) { void setCellColor(colorPickId, colorPickColor); setColorPickId(""); } }}
+            >
+              Add
+            </Button>
+          </div>
+          {/* Only subjects that already have a colour are listed. */}
+          {assignments.filter((a) => a.cellColor).map((a) => (
+            <div key={a.id} className="flex items-center gap-2 text-xs">
+              <span className={`h-4 w-4 rounded-full ${isSubjectColor(a.cellColor) ? SUBJECT_COLORS[a.cellColor].dot : ""}`} />
+              <span className="min-w-[120px] font-medium">{subjectLabel(a)}</span>
+              <button type="button" className="text-muted-foreground underline" onClick={() => void setCellColor(a.id, null)}>
+                Remove
+              </button>
             </div>
           ))}
         </div>

@@ -88,7 +88,12 @@ export async function POST(request: Request) {
     }
 
     const now = new Date();
-    const subjectRef = collegeRef.collection("subjects").doc(`cus_${dept.id}_${section.year}_${semester}_${nameKey}`.slice(0, 200));
+    // The subject doc is shared by every department of the same course catalog
+    // (Counselling for first year is ONE subject, not one per Basic Science
+    // department); each department still gets its own assignment row below, which
+    // is what puts it in that department's picker.
+    // ponytail: not keyed by regulation - the adder doesn't know one; add when it does.
+    const subjectRef = collegeRef.collection("subjects").doc(`cus_${course.catalogId ?? body.courseId}_${section.year}_${semester}_${nameKey}`.slice(0, 200));
     const code = (body.code ?? body.shortCode ?? name).trim().toUpperCase();
     const shortCode = (body.shortCode ?? body.code ?? name).trim().toUpperCase();
     const isNonTeaching = body.type === "NON_TEACHING" || body.isNonTeachingLoad === true;
@@ -125,8 +130,10 @@ export async function POST(request: Request) {
     const assignmentId = `${subjectRef.id}_${dept.id}_${semester}`;
     const assignmentRef = collegeRef.collection("subjectSemesterAssignments").doc(assignmentId);
     const raced = await db.runTransaction(async (tx) => {
-      if ((await tx.get(assignmentRef)).exists) return true; // another add got here first
-      tx.set(subjectRef, subjectDoc);
+      const [assignmentSnap, subjectSnap] = await Promise.all([tx.get(assignmentRef), tx.get(subjectRef)]);
+      if (assignmentSnap.exists) return true; // another add got here first
+      // Another department already made this subject - only add this department's row.
+      if (!subjectSnap.exists) tx.set(subjectRef, subjectDoc);
       tx.set(assignmentRef, assignmentDoc);
       return false;
     });

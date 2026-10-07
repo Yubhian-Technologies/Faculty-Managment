@@ -109,6 +109,9 @@ export async function GET(request: Request) {
       subjectsSnap.docs.map((d) => [d.id, { id: d.id, ...d.data() } as Subject])
     );
 
+    // The HOD's per-subject cell colour lives on the assignment; shown on screen only.
+    const colorByAssignment = new Map(assignmentsSnap.docs.map((d) => [d.id, (d.data() as { cellColor?: string }).cellColor]));
+
     // Filter slots for the current semester and join subject details
     const rawSlots = slotsSnap.docs
       .map((d) => ({ id: d.id, ...d.data() } as TimetableSlot & { id: string }))
@@ -120,6 +123,7 @@ export async function GET(request: Request) {
           subjectCode: sub?.code,
           shortCode: sub?.shortCode,
           subjectType: sub?.type,
+          cellColor: colorByAssignment.get(s.assignmentId),
         };
       });
 

@@ -66,8 +66,10 @@ export async function GET(request: Request) {
     // specific history year it may not actually belong to.
     const isBrowsingPastYear = requestedAcademicYear !== currentAcademicYear;
 
-    const [snap, subjectsSnap, rulesSnap] = await Promise.all([
+    const [snap, assignmentsSnap, subjectsSnap, rulesSnap] = await Promise.all([
       collegeRef.collection("timetableSlots").where("sectionId", "==", sectionId).get(),
+      // Only for the HOD's per-subject cell colour (on-screen display).
+      collegeRef.collection("teachingAssignments").where("sectionId", "==", sectionId).select("cellColor").get(),
       // Joined onto each slot below so the Timetable pages' Theory/Practical
       // filter can group by SubjectType without a second round-trip - same
       // technique as class-leader/timetable/route.ts's own Theory/Lab filter.
@@ -113,8 +115,10 @@ export async function GET(request: Request) {
       }
     }
 
+    const colorByAssignment = new Map(assignmentsSnap.docs.map((d) => [d.id, (d.data() as { cellColor?: string }).cellColor]));
     const rawSlots = filteredSlots.map((s) => ({
       ...s,
+      cellColor: colorByAssignment.get(s.assignmentId),
       subjectType: s.subjectId ? (subjectsById.get(s.subjectId) as { type?: SubjectType } | undefined)?.type : undefined
     }));
 

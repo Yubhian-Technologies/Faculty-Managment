@@ -14,6 +14,8 @@ import {
   buildAllocationList,
   buildTimetableColumns,
   timetableClassLine,
+  formatYearSemBranch,
+  formatRoomNo,
   buildClassTimetableSubtitle,
   getHodSignatureLabel,
   continuousSpans,
@@ -143,16 +145,16 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
     ? `<div class="inst-name">${escapeHtml(collegeName)}${collegeCode ? ` ( Code: ${escapeHtml(collegeCode)} )` : ""}</div>`
     : "";
 
-  // One plain line naming the class this timetable belongs to.
+  // Header metadata: Year /Sem/Branch and Class In-charge on left, ROOM NO on right.
   const resolvedRoom = opts.classroom || section?.classroomNumber || (section as { classroom?: string })?.classroom;
-  const classLine = escapeHtml(timetableClassLine({
+  const yearSemBranchText = formatYearSemBranch({
     courseName: resolvedCourse,
     year: section?.year,
     semesterLabel,
     sectionName: section?.name,
     departmentName: resolvedDepartment,
-    classroom: resolvedRoom,
-  }));
+  });
+  const roomText = formatRoomNo(resolvedRoom);
   const inchargeLine = resolvedIncharge ? `Class In-charge: ${escapeHtml(resolvedIncharge)}` : "";
 
   // Always a logo: the college's own, else the bundled Vishnu logo.
@@ -177,9 +179,19 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
     </tr>
   </table>
   <div class="doc-title">${escapeHtml(title || "TIME TABLE")}</div>
-  <div class="class-line" style="font-size:9.5pt;font-weight:600;margin-bottom:2px;">${escapeHtml(subtitleText)}</div>
-  ${classLine ? `<div class="class-line">${classLine}</div>` : ""}
-  ${inchargeLine ? `<div class="class-line" style="font-weight:600;color:#1e3a8a;">${inchargeLine}</div>` : ""}`;
+  <div class="class-line" style="font-size:9.5pt;font-weight:600;margin-bottom:4px;text-align:center;">${escapeHtml(subtitleText)}</div>
+
+  <table class="meta-header-table" style="width:100%;border-collapse:collapse;margin-bottom:2px;font-size:9.5pt;font-weight:600;">
+    <tr>
+      <td style="text-align:left;padding:0;font-weight:700;">${escapeHtml(yearSemBranchText)}</td>
+      <td style="text-align:right;padding:0;font-weight:700;">${escapeHtml(roomText)}</td>
+    </tr>
+    ${inchargeLine ? `
+    <tr>
+      <td style="text-align:left;padding-top:2px;font-weight:600;" colspan="2">${inchargeLine}</td>
+    </tr>
+    ` : ""}
+  </table>`;
 
   // ── Grid ──────────────────────────────────────────────────────────────────
   const timeStack = (start?: string, end?: string) =>
