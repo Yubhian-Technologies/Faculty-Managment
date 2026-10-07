@@ -185,8 +185,12 @@ export async function GET(request: Request) {
       for (const [key, { courseId, year }] of distinctCourseYears) {
         semesterByCourseYear.set(key, await resolveSectionCurrentSemester(db, session.collegeId, courseId, year));
       }
+      // A semester the caller explicitly picked (the Teaching Load semester
+      // filter) wins over today's date, so browsing another semester shows its slots.
       const ownSlots = rawOwnSlots.filter((s) =>
-        matchesCurrentSemester(s.semester, semesterByCourseYear.get(`${s.courseId} ${s.year}`) ?? null)
+        requestedSemester != null && Number.isFinite(requestedSemester)
+          ? matchesCurrentSemester(s.semester, requestedSemester)
+          : matchesCurrentSemester(s.semester, semesterByCourseYear.get(`${s.courseId} ${s.year}`) ?? null)
       );
 
       // The displayed week's approved-leave substitutions - both directions:

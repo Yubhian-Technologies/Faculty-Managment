@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/hooks/useToast";
+import { formatTime12h } from "@/lib/timetable/facultyTimetablePdf";
 import { downloadFreeFacultyPdf, downloadFreeFacultyXlsx } from "@/lib/timetable/freeFacultyExport";
 interface LeisureFaculty { id: string; employeeId: string; name: string; department: string; freeRanges?: [string, string][] }
 
@@ -78,7 +79,7 @@ export function FacultyLeisureFilter({ scopeLabel = "in the college" }: { scopeL
   }
 
   function describeSlot(): string {
-    const parts = [formatDate(date), `${from}-${to}`];
+    const parts = [formatDate(date), `${formatTime12h(from)} - ${formatTime12h(to)}`];
     if (department) parts.push(department);
     return parts.join(", ");
   }
@@ -108,7 +109,7 @@ export function FacultyLeisureFilter({ scopeLabel = "in the college" }: { scopeL
     <Card>
       <CardContent className="space-y-3 pt-6">
         <div>
-          <h3 className="text-sm font-semibold">Free faculty</h3>
+          <h3 className="text-sm font-semibold">Leisure faculty</h3>
           <p className="text-xs text-muted-foreground">
             Pick a date and a time range to list every faculty member {scopeLabel} with no class then.
           </p>
@@ -194,7 +195,7 @@ export function FacultyLeisureFilter({ scopeLabel = "in the college" }: { scopeL
                             <td className="px-3 py-2">{i + 1}</td>
                             <td className="px-3 py-2">{f.employeeId || "-"}</td>
                             <td className="px-3 py-2">{f.name}</td>
-                            <td className="px-3 py-2 text-muted-foreground">{f.freeRanges ? f.freeRanges.map(([a, b]) => `${a}-${b}`).join(", ") : "Whole range"}</td>
+                            <td className="px-3 py-2 text-muted-foreground">{f.freeRanges ? f.freeRanges.map(([a, b]) => `${formatTime12h(a)} - ${formatTime12h(b)}`).join(", ") : "Whole range"}</td>
                           </tr>
                         ))}
                       </tbody>

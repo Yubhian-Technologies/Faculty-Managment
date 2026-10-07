@@ -6,7 +6,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
-import { resolveCurrentSemester, matchesCurrentSemester } from "@/lib/college/semester";
+import { resolveCurrentSemester, matchesCurrentSemester, loadEffectiveTiming } from "@/lib/college/semester";
 import { isTimetableInchargeAnywhere } from "@/lib/departments/timetableIncharge";
 import { isFacultyAvailable } from "@/types";
 import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
@@ -140,8 +140,8 @@ export async function GET(request: Request) {
       const timingByCourseYear = new Map<string, CourseYearTiming | null>();
       await Promise.all(
         Array.from(distinctCourseYears.entries()).map(async ([key, { courseId, year }]) => {
-          const timingSnap = await collegeRef.collection("courseYearTimings").doc(`${courseId}_year${year}`).get();
-          const timing = timingSnap.exists ? (timingSnap.data() as CourseYearTiming) : null;
+          // Includes the main department's timing for a sub-department / shared-year section.
+          const timing = await loadEffectiveTiming(db, session.collegeId, courseId, year);
           timingByCourseYear.set(key, timing);
           currentSemesterByCourseYear.set(key, resolveCurrentSemester(timing));
         }),

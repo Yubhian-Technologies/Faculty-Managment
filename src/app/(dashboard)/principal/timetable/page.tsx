@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
 import { FacultyLeisureFilter } from "@/components/timetable/FacultyLeisureFilter";
+import { TeachingNowFilter } from "@/components/timetable/TeachingNowFilter";
 import { currentWeekDates } from "@/lib/utils";
 import { isoDateKey } from "@/lib/leave/dayCounter";
 import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
@@ -27,11 +28,18 @@ import { yearSemesterLabelIn } from "@/lib/academic/format";
 // /api/college/faculty-leisure guard enforces the real role list). Hidden for Academics only; a "working as" seat can change user.role, so this
 // is a denylist rather than an allowlist.
 const NO_LEISURE_ROLES = ["ACADEMICS"];
+// "Teaching at this time" is for the Principal, Vice Principal and admins only
+// (api/college/teaching-now enforces the real list). This page is also
+// re-exported for Exam Cell and Academics, who do not get it. A denylist for
+// the same reason as above: a "working as" seat can change user.role.
+const NO_TEACHING_NOW_ROLES = ["ACADEMICS", "EXAM_CELL"];
 
 export default function PrincipalTimetablePage() {
   const { user } = useAuth();
   const canSeeLeisure = !NO_LEISURE_ROLES.includes(user?.role ?? "");
-  const [showLeisure, setShowLeisure] = useState(false);
+  const canSeeTeachingNow = !!user && !NO_TEACHING_NOW_ROLES.includes(user.role);
+  const [panel, setPanel] = useState<"" | "leisure" | "teaching">("");
+  const showLeisure = panel === "leisure";
   const [courses, setCourses] = useState<Course[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   // A Course doc belongs to one department, so the same programme (e.g. B.Tech)
@@ -313,14 +321,26 @@ export default function PrincipalTimetablePage() {
 
       {canSeeLeisure && (
         <div className="space-y-3">
-          <button
-            type="button"
-            className="h-9 rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-muted"
-            onClick={() => setShowLeisure((v) => !v)}
-          >
-            {showLeisure ? "Hide free faculty" : "Show free faculty"}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-muted"
+              onClick={() => setPanel((v) => (v === "leisure" ? "" : "leisure"))}
+            >
+              {showLeisure ? "Hide leisure faculty" : "Show leisure faculty"}
+            </button>
+            {canSeeTeachingNow && (
+              <button
+                type="button"
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-muted"
+                onClick={() => setPanel((v) => (v === "teaching" ? "" : "teaching"))}
+              >
+                {panel === "teaching" ? "Hide teaching at this time" : "Teaching at this time"}
+              </button>
+            )}
+          </div>
           {showLeisure && <FacultyLeisureFilter />}
+          {panel === "teaching" && canSeeTeachingNow && <TeachingNowFilter />}
         </div>
       )}
 
