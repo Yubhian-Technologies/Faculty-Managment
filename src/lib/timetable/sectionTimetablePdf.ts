@@ -220,7 +220,7 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
           const inner = cellSlots
             .map((s) => {
               const sub = s.substituteFacultyName;
-              const room = s.classroom ? (/^room/i.test(s.classroom.trim()) ? s.classroom.trim() : `Room: ${s.classroom.trim()}`) : null;
+              const room = s.classroom ? `ROOM NO: ${s.classroom.trim().replace(/^room\s*(no:?)?\s*/i, "").trim()}` : null;
               return `<div class="slot">
                 <div class="slot-code">${escapeHtml(slotShortCode(s, subjectMap))}</div>
                 ${s.labBatch ? `<div class="slot-note">${escapeHtml(s.labBatch)}</div>` : ""}

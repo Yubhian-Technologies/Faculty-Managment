@@ -217,6 +217,9 @@ export interface TeachingAssignment {
   // HOD types by hand, unrelated to CourseYearTiming) and from `semester`
   // near the top of this interface (the independent semester-scoped shape).
   timetableSemester?: number;
+
+  // Cell color picked in the timetable editor (key of SUBJECT_COLORS); absent = default.
+  cellColor?: string;
 }
 
 // ─── Faculty Assignment Request ────────────────────────────────────────────────

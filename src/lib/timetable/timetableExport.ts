@@ -272,7 +272,7 @@ export async function buildSectionTimetableXlsxBuffer(opts: SectionTimetableXlsx
         [
           slotShortCode(s, subjectMap),
           s.labBatch,
-          s.classroom ? (/^room/i.test(s.classroom.trim()) ? s.classroom.trim() : `Room: ${s.classroom.trim()}`) : undefined,
+          s.classroom ? (/^room/i.test(s.classroom.trim()) ? s.classroom.trim() : `ROOM NO: ${s.classroom.trim()}`) : undefined,
           s.substituteFacultyName ? `Sub: ${s.substituteFacultyName}` : undefined,
         ].filter((v): v is string => !!v)
       );
@@ -498,7 +498,7 @@ export async function downloadFacultyTimetableXlsx(opts: FacultyTimetableXlsxOpt
           const courseCode = assignment?.courseId ? courseCodeById.get(assignment.courseId) : undefined;
           const classStr = [courseCode ?? assignment?.courseName, assignment?.year ? `Yr ${assignment.year}` : null, assignment?.sectionName ? `Sec ${assignment.sectionName}` : null].filter(Boolean).join(" ");
           const subjStr = assignment?.shortCode || assignment?.subjectName || slot.subjectName;
-          const roomStr = slot.classroom ? `Room: ${slot.classroom}` : "";
+          const roomStr = slot.classroom ? (/^room/i.test(slot.classroom.trim()) ? slot.classroom.trim() : `ROOM NO: ${slot.classroom.trim()}`) : "";
           return [classStr, subjStr, roomStr].filter(Boolean).join("\n");
         });
         cell.value = textBlocks.join("\n---\n");

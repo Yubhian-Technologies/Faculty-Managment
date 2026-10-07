@@ -494,9 +494,7 @@ export function InstitutionalTimetableTable({
                                   type="button"
                                   onClick={() => setSelectedMobileSlot({ slot: s, day: d, col })}
                                   className={`w-full p-1 rounded border text-center transition-all focus:outline-none focus:ring-1 focus:ring-primary ${
-                                    isLab
-                                      ? "bg-violet-500/15 border-violet-500/30 text-violet-950 dark:text-violet-200 font-extrabold"
-                                      : isSub
+                                    isSub
                                       ? "bg-amber-500/15 border-amber-500/30 text-amber-950 dark:text-amber-200 font-bold"
                                       : "bg-primary/10 border-primary/25 text-foreground font-bold"
                                   }`}
@@ -792,10 +790,7 @@ export function InstitutionalTimetableTable({
                                     className={`w-full rounded px-1 py-1 text-center transition-all cursor-pointer ${
                                       isSub
                                         ? "bg-amber-100 text-amber-900 border border-amber-300"
-                                        : isLabSlot(s, subjectMap)
-                                          // Lab / practical periods stand out from theory.
-                                          ? "bg-violet-100 hover:bg-violet-200 border border-violet-300 text-violet-950 dark:bg-violet-950/40 dark:border-violet-700 dark:text-violet-100"
-                                          : "bg-primary/5 hover:bg-primary/10 border border-primary/20 text-foreground"
+                                        : "bg-primary/5 hover:bg-primary/10 border border-primary/20 text-foreground"
                                     }`}
                                     title={`${s.subjectName}${faculty ? ` · ${faculty}` : ""}${s.classroom ? ` · Room ${s.classroom}` : ""}`}
                                   >

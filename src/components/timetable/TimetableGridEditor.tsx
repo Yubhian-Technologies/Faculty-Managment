@@ -30,6 +30,7 @@ import type {
 } from "@/types";
 import { DAY_LABELS, DEFAULT_TIMETABLE_RULES } from "@/types";
 import { courseYearNumbers } from "@/lib/college/courseYears";
+import { SUBJECT_COLORS, isSubjectColor } from "@/lib/timetable/subjectColors";
 
 /** What the grid is currently showing. */
 type Mode = "published" | "draft";
@@ -238,6 +239,27 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
     })();
     return () => { cancelled = true; };
   }, [loadAll]);
+
+  // The color the editor picked for a subject's cells (default tint when none).
+  const cellTint = (assignmentId: string) => {
+    const c = assignments.find((a) => a.id === assignmentId)?.cellColor;
+    return isSubjectColor(c) ? SUBJECT_COLORS[c].cell : "bg-primary/5 border-primary/20";
+  };
+
+  const setCellColor = async (assignmentId: string, color: string | null) => {
+    const prev = assignments;
+    setAssignments((list) => list.map((a) => (a.id === assignmentId ? { ...a, cellColor: color ?? undefined } : a)));
+    const res = await fetch("/api/college/timetable/subject-color", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ assignmentId, color }),
+    });
+    if (!res.ok) {
+      setAssignments(prev);
+      const err = (await res.json().catch(() => ({}))) as { error?: string };
+      toast({ variant: "destructive", title: err.error ?? "Could not save the color" });
+    }
+  };
 
   const rows = timing ? buildRows(timing) : [];
   // Which period cells of a day are drawn as one wide cell (the ones merged via "Merge cells").
@@ -497,7 +519,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
     return (
       <div
         key={`shared_${first.subjectId}`}
-        className={`w-full rounded-md border p-2 ${allLocked ? "bg-muted border-border" : "bg-primary/5 border-primary/20"}`}
+        className={`w-full rounded-md border p-2 ${allLocked ? "bg-muted border-border" : cellTint(first.assignmentId)}`}
       >
         <p className="text-xs font-bold leading-tight uppercase tracking-wide">{code}</p>
         {("subjectCode" in first && first.subjectCode && first.subjectCode !== first.subjectName) && (
@@ -1149,6 +1171,31 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
         </div>
       )}
 
+      {mode === "draft" && isEditing && assignments.length > 0 && (
+        <div className="space-y-1.5 rounded-md border p-3">
+          <p className="text-xs font-semibold">Subject colors</p>
+          {assignments.map((a) => (
+            <div key={a.id} className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="min-w-[120px] font-medium">{readableCode(a.subjectCode, a.subjectName) || a.shortCode || a.subjectName}</span>
+              {(Object.keys(SUBJECT_COLORS) as (keyof typeof SUBJECT_COLORS)[]).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  aria-label={`${a.subjectName}: ${k}`}
+                  onClick={() => void setCellColor(a.id, k)}
+                  className={`h-5 w-5 rounded-full ${SUBJECT_COLORS[k].dot} ${a.cellColor === k ? "ring-2 ring-primary ring-offset-1" : ""}`}
+                />
+              ))}
+              {a.cellColor && (
+                <button type="button" className="text-muted-foreground underline" onClick={() => void setCellColor(a.id, null)}>
+                  Clear
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
       {draft?.diagnostics?.length ? (
         <ul className="space-y-1 text-xs text-muted-foreground list-disc pl-5">
           {draft.diagnostics.map((d, n) => <li key={n}>{d}</li>)}
@@ -1315,10 +1362,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
                                     "w-full text-left rounded-md border p-2 transition-colors",
                                     isLocked
                                       ? "bg-muted border-border"
-                                      // Lab / practical periods stand out from theory.
-                                      : assignments.find((a) => a.id === slot.assignmentId)?.subjectType === "PRACTICAL" || ("labBatch" in slot && slot.labBatch)
-                                        ? "bg-violet-100 border-violet-300"
-                                        : "bg-primary/5 border-primary/20",
+                                      : cellTint(slot.assignmentId),
                                     isSelected ? "ring-2 ring-primary" : "",
                                     clickable ? "hover:border-primary cursor-pointer" : "cursor-default",
                                   ].join(" ")}

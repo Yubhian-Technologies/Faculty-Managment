@@ -332,7 +332,8 @@ export function timetableClassLine(parts: {
   ].filter(Boolean).join(" ");
 
   if (parts.classroom?.trim()) {
-    const roomStr = /^room/i.test(parts.classroom.trim()) ? parts.classroom.trim() : `Room: ${parts.classroom.trim()}`;
+    const cleaned = parts.classroom.trim().replace(/^room\s*(no:?)?\s*/i, "").trim();
+    const roomStr = `ROOM NO: ${cleaned}`;
     return base ? `${base}  |  ${roomStr}` : roomStr;
   }
   return base;
@@ -344,15 +345,19 @@ export function buildClassTimetableSubtitle(opts: {
   semesterLabel?: string;
   effectiveDate?: string;
 }): string {
-  const acadYear = opts.academicYear || "2026-2027";
+  const acadYear = opts.academicYear || "2026-27";
   const semNum = typeof opts.semester === "number"
     ? opts.semester
     : Number(opts.semesterLabel?.match(/\d+/g)?.pop()) || 1;
-  const semType = semNum > 0 ? (semNum % 2 === 1 ? "Odd Semester" : "Even Semester") : "Semester";
-  const eff = opts.effectiveDate?.trim() || istDateKey();
-  const iso = eff.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  const shown = iso ? `${iso[3]}-${iso[2]}-${iso[1]}` : eff;
-  return `Class Time Table for the Academic Year ${acadYear}, ${semType}, w.e.f ${shown}`;
+  const semType = semNum > 0 ? (semNum % 2 === 1 ? "Odd Sem." : "Even Sem.") : "Sem.";
+  const eff = opts.effectiveDate?.trim();
+  let wefSentence = "";
+  if (eff) {
+    const iso = eff.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const shown = iso ? `${iso[3]}.${iso[2]}.${iso[1]}` : eff;
+    wefSentence = `, w.e.f. ${shown}`;
+  }
+  return `Class Timetable for Academic Year ${acadYear}, ${semType}${wefSentence}`;
 }
 
 /**
