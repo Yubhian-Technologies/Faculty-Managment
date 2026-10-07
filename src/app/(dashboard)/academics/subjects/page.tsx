@@ -16,7 +16,7 @@ import type { Department, Subject, SubjectCategory } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
 import { CategoryField } from "@/components/academics/CategoryField";
 import { offeredYears } from "@/lib/college/departmentYears";
-import { courseYearNumbers, semesterLabel, semestersInYear } from "@/lib/college/courseYears";
+import { courseYearNumbers, semesterLabel } from "@/lib/college/courseYears";
 import { useCourseSemesterPlan } from "@/hooks/useCourseSemesterPlan";
 
 // Academics > Subjects. View and manage subjects assigned to departments
@@ -167,10 +167,17 @@ export default function SubjectsPage() {
   // changing department, say - clears rather than silently becoming another
   // year, so the choice goes back to whoever is looking at it.
   const yearValue = yearOptions.includes(Number(year)) ? year : "";
+  // Strictly what this course has configured for this year - read off the
+  // plan's own timings, never semestersInYear, whose two-per-year default is a
+  // LABEL fallback for pages that must still show something, not configuration.
+  // A course with no Semester Timings offers no semesters here, and says so.
   const semesterOptions = useMemo(
-    () => (yearValue ? semestersInYear(plan, Number(yearValue)) : []),
+    () => (yearValue && plan.source === "timings"
+      ? plan.semesters.filter((sem) => plan.yearOf(sem) === Number(yearValue))
+      : []),
     [plan, yearValue]
   );
+  const semestersNotConfigured = !!courseKey && !!activeDeptId && !!yearValue && semesterOptions.length === 0;
   const semesterValue = semesterOptions.includes(Number(semester)) ? semester : "";
   // Sibling sub-departments (or the children of a parent picked "itself") that can share one added subject.
   const siblingDepts = useMemo(() => {
@@ -529,6 +536,11 @@ export default function SubjectsPage() {
                   "1-2", "1-3" where a year has three - and nothing else. */}
               {semesterOptions.map((s) => <option key={s} value={String(s)}>{semesterLabel(plan, s)}</option>)}
             </select>
+            {semestersNotConfigured && (
+              <p className="text-xs text-muted-foreground">
+                No semesters set for this year — ask the Office to add them under Semester Timings.
+              </p>
+            )}
           </div>
           <div className="flex items-end">
             <Button onClick={() => void handleLoad()} className="w-full" disabled={!courseKey || !deptId || !yearValue || !semesterValue}>
