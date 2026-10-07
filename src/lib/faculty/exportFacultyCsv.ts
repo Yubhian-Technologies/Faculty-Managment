@@ -5,6 +5,7 @@
 // core identity/employment fields), so this isn't round-trippable back through import.
 
 import { toCSV, downloadCSV } from "@/lib/utils/csv";
+import { qualifiedExamName } from "@/lib/faculty/qualifiedExams";
 import { toDateInputValue } from "@/lib/utils";
 import { EXPORT_FIELDS, type ExportField, type ExportGroupField } from "@/lib/faculty/csvColumns";
 import { designationLabel } from "@/lib/designations/config";
@@ -325,6 +326,12 @@ function buildRow(rawFaculty: FacultyMember, teachingSummary: string): Record<st
     pleaseSpecifyExam: s(p.pleaseSpecifyExam),
     examScore: s(p.examScore),
     qualifiedYear: s(p.qualifiedYear),
+    additionalQualifiedExams: combineGroup(
+      "additionalQualifiedExams",
+      p.netSletSetGateOthers === "YES"
+        ? (p.additionalQualifiedExams ?? []).map((e) => [qualifiedExamName(e.exam, e.pleaseSpecifyExam), s(e.examScore), s(e.qualifiedYear)])
+        : []
+    ),
     secondaryEducation: combineGroup("secondaryEducation", p.secondaryEducation ? [schoolDegreeCells(p.secondaryEducation)] : []),
     intermediateDiplomaIti: combineGroup("intermediateDiplomaIti", p.intermediateDiplomaIti ? [schoolDegreeCells(p.intermediateDiplomaIti)] : []),
     ugDetailsGroup: combineGroup("ugDetailsGroup", degreeList(p.ugDetails, p.additionalUgDetails).map(degreeCells)),

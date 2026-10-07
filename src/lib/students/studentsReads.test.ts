@@ -351,7 +351,9 @@ describe("HOD paged list", () => {
   it("reports the filter options without reading any student", async () => {
     const { collection, stats } = fakeStudentsCollection(roster);
     const meta = await fetchHodMeta(collection, hodContext({ own: ["CSE"], child: ["Cyber"], managed: ["IT"] }));
-    expect(meta.departmentNames).toEqual(["CSE", "Cyber", "IT"]);
+    // Own + sub-departments only: a managed branch ("IT") is another
+    // department's name and is not offered as a filter option.
+    expect(meta.departmentNames).toEqual(["CSE", "Cyber"]);
     expect(meta.freshmanDepartments).toEqual([]); // no shared first year configured
     expect(stats.docsRead).toBe(0);
   });

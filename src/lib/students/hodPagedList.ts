@@ -263,8 +263,13 @@ export async function fetchHodMeta(
   studentsColl: FirebaseFirestore.CollectionReference,
   ctx: HodStudentsContext
 ): Promise<{ departmentNames: string[]; freshmanDepartments: string[] }> {
+  // Picker options only: the HOD's own departments and their sub-departments.
+  // The branches they merely manage (managedDepartmentNames - e.g. every
+  // branch a Basic Science HOD handles first year for) are other
+  // departments' names, so they are not offered as filters. Their students are
+  // still part of the roster ("All departments") - only the option is omitted.
   const departmentNames = Array.from(
-    new Set([...ctx.scope.ownDepartmentNames, ...ctx.scope.childDepartmentNames, ...ctx.scope.managedDepartmentNames])
+    new Set([...ctx.scope.ownDepartmentNames, ...ctx.scope.childDepartmentNames])
   ).sort();
 
   let freshmanDepartments: string[] = [];
