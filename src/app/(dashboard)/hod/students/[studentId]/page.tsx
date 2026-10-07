@@ -5,5 +5,5 @@ import { StudentDetailsPage } from "@/components/students/StudentDetailsPage";
 
 export default function HodStudentDetailsPage() {
   const { studentId } = useParams<{ studentId: string }>();
-  return <StudentDetailsPage studentId={studentId} backHref="/hod/students" />;
+  return <StudentDetailsPage studentId={studentId} backHref="/hod/students" lifecycle />;
 }

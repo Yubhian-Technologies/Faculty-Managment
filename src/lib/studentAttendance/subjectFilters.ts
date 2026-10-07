@@ -39,3 +39,12 @@ export function totalOfRows(rows: SubjectFilterRow[]): { held: number; attended:
   const attended = rows.reduce((n, r) => n + r.attended, 0);
   return { held, attended, percent: calcPercent(attended, held) };
 }
+
+/** The filters in words, for the header of a printed/exported report; empty when none are on. */
+export function describeSubjectFilters(f: SubjectFilters, subjectNames: Record<string, string>, threshold: number): string[] {
+  const parts: string[] = [];
+  if (f.subjectIds) parts.push(`Subjects: ${f.subjectIds.map((id) => subjectNames[id] ?? id).join(", ")}`);
+  if (f.shortageOnly) parts.push(`Below ${threshold}% only`);
+  if (f.minPercent != null || f.maxPercent != null) parts.push(`Attendance ${f.minPercent ?? 0}% to ${f.maxPercent ?? 100}%`);
+  return parts;
+}

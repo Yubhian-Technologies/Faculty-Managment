@@ -20,7 +20,8 @@ import {
   getHodSignatureLabel,
   latestEffectiveDate,
   resolveTimetableDays,
-  slotShortCode, mergeCoTaughtSlots,} from "./gridModel";
+  slotShortCode, mergeCoTaughtSlots, continuousSpans, isLabSlot,
+} from "./gridModel";
 
 export interface SectionTimetableXlsxOptions {
   collegeName?: string;
@@ -70,6 +71,14 @@ const DAY_COL_WIDTH = 13;
 const PERIOD_COL_WIDTH = 16;
 const BREAK_COL_WIDTH = 11;
 const LINE_HEIGHT = 13;
+
+// Fills: the header and day column read as headings; a lab cell is tinted (like the screen and PDF).
+const HEADER_FILL: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE5E7EB" } };
+const DAY_FILL: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3F4F6" } };
+const LAB_FILL: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEDE9FE" } };
+const BREAK_FILL: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEF3C7" } };
+// Drawn between two subjects sharing one period, so they never run together.
+const DIVIDER = "- - - - - - - - - -";
 
 /** Border + alignment for every cell of a merged or plain range, by index (eachCell skips empty cells). */
 function styleRange(
@@ -250,6 +259,7 @@ export async function buildSectionTimetableXlsxBuffer(opts: SectionTimetableXlsx
     maxHeaderLines = Math.max(maxHeaderLines, lines.length);
   });
   styleRange(sheet, headerRowIndex, 1, lastCol, { bold: true });
+  for (let c = 1; c <= lastCol; c++) sheet.getCell(headerRowIndex, c).fill = HEADER_FILL;
   headerRow.height = maxHeaderLines * LINE_HEIGHT + 6;
   // Keep the Day column and period header on screen while scrolling, and
   // repeat the header if the sheet ever prints on more than one page.
@@ -262,26 +272,47 @@ export async function buildSectionTimetableXlsxBuffer(opts: SectionTimetableXlsx
     const row = sheet.getRow(r);
     row.getCell(1).value = DAY_LABELS[day] ?? day;
     let maxLines = 1;
+    // Periods merged in the timetable editor (a 2-3 period lab block, one subject across back-to-back
+    // periods) are one wide cell here too, exactly as on screen and in the PDF.
+    const { spans, skipped } = continuousSpans(columns, (p) => slots.filter((s) => s.day === day && s.periodNumber === p));
+    const labCols: [number, number][] = [];
     columns.forEach((col, i) => {
-      if (col.kind === "break") return;
+      if (col.kind === "break" || skipped.has(i)) return;
       // Faculty of one subject sharing the period print the subject once.
       const rawCell = slots.filter((s) => s.day === day && s.periodNumber === col.periodNumber);
       const cellSlots = opts.mergeCoTaught === false ? rawCell : mergeCoTaughtSlots(rawCell);
       if (cellSlots.length === 0) return;
-      const blocks = cellSlots.map((s) =>
-        [
-          slotShortCode(s, subjectMap),
+      // One block per subject: the code in bold, then batch / room / cover in smaller type. Two subjects in
+      // one period are told apart by a divider line between them.
+      const richText: ExcelJS.RichText[] = [];
+      let lines = 0;
+      cellSlots.forEach((s, bi) => {
+        if (bi > 0) {
+          richText.push({ text: "\n" + DIVIDER + "\n", font: { size: 8, color: { argb: "FF9CA3AF" } } });
+          lines += 1;
+        }
+        const notes = [
           s.labBatch,
           s.classroom ? (/^room/i.test(s.classroom.trim()) ? s.classroom.trim() : `Room: ${s.classroom.trim()}`) : undefined,
           s.substituteFacultyName ? `Sub: ${s.substituteFacultyName}` : undefined,
-        ].filter((v): v is string => !!v)
-      );
-      row.getCell(i + 2).value = blocks.map((b) => b.join("\n")).join("\n");
-      maxLines = Math.max(maxLines, blocks.reduce((n, b) => n + b.length, 0));
+        ].filter((v): v is string => !!v);
+        richText.push({ text: slotShortCode(s, subjectMap), font: { bold: true, size: 10 } });
+        if (notes.length) richText.push({ text: "\n" + notes.join("\n"), font: { size: 9, color: { argb: "FF4B5563" } } });
+        lines += 1 + notes.length;
+      });
+      const cell = row.getCell(i + 2);
+      cell.value = { richText };
+      maxLines = Math.max(maxLines, lines);
+      const span = spans.get(i) ?? 1;
+      if (span > 1) sheet.mergeCells(r, i + 2, r, i + 1 + span);
+      if (cellSlots.some((s) => isLabSlot(s, subjectMap))) labCols.push([i + 2, i + 1 + span]);
     });
     styleRange(sheet, r, 1, lastCol);
     row.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
-    row.height = Math.max(28, maxLines * LINE_HEIGHT + 6);
+    row.getCell(1).font = { bold: true, size: 10 };
+    row.getCell(1).fill = DAY_FILL;
+    for (const [from, to] of labCols) for (let c = from; c <= to; c++) sheet.getCell(r, c).fill = LAB_FILL;
+    row.height = Math.max(30, maxLines * LINE_HEIGHT + 8);
     r++;
   }
   const lastBodyRow = r - 1;
@@ -295,6 +326,7 @@ export async function buildSectionTimetableXlsxBuffer(opts: SectionTimetableXlsx
       const cell = sheet.getCell(firstBodyRow, colIdx);
       cell.value = col.breakKind === "lunch" ? "LUNCH BREAK" : "SHORT BREAK";
       styleRange(sheet, firstBodyRow, colIdx, colIdx, { bold: true, size: 10 });
+      cell.fill = BREAK_FILL;
       cell.alignment = { horizontal: "center", vertical: "middle", textRotation: 90, wrapText: true };
     }
   });

@@ -5,11 +5,8 @@ import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { getOrCreateProfile } from "@/lib/leave/profile";
-import { REQUESTS_COL, commitApproval, splitLeaveDays } from "@/lib/leave/balanceEngine";
-import { LEAVE_TYPE_SEED } from "@/lib/leave/seedData";
-import type { EmployeeLeaveProfile, LeaveActionRecord, LeaveRequest, LeaveTypeCode } from "@/types/leave";
-import type { UserRole } from "@/types";
+import { commitImportTasks, loadStaffLookup, resolveStaffUid, sortImportTasks, type ImportTask } from "@/lib/leave/historyImport";
+import type { LeaveTypeCode } from "@/types/leave";
 
 // Matches College Office's register CSV shape (see lib/leave/importCsvColumns.ts
 // and LeaveHistoryReport.tsx's EXPORT_HEADERS) - only identity, Payroll Month,
@@ -26,14 +23,6 @@ type ImportRow = {
   el?: string;
   vc?: string; // On Duty
 };
-
-// Excludes STUDENT/CLASS_LEADER when matching a row's identifier to a login -
-// they never have a leave profile (see lib/leave/identity.ts).
-const NON_STAFF_ROLES: UserRole[] = ["STUDENT", "CLASS_LEADER"];
-
-function normalizeName(s: string): string {
-  return s.trim().toLowerCase().replace(/[.,]/g, "").replace(/\s+/g, " ");
-}
 
 const MONTH_LOOKUP: Record<string, number> = {};
 ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"]
@@ -71,16 +60,6 @@ const IMPORT_TYPE_KEYS: { key: "cl" | "sl" | "el" | "vc"; code: LeaveTypeCode }[
   { key: "vc", code: "OD" },
 ];
 
-interface ImportTask {
-  row: number;
-  identifier: string;
-  uid: string;
-  code: LeaveTypeCode;
-  year: number;
-  month: number; // 1-12
-  days: number;
-}
-
 // Bulk-backfills leave already taken before this module existed (or any
 // other gap in the record) directly as APPROVED requests - one synthetic,
 // single-day request per employee/leave-type/Payroll-Month, dated the 1st of
@@ -106,42 +85,8 @@ export async function POST(request: Request) {
     const db = getAdminDb();
     const collegeId = session.collegeId;
 
-    const [usersSnap, facultySnap, supportingStaffSnap] = await Promise.all([
-      db.collection("colleges").doc(collegeId).collection("users").get(),
-      db.collection("colleges").doc(collegeId).collection("facultyMembers").get(),
-      db.collection("colleges").doc(collegeId).collection("supportingStaff").get(),
-    ]);
-    const byEmployeeId = new Map<string, string>();
-    const byNormalizedName = new Map<string, string>();
-    const namesByUid = new Map<string, string>();
-    for (const doc of usersSnap.docs) {
-      const data = doc.data() as { name?: string; employeeId?: string; role?: UserRole };
-      if (!data.role || NON_STAFF_ROLES.includes(data.role)) continue;
-      if (data.employeeId?.trim()) byEmployeeId.set(data.employeeId.trim().toLowerCase(), doc.id);
-      if (data.name) {
-        namesByUid.set(doc.id, data.name);
-        const key = normalizeName(data.name);
-        if (!byNormalizedName.has(key)) byNormalizedName.set(key, doc.id); // first match wins on duplicate names
-      }
-    }
-    // The Add/Import Faculty and Add/Import Supporting Staff flows both set
-    // employeeId on the facultyMembers/supportingStaff doc itself, never on
-    // the linked `users` doc (see faculty/import POST's own payload) - so the
-    // loop above, which only reads users.employeeId, never actually resolves
-    // an Employee Code for staff onboarded the normal way (confirmed live:
-    // a populated college can have 0 of its users docs carrying employeeId
-    // while its facultyMembers docs all do). Filled in here from both
-    // collections' own employeeId + userUid, keyed the same way so a row's
-    // Employee Code matches regardless of which flow actually created the
-    // login.
-    for (const doc of facultySnap.docs) {
-      const data = doc.data() as { employeeId?: string; userUid?: string };
-      if (data.employeeId?.trim() && data.userUid) byEmployeeId.set(data.employeeId.trim().toLowerCase(), data.userUid);
-    }
-    for (const doc of supportingStaffSnap.docs) {
-      const data = doc.data() as { employeeId?: string; userUid?: string };
-      if (data.employeeId?.trim() && data.userUid) byEmployeeId.set(data.employeeId.trim().toLowerCase(), data.userUid);
-    }
+    const lookup = await loadStaffLookup(db, collegeId);
+    const { namesByUid } = lookup;
 
     let addedByName = "College Office";
     try {
@@ -159,9 +104,7 @@ export async function POST(request: Request) {
       const rawName = row.employeeName?.trim() ?? "";
       const identifier = rawEmployeeId || rawName || "-";
 
-      const uid = (rawEmployeeId && byEmployeeId.get(rawEmployeeId.toLowerCase()))
-        || (rawName && byNormalizedName.get(normalizeName(rawName)))
-        || undefined;
+      const uid = resolveStaffUid(lookup, rawEmployeeId, rawName);
       if (!uid) {
         failed.push({ row: rowNum, identifier, error: `No staff login account found matching "${identifier}" - check spelling/ID, or set up their login first` });
         continue;
@@ -182,63 +125,9 @@ export async function POST(request: Request) {
     // Oldest Payroll Month first, per employee - so a balance depleted by an
     // earlier month is already reflected when a later month's figure is
     // split into within-balance/Loss-of-Pay, regardless of upload order.
-    tasks.sort((a, b) => a.uid.localeCompare(b.uid) || a.year - b.year || a.month - b.month);
+    sortImportTasks(tasks);
 
-    const now = new Date();
-    const profileCache = new Map<string, EmployeeLeaveProfile | null>();
-    let created = 0;
-
-    for (const task of tasks) {
-      let profile = profileCache.get(task.uid);
-      if (profile === undefined) {
-        profile = await getOrCreateProfile(db, collegeId, task.uid);
-        profileCache.set(task.uid, profile);
-      }
-      if (!profile) {
-        failed.push({ row: task.row, identifier: task.identifier, error: "Employee record not found" });
-        continue;
-      }
-
-      let lopDays = 0;
-      const lt = LEAVE_TYPE_SEED.find((t) => t.code === task.code);
-      if (lt && !lt.rules.unlimited) {
-        const split = await splitLeaveDays(db, collegeId, task.uid, lt, task.year, task.days);
-        lopDays = split.lopDays;
-        if (split.withinBalance > 0) {
-          await commitApproval(db, collegeId, task.uid, task.code, task.year, split.withinBalance);
-        }
-      }
-
-      const actionRecord: LeaveActionRecord = {
-        action: "APPROVED",
-        by: session.uid,
-        byName: addedByName,
-        at: now as unknown as LeaveActionRecord["at"],
-        remarks: "Imported historical record",
-      };
-
-      const fromDate = new Date(task.year, task.month - 1, 1);
-      const newRequest: Omit<LeaveRequest, "id"> = {
-        collegeId,
-        uid: task.uid,
-        employeeName: namesByUid.get(task.uid) ?? task.identifier,
-        ...(profile.department ? { department: profile.department } : {}),
-        leaveTypeCode: task.code,
-        isOtherRequest: false,
-        fromDate: fromDate as unknown as LeaveRequest["fromDate"],
-        toDate: fromDate as unknown as LeaveRequest["toDate"],
-        totalDays: task.days,
-        reason: "Imported record",
-        status: "APPROVED",
-        lopDays,
-        hodAction: actionRecord,
-        createdAt: now as unknown as LeaveRequest["createdAt"],
-        updatedAt: now as unknown as LeaveRequest["updatedAt"],
-      };
-
-      await REQUESTS_COL(collegeId, db).add(newRequest);
-      created++;
-    }
+    const created = await commitImportTasks(db, collegeId, { uid: session.uid, name: addedByName }, namesByUid, tasks, failed);
 
     if (created > 0) {
       await writeAuditLogSafe(db, collegeId, { action: "LEAVE_HISTORY_IMPORTED", performedBy: session.uid, performedByName: addedByName, details: { created, failed: failed.length } });
