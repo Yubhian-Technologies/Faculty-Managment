@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { FileDown, FileSpreadsheet, Palette, Printer } from "lucide-react";
+import { FileDown, FileSpreadsheet, Printer } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem } from "@/components/ui/dropdown-menu";
+import { SubjectColorPicker } from "@/components/timetable/SubjectColorPicker";
+import { HIGHLIGHT_COLORS, highlightFor, type SubjectHighlights } from "@/lib/timetable/highlightColors";
 import { toast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
 import { formatDMY, currentWeekDates } from "@/lib/utils";
@@ -160,7 +160,7 @@ export default function HODTeachingPage() {
   const displaySlots = typeFilter === "ALL" ? filteredSlots : filteredSlots.filter((s) => s.subjectType === typeFilter);
 
   // Subject color highlight state
-  const [highlightedSubjects, setHighlightedSubjects] = useState<string[]>([]);
+  const [highlights, setHighlights] = useState<SubjectHighlights>({});
 
   const uniqueSubjects = useMemo(() => {
     const map = new Map<string, { code: string; name: string; isLab: boolean }>();
@@ -176,22 +176,7 @@ export default function HODTeachingPage() {
     return Array.from(map.values());
   }, [displaySlots, assignmentById]);
 
-  function toggleSubjectHighlight(code: string) {
-    setHighlightedSubjects((prev) =>
-      prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code]
-    );
-  }
-
-  function selectAllLabSubjects() {
-    const labCodes = uniqueSubjects.filter((s) => s.isLab).map((s) => s.code);
-    setHighlightedSubjects(labCodes);
-  }
-
-  function clearAllHighlights() {
-    setHighlightedSubjects([]);
-  }
-
-  const periodsByCourseYear = new Map<string, PeriodTiming[]>(
+    const periodsByCourseYear = new Map<string, PeriodTiming[]>(
     timings.map((t) => [
       `${t.courseId}_${t.year}`,
       t.periods && t.periods.length > 0 ? t.periods : defaultPeriodTimings(t),
@@ -227,7 +212,7 @@ export default function HODTeachingPage() {
         courseCodeById,
         departments,
         formatDMY,
-        highlightedSubjectCodes: highlightedSubjects,
+        highlightColors: highlights,
       });
       await renderHtmlToPdf(html, `Faculty-Teaching-Load-${isoDateKey(weekStart)}.pdf`);
       toast({ title: "Timetable downloaded", description: "Saved as PDF" });
@@ -293,7 +278,7 @@ export default function HODTeachingPage() {
       courseCodeById,
       departments,
       formatDMY,
-      highlightedSubjectCodes: highlightedSubjects,
+      highlightColors: highlights,
     });
     const printWindow = window.open("", "_blank");
     if (!printWindow) {
@@ -356,54 +341,7 @@ export default function HODTeachingPage() {
                </select>
              )}
 
-             <DropdownMenu>
-               <DropdownMenuTrigger asChild>
-                 <Button size="sm" variant="outline" className="gap-1.5">
-                   <Palette className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
-                   <span>Highlight Subjects</span>
-                   {highlightedSubjects.length > 0 && (
-                     <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-[10px] bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300">
-                       {highlightedSubjects.length}
-                     </Badge>
-                   )}
-                 </Button>
-               </DropdownMenuTrigger>
-               <DropdownMenuContent align="end" className="w-64 p-2">
-                 <div className="flex items-center justify-between pb-2 border-b mb-1">
-                   <span className="text-xs font-semibold text-foreground">Select Subjects to Color</span>
-                   <div className="flex items-center gap-1">
-                     <Button size="sm" variant="ghost" className="h-6 px-1.5 text-[10px]" onClick={selectAllLabSubjects}>
-                       Labs Only
-                     </Button>
-                     <Button size="sm" variant="ghost" className="h-6 px-1.5 text-[10px] text-muted-foreground" onClick={clearAllHighlights}>
-                       Clear
-                     </Button>
-                   </div>
-                 </div>
-                 {uniqueSubjects.length === 0 ? (
-                   <div className="py-2 text-center text-xs text-muted-foreground">No subjects found</div>
-                 ) : (
-                   <div className="max-h-56 overflow-y-auto space-y-0.5">
-                     {uniqueSubjects.map((sub) => {
-                       const isSelected = highlightedSubjects.includes(sub.code);
-                       return (
-                         <DropdownMenuCheckboxItem
-                           key={sub.code}
-                           checked={isSelected}
-                           onCheckedChange={() => toggleSubjectHighlight(sub.code)}
-                           className="text-xs font-medium cursor-pointer"
-                         >
-                           <div className="flex items-center justify-between w-full gap-2">
-                             <span className="truncate">{sub.name} <span className="text-muted-foreground">({sub.code})</span></span>
-                             {sub.isLab && <span className="shrink-0 text-[9px] bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300 px-1 rounded font-semibold">LAB</span>}
-                           </div>
-                         </DropdownMenuCheckboxItem>
-                       );
-                     })}
-                   </div>
-                 )}
-               </DropdownMenuContent>
-             </DropdownMenu>
+             <SubjectColorPicker subjects={uniqueSubjects} value={highlights} onChange={setHighlights} />
 
              <Button size="sm" variant="outline" onClick={downloadPdf} disabled={isExportingPdf}>
                <FileDown className="h-3.5 w-3.5 mr-1.5" />
@@ -464,12 +402,15 @@ export default function HODTeachingPage() {
                               const titleDisplay = shortCode ? `${subjectName} (${shortCode})` : subjectName;
                               const codeKey = (shortCode || assignment?.subjectCode || (slot as any).subjectCode || slot.subjectId || "").toUpperCase().trim();
                               
-                              const isHighlighted = highlightedSubjects.length > 0
-                                ? highlightedSubjects.includes(codeKey)
-                                : (assignment?.subjectType === "PRACTICAL" || Boolean(slot.labBatch) || /\b(lab|laboratory|practical)\b/i.test(subjectName));
+                              const nameKey = (subjectName || "").toUpperCase().trim();
+                              const hl = Object.keys(highlights).length > 0
+                                ? highlightFor(highlights, codeKey, nameKey, (slot.subjectId || "").toUpperCase().trim())
+                                : (assignment?.subjectType === "PRACTICAL" || Boolean(slot.labBatch) || /(lab|laboratory|practical)/i.test(subjectName)) ? HIGHLIGHT_COLORS.purple : null;
+                              const isSubstitute = Boolean(slot.substituteFacultyName || slot.substituteForName);
 
                               return (
-                                <div key={`${slot.id ?? idx}`} className={`rounded-md border p-2 transition-all ${slot.substituteFacultyName || slot.substituteForName ? "bg-amber-50 border-amber-200" : isHighlighted ? "bg-purple-100/90 border-purple-300 text-purple-950 shadow-xs dark:bg-purple-950/50 dark:border-purple-700 dark:text-purple-100 font-medium" : "bg-primary/5 border-primary/20"}`}>
+                                <div key={`${slot.id ?? idx}`} className={`rounded-md border p-2 transition-all ${isSubstitute ? "bg-amber-50 border-amber-200" : hl ? "font-medium" : "bg-primary/5 border-primary/20"}`}
+                                  style={!isSubstitute && hl ? { background: hl.bg, borderColor: hl.border, color: hl.text } : undefined}>
                                   {time && (
                                     <p className="text-[10px] font-medium text-muted-foreground/80 mb-0.5">
                                       {format12h(time.startTime)}&ndash;{format12h(time.endTime)}

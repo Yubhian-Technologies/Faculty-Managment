@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
+import { FieldValue } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
@@ -29,6 +30,8 @@ export async function PATCH(
       lectureHours?: number;
       tutorialHours?: number;
       practicalHours?: number;
+      /** "Don't include in teaching load" - kept off teaching load and the resume; still timetabled, assigned and attended. */
+      excludeFromTeachingLoad?: boolean;
     };
 
     // Import accepts any free-text category as a valid custom category (see
@@ -83,8 +86,31 @@ export async function PATCH(
     if (body.lectureHours != null) updates.lectureHours = Number(body.lectureHours);
     if (body.tutorialHours != null) updates.tutorialHours = Number(body.tutorialHours);
     if (body.practicalHours != null) updates.practicalHours = Number(body.practicalHours);
+    // Stored as the existing isNonTeachingLoad/excludeFromResume pair, which every
+    // teaching-load view and the resume already honour.
+    const loadFlags = body.excludeFromTeachingLoad == null ? null
+      : body.excludeFromTeachingLoad
+        ? { isNonTeachingLoad: true, excludeFromResume: true }
+        : { isNonTeachingLoad: FieldValue.delete(), excludeFromResume: FieldValue.delete() };
+    if (loadFlags) Object.assign(updates, loadFlags);
 
     await ref.update(updates);
+
+    // The flag is copied onto every assignment and department semester row at
+    // creation, so changing it here must reach the existing ones too.
+    if (loadFlags) {
+      const collegeRef = db.collection("colleges").doc(session.collegeId);
+      const targets = (await Promise.all(
+        (["teachingAssignments", "subjectSemesterAssignments"] as const).map((c) =>
+          collegeRef.collection(c).where("subjectId", "==", id).get()
+        ),
+      )).flatMap((s) => s.docs);
+      for (let i = 0; i < targets.length; i += 400) {
+        const batch = db.batch();
+        for (const doc of targets.slice(i, i + 400)) batch.update(doc.ref, { ...loadFlags, updatedAt: new Date() });
+        await batch.commit();
+      }
+    }
 
     // hoursPerWeek is shown/edited from multiple places (the Subjects page and every
     // faculty member's teaching-assignment editor) but is owned here - cascade it to every

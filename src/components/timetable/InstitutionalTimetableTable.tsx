@@ -12,10 +12,13 @@ import { downloadSectionTimetableXlsx } from "@/lib/timetable/timetableExport";
 import { resolveLogoUrl } from "@/lib/timetable/logoAsset";
 import { renderHtmlToPdf } from "@/lib/pdf/htmlToPdf";
 import { yearSemesterLabelIn } from "@/lib/academic/format";
+import { SUBJECT_COLORS, isSubjectColor } from "@/lib/timetable/subjectColors";
 import {
   buildAllocationList,
   buildClassTimetableSubtitle,
   buildTimetableColumns,
+  formatYearSemBranch,
+  formatRoomNo,
   latestEffectiveDate,
   ordinalYear,
   periodTimeRange,
@@ -385,6 +388,27 @@ export function InstitutionalTimetableTable({
                   effectiveDate: effectiveDateProp ?? latestEffectiveDate(filteredSlots),
                 })}
               </p>
+              <div className="mt-2 pt-2 border-t flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-foreground">
+                <div>
+                  {formatYearSemBranch({
+                    courseName: courseName || section?.courseName,
+                    year: timing.year,
+                    semesterLabel,
+                    sectionName: section?.name,
+                    departmentName: departmentName || section?.department,
+                  })}
+                </div>
+                {(classroom || section?.classroomNumber || (section as { classroom?: string })?.classroom) && (
+                  <div className="text-muted-foreground font-bold">
+                    {formatRoomNo(classroom || section?.classroomNumber || (section as { classroom?: string })?.classroom)}
+                  </div>
+                )}
+              </div>
+              {(classInchargeName && classInchargeName !== "—" || section?.facultyInchargeName) && (
+                <div className="mt-0.5 text-xs font-semibold text-foreground/90">
+                  Class In-charge: {classInchargeName && classInchargeName !== "—" ? classInchargeName : section?.facultyInchargeName}
+                </div>
+              )}
             </div>
           </div>
           <div className="shrink-0">
@@ -494,11 +518,9 @@ export function InstitutionalTimetableTable({
                                   type="button"
                                   onClick={() => setSelectedMobileSlot({ slot: s, day: d, col })}
                                   className={`w-full p-1 rounded border text-center transition-all focus:outline-none focus:ring-1 focus:ring-primary ${
-                                    isLab
-                                      ? "bg-violet-500/15 border-violet-500/30 text-violet-950 dark:text-violet-200 font-extrabold"
-                                      : isSub
+                                    isSub
                                       ? "bg-amber-500/15 border-amber-500/30 text-amber-950 dark:text-amber-200 font-bold"
-                                      : "bg-primary/10 border-primary/25 text-foreground font-bold"
+                                      : `${isSubjectColor(s.cellColor) ? SUBJECT_COLORS[s.cellColor].cell : "bg-primary/10 border-primary/25"} text-foreground font-bold`
                                   }`}
                                   aria-label={`${shortCode} details`}
                                 >
@@ -792,10 +814,7 @@ export function InstitutionalTimetableTable({
                                     className={`w-full rounded px-1 py-1 text-center transition-all cursor-pointer ${
                                       isSub
                                         ? "bg-amber-100 text-amber-900 border border-amber-300"
-                                        : isLabSlot(s, subjectMap)
-                                          // Lab / practical periods stand out from theory.
-                                          ? "bg-violet-100 hover:bg-violet-200 border border-violet-300 text-violet-950 dark:bg-violet-950/40 dark:border-violet-700 dark:text-violet-100"
-                                          : "bg-primary/5 hover:bg-primary/10 border border-primary/20 text-foreground"
+                                        : `${isSubjectColor(s.cellColor) ? `${SUBJECT_COLORS[s.cellColor].cell} border` : "bg-primary/5 hover:bg-primary/10 border border-primary/20"} text-foreground`
                                     }`}
                                     title={`${s.subjectName}${faculty ? ` · ${faculty}` : ""}${s.classroom ? ` · Room ${s.classroom}` : ""}`}
                                   >

@@ -14,6 +14,8 @@ import {
   buildAllocationList,
   buildTimetableColumns,
   timetableClassLine,
+  formatYearSemBranch,
+  formatRoomNo,
   buildClassTimetableSubtitle,
   getHodSignatureLabel,
   continuousSpans,
@@ -143,16 +145,16 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
     ? `<div class="inst-name">${escapeHtml(collegeName)}${collegeCode ? ` ( Code: ${escapeHtml(collegeCode)} )` : ""}</div>`
     : "";
 
-  // One plain line naming the class this timetable belongs to.
+  // Header metadata: Year /Sem/Branch and Class In-charge on left, ROOM NO on right.
   const resolvedRoom = opts.classroom || section?.classroomNumber || (section as { classroom?: string })?.classroom;
-  const classLine = escapeHtml(timetableClassLine({
+  const yearSemBranchText = formatYearSemBranch({
     courseName: resolvedCourse,
     year: section?.year,
     semesterLabel,
     sectionName: section?.name,
     departmentName: resolvedDepartment,
-    classroom: resolvedRoom,
-  }));
+  });
+  const roomText = formatRoomNo(resolvedRoom);
   const inchargeLine = resolvedIncharge ? `Class In-charge: ${escapeHtml(resolvedIncharge)}` : "";
 
   // Always a logo: the college's own, else the bundled Vishnu logo.
@@ -177,9 +179,19 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
     </tr>
   </table>
   <div class="doc-title">${escapeHtml(title || "TIME TABLE")}</div>
-  <div class="class-line" style="font-size:9.5pt;font-weight:600;margin-bottom:2px;">${escapeHtml(subtitleText)}</div>
-  ${classLine ? `<div class="class-line">${classLine}</div>` : ""}
-  ${inchargeLine ? `<div class="class-line" style="font-weight:600;color:#1e3a8a;">${inchargeLine}</div>` : ""}`;
+  <div class="class-line" style="font-size:9.5pt;font-weight:600;margin-bottom:4px;text-align:center;">${escapeHtml(subtitleText)}</div>
+
+  <table class="meta-header-table" style="width:100%;border-collapse:collapse;margin-bottom:2px;font-size:9.5pt;font-weight:600;">
+    <tr>
+      <td style="text-align:left;padding:0;font-weight:700;">${escapeHtml(yearSemBranchText)}</td>
+      <td style="text-align:right;padding:0;font-weight:700;">${escapeHtml(roomText)}</td>
+    </tr>
+    ${inchargeLine ? `
+    <tr>
+      <td style="text-align:left;padding-top:2px;font-weight:600;" colspan="2">${inchargeLine}</td>
+    </tr>
+    ` : ""}
+  </table>`;
 
   // ── Grid ──────────────────────────────────────────────────────────────────
   const timeStack = (start?: string, end?: string) =>
@@ -220,7 +232,7 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
           const inner = cellSlots
             .map((s) => {
               const sub = s.substituteFacultyName;
-              const room = s.classroom ? (/^room/i.test(s.classroom.trim()) ? s.classroom.trim() : `Room: ${s.classroom.trim()}`) : null;
+              const room = s.classroom ? `ROOM NO: ${s.classroom.trim().replace(/^room\s*(no:?)?\s*/i, "").trim()}` : null;
               return `<div class="slot">
                 <div class="slot-code">${escapeHtml(slotShortCode(s, subjectMap))}</div>
                 ${s.labBatch ? `<div class="slot-note">${escapeHtml(s.labBatch)}</div>` : ""}
@@ -291,10 +303,10 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
   // Basic Science - Chemistry runs it.
   const hodLabel = getHodSignatureLabel(section?.department || resolvedDepartment);
   const signatureHtml = `
-  <div class="signature-row" style="margin-top:24px;display:flex;justify-content:space-between;align-items:flex-end;">
-    <div class="signature-block" style="flex:1;text-align:center;">TimeTable In-Charge</div>
-    <div class="signature-block" style="flex:1;text-align:center;">${escapeHtml(hodLabel)}</div>
-    <div class="signature-block" style="flex:1;text-align:center;">PRINCIPAL</div>
+  <div class="signature-row" style="margin-top:48px;margin-bottom:16px;padding-top:16px;display:flex;justify-content:space-between;align-items:flex-end;width:100%;page-break-inside:avoid;">
+    <div class="signature-block" style="flex:1;text-align:center;font-weight:700;font-size:9.5pt;">TimeTable In-Charge</div>
+    <div class="signature-block" style="flex:1;text-align:center;font-weight:700;font-size:9.5pt;">${escapeHtml(hodLabel)}</div>
+    <div class="signature-block" style="flex:1;text-align:center;font-weight:700;font-size:9.5pt;">${escapeHtml(signatureLabels?.principal || "PRINCIPAL")}</div>
   </div>`;
 
   const documentTitle = title || "TIME TABLE";
@@ -307,9 +319,9 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
     @page { size: A4 portrait; margin: 0; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: Arial, Helvetica, sans-serif; color: #000; background: #fff; font-size: 11px; line-height: 1.3; }
-    /* The PDF renderer captures .page edge to edge, so the page margin lives
-       inside it as padding. */
-    .page { width: 210mm; margin: 0 auto; padding: 12mm 10mm; }
+    /* The PDF renderer captures .page edge to edge, so the page margin lives inside it as padding. */
+    .page { width: 210mm; margin: 0 auto; padding: 10mm 10mm 14mm; }
+    .content-area { width: 100%; }
 
     .letterhead { width: 100%; border: 0; }
     .logo-cell { width: 26mm; vertical-align: middle; text-align: center; }
@@ -364,16 +376,17 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
     table.allocation th.cell { font-weight: 700; }
     table.allocation th.cell > .fx { min-height: 28px; }
 
-
-    .signature-row { display: flex; justify-content: space-around; margin-top: 48px; }
-    .signature-block { text-align: center; width: 26%; font-size: 9pt; }
+    .signature-row { display: flex; justify-content: space-between; margin-top: 48px; margin-bottom: 16px; padding-top: 16px; width: 100%; page-break-inside: avoid; }
+    .signature-block { text-align: center; width: 30%; font-size: 9.5pt; font-weight: 700; }
   </style>
 </head>
 <body>
   <div class="page">
-    ${headerHtml}
-    ${gridHtml}
-    ${allocationHtml}
+    <div class="content-area">
+      ${headerHtml}
+      ${gridHtml}
+      ${allocationHtml}
+    </div>
     ${signatureHtml}
   </div>
 </body>

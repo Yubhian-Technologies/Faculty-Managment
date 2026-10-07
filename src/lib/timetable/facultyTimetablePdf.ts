@@ -2,6 +2,7 @@ import type { Department, DayOfWeek, PeriodTiming, TeachingAssignment, Timetable
 import { DAY_LABELS } from "@/types";
 import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
 import { resolveLogoUrl } from "./logoAsset";
+import { HIGHLIGHT_COLORS, highlightFor, type HighlightColorKey, type SubjectHighlights } from "./highlightColors";
 
 // Shared by hod/teaching and panel/teaching's own "Download" button - both
 // pages lay a faculty member's own slots out identically (Day columns x
@@ -57,15 +58,16 @@ export interface FacultyTimetablePdfOptions {
   formatDMY: (d: Date) => string;
   /** College letterhead (name, logo ...) - printed like the section timetable's. */
   college?: { name?: string; code?: string; affiliation?: string; address?: string; phone?: string; logoUrl?: string };
-  /** Optional selected subject codes/IDs to highlight with accent color in the PDF grid */
-  highlightedSubjectCodes?: string[];
+  /** Optional subject code/name/id -> colour, painted on that subject's cells in the PDF grid */
+  highlightColors?: SubjectHighlights;
 }
 
 export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): string {
-  const { facultyName, departmentName, semesterLabel, weekStart, weekEnd, days, periods, slots, assignmentById, periodTimeFor, courseCodeById, departments, formatDMY, highlightedSubjectCodes = [] } = opts;
+  const { facultyName, departmentName, semesterLabel, weekStart, weekEnd, days, periods, slots, assignmentById, periodTimeFor, courseCodeById, departments, formatDMY, highlightColors = {} } = opts;
 
-  const hasCustomHighlights = highlightedSubjectCodes.length > 0;
-  const highlightSet = new Set(highlightedSubjectCodes.map((c) => c.toUpperCase().trim()));
+  const hasCustomHighlights = Object.keys(highlightColors).length > 0;
+  // With none picked, labs keep the default purple.
+  const lab = HIGHLIGHT_COLORS.purple;
 
   // Header cells for days
   const dayHeaderCells = days.map((d) =>
@@ -94,19 +96,20 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
       }
 
       // Check if any slot in cell is highlighted
-      const cellIsHighlighted = cellSlots.some((slot) => {
+      let cellColor: (typeof HIGHLIGHT_COLORS)[HighlightColorKey] | null = null;
+      for (const slot of cellSlots) {
         const assignment = assignmentById.get(slot.assignmentId);
         const codeKey = (assignment?.shortCode || assignment?.subjectCode || (slot as any).subjectCode || slot.subjectId || "").toUpperCase().trim();
         const nameKey = (assignment?.subjectName || slot.subjectName || "").toUpperCase().trim();
         const idKey = (assignment?.subjectId || slot.subjectId || "").toUpperCase().trim();
-        if (hasCustomHighlights) {
-          return highlightSet.has(codeKey) || highlightSet.has(nameKey) || highlightSet.has(idKey);
-        }
-        return assignment?.subjectType === "PRACTICAL" || Boolean(slot.labBatch);
-      });
+        cellColor = hasCustomHighlights
+          ? highlightFor(highlightColors, codeKey, nameKey, idKey)
+          : (assignment?.subjectType === "PRACTICAL" || Boolean(slot.labBatch)) ? lab : null;
+        if (cellColor) break;
+      }
 
-      const cellBgStyle = cellIsHighlighted
-        ? "background:#f3e8ff;border:1px solid #c084fc;"
+      const cellBgStyle = cellColor
+        ? `background:${cellColor.bg};border:1px solid ${cellColor.border};`
         : "background:#ffffff;border:1px solid #cbd5e1;";
 
       const blocks = cellSlots.map((slot, i) => {
@@ -122,13 +125,13 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
         ].filter(Boolean).join(" · ");
 
         const classLine = subline
-          ? `<div style="font-size:7.5pt;font-weight:700;color:${cellIsHighlighted ? "#581c87" : "#1e293b"};line-height:1.15;text-transform:uppercase;">${escapeHtml(subline)}</div>`
+          ? `<div style="font-size:7.5pt;font-weight:700;color:${cellColor ? cellColor.text : "#1e293b"};line-height:1.15;text-transform:uppercase;">${escapeHtml(subline)}</div>`
           : "";
-        const subjectLine = `<div style="font-size:8.5pt;font-weight:800;color:${cellIsHighlighted ? "#6b21a8" : "#0f172a"};margin-top:1px;line-height:1.15;">${escapeHtml(readable(assignment?.shortCode, assignment?.subjectName) || readable(assignment?.subjectCode, assignment?.subjectName) || slot.subjectName)}</div>`;
+        const subjectLine = `<div style="font-size:8.5pt;font-weight:800;color:${cellColor ? cellColor.text : "#0f172a"};margin-top:1px;line-height:1.15;">${escapeHtml(readable(assignment?.shortCode, assignment?.subjectName) || readable(assignment?.subjectCode, assignment?.subjectName) || slot.subjectName)}</div>`;
         const roomLine = slot.classroom
-          ? `<div style="font-size:7pt;font-weight:600;color:${cellIsHighlighted ? "#7e22ce" : "#475569"};margin-top:2px;">Room: ${escapeHtml(slot.classroom)}</div>`
+          ? `<div style="font-size:7pt;font-weight:600;color:${cellColor ? cellColor.text : "#475569"};margin-top:2px;">Room: ${escapeHtml(slot.classroom)}</div>`
           : "";
-        const divider = i > 0 ? `border-top:1px dashed ${cellIsHighlighted ? "#d8b4fe" : "#cbd5e1"};margin-top:4px;padding-top:4px;` : "";
+        const divider = i > 0 ? `border-top:1px dashed ${cellColor ? cellColor.border : "#cbd5e1"};margin-top:4px;padding-top:4px;` : "";
         return `<div style="display:flex;flex-direction:column;justify-content:center;align-items:center;${divider}">${classLine}${subjectLine}${roomLine}</div>`;
       }).join("");
 
@@ -144,11 +147,11 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
     const courseCode = a.courseId ? courseCodeById.get(a.courseId) : undefined;
     const classStr = [courseCode ?? a.courseName, a.year ? romanYear(a.year) : null, a.sectionName].filter(Boolean).join(" ");
     const subCode = (a.shortCode || a.subjectCode || "").toUpperCase().trim();
-    const isRowHighlighted = hasCustomHighlights
-      ? highlightSet.has(subCode) || highlightSet.has((a.subjectName || "").toUpperCase().trim()) || highlightSet.has((a.subjectId || "").toUpperCase().trim())
-      : a.subjectType === "PRACTICAL";
+    const rowColor = hasCustomHighlights
+      ? highlightFor(highlightColors, subCode, a.subjectName || "", a.subjectId || "")
+      : a.subjectType === "PRACTICAL" ? lab : null;
 
-    const bg = isRowHighlighted ? "background:#faf5ff;" : (i % 2 === 0 ? "background:#ffffff;" : "background:#f8fafc;");
+    const bg = rowColor ? `background:${rowColor.bg};` : (i % 2 === 0 ? "background:#ffffff;" : "background:#f8fafc;");
     return `<tr style="${bg}">
       <td style="border:1px solid #cbd5e1;padding:4px 6px;text-align:center;font-weight:600;">${i + 1}</td>
       <td style="border:1px solid #cbd5e1;padding:4px 8px;"><strong>${escapeHtml(classStr)}</strong></td>
