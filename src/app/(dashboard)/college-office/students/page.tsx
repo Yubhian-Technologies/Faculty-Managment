@@ -30,6 +30,8 @@ import { StudentStrengthDashboard } from "@/components/students/StudentStrengthD
 import { StudentsViewTabs } from "@/components/students/StudentsViewTabs";
 import type { StudentListItem, Department, AcademicYear, Course } from "@/types";
 import { selectableYears } from "@/lib/college/courseYears";
+import { coreDepartmentsWithSections, departmentsWithSections } from "@/lib/college/departmentSectionScope";
+import { useSectionDepartments } from "@/hooks/useSectionDepartments";
 
 // The Add and Edit forms collect every field the roster import collects, in the
 // template's order - see src/lib/students/rosterFields.ts, the one definition
@@ -52,6 +54,14 @@ const DEFAULT_PAGE_SIZE = 20;
 interface StudentListFilters {
   search: string;
   department: string;
+  /** The branch a feeder department is narrowed to - the student's Core Department. */
+  coreDepartment: string;
+  /**
+   * The years the picked department is configured to teach, comma-separated -
+   * what "All years" means once a department is chosen. Empty when no
+   * department is picked, where "All years" still means every year.
+   */
+  years: string;
   course: string;
   year: string;
   studentType: string;
@@ -63,6 +73,8 @@ function filtersToParams(f: StudentListFilters): URLSearchParams {
   const params = new URLSearchParams();
   if (f.search) params.set("search", f.search);
   if (f.department !== "all") params.set("department", f.department);
+  if (f.coreDepartment !== "all") params.set("coreDepartment", f.coreDepartment);
+  if (f.year === "all" && f.years) params.set("years", f.years);
   if (f.course !== "all") params.set("course", f.course);
   if (f.year !== "all") params.set("year", f.year);
   if (f.studentType !== "all") params.set("studentType", f.studentType);
@@ -123,6 +135,7 @@ export default function OfficeStudentsPage() {
   // applied snapshot - never with a half-edited draft.
   const [search, setSearch] = useState("");
   const [deptFilter, setDeptFilter] = useState("all");
+  const [coreDeptFilter, setCoreDeptFilter] = useState("all");
   const [yearFilter, setYearFilter] = useState<string>("all");
   const [courseFilter, setCourseFilter] = useState<string>("all");
   const [studentTypeFilter, setStudentTypeFilter] = useState<string>("all");
@@ -250,6 +263,10 @@ export default function OfficeStudentsPage() {
     void (async () => { await loadStudents(); })();
   }, [loadStudents, appliedFilters]);
 
+  // Which departments a section is actually filed under - the Department
+  // filter's options are drawn from these, not from the whole department list.
+  const sectionDepartments = useSectionDepartments();
+
   const activeDepartments = useMemo(
     () => departments.filter((d) => d.isActive).sort((a, b) => a.name.localeCompare(b.name)),
     [departments]
@@ -262,11 +279,33 @@ export default function OfficeStudentsPage() {
   // same resolution the Add/Edit form's own Course/Department/Year fields
   // already use (RosterFieldInputs.tsx), so a filter never suggests a
   // department/year combination that couldn't really exist.
+  //
+  // Narrowed once more to the departments that actually resolve to sections -
+  // their own, or those of a branch they manage. A department that holds
+  // neither ("Basic Science" at a college whose four sub-departments do the
+  // work) could only ever return an empty list.
   const departmentFilterOptions = useMemo(() => {
-    if (courseFilter === "all") return activeDepartments;
-    const offeringIds = new Set(departmentsOfferingCourse(departments, courses, courseFilter).map((d) => d.id));
-    return activeDepartments.filter((d) => offeringIds.has(d.id));
-  }, [courseFilter, activeDepartments, departments, courses]);
+    const offered = courseFilter === "all"
+      ? activeDepartments
+      : (() => {
+        const offeringIds = new Set(departmentsOfferingCourse(departments, courses, courseFilter).map((d) => d.id));
+        return activeDepartments.filter((d) => offeringIds.has(d.id));
+      })();
+    return departmentsWithSections(offered, sectionDepartments);
+  }, [courseFilter, activeDepartments, departments, courses, sectionDepartments]);
+
+  // A feeder department teaches the shared first year for several branches at
+  // once (Basic Science - Chemistry runs CSE and CSBS). Those are its Core
+  // Departments, and picking one narrows the list to the students filed under
+  // it. Offered only when the picked department has any.
+  const coreDepartmentOptions = useMemo(
+    () => coreDepartmentsWithSections(
+      deptFilter === "all" ? undefined : departments.find((d) => d.name === deptFilter),
+      sectionDepartments
+    ),
+    [deptFilter, departments, sectionDepartments]
+  );
+  const coreDeptValue = coreDepartmentOptions.includes(coreDeptFilter) ? coreDeptFilter : "all";
 
   const yearFilterOptions = useMemo(() => {
     if (deptFilter !== "all") {
@@ -335,12 +374,18 @@ export default function OfficeStudentsPage() {
   const draftFilters = useMemo<StudentListFilters>(() => ({
     search: search.trim().toLowerCase(),
     department: deptFilter,
+    coreDepartment: coreDeptValue,
+    // "All years" for a department means the years it actually teaches - the
+    // same list the Year dropdown offers. Without this, picking a branch that
+    // teaches years 2-4 also returned the 1st years its feeder department holds
+    // for it, because a department filter matches Core Department too.
+    years: deptFilter === "all" ? "" : yearFilterOptions.join(","),
     course: courseFilter,
     year: yearFilter,
     studentType: studentTypeFilter,
     rollFrom: rollFrom.trim(),
     rollTo: rollTo.trim(),
-  }), [search, deptFilter, courseFilter, yearFilter, studentTypeFilter, rollFrom, rollTo]);
+  }), [search, deptFilter, coreDeptValue, yearFilterOptions, courseFilter, yearFilter, studentTypeFilter, rollFrom, rollTo]);
 
   // True once a list is on screen and the filter bar has been edited since -
   // the table still shows the previous Load's results until Load is pressed.
@@ -364,7 +409,7 @@ export default function OfficeStudentsPage() {
       : activeDepartments.filter((d) => new Set(departmentsOfferingCourse(departments, courses, value).map((o) => o.id)).has(d.id));
     const deptStillValid = deptFilter === "all" || nextDeptOptions.some((d) => d.name === deptFilter);
     const nextDept = deptStillValid ? deptFilter : "all";
-    if (!deptStillValid) setDeptFilter("all");
+    if (!deptStillValid) { setDeptFilter("all"); setCoreDeptFilter("all"); }
     const nextYearOptions = nextDept === "all"
       ? yearOptionsForCourse(courses, value === "all" ? undefined : value, years)
       : yearOptionsForDepartment(departments, courses, nextDept, value === "all" ? "" : value, years);
@@ -377,6 +422,7 @@ export default function OfficeStudentsPage() {
       ? yearOptionsForCourse(courses, courseFilter === "all" ? undefined : courseFilter, years)
       : yearOptionsForDepartment(departments, courses, value, courseFilter === "all" ? "" : courseFilter, years);
     if (yearFilter !== "all" && !nextYearOptions.includes(Number(yearFilter))) setYearFilter("all");
+    setCoreDeptFilter("all");
     setDeptFilter(value);
   }
 
@@ -722,6 +768,15 @@ export default function OfficeStudentsPage() {
             {departmentFilterOptions.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
           </SelectContent>
         </Select>
+        {coreDepartmentOptions.length > 0 && (
+          <Select value={coreDeptValue} onValueChange={setCoreDeptFilter}>
+            <SelectTrigger className="sm:w-56"><SelectValue placeholder="All core departments" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All core departments</SelectItem>
+              {coreDepartmentOptions.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        )}
         <Select value={yearFilter} onValueChange={onYearFilterChange}>
           <SelectTrigger className="sm:w-40"><SelectValue placeholder="All years" /></SelectTrigger>
           <SelectContent>
