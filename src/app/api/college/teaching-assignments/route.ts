@@ -16,7 +16,7 @@ import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { facultyActiveOn, facultyActiveOnAny, loadLabWindows } from "@/lib/students/labFacultyWindow";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { getActiveSubstitutionsForDates, currentWeekDateKeys } from "@/lib/leave/periodCoverage";
-import { resolveSectionCurrentSemester, resolveRequestedSemester, matchesCurrentSemester } from "@/lib/college/semester";
+import { loadEffectiveTiming, resolveDisplaySemester, resolveRequestedSemester, matchesCurrentSemester } from "@/lib/college/semester";
 import { inheritedAssignmentDepartmentId } from "@/lib/timetable/sharedYearTiming";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
 import { isFacultyAvailable } from "@/types";
@@ -183,7 +183,9 @@ export async function GET(request: Request) {
       for (const s of rawOwnSlots) distinctCourseYears.set(`${s.courseId} ${s.year}`, { courseId: s.courseId, year: s.year });
       const semesterByCourseYear = new Map<string, number | null>();
       for (const [key, { courseId, year }] of distinctCourseYears) {
-        semesterByCourseYear.set(key, await resolveSectionCurrentSemester(db, session.collegeId, courseId, year));
+        // By the semester DATES, so a semester that has ended drops its subjects
+        // by itself (see resolveDisplaySemester).
+        semesterByCourseYear.set(key, resolveDisplaySemester(await loadEffectiveTiming(db, session.collegeId, courseId, year)));
       }
       // A semester the caller explicitly picked (the Teaching Load semester
       // filter) wins over today's date, so browsing another semester shows its slots.
