@@ -1,5 +1,6 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { DEFAULT_TIMETABLE_RULES } from "@/types";
+import { loadEffectiveTiming } from "@/lib/college/semester";
 import type { Course, CourseYearTiming, Department, Section, Subject, TimetableSlot, TeachingAssignment, TimetableRules } from "@/types";
 
 // Everything a student's timetable view reads that depends on the SECTION, not on the student:
@@ -25,9 +26,9 @@ const cache = new Map<string, { at: number; value: Promise<SectionTimetableData>
 
 async function load(db: Firestore, collegeId: string, section: Section & { id: string }): Promise<SectionTimetableData> {
   const collegeRef = db.collection("colleges").doc(collegeId);
-  const [courseSnap, timingsSnap, slotsSnap, assignmentsSnap, deptsSnap, rulesSnap, subjectsSnap] = await Promise.all([
+  const [courseSnap, effectiveTiming, slotsSnap, assignmentsSnap, deptsSnap, rulesSnap, subjectsSnap] = await Promise.all([
     collegeRef.collection("courses").doc(section.courseId).get(),
-    collegeRef.collection("courseYearTimings").where("courseId", "==", section.courseId).where("year", "==", section.year).limit(1).get(),
+    loadEffectiveTiming(db, collegeId, section.courseId, section.year),
     collegeRef.collection("timetableSlots").where("sectionId", "==", section.id).get(),
     collegeRef.collection("teachingAssignments").where("sectionId", "==", section.id).get(),
     collegeRef.collection("departments").get(),
@@ -36,7 +37,7 @@ async function load(db: Firestore, collegeId: string, section: Section & { id: s
   ]);
   return {
     course: courseSnap.exists ? ({ id: courseSnap.id, ...courseSnap.data() } as Course) : null,
-    timing: timingsSnap.empty ? null : ({ id: timingsSnap.docs[0].id, ...timingsSnap.docs[0].data() } as CourseYearTiming),
+    timing: effectiveTiming as CourseYearTiming | null,
     departments: deptsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Department),
     timetableRules: rulesSnap.exists ? { ...DEFAULT_TIMETABLE_RULES, ...(rulesSnap.data() as Partial<TimetableRules>) } : DEFAULT_TIMETABLE_RULES,
     slots: slotsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as TimetableSlot & { id: string }),

@@ -25,7 +25,7 @@ function groupByDepartment(rows: FreeFacultyRow[]): [string, FreeFacultyRow[]][]
 
 export async function downloadFreeFacultyXlsx(rows: FreeFacultyRow[], slotLabel: string, filename: string, wholeWindow: [string, string]): Promise<void> {
   const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet("Free Faculty");
+  const sheet = workbook.addWorksheet("Leisure Faculty");
   // Same layout as the on-screen list and the PDF: each department is ONE
   // heading row spanning the table, then its S.No | Employee ID | Name table
   // underneath, with a blank row between departments.
@@ -33,7 +33,7 @@ export async function downloadFreeFacultyXlsx(rows: FreeFacultyRow[], slotLabel:
   sheet.getColumn(2).width = 18;
   sheet.getColumn(3).width = 40;
   sheet.getColumn(4).width = 24;
-  const title = sheet.addRow([`Free faculty - ${slotLabel}`]);
+  const title = sheet.addRow([`Leisure faculty - ${slotLabel}`]);
   title.font = { bold: true, size: 13 };
   sheet.mergeCells(1, 1, 1, 4);
   const thin = { style: "thin" as const };
@@ -82,9 +82,9 @@ export async function downloadFreeFacultyPdf(rows: FreeFacultyRow[], slotLabel: 
         <td style="border:1px solid #999;padding:5px">${escapeHtml(freeText(f, wholeWindow))}</td>
       </tr>`).join("")}</tbody>
     </table>`).join("");
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Free faculty</title></head>
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Leisure faculty</title></head>
     <body style="font-family:Arial,sans-serif;padding:24px;color:#111">
-      <h2 style="margin:0">Free faculty</h2>
+      <h2 style="margin:0">Leisure faculty</h2>
       <p style="margin:4px 0 0;color:#555;font-size:13px">${escapeHtml(slotLabel)} &middot; ${rows.length} free</p>
       ${blocks}
     </body></html>`;

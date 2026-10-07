@@ -79,7 +79,7 @@ export function FacultyLeisureFilter({ scopeLabel = "in the college" }: { scopeL
   }
 
   function describeSlot(): string {
-    const parts = [formatDate(date), `${from}-${to}`];
+    const parts = [formatDate(date), `${formatTime12h(from)} - ${formatTime12h(to)}`];
     if (department) parts.push(department);
     return parts.join(", ");
   }
@@ -109,7 +109,7 @@ export function FacultyLeisureFilter({ scopeLabel = "in the college" }: { scopeL
     <Card>
       <CardContent className="space-y-3 pt-6">
         <div>
-          <h3 className="text-sm font-semibold">Free faculty</h3>
+          <h3 className="text-sm font-semibold">Leisure faculty</h3>
           <p className="text-xs text-muted-foreground">
             Pick a date and a time range to list every faculty member {scopeLabel} with no class then.
           </p>

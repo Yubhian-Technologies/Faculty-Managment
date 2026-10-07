@@ -46,6 +46,8 @@ export function useAuth() {
         // True only for a RESIGNED/RETIRED faculty member whose college has read-only
         // faculty access on (see FMSUser.readOnlyAccess) - from /api/auth/session.
         let serverReadOnly = false;
+        // Departments of an HOD seat handed over for someone's leave (live today).
+        let serverDelegatedDepartments: string[] = [];
         // Whether the server actually answered - if it did not, we do not know, and must not claim "not read-only".
         let sessionAnswered = false;
 
@@ -60,7 +62,7 @@ export function useAuth() {
             });
             if (res.ok) {
               const data = await res.json() as {
-                role?: string; realRole?: string; roles?: string[]; collegeId?: string; locationId?: string;
+                role?: string; realRole?: string; roles?: string[]; delegatedDepartments?: string[]; collegeId?: string; locationId?: string;
                 name?: string; email?: string; profile?: FMSUser; readOnlyAccess?: boolean;
               };
               role = data.role && data.role !== "UNKNOWN" ? data.role : undefined;
@@ -72,6 +74,7 @@ export function useAuth() {
               serverRealRole = data.realRole;
               serverRoles = data.roles as UserRole[] | undefined;
               serverReadOnly = data.readOnlyAccess === true;
+              serverDelegatedDepartments = data.delegatedDepartments ?? [];
               sessionAnswered = true;
             }
           } catch { /* non-fatal */ }
@@ -91,8 +94,9 @@ export function useAuth() {
               body: JSON.stringify({ token }),
             });
             if (res.ok) {
-              const data = await res.json() as { roles?: string[]; realRole?: string; readOnlyAccess?: boolean };
+              const data = await res.json() as { roles?: string[]; realRole?: string; delegatedDepartments?: string[]; readOnlyAccess?: boolean };
               serverRoles = data.roles as UserRole[] | undefined;
+              serverDelegatedDepartments = data.delegatedDepartments ?? [];
               serverRealRole = data.realRole;
               serverReadOnly = data.readOnlyAccess === true;
               sessionAnswered = true;
@@ -170,6 +174,10 @@ export function useAuth() {
           if (profile && (profile.role as string) === "DEPARTMENT_OFFICE") {
             realRole = "DEPARTMENT_OFFICE";
             profile = { ...profile, role: "HOD" };
+          }
+          if (profile && serverDelegatedDepartments.length > 0) {
+            const own = profile.departments?.length ? profile.departments : profile.department ? [profile.department] : [];
+            profile = { ...profile, departments: Array.from(new Set([...own, ...serverDelegatedDepartments])) };
           }
           setUser(
             profile

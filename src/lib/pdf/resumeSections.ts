@@ -11,7 +11,6 @@ export const RESUME_SECTIONS = [
   { key: "experience", label: "Experience" },
   { key: "teachingLoad", label: "Teaching Load" },
   { key: "research", label: "Research & Innovation" },
-  { key: "mentorship", label: "Mentorship & Institutional Contribution" },
   { key: "otherInfo", label: "Other Information" },
   { key: "financial", label: "Financial Standing" },
 ] as const;

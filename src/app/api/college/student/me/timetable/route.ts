@@ -79,11 +79,13 @@ export async function GET(request: Request) {
 
     const subjectMap = new Map<string, Subject>(subjects.map((sub) => [sub.id, sub]));
 
+    // The HOD's per-subject cell colour lives on the assignment; shown on screen only.
+    const colorByAssignment = new Map(sectionAssignments.map((a) => [a.id, a.cellColor]));
     const rawSlots = sectionSlots
       .filter((s) => matchesCurrentSemester(s.semester, currentSemester))
       .map((s) => {
         const sub = s.subjectId ? subjectMap.get(s.subjectId) : undefined;
-        return { ...s, subjectCode: sub?.code, shortCode: sub?.shortCode, subjectType: sub?.type };
+        return { ...s, subjectCode: sub?.code, shortCode: sub?.shortCode, subjectType: sub?.type, cellColor: colorByAssignment.get(s.assignmentId) };
       });
 
     const assignments = sectionAssignments

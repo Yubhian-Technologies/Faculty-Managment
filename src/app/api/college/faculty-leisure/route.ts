@@ -7,31 +7,15 @@ import { getHodDepartmentScope, ownDepartmentNames } from "@/lib/departments/sco
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
 import { makeLiveSlotPredicate } from "@/lib/timetable/liveSlots";
-import { timingLookupFrom } from "@/lib/timetable/facultyOverlap";
+import { loadTimingLookup, type TimingLookup } from "@/lib/timetable/facultyOverlap";
 import { getActiveSubstitutionsForDates } from "@/lib/leave/periodCoverage";
 import { isFacultyAvailable, DEFAULT_TIMETABLE_RULES } from "@/types";
 import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
 import { REQUESTS_COL } from "@/lib/leave/balanceEngine";
 import { istDateKey } from "@/lib/attendance/istTime";
+import { normalizeHHMM, dayOfWeekFromISODate } from "@/lib/timetable/leisureQuery";
+import { facultyActiveOn, loadLabWindows } from "@/lib/students/labFacultyWindow";
 import type { CourseYearTiming, DayOfWeek, PeriodTiming, TimetableDraft, TimetableRules, TimetableSlot } from "@/types";
-
-// "HH:MM" or nothing. Anything else is ignored rather than guessed at.
-function normalizeHHMM(v: string | null): string | null {
-  const t = (v ?? "").trim();
-  return /^([01]\d|2[0-3]):[0-5]\d$/.test(t) ? t : null;
-}
-
-// Parsed as a plain calendar date, not an instant - "2026-10-05" is that
-// Monday whatever the server timezone is, which `new Date(iso)` alone would
-// not guarantee.
-function dayOfWeekFromISODate(iso: string): DayOfWeek | null {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.trim());
-  if (!m) return null;
-  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-  if (Number.isNaN(d.getTime())) return null;
-  // Sunday (0) is never a working day in this app DayOfWeek union.
-  return ([null, "MON", "TUE", "WED", "THU", "FRI", "SAT"] as const)[d.getDay()] ?? null;
-}
 
 // College-wide "who is free at this time": every available faculty member with
 // NO class on the given day + period, in any department. Restricted to the
@@ -43,7 +27,8 @@ function dayOfWeekFromISODate(iso: string): DayOfWeek | null {
 //
 // Busy = a published slot OR an unpublished draft slot (a draft still occupies
 // the faculty - see faculty-schedule), each checked against its own course-year's
-// current semester. Matching is by day + period NUMBER, the app-wide convention.
+// current semester. A slot of a subject ticked "Don't include in teaching load"
+// is the exception: it never makes anyone busy. Matching is by day + period NUMBER, the app-wide convention.
 //
 // Without day/period it just returns the pickers' options (working days,
 // widest period count and the configured semester numbers).
@@ -99,8 +84,12 @@ export async function GET(request: Request) {
       const own = normalizePeriods(t.periods && t.periods.length > 0 ? t.periods : defaultPeriodTimings(t));
       if (own.length > periodCount) { periodCount = own.length; periods = own; }
     }
+    // Exact (courseId, year) until the slots are loaded; then widened to include
+    // a shared first year's timing for a managed-branch section (BSC-*, ...),
+    // which has no row of its own (see loadTimingLookup).
+    let timingFor: TimingLookup = (courseId, year) => timingByCourseYear.get(`${courseId}_${year}`) ?? null;
     const periodsFor = (courseId: string, year: number): PeriodTiming[] => {
-      const t = timingByCourseYear.get(`${courseId}_${year}`);
+      const t = timingFor(courseId, year);
       if (!t) return periods;
       return normalizePeriods(t.periods && t.periods.length > 0 ? t.periods : defaultPeriodTimings(t));
     };
@@ -125,7 +114,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "That date is not a working day" }, { status: 400 });
     }
 
-    const [facultySnap, slotsSnap, draftsSnap, leaveSnap] = await Promise.all([
+    const [facultySnap, slotsSnap, draftsSnap, leaveSnap, offLoadSubjectsSnap] = await Promise.all([
       collegeRef.collection("facultyMembers").get(),
       // A window cannot be narrowed to one periodNumber up front - which
       // numbers fall inside it differs per course-year - so the whole day is
@@ -135,7 +124,11 @@ export async function GET(request: Request) {
         : collegeRef.collection("timetableSlots").where("day", "==", day).where("periodNumber", "==", period).get(),
       collegeRef.collection("timetableDrafts").get(),
       REQUESTS_COL(session.collegeId, db).where("status", "==", "APPROVED").get(),
+      // Subjects ticked "Don't include in teaching load" (e.g. Counselling): their
+      // periods are real timetable entries but do not make the faculty busy.
+      collegeRef.collection("subjects").where("isNonTeachingLoad", "==", true).get(),
     ]);
+    const offLoadSubjectIds = new Set(offLoadSubjectsSnap.docs.map((d) => d.id));
 
     // Time ranges ("HH:MM") each person is NOT free in. With a clock window a
     // person is listed when any part of the window is left over, together with
@@ -165,7 +158,12 @@ export async function GET(request: Request) {
     // semester check alone counted a past cohort's slots (same semester number,
     // last year) as busy, so people wrongly dropped off the free list.
     const currentAcademicYear = await resolveCollegeAcademicYear(db, session.collegeId);
-    const isLive = makeLiveSlotPredicate(timingLookupFrom(Array.from(timingByCourseYear.values())), currentAcademicYear);
+    const needed = [
+      ...slotsSnap.docs.map((d) => d.data() as TimetableSlot),
+      ...draftsSnap.docs.map((d) => d.data() as TimetableDraft),
+    ].filter((x) => x.courseId && x.year != null).map((x) => ({ courseId: x.courseId, year: Number(x.year) }));
+    timingFor = (await loadTimingLookup(db, session.collegeId, needed, Array.from(timingByCourseYear.values()))).lookup;
+    const isLive = makeLiveSlotPredicate(timingFor, currentAcademicYear);
     const inCurrentSemester = (courseId: string, year: number, semester: number | null | undefined, academicYear?: string | null) =>
       isLive({ courseId, year, semester, academicYear });
 
@@ -173,6 +171,16 @@ export async function GET(request: Request) {
       const pt = periodsFor(courseId, year).find((x) => x.period === periodNumber);
       return pt ? [pt.startTime, pt.endTime] : null;
     };
+    // A lab's faculty teach it only on their own dates (the Teaching Load
+    // already honours this), so outside them the slot does not make them busy.
+    const labWindows = dateParam
+      ? await loadLabWindows(db, session.collegeId, [
+          ...slotsSnap.docs.map((d) => d.data() as TimetableSlot),
+          ...draftsSnap.docs.flatMap((d) => (d.data() as TimetableDraft).slots ?? []).map((ds) => ({ sectionId: (ds as { sectionId?: string }).sectionId, subjectId: ds.subjectId })),
+        ])
+      : new Map();
+    const activeOnDate = (sectionId: string | undefined, subjectId: string | undefined, facultyId: string | undefined) =>
+      !dateParam || facultyActiveOn(labWindows, sectionId, subjectId, facultyId, dateParam);
     const busyByFaculty = new Map<string, Range[]>();
     const markBusy = (facultyId: string, courseId: string, year: number, periodNumber: number) => {
       if (!byWindow) return addRange(busyByFaculty, facultyId, WHOLE_DAY);
@@ -183,6 +191,8 @@ export async function GET(request: Request) {
     for (const d of slotsSnap.docs) {
       const s = d.data() as TimetableSlot;
       if (!s.facultyId || !inCurrentSemester(s.courseId, s.year, s.semester, s.academicYear)) continue;
+      if (offLoadSubjectIds.has(s.subjectId)) continue;
+      if (!activeOnDate(s.sectionId, s.subjectId, s.facultyId)) continue;
       markBusy(s.facultyId, s.courseId, s.year, s.periodNumber);
     }
     // Someone covering a colleague's period on this date is busy then, whatever
@@ -191,14 +201,15 @@ export async function GET(request: Request) {
       const slotById = new Map(slotsSnap.docs.map((d) => [d.id, d.data() as TimetableSlot]));
       for (const sub of await getActiveSubstitutionsForDates(db, session.collegeId, [dateParam])) {
         const slot = slotById.get(sub.timetableSlotId);
-        if (slot && sub.substituteFacultyId) markBusy(sub.substituteFacultyId, slot.courseId, slot.year, slot.periodNumber);
+        if (slot && sub.substituteFacultyId && !offLoadSubjectIds.has(slot.subjectId)) markBusy(sub.substituteFacultyId, slot.courseId, slot.year, slot.periodNumber);
       }
     }
     for (const d of draftsSnap.docs) {
       const draft = d.data() as TimetableDraft;
       if (draft.status !== "DRAFT" || !inCurrentSemester(draft.courseId, draft.year, draft.semester, (draft as { academicYear?: string }).academicYear)) continue;
       for (const ds of draft.slots ?? []) {
-        if (!ds.facultyId || ds.day !== day) continue;
+        if (!ds.facultyId || ds.day !== day || offLoadSubjectIds.has(ds.subjectId)) continue;
+        if (!activeOnDate((ds as { sectionId?: string }).sectionId ?? draft.sectionId, ds.subjectId, ds.facultyId)) continue;
         if (!byWindow && ds.periodNumber !== period) continue;
         markBusy(ds.facultyId, draft.courseId, draft.year, ds.periodNumber);
       }

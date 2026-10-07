@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { getDepartmentTreeNames } from "@/lib/departments/scope";
 import { fetchSectionStudents } from "@/lib/students/sectionRoster";
 import { calcPercent } from "@/lib/studentAttendance/percentage";
+import { effectiveJoiningDate } from "@/lib/studentAttendance/joiningDate";
 import { indexSessions, tallyStudentBySubject } from "@/lib/studentAttendance/counting";
 import { matchesCurrentSemester } from "@/lib/college/semester";
 import { compareStudentsForList } from "@/lib/students/listOrder";
@@ -227,8 +228,9 @@ export async function GET(request: Request) {
         let attended = 0;
         let heldTimetable = 0;
         let notPostedCount = 0;
-        const tallies = tallyStudentBySubject(indexed, stu.id);
-        const owed = notPosted?.index.forStudent(stu);
+        const joinedOn = effectiveJoiningDate(stu);
+        const tallies = tallyStudentBySubject(indexed, stu.id, joinedOn);
+        const owed = notPosted?.index.forStudent({ labBatch: stu.labBatch, joinedOn });
         for (const subjectId of subjectIds) {
           const t = tallies.get(subjectId);
           const extra = owed?.get(subjectId) ?? 0;
