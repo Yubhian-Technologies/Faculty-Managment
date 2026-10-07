@@ -14,7 +14,6 @@ import { isoDateKey } from "@/lib/leave/dayCounter";
 import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
 import { renderHtmlToPdf } from "@/lib/pdf/htmlToPdf";
 import { buildFacultyTimetablePdfHtml, formatTime12h } from "@/lib/timetable/facultyTimetablePdf";
-import { yearSemesterLabel } from "@/lib/academic/format";
 import { downloadFacultyTimetableXlsx } from "@/lib/timetable/timetableExport";
 import { WeekNavigator } from "@/components/timetable/WeekNavigator";
 import type { TeachingAssignment, TimetableSlot, DayOfWeek, CourseYearTiming, PeriodTiming, Course, Department } from "@/types";
@@ -77,9 +76,6 @@ export default function TeachingLoadPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [typeFilter, setTypeFilter] = useState<"ALL" | "THEORY" | "PRACTICAL">("ALL");
   const [isLoading, setIsLoading] = useState(true);
-  // null = each course-year's own current semester (today's date); a number =
-  // the semester picked in the filter above the grid.
-  const [semester, setSemester] = useState<number | null>(null);
   // Monday of the week currently on screen - navigable via WeekNavigator,
   // defaulting to this calendar week. weekDates pairs positionally with
   // DAYS above, labelling each column with its actual date.
@@ -91,7 +87,7 @@ export default function TeachingLoadPage() {
       setIsLoading(true);
       try {
         const [assignRes, coursesRes, deptsRes] = await Promise.all([
-          fetch(`/api/college/teaching-assignments?week=${isoDateKey(weekStart)}${semester != null ? "&semester=" + semester : ""}`),
+          fetch(`/api/college/teaching-assignments?week=${isoDateKey(weekStart)}`),
           fetch("/api/college/courses"),
           fetch("/api/college/departments"),
         ]);
@@ -106,8 +102,7 @@ export default function TeachingLoadPage() {
         // shared first year's timing to a managed-branch section (BSC-*, BSM-*
         // ...), which has no timing row of its own. A faculty's own slots span
         // several course-years, so periodTimeFor resolves each cell separately.
-        // Merged by id across loads so the semester list stays complete after
-        // picking one semester narrows the assignments.
+        // Merged by id across loads.
         const courseIds = Array.from(new Set([
           ...(json.assignments ?? []).map((a) => a.courseId),
           ...(json.timetableSlots ?? []).map((sl) => sl.courseId),
@@ -139,31 +134,7 @@ export default function TeachingLoadPage() {
         setIsLoading(false);
       }
     })();
-  }, [weekStart, semester]);
-
-  const semesterOptions = useMemo(() => {
-    const nums = new Set<number>();
-    for (const t of timings) for (const sem of t.semesters ?? []) nums.add(sem.semester);
-    // Also whatever semester the faculty's own records are filed under, so the
-    // filter still lists them when a course-year's timing has none configured.
-    for (const a of assignments) if (a.timetableSemester != null) nums.add(Number(a.timetableSemester));
-    for (const sl of timetableSlots) if (sl.semester != null) nums.add(Number(sl.semester));
-    if (semester != null) nums.add(semester);
-    return Array.from(nums).filter((n) => Number.isFinite(n)).sort((a, b) => a - b);
-  }, [timings, assignments, timetableSlots, semester]);
-  // Always rendered, so the filter is never silently missing.
-  const semesterPicker = (
-    <select
-      className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:border-primary focus:outline-none"
-      value={semester != null ? String(semester) : ""}
-      onChange={(e) => setSemester(e.target.value === "" ? null : Number(e.target.value))}
-    >
-      <option value="">Current semester</option>
-      {semesterOptions.map((n) => (
-        <option key={n} value={n}>{yearSemesterLabel(n)}</option>
-      ))}
-    </select>
-  );
+  }, [weekStart]);
 
   const nonTeachingAssignmentIds = new Set(
     assignments
@@ -345,12 +316,9 @@ export default function TeachingLoadPage() {
       />
 
       {periods.length === 0 ? (
-        <>
-          {semester != null && <div className="flex justify-end">{semesterPicker}</div>}
-          <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-            {semester != null ? "No timetable slots for you in this semester." : "No timetable slots have been published for you yet."}
-          </div>
-        </>
+        <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+          No timetable slots are running for you right now.
+        </div>
       ) : (
         <>
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -364,8 +332,6 @@ export default function TeachingLoadPage() {
             ))}
 
             <SubjectColorPicker subjects={uniqueSubjects} value={highlights} onChange={setHighlights} />
-
-            {semesterPicker}
             <Button size="sm" variant="outline" onClick={downloadPdf} disabled={isExportingPdf}>
               <FileDown className="h-3.5 w-3.5 mr-1.5" />
               {isExportingPdf ? "Generating PDF..." : "PDF"}
@@ -383,30 +349,32 @@ export default function TeachingLoadPage() {
         <div className="overflow-x-auto md:overflow-x-visible rounded-lg border">
           <table className="w-full text-xs md:table-fixed border-collapse">
             <colgroup>
-              <col style={{ width: "55px" }} />
-              {DAYS.map((d) => (
-                <col key={d} style={{ width: "auto" }} />
+              <col style={{ width: "90px" }} />
+              {periods.map((period) => (
+                <col key={period} style={{ width: "auto" }} />
               ))}
             </colgroup>
             <thead>
               <tr className="bg-muted/50">
-                <th className="p-2 text-center font-bold text-muted-foreground border-b w-[55px]">Period</th>
-                {DAYS.map((d, i) => (
-                  <th key={d} className="p-1.5 text-center font-bold text-foreground border-b">
-                    <p className="text-[9px] font-normal text-muted-foreground truncate">{formatDMY(weekDates[i])}</p>
-                    <div>{DAY_LABELS[d]}</div>
-                  </th>
+                <th className="p-2 text-center font-bold text-muted-foreground border-b w-[90px]">Day</th>
+                {periods.map((period) => (
+                  <th key={period} className="p-1.5 text-center font-bold text-foreground border-b">Period {period}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {periods.map((period) => (
-                <tr key={period} className="border-b last:border-b-0">
-                  <td className="p-2.5 font-medium text-muted-foreground">{period}</td>
-                  {DAYS.map((d) => {
+              {DAYS.map((d, di) => (
+                <tr key={d} className="border-b last:border-b-0">
+                  <td className="p-2 align-top font-medium text-muted-foreground">
+                    <div className="text-foreground font-bold">{DAY_LABELS[d]}</div>
+                    <div className="text-[9px] font-normal truncate">{formatDMY(weekDates[di])}</div>
+                  </td>
+                  {periods.map((period) => {
+                    // Every slot in the cell, not the first: one faculty can hold
+                    // two sections in the same period (e.g. a combined class).
                     const cellSlots = displaySlots.filter((s) => s.day === d && s.periodNumber === period);
                     return (
-                      <td key={d} className="p-2 align-top">
+                      <td key={period} className="p-2 align-top">
                         {cellSlots.length > 0 ? (
                           <div className="space-y-1.5">
                             {cellSlots.map((slot, idx) => {
