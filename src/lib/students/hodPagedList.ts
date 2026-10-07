@@ -165,6 +165,8 @@ async function loadCandidates(
       seen.add(d.id);
       const data = d.data() as Omit<StudentRecord, "id">;
       if (classifyHodStudent(data, ctx) !== f.level) continue;
+      // A discontinued student has no section by design - never part of the "unassigned" pool.
+      if (f.unassignedOnly && data.status === "DISCONTINUED") continue;
       if (f.coreDepartment && data.secondaryDepartment !== f.coreDepartment) continue;
       out.push({ id: d.id, ...data, accessLevel: f.level });
     }
@@ -196,7 +198,7 @@ export async function fetchHodStudentsPage(
   opts: { page: number; pageSize: number; search: string; binding: string }
 ): Promise<HodPage> {
   const candidates = await loadCandidates(studentsColl, ctx, f);
-  const unassignedTotal = candidates.filter((s) => !s.section).length;
+  const unassignedTotal = candidates.filter((s) => !s.section && s.status !== "DISCONTINUED").length;
   const matching = candidates.filter((s) => matchesSearch(s, opts.search));
   const totalPages = Math.max(1, Math.ceil(matching.length / opts.pageSize));
   const page = Math.min(Math.max(1, opts.page), totalPages);

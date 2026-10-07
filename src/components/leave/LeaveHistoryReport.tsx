@@ -271,7 +271,7 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
     queryKey: [...queryKey, "month", shownYear, shownMonth],
     queryFn: () =>
       fetch(`${apiUrl}${apiUrl.includes("?") ? "&" : "?"}year=${shownYear}&month=${shownMonth}`)
-        .then((r) => r.json() as Promise<{ department: Department; rows: LeaveHistoryReportRow[]; location?: string; holidaysCount?: number; holidaysByMonth?: number[] }>),
+        .then((r) => r.json() as Promise<{ department: Department; rows: LeaveHistoryReportRow[]; location?: string; holidaysCount?: number; holidaysByMonth?: number[]; importedYearly?: undefined }>),
     enabled: applied?.mode === "month",
   });
 
@@ -280,7 +280,7 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
     queryKey: [...queryKey, "year", shownYear],
     queryFn: () =>
       fetch(`${yearlyApiUrl}${yearlyApiUrl.includes("?") ? "&" : "?"}year=${shownYear}`)
-        .then((r) => r.json() as Promise<{ department: Department; rows: LeaveYearlyReportRow[]; location?: string; holidaysCount?: number; holidaysByMonth?: number[] }>),
+        .then((r) => r.json() as Promise<{ department: Department; rows: LeaveYearlyReportRow[]; location?: string; holidaysCount?: number; holidaysByMonth?: number[]; importedYearly?: Record<string, { weeklyOffs?: number; holidays?: number }> }>),
     enabled: applied?.mode === "year",
   });
 
@@ -343,8 +343,8 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
             period: row.totals,
             category: row.category,
             location,
-            weeklyOffs: totalSundaysInYear(shownYear),
-            holidays: holidaysByMonth.reduce((s, n) => s + n, 0),
+            weeklyOffs: data?.importedYearly?.[row.uid]?.weeklyOffs ?? totalSundaysInYear(shownYear),
+            holidays: data?.importedYearly?.[row.uid]?.holidays ?? holidaysByMonth.reduce((s, n) => s + n, 0),
           }),
         ]);
   }
@@ -516,7 +516,7 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
                           ))}
                           <tr className="bg-muted/60 font-semibold">
                             <td className={td}>Total</td>
-                            <PeriodCells period={row.totals} weeklyOffs={totalSundaysInYear(shownYear)} holidays={(data?.holidaysByMonth ?? []).reduce((s, n) => s + n, 0)} />
+                            <PeriodCells period={row.totals} weeklyOffs={data?.importedYearly?.[row.uid]?.weeklyOffs ?? totalSundaysInYear(shownYear)} holidays={data?.importedYearly?.[row.uid]?.holidays ?? (data?.holidaysByMonth ?? []).reduce((s, n) => s + n, 0)} />
                           </tr>
                         </Fragment>
                       ))}

@@ -24,6 +24,8 @@ export interface StudentReportData {
   };
   subjects: StudentReportRow[];
   total: { held: number; attended: number; percent: number | null };
+  /** Filters narrowing `subjects` (set by the page when any is on) - printed under Period so the sheet says what it shows. */
+  filters?: string[];
 }
 
 const esc = (v: unknown) =>
@@ -42,6 +44,7 @@ export function studentReportIdentity(report: StudentReportData): [string, strin
     ["Branch", student.branch || "-"],
     ["Semester", student.classLabel || "-"],
     ["Period", scope.label],
+    ...(report.filters && report.filters.length > 0 ? [["Filters", report.filters.join("; ")] as [string, string]] : []),
   ];
 }
 

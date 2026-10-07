@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { getHodDepartmentScope, editableDepartmentNames } from "@/lib/departments/scope";
 import { STUDENT_FACULTY_RATIO, CADRE_PARTS as DEFAULT_CADRE_PARTS, CADRE_TOTAL_PARTS as DEFAULT_CADRE_TOTAL, requiredFacultyCount } from "@/lib/college/facultyRatio";
 import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
 import { countStudentsOfDepartment } from "@/lib/students/countStudents";
@@ -51,6 +52,15 @@ export async function GET(request: Request) {
 
     if (!dept) {
       return NextResponse.json({ error: "Department not found" }, { status: 400 });
+    }
+
+    // An HOD may only look at a department inside their own scope - the
+    // `department` param must not open another department's student strength.
+    if (session.role === "HOD") {
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      if (!editableDepartmentNames(scope).includes(dept)) {
+        return NextResponse.json({ error: "Outside your department" }, { status: 403 });
+      }
     }
 
     // ── Student strength ──────────────────────────────────────────────────────
