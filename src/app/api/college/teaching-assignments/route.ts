@@ -611,9 +611,16 @@ export async function POST(request: Request) {
         subjectName: subject.name,
         subjectCode: subject.code,
         ...(subject.shortCode ? { shortCode: subject.shortCode } : {}),
-        // A hand-typed subject (subjects/custom) is real teaching load for the
-        // timetable but never belongs on the faculty resume.
-        ...((subject as { isCustom?: boolean }).isCustom ? { excludeFromResume: true } : {}),
+        subjectType: (subject as { type?: SubjectType }).type,
+        ...((subject as { isCustom?: boolean; isNonTeachingLoad?: boolean; excludeFromResume?: boolean; type?: string }).isCustom ||
+        (subject as { type?: string }).type === "NON_TEACHING" ||
+        (subject as { isNonTeachingLoad?: boolean }).isNonTeachingLoad ||
+        (subject as { excludeFromResume?: boolean }).excludeFromResume
+          ? { excludeFromResume: true }
+          : {}),
+        ...((subject as { type?: string }).type === "NON_TEACHING" || (subject as { isNonTeachingLoad?: boolean }).isNonTeachingLoad
+          ? { isNonTeachingLoad: true }
+          : {}),
         hoursPerWeek: body.hoursPerWeek != null ? Number(body.hoursPerWeek) : subject.hoursPerWeek,
         assignedBy: session.uid,
         assignedByName: session.role,

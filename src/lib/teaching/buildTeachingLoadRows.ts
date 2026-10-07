@@ -48,8 +48,10 @@ interface CurrentAssignmentLike {
   subjectName?: string;
   subjectCode?: string;
   hoursPerWeek?: number;
-  // Set on assignments of a hand-typed (custom) subject - kept off the resume.
+  // Set on assignments of a hand-typed (custom) or non-teaching subject - kept off the resume/teaching load.
   excludeFromResume?: boolean;
+  isNonTeachingLoad?: boolean;
+  subjectType?: string;
   // Every assignment (current or past) carries which academic year/semester it
   // belongs to. `isPast` additionally marks a structured past teaching
   // assignment (added via "Add Past Teaching Assignment" in the Current
@@ -90,7 +92,9 @@ export function buildTeachingLoadRows(input: {
   // department; not derived per-assignment (assignments don't track it).
   department?: string;
 }): TeachingLoadGroups {
-  const assignments = (input.currentAssignments ?? []).filter((a) => !a.excludeFromResume && (a.courseName || a.subjectName));
+  const assignments = (input.currentAssignments ?? []).filter(
+    (a) => !a.excludeFromResume && !a.isNonTeachingLoad && a.subjectType !== "NON_TEACHING" && (a.courseName || a.subjectName)
+  );
   const currentAssignmentRows = assignments.filter((a) => !a.isPast).map((a) => toRow(a, input.department));
   const pastAssignmentRows = assignments.filter((a) => a.isPast).map((a) => toRow(a, input.department));
 
