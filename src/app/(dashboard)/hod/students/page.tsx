@@ -31,6 +31,8 @@ import type { StudentRow, SectionRow } from "@/components/students/hod/types";
 import { EditStudentDialog } from "@/components/students/hod/EditStudentDialog";
 import { AssignStudentDialog } from "@/components/students/hod/AssignStudentDialog";
 import { selectableYears } from "@/lib/college/courseYears";
+import { coreDepartmentsWithSections, departmentHasSections } from "@/lib/college/departmentSectionScope";
+import { useSectionDepartments } from "@/hooks/useSectionDepartments";
 
 
 type BulkMode = "move" | "unassign";
@@ -107,6 +109,7 @@ export default function HodStudentsPage() {
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deptFilter, setDeptFilter] = useState("all");
+  const [coreDeptFilter, setCoreDeptFilter] = useState("all");
   // Matches the College Office Students page's own filter row (Course/
   // Department/Year) - this table previously only offered Department, with no
   // way to narrow a large mixed roster down to one course or year at a glance.
@@ -229,10 +232,11 @@ export default function HodStudentsPage() {
       return params;
     }
     if (deptFilter !== "all") params.set("department", deptFilter);
+    if (coreDeptFilter !== "all") params.set("coreDepartment", coreDeptFilter);
     if (courseFilter !== "all") params.set("course", courseFilter);
     if (yearFilter !== "all") params.set("year", yearFilter);
     return params;
-  }, [freshmanView, deptFilter, courseFilter, yearFilter]);
+  }, [freshmanView, deptFilter, coreDeptFilter, courseFilter, yearFilter]);
 
   const executeLoad = useCallback(async (targetPage: number, targetSize: number) => {
     const seq = ++requestSeq.current;
@@ -406,7 +410,7 @@ export default function HodStudentsPage() {
   // student data (it never houses a student directly), so without this it
   // could never be picked at all even though the server-side Department
   // filter already handles it correctly as a rollup target.
-  const departmentNames = useMemo(() => {
+  const scopedDepartmentNames = useMemo(() => {
     const names = new Set(metaDepartmentNames);
     const allDepts = departments as DepartmentWithId[];
     for (const d of allDepts) {
@@ -416,6 +420,34 @@ export default function HodStudentsPage() {
     }
     return Array.from(names).sort();
   }, [metaDepartmentNames, departments]);
+
+  // Which departments a section is actually filed under.
+  const sectionDepartments = useSectionDepartments();
+
+  // Only the departments that resolve to sections - their own, or those of a
+  // branch they manage. A parent that organises sub-departments and holds
+  // nothing itself ("Basic Science") was a dead option: no section and no
+  // student is ever filed directly under it. Falls back to the whole scope when
+  // nothing would qualify, so a department list is never empty.
+  const departmentNames = useMemo(() => {
+    const kept = scopedDepartmentNames.filter((n) => {
+      const doc = departments.find((d) => d.name === n);
+      return doc ? departmentHasSections(doc, sectionDepartments) : true;
+    });
+    return kept.length > 0 ? kept : scopedDepartmentNames;
+  }, [scopedDepartmentNames, departments, sectionDepartments]);
+
+  // The branches a shared-first-year department holds the first year for -
+  // the students' Core Department. Offered only when the picked department
+  // actually manages any.
+  const coreDepartmentOptions = useMemo(
+    () => coreDepartmentsWithSections(
+      deptFilter === "all" ? undefined : departments.find((d) => d.name === deptFilter),
+      sectionDepartments
+    ),
+    [deptFilter, departments, sectionDepartments]
+  );
+  const coreDeptValue = coreDepartmentOptions.includes(coreDeptFilter) ? coreDeptFilter : "all";
   // The "Freshman's Department" view: students currently held by some OTHER
   // (Freshman's) department who are pre-registered toward one of THIS HOD's own
   // departments - accessLevel "secondary" (students/route.ts's own
@@ -612,10 +644,11 @@ export default function HodStudentsPage() {
     // separately, view-only, via the Freshman's Department selector below.
     if (s.accessLevel === "secondary") return false;
     if (deptFilterRollupNames && !deptFilterRollupNames.includes(s.department)) return false;
+    if (coreDeptFilter !== "all" && s.secondaryDepartment !== coreDeptFilter) return false;
     if (courseFilter !== "all" && s.course !== courseFilter) return false;
     if (yearFilter !== "all" && s.year !== Number(yearFilter)) return false;
     return true;
-  }, [deptFilterRollupNames, courseFilter, yearFilter]);
+  }, [deptFilterRollupNames, coreDeptFilter, courseFilter, yearFilter]);
 
   // Sections a single student can be assigned into - their real branch's (if
   // pre-registered to one via secondaryDepartment) or their own department's,
@@ -886,6 +919,7 @@ export default function HodStudentsPage() {
       ? yearOptionsForDepartment(departments, courses, value, courseFilter === "all" ? "" : courseFilter, fallbackYears)
       : yearOptionsForCourse(courses, courseFilter === "all" ? undefined : courseFilter, fallbackYears);
     if (yearFilter !== "all" && !nextYearOptions.includes(Number(yearFilter))) setYearFilter("all");
+    setCoreDeptFilter("all");
     setDeptFilter(value);
   }
 
@@ -1431,6 +1465,15 @@ export default function HodStudentsPage() {
                     {departmentNames.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
                   </SelectContent>
                 </Select>
+                {coreDepartmentOptions.length > 0 && (
+                  <Select value={coreDeptValue} onValueChange={setCoreDeptFilter}>
+                    <SelectTrigger className="w-48"><SelectValue placeholder="All core departments" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All core departments</SelectItem>
+                      {coreDepartmentOptions.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                )}
                 <Select value={yearFilter} onValueChange={setYearFilter}>
                   <SelectTrigger className="w-36"><SelectValue placeholder="All years" /></SelectTrigger>
                   <SelectContent>
