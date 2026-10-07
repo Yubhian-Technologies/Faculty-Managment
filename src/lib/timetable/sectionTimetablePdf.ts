@@ -303,10 +303,10 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
   // Basic Science - Chemistry runs it.
   const hodLabel = getHodSignatureLabel(section?.department || resolvedDepartment);
   const signatureHtml = `
-  <div class="signature-row" style="margin-top:24px;display:flex;justify-content:space-between;align-items:flex-end;">
-    <div class="signature-block" style="flex:1;text-align:center;">TimeTable In-Charge</div>
-    <div class="signature-block" style="flex:1;text-align:center;">${escapeHtml(hodLabel)}</div>
-    <div class="signature-block" style="flex:1;text-align:center;">PRINCIPAL</div>
+  <div class="signature-row" style="margin-top:auto;padding-top:40px;padding-bottom:6px;display:flex;justify-content:space-between;align-items:flex-end;width:100%;page-break-inside:avoid;">
+    <div class="signature-block" style="flex:1;text-align:center;font-weight:700;font-size:9.5pt;">TimeTable In-Charge</div>
+    <div class="signature-block" style="flex:1;text-align:center;font-weight:700;font-size:9.5pt;">${escapeHtml(hodLabel)}</div>
+    <div class="signature-block" style="flex:1;text-align:center;font-weight:700;font-size:9.5pt;">${escapeHtml(signatureLabels?.principal || "PRINCIPAL")}</div>
   </div>`;
 
   const documentTitle = title || "TIME TABLE";
@@ -319,9 +319,9 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
     @page { size: A4 portrait; margin: 0; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: Arial, Helvetica, sans-serif; color: #000; background: #fff; font-size: 11px; line-height: 1.3; }
-    /* The PDF renderer captures .page edge to edge, so the page margin lives
-       inside it as padding. */
-    .page { width: 210mm; margin: 0 auto; padding: 12mm 10mm; }
+    /* The PDF renderer captures .page edge to edge, so the page margin lives inside it as padding. */
+    .page { width: 210mm; min-height: 290mm; margin: 0 auto; padding: 10mm 10mm 12mm; display: flex; flex-direction: column; justify-content: space-between; }
+    .content-area { flex: 1; }
 
     .letterhead { width: 100%; border: 0; }
     .logo-cell { width: 26mm; vertical-align: middle; text-align: center; }
@@ -376,16 +376,17 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
     table.allocation th.cell { font-weight: 700; }
     table.allocation th.cell > .fx { min-height: 28px; }
 
-
-    .signature-row { display: flex; justify-content: space-around; margin-top: 48px; }
-    .signature-block { text-align: center; width: 26%; font-size: 9pt; }
+    .signature-row { display: flex; justify-content: space-between; margin-top: auto; padding-top: 40px; padding-bottom: 6px; width: 100%; page-break-inside: avoid; }
+    .signature-block { text-align: center; width: 30%; font-size: 9.5pt; font-weight: 700; }
   </style>
 </head>
 <body>
   <div class="page">
-    ${headerHtml}
-    ${gridHtml}
-    ${allocationHtml}
+    <div class="content-area">
+      ${headerHtml}
+      ${gridHtml}
+      ${allocationHtml}
+    </div>
     ${signatureHtml}
   </div>
 </body>
