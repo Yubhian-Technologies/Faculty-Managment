@@ -70,8 +70,10 @@ export default function SubjectsPage() {
   const [courseKey, setCourseKey] = useState("");
   const [deptId, setDeptId] = useState("");
   const [subDeptId, setSubDeptId] = useState("");
-  const [year, setYear] = useState("1");
-  const [semester, setSemester] = useState("1");
+  // Nothing is pre-picked: the page opens asking for a course, a department,
+  // a year and a semester rather than silently loading somebody else's.
+  const [year, setYear] = useState("");
+  const [semester, setSemester] = useState("");
   const [assignments, setAssignments] = useState<AssignmentWithMaster[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -101,19 +103,12 @@ export default function SubjectsPage() {
           fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses?: CourseOption[] }>),
           fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments?: DepartmentOption[] }>),
         ]);
-        const courses = (c.courses ?? []).filter((x) => x.isActive !== false);
-        const all = d.departments ?? [];
-        setCourses(courses);
-        setDepartments(all);
-        const firstCourseKey = courses[0] ? (courses[0].catalogId ?? `name:${courses[0].name}`) : "";
-        if (firstCourseKey) setCourseKey(firstCourseKey);
-        const firstDept = all.find((x) => !x.parentDepartmentId);
-        const firstDeptId = firstDept ? firstDept.id : "";
-        if (firstDeptId) setDeptId(firstDeptId);
-
-        if (firstCourseKey && firstDeptId) {
-          void fetchAssignments(firstCourseKey, firstDeptId, "", "1", "1", courses);
-        }
+        // Only the options. The first course and the first department used to be
+        // picked here and loaded straight away, which answered a question nobody
+        // had asked - and for a department that teaches neither the year nor the
+        // semester it was loaded for.
+        setCourses((c.courses ?? []).filter((x) => x.isActive !== false));
+        setDepartments(d.departments ?? []);
       } catch {
         setLoadError("Couldn't load courses or departments.");
       }
@@ -168,14 +163,15 @@ export default function SubjectsPage() {
     [activeDept, departments, catalogId, planCourse]
   );
   // Derived rather than corrected in an effect, so what is shown and what Load
-  // sends can never disagree: a pick that falls outside the options reverts to
-  // the first one that is actually offered.
-  const yearValue = yearOptions.includes(Number(year)) ? year : String(yearOptions[0] ?? "");
+  // sends can never disagree. A pick that falls outside the options - after
+  // changing department, say - clears rather than silently becoming another
+  // year, so the choice goes back to whoever is looking at it.
+  const yearValue = yearOptions.includes(Number(year)) ? year : "";
   const semesterOptions = useMemo(
     () => (yearValue ? semestersInYear(plan, Number(yearValue)) : []),
     [plan, yearValue]
   );
-  const semesterValue = semesterOptions.includes(Number(semester)) ? semester : String(semesterOptions[0] ?? "");
+  const semesterValue = semesterOptions.includes(Number(semester)) ? semester : "";
   // Sibling sub-departments (or the children of a parent picked "itself") that can share one added subject.
   const siblingDepts = useMemo(() => {
     const active = departments.find((d) => d.id === activeDeptId);
@@ -201,6 +197,7 @@ export default function SubjectsPage() {
     const group = groups.get(cKey);
     const targetDeptId = sDeptId || aDeptId;
     if (!group || !targetDeptId) { setLoadError("Please select course and department."); return; }
+    if (!yr || !sem) { setLoadError("Please select year and semester."); return; }
 
     setIsLoading(true);
     setLoadError("");
@@ -481,7 +478,7 @@ export default function SubjectsPage() {
         description="View and manage subjects by department, year and semester"
         actions={
           <div className="flex gap-2 flex-wrap">
-            <Button onClick={openAdd} disabled={!courseKey || !deptId}>
+            <Button onClick={openAdd} disabled={!courseKey || !deptId || !yearValue || !semesterValue}>
               <Plus className="h-4 w-4 mr-1" />Add Subject
             </Button>
             <Button variant="outline" asChild>
@@ -520,17 +517,21 @@ export default function SubjectsPage() {
           <div className="space-y-1.5">
             <Label htmlFor="yr">Year</Label>
             <select id="yr" className={SELECT_CLASS} value={yearValue} onChange={(e) => setYear(e.target.value)}>
+              <option value="">Select…</option>
               {yearOptions.map((y) => <option key={y} value={String(y)}>Year {y}</option>)}
             </select>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="sem">Semester</Label>
             <select id="sem" className={SELECT_CLASS} value={semesterValue} onChange={(e) => setSemester(e.target.value)}>
-              {semesterOptions.map((s) => <option key={s} value={String(s)}>Sem {semesterLabel(plan, s)}</option>)}
+              <option value="">Select…</option>
+              {/* The label is the course's own year-semester position - "1-1",
+                  "1-2", "1-3" where a year has three - and nothing else. */}
+              {semesterOptions.map((s) => <option key={s} value={String(s)}>{semesterLabel(plan, s)}</option>)}
             </select>
           </div>
           <div className="flex items-end">
-            <Button onClick={() => void handleLoad()} className="w-full" disabled={!courseKey || !deptId}>
+            <Button onClick={() => void handleLoad()} className="w-full" disabled={!courseKey || !deptId || !yearValue || !semesterValue}>
               Load
             </Button>
           </div>
