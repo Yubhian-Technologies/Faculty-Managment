@@ -203,6 +203,8 @@ export interface TeachingAssignment {
   assignmentSemester?: string;
   passPercentage?: number;
   studentFeedback?: number;   // average student feedback rating for this teaching period, as a %
+  isNonTeachingLoad?: boolean;
+  excludeFromResume?: boolean;
 
   // Course/section-scoped rows only - which of the course-year's configured
   // CourseYearTiming.semesters (src/types/core.ts) this assignment is

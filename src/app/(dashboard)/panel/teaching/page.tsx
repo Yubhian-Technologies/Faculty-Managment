@@ -163,10 +163,18 @@ export default function TeachingLoadPage() {
     </select>
   );
 
+  const nonTeachingAssignmentIds = new Set(
+    assignments
+      .filter((a) => a.isNonTeachingLoad || a.excludeFromResume || (a as any).subjectType === "NON_TEACHING")
+      .map((a) => a.id)
+  );
   const assignmentById = new Map(assignments.map((a) => [a.id, a]));
-  const maxPeriod = timetableSlots.reduce((max, s) => Math.max(max, s.periodNumber), 0);
+  const filteredSlots = timetableSlots.filter(
+    (s) => !nonTeachingAssignmentIds.has(s.assignmentId) && s.subjectType !== "NON_TEACHING" && !(s as any).isNonTeachingLoad
+  );
+  const maxPeriod = filteredSlots.reduce((max, s) => Math.max(max, s.periodNumber), 0);
   const periods = Array.from({ length: maxPeriod }, (_, i) => i + 1);
-  const displaySlots = typeFilter === "ALL" ? timetableSlots : timetableSlots.filter((s) => s.subjectType === typeFilter);
+  const displaySlots = typeFilter === "ALL" ? filteredSlots : filteredSlots.filter((s) => s.subjectType === typeFilter);
 
   // Each course-year's own period-by-period breakdown, resolved once up
   // front (falls back to the plain numberOfPeriods/periodDurationMinutes
