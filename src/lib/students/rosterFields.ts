@@ -51,6 +51,13 @@ export interface RosterField {
    * near-empty column.
    */
   hideInList?: boolean;
+  /**
+   * Shown as a students-list column WITHOUT joining the identity block of the
+   * form and detail view. `primary` would do both, which would move the field
+   * out of its detail group; this keeps it exactly where it is on those
+   * surfaces and only adds the column.
+   */
+  showInList?: boolean;
 }
 
 export const ROSTER_FIELDS: RosterField[] = [
@@ -78,6 +85,7 @@ export const ROSTER_FIELDS: RosterField[] = [
 
   { key: "admissionNo", label: "Admission No", kind: "text", sample: "Optional; text" },
   { key: "hallTicketNo", label: "Hall Ticket No", kind: "text", sample: "Optional; text" },
+  { key: "mobileNo", label: "Student Mobile No", kind: "text", sample: "Required; 10-digit mobile starting 6-9 - must be different for every student in every college (it is how roll numbers are matched to students later)", required: true, showInList: true, placeholder: "9876543210" },
   { key: "dateOfAdmission", label: "Date of Admission (YYYY-MM-DD)", kind: "date", sample: "Optional; YYYY-MM-DD" },
   { key: "admissionType", label: "Admission Type", kind: "text", sample: "Optional; e.g. Direct, Management, Convenor", placeholder: "Direct" },
   { key: "entranceType", label: "Entrance Type", kind: "text", sample: "Optional; e.g. EAMCET, ECET, JEE", placeholder: "EAMCET" },
@@ -102,7 +110,6 @@ export const ROSTER_FIELDS: RosterField[] = [
   { key: "motherContactNo", label: "Mother Contact Number", kind: "text", sample: "Optional; phone/text", aliases: ["Mother Phone", "Mother Mobile", "Mother Contact"], placeholder: "9876543211" },
   { key: "guardianName", label: "Guardian Name (if any)", kind: "text", sample: "Optional; only when someone other than a parent is this student's guardian", aliases: ["Guardian"] },
   { key: "guardianContact", label: "Guardian Contact Number", kind: "text", sample: "Optional; phone/text", aliases: ["Guardian Contact", "Parent Contact", "Guardian Phone", "Parent Phone"], placeholder: "9876543212" },
-  { key: "mobileNo", label: "Student Mobile No", kind: "text", sample: "Required; 10-digit mobile starting 6-9 - must be different for every student in every college (it is how roll numbers are matched to students later)", required: true, placeholder: "9876543210" },
   { key: "landLineNo", label: "Land Line No", kind: "text", sample: "Optional; text" },
   { key: "email", label: "Email", kind: "text", sample: "Optional; must contain @", aliases: ["Email ID"], placeholder: "student@example.com" },
   { key: "aadharNo", label: "Aadhar Card No.", kind: "text", sample: "Optional; text", aliases: ["Aadhar No"] },
@@ -236,8 +243,14 @@ export const ROSTER_SAMPLE_ROWS: Record<string, string>[] = [
 /** The identity fields, in template order - shown before everything else. */
 export const PRIMARY_ROSTER_FIELDS = ROSTER_FIELDS.filter((f) => f.primary);
 
-/** The identity fields the students list shows as columns. */
-export const LIST_ROSTER_FIELDS = PRIMARY_ROSTER_FIELDS.filter((f) => !f.hideInList);
+/**
+ * The columns the students list shows: the identity fields, plus any field
+ * explicitly marked showInList. Filtered from ROSTER_FIELDS rather than from
+ * PRIMARY_ROSTER_FIELDS so the columns stay in template order.
+ */
+export const LIST_ROSTER_FIELDS = ROSTER_FIELDS.filter(
+  (f) => (f.primary && !f.hideInList) || f.showInList
+);
 
 /** Everything after the identity block, in template order. */
 export const DETAIL_ROSTER_FIELDS = ROSTER_FIELDS.filter((f) => !f.primary);
