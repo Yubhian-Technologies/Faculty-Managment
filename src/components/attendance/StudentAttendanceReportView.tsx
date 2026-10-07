@@ -12,6 +12,7 @@ import { exportToCSV } from "@/lib/utils";
 import { formatPercent } from "@/lib/studentAttendance/percentage";
 import { applyStudentFilters, NO_FILTERS, type StudentReportFilters } from "@/lib/studentAttendance/reportFilters";
 import { offeredYears } from "@/lib/college/departmentYears";
+import { coreDepartmentsWithSections, departmentsWithSections } from "@/lib/college/departmentSectionScope";
 import type { Course, Department, SectionListItem } from "@/types";
 import { semesterLabel, semestersInYear, yearOfSemester } from "@/lib/college/courseYears";
 import { useCourseSemesterPlan } from "@/hooks/useCourseSemesterPlan";
@@ -64,6 +65,8 @@ interface SectionReport { section: SectionListItem; subjects: SubjectCol[]; stud
 // when "All sections" is picked. Options come from the one /api/college/sections
 // call, which already returns only what the signed-in role may see (an HOD only
 // gets their own department tree).
+const ALL_CORE = "__all__";
+
 export function StudentAttendanceReportView({ title = "Student Attendance", scoped, onlyOwnYears }: {
   title?: string;
   /** The viewer only sees their own slice (an HOD, a class incharge): a filter level with a single option is picked for them and hidden. */
@@ -76,6 +79,7 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
   const [courseDocs, setCourseDocs] = useState<Course[]>([]);
   const [pickedCourse, setCourse] = useState("");
   const [pickedDepartment, setDepartment] = useState("");
+  const [pickedCoreDepartment, setCoreDepartment] = useState("");
   // The running semester number as a string, e.g. "3".
   const [semesterKey, setSemesterKey] = useState("");
   const [sectionId, setSectionId] = useState("");
@@ -148,13 +152,29 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
   const departments = useMemo(() => {
     const fromSections = Array.from(new Set(inCourse.map((s) => s.department).filter(Boolean)));
     if (scoped) return fromSections.sort();
-    const all = departmentDocs
-      .filter((d) => d.isActive !== false)
+    // Only departments that actually resolve to sections - their own, or those
+    // of a branch they manage. Listing every configured department offered
+    // choices that could only ever come back empty: at one college "Basic
+    // Science" holds nothing itself, its four sub-departments do.
+    return departmentsWithSections(departmentDocs, fromSections)
       .map((d) => (d.name ?? "").trim())
-      .filter(Boolean);
-    return Array.from(new Set([...all, ...fromSections])).sort();
+      .filter(Boolean)
+      .sort();
   }, [inCourse, departmentDocs, scoped]);
   const department = course ? only(departments, pickedDepartment) : "";
+
+  // A shared-first-year department teaches for several branches at once (Basic
+  // Science - Chemistry runs CSE and CSBS). Those are its "core" departments,
+  // and this narrows the report to one of them. Only offered when there is
+  // more than nothing to choose from.
+  const coreDepartments = useMemo(
+    () => coreDepartmentsWithSections(
+      departmentDocs.find((d) => d.name === department),
+      inCourse.map((x) => x.department).filter(Boolean)
+    ),
+    [departmentDocs, department, inCourse]
+  );
+  const coreDepartment = coreDepartments.includes(pickedCoreDepartment) ? pickedCoreDepartment : "";
   const showCourse = !scoped || courses.length !== 1;
   const showDepartment = !scoped || departments.length !== 1;
   // A section's courseId can be a duplicate Course doc merged into the one the
@@ -208,10 +228,14 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
     const managedSet = new Set(managed);
     const yearSet = new Set(assignedYears);
     const borrowed = inCourse.filter(
-      (x) => x.department !== department && managedSet.has(x.department) && yearSet.has(Number(x.year))
+      (x) => x.department !== department
+        && managedSet.has(x.department)
+        && yearSet.has(Number(x.year))
+        // Narrowed to one branch when the Office picked one.
+        && (!coreDepartment || x.department === coreDepartment)
     );
     return [...own, ...borrowed];
-  }, [inCourse, department, deptDoc, assignedYears]);
+  }, [inCourse, department, deptDoc, assignedYears, coreDepartment]);
 
   // A department offers the semesters of the years it is assigned. One given
   // years 2-4 offers 2-1 .. 4-2 and never 1-1; a freshman department given only
@@ -257,7 +281,8 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
     setHostellers(false); setDayScholars(false);
   }
   function pickCourse(v: string) { setCourse(v); setDepartment(""); setSemesterKey(""); setSectionId(""); reset(); }
-  function pickDepartment(v: string) { setDepartment(v); setSemesterKey(""); setSectionId(""); reset(); }
+  function pickDepartment(v: string) { setDepartment(v); setCoreDepartment(""); setSemesterKey(""); setSectionId(""); reset(); }
+  function pickCoreDepartment(v: string) { setCoreDepartment(v === ALL_CORE ? "" : v); setSemesterKey(""); setSectionId(""); reset(); }
   function pickSemester(v: string) { setSemesterKey(v); setSectionId(""); reset(); }
   function pickSection(v: string) { setSectionId(v); reset(); }
 
@@ -478,6 +503,18 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
                   <SelectContent>{departments.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
                 </Select>
               </div>}
+              {coreDepartments.length > 0 && (
+                <div className="space-y-1.5">
+                  <Label>Core Department</Label>
+                  <Select value={coreDepartment || ALL_CORE} onValueChange={pickCoreDepartment}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL_CORE}>All core departments</SelectItem>
+                      {coreDepartments.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="space-y-1.5">
                 <Label>Semester</Label>
                 <Select value={semesterKey} onValueChange={pickSemester} disabled={!department}>
