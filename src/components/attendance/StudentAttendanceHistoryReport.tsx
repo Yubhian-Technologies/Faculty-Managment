@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -10,6 +10,9 @@ import { Input } from "@/components/ui/input";
 import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
 import { toast } from "@/hooks/useToast";
 import { yearSemesterLabel } from "@/lib/academic/format";
+import { SubjectAttendanceFilters } from "@/components/attendance/SubjectAttendanceFilters";
+import { filterSubjectRows, hasSubjectFilters, NO_SUBJECT_FILTERS, totalOfRows, type SubjectFilters } from "@/lib/studentAttendance/subjectFilters";
+import { DEFAULT_SHORTAGE_THRESHOLD } from "@/lib/studentAttendance/shortage";
 
 const MONTH_LABELS = [
   "January", "February", "March", "April", "May", "June",
@@ -115,8 +118,16 @@ export function StudentAttendanceHistoryReport({
   const [hasShown, setHasShown] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [student, setStudent] = useState<StudentInfo | null>(null);
-  const [subjects, setSubjects] = useState<SubjectRow[]>([]);
-  const [total, setTotal] = useState<TotalRow | null>(null);
+  const [allSubjects, setSubjects] = useState<SubjectRow[]>([]);
+  const [fullTotal, setTotal] = useState<TotalRow | null>(null);
+  const [filters, setFilters] = useState<SubjectFilters>(NO_SUBJECT_FILTERS);
+  // The loaded table narrowed by the filters; the total follows the rows shown.
+  const { subjects, total } = useMemo(() => {
+    if (!hasSubjectFilters(filters)) return { subjects: allSubjects, total: fullTotal };
+    const shown = filterSubjectRows(allSubjects.map((s) => ({ ...s, attended: s.attend })), filters, DEFAULT_SHORTAGE_THRESHOLD);
+    const t = totalOfRows(shown);
+    return { subjects: shown as SubjectRow[], total: { held: t.held, attend: t.attended, percent: t.percent ?? 0 } };
+  }, [allSubjects, fullTotal, filters]);
   // The exact range actually fetched, captured at Show time - so the report
   // card's title line reflects what's on screen even if the pickers above
   // are changed again before hitting Show a second time.
@@ -143,6 +154,7 @@ export function StudentAttendanceHistoryReport({
     }
     setIsLoading(true);
     setHasShown(true);
+    setFilters(NO_SUBJECT_FILTERS);
     try {
       const params = new URLSearchParams({ studentId });
       if (mode === "monthly") {
@@ -275,11 +287,20 @@ export function StudentAttendanceHistoryReport({
         </button>
       )}
 
+      {hasShown && !isLoading && allSubjects.length > 0 && (
+        <SubjectAttendanceFilters
+          subjects={allSubjects.map((x) => ({ id: x.subjectId, name: x.subjectName }))}
+          value={filters}
+          onChange={setFilters}
+          threshold={DEFAULT_SHORTAGE_THRESHOLD}
+        />
+      )}
+
       {hasShown && !isLoading && (
         subjects.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center text-sm text-muted-foreground">
-              No attendance records for {studentName} in this range.
+              {allSubjects.length > 0 ? "No subjects match these filters." : `No attendance records for ${studentName} in this range.`}
             </CardContent>
           </Card>
         ) : (

@@ -6,7 +6,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { getNoClassReason } from "@/lib/studentAttendance/classDay";
-import { getFacultyPeriodsForDate } from "@/lib/timetable/currentPeriod";
+import { getFacultyPeriodsForDate, UNAVAILABLE_MESSAGES } from "@/lib/timetable/currentPeriod";
 import { dateInRanges, getAllocatedPeriodsForDate, loadFacultyAllocations } from "@/lib/studentAttendance/labAllocation";
 import { facultyActiveOn, loadLabWindows } from "@/lib/students/labFacultyWindow";
 import type { StudentAttendanceSession, TeachingAssignment } from "@/types";
@@ -29,6 +29,8 @@ function todayStrIST(): string {
 }
 
 function toMinutes(hhmm: string): number {
+  // A period whose timing can't be resolved has no time: sorted last, never open.
+  if (!hhmm) return Number.MAX_SAFE_INTEGER;
   const [h, m] = hhmm.split(":").map(Number);
   return h * 60 + m;
 }
@@ -77,7 +79,7 @@ export async function GET(request: Request) {
     const [closedReason, ownSlots, allocatedSlots] = await Promise.all([
       getNoClassReason(db, session.collegeId, date),
       // A past date is only ever the allocated lab periods, never the day's ordinary classes.
-      isToday ? getFacultyPeriodsForDate(db, session.collegeId, facultyMemberId, date) : Promise.resolve([]),
+      isToday ? getFacultyPeriodsForDate(db, session.collegeId, facultyMemberId, date, undefined, { lenient: true }) : Promise.resolve([]),
       getAllocatedPeriodsForDate(db, session.collegeId, facultyMemberId, allocations, date),
     ]);
     // Holiday / summer break / non-working day: nothing to mark today.
@@ -86,11 +88,13 @@ export async function GET(request: Request) {
     // A lab's faculty teach it on their own dates (set by the section's faculty incharge): outside
     // them the period is not theirs to take - unless an HOD/Incharge allocated it to them.
     const labWindows = await loadLabWindows(db, session.collegeId, ownSlots.map((s) => ({ sectionId: s.slot.sectionId, subjectId: s.slot.subjectId })));
+    // An allocated period comes from the allocation (its own resolved times); the faculty's own
+    // copy of it is not listed twice.
     const slots = [
       ...ownSlots.filter((o) =>
-        allocatedKeys.has(`${o.slot.assignmentId}_${o.slot.periodNumber}`)
-        || facultyActiveOn(labWindows, o.slot.sectionId, o.slot.subjectId, o.slot.facultyId, date)),
-      ...allocatedSlots.filter((a) => !ownSlots.some((o) => o.slot.assignmentId === a.slot.assignmentId && o.slot.periodNumber === a.slot.periodNumber)),
+        !allocatedKeys.has(`${o.slot.assignmentId}_${o.slot.periodNumber}`)
+        && facultyActiveOn(labWindows, o.slot.sectionId, o.slot.subjectId, o.slot.facultyId, date)),
+      ...allocatedSlots,
     ].sort((a, b) => toMinutes(a.startTime) - toMinutes(b.startTime));
 
     const collegeRef = db.collection("colleges").doc(session.collegeId);
@@ -114,12 +118,12 @@ export async function GET(request: Request) {
     // A lab the section's faculty incharge set to "no batch" shows (and rosters) as the whole section.
     const labModes = await loadLabBatchModes(db, session.collegeId, slots.map((s) => ({ sectionId: s.slot.sectionId, subjectId: s.slot.subjectId })));
     const periods = await Promise.all(
-      slots.map(async ({ slot, startTime, endTime, closeTime }) => {
+      slots.map(async ({ slot, startTime, endTime, closeTime, unavailableReason }) => {
         // An allocated lab period is open all day on its allocated dates.
         const allocated = allocatedKeys.has(`${slot.assignmentId}_${slot.periodNumber}`);
-        const isOpen = allocated || (nowMinutes >= toMinutes(startTime) && nowMinutes < toMinutes(closeTime));
+        const isOpen = allocated || (!unavailableReason && nowMinutes >= toMinutes(startTime) && nowMinutes < toMinutes(closeTime));
         // Where "now" sits against the period: not started yet, running, or over.
-        const phase: "UPCOMING" | "OPEN" | "ENDED" = isOpen ? "OPEN" : nowMinutes < toMinutes(startTime) ? "UPCOMING" : "ENDED";
+        const phase: "UPCOMING" | "OPEN" | "ENDED" = isOpen ? "OPEN" : unavailableReason || nowMinutes < toMinutes(startTime) ? "UPCOMING" : "ENDED";
         const id = `${slot.assignmentId}_${date}_${slot.periodNumber}`;
         const sess = sessionMap.get(id) ?? null;
         const assignment = assignMap.get(slot.assignmentId);
@@ -128,6 +132,8 @@ export async function GET(request: Request) {
           periodNumber: slot.periodNumber,
           startTime,
           endTime,
+          closeTime,
+          unavailableMessage: unavailableReason && !allocated ? UNAVAILABLE_MESSAGES[unavailableReason] : null,
           department: slot.department,
           courseId: slot.courseId,
           courseName: assignment?.courseName ?? "",

@@ -86,8 +86,11 @@ export async function computeStudentAttendanceHistory(
   studentId: string,
   departments: string | string[],
   range: AttendanceHistoryRange = {},
-  opts: { cacheMs?: number } = {}
+  opts: { cacheMs?: number; joinedOn?: string } = {}
 ): Promise<StudentAttendanceHistory> {
+  // Attendance counts only from the day the student joined (see joiningDate.ts); every
+  // path below honours `range.from`, so clamping it here covers all of them.
+  if (opts.joinedOn && (!range.from || range.from < opts.joinedOn)) range = { ...range, from: opts.joinedOn };
   // The per-student daily tally (dayTally.ts) answers an explicit from/to range
   // with a handful of document reads instead of a department-wide scan. It is
   // trusted only from the backfilled date on; anything else, and any failure,

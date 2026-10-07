@@ -28,6 +28,10 @@ interface TodayPeriod {
   periodNumber: number;
   startTime: string;
   endTime: string;
+  /** When posting closes: the college end time (never before endTime). */
+  closeTime?: string;
+  /** Set when the period is listed but cannot be taken (timing/semester not set up); says why. */
+  unavailableMessage?: string | null;
   department: string;
   courseId: string;
   courseName: string;
@@ -88,6 +92,7 @@ function ordinalYear(year: number) {
 }
 
 function formatTime12h(hhmm: string) {
+  if (!hhmm) return "time not set";
   const [h, m] = hhmm.split(":").map(Number);
   const period = h >= 12 ? "PM" : "AM";
   const h12 = h % 12 === 0 ? 12 : h % 12;
@@ -120,10 +125,12 @@ function hhmmToMs(hhmm: string): number {
 }
 
 // Every period's start AND end counts as a boundary - a start flips
-// UPCOMING -> OPEN, an end flips OPEN -> ENDED, and isOpen/phase can only
+// UPCOMING -> OPEN, the close time (college end) flips OPEN -> ENDED, and isOpen/phase can only
 // change at one of these moments.
 function boundariesOf(todayPeriods: TodayPeriod[]): number[] {
-  return todayPeriods.flatMap((p) => [hhmmToMs(p.startTime), hhmmToMs(p.endTime)]);
+  return todayPeriods
+    .filter((p) => p.startTime)
+    .flatMap((p) => [hhmmToMs(p.startTime), hhmmToMs(p.closeTime || p.endTime)]);
 }
 
 // How long to wait before the mark-attendance page checks the server again.
@@ -205,6 +212,8 @@ export default function MarkAttendancePage() {
   const [draft, setDraft] = useState<Record<string, StudentAttendanceMark | null>>({});
   const [mode, setMode] = useState<AttendanceMode | null>(null);
   const [classNotes, setClassNotes] = useState("");
+  // Other open periods of the same class the same marks are posted to on Submit (e.g. a 2-3 period lab).
+  const [alsoPeriods, setAlsoPeriods] = useState<Set<string>>(new Set());
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Sessions with a submission saved locally, not yet confirmed synced to
@@ -364,6 +373,17 @@ export default function MarkAttendancePage() {
     await fetchTodayPeriods();
   }
 
+  // Opening a period shows the roster ready to mark: "Check Absentees" is on (everyone present,
+  // switch on the absentees) unless the faculty flips it. Marks already saved are kept as they are.
+  function startMarking(session: StudentAttendanceSession, saved: Record<string, StudentAttendanceMark | null>) {
+    setAlsoPeriods(new Set());
+    setMode("ABSENTEES");
+    const untouched = session.entries.every((e) => saved[e.studentId] == null);
+    setDraft(untouched
+      ? Object.fromEntries(session.entries.map((e) => [e.studentId, e.status === "ON_DUTY" ? "ON_DUTY" : defaultFillFor("ABSENTEES")]))
+      : saved);
+  }
+
   async function handleOpenPeriod(p: TodayPeriod) {
     if (!p.isOpen) return;
     // If session already embedded and we have roster, use it; otherwise POST to create/load
@@ -371,9 +391,8 @@ export default function MarkAttendancePage() {
       setExpandedId(p.sessionId);
       setAttendanceSession(p.session as StudentAttendanceSession);
       const { draft, classNotes } = overlayQueued(p.session as StudentAttendanceSession);
-      setDraft(draft);
+      startMarking(p.session as StudentAttendanceSession, draft);
       setClassNotes(classNotes);
-      setMode(null);
       setLoadError(null);
       return;
     }
@@ -393,9 +412,8 @@ export default function MarkAttendancePage() {
       }
       setAttendanceSession(json.session);
       const { draft, classNotes } = overlayQueued(json.session);
-      setDraft(draft);
+      startMarking(json.session, draft);
       setClassNotes(classNotes);
-      setMode(null);
       // refresh periods list to reflect newly created DRAFT
       void fetchTodayPeriods();
     } catch {
@@ -433,9 +451,41 @@ export default function MarkAttendancePage() {
   const isReadOnly = attendanceSession?.status === "SUBMITTED" || isQueuedPending;
   const expandedPeriod = periods.find((p) => p.sessionId === expandedId) ?? null;
   const isExpandedOpen = expandedPeriod?.isOpen ?? false;
+  // Same class (assignment + lab batch), open now, not yet submitted: can take the same attendance.
+  const otherPeriods = expandedPeriod
+    ? periods.filter((p) =>
+        p.sessionId !== expandedPeriod.sessionId && p.assignmentId === expandedPeriod.assignmentId
+        && (p.labBatch ?? null) === (expandedPeriod.labBatch ?? null)
+        && p.isOpen && p.session?.status !== "SUBMITTED" && !queuedIds.has(p.sessionId))
+    : [];
   const hasClassWorkRecord = classNotes.trim().length > 0;
   const canSubmit = allMarked && hasClassWorkRecord && isExpandedOpen && !isReadOnly;
   const presentCount = attendanceSession ? attendanceSession.entries.filter((e) => draft[e.studentId] === "PRESENT").length : 0;
+
+  // Creates/loads the other period's session and submits the same marks to it. Returns an error message, or null.
+  async function postSameMarks(p: TodayPeriod, entries: { studentId: string; status: StudentAttendanceMark | null }[]): Promise<string | null> {
+    try {
+      const open = await fetch("/api/college/student-attendance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assignmentId: p.assignmentId, date: dateStr, periodNumber: p.periodNumber }),
+      });
+      const opened = (await open.json()) as { session?: StudentAttendanceSession; error?: string };
+      if (!open.ok || !opened.session) return opened.error ?? "could not open";
+      if (opened.session.status === "SUBMITTED") return "already submitted";
+      // Students on duty in that period are locked there; only real marks are sent.
+      const marks = entries.filter((e) => e.status === "PRESENT" || e.status === "ABSENT");
+      const res = await fetch(`/api/college/student-attendance/${opened.session.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entries: marks, classNotes, submit: true, expectedUpdatedAt: updatedAtIso(opened.session) }),
+      });
+      const saved = (await res.json()) as { error?: string };
+      return res.ok ? null : saved.error ?? "could not submit";
+    } catch {
+      return "network error";
+    }
+  }
 
   async function handleSubmit() {
     if (!attendanceSession || !canSubmit) return;
@@ -466,6 +516,11 @@ export default function MarkAttendancePage() {
     // queue straight away, same outcome as the catch block below but
     // without waiting on a fetch that can only fail.
     if (typeof navigator !== "undefined" && !navigator.onLine) {
+      if (alsoPeriods.size > 0) {
+        toast({ variant: "destructive", title: "No connection", description: "Posting to several periods needs a connection. Untick the extra periods to save on this device." });
+        setIsSubmitting(false);
+        return;
+      }
       queueLocally();
       setIsSubmitting(false);
       return;
@@ -491,7 +546,19 @@ export default function MarkAttendancePage() {
       }
       if (!res.ok || !json.session) throw new Error(json.error ?? "Failed to submit attendance");
       setAttendanceSession(json.session);
-      toast({ variant: "success", title: "Attendance submitted successfully" });
+      const extras = otherPeriods.filter((o) => alsoPeriods.has(o.sessionId));
+      if (extras.length === 0) {
+        toast({ variant: "success", title: "Attendance submitted successfully" });
+      } else {
+        const failed: string[] = [];
+        for (const o of extras) {
+          const err = await postSameMarks(o, entries);
+          if (err) failed.push(`Period ${o.periodNumber}: ${err}`);
+        }
+        setAlsoPeriods(new Set());
+        if (failed.length === 0) toast({ variant: "success", title: `Attendance submitted for ${extras.length + 1} periods` });
+        else toast({ variant: "destructive", title: "Submitted for this period, but not all the others", description: failed.join("  |  ") });
+      }
       void fetchTodayPeriods();
     } catch (err) {
       // A thrown fetch (network unreachable - TypeError, "Failed to fetch"
@@ -585,7 +652,7 @@ export default function MarkAttendancePage() {
               const s = p.session;
               const isSubmitted = s?.status === "SUBMITTED";
               const isPending = queuedIds.has(p.sessionId);
-              const label = isPending ? "Saved on this device — pending sync" : isSubmitted ? "Closed — attendance submitted" : phaseOf(p) === "OPEN" ? "Open — tap to mark" : phaseOf(p) === "UPCOMING" ? `Not started — opens at ${formatTime12h(p.startTime)}` : "Closed — time over, contact Dept Office";
+              const label = isPending ? "Saved on this device — pending sync" : isSubmitted ? "Closed — attendance submitted" : phaseOf(p) === "OPEN" ? "Open — tap to mark" : p.unavailableMessage ? p.unavailableMessage : phaseOf(p) === "UPCOMING" ? `Not started — opens at ${formatTime12h(p.startTime)}` : "Closed — time over, contact Dept Office";
               const badge = isPending ? "bg-amber-100 text-amber-800 border-amber-200" : isSubmitted ? "bg-green-100 text-green-800 border-green-200" : phaseOf(p) === "OPEN" ? "bg-emerald-100 text-emerald-800 border-emerald-200" : phaseOf(p) === "UPCOMING" ? "bg-slate-100 text-slate-700 border-slate-200" : "bg-amber-100 text-amber-800 border-amber-200";
               const isExpanded = expandedId === p.sessionId;
               return (
@@ -603,10 +670,10 @@ export default function MarkAttendancePage() {
                   <p className="text-xs text-muted-foreground">{label}</p>
                   {p.isOpen ? (
                     <Button size="sm" variant={isSubmitted || isPending ? "outline" : "default"} className="w-full" onClick={() => void handleOpenPeriod(p)}>
-                      {isSubmitted || isPending ? "View" : isExpanded ? "Opened" : "Mark Attendance"}
+                      {isSubmitted || isPending ? "View" : "Mark Attendance"}
                     </Button>
                   ) : (
-                    <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="h-3.5 w-3.5" /> {phaseOf(p) === "UPCOMING" ? `Opens ${formatTime12h(p.startTime)}` : "Time over"}</span>
+                    <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="h-3.5 w-3.5" /> {p.unavailableMessage ? "Not available" : phaseOf(p) === "UPCOMING" ? `Opens ${formatTime12h(p.startTime)}` : "Time over"}</span>
                   )}
                 </div>
               );
@@ -629,7 +696,7 @@ export default function MarkAttendancePage() {
                   const s = p.session;
                   const isSubmitted = s?.status === "SUBMITTED";
                   const isPending = queuedIds.has(p.sessionId);
-                  const label = isPending ? "Saved on this device — pending sync" : isSubmitted ? "Closed — attendance submitted" : phaseOf(p) === "OPEN" ? "Open — tap to mark" : phaseOf(p) === "UPCOMING" ? `Not started — opens at ${formatTime12h(p.startTime)}` : "Closed — time over, contact Dept Office";
+                  const label = isPending ? "Saved on this device — pending sync" : isSubmitted ? "Closed — attendance submitted" : phaseOf(p) === "OPEN" ? "Open — tap to mark" : p.unavailableMessage ? p.unavailableMessage : phaseOf(p) === "UPCOMING" ? `Not started — opens at ${formatTime12h(p.startTime)}` : "Closed — time over, contact Dept Office";
                   const badge = isPending ? "bg-amber-100 text-amber-800 border-amber-200" : isSubmitted ? "bg-green-100 text-green-800 border-green-200" : phaseOf(p) === "OPEN" ? "bg-emerald-100 text-emerald-800 border-emerald-200" : phaseOf(p) === "UPCOMING" ? "bg-slate-100 text-slate-700 border-slate-200" : "bg-amber-100 text-amber-800 border-amber-200";
                   const isExpanded = expandedId === p.sessionId;
                   return (
@@ -647,10 +714,10 @@ export default function MarkAttendancePage() {
                       <td className="px-4 py-3 text-right">
                         {p.isOpen ? (
                           <Button size="sm" variant={isSubmitted || isPending ? "outline" : "default"} onClick={() => void handleOpenPeriod(p)}>
-                            {isSubmitted || isPending ? "View" : isExpanded ? "Opened" : "Mark Attendance"}
+                            {isSubmitted || isPending ? "View" : "Mark Attendance"}
                           </Button>
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="h-3.5 w-3.5" /> {phaseOf(p) === "UPCOMING" ? `Opens ${formatTime12h(p.startTime)}` : "Time over"}</span>
+                          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="h-3.5 w-3.5" /> {p.unavailableMessage ? "Not available" : phaseOf(p) === "UPCOMING" ? `Opens ${formatTime12h(p.startTime)}` : "Time over"}</span>
                         )}
                       </td>
                     </tr>
@@ -675,7 +742,7 @@ export default function MarkAttendancePage() {
         <>
           {!isExpandedOpen && (
             <Card className="border-amber-200 bg-amber-50">
-              <CardContent className="py-4 text-sm text-amber-900">This period is not open now ({expandedPeriod ? `${formatTime12h(expandedPeriod.startTime)} – ${formatTime12h(expandedPeriod.endTime)}` : ""}). Attendance open only in time — if not posted, contact Dept Office for office correction.</CardContent>
+              <CardContent className="py-4 text-sm text-amber-900">This period is not open now ({expandedPeriod ? `${formatTime12h(expandedPeriod.startTime)} – ${formatTime12h(expandedPeriod.closeTime ?? expandedPeriod.endTime)}` : ""}). Attendance open only in time — if not posted, contact Dept Office for office correction.</CardContent>
             </Card>
           )}
           {expandedPeriod?.labBatch && (
@@ -817,6 +884,28 @@ export default function MarkAttendancePage() {
                 </table>
               </div>
               <CardContent className="space-y-4 py-5">
+                {!isReadOnly && isExpandedOpen && otherPeriods.length > 0 && (
+                  <div className="rounded-xl border bg-muted/30 p-3 text-sm">
+                    <p className="font-medium">Same attendance for other periods</p>
+                    <p className="mb-2 text-xs text-muted-foreground">Tick the periods of this class that should get exactly these marks (for example the other periods of a lab).</p>
+                    <div className="flex flex-wrap gap-3">
+                      {otherPeriods.map((o) => (
+                        <label key={o.sessionId} className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={alsoPeriods.has(o.sessionId)}
+                            onChange={(e) => setAlsoPeriods((prev) => {
+                              const next = new Set(prev);
+                              if (e.target.checked) next.add(o.sessionId); else next.delete(o.sessionId);
+                              return next;
+                            })}
+                          />
+                          Period {o.periodNumber} · {formatTime12h(o.startTime)} – {formatTime12h(o.endTime)}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div className="text-sm text-muted-foreground">
                     <p>{isQueuedPending ? "Saved on this device — no network when you hit Submit. Will reach the server automatically once you're back online." : isReadOnly ? "This attendance has been submitted and is locked." : isExpandedOpen ? "Please review the attendance before submitting." : "Period closed — contact Dept Office for correction."}</p>

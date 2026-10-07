@@ -7,6 +7,7 @@ import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/s
 import { fetchSectionStudents } from "@/lib/students/sectionRoster";
 import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
 import { calcPercent } from "@/lib/studentAttendance/percentage";
+import { effectiveJoiningDate } from "@/lib/studentAttendance/joiningDate";
 import { countFullyAbsentDays, indexSessions, tallyStudentBySubject } from "@/lib/studentAttendance/counting";
 import { isShortageByPercent } from "@/lib/studentAttendance/shortage";
 import { matchesCurrentSemester } from "@/lib/college/semester";
@@ -344,8 +345,9 @@ export async function GET(request: Request) {
         .map((stu) => {
           type Cell = { held: number; attend: number; percent: number | null };
           const bySubject: Record<string, Cell & { alt?: Cell & { mode: HeldDenominatorMode } }> = {};
-          const tallies = tallyStudentBySubject(indexedInRange, stu.id);
-          const owed = notPosted?.index.forStudent(stu);
+          const joinedOn = effectiveJoiningDate(stu);
+          const tallies = tallyStudentBySubject(indexedInRange, stu.id, joinedOn);
+          const owed = notPosted?.index.forStudent({ labBatch: stu.labBatch, joinedOn });
           let aHeld = 0, aAttend = 0;
           for (const sub of subjects) {
             const { main, alt } = denominatorNumbers(tallies.get(sub.subjectId), owed?.get(sub.subjectId) ?? 0, denominator);
@@ -450,8 +452,9 @@ export async function GET(request: Request) {
           let altAttended = 0;
           type Cell = { held: number; attended: number; percentage: number | null };
           const bySubject: Record<string, Cell & { alt?: Cell & { mode: HeldDenominatorMode } }> = {};
-          const tallies = tallyStudentBySubject(indexedRange, stu.id);
-          const owed = notPosted?.index.forStudent(stu);
+          const joinedOn = effectiveJoiningDate(stu);
+          const tallies = tallyStudentBySubject(indexedRange, stu.id, joinedOn);
+          const owed = notPosted?.index.forStudent({ labBatch: stu.labBatch, joinedOn });
           for (const s of subjects) {
             const { main, alt } = denominatorNumbers(tallies.get(s.subjectId), owed?.get(s.subjectId) ?? 0, denominator);
             bySubject[s.subjectId] = { ...main, ...(compare ? { alt } : {}) };
@@ -466,7 +469,7 @@ export async function GET(request: Request) {
             rollNumber: stu.rollNumber,
             name: stu.name,
             labBatch: stu.labBatch ?? "",
-            absentDays: countFullyAbsentDays(indexedRange, stu.id),
+            absentDays: countFullyAbsentDays(indexedRange, stu.id, joinedOn),
             bySubject,
             overall: {
               held: overallHeld, attended: overallAttended, percentage: overallPercentage,
@@ -678,7 +681,7 @@ export async function GET(request: Request) {
         }
         // also compute percent per subject for this single day (1 held if session exists)
         const bySubjectDaily: Record<string, { held: number; attend: number; percent: number | null }> = {};
-        const dayTallies = tallyStudentBySubject(indexedDay, stu.id);
+        const dayTallies = tallyStudentBySubject(indexedDay, stu.id, effectiveJoiningDate(stu));
         for (const s of subjects) {
           const { held: has, attended: present } = dayTallies.get(s.subjectId) ?? { held: 0, attended: 0 };
           bySubjectDaily[s.subjectId] = { held: has, attend: present, percent: calcPercent(present, has) };
