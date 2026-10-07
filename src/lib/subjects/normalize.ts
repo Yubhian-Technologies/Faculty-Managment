@@ -63,6 +63,15 @@ const TYPE_ALIASES: Record<string, SubjectType> = {
   seminar: "PROJECT",
   viva: "PROJECT",
   "comprehensive viva": "PROJECT",
+
+  // Non-Teaching / Attendance Only
+  "non teaching": "NON_TEACHING",
+  "non-teaching": "NON_TEACHING",
+  "non teaching load": "NON_TEACHING",
+  "attendance only": "NON_TEACHING",
+  sports: "NON_TEACHING",
+  library: "NON_TEACHING",
+  nss: "NON_TEACHING",
 };
 
 for (const [alias, type] of Object.entries(TYPE_ALIASES)) {
@@ -85,6 +94,9 @@ export function resolveSubjectType(text: string | undefined): SubjectType | unde
   if (matched) return matched;
 
   // Keyword-based fallback matching for compound or descriptive strings
+  if (normalized.includes("non teaching") || normalized.includes("attendance only")) {
+    return "NON_TEACHING";
+  }
   if (normalized.includes("lab") || normalized.includes("practical")) {
     return "PRACTICAL";
   }

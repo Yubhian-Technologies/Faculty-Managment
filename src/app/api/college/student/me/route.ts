@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { effectiveJoiningDate } from "@/lib/studentAttendance/joiningDate";
 import { NextResponse } from "next/server";
 import { passwordChangeRequired, passwordChangeRequiredResponse } from "@/lib/students/passwordGate";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -40,7 +41,7 @@ export async function GET() {
     const cfg = await loadAcademicYearConfig(db, session.collegeId);
     const win = windowForAcademicYear(cfg.currentLabel, cfg);
     const attendance = await computeStudentAttendanceHistory(
-      db, session.collegeId, student.id, student.department, win ? { from: win.from, to: win.to } : {}, { cacheMs: STUDENT_SELF_VIEW_CACHE_MS }
+      db, session.collegeId, student.id, student.department, win ? { from: win.from, to: win.to } : {}, { cacheMs: STUDENT_SELF_VIEW_CACHE_MS, joinedOn: effectiveJoiningDate(student) }
     );
 
     return NextResponse.json({ student, section, attendance });

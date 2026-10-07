@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { FileDown } from "lucide-react";
+import { FileDown, FileSpreadsheet, Printer } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
@@ -11,6 +11,7 @@ import { isoDateKey } from "@/lib/leave/dayCounter";
 import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
 import { renderHtmlToPdf } from "@/lib/pdf/htmlToPdf";
 import { buildFacultyTimetablePdfHtml, formatTime12h as format12h } from "@/lib/timetable/facultyTimetablePdf";
+import { downloadFacultyTimetableXlsx } from "@/lib/timetable/timetableExport";
 import { WeekNavigator } from "@/components/timetable/WeekNavigator";
 import type { TeachingAssignment, TimetableSlot, DayOfWeek, CourseYearTiming, PeriodTiming, Course, Department } from "@/types";
 import { DAY_LABELS } from "@/types";
@@ -159,18 +160,77 @@ export default function HODTeachingPage() {
     return periodsByCourseYear.get(`${courseId}_${year}`)?.find((p) => p.period === period);
   }
 
-  function downloadPdf() {
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isExportingXlsx, setIsExportingXlsx] = useState(false);
+
+  async function downloadPdf() {
     if (periods.length === 0) return;
-    // The download is the standing SEMESTER timetable (the recurring MON-SAT
-    // pattern this person teaches every week), not a snapshot of whichever
-    // calendar week happens to be on screen - so it deliberately drops two
-    // things the on-screen grid overlays for the browsed week only: (1) the
-    // synthetic "substitute_*" entries api/college/teaching-assignments
-    // injects for a period this person is one-off covering for someone else
-    // (never a recurring slot of theirs), and (2) the substituteFacultyName/
-    // substituteForName annotation a leave-covered slot of their OWN picks up
-    // for that specific week - both would misrepresent every other week's
-    // actual schedule.
+    setIsExportingPdf(true);
+    try {
+      const semesterSlots = timetableSlots
+        .filter((s) => !s.id.startsWith("substitute_"))
+        .filter((s) => typeFilter === "ALL" || s.subjectType === typeFilter);
+      const courseCodeById = new Map(courses.map((c) => [c.id, c.code || c.name]));
+      const html = buildFacultyTimetablePdfHtml({
+        facultyName: user?.name ?? "",
+        semesterLabel: effectiveSemester != null ? String(effectiveSemester) : "—",
+        weekStart,
+        weekEnd: weekDates[weekDates.length - 1],
+        days: DAYS,
+        periods,
+        slots: semesterSlots,
+        assignmentById,
+        periodTimeFor,
+        courseCodeById,
+        departments,
+        formatDMY,
+      });
+      await renderHtmlToPdf(html, `Semester-Timetable-${isoDateKey(weekStart)}.pdf`);
+      toast({ title: "Timetable downloaded", description: "Saved as PDF" });
+    } catch (err) {
+      console.error(err);
+      toast({ variant: "destructive", title: "Download failed", description: "Failed to generate PDF" });
+    } finally {
+      setIsExportingPdf(false);
+    }
+  }
+
+  async function downloadXlsx() {
+    if (periods.length === 0) return;
+    setIsExportingXlsx(true);
+    try {
+      const semesterSlots = timetableSlots
+        .filter((s) => !s.id.startsWith("substitute_"))
+        .filter((s) => typeFilter === "ALL" || s.subjectType === typeFilter);
+      const courseCodeById = new Map(courses.map((c) => [c.id, c.code || c.name]));
+      await downloadFacultyTimetableXlsx(
+        {
+          facultyName: user?.name ?? "",
+          semesterLabel: effectiveSemester != null ? String(effectiveSemester) : "—",
+          weekStart,
+          weekEnd: weekDates[weekDates.length - 1],
+          days: DAYS,
+          periods,
+          slots: semesterSlots,
+          assignmentById,
+          periodTimeFor,
+          courseCodeById,
+          departments,
+          formatDMY,
+        },
+        `Semester-Timetable-${isoDateKey(weekStart)}.xlsx`
+      );
+      toast({ title: "Timetable exported", description: "Saved as Excel spreadsheet" });
+    } catch (err) {
+      console.error(err);
+      toast({ variant: "destructive", title: "Export failed", description: "Failed to export spreadsheet" });
+    } finally {
+      setIsExportingXlsx(false);
+    }
+  }
+
+  function handlePrint() {
+    if (periods.length === 0) return;
     const semesterSlots = timetableSlots
       .filter((s) => !s.id.startsWith("substitute_"))
       .filter((s) => typeFilter === "ALL" || s.subjectType === typeFilter);
@@ -189,7 +249,18 @@ export default function HODTeachingPage() {
       departments,
       formatDMY,
     });
-    void renderHtmlToPdf(html, `Semester-Timetable-${isoDateKey(weekStart)}.pdf`);
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      toast({ title: "Popup blocked", description: "Please allow popups to print", variant: "destructive" });
+      return;
+    }
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+    }, 400);
   }
 
   if (isLoading) {
@@ -238,8 +309,17 @@ export default function HODTeachingPage() {
                  ))}
                </select>
              )}
-             <Button size="sm" variant="outline" onClick={downloadPdf}>
-               <FileDown className="h-3.5 w-3.5 mr-1.5" />Download
+             <Button size="sm" variant="outline" onClick={downloadPdf} disabled={isExportingPdf}>
+               <FileDown className="h-3.5 w-3.5 mr-1.5" />
+               {isExportingPdf ? "Generating PDF..." : "PDF"}
+             </Button>
+             <Button size="sm" variant="outline" onClick={downloadXlsx} disabled={isExportingXlsx}>
+               <FileSpreadsheet className="h-3.5 w-3.5 mr-1.5" />
+               {isExportingXlsx ? "Exporting Excel..." : "Excel"}
+             </Button>
+             <Button size="sm" variant="outline" onClick={handlePrint}>
+               <Printer className="h-3.5 w-3.5 mr-1.5" />
+               Print
              </Button>
            </div>
          </div>

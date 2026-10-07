@@ -2,6 +2,7 @@ import type { DayOfWeek } from "@/types";
 import { noClassReason, type ClassDayInputs } from "@/lib/studentAttendance/classDay";
 import { resolvePeriodCompletionStatus } from "@/lib/attendance/periodAttendanceStatus";
 import { istDateKey } from "@/lib/attendance/istTime";
+import { countsFromJoining } from "@/lib/studentAttendance/joiningDate";
 
 // The timetable-based "classes held" denominator (audit F-25).
 //
@@ -125,7 +126,7 @@ const normBatch = (v: string | null | undefined) => (v ?? "").trim().toLowerCase
 export interface NotPostedIndex {
   periods: ExpectedPeriod[];
   /** Not-posted periods per subject that count against a student (a split lab only counts against its own batch). */
-  forStudent(student: { labBatch?: string | null }): Map<string, number>;
+  forStudent(student: { labBatch?: string | null; joinedOn?: string }): Map<string, number>;
   total: number;
 }
 
@@ -143,6 +144,11 @@ export function buildNotPostedIndex(periods: ExpectedPeriod[]): NotPostedIndex {
     periods,
     total: periods.length,
     forStudent(student) {
+      // A student who joined part-way through is only owed the periods from their joining date on.
+      if (student.joinedOn) {
+        const own = buildNotPostedIndex(periods.filter((p) => countsFromJoining(p.date, student.joinedOn)));
+        return own.forStudent({ labBatch: student.labBatch });
+      }
       const out = new Map(common);
       // A student with no lab batch is excluded from every split lab period,
       // same as sectionRoster's rule for rostering one.

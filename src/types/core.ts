@@ -2934,6 +2934,9 @@ export interface StudentRecord {
   // internal-exam-marks routes' roster queries.
   courseId?: string;
   dateOfAdmission?: string; // yyyy-mm-dd
+  // yyyy-mm-dd - the day the student joined classes. Student attendance is counted from
+  // this date onward (see lib/studentAttendance/joiningDate.ts); blank falls back to dateOfAdmission.
+  dateOfJoining?: string;
   admissionNo?: string;
   hallTicketNo?: string;
   admissionType?: string; // e.g. Direct, Management, Convenor

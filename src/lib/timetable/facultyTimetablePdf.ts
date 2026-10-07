@@ -1,6 +1,7 @@
 import type { Department, DayOfWeek, PeriodTiming, TeachingAssignment, TimetableSlot } from "@/types";
 import { DAY_LABELS } from "@/types";
 import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
+import { resolveLogoUrl } from "./logoAsset";
 
 // Shared by hod/teaching and panel/teaching's own "Download" button - both
 // pages lay a faculty member's own slots out identically (Day columns x
@@ -53,6 +54,8 @@ export interface FacultyTimetablePdfOptions {
   courseCodeById: Map<string, string>;
   departments: Department[];
   formatDMY: (d: Date) => string;
+  /** College letterhead (name, logo ...) - printed like the section timetable's. */
+  college?: { name?: string; code?: string; affiliation?: string; address?: string; phone?: string; logoUrl?: string };
 }
 
 /**
@@ -69,7 +72,7 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
 
   // Header cells for days
   const dayHeaderCells = days.map((d) =>
-    `<th style="border:1px solid #000;background:#f0f0f0;color:#000;padding:6px 4px;font-size:9.5pt;font-weight:800;text-transform:uppercase;">${escapeHtml(DAY_LABELS[d])}</th>`
+    `<th style="border:1px solid #555;padding:3px 4px;font-size:8.5pt;font-weight:700;text-transform:uppercase;">${escapeHtml(DAY_LABELS[d])}</th>`
   ).join("");
 
   const bodyRows = periods.map((period) => {
@@ -91,7 +94,7 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
       // Every slot in the cell: one faculty can hold two sections in the same period.
       const cellSlots = slots.filter((s) => s.day === d && s.periodNumber === period);
       if (cellSlots.length === 0) {
-        return `<td style="border:1px solid #000;padding:2px;vertical-align:middle;text-align:center;"><span style="color:#888;font-weight:700;font-size:10pt;">${EN_DASH}</span></td>`;
+        return `<td style="border:1px solid #555;padding:2px;vertical-align:middle;text-align:center;"><span style="color:#888;font-weight:700;font-size:10pt;">${EN_DASH}</span></td>`;
       }
       const blocks = cellSlots.map((slot, i) => {
         const assignment = assignmentById.get(slot.assignmentId);
@@ -106,20 +109,20 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
         ].filter(Boolean).join(" · ");
 
         const classLine = subline
-          ? `<div style="font-size:9pt;font-weight:900;color:#000;line-height:1.2;text-transform:uppercase;">${escapeHtml(subline)}</div>`
+          ? `<div style="font-size:8pt;font-weight:700;color:#000;line-height:1.15;text-transform:uppercase;">${escapeHtml(subline)}</div>`
           : "";
-        const subjectLine = `<div style="font-size:8.5pt;font-weight:800;color:#000;margin-top:2px;line-height:1.2;">${escapeHtml(readable(assignment?.shortCode, assignment?.subjectName) || readable(assignment?.subjectCode, assignment?.subjectName) || slot.subjectName)}</div>`;
+        const subjectLine = `<div style="font-size:8pt;font-weight:700;color:#000;margin-top:1px;line-height:1.15;">${escapeHtml(readable(assignment?.shortCode, assignment?.subjectName) || readable(assignment?.subjectCode, assignment?.subjectName) || slot.subjectName)}</div>`;
         const roomLine = slot.classroom
-          ? `<div style="font-size:7.5pt;font-weight:600;color:#222;margin-top:2px;">Room: ${escapeHtml(slot.classroom)}</div>`
+          ? `<div style="font-size:7pt;font-weight:400;color:#333;margin-top:1px;">Room: ${escapeHtml(slot.classroom)}</div>`
           : "";
         const divider = i > 0 ? "border-top:1px dashed #888;margin-top:3px;padding-top:3px;" : "";
         return `<div style="display:flex;flex-direction:column;justify-content:center;align-items:center;${divider}">${classLine}${subjectLine}${roomLine}</div>`;
       }).join("");
 
-      return `<td style="border:1px solid #000;padding:4px 3px;vertical-align:middle;text-align:center;height:18mm;">${blocks}</td>`;
+      return `<td style="border:1px solid #555;padding:2px 3px;vertical-align:middle;text-align:center;height:11mm;line-height:1.15;">${blocks}</td>`;
     }).join("");
 
-    return `<tr><td style="border:1px solid #000;padding:5px 2px;font-size:9pt;font-weight:800;text-align:center;background:#f0f0f0;vertical-align:middle;width:10%;">Period ${period}${rowTimeLabel}</td>${cells}</tr>`;
+    return `<tr><td style="border:1px solid #555;padding:2px;font-size:8.5pt;font-weight:700;text-align:center;vertical-align:middle;width:10%;">Period ${period}${rowTimeLabel}</td>${cells}</tr>`;
   }).join("");
 
   // Build unique subject workload summary list
@@ -128,13 +131,13 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
     const courseCode = a.courseId ? courseCodeById.get(a.courseId) : undefined;
     const classStr = [courseCode ?? a.courseName, a.year ? romanYear(a.year) : null, a.sectionName].filter(Boolean).join(" ");
     return `<tr>
-      <td style="border:1px solid #000;padding:3px;text-align:center;">${i + 1}</td>
-      <td style="border:1px solid #000;padding:3px 6px;"><strong>${escapeHtml(classStr)}</strong></td>
-      <td style="border:1px solid #000;padding:3px 6px;"><strong>${escapeHtml(readable(a.subjectCode, a.subjectName) ?? "—")}</strong></td>
-      <td style="border:1px solid #000;padding:3px 6px;"><strong>${escapeHtml(a.subjectName ?? "—")}</strong></td>
-      <td style="border:1px solid #000;padding:3px;text-align:center;"><strong>${escapeHtml(readable(a.shortCode, a.subjectName) ?? readable(a.subjectCode, a.subjectName) ?? "—")}</strong></td>
-      <td style="border:1px solid #000;padding:3px;text-align:center;">${escapeHtml(a.subjectType ?? "Theory")}</td>
-      <td style="border:1px solid #000;padding:3px;text-align:center;"><strong>${a.hoursPerWeek ?? "—"}</strong></td>
+      <td style="border:1px solid #555;padding:2px 3px;text-align:center;">${i + 1}</td>
+      <td style="border:1px solid #555;padding:2px 6px;"><strong>${escapeHtml(classStr)}</strong></td>
+      <td style="border:1px solid #555;padding:2px 6px;"><strong>${escapeHtml(readable(a.subjectCode, a.subjectName) ?? "—")}</strong></td>
+      <td style="border:1px solid #555;padding:2px 6px;"><strong>${escapeHtml(a.subjectName ?? "—")}</strong></td>
+      <td style="border:1px solid #555;padding:2px 3px;text-align:center;"><strong>${escapeHtml(readable(a.shortCode, a.subjectName) ?? readable(a.subjectCode, a.subjectName) ?? "—")}</strong></td>
+      <td style="border:1px solid #555;padding:2px 3px;text-align:center;">${escapeHtml(a.subjectType ?? "Theory")}</td>
+      <td style="border:1px solid #555;padding:2px 3px;text-align:center;"><strong>${a.hoursPerWeek ?? "—"}</strong></td>
     </tr>`;
   }).join("");
 
@@ -146,44 +149,47 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
   <meta charset="utf-8">
   <title>Faculty Timetable - ${escapeHtml(facultyName)}</title>
   <style>
+    /* Same page, letterhead and table look as the section timetable PDF
+       (lib/timetable/sectionTimetablePdf.ts): plain white cells, thin grey grid. */
     @page { size: A4 landscape; margin: 10mm 12mm; }
-    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; color: #000; background: #fff; font-size: 11px; line-height: 1.3; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, Helvetica, sans-serif; color: #000; background: #fff; font-size: 11px; line-height: 1.3; }
     .container { width: 100%; max-width: 273mm; margin: 0 auto; }
-    .header-box { border: 2px solid #000; padding: 8px 12px; text-align: center; margin-bottom: 8px; }
-    .inst-name { font-size: 15pt; font-weight: 900; letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 2px; }
-    .dept-name { font-size: 11pt; font-weight: 800; text-transform: uppercase; letter-spacing: 0.3px; border-top: 1px solid #000; border-bottom: 1px solid #000; padding: 3px 0; margin: 4px 0; }
-    .academic-info { font-size: 9.5pt; font-weight: 700; display: flex; justify-content: space-between; padding-top: 2px; }
-    .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; border: 1.5px solid #000; }
-    .meta-table td { border: 1px solid #000; padding: 4px 8px; font-size: 8.5pt; }
-    .grid-table { width: 100%; border-collapse: collapse; border: 2px solid #000; table-layout: fixed; margin-bottom: 10px; }
-    .workload-box { border: 1.5px solid #000; margin-bottom: 16px; }
-    .workload-title { background: #000; color: #fff; font-weight: 800; font-size: 8pt; padding: 3px 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .letterhead { width: 100%; border: 0; }
+    .logo-cell { width: 26mm; vertical-align: middle; text-align: center; }
+    .logo-cell img { max-width: 24mm; max-height: 24mm; object-fit: contain; }
+    .letterhead-text { vertical-align: middle; text-align: center; }
+    .college-name { font-size: 13pt; font-weight: 700; overflow-wrap: anywhere; }
+    .identity-line { font-size: 10pt; font-weight: 700; overflow-wrap: anywhere; }
+    .doc-title { text-align: center; font-size: 12pt; font-weight: 700; margin: 12px 0 4px; }
+    .class-line { text-align: center; font-size: 9pt; font-weight: 600; margin-bottom: 8px; overflow-wrap: anywhere; }
+    .grid-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin: 8px 0 10px; }
+    .grid-table th, .grid-table td { border: 1px solid #555; }
+    .section-title { text-align: center; font-size: 12pt; font-weight: 700; margin: 18px 0 8px; }
     .workload-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    .workload-table th { background: #f0f0f0; font-weight: 800; text-align: left; border: 1px solid #000; padding: 3px 6px; font-size: 7.5pt; }
-    .workload-table td { border: 1px solid #000; padding: 3px 6px; font-size: 7.5pt; }
-    .sig-section { display: flex; justify-content: space-between; margin-top: 24px; padding: 0 20px; }
-    .sig-block { text-align: center; width: 28%; }
-    .sig-line { border-top: 1.5px solid #000; margin-bottom: 4px; }
-    .sig-title { font-size: 8.5pt; font-weight: 800; text-transform: uppercase; }
+    .workload-table th { font-weight: 700; text-align: left; border: 1px solid #555; padding: 2px 6px; font-size: 7.5pt; background: #fff; }
+    .workload-table td { border: 1px solid #555; padding: 2px 6px; font-size: 7.5pt; }
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="header-box">
-      <div class="inst-name">Faculty Timetable</div>
-      <div class="dept-name">Department Teaching Schedule</div>
-      <div class="academic-info">
-        <span>FACULTY: <strong>${escapeHtml(facultyName)}</strong></span>
-        <span>SEMESTER: <strong>${escapeHtml(semesterLabel)}</strong></span>
-        <span>PERIOD: <strong>${escapeHtml(formatDMY(weekStart))} &ndash; ${escapeHtml(formatDMY(weekEnd))}</strong></span>
-      </div>
-    </div>
+    <table class="letterhead" cellspacing="0" cellpadding="0">
+      <tr>
+        <td class="logo-cell"><img src="${escapeHtml(resolveLogoUrl(opts.college?.logoUrl))}" alt="logo"></td>
+        <td class="letterhead-text">
+          ${opts.college?.name ? `<div class="college-name">${escapeHtml(opts.college.name)}${opts.college.code ? ` ( Code: ${escapeHtml(opts.college.code)} )` : ""}</div>` : ""}
+          ${[opts.college?.affiliation, opts.college?.address, opts.college?.phone ? `Tel : ${opts.college.phone}` : ""].filter(Boolean).map((l) => `<div class="identity-line">${escapeHtml(l as string)}</div>`).join("")}
+        </td>
+        <td class="logo-cell"></td>
+      </tr>
+    </table>
+    <div class="doc-title">FACULTY TIME TABLE</div>
+    <div class="class-line">${escapeHtml(facultyName)}  |  Semester: ${escapeHtml(semesterLabel)}  |  ${escapeHtml(formatDMY(weekStart))} &ndash; ${escapeHtml(formatDMY(weekEnd))}</div>
 
     <table class="grid-table">
       <thead>
         <tr>
-          <th style="border:1px solid #000;background:#f0f0f0;color:#000;padding:6px 2px;font-size:9pt;font-weight:800;width:10%;">Period / Day</th>
+          <th style="border:1px solid #555;padding:3px 2px;font-size:8.5pt;font-weight:700;width:10%;">Period / Day</th>
           ${dayHeaderCells}
         </tr>
       </thead>
@@ -194,7 +200,7 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
 
     ${uniqueAssignments.length > 0 ? `
     <div class="workload-box">
-      <div class="workload-title">Teaching Workload & Subject Details</div>
+      <div class="section-title">Teaching Workload &amp; Subject Details</div>
       <table class="workload-table">
         <thead>
           <tr>
@@ -209,29 +215,14 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
         </thead>
         <tbody>
           ${workloadRows}
-          <tr style="background: #f0f0f0; font-weight: 800;">
-            <td colspan="6" style="border:1px solid #000;text-align: right; padding-right: 12px; font-size: 8pt;">TOTAL TEACHING WORKLOAD:</td>
-            <td style="border:1px solid #000;text-align: center; font-size: 8.5pt;"><strong>${totalHours} Hours</strong></td>
+          <tr style="font-weight: 700;">
+            <td colspan="6" style="text-align: right; padding-right: 12px; font-size: 8pt;">TOTAL TEACHING WORKLOAD:</td>
+            <td style="text-align: center; font-size: 8.5pt;"><strong>${totalHours} Hours</strong></td>
           </tr>
         </tbody>
       </table>
     </div>
     ` : ""}
-
-    <div class="sig-section">
-      <div class="sig-block">
-        <div class="sig-line"></div>
-        <div class="sig-title">Faculty Member</div>
-      </div>
-      <div class="sig-block">
-        <div class="sig-line"></div>
-        <div class="sig-title">Time Table Incharge</div>
-      </div>
-      <div class="sig-block">
-        <div class="sig-line"></div>
-        <div class="sig-title">Head of Department (HOD)</div>
-      </div>
-    </div>
   </div>
 </body>
 </html>`;

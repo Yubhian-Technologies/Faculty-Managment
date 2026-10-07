@@ -2,13 +2,14 @@ import type { Timestamp } from "firebase/firestore";
 
 // ─── Subject ──────────────────────────────────────────────────────────────────
 
-export type SubjectType = "THEORY" | "PRACTICAL" | "TUTORIAL" | "PROJECT";
+export type SubjectType = "THEORY" | "PRACTICAL" | "TUTORIAL" | "PROJECT" | "NON_TEACHING";
 
 export const SUBJECT_TYPE_LABELS: Record<SubjectType, string> = {
   THEORY: "Theory",
   PRACTICAL: "Practical",
   TUTORIAL: "Tutorial",
   PROJECT: "Project",
+  NON_TEACHING: "Non-Teaching / Attendance Only",
 };
 
 // Standard AICTE model-curriculum categories, used across most Indian
@@ -100,6 +101,9 @@ export interface Subject {
   internalMarks?: number;
   externalMarks?: number;
   totalMarks?: number;
+  isCustom?: boolean;
+  isNonTeachingLoad?: boolean;
+  excludeFromResume?: boolean;
   isActive: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -141,6 +145,9 @@ export interface SubjectSemesterAssignment {
   internalMarks?: number;
   externalMarks?: number;
   totalMarks?: number;
+  isCustom?: boolean;
+  isNonTeachingLoad?: boolean;
+  excludeFromResume?: boolean;
   isCustomized?: boolean;
   isActive?: boolean;
   createdAt: Timestamp;
