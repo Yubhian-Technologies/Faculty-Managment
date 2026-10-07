@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { FileDown, FileSpreadsheet, Printer } from "lucide-react";
+import { FileDown, FileSpreadsheet, Palette, Printer } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem } from "@/components/ui/dropdown-menu";
 import { toast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
 import { useCollegeInfo } from "@/hooks/useCollegeInfo";
@@ -137,6 +139,38 @@ export default function TeachingLoadPage() {
   const periods = Array.from({ length: maxPeriod }, (_, i) => i + 1);
   const displaySlots = typeFilter === "ALL" ? filteredSlots : filteredSlots.filter((s) => s.subjectType === typeFilter);
 
+  // Subject color highlight state
+  const [highlightedSubjects, setHighlightedSubjects] = useState<string[]>([]);
+
+  const uniqueSubjects = useMemo(() => {
+    const map = new Map<string, { code: string; name: string; isLab: boolean }>();
+    for (const s of displaySlots) {
+      const a = assignmentById.get(s.assignmentId);
+      const code = (a?.shortCode || a?.subjectCode || (s as any).subjectCode || s.subjectId || "").toUpperCase().trim();
+      const name = a?.subjectName || s.subjectName || code;
+      if (code && !map.has(code)) {
+        const isLab = a?.subjectType === "PRACTICAL" || Boolean(s.labBatch) || /\b(lab|laboratory|practical)\b/i.test(name);
+        map.set(code, { code, name, isLab });
+      }
+    }
+    return Array.from(map.values());
+  }, [displaySlots, assignmentById]);
+
+  function toggleSubjectHighlight(code: string) {
+    setHighlightedSubjects((prev) =>
+      prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code]
+    );
+  }
+
+  function selectAllLabSubjects() {
+    const labCodes = uniqueSubjects.filter((s) => s.isLab).map((s) => s.code);
+    setHighlightedSubjects(labCodes);
+  }
+
+  function clearAllHighlights() {
+    setHighlightedSubjects([]);
+  }
+
   // Each course-year's own period-by-period breakdown, resolved once up
   // front (falls back to the plain numberOfPeriods/periodDurationMinutes
   // formula for a course-year the HOD hasn't broken down yet - same
@@ -168,6 +202,7 @@ export default function TeachingLoadPage() {
       const courseCodeById = new Map(courses.map((c) => [c.id, c.code || c.name]));
       const html = buildFacultyTimetablePdfHtml({
         facultyName: user?.name ?? "",
+        departmentName: user?.department,
         semesterLabel: semesterNums.length > 0 ? semesterNums.join(", ") : "—",
         weekStart,
         weekEnd: weekDates[weekDates.length - 1],
@@ -180,8 +215,9 @@ export default function TeachingLoadPage() {
         departments,
         formatDMY,
         college,
+        highlightedSubjectCodes: highlightedSubjects,
       });
-      await renderHtmlToPdf(html, `Semester-Timetable-${isoDateKey(weekStart)}.pdf`);
+      await renderHtmlToPdf(html, `Faculty-Teaching-Load-${isoDateKey(weekStart)}.pdf`);
       toast({ title: "Timetable downloaded", description: "Saved as PDF" });
     } catch (err) {
       console.error(err);
@@ -236,6 +272,7 @@ export default function TeachingLoadPage() {
     const courseCodeById = new Map(courses.map((c) => [c.id, c.code || c.name]));
     const html = buildFacultyTimetablePdfHtml({
       facultyName: user?.name ?? "",
+      departmentName: user?.department,
       semesterLabel: semesterNums.length > 0 ? semesterNums.join(", ") : "—",
       weekStart,
       weekEnd: weekDates[weekDates.length - 1],
@@ -248,6 +285,7 @@ export default function TeachingLoadPage() {
       departments,
       formatDMY,
       college,
+      highlightedSubjectCodes: highlightedSubjects,
     });
     const printWindow = window.open("", "_blank");
     if (!printWindow) {
@@ -297,6 +335,56 @@ export default function TeachingLoadPage() {
                 {t === "ALL" ? "All" : t === "THEORY" ? "Theory" : "Practical"}
               </Button>
             ))}
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline" className="gap-1.5">
+                  <Palette className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                  <span>Highlight Subjects</span>
+                  {highlightedSubjects.length > 0 && (
+                    <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-[10px] bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300">
+                      {highlightedSubjects.length}
+                    </Badge>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64 p-2">
+                <div className="flex items-center justify-between pb-2 border-b mb-1">
+                  <span className="text-xs font-semibold text-foreground">Select Subjects to Color</span>
+                  <div className="flex items-center gap-1">
+                    <Button size="sm" variant="ghost" className="h-6 px-1.5 text-[10px]" onClick={selectAllLabSubjects}>
+                      Labs Only
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-6 px-1.5 text-[10px] text-muted-foreground" onClick={clearAllHighlights}>
+                      Clear
+                    </Button>
+                  </div>
+                </div>
+                {uniqueSubjects.length === 0 ? (
+                  <div className="py-2 text-center text-xs text-muted-foreground">No subjects found</div>
+                ) : (
+                  <div className="max-h-56 overflow-y-auto space-y-0.5">
+                    {uniqueSubjects.map((sub) => {
+                      const isSelected = highlightedSubjects.includes(sub.code);
+                      return (
+                        <DropdownMenuCheckboxItem
+                          key={sub.code}
+                          checked={isSelected}
+                          onCheckedChange={() => toggleSubjectHighlight(sub.code)}
+                          className="text-xs font-medium cursor-pointer"
+                        >
+                          <div className="flex items-center justify-between w-full gap-2">
+                            <span className="truncate">{sub.name} <span className="text-muted-foreground">({sub.code})</span></span>
+                            {sub.isLab && <span className="shrink-0 text-[9px] bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300 px-1 rounded font-semibold">LAB</span>}
+                          </div>
+                        </DropdownMenuCheckboxItem>
+                      );
+                    })}
+                  </div>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             <Button size="sm" variant="outline" onClick={downloadPdf} disabled={isExportingPdf}>
               <FileDown className="h-3.5 w-3.5 mr-1.5" />
               {isExportingPdf ? "Generating PDF..." : "PDF"}
@@ -335,8 +423,6 @@ export default function TeachingLoadPage() {
                 <tr key={period} className="border-b last:border-b-0">
                   <td className="p-2.5 font-medium text-muted-foreground">{period}</td>
                   {DAYS.map((d) => {
-                    // Every slot in the cell, not the first: one faculty can hold
-                    // two sections in the same period (e.g. a combined class).
                     const cellSlots = displaySlots.filter((s) => s.day === d && s.periodNumber === period);
                     return (
                       <td key={d} className="p-2 align-top">
@@ -356,10 +442,14 @@ export default function TeachingLoadPage() {
                               const subjectName = slot.subjectName || assignment?.subjectName || "";
                               const shortCode = assignment?.shortCode;
                               const titleDisplay = shortCode ? `${subjectName} (${shortCode})` : subjectName;
-                              const isLab = assignment?.subjectType === "PRACTICAL" || Boolean(slot.labBatch) || /\b(lab|laboratory|practical)\b/i.test(subjectName);
+                              const codeKey = (shortCode || assignment?.subjectCode || (slot as any).subjectCode || slot.subjectId || "").toUpperCase().trim();
+                              
+                              const isHighlighted = highlightedSubjects.length > 0
+                                ? highlightedSubjects.includes(codeKey)
+                                : (assignment?.subjectType === "PRACTICAL" || Boolean(slot.labBatch) || /\b(lab|laboratory|practical)\b/i.test(subjectName));
 
                               return (
-                                <div key={`${slot.id ?? idx}`} className={`rounded-md border p-2 ${slot.substituteFacultyName || slot.substituteForName ? "bg-amber-50 border-amber-200" : isLab ? "bg-purple-100/90 border-purple-300 text-purple-950 dark:bg-purple-950/40 dark:border-purple-700 dark:text-purple-200" : "bg-primary/5 border-primary/20"}`}>
+                                <div key={`${slot.id ?? idx}`} className={`rounded-md border p-2 transition-all ${slot.substituteFacultyName || slot.substituteForName ? "bg-amber-50 border-amber-200" : isHighlighted ? "bg-purple-100/90 border-purple-300 text-purple-950 shadow-xs dark:bg-purple-950/50 dark:border-purple-700 dark:text-purple-100 font-medium" : "bg-primary/5 border-primary/20"}`}>
                                   {time && (
                                     <p className="text-[10px] font-medium text-muted-foreground/80 mb-0.5">
                                       {formatTime12h(time.startTime)}&ndash;{formatTime12h(time.endTime)}
