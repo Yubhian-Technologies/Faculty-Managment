@@ -1,11 +1,12 @@
 export const dynamic = "force-dynamic";
 
+import { loadEffectiveTiming } from "@/lib/college/semester";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { computeStudentAttendanceHistory, studentDepartmentsForHistory } from "@/lib/studentAttendance/history";
-import type { CourseYearTiming, StudentRecord } from "@/types";
+import type { StudentRecord } from "@/types";
 
 function toDateStr(v: unknown): string {
   const d = (v as { toDate?: () => Date })?.toDate ? (v as { toDate: () => Date }).toDate() : new Date(v as string);
@@ -92,11 +93,7 @@ export async function GET(request: Request) {
     let semesterFrom: string | null = null;
     let semesterTo: string | null = null;
     if (student.courseId) {
-      const timingSnap = await collegeRef
-        .collection("courseYearTimings")
-        .doc(`${student.courseId}_year${student.year}`)
-        .get();
-      const timing = timingSnap.exists ? (timingSnap.data() as CourseYearTiming) : null;
+      const timing = await loadEffectiveTiming(db, session.collegeId, student.courseId, student.year);
       semesterOptions = (timing?.semesters ?? []).map((s) => s.semester).sort((a, b) => a - b);
       if (semesterParam) {
         const match = timing?.semesters?.find((s) => s.semester === Number(semesterParam));

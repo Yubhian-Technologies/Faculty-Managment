@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { loadEffectiveTiming } from "@/lib/college/semester";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -8,7 +9,7 @@ import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { DAY_BY_JS_DAY } from "@/lib/timetable/currentPeriod";
 import { fetchSectionStudents } from "@/lib/students/sectionRoster";
 import { isOnDutyMark } from "@/lib/studentAttendance/counting";
-import type { CourseYearTiming, Section, StudentAttendanceMark, StudentAttendanceSession, TimetableSlot } from "@/types";
+import type { Section, StudentAttendanceMark, StudentAttendanceSession, TimetableSlot } from "@/types";
 
 function toDateStr(v: unknown): string {
   const d = (v as { toDate?: () => Date })?.toDate ? (v as { toDate: () => Date }).toDate() : new Date(v as string);
@@ -115,10 +116,7 @@ export async function GET(request: Request) {
       const section = sectionSnap.data() as Section;
       summarySection = section;
       if (section.courseId) {
-        const timingSnap = await collegeRef
-          .collection("courseYearTimings")
-          .doc(`${section.courseId}_year${section.year}`).get();
-        const timing = timingSnap.exists ? (timingSnap.data() as CourseYearTiming) : null;
+        const timing = await loadEffectiveTiming(db, session.collegeId, section.courseId, section.year);
         semesterOptions = (timing?.semesters ?? []).map((s) => s.semester).sort((a, b) => a - b);
         if (semesterParam) {
           const match = timing?.semesters?.find((s) => s.semester === Number(semesterParam));

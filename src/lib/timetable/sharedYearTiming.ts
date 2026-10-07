@@ -35,27 +35,30 @@ export function inheritedTimingCourseId(
   const ownDept = departments.find((d) => d.id === course.departmentId);
   if (!ownDept) return null;
 
+  const sameCatalog = (deptId: string | null | undefined) =>
+    deptId
+      ? courses.find((c) => c.departmentId === deptId && c.catalogId && c.catalogId === course.catalogId && c.id !== course.id)?.id ?? null
+      : null;
+
   const manager = findBranchManager(departments as unknown as DepartmentYearRow[], ownDept.name);
-  if (!manager) return null;
-  const managerDept = departments.find((d) => d.id === manager.department.id);
-  if (!managerDept || managerDept.id === ownDept.id) return null;
-
+  const managerDept = manager ? departments.find((d) => d.id === manager.department.id) : undefined;
   // Only the years the manager itself teaches - every other year belongs to
-  // this department's own HOD and must not fall through.
-  if (!managerEffectiveYears(managerDept, departments, course.catalogId).includes(Number(year))) {
-    return null;
+  // this department's own HOD and must not fall through to the manager.
+  if (managerDept && managerDept.id !== ownDept.id
+    && managerEffectiveYears(managerDept, departments, course.catalogId).includes(Number(year))) {
+    // A sub-department (BS Chemistry) owns no Course doc of its own - it shares
+    // its parent's - so try the manager first, then the parent it sits under.
+    for (const deptId of [managerDept.id, managerDept.parentDepartmentId]) {
+      const match = sameCatalog(deptId);
+      if (match) return match;
+    }
   }
 
-  // A sub-department (BS Chemistry) owns no Course doc of its own - it shares
-  // its parent's - so try the manager first, then the parent it sits under.
-  for (const deptId of [managerDept.id, managerDept.parentDepartmentId]) {
-    if (!deptId) continue;
-    const match = courses.find(
-      (c) => c.departmentId === deptId && c.catalogId && c.catalogId === course.catalogId
-    );
-    if (match) return match.id;
-  }
-  return null;
+  // A sub-department takes the timings and semester calendar its main
+  // (parent) department configured, for the same programme. Only reached when
+  // the sub-department has no row of its own - every caller asks for this
+  // fallback only for a (course, year) that is missing one.
+  return sameCatalog(ownDept.parentDepartmentId);
 }
 
 /**
