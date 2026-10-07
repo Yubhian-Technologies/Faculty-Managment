@@ -764,7 +764,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
       const res = await fetch("/api/college/timetable/publish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sectionId, ...semesterBody }),
+        body: JSON.stringify({ sectionId, effectiveDate, ...semesterBody }),
       });
       const json = (await res.json()) as { issues?: string[]; error?: string; published?: number };
       if (!res.ok) {

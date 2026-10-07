@@ -429,11 +429,11 @@ export function isLabSlot(slot: TimetableSlot, subjects?: Map<string, Subject> |
   return /\b(lab|laboratory|practical)\b/i.test(slot.subjectName ?? "");
 }
 
-/** The effective date entered at publish time, carried on the published slots (latest wins, falls back to today IST). */
-export function latestEffectiveDate(slots: { effectiveDate?: string }[]): string {
+/** The effective date entered at publish time, carried on the published slots. */
+export function latestEffectiveDate(slots: { effectiveDate?: string }[]): string | undefined {
   let best: string | undefined;
   for (const s of slots) if (s.effectiveDate && (!best || s.effectiveDate > best)) best = s.effectiveDate;
-  return best || istDateKey();
+  return best;
 }
 
 export function getHodSignatureLabel(deptNameOrCode?: string): string {
