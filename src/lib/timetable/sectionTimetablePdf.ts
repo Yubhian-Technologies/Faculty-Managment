@@ -188,7 +188,7 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
     </tr>
   </table>
   <div class="doc-title">${escapeHtml(title || "TIME TABLE")}</div>
-  <div class="class-line" style="font-size:9.5pt;font-weight:600;margin-bottom:4px;text-align:center;">${escapeHtml(subtitleText)}</div>`;="class-line" style="font-size:9.5pt;font-weight:600;margin-bottom:4px;text-align:center;">${escapeHtml(subtitleText)}</div>
+  <div class="class-line" style="font-size:9.5pt;font-weight:600;margin-bottom:4px;text-align:center;">${escapeHtml(subtitleText)}</div>
 
   <table class="meta-header-table" style="width:100%;border-collapse:collapse;margin-bottom:2px;font-size:9.5pt;font-weight:600;">
     <tr>
