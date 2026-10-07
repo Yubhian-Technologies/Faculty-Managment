@@ -89,6 +89,14 @@ There is **no env switch** (the old `READ_ONLY_FACULTY_COLLEGES` is gone and ign
 - **Legacy students:** only a *changed* number is validated/claimed - an unchanged value is never re-judged, and a legacy student saved with no number may still be saved without one until it is entered. Students saved before the claims existed are covered for their OWN college by an exact-value lookup; another college's legacy students only after `scripts/backfill-student-mobile-keys.mjs` (global, dry run by default) has created their claims (it also reports duplicates, blanks and non-mobile values).
 - **Why:** the mobile number is the reference a later "Roll No + Student Mobile No" import will use to give each student their roll number (then logins are created from the roll).
 
+### Students edit their own details
+
+- `PATCH /api/college/student/me/profile` (STUDENT only, resolved from `session.uid`): a student may change only the keys in `STUDENT_SELF_EDITABLE_KEYS` (`src/lib/students/selfEdit.ts`) - personal (blood group, nationality, mother tongue, hosteller, handicap, identification marks), contact & address, family & guardian, bank (account/bank/IFSC), "studied outside AP"/"family ID" answers. Everything else (Roll No, name, course/department/year/section, admission & entrance data, gender, DOB, caste/religion, Aadhar, ration card, remarks, status) stays with the College Office and is refused 403 `FIELD_NOT_EDITABLE`; nothing is written on a refusal.
+- Only CHANGED fields are written (the page sends a diff), so a stale form can't overwrite an Office edit. Phones are stored as 10 digits, email lower-case, IFSC upper-case, a cleared field as `null`; "No" answers clear their dependent details and "permanent same as temporary" keeps both addresses identical.
+- **Student Mobile No** is editable by the student only once a Roll No exists (until then the Office uses it to map the roll), never clearable, and goes through the same global claim as everywhere (`studentMobile.ts`).
+- **Photo:** `PATCH /api/college/student/me/photo` writes the student record + `users/{uid}` + `systemUsers/{uid}` in ONE batch (record is the source of truth, the login only feeds the avatar); `upload/profile-photo` accepts STUDENT and forces their own uid path. The Office's photo edit (`students/[id]`) now mirrors to the login the same way.
+- Each save writes an audit entry (`STUDENT_DETAILS_UPDATED`, `self: true`, field names only).
+
 ## Architecture & Directory Map
 
 ```
