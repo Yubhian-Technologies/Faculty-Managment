@@ -34,6 +34,42 @@ export function resolveCurrentSemester(
   return null;
 }
 
+// Stands for "this course-year has semesters configured and every one of them
+// has ended": no semester number can equal it, so matchesCurrentSemester keeps
+// only slots that carry no semester tag at all.
+export const SEMESTERS_ENDED = -1;
+
+// Which semester a course-year's teaching should be SHOWN under today (the
+// Teaching Load grid), worked out from the semester dates alone:
+//   - one is running today -> that one
+//   - between two (a gap) or before the first starts -> the next one to start,
+//     so subjects assigned for it appear as soon as they are placed rather than
+//     the finished semester's reappearing
+//   - every semester has ended -> SEMESTERS_ENDED, so the finished semesters'
+//     subjects are gone until new ones are assigned under a new semester
+//   - no semesters configured (or no timing) -> null, "no semester concept",
+//     which matchesCurrentSemester treats as everything matches.
+// resolveCurrentSemester alone returns null in a gap, and null means
+// "everything matches" - which is how a finished semester's slots came back.
+export function resolveDisplaySemester(
+  timing: Pick<CourseYearTiming, "semesters"> | null | undefined,
+  date: Date = new Date()
+): number | null {
+  const semesters = timing?.semesters ?? [];
+  if (semesters.length === 0) return null;
+  const current = resolveCurrentSemester(timing, date);
+  if (current !== null) return current;
+  const today = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  let upcoming: { semester: number; start: number } | null = null;
+  for (const s of semesters) {
+    const start = toJsDate(s.startDate);
+    if (!start) continue;
+    const startMs = new Date(start.getFullYear(), start.getMonth(), start.getDate()).getTime();
+    if (startMs > today && (!upcoming || startMs < upcoming.start)) upcoming = { semester: s.semester, start: startMs };
+  }
+  return upcoming ? upcoming.semester : SEMESTERS_ENDED;
+}
+
 // Shared rule for every timetable/draft read or write that needs to decide
 // whether an item (a TimetableSlot, a TimetableDraft, ...) belongs to the
 // resolved "current" semester:

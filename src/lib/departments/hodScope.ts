@@ -214,7 +214,14 @@ export function managedBranchYearsMap(departments: Department[], catalogId?: str
  * Years Taught means "not configured", never "teaches every year"
  * (lib/college/taughtYears.ts); the caller shows its own "set Years Taught
  * first" state. A year some OTHER department has claimed as a feeder FOR one
- * of `relevantDepartments` (fedYears) is excluded. `catalogId`
+ * of `relevantDepartments` (fedYears) is excluded.
+ *
+ * `managedOnlyNames`: branches the viewer reaches ONLY through a managed
+ * relationship (they are neither the viewer's own department nor a true
+ * sub-department of it). For those the branch's own Years Taught are NOT added -
+ * a manager runs the shared year(s) and nothing else; every other year belongs to
+ * the branch's own HOD - so only the manager's years (managedBranchYears) count.
+ * `catalogId`
  * omitted (a legacy, pre-catalog course - see CourseGroup) falls back to
  * each department's flat fields only, unchanged from before per-course
  * overrides existed.
@@ -225,14 +232,17 @@ export function yearsInScope(
   managedBranchYears: Map<string, number[]>,
   viewsManagedBranchYears: boolean,
   catalogId: string | undefined,
-  allDepartments: Department[]
+  allDepartments: Department[],
+  managedOnlyNames?: ReadonlySet<string>
 ): number[] {
   const courseYears = Array.from({ length: durationYears }, (_, i) => i + 1);
   const assigned = new Set<number>();
   const excluded = new Set<number>();
   for (const d of relevantDepartments) {
     for (const y of fedYears(d, allDepartments, catalogId)) excluded.add(y);
-    for (const y of resolveDepartmentCourseScope(d, catalogId).assignedYears) assigned.add(y);
+    if (!managedOnlyNames?.has(d.name)) {
+      for (const y of resolveDepartmentCourseScope(d, catalogId).assignedYears) assigned.add(y);
+    }
     if (viewsManagedBranchYears) {
       for (const y of managedBranchYears.get(d.name) ?? []) assigned.add(y);
     }
