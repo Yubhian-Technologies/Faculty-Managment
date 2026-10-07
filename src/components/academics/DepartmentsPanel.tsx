@@ -20,6 +20,14 @@ import type { Course, Department, Section } from "@/types";
 
 type DeptWithMaybeId = Department & { id: string };
 
+/** Sections by year, ascending, each year's own list by name. */
+function groupByYear(list: Section[]): [number, Section[]][] {
+  const map = new Map<number, Section[]>();
+  for (const s of list) map.set(s.year, [...(map.get(s.year) ?? []), s]);
+  for (const group of map.values()) group.sort((a, b) => a.name.localeCompare(b.name));
+  return Array.from(map.entries()).sort((a, b) => a[0] - b[0]);
+}
+
 // In-place drill-down for one top-level department: sub-departments (if it has
 // any) -> that sub-department's sections -> a section's student roster. All of
 // it renders inside the Departments toggle - nothing navigates away.
@@ -53,16 +61,28 @@ function DepartmentDrillDown({ departments, courses, rootId, onExit }: {
   const children = current ? departments.filter((d) => d.parentDepartmentId === current.id) : [];
   // courseId -> catalogId: a manager's years are decided per course, so each section is resolved against its own course.
   const catalogIdByCourseId = useMemo(() => new Map(courses.map((c) => [c.id, c.catalogId])), [courses]);
-  const deptSections = useMemo(
-    () => (current && children.length === 0 ? sectionsOfDepartment(current as DeptWithMaybeId, departments, sections, catalogIdByCourseId) : []),
-    [current, departments, sections, catalogIdByCourseId, children.length]
-  );
-  const byYear = useMemo(() => {
-    const map = new Map<number, Section[]>();
-    for (const s of deptSections) map.set(s.year, [...(map.get(s.year) ?? []), s]);
-    for (const list of map.values()) list.sort((a, b) => a.name.localeCompare(b.name));
-    return Array.from(map.entries()).sort((a, b) => a[0] - b[0]);
-  }, [deptSections]);
+  // Every section in this department's tree: its own, then each
+  // sub-department's, each under the name of the department that owns it.
+  //
+  // The page used to compute sections only when there were NO sub-departments,
+  // so a department that both runs its own sections and organises
+  // sub-departments (VWU's Computer Science and Engineering: 9 of its own, plus
+  // CSE [CYBER SECURITY] with 3) showed nothing but the sub-department cards,
+  // and 12 sections were reachable from nowhere on this screen.
+  //
+  // A sub-department owns its own years outright (sectionsOfDepartment resolves
+  // the owner per year), so nothing is listed twice.
+  const sectionGroups = useMemo(() => {
+    if (!current) return [];
+    const owners = [current, ...departments.filter((d) => d.parentDepartmentId === current.id)];
+    return owners
+      .map((owner) => ({
+        owner,
+        byYear: groupByYear(sectionsOfDepartment(owner as DeptWithMaybeId, departments, sections, catalogIdByCourseId)),
+      }))
+      .filter((g) => g.byYear.length > 0);
+  }, [current, departments, sections, catalogIdByCourseId]);
+  const hasAnySection = sectionGroups.length > 0;
 
   if (!current) return null;
   if (openSectionId) {
@@ -105,10 +125,16 @@ function DepartmentDrillDown({ departments, courses, rootId, onExit }: {
 
       <PageHeader
         title={current.name}
-        description={children.length > 0 ? "Select a sub-department to see its sections" : "Select a section to see its students"}
+        description={
+          children.length === 0
+            ? "Select a section to see its students"
+            : hasAnySection
+              ? "Open a sub-department, or a section below, to see its students"
+              : "Select a sub-department to see its sections"
+        }
       />
 
-      {children.length > 0 ? (
+      {children.length > 0 && (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {children.map((c) => (
             <Card key={c.id} className="cursor-pointer transition-colors hover:border-primary/50" onClick={() => setPath([...path, c.id])}>
@@ -122,20 +148,37 @@ function DepartmentDrillDown({ departments, courses, rootId, onExit }: {
             </Card>
           ))}
         </div>
-      ) : isLoading ? (
+      )}
+
+      {isLoading ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3].map((i) => <div key={i} className="h-28 rounded-lg border bg-muted/30 animate-pulse" />)}
         </div>
-      ) : byYear.length === 0 ? (
-        <Card><CardContent className="py-12 text-center text-sm text-muted-foreground">No sections in this department yet.</CardContent></Card>
+      ) : !hasAnySection ? (
+        // A parent whose sub-department cards are above and which runs nothing
+        // itself needs no empty state - the cards are the answer.
+        children.length === 0
+          ? <Card><CardContent className="py-12 text-center text-sm text-muted-foreground">No sections in this department yet.</CardContent></Card>
+          : null
       ) : (
-        <div className="space-y-8">
-          {byYear.map(([year, list]) => (
-            <div key={year}>
-              <h2 className="font-semibold text-base mb-3">{yearOrdinalLabel(year)}</h2>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {list.map((sec) => <SectionCard key={sec.id} sec={sec} onOpen={() => setOpenSectionId(sec.id)} />)}
-              </div>
+        <div className="space-y-10">
+          {sectionGroups.map(({ owner, byYear }) => (
+            <div key={owner.id} className="space-y-6">
+              {/* Named only when there is more than one owner in view, so a
+                  plain department's page reads exactly as it did before. */}
+              {sectionGroups.length > 1 && (
+                <p className="text-sm font-semibold">
+                  {owner.id === current.id ? `${owner.name} (this department)` : owner.name}
+                </p>
+              )}
+              {byYear.map(([year, list]) => (
+                <div key={year}>
+                  <h2 className="font-semibold text-base mb-3">{yearOrdinalLabel(year)}</h2>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {list.map((sec) => <SectionCard key={sec.id} sec={sec} onOpen={() => setOpenSectionId(sec.id)} />)}
+                  </div>
+                </div>
+              ))}
             </div>
           ))}
         </div>

@@ -12,15 +12,21 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import { ArrowLeft, Edit2, Trash2, BookOpen, Plus } from "lucide-react";
-import type { Subject, SubjectCategory } from "@/types";
+import type { Department, Subject, SubjectCategory } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
 import { CategoryField } from "@/components/academics/CategoryField";
+import { offeredYears } from "@/lib/college/departmentYears";
+import { courseYearNumbers, semesterLabel, semestersInYear } from "@/lib/college/courseYears";
+import { useCourseSemesterPlan } from "@/hooks/useCourseSemesterPlan";
 
 // Academics > Subjects. View and manage subjects assigned to departments
 // by year and semester in a horizontal table with CRUD & bulk delete capabilities.
 
-type CourseOption = { id: string; name: string; catalogId?: string; departmentId?: string; isActive?: boolean };
-type DepartmentOption = { id: string; name: string; parentDepartmentId?: string };
+type CourseOption = { id: string; name: string; catalogId?: string; departmentId?: string; isActive?: boolean; durationYears?: number };
+// The whole Department doc, not a three-field shape: the Year dropdown is
+// built from the department's own Years Taught (assignedYears / per-course
+// courseScopes / the parent it inherits from), which that shape dropped.
+type DepartmentOption = Department;
 type AssignmentWithMaster = { assignment: any; master: Subject };
 type EditForm = {
   assignmentId?: string;
@@ -134,6 +140,42 @@ export default function SubjectsPage() {
   const topDepartments = useMemo(() => departments.filter((d) => !d.parentDepartmentId), [departments]);
   const subDepartments = useMemo(() => departments.filter((d) => d.parentDepartmentId === deptId), [departments, deptId]);
   const activeDeptId = subDeptId || deptId;
+
+  // Years and semesters come from the configuration, never from a fixed 1-4 /
+  // 1-8. A department teaches the years the Principal assigned it (Basic
+  // Science only year 1), and a course's semesters and their numbering come
+  // from its own Semester Timings - so the labels read 1-1, 1-2, 2-1 ... in
+  // whatever shape that college set up, not a flat "Sem 1 ... Sem 8".
+  const catalogId = courseKey.startsWith("name:") ? undefined : courseKey || undefined;
+  const courseIdsOfGroup = useMemo(
+    () => new Set(courseGroups.find((g) => g.key === courseKey)?.ids ?? []),
+    [courseGroups, courseKey]
+  );
+  // The department's own Course doc for this programme decides the semester
+  // shape; every department owns one, and they can differ.
+  const planCourse = useMemo(
+    () => courses.find((c) => courseIdsOfGroup.has(c.id) && c.departmentId === activeDeptId)
+      ?? courses.find((c) => courseIdsOfGroup.has(c.id))
+      ?? null,
+    [courses, courseIdsOfGroup, activeDeptId]
+  );
+  const plan = useCourseSemesterPlan(planCourse);
+  const activeDept = useMemo(() => departments.find((d) => d.id === activeDeptId), [departments, activeDeptId]);
+  // Falls back to the course's own span, never an invented 1-4, for a
+  // department whose Years Taught has not been set yet.
+  const yearOptions = useMemo(
+    () => offeredYears(activeDept, departments, catalogId, courseYearNumbers(planCourse?.durationYears)),
+    [activeDept, departments, catalogId, planCourse]
+  );
+  // Derived rather than corrected in an effect, so what is shown and what Load
+  // sends can never disagree: a pick that falls outside the options reverts to
+  // the first one that is actually offered.
+  const yearValue = yearOptions.includes(Number(year)) ? year : String(yearOptions[0] ?? "");
+  const semesterOptions = useMemo(
+    () => (yearValue ? semestersInYear(plan, Number(yearValue)) : []),
+    [plan, yearValue]
+  );
+  const semesterValue = semesterOptions.includes(Number(semester)) ? semester : String(semesterOptions[0] ?? "");
   // Sibling sub-departments (or the children of a parent picked "itself") that can share one added subject.
   const siblingDepts = useMemo(() => {
     const active = departments.find((d) => d.id === activeDeptId);
@@ -188,7 +230,7 @@ export default function SubjectsPage() {
   }
 
   function handleLoad() {
-    void fetchAssignments(courseKey, deptId, subDeptId, year, semester);
+    void fetchAssignments(courseKey, deptId, subDeptId, yearValue, semesterValue);
   }
 
   const allSelected = assignments.length > 0 && selectedIds.size === assignments.length;
@@ -256,11 +298,11 @@ export default function SubjectsPage() {
       const ares = await fetch("/api/college/subject-semester-assignments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subjectId, departmentId: activeDeptId, courseId: course.id, year: Number(year), semester: Number(semester) }),
+        body: JSON.stringify({ subjectId, departmentId: activeDeptId, courseId: course.id, year: Number(yearValue), semester: Number(semesterValue) }),
       });
       if (!ares.ok) {
         const abody = await ares.json() as { error?: string };
-        setAddError(`Subject created, but not assigned to Year ${year} Sem ${semester}: ${abody.error ?? "failed"}. Use Course Structure to assign it.`);
+        setAddError(`Subject created, but not assigned to Year ${yearValue} Sem ${semesterLabel(plan, Number(semesterValue))}: ${abody.error ?? "failed"}. Use Course Structure to assign it.`);
         return;
       }
       // The same subject, listed under the other ticked departments too (one row each, no copies).
@@ -269,7 +311,7 @@ export default function SubjectsPage() {
         const r = await fetch("/api/college/subject-semester-assignments", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ subjectId, departmentId: extraId, courseId: course.id, year: Number(year), semester: Number(semester) }),
+          body: JSON.stringify({ subjectId, departmentId: extraId, courseId: course.id, year: Number(yearValue), semester: Number(semesterValue) }),
         });
         if (!r.ok) failedDepts.push(departments.find((d) => d.id === extraId)?.name ?? extraId);
       }
@@ -477,14 +519,14 @@ export default function SubjectsPage() {
           )}
           <div className="space-y-1.5">
             <Label htmlFor="yr">Year</Label>
-            <select id="yr" className={SELECT_CLASS} value={year} onChange={(e) => setYear(e.target.value)}>
-              {[1, 2, 3, 4].map((y) => <option key={y} value={String(y)}>Year {y}</option>)}
+            <select id="yr" className={SELECT_CLASS} value={yearValue} onChange={(e) => setYear(e.target.value)}>
+              {yearOptions.map((y) => <option key={y} value={String(y)}>Year {y}</option>)}
             </select>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="sem">Semester</Label>
-            <select id="sem" className={SELECT_CLASS} value={semester} onChange={(e) => setSemester(e.target.value)}>
-              {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => <option key={s} value={String(s)}>Sem {s}</option>)}
+            <select id="sem" className={SELECT_CLASS} value={semesterValue} onChange={(e) => setSemester(e.target.value)}>
+              {semesterOptions.map((s) => <option key={s} value={String(s)}>Sem {semesterLabel(plan, s)}</option>)}
             </select>
           </div>
           <div className="flex items-end">
@@ -643,7 +685,7 @@ export default function SubjectsPage() {
             <div className="grid gap-3">
               <p className="text-xs text-muted-foreground rounded-md border bg-muted/40 p-2">
                 Adds the subject to <strong>{departments.find((d) => d.id === activeDeptId)?.name}</strong>
-                {subDeptId ? " (sub-department)" : ""}, Year {year}, Sem {semester}.
+                {subDeptId ? " (sub-department)" : ""}, Year {yearValue}, Sem {semesterLabel(plan, Number(semesterValue))}.
               </p>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
