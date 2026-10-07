@@ -361,7 +361,13 @@ export default function HODSectionsPage() {
       // A specific branch is the active filter - its own years for this
       // course, plus whatever shared year its manager contributes.
       const relevant = departments.filter((d) => d.name === deptFilter);
-      return yearsInScope(activeDurationYears, relevant, managedBranchYearsForActiveCourse, viewsManagedBranchYears, activeCatalogId, departments);
+      // A branch reached only by being managed (not this HOD's own / a true child) contributes just
+      // the manager's shared year(s) - never its own later years, which are its own HOD's.
+      const directNames = new Set([ownDept?.name, ...plainChildren.map((d) => d.name), ...groupingChildren.map((d) => d.name)]);
+      const managedOnly = new Set(
+        viewsManagedBranchYears && !directNames.has(deptFilter) && managedBranchYearsForActiveCourse.has(deptFilter) ? [deptFilter] : []
+      );
+      return yearsInScope(activeDurationYears, relevant, managedBranchYearsForActiveCourse, viewsManagedBranchYears, activeCatalogId, departments, managedOnly);
     }
 
     if (viewsManagedBranchYears) {

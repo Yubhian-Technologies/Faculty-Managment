@@ -15,22 +15,17 @@ import { resolveDepartmentCourseScope, type DepartmentWithId } from "@/lib/colle
 import { RoleAssignmentsPage } from "@/components/roles/RoleAssignmentsPage";
 import { SectionCard } from "@/components/academics/SectionsPanel";
 import { SectionRoster } from "@/components/academics/SectionRoster";
+import { sectionsOfDepartment } from "@/lib/departments/departmentSections";
 import type { Course, Department, Section } from "@/types";
 
 type DeptWithMaybeId = Department & { id: string };
 
-function sectionsOfDepartment(dept: DeptWithMaybeId, sections: Section[]) {
-  return sections.filter((s) => {
-    const sid = (s as Section & { departmentId?: string }).departmentId;
-    return sid ? sid === dept.id : s.department === dept.name || s.department === dept.code;
-  });
-}
-
 // In-place drill-down for one top-level department: sub-departments (if it has
 // any) -> that sub-department's sections -> a section's student roster. All of
 // it renders inside the Departments toggle - nothing navigates away.
-function DepartmentDrillDown({ departments, rootId, onExit }: {
+function DepartmentDrillDown({ departments, courses, rootId, onExit }: {
   departments: Department[];
+  courses: Course[];
   rootId: string;
   onExit: () => void;
 }) {
@@ -56,9 +51,11 @@ function DepartmentDrillDown({ departments, rootId, onExit }: {
   const byId = (id: string) => departments.find((d) => d.id === id);
   const current = byId(path[path.length - 1]);
   const children = current ? departments.filter((d) => d.parentDepartmentId === current.id) : [];
+  // courseId -> catalogId: a manager's years are decided per course, so each section is resolved against its own course.
+  const catalogIdByCourseId = useMemo(() => new Map(courses.map((c) => [c.id, c.catalogId])), [courses]);
   const deptSections = useMemo(
-    () => (current && children.length === 0 ? sectionsOfDepartment(current as DeptWithMaybeId, sections) : []),
-    [current, sections, children.length]
+    () => (current && children.length === 0 ? sectionsOfDepartment(current as DeptWithMaybeId, departments, sections, catalogIdByCourseId) : []),
+    [current, departments, sections, catalogIdByCourseId, children.length]
   );
   const byYear = useMemo(() => {
     const map = new Map<number, Section[]>();
@@ -232,7 +229,7 @@ export function DepartmentsPanel() {
   }
 
   if (selectedDeptId) {
-    return <DepartmentDrillDown departments={departments} rootId={selectedDeptId} onExit={() => setSelectedDeptId(null)} />;
+    return <DepartmentDrillDown departments={departments} courses={courses} rootId={selectedDeptId} onExit={() => setSelectedDeptId(null)} />;
   }
 
   return (
