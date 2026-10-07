@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,8 @@ import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
 import { TableSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
 import { toRoman } from "@/lib/academic/format";
+import { SubjectAttendanceFilters } from "@/components/attendance/SubjectAttendanceFilters";
+import { filterSubjectRows, hasSubjectFilters, NO_SUBJECT_FILTERS, totalOfRows, type SubjectFilters } from "@/lib/studentAttendance/subjectFilters";
 import { DEFAULT_SHORTAGE_THRESHOLD, isShortageByPercent } from "@/lib/studentAttendance/shortage";
 import {
   MONTH_NAMES,
@@ -51,7 +53,8 @@ export function StudentAttendanceReport() {
   const [batchYear, setBatchYear] = useState<number | null>(null);
   const [optionsReady, setOptionsReady] = useState(false);
 
-  const [report, setReport] = useState<StudentReportData | null>(null);
+  const [loaded, setReport] = useState<StudentReportData | null>(null);
+  const [filters, setFilters] = useState<SubjectFilters>(NO_SUBJECT_FILTERS);
   const [isLoading, setIsLoading] = useState(false);
   // A newer Load (or any input change) invalidates an in-flight response.
   const requestId = useRef(0);
@@ -75,6 +78,7 @@ export function StudentAttendanceReport() {
   const reset = () => {
     requestId.current += 1;
     setReport(null);
+    setFilters(NO_SUBJECT_FILTERS);
     setIsLoading(false);
   };
 
@@ -103,6 +107,7 @@ export function StudentAttendanceReport() {
 
     const id = ++requestId.current;
     setReport(null);
+    setFilters(NO_SUBJECT_FILTERS);
     setIsLoading(true);
     try {
       const res = await fetch(`/api/college/student/me/attendance?${qs.toString()}`);
@@ -119,6 +124,13 @@ export function StudentAttendanceReport() {
       if (id === requestId.current) setIsLoading(false);
     }
   };
+
+  // The loaded report narrowed by the filters - what the table, Print and Export all use.
+  const report = useMemo<StudentReportData | null>(() => {
+    if (!loaded || !hasSubjectFilters(filters)) return loaded;
+    const subjects = filterSubjectRows(loaded.subjects, filters, THRESHOLD);
+    return { ...loaded, subjects, total: totalOfRows(subjects) };
+  }, [loaded, filters]);
 
   const letterhead = report ? studentReportLetterhead(report) : [];
 
@@ -226,9 +238,20 @@ export function StudentAttendanceReport() {
             </tbody>
           </table>
 
+          {loaded && loaded.subjects.length > 0 && (
+            <div className="mb-3">
+              <SubjectAttendanceFilters
+                subjects={loaded.subjects.map((x) => ({ id: x.subjectId, name: x.code }))}
+                value={filters}
+                onChange={setFilters}
+                threshold={THRESHOLD}
+              />
+            </div>
+          )}
+
           {report.subjects.length === 0 ? (
             <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-              No classes were held in {report.scope.label}.
+              {loaded && loaded.subjects.length > 0 ? "No subjects match these filters." : `No classes were held in ${report.scope.label}.`}
             </p>
           ) : (
             <div className="overflow-x-auto">

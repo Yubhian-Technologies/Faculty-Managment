@@ -36,6 +36,33 @@ export async function activeDelegatedRoles(
   return { roles: Array.from(roles), departments: Array.from(departments) };
 }
 
+// The reverse lookup: everyone currently acting in one of `roles` on someone
+// else's behalf. Notification fan-outs (lib/notify.ts) use it so the seat's
+// mail reaches the delegate while the holder is out. The single array filter
+// keeps this off the composite-index path; status and dates are checked here.
+export async function findActiveDelegates(
+  db: Firestore,
+  collegeId: string,
+  roles: string[]
+): Promise<{ uid: string; roles: string[]; departments: string[] }[]> {
+  if (roles.length === 0) return [];
+  const today = istDateKey();
+  const snap = await db.collection("colleges").doc(collegeId).collection("leaveRequests")
+    .where("roleHandoverRoles", "array-contains-any", roles.slice(0, 30))
+    .get();
+  const byUid = new Map<string, { uid: string; roles: Set<string>; departments: Set<string> }>();
+  for (const d of snap.docs) {
+    const r = d.data() as Partial<LeaveRequest>;
+    if (r.status !== "APPROVED" || !r.roleHandoverToUid) continue;
+    if (!r.roleHandoverFrom || !r.roleHandoverTo || today < r.roleHandoverFrom || today > r.roleHandoverTo) continue;
+    const entry = byUid.get(r.roleHandoverToUid) ?? { uid: r.roleHandoverToUid, roles: new Set<string>(), departments: new Set<string>() };
+    for (const role of r.roleHandoverRoles ?? []) if (roles.includes(role)) entry.roles.add(role);
+    for (const dept of r.roleHandoverDepartments ?? []) entry.departments.add(dept);
+    byUid.set(entry.uid, entry);
+  }
+  return Array.from(byUid.values()).map((e) => ({ uid: e.uid, roles: [...e.roles], departments: [...e.departments] }));
+}
+
 // The seat roles a requester could hand over: seats held plus a legacy
 // role-login whose own role is a seat role.
 export function handoverableRoles(profile: { role?: string; seatRoles?: string[] } | undefined): string[] {

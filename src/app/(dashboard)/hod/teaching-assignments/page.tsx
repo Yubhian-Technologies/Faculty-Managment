@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CustomSubjectAdder } from "@/components/timetable/CustomSubjectAdder";
 import Link from "next/link";
-import { Search, Trash2, Send, Plus, X } from "lucide-react";
+import { Search, Trash2, Send, Plus, X, FileDown, FileSpreadsheet } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { downloadTeachingAssignmentsPdf, downloadTeachingAssignmentsXlsx, type TeachingAssignmentExportRow, type FacultyWorkloadExportRow, type UnstaffedGapExportRow } from "@/lib/teaching/exportTeachingAssignments";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -967,15 +968,154 @@ const effectiveSemester = semesterOptions.length === 0
     return { groups, ungrouped };
   }, [assignments]);
 
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isExportingXlsx, setIsExportingXlsx] = useState(false);
+
+  async function handleExportPdf() {
+    setIsExportingPdf(true);
+    try {
+      const exportAssignments: TeachingAssignmentExportRow[] = assignments.map((a) => ({
+        courseName: a.courseName ?? "",
+        year: a.year ?? 1,
+        sectionName: a.sectionName ?? "",
+        subjectCode: a.subjectCode,
+        subjectName: a.subjectName ?? "",
+        facultyName: a.facultyName ?? "",
+        hoursPerWeek: a.hoursPerWeek ?? 0,
+      }));
+
+      const wlMap = new Map<string, FacultyWorkloadExportRow>();
+      for (const f of faculty) {
+        wlMap.set(f.id, {
+          facultyName: f.name,
+          designation: f.designation,
+          department: f.department,
+          assignedSubjects: "",
+          totalHours: 0,
+        });
+      }
+      for (const a of assignments) {
+        if (!a.facultyId) continue;
+        const entry = wlMap.get(a.facultyId);
+        if (entry) {
+          entry.totalHours += a.hoursPerWeek ?? 0;
+          const label = `${a.subjectName} (${a.sectionName ?? ""})`;
+          entry.assignedSubjects = entry.assignedSubjects ? `${entry.assignedSubjects}, ${label}` : label;
+        }
+      }
+
+      const gaps: UnstaffedGapExportRow[] = gapRows.flatMap((g) =>
+        g.unstaffedSections.map((u) => ({
+          sectionName: u.section.name,
+          subjectName: g.subject.name,
+          hoursPerWeek: g.subject.hoursPerWeek ?? 0,
+          subjectType: g.subject.type,
+        }))
+      );
+
+      await downloadTeachingAssignmentsPdf(
+        {
+          departmentName: topDepartment || "Department",
+          courseName: course?.name,
+          yearLabel: year ? ordinalYear(Number(year)) : undefined,
+          semesterLabel: effectiveSemester != null ? `Sem ${effectiveSemester}` : undefined,
+          assignments: exportAssignments,
+          facultyWorkload: Array.from(wlMap.values()),
+          unstaffedGaps: gaps,
+        },
+        `Teaching-Assignments-${topDepartment || "Dept"}.pdf`
+      );
+      toast({ title: "Report exported", description: "Saved as PDF" });
+    } catch (err) {
+      console.error(err);
+      toast({ variant: "destructive", title: "Export failed", description: "Failed to generate PDF" });
+    } finally {
+      setIsExportingPdf(false);
+    }
+  }
+
+  async function handleExportXlsx() {
+    setIsExportingXlsx(true);
+    try {
+      const exportAssignments: TeachingAssignmentExportRow[] = assignments.map((a) => ({
+        courseName: a.courseName ?? "",
+        year: a.year ?? 1,
+        sectionName: a.sectionName ?? "",
+        subjectCode: a.subjectCode,
+        subjectName: a.subjectName ?? "",
+        facultyName: a.facultyName ?? "",
+        hoursPerWeek: a.hoursPerWeek ?? 0,
+      }));
+
+      const wlMap = new Map<string, FacultyWorkloadExportRow>();
+      for (const f of faculty) {
+        wlMap.set(f.id, {
+          facultyName: f.name,
+          designation: f.designation,
+          department: f.department,
+          assignedSubjects: "",
+          totalHours: 0,
+        });
+      }
+      for (const a of assignments) {
+        if (!a.facultyId) continue;
+        const entry = wlMap.get(a.facultyId);
+        if (entry) {
+          entry.totalHours += a.hoursPerWeek ?? 0;
+          const label = `${a.subjectName} (${a.sectionName ?? ""})`;
+          entry.assignedSubjects = entry.assignedSubjects ? `${entry.assignedSubjects}, ${label}` : label;
+        }
+      }
+
+      const gaps: UnstaffedGapExportRow[] = gapRows.flatMap((g) =>
+        g.unstaffedSections.map((u) => ({
+          sectionName: u.section.name,
+          subjectName: g.subject.name,
+          hoursPerWeek: g.subject.hoursPerWeek ?? 0,
+          subjectType: g.subject.type,
+        }))
+      );
+
+      await downloadTeachingAssignmentsXlsx(
+        {
+          departmentName: topDepartment || "Department",
+          courseName: course?.name,
+          yearLabel: year ? ordinalYear(Number(year)) : undefined,
+          semesterLabel: effectiveSemester != null ? `Sem ${effectiveSemester}` : undefined,
+          assignments: exportAssignments,
+          facultyWorkload: Array.from(wlMap.values()),
+          unstaffedGaps: gaps,
+        },
+        `Teaching-Assignments-${topDepartment || "Dept"}.xlsx`
+      );
+      toast({ title: "Report exported", description: "Saved as Excel spreadsheet" });
+    } catch (err) {
+      console.error(err);
+      toast({ variant: "destructive", title: "Export failed", description: "Failed to export spreadsheet" });
+    } finally {
+      setIsExportingXlsx(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Teaching Assignments"
         description="Find staffing gaps and assign faculty to subjects, course &amp; year wise"
         actions={
-          <Button asChild variant="outline">
-            <Link href="/hod/assignment-requests"><Send className="h-4 w-4 mr-2" />Assignment Requests</Link>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="outline" onClick={handleExportPdf} disabled={isExportingPdf}>
+              <FileDown className="h-3.5 w-3.5 mr-1.5" />
+              {isExportingPdf ? "Generating..." : "Export PDF"}
+            </Button>
+            <Button size="sm" variant="outline" onClick={handleExportXlsx} disabled={isExportingXlsx}>
+              <FileSpreadsheet className="h-3.5 w-3.5 mr-1.5" />
+              {isExportingXlsx ? "Exporting..." : "Export Excel"}
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/hod/assignment-requests"><Send className="h-4 w-4 mr-2" />Assignment Requests</Link>
+            </Button>
+          </div>
         }
       />
 

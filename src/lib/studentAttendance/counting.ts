@@ -1,4 +1,5 @@
 import { calcPercent } from "./percentage";
+import { countsFromJoining } from "./joiningDate";
 
 // The ONE definition of "classes held" and "classes attended" for a student,
 // shared by every student-attendance report and the student's own view. These
@@ -26,6 +27,8 @@ export const isOnDutyMark = (mark: string | null | undefined): boolean => mark =
 
 export interface CountableSession {
   subjectId: string;
+  /** "YYYY-MM-DD"; when present, lets a student's joining date leave out earlier sessions. */
+  date?: string;
   status?: string;
   entries: { studentId: string; status: string | null }[];
 }
@@ -49,11 +52,12 @@ export interface HeldAttend {
 }
 
 /** Held/attended for one student over `sessions` (all subjects together). */
-export function tallyStudent(sessions: IndexedSession[], studentId: string): HeldAttend {
+export function tallyStudent(sessions: IndexedSession[], studentId: string, joinedOn?: string): HeldAttend {
   let held = 0;
   let attended = 0;
-  for (const { marks } of sessions) {
+  for (const { session, marks } of sessions) {
     if (!marks.has(studentId)) continue;
+    if (!countsFromJoining(session.date, joinedOn)) continue;
     if (isOnDutyMark(marks.get(studentId))) continue;
     held += 1;
     if (marks.get(studentId) === "PRESENT") attended += 1;
@@ -62,10 +66,11 @@ export function tallyStudent(sessions: IndexedSession[], studentId: string): Hel
 }
 
 /** Held/attended for one student, split by subject. */
-export function tallyStudentBySubject(sessions: IndexedSession[], studentId: string): Map<string, HeldAttend> {
+export function tallyStudentBySubject(sessions: IndexedSession[], studentId: string, joinedOn?: string): Map<string, HeldAttend> {
   const out = new Map<string, HeldAttend>();
   for (const { session, marks } of sessions) {
     if (!marks.has(studentId)) continue;
+    if (!countsFromJoining(session.date, joinedOn)) continue;
     if (isOnDutyMark(marks.get(studentId))) continue;
     const cur = out.get(session.subjectId) ?? { held: 0, attended: 0 };
     cur.held += 1;
@@ -86,11 +91,13 @@ export function withPercent(v: HeldAttend): HeldAttend & { percentage: number | 
  */
 export function countFullyAbsentDays(
   sessions: IndexedSession<CountableSession & { date: string }>[],
-  studentId: string
+  studentId: string,
+  joinedOn?: string
 ): number {
   const byDate = new Map<string, { held: number; absent: number }>();
   for (const { session, marks } of sessions) {
     if (!marks.has(studentId)) continue;
+    if (!countsFromJoining(session.date, joinedOn)) continue;
     const day = byDate.get(session.date) ?? { held: 0, absent: 0 };
     day.held += 1;
     if (marks.get(studentId) !== "PRESENT") day.absent += 1;

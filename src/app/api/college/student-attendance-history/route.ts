@@ -1,11 +1,14 @@
 export const dynamic = "force-dynamic";
 
+import { loadEffectiveTiming } from "@/lib/college/semester";
+import { effectiveJoiningDate } from "@/lib/studentAttendance/joiningDate";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
+import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
 import { computeStudentAttendanceHistory, studentDepartmentsForHistory } from "@/lib/studentAttendance/history";
-import type { CourseYearTiming, StudentRecord } from "@/types";
+import type { StudentRecord } from "@/types";
 
 function toDateStr(v: unknown): string {
   const d = (v as { toDate?: () => Date })?.toDate ? (v as { toDate: () => Date }).toDate() : new Date(v as string);
@@ -37,7 +40,7 @@ function earlierDate(a: string | null, b: string | null): string | null {
 // "Till now", and a mid-year section transfer doesn't silently drop history.
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "PANEL_MEMBER");
     const { searchParams } = new URL(request.url);
     const studentId = searchParams.get("studentId");
     if (!studentId) {
@@ -83,6 +86,32 @@ export async function GET(request: Request) {
       }
     }
 
+    // A class incharge (a faculty login, PANEL_MEMBER) may open the history of students in the
+    // sections they are in charge of - and only those, same rule as section-attendance-report.
+    // Section.facultyInchargeUid holds their login uid or, on older records, their FacultyMember
+    // doc id. The student's section is the one matching their department/section/year (and
+    // course, when both carry one); a student in no section of theirs is refused.
+    if (session.role === "PANEL_MEMBER") {
+      const candidateIds = await getFacultyIdCandidates(db, session.collegeId, session.uid);
+      const sectionsColl = collegeRef.collection("sections");
+      const departments = [student.department, student.secondaryDepartment].filter((d): d is string => !!d);
+      const snaps = await Promise.all(
+        departments.map((department) =>
+          sectionsColl.where("department", "==", department).where("name", "==", student.section).where("year", "==", student.year).get()
+        )
+      );
+      const isIncharge = snaps.some((snap) =>
+        snap.docs.some((d) => {
+          const sec = d.data() as { courseId?: string; facultyInchargeUid?: string };
+          if (student.courseId && sec.courseId && sec.courseId !== student.courseId) return false;
+          return !!sec.facultyInchargeUid && candidateIds.includes(sec.facultyInchargeUid);
+        })
+      );
+      if (!isIncharge) {
+        return NextResponse.json({ error: "You are not the class incharge of this student's section" }, { status: 403 });
+      }
+    }
+
     // This student's configured semester numbers (from their course-year's
     // CourseYearTiming), plus - when a specific one was requested - the
     // date range to filter attendance sessions by. A course-year with no
@@ -92,11 +121,7 @@ export async function GET(request: Request) {
     let semesterFrom: string | null = null;
     let semesterTo: string | null = null;
     if (student.courseId) {
-      const timingSnap = await collegeRef
-        .collection("courseYearTimings")
-        .doc(`${student.courseId}_year${student.year}`)
-        .get();
-      const timing = timingSnap.exists ? (timingSnap.data() as CourseYearTiming) : null;
+      const timing = await loadEffectiveTiming(db, session.collegeId, student.courseId, student.year);
       semesterOptions = (timing?.semesters ?? []).map((s) => s.semester).sort((a, b) => a - b);
       if (semesterParam) {
         const match = timing?.semesters?.find((s) => s.semester === Number(semesterParam));
@@ -129,7 +154,8 @@ export async function GET(request: Request) {
         to: earlierDate(semesterTo, toParam),
         year: yearParam,
         month: monthParam,
-      }
+      },
+      { joinedOn: effectiveJoiningDate(student) }
     );
 
     return NextResponse.json({

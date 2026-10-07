@@ -185,8 +185,12 @@ export async function GET(request: Request) {
       for (const [key, { courseId, year }] of distinctCourseYears) {
         semesterByCourseYear.set(key, await resolveSectionCurrentSemester(db, session.collegeId, courseId, year));
       }
+      // A semester the caller explicitly picked (the Teaching Load semester
+      // filter) wins over today's date, so browsing another semester shows its slots.
       const ownSlots = rawOwnSlots.filter((s) =>
-        matchesCurrentSemester(s.semester, semesterByCourseYear.get(`${s.courseId} ${s.year}`) ?? null)
+        requestedSemester != null && Number.isFinite(requestedSemester)
+          ? matchesCurrentSemester(s.semester, requestedSemester)
+          : matchesCurrentSemester(s.semester, semesterByCourseYear.get(`${s.courseId} ${s.year}`) ?? null)
       );
 
       // The displayed week's approved-leave substitutions - both directions:
@@ -611,9 +615,16 @@ export async function POST(request: Request) {
         subjectName: subject.name,
         subjectCode: subject.code,
         ...(subject.shortCode ? { shortCode: subject.shortCode } : {}),
-        // A hand-typed subject (subjects/custom) is real teaching load for the
-        // timetable but never belongs on the faculty resume.
-        ...((subject as { isCustom?: boolean }).isCustom ? { excludeFromResume: true } : {}),
+        subjectType: (subject as { type?: SubjectType }).type,
+        ...((subject as { isCustom?: boolean; isNonTeachingLoad?: boolean; excludeFromResume?: boolean; type?: string }).isCustom ||
+        (subject as { type?: string }).type === "NON_TEACHING" ||
+        (subject as { isNonTeachingLoad?: boolean }).isNonTeachingLoad ||
+        (subject as { excludeFromResume?: boolean }).excludeFromResume
+          ? { excludeFromResume: true }
+          : {}),
+        ...((subject as { type?: string }).type === "NON_TEACHING" || (subject as { isNonTeachingLoad?: boolean }).isNonTeachingLoad
+          ? { isNonTeachingLoad: true }
+          : {}),
         hoursPerWeek: body.hoursPerWeek != null ? Number(body.hoursPerWeek) : subject.hoursPerWeek,
         assignedBy: session.uid,
         assignedByName: session.role,

@@ -87,6 +87,7 @@ export const ROSTER_FIELDS: RosterField[] = [
   { key: "hallTicketNo", label: "Hall Ticket No", kind: "text", sample: "Optional; text" },
   { key: "mobileNo", label: "Student Mobile No", kind: "text", sample: "Required; 10-digit mobile starting 6-9 - must be different for every student in every college (it is how roll numbers are matched to students later)", required: true, showInList: true, placeholder: "9876543210" },
   { key: "dateOfAdmission", label: "Date of Admission (YYYY-MM-DD)", kind: "date", sample: "Optional; YYYY-MM-DD" },
+  { key: "dateOfJoining", label: "Date of Joining (YYYY-MM-DD)", kind: "date", sample: "Optional; YYYY-MM-DD - the day the student joined classes; attendance is counted from this date (falls back to Date of Admission when blank)", aliases: ["Joining Date", "DOJ"] },
   { key: "admissionType", label: "Admission Type", kind: "text", sample: "Optional; e.g. Direct, Management, Convenor", placeholder: "Direct" },
   { key: "entranceType", label: "Entrance Type", kind: "text", sample: "Optional; e.g. EAMCET, ECET, JEE", placeholder: "EAMCET" },
   { key: "entranceRank", label: "Entrance Rank", kind: "text", sample: "Optional; text/number" },
@@ -266,7 +267,7 @@ export const DETAIL_ROSTER_FIELDS = ROSTER_FIELDS.filter((f) => !f.primary);
 export const ROSTER_DETAIL_GROUPS: { title: string; keys: string[] }[] = [
   {
     title: "Academic Details",
-    keys: ["admissionNo", "hallTicketNo", "dateOfAdmission", "admissionType", "entranceType", "entranceRank", "jeeRank", "jeePercentage", "scholarship", "lastAttendedInstitution"],
+    keys: ["admissionNo", "hallTicketNo", "dateOfAdmission", "dateOfJoining", "admissionType", "entranceType", "entranceRank", "jeeRank", "jeePercentage", "scholarship", "lastAttendedInstitution"],
   },
   {
     title: "Personal Details",

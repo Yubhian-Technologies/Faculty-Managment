@@ -1,16 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { FileDown } from "lucide-react";
+import { FileDown, FileSpreadsheet, Printer } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
+import { useCollegeInfo } from "@/hooks/useCollegeInfo";
 import { formatDMY, currentWeekDates } from "@/lib/utils";
 import { isoDateKey } from "@/lib/leave/dayCounter";
 import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
 import { renderHtmlToPdf } from "@/lib/pdf/htmlToPdf";
 import { buildFacultyTimetablePdfHtml, formatTime12h } from "@/lib/timetable/facultyTimetablePdf";
+import { yearSemesterLabel } from "@/lib/academic/format";
+import { downloadFacultyTimetableXlsx } from "@/lib/timetable/timetableExport";
 import { WeekNavigator } from "@/components/timetable/WeekNavigator";
 import type { TeachingAssignment, TimetableSlot, DayOfWeek, CourseYearTiming, PeriodTiming, Course, Department } from "@/types";
 import { DAY_LABELS } from "@/types";
@@ -72,6 +75,9 @@ export default function TeachingLoadPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [typeFilter, setTypeFilter] = useState<"ALL" | "THEORY" | "PRACTICAL">("ALL");
   const [isLoading, setIsLoading] = useState(true);
+  // null = each course-year's own current semester (today's date); a number =
+  // the semester picked in the filter above the grid.
+  const [semester, setSemester] = useState<number | null>(null);
   // Monday of the week currently on screen - navigable via WeekNavigator,
   // defaulting to this calendar week. weekDates pairs positionally with
   // DAYS above, labelling each column with its actual date.
@@ -82,12 +88,8 @@ export default function TeachingLoadPage() {
     void (async () => {
       setIsLoading(true);
       try {
-        const [assignRes, timingsRes, coursesRes, deptsRes] = await Promise.all([
-          fetch(`/api/college/teaching-assignments?week=${isoDateKey(weekStart)}`),
-          // No courseId filter - a faculty's own slots can span several
-          // courses/years, so this needs every course-year's timing to
-          // resolve clock times cell by cell (see periodTimeFor below).
-          fetch("/api/college/course-year-timings"),
+        const [assignRes, coursesRes, deptsRes] = await Promise.all([
+          fetch(`/api/college/teaching-assignments?week=${isoDateKey(weekStart)}${semester != null ? "&semester=" + semester : ""}`),
           fetch("/api/college/courses"),
           fetch("/api/college/departments"),
         ]);
@@ -98,9 +100,24 @@ export default function TeachingLoadPage() {
         };
         setAssignments(json.assignments ?? []);
         setTimetableSlots(json.timetableSlots ?? []);
+        // Timings are asked for BY course id: only then does the API add the
+        // shared first year's timing to a managed-branch section (BSC-*, BSM-*
+        // ...), which has no timing row of its own. A faculty's own slots span
+        // several course-years, so periodTimeFor resolves each cell separately.
+        // Merged by id across loads so the semester list stays complete after
+        // picking one semester narrows the assignments.
+        const courseIds = Array.from(new Set([
+          ...(json.assignments ?? []).map((a) => a.courseId),
+          ...(json.timetableSlots ?? []).map((sl) => sl.courseId),
+        ].filter(Boolean))).slice(0, 30);
+        const timingsRes = await fetch(`/api/college/course-year-timings${courseIds.length ? `?courseId=${courseIds.join(",")}` : ""}`);
         if (timingsRes.ok) {
           const timingsJson = await timingsRes.json() as { timings: CourseYearTiming[] };
-          setTimings(timingsJson.timings ?? []);
+          setTimings((prev) => {
+            const byKey = new Map(prev.map((t) => [`${t.courseId}_${t.year}`, t]));
+            for (const t of timingsJson.timings ?? []) byKey.set(`${t.courseId}_${t.year}`, t);
+            return Array.from(byKey.values());
+          });
         }
         // Course short codes and department codes - needed only for the
         // downloaded PDF's short "B.TECH II ECE-A" style sub-line, never the
@@ -120,12 +137,44 @@ export default function TeachingLoadPage() {
         setIsLoading(false);
       }
     })();
-  }, [weekStart]);
+  }, [weekStart, semester]);
 
+  const semesterOptions = useMemo(() => {
+    const nums = new Set<number>();
+    for (const t of timings) for (const sem of t.semesters ?? []) nums.add(sem.semester);
+    // Also whatever semester the faculty's own records are filed under, so the
+    // filter still lists them when a course-year's timing has none configured.
+    for (const a of assignments) if (a.timetableSemester != null) nums.add(Number(a.timetableSemester));
+    for (const sl of timetableSlots) if (sl.semester != null) nums.add(Number(sl.semester));
+    if (semester != null) nums.add(semester);
+    return Array.from(nums).filter((n) => Number.isFinite(n)).sort((a, b) => a - b);
+  }, [timings, assignments, timetableSlots, semester]);
+  // Always rendered, so the filter is never silently missing.
+  const semesterPicker = (
+    <select
+      className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:border-primary focus:outline-none"
+      value={semester != null ? String(semester) : ""}
+      onChange={(e) => setSemester(e.target.value === "" ? null : Number(e.target.value))}
+    >
+      <option value="">Current semester</option>
+      {semesterOptions.map((n) => (
+        <option key={n} value={n}>{yearSemesterLabel(n)}</option>
+      ))}
+    </select>
+  );
+
+  const nonTeachingAssignmentIds = new Set(
+    assignments
+      .filter((a) => a.isNonTeachingLoad || a.excludeFromResume || (a as any).subjectType === "NON_TEACHING")
+      .map((a) => a.id)
+  );
   const assignmentById = new Map(assignments.map((a) => [a.id, a]));
-  const maxPeriod = timetableSlots.reduce((max, s) => Math.max(max, s.periodNumber), 0);
+  const filteredSlots = timetableSlots.filter(
+    (s) => !nonTeachingAssignmentIds.has(s.assignmentId) && s.subjectType !== "NON_TEACHING" && !(s as any).isNonTeachingLoad
+  );
+  const maxPeriod = filteredSlots.reduce((max, s) => Math.max(max, s.periodNumber), 0);
   const periods = Array.from({ length: maxPeriod }, (_, i) => i + 1);
-  const displaySlots = typeFilter === "ALL" ? timetableSlots : timetableSlots.filter((s) => s.subjectType === typeFilter);
+  const displaySlots = typeFilter === "ALL" ? filteredSlots : filteredSlots.filter((s) => s.subjectType === typeFilter);
 
   // Each course-year's own period-by-period breakdown, resolved once up
   // front (falls back to the plain numberOfPeriods/periodDurationMinutes
@@ -142,25 +191,86 @@ export default function TeachingLoadPage() {
     return periodsByCourseYear.get(`${courseId}_${year}`)?.find((p) => p.period === period);
   }
 
-  function downloadPdf() {
+  const { collegeInfo } = useCollegeInfo();
+  const college = collegeInfo ?? undefined;
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isExportingXlsx, setIsExportingXlsx] = useState(false);
+
+  async function downloadPdf() {
     if (periods.length === 0) return;
-    // The download is the standing SEMESTER timetable (the recurring MON-SAT
-    // pattern this person teaches every week), not a snapshot of whichever
-    // calendar week happens to be on screen - so it deliberately drops two
-    // things the on-screen grid overlays for the browsed week only: (1) the
-    // synthetic "substitute_*" entries api/college/teaching-assignments
-    // injects for a period this person is one-off covering for someone else
-    // (never a recurring slot of theirs), and (2) the substituteFacultyName/
-    // substituteForName annotation a leave-covered slot of their OWN picks up
-    // for that specific week - both would misrepresent every other week's
-    // actual schedule.
+    setIsExportingPdf(true);
+    try {
+      const semesterSlots = timetableSlots
+        .filter((s) => !s.id.startsWith("substitute_"))
+        .filter((s) => typeFilter === "ALL" || s.subjectType === typeFilter);
+      const semesterNums = Array.from(new Set(semesterSlots.map((s) => s.semester).filter((n): n is number => n != null))).sort((a, b) => a - b);
+      const courseCodeById = new Map(courses.map((c) => [c.id, c.code || c.name]));
+      const html = buildFacultyTimetablePdfHtml({
+        facultyName: user?.name ?? "",
+        semesterLabel: semesterNums.length > 0 ? semesterNums.join(", ") : "—",
+        weekStart,
+        weekEnd: weekDates[weekDates.length - 1],
+        days: DAYS,
+        periods,
+        slots: semesterSlots,
+        assignmentById,
+        periodTimeFor,
+        courseCodeById,
+        departments,
+        formatDMY,
+        college,
+      });
+      await renderHtmlToPdf(html, `Semester-Timetable-${isoDateKey(weekStart)}.pdf`);
+      toast({ title: "Timetable downloaded", description: "Saved as PDF" });
+    } catch (err) {
+      console.error(err);
+      toast({ variant: "destructive", title: "Download failed", description: "Failed to generate PDF" });
+    } finally {
+      setIsExportingPdf(false);
+    }
+  }
+
+  async function downloadXlsx() {
+    if (periods.length === 0) return;
+    setIsExportingXlsx(true);
+    try {
+      const semesterSlots = timetableSlots
+        .filter((s) => !s.id.startsWith("substitute_"))
+        .filter((s) => typeFilter === "ALL" || s.subjectType === typeFilter);
+      const semesterNums = Array.from(new Set(semesterSlots.map((s) => s.semester).filter((n): n is number => n != null))).sort((a, b) => a - b);
+      const courseCodeById = new Map(courses.map((c) => [c.id, c.code || c.name]));
+      await downloadFacultyTimetableXlsx(
+        {
+          facultyName: user?.name ?? "",
+          semesterLabel: semesterNums.length > 0 ? semesterNums.join(", ") : "—",
+          weekStart,
+          weekEnd: weekDates[weekDates.length - 1],
+          days: DAYS,
+          periods,
+          slots: semesterSlots,
+          assignmentById,
+          periodTimeFor,
+          courseCodeById,
+          departments,
+          formatDMY,
+          college,
+        },
+        `Semester-Timetable-${isoDateKey(weekStart)}.xlsx`
+      );
+      toast({ title: "Timetable exported", description: "Saved as Excel spreadsheet" });
+    } catch (err) {
+      console.error(err);
+      toast({ variant: "destructive", title: "Export failed", description: "Failed to export spreadsheet" });
+    } finally {
+      setIsExportingXlsx(false);
+    }
+  }
+
+  function handlePrint() {
+    if (periods.length === 0) return;
     const semesterSlots = timetableSlots
       .filter((s) => !s.id.startsWith("substitute_"))
       .filter((s) => typeFilter === "ALL" || s.subjectType === typeFilter);
-    // No single semester picker on this page (unlike hod/teaching - a
-    // faculty's own slots can span several course-years, each with its own
-    // independent semester calendar) - read the distinct semester number(s)
-    // straight off the slots this download actually shows instead.
     const semesterNums = Array.from(new Set(semesterSlots.map((s) => s.semester).filter((n): n is number => n != null))).sort((a, b) => a - b);
     const courseCodeById = new Map(courses.map((c) => [c.id, c.code || c.name]));
     const html = buildFacultyTimetablePdfHtml({
@@ -176,8 +286,20 @@ export default function TeachingLoadPage() {
       courseCodeById,
       departments,
       formatDMY,
+      college,
     });
-    void renderHtmlToPdf(html, `Semester-Timetable-${isoDateKey(weekStart)}.pdf`);
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      toast({ title: "Popup blocked", description: "Please allow popups to print", variant: "destructive" });
+      return;
+    }
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+    }, 400);
   }
 
   if (isLoading) {
@@ -200,9 +322,12 @@ export default function TeachingLoadPage() {
       />
 
       {periods.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-          No timetable slots have been published for you yet.
-        </div>
+        <>
+          {semester != null && <div className="flex justify-end">{semesterPicker}</div>}
+          <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+            {semester != null ? "No timetable slots for you in this semester." : "No timetable slots have been published for you yet."}
+          </div>
+        </>
       ) : (
         <>
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -214,8 +339,18 @@ export default function TeachingLoadPage() {
                 {t === "ALL" ? "All" : t === "THEORY" ? "Theory" : "Practical"}
               </Button>
             ))}
-            <Button size="sm" variant="outline" onClick={downloadPdf}>
-              <FileDown className="h-3.5 w-3.5 mr-1.5" />Download
+            {semesterPicker}
+            <Button size="sm" variant="outline" onClick={downloadPdf} disabled={isExportingPdf}>
+              <FileDown className="h-3.5 w-3.5 mr-1.5" />
+              {isExportingPdf ? "Generating PDF..." : "PDF"}
+            </Button>
+            <Button size="sm" variant="outline" onClick={downloadXlsx} disabled={isExportingXlsx}>
+              <FileSpreadsheet className="h-3.5 w-3.5 mr-1.5" />
+              {isExportingXlsx ? "Exporting Excel..." : "Excel"}
+            </Button>
+            <Button size="sm" variant="outline" onClick={handlePrint}>
+              <Printer className="h-3.5 w-3.5 mr-1.5" />
+              Print
             </Button>
           </div>
         </div>

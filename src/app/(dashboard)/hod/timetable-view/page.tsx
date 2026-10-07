@@ -96,7 +96,11 @@ export default function HODTimetableViewPage() {
   const years = useMemo(() => {
     const sectionYears = sections.map((s) => Number(s.year));
     const catalogId = courses.find((c) => sections.some((s) => s.courseId === c.id))?.catalogId;
-    return offeredYearsAcross(ownDepartmentNames, departments, catalogId, sectionYears);
+    const baseYears = offeredYearsAcross(ownDepartmentNames, departments, catalogId, sectionYears);
+    const allYears = Array.from(new Set([...baseYears, ...sectionYears]))
+      .filter((y) => Number.isFinite(y) && y >= 1)
+      .sort((a, b) => a - b);
+    return allYears.length > 0 ? allYears : [1, 2, 3, 4];
   }, [sections, departments, courses, ownDepartmentNames]);
   const yearSections = useMemo(() => sections.filter((s) => String(s.year) === year), [sections, year]);
 
@@ -252,7 +256,7 @@ export default function HODTimetableViewPage() {
           className="h-9 rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-muted"
           onClick={() => setShowLeisure((v) => !v)}
         >
-          {showLeisure ? "Hide free faculty" : "Show free faculty"}
+          {showLeisure ? "Hide leisure faculty" : "Show leisure faculty"}
         </button>
         {showLeisure && <FacultyLeisureFilter scopeLabel="in your department" />}
       </div>

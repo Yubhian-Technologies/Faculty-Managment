@@ -90,6 +90,8 @@ export function FacultyProfileModuleContent({ moduleKey, faculty, teachingAssign
         {moduleKey === "others" && <OthersModule profile={faculty.academicProfile} />}
         {moduleKey === "teaching-load" && (
           <TeachingLoadTable
+            facultyName={facultyDisplayName(faculty)}
+            department={faculty.department}
             previous={readPreviousTeachingAssignments(faculty as { previousTeachingAssignments?: unknown })}
             groups={buildTeachingLoadRows({
               currentAssignments: teachingAssignments,

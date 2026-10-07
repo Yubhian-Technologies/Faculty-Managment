@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Layers, Pencil } from "lucide-react";
+import { CalendarCheck, Layers, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -323,6 +323,11 @@ export default function StudentsPage() {
                       <Badge variant={s.status === "REGULAR" ? "default" : s.status === "GRADUATED" ? "secondary" : "destructive"} className="text-xs">
                         {s.status === "REGULAR" ? "Regular" : s.status === "GRADUATED" ? "Graduated" : "Detained"}
                       </Badge>
+                      <Button variant="ghost" size="sm" asChild title="View attendance history">
+                        <Link href={`/panel/students/${s.id}/attendance?name=${encodeURIComponent(s.name)}`}>
+                          <CalendarCheck className="h-3.5 w-3.5" />
+                        </Link>
+                      </Button>
                       <Button variant="ghost" size="sm" onClick={() => openEdit(s)} title="Set lab batch">
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>

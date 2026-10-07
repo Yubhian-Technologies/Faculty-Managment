@@ -4,11 +4,10 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getActiveSubstitutionsForDates, currentWeekDateKeys } from "@/lib/leave/periodCoverage";
-import { resolveCurrentSemester, matchesCurrentSemester } from "@/lib/college/semester";
+import { resolveCurrentSemester, matchesCurrentSemester, loadEffectiveTiming } from "@/lib/college/semester";
 import { DEFAULT_TIMETABLE_RULES } from "@/types";
 import type {
   Course,
-  CourseYearTiming,
   Department,
   Section,
   Subject,
@@ -64,14 +63,10 @@ export async function GET(request: Request) {
     const section = { id: sectionSnap.id, ...sectionSnap.data() } as Section;
 
     // Fetch this section's course, timings, slots, teaching assignments, and departments
-    const [courseSnap, timingsSnap, slotsSnap, assignmentsSnap, deptsSnap, rulesSnap] = await Promise.all([
+    const [courseSnap, timing, slotsSnap, assignmentsSnap, deptsSnap, rulesSnap] = await Promise.all([
       collegeRef.collection("courses").doc(section.courseId).get(),
-      collegeRef
-        .collection("courseYearTimings")
-        .where("courseId", "==", section.courseId)
-        .where("year", "==", section.year)
-        .limit(1)
-        .get(),
+      // Includes the main department's timing for a sub-department / shared-year section.
+      loadEffectiveTiming(db, session.collegeId, section.courseId, section.year),
       collegeRef.collection("timetableSlots").where("sectionId", "==", targetSectionId).get(),
       collegeRef.collection("teachingAssignments").where("sectionId", "==", targetSectionId).get(),
       collegeRef.collection("departments").get(),
@@ -86,9 +81,6 @@ export async function GET(request: Request) {
       : DEFAULT_TIMETABLE_RULES;
 
     const course = courseSnap.exists ? ({ id: courseSnap.id, ...courseSnap.data() } as Course) : null;
-    const timing = timingsSnap.empty
-      ? null
-      : ({ id: timingsSnap.docs[0].id, ...timingsSnap.docs[0].data() } as CourseYearTiming);
     const departments = deptsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Department);
 
     // Current semester resolution: explicit user choice or derived from
