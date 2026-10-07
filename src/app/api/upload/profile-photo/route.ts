@@ -29,7 +29,8 @@ export async function POST(request: Request) {
       "PURCHASE_DEPT",
       "WEBMASTER",
       "ADMINISTRATION",
-      "SUPER_ADMIN"
+      "SUPER_ADMIN",
+      "STUDENT"
     );
 
     const formData = await request.formData();
@@ -54,7 +55,9 @@ export async function POST(request: Request) {
     // returned URL is persisted via the college/users or college/faculty PATCH routes.
     const rawTargetId = formData.get("targetId");
     const targetId = typeof rawTargetId === "string" ? rawTargetId.replace(/[^a-zA-Z0-9_-]/g, "") : "";
-    const id = targetId || session.uid;
+    // A student can only ever upload their own photo - targetId is ignored for them (the PATCH that saves the URL
+    // also requires the path to carry their own uid).
+    const id = session.role === "STUDENT" ? session.uid : targetId || session.uid;
 
     const path = `profile-photos/${id}_${Date.now()}.${ext}`;
 
