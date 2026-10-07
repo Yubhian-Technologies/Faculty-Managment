@@ -95,9 +95,8 @@ export default function HODTeachingPage() {
       setIsLoading(true);
       try {
         const qs = `myAssignments=true&week=${isoDateKey(weekStart)}${effectiveSemester != null ? "&semester=" + effectiveSemester : ""}`;
-        const [assignRes, timingsRes, coursesRes, deptsRes] = await Promise.all([
+        const [assignRes, coursesRes, deptsRes] = await Promise.all([
           fetch(`/api/college/teaching-assignments?${qs}`),
-          fetch("/api/college/course-year-timings"),
           fetch("/api/college/courses"),
           fetch("/api/college/departments"),
         ]);
@@ -108,9 +107,24 @@ export default function HODTeachingPage() {
         };
         setAssignments(json.assignments ?? []);
         setTimetableSlots(json.timetableSlots ?? []);
+        // Timings are asked for BY course id: only then does the API add the
+        // shared first year's timing to a managed-branch section (BSC-*, BSM-*
+        // ...), which has no timing row of its own. A faculty's own slots span
+        // several course-years, so periodTimeFor resolves each cell separately.
+        // Merged by id across loads so the semester list stays complete after
+        // picking one semester narrows the assignments.
+        const courseIds = Array.from(new Set([
+          ...(json.assignments ?? []).map((a) => a.courseId),
+          ...(json.timetableSlots ?? []).map((sl) => sl.courseId),
+        ].filter(Boolean))).slice(0, 30);
+        const timingsRes = await fetch(`/api/college/course-year-timings${courseIds.length ? `?courseId=${courseIds.join(",")}` : ""}`);
         if (timingsRes.ok) {
           const timingsJson = await timingsRes.json() as { timings: CourseYearTiming[] };
-          setTimings(timingsJson.timings ?? []);
+          setTimings((prev) => {
+            const byKey = new Map(prev.map((t) => [`${t.courseId}_${t.year}`, t]));
+            for (const t of timingsJson.timings ?? []) byKey.set(`${t.courseId}_${t.year}`, t);
+            return Array.from(byKey.values());
+          });
         }
         // Course short codes and department codes - needed only for the
         // downloaded PDF's short "B.TECH II ECE-A" style sub-line, never the

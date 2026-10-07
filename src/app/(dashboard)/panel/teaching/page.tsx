@@ -14,6 +14,7 @@ import { isoDateKey } from "@/lib/leave/dayCounter";
 import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
 import { renderHtmlToPdf } from "@/lib/pdf/htmlToPdf";
 import { buildFacultyTimetablePdfHtml, formatTime12h } from "@/lib/timetable/facultyTimetablePdf";
+import { yearSemesterLabel } from "@/lib/academic/format";
 import { downloadFacultyTimetableXlsx } from "@/lib/timetable/timetableExport";
 import { WeekNavigator } from "@/components/timetable/WeekNavigator";
 import type { TeachingAssignment, TimetableSlot, DayOfWeek, CourseYearTiming, PeriodTiming, Course, Department } from "@/types";
@@ -76,6 +77,9 @@ export default function TeachingLoadPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [typeFilter, setTypeFilter] = useState<"ALL" | "THEORY" | "PRACTICAL">("ALL");
   const [isLoading, setIsLoading] = useState(true);
+  // null = each course-year's own current semester (today's date); a number =
+  // the semester picked in the filter above the grid.
+  const [semester, setSemester] = useState<number | null>(null);
   // Monday of the week currently on screen - navigable via WeekNavigator,
   // defaulting to this calendar week. weekDates pairs positionally with
   // DAYS above, labelling each column with its actual date.
@@ -86,12 +90,8 @@ export default function TeachingLoadPage() {
     void (async () => {
       setIsLoading(true);
       try {
-        const [assignRes, timingsRes, coursesRes, deptsRes] = await Promise.all([
-          fetch(`/api/college/teaching-assignments?week=${isoDateKey(weekStart)}`),
-          // No courseId filter - a faculty's own slots can span several
-          // courses/years, so this needs every course-year's timing to
-          // resolve clock times cell by cell (see periodTimeFor below).
-          fetch("/api/college/course-year-timings"),
+        const [assignRes, coursesRes, deptsRes] = await Promise.all([
+          fetch(`/api/college/teaching-assignments?week=${isoDateKey(weekStart)}${semester != null ? "&semester=" + semester : ""}`),
           fetch("/api/college/courses"),
           fetch("/api/college/departments"),
         ]);
@@ -102,9 +102,24 @@ export default function TeachingLoadPage() {
         };
         setAssignments(json.assignments ?? []);
         setTimetableSlots(json.timetableSlots ?? []);
+        // Timings are asked for BY course id: only then does the API add the
+        // shared first year's timing to a managed-branch section (BSC-*, BSM-*
+        // ...), which has no timing row of its own. A faculty's own slots span
+        // several course-years, so periodTimeFor resolves each cell separately.
+        // Merged by id across loads so the semester list stays complete after
+        // picking one semester narrows the assignments.
+        const courseIds = Array.from(new Set([
+          ...(json.assignments ?? []).map((a) => a.courseId),
+          ...(json.timetableSlots ?? []).map((sl) => sl.courseId),
+        ].filter(Boolean))).slice(0, 30);
+        const timingsRes = await fetch(`/api/college/course-year-timings${courseIds.length ? `?courseId=${courseIds.join(",")}` : ""}`);
         if (timingsRes.ok) {
           const timingsJson = await timingsRes.json() as { timings: CourseYearTiming[] };
-          setTimings(timingsJson.timings ?? []);
+          setTimings((prev) => {
+            const byKey = new Map(prev.map((t) => [`${t.courseId}_${t.year}`, t]));
+            for (const t of timingsJson.timings ?? []) byKey.set(`${t.courseId}_${t.year}`, t);
+            return Array.from(byKey.values());
+          });
         }
         // Course short codes and department codes - needed only for the
         // downloaded PDF's short "B.TECH II ECE-A" style sub-line, never the
@@ -124,7 +139,31 @@ export default function TeachingLoadPage() {
         setIsLoading(false);
       }
     })();
-  }, [weekStart]);
+  }, [weekStart, semester]);
+
+  const semesterOptions = useMemo(() => {
+    const nums = new Set<number>();
+    for (const t of timings) for (const sem of t.semesters ?? []) nums.add(sem.semester);
+    // Also whatever semester the faculty's own records are filed under, so the
+    // filter still lists them when a course-year's timing has none configured.
+    for (const a of assignments) if (a.timetableSemester != null) nums.add(Number(a.timetableSemester));
+    for (const sl of timetableSlots) if (sl.semester != null) nums.add(Number(sl.semester));
+    if (semester != null) nums.add(semester);
+    return Array.from(nums).filter((n) => Number.isFinite(n)).sort((a, b) => a - b);
+  }, [timings, assignments, timetableSlots, semester]);
+  // Always rendered, so the filter is never silently missing.
+  const semesterPicker = (
+    <select
+      className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:border-primary focus:outline-none"
+      value={semester != null ? String(semester) : ""}
+      onChange={(e) => setSemester(e.target.value === "" ? null : Number(e.target.value))}
+    >
+      <option value="">Current semester</option>
+      {semesterOptions.map((n) => (
+        <option key={n} value={n}>{yearSemesterLabel(n)}</option>
+      ))}
+    </select>
+  );
 
   const nonTeachingAssignmentIds = new Set(
     assignments
@@ -321,9 +360,12 @@ export default function TeachingLoadPage() {
       />
 
       {periods.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-          No timetable slots have been published for you yet.
-        </div>
+        <>
+          {semester != null && <div className="flex justify-end">{semesterPicker}</div>}
+          <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+            {semester != null ? "No timetable slots for you in this semester." : "No timetable slots have been published for you yet."}
+          </div>
+        </>
       ) : (
         <>
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -385,6 +427,7 @@ export default function TeachingLoadPage() {
               </DropdownMenuContent>
             </DropdownMenu>
 
+            {semesterPicker}
             <Button size="sm" variant="outline" onClick={downloadPdf} disabled={isExportingPdf}>
               <FileDown className="h-3.5 w-3.5 mr-1.5" />
               {isExportingPdf ? "Generating PDF..." : "PDF"}

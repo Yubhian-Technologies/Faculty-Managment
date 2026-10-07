@@ -256,7 +256,7 @@ export default function HODTimetableViewPage() {
           className="h-9 rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-muted"
           onClick={() => setShowLeisure((v) => !v)}
         >
-          {showLeisure ? "Hide free faculty" : "Show free faculty"}
+          {showLeisure ? "Hide leisure faculty" : "Show leisure faculty"}
         </button>
         {showLeisure && <FacultyLeisureFilter scopeLabel="in your department" />}
       </div>
