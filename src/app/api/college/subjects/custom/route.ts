@@ -17,10 +17,20 @@ import type { Department } from "@/types";
 // out of the faculty resume (see teaching-assignments POST / buildTeachingLoadRows).
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_STAFF");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_STAFF", "ACADEMICS");
     // Added for a DEPARTMENT (+ year + semester), not for any one section: every
     // section of that department then picks it from the normal Subject list.
-    const body = (await readJsonBody(request)) as { courseId?: string; departmentId?: string; year?: number; semester?: number; name?: string };
+    const body = (await readJsonBody(request)) as {
+      courseId?: string;
+      departmentId?: string;
+      year?: number;
+      semester?: number;
+      name?: string;
+      code?: string;
+      shortCode?: string;
+      type?: string;
+      isNonTeachingLoad?: boolean;
+    };
     const name = body.name?.trim() ?? "";
     const semester = Number(body.semester);
     const yearNum = Number(body.year);
@@ -79,12 +89,24 @@ export async function POST(request: Request) {
 
     const now = new Date();
     const subjectRef = collegeRef.collection("subjects").doc(`cus_${dept.id}_${section.year}_${semester}_${nameKey}`.slice(0, 200));
-    // The typed name doubles as the code, so every place that shows a code
-    // (grid, PDFs, allocation list) reads naturally. Uniqueness is by doc id.
-    const code = name;
-    // shortCode is what timetable cells show (falling back to `code`), so it
-    // carries the typed name - otherwise the grid would show "CUS-AB12C".
-    const base = { collegeId: session.collegeId, courseId: body.courseId, courseName: course.name, name, code, shortCode: name, type: "THEORY", hoursPerWeek: 0, credits: 0, isCustom: true };
+    const code = (body.code ?? body.shortCode ?? name).trim().toUpperCase();
+    const shortCode = (body.shortCode ?? body.code ?? name).trim().toUpperCase();
+    const isNonTeaching = body.type === "NON_TEACHING" || body.isNonTeachingLoad === true;
+    const type = isNonTeaching ? "NON_TEACHING" : (body.type ?? "THEORY");
+    
+    const base = {
+      collegeId: session.collegeId,
+      courseId: body.courseId,
+      courseName: course.name,
+      name,
+      code,
+      shortCode,
+      type,
+      hoursPerWeek: 0,
+      credits: 0,
+      isCustom: true,
+      ...(isNonTeaching ? { isNonTeachingLoad: true, excludeFromResume: true } : {}),
+    };
     const subjectDoc = { ...base, isActive: true, createdAt: now, updatedAt: now };
     const assignmentDoc = {
       ...base,

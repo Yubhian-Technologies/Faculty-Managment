@@ -8,7 +8,7 @@
 // (lib/timetable/gridModel.ts), so the three renderings can't drift.
 
 import ExcelJS from "exceljs";
-import type { CourseYearTiming, DayOfWeek, PeriodTiming, Subject, TeachingAssignment, TimetableSlot } from "@/types";
+import type { CourseYearTiming, DayOfWeek, Department, PeriodTiming, Subject, TeachingAssignment, TimetableSlot } from "@/types";
 import { DAY_LABELS } from "@/types";
 import { formatTime12h } from "./facultyTimetablePdf";
 import { loadExcelLogo } from "./logoAsset";
@@ -360,3 +360,227 @@ export async function downloadSectionTimetableXlsx(opts: SectionTimetableXlsxOpt
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 }
+
+export interface FacultyTimetableXlsxOptions {
+  facultyName: string;
+  semesterLabel: string;
+  weekStart: Date;
+  weekEnd: Date;
+  days: DayOfWeek[];
+  periods: number[];
+  slots: (TimetableSlot & { id: string })[];
+  assignmentById: Map<string, TeachingAssignment>;
+  periodTimeFor: (courseId: string | undefined, year: number | undefined, period: number) => PeriodTiming | undefined;
+  courseCodeById: Map<string, string>;
+  departments: Department[];
+  formatDMY: (d: Date) => string;
+  college?: { name?: string; code?: string; affiliation?: string; address?: string; phone?: string; logoUrl?: string };
+}
+
+export async function downloadFacultyTimetableXlsx(opts: FacultyTimetableXlsxOptions, filename: string): Promise<void> {
+  const { facultyName, semesterLabel, weekStart, weekEnd, days, periods, slots, assignmentById, periodTimeFor, courseCodeById, formatDMY } = opts;
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Faculty Management System";
+  workbook.created = new Date();
+
+  const sheet = workbook.addWorksheet("Faculty Timetable", {
+    pageSetup: {
+      paperSize: 9,
+      orientation: "landscape",
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0,
+      margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.3, footer: 0.3 },
+    },
+  });
+
+  const lastCol = days.length + 1; // Period column + Day columns
+  sheet.getColumn(1).width = 16;
+  days.forEach((_, i) => {
+    sheet.getColumn(i + 2).width = 22;
+  });
+
+  let r = 1;
+  const putHeader = (text: string, font: Partial<ExcelJS.Font>) => {
+    const row = sheet.getRow(r);
+    row.getCell(1).value = text;
+    row.getCell(1).font = font;
+    row.getCell(1).alignment = { horizontal: "center", vertical: "middle" };
+    sheet.mergeCells(r, 1, r, lastCol);
+    row.height = (font.size ?? 11) * 1.8;
+    r++;
+  };
+
+  // Letterhead like the section timetable's: logo in column 1, college details beside it.
+  const c = opts.college ?? {};
+  const letterheadStart = r;
+  const putText = (text: string, font: Partial<ExcelJS.Font>) => {
+    const row = sheet.getRow(r);
+    row.getCell(2).value = text;
+    row.getCell(2).font = font;
+    row.getCell(2).alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+    if (lastCol > 2) sheet.mergeCells(r, 2, r, lastCol);
+    row.height = Math.max(16, (font.size ?? 10) * 1.6);
+    r++;
+  };
+  if (c.name) putText(`${c.name}${c.code ? ` ( Code: ${c.code} )` : ""}`, { bold: true, size: 14 });
+  if (c.affiliation) putText(c.affiliation, { bold: true, size: 10 });
+  if (c.address) putText(c.address, { bold: true, size: 10 });
+  if (c.phone) putText(`Tel : ${c.phone}`, { bold: true, size: 10 });
+  const logo = await loadExcelLogo(c.logoUrl);
+  if (logo && r > letterheadStart) {
+    try {
+      const rowsPx = (sheet.getRows(letterheadStart, r - letterheadStart) ?? []).reduce((n, row) => n + ((row.height ?? 15) * 96) / 72, 0);
+      const colPx = 16 * 7 + 5;
+      const box = Math.max(24, Math.min(rowsPx - 6, colPx - 8, 84));
+      const ratio = logo.width && logo.height ? logo.width / logo.height : 1;
+      const w = ratio >= 1 ? box : box * ratio;
+      const h = ratio >= 1 ? box / ratio : box;
+      const firstRowPx = (((sheet.getRow(letterheadStart).height ?? 15) * 96) / 72) || 20;
+      sheet.addImage(workbook.addImage({ base64: logo.base64, extension: logo.extension }), {
+        tl: { col: Math.max(0, (colPx - w) / 2 / colPx), row: letterheadStart - 1 + Math.min(0.9, Math.max(0, (rowsPx - h) / 2 / firstRowPx)) },
+        ext: { width: w, height: h },
+        editAs: "oneCell",
+      });
+    } catch {
+      // A logo that can't be placed must never fail the download.
+    }
+  }
+  putHeader("FACULTY TIME TABLE", { bold: true, size: 13 });
+  putHeader(`${facultyName}   |   Semester: ${semesterLabel}   |   ${formatDMY(weekStart)} – ${formatDMY(weekEnd)}`, { bold: true, size: 10 });
+  r++; // spacer
+
+  const headerRowIndex = r++;
+  const headerRow = sheet.getRow(headerRowIndex);
+  headerRow.getCell(1).value = "Period / Day";
+  headerRow.getCell(1).font = { bold: true };
+  headerRow.getCell(1).alignment = { horizontal: "center", vertical: "middle" };
+  headerRow.getCell(1).border = BORDER;
+
+  days.forEach((d, i) => {
+    const cell = headerRow.getCell(i + 2);
+    cell.value = DAY_LABELS[d] ?? d;
+    cell.font = { bold: true };
+    cell.alignment = { horizontal: "center", vertical: "middle" };
+    cell.border = BORDER;
+  });
+  headerRow.height = 24;
+
+  for (const period of periods) {
+    const row = sheet.getRow(r);
+    const rowSlots = slots.filter((s) => s.periodNumber === period && days.includes(s.day));
+    const rowTimes = new Set(
+      rowSlots
+        .map((s) => periodTimeFor(s.courseId, s.year, period))
+        .filter((t): t is PeriodTiming => !!t)
+        .map((t) => `${formatTime12h(t.startTime)}–${formatTime12h(t.endTime)}`)
+    );
+    const timeLabel = rowTimes.size === 1 ? `\n${[...rowTimes][0]}` : "";
+    row.getCell(1).value = `Period ${period}${timeLabel}`;
+    row.getCell(1).font = { bold: true, size: 9 };
+    row.getCell(1).alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+    row.getCell(1).border = BORDER;
+
+    let maxLines = 1;
+    days.forEach((d, i) => {
+      const cellSlots = slots.filter((s) => s.day === d && s.periodNumber === period);
+      const cell = row.getCell(i + 2);
+      cell.border = BORDER;
+      cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+
+      if (cellSlots.length === 0) {
+        cell.value = "—";
+        cell.font = { color: { argb: "FF888888" } };
+      } else {
+        const textBlocks = cellSlots.map((slot) => {
+          const assignment = assignmentById.get(slot.assignmentId);
+          const courseCode = assignment?.courseId ? courseCodeById.get(assignment.courseId) : undefined;
+          const classStr = [courseCode ?? assignment?.courseName, assignment?.year ? `Yr ${assignment.year}` : null, assignment?.sectionName ? `Sec ${assignment.sectionName}` : null].filter(Boolean).join(" ");
+          const subjStr = assignment?.shortCode || assignment?.subjectName || slot.subjectName;
+          const roomStr = slot.classroom ? `Room: ${slot.classroom}` : "";
+          return [classStr, subjStr, roomStr].filter(Boolean).join("\n");
+        });
+        cell.value = textBlocks.join("\n---\n");
+        cell.font = { size: 9, bold: true };
+        const linesCount = textBlocks.reduce((acc, b) => acc + b.split("\n").length, 0);
+        maxLines = Math.max(maxLines, linesCount);
+      }
+    });
+    row.height = Math.max(30, maxLines * LINE_HEIGHT + 10);
+    r++;
+  }
+
+  const uniqueAssignments = Array.from(assignmentById.values());
+  if (uniqueAssignments.length > 0) {
+    r += 2;
+    const titleRow = sheet.getRow(r++);
+    titleRow.getCell(1).value = "TEACHING WORKLOAD & SUBJECT DETAILS";
+    titleRow.getCell(1).font = { bold: true, size: 11 };
+    sheet.mergeCells(r - 1, 1, r - 1, Math.max(7, lastCol));
+
+    const wlHeader = sheet.getRow(r++);
+    const headers = ["S.No", "Class / Section", "Subject Code", "Subject Name", "Short Code", "Type", "Hours/Wk"];
+    headers.forEach((h, i) => {
+      const cell = wlHeader.getCell(i + 1);
+      cell.value = h;
+      cell.font = { bold: true, size: 9 };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.border = BORDER;
+    });
+    wlHeader.height = 20;
+
+    let totalHours = 0;
+    uniqueAssignments.forEach((a, idx) => {
+      const row = sheet.getRow(r++);
+      const courseCode = a.courseId ? courseCodeById.get(a.courseId) : undefined;
+      const classStr = [courseCode ?? a.courseName, a.year ? `Yr ${a.year}` : null, a.sectionName].filter(Boolean).join(" ");
+      const hours = a.hoursPerWeek ?? 0;
+      totalHours += hours;
+
+      const vals = [
+        idx + 1,
+        classStr,
+        a.subjectCode ?? "—",
+        a.subjectName ?? "—",
+        a.shortCode ?? a.subjectCode ?? "—",
+        a.subjectType ?? "Theory",
+        hours,
+      ];
+      vals.forEach((v, cIdx) => {
+        const cell = row.getCell(cIdx + 1);
+        cell.value = v;
+        cell.font = { size: 9 };
+        cell.alignment = { horizontal: cIdx === 1 || cIdx === 3 ? "left" : "center", vertical: "middle" };
+        cell.border = BORDER;
+      });
+      row.height = 18;
+    });
+
+    const totalRow = sheet.getRow(r++);
+    totalRow.getCell(1).value = "TOTAL TEACHING HOURS PER WEEK";
+    totalRow.getCell(1).font = { bold: true, size: 9 };
+    sheet.mergeCells(r - 1, 1, r - 1, 6);
+    totalRow.getCell(1).alignment = { horizontal: "right", vertical: "middle" };
+    totalRow.getCell(1).border = BORDER;
+
+    const totalCell = totalRow.getCell(7);
+    totalCell.value = totalHours;
+    totalCell.font = { bold: true, size: 10 };
+    totalCell.alignment = { horizontal: "center", vertical: "middle" };
+    totalCell.border = BORDER;
+    totalRow.height = 20;
+  }
+
+  const buffer = (await workbook.xlsx.writeBuffer()) as ArrayBuffer;
+  const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename.endsWith(".xlsx") ? filename : `${filename}.xlsx`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+

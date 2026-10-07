@@ -1,5 +1,11 @@
 "use client";
 
+import { useState } from "react";
+import { FileDown, FileSpreadsheet } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from "@/hooks/useToast";
+import { useCollegeInfo } from "@/hooks/useCollegeInfo";
+import { downloadTeachingLoadPdf, downloadTeachingLoadXlsx } from "@/lib/teaching/teachingLoadExport";
 import { formatClassColumn, type TeachingLoadRow, type TeachingLoadGroups } from "@/lib/teaching/buildTeachingLoadRows";
 import { formatPassPercentage, PREVIOUS_TEACHING_SOURCE_LABELS } from "@/lib/faculty/previousTeaching";
 import type { PreviousTeachingAssignment } from "@/types";
@@ -8,6 +14,9 @@ interface Props {
   groups: TeachingLoadGroups;
   // Free-text Previous Teaching Assignments from the faculty record - shown above any earlier course/section/subject entries.
   previous?: PreviousTeachingAssignment[];
+  // Printed in the downloads' heading and file name.
+  facultyName?: string;
+  department?: string;
 }
 
 function PreviousTable({ rows }: { rows: PreviousTeachingAssignment[] }) {
@@ -73,13 +82,40 @@ function LoadTable({ rows, showPastColumns }: { rows: TeachingLoadRow[]; showPas
 // Read-only preview of the same Teaching Load tables the resume renders - kept
 // as two separate tables (Current vs Past) rather than intermixed, matching the
 // resume's layout, so what the HOD sees here matches what gets downloaded.
-export function TeachingLoadTable({ groups, previous = [] }: Props) {
+export function TeachingLoadTable({ groups, previous = [], facultyName, department }: Props) {
+  const [busy, setBusy] = useState<"" | "pdf" | "xlsx">("");
+  const { collegeInfo } = useCollegeInfo();
   if (groups.current.length === 0 && groups.past.length === 0 && previous.length === 0) {
     return <p className="text-xs text-muted-foreground">No teaching load data yet - add current teaching assignments above or previous/present records under Academic Profile.</p>;
   }
 
+  async function download(kind: "pdf" | "xlsx") {
+    setBusy(kind);
+    try {
+      const input = {
+        groups, previous, facultyName, department,
+        college: collegeInfo ? { name: collegeInfo.name, code: collegeInfo.code, affiliation: collegeInfo.affiliation, address: collegeInfo.address, phone: collegeInfo.phone, logoUrl: collegeInfo.logoUrl } : undefined,
+      };
+      const base = `Teaching-Load${facultyName ? `-${facultyName.replace(/[^A-Za-z0-9]+/g, "-")}` : ""}`;
+      if (kind === "pdf") await downloadTeachingLoadPdf(input, base);
+      else await downloadTeachingLoadXlsx(input, base);
+    } catch {
+      toast({ variant: "destructive", title: "Download failed" });
+    } finally {
+      setBusy("");
+    }
+  }
+
   return (
     <div className="space-y-4">
+      <div className="flex justify-end gap-2">
+        <Button size="sm" variant="outline" onClick={() => void download("pdf")} disabled={busy !== ""}>
+          <FileDown className="h-3.5 w-3.5 mr-1.5" />{busy === "pdf" ? "Generating PDF..." : "PDF"}
+        </Button>
+        <Button size="sm" variant="outline" onClick={() => void download("xlsx")} disabled={busy !== ""}>
+          <FileSpreadsheet className="h-3.5 w-3.5 mr-1.5" />{busy === "xlsx" ? "Exporting Excel..." : "Excel"}
+        </Button>
+      </div>
       {groups.current.length > 0 && (
         <div className="space-y-1.5">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Current Teaching Assignments</p>
