@@ -282,6 +282,27 @@ describe("HOD paged list", () => {
     expect(none.total).toBe(0);
   });
 
+  // A shared-first-year department holds one cohort per branch at once; the
+  // Core Department filter picks one of them. Keyed on secondaryDepartment, so
+  // a student with none recorded never matches a narrowed filter.
+  it("narrows to one Core Department when asked", async () => {
+    const shared = [
+      stu("a", { department: "BS-Maths", secondaryDepartment: "CSE", year: 1, rollNumber: "A1", name: "Asha" }),
+      stu("b", { department: "BS-Maths", secondaryDepartment: "CSBS", year: 1, rollNumber: "A2", name: "Bhanu" }),
+      stu("c", { department: "BS-Maths", secondaryDepartment: "CSE", year: 1, rollNumber: "A3", name: "Chetan" }),
+      stu("d", { department: "BS-Maths", year: 1, rollNumber: "A4", name: "Divya" }),
+    ];
+    const sharedCtx = hodContext({ own: ["BS-Maths"] });
+    const { collection } = fakeStudentsCollection(shared);
+    const page = await fetchHodStudentsPage(collection, sharedCtx, { ...primaryFilters, coreDepartment: "CSE" }, opts);
+    expect(page.students.map((s) => s.id)).toEqual(["a", "c"]);
+    expect(page.total).toBe(2);
+
+    const all = fakeStudentsCollection(shared);
+    const unfiltered = await fetchHodStudentsPage(all.collection, sharedCtx, primaryFilters, opts);
+    expect(unfiltered.total).toBe(4);
+  });
+
   it("never reads the cross-listed students for the editable roster", async () => {
     const { collection } = fakeStudentsCollection(roster);
     const page = await fetchHodStudentsPage(collection, ctx, primaryFilters, opts);

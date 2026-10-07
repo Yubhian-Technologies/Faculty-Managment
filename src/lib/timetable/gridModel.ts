@@ -288,8 +288,8 @@ export const toRoman = roman;
 /** "Bachelor Of Technology" -> "B.Tech" etc.; anything unrecognised is left as written. */
 function shortCourseName(course: string): string {
   const c = course.trim();
-  if (/^(bachelor of technology|b\.?\s?tech)\b/i.test(c)) return "B.Tech";
-  if (/^(master of technology|m\.?\s?tech)\b/i.test(c)) return "M.Tech";
+  if (/^(bachelor of technology|b\.?\s?tech)\b/i.test(c)) return "B. Tech";
+  if (/^(master of technology|m\.?\s?tech)\b/i.test(c)) return "M. Tech";
   if (/^(bachelor of engineering|b\.?\s?e)\.?$/i.test(c)) return "B.E";
   if (/^(master of business administration|mba)$/i.test(c)) return "MBA";
   if (/^(master of computer applications|mca)$/i.test(c)) return "MCA";
@@ -297,10 +297,46 @@ function shortCourseName(course: string): string {
 }
 
 /**
- * The short class line printed on a section timetable, e.g. "III B.Tech I Sem CSE A":
- * year and semester in roman numerals, the course abbreviated, and the section as
- * "<branch> <letter>" (a name stored as "CSE-A" reads "CSE A"; a bare "A" is prefixed
- * with the department's initials). Batch, regulation and academic year are left out.
+ * Formats the Year /Sem/Branch header line, e.g. "Year /Sem/Branch: I-B. Tech / I-Sem / AIDS-A".
+ */
+export function formatYearSemBranch(parts: {
+  courseName?: string;
+  year?: number;
+  semesterLabel?: string;
+  sectionName?: string;
+  departmentName?: string;
+  includeLabel?: boolean;
+}): string {
+  const semNumber = parts.semesterLabel?.match(/\d+/g)?.pop();
+  const semester = semNumber ? `${roman(Number(semNumber))}-Sem` : parts.semesterLabel;
+
+  const nameParts = (parts.sectionName ?? "").trim().split(/[-_\s]+/).filter(Boolean);
+  let sectionParts = nameParts.length >= 3 ? nameParts.slice(1) : nameParts;
+  if (sectionParts.length === 1 && !/[A-Za-z]{2,}/.test(sectionParts[0]) && parts.departmentName) {
+    const initials = parts.departmentName.split(/[\s&]+/).filter((w) => /^[A-Za-z]/.test(w) && !/^(and|of)$/i.test(w)).map((w) => w[0].toUpperCase()).join("");
+    sectionParts = [initials, sectionParts[0]];
+  }
+  const section = sectionParts.join("-");
+
+  const courseAbbr = parts.courseName ? shortCourseName(parts.courseName) : "";
+  const yearCourse = parts.year != null ? `${roman(parts.year)}-${courseAbbr}` : courseAbbr;
+
+  const combined = [yearCourse, semester, section].filter(Boolean).join(" / ");
+  if (!combined) return "";
+  return parts.includeLabel !== false ? `Year /Sem/Branch: ${combined}` : combined;
+}
+
+/**
+ * Formats the room number label, e.g. "ROOM NO: B-302".
+ */
+export function formatRoomNo(classroom?: string): string {
+  if (!classroom?.trim()) return "";
+  const cleaned = classroom.trim().replace(/^room\s*(no)?\s*:?\s*/i, "").trim();
+  return `ROOM NO: ${cleaned}`;
+}
+
+/**
+ * The short class line printed on a section timetable, e.g. "Year /Sem/Branch: I-B. Tech / I-Sem / AIDS-A  |  ROOM NO: B-302".
  */
 export function timetableClassLine(parts: {
   courseName?: string;
@@ -310,32 +346,10 @@ export function timetableClassLine(parts: {
   departmentName?: string;
   classroom?: string;
 }): string {
-  // The LAST number: pickers label a semester "2-1" (year-semester), and the
-  // class line already shows the year, so it is the semester within the year.
-  const semNumber = parts.semesterLabel?.match(/\d+/g)?.pop();
-  const semester = semNumber ? `${roman(Number(semNumber))} Sem` : parts.semesterLabel;
-  // A branch-picker name carries the owning department's code first
-  // ("BSC-CSE-C" = Basic Science, CSE, C); the class line wants "CSE-C".
-  const nameParts = (parts.sectionName ?? "").trim().split(/[-_\s]+/).filter(Boolean);
-  let sectionParts = nameParts.length >= 3 ? nameParts.slice(1) : nameParts;
-  if (sectionParts.length === 1 && !/[A-Za-z]{2,}/.test(sectionParts[0]) && parts.departmentName) {
-    const initials = parts.departmentName.split(/[\s&]+/).filter((w) => /^[A-Za-z]/.test(w) && !/^(and|of)$/i.test(w)).map((w) => w[0].toUpperCase()).join("");
-    sectionParts = [initials, sectionParts[0]];
-  }
-  const section = sectionParts.join("-");
-
-  const base = [
-    parts.year != null ? roman(parts.year) : undefined,
-    parts.courseName ? shortCourseName(parts.courseName) : undefined,
-    semester,
-    section || undefined,
-  ].filter(Boolean).join(" ");
-
-  if (parts.classroom?.trim()) {
-    const roomStr = /^room/i.test(parts.classroom.trim()) ? parts.classroom.trim() : `Room: ${parts.classroom.trim()}`;
-    return base ? `${base}  |  ${roomStr}` : roomStr;
-  }
-  return base;
+  const left = formatYearSemBranch(parts);
+  const room = formatRoomNo(parts.classroom);
+  if (left && room) return `${left}  |  ${room}`;
+  return left || room;
 }
 
 export function buildClassTimetableSubtitle(opts: {
@@ -344,15 +358,19 @@ export function buildClassTimetableSubtitle(opts: {
   semesterLabel?: string;
   effectiveDate?: string;
 }): string {
-  const acadYear = opts.academicYear || "2026-2027";
+  const acadYear = opts.academicYear || "2026-27";
   const semNum = typeof opts.semester === "number"
     ? opts.semester
     : Number(opts.semesterLabel?.match(/\d+/g)?.pop()) || 1;
-  const semType = semNum > 0 ? (semNum % 2 === 1 ? "Odd Semester" : "Even Semester") : "Semester";
-  const eff = opts.effectiveDate?.trim() || istDateKey();
-  const iso = eff.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  const shown = iso ? `${iso[3]}-${iso[2]}-${iso[1]}` : eff;
-  return `Class Time Table for the Academic Year ${acadYear}, ${semType}, w.e.f ${shown}`;
+  const semType = semNum > 0 ? (semNum % 2 === 1 ? "Odd Sem." : "Even Sem.") : "Sem.";
+  const eff = opts.effectiveDate?.trim();
+  let wefSentence = "";
+  if (eff) {
+    const iso = eff.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const shown = iso ? `${iso[3]}.${iso[2]}.${iso[1]}` : eff;
+    wefSentence = `, w.e.f. ${shown}`;
+  }
+  return `Class Timetable for Academic Year ${acadYear}, ${semType}${wefSentence}`;
 }
 
 /**
@@ -411,11 +429,11 @@ export function isLabSlot(slot: TimetableSlot, subjects?: Map<string, Subject> |
   return /\b(lab|laboratory|practical)\b/i.test(slot.subjectName ?? "");
 }
 
-/** The effective date entered at publish time, carried on the published slots (latest wins, falls back to today IST). */
-export function latestEffectiveDate(slots: { effectiveDate?: string }[]): string {
+/** The effective date entered at publish time, carried on the published slots. */
+export function latestEffectiveDate(slots: { effectiveDate?: string }[]): string | undefined {
   let best: string | undefined;
   for (const s of slots) if (s.effectiveDate && (!best || s.effectiveDate > best)) best = s.effectiveDate;
-  return best || istDateKey();
+  return best;
 }
 
 export function getHodSignatureLabel(deptNameOrCode?: string): string {

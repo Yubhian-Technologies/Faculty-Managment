@@ -2,7 +2,6 @@
 
 import { MAX_FACULTY_PER_SUBJECT } from "@/lib/teaching/facultyCap";
 import { useEffect, useMemo, useState } from "react";
-import { CustomSubjectAdder } from "@/components/timetable/CustomSubjectAdder";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Plus, Send, Trash2, X } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -509,22 +508,6 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
           </CardContent>
         </Card>
       )}
-
-      {/* Department-level, outside the section form: the subject is added for the
-          department's semester and then picked like any regular subject. */}
-      <CustomSubjectAdder
-        departments={departments.filter((d) => sections.some((s) => s.department === d.name))}
-        courseIdFor={(deptId) => {
-          const name = departments.find((d) => d.id === deptId)?.name;
-          return sections.find((s) => s.department === name)?.courseId ?? courseId;
-        }}
-        year={Number(year)}
-        semester={effectiveSemester}
-        onAdded={({ subject, assignment }) => {
-          setMasterSubjects((p) => [...p.filter((x) => x.id !== subject.id), subject]);
-          setSemesterAssignments((p) => [...p.filter((x) => x.id !== assignment.id), assignment]);
-        }}
-      />
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card>

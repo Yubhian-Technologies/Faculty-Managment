@@ -45,10 +45,28 @@ export interface StudentListQuery {
    * file stays agnostic to why there's more than one.
    */
   departments: string[];
+  /**
+   * Exact "core department" name - a student's `secondaryDepartment`, the real
+   * branch a shared-first-year student belongs to while the feeder department
+   * holds them. "" means no filter. Only ever meaningful alongside
+   * `departments`: it narrows a feeder department's roll-up to one of the
+   * branches it manages. Applied in memory, like the other non-structural
+   * filters, over the candidate set `departments` already narrowed.
+   */
+  coreDepartment?: string;
   /** Exact course name. "" means no filter. */
   course: string;
   /** null means no filter. */
   year: number | null;
+  /**
+   * The years the picked department is actually configured to teach - what
+   * "All years" means once a department is chosen, rather than "no filter at
+   * all". A department filter matches department OR secondaryDepartment, so
+   * picking a branch that teaches years 2-4 otherwise also returned the 1st
+   * years a feeder department holds for it. [] / absent means no filter, which
+   * is still what "All years" means with no department picked.
+   */
+  years?: number[];
   /** Exact studentType ("Regular"/"Lateral"). "" means no filter. */
   studentType: string;
   /**
@@ -87,9 +105,11 @@ export function rollInRange(roll: unknown, range: RollRange): boolean {
 
 function matchesRemaining(
   data: FirebaseFirestore.DocumentData,
-  opts: Pick<StudentListQuery, "search" | "course" | "year" | "studentType" | "rollFrom" | "rollTo">
+  opts: Pick<StudentListQuery, "search" | "course" | "year" | "years" | "studentType" | "rollFrom" | "rollTo" | "coreDepartment">
 ): boolean {
   if (opts.year !== null && Number(data.year) !== opts.year) return false;
+  if (opts.years && opts.years.length > 0 && !opts.years.includes(Number(data.year))) return false;
+  if (opts.coreDepartment && data.secondaryDepartment !== opts.coreDepartment) return false;
   if (opts.course && data.course !== opts.course) return false;
   if (opts.studentType && data.studentType !== opts.studentType) return false;
   if (!rollInRange(data.rollNumber, opts)) return false;
@@ -159,7 +179,7 @@ export async function fetchStudentsPage(
   studentsColl: FirebaseFirestore.CollectionReference,
   params: StudentListQuery
 ): Promise<{ students: StudentListItem[]; total: number }> {
-  const hasFilter = params.departments.length > 0 || params.year !== null || !!params.course || !!params.search || !!params.studentType || hasRollRange(params);
+  const hasFilter = params.departments.length > 0 || params.year !== null || !!params.course || !!params.search || !!params.studentType || !!params.coreDepartment || (params.years?.length ?? 0) > 0 || hasRollRange(params);
 
   if (!hasFilter) {
     const [countSnap, pageSnap] = await Promise.all([
@@ -184,7 +204,7 @@ export async function fetchStudentsPage(
  */
 export async function fetchMatchingStudentIds(
   studentsColl: FirebaseFirestore.CollectionReference,
-  params: Pick<StudentListQuery, "departments" | "year" | "course" | "search" | "studentType" | "rollFrom" | "rollTo">
+  params: Pick<StudentListQuery, "departments" | "year" | "years" | "course" | "search" | "studentType" | "rollFrom" | "rollTo" | "coreDepartment">
 ): Promise<string[]> {
   const candidates = await resolveCandidates(studentsColl, params);
   return candidates.filter((d) => matchesRemaining(d.data(), params)).map((d) => d.id);
