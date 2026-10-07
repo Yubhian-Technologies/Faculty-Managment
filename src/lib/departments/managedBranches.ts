@@ -338,7 +338,7 @@ export type SectionHodVisibility = "primary" | "secondary" | "hidden";
  *                 nothing else, so these are not theirs to see at all.
  */
 export function classifySectionForHod<T extends DepartmentYearRow & { name?: string }>(
-  scope: { ownDepartmentNames: string[]; childDepartmentNames: string[] },
+  scope: { ownDepartmentNames: string[]; childDepartmentNames: string[]; managedDepartmentNames?: string[] },
   departments: T[],
   departmentName: string,
   year: number,
@@ -346,5 +346,11 @@ export function classifySectionForHod<T extends DepartmentYearRow & { name?: str
 ): SectionHodVisibility {
   const owner = resolveBranchYearOwner(departments, departmentName, year, catalogId);
   if (scope.ownDepartmentNames.includes(owner) || scope.childDepartmentNames.includes(owner)) return "primary";
-  return scope.childDepartmentNames.includes(departmentName) ? "secondary" : "hidden";
+  if (
+    scope.childDepartmentNames.includes(departmentName) ||
+    (scope.managedDepartmentNames && scope.managedDepartmentNames.includes(departmentName))
+  ) {
+    return "secondary";
+  }
+  return "hidden";
 }

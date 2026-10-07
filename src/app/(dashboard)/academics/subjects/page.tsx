@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
-import { ArrowLeft, Edit2, Trash2, BookOpen } from "lucide-react";
+import { ArrowLeft, Edit2, Trash2, BookOpen, Plus, Award } from "lucide-react";
 import type { Subject, SubjectCategory } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
 import { CategoryField } from "@/components/academics/CategoryField";
@@ -19,7 +19,7 @@ import { CategoryField } from "@/components/academics/CategoryField";
 // Academics > Subjects. View and manage subjects assigned to departments
 // by year and semester in a horizontal table with CRUD & bulk delete capabilities.
 
-type CourseOption = { id: string; name: string; catalogId?: string; isActive?: boolean };
+type CourseOption = { id: string; name: string; catalogId?: string; departmentId?: string; isActive?: boolean };
 type DepartmentOption = { id: string; name: string; parentDepartmentId?: string };
 type AssignmentWithMaster = { assignment: any; master: Subject };
 type EditForm = {
@@ -41,7 +41,17 @@ type EditForm = {
   credits: string;
 };
 
-const SELECT_CLASS = "h-9 w-full rounded-md border bg-background px-2 text-sm";
+type AddForm = {
+  regulation: string; serialNumber: string; category: string; customCategory: string;
+  name: string; code: string; shortCode: string; type: string;
+  lectureHours: string; tutorialHours: string; practicalHours: string; credits: string;
+};
+const EMPTY_ADD: AddForm = {
+  regulation: "", serialNumber: "", category: "", customCategory: "", name: "", code: "", shortCode: "",
+  type: "THEORY", lectureHours: "0", tutorialHours: "0", practicalHours: "0", credits: "0",
+};
+
+const SELECT_CLASS ="h-9 w-full rounded-md border bg-background px-2 text-sm";
 
 export default function SubjectsPage() {
   const [courses, setCourses] = useState<CourseOption[]>([]);
@@ -62,11 +72,29 @@ export default function SubjectsPage() {
   const [editError, setEditError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
+  const [regulations, setRegulations] = useState<Record<string, string[]>>({});
+  const [addForm, setAddForm] = useState<AddForm | null>(null);
+  const [addError, setAddError] = useState("");
+  const [isAdding, setIsAdding] = useState(false);
+
   const [deleting, setDeleting] = useState<any>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [showBulkConfirm, setShowBulkConfirm] = useState(false);
+
+  const [isAddNonTeachingOpen, setIsAddNonTeachingOpen] = useState(false);
+  const [nonTeachingForm, setNonTeachingForm] = useState({
+    courseKey: "",
+    deptId: "",
+    subDeptId: "",
+    year: "1",
+    semester: "1",
+    name: "",
+    shortCode: "",
+  });
+  const [nonTeachingError, setNonTeachingError] = useState("");
+  const [isSubmittingNonTeaching, setIsSubmittingNonTeaching] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -94,6 +122,13 @@ export default function SubjectsPage() {
     })();
   }, []);
 
+  useEffect(() => {
+    fetch("/api/college/course-catalog")
+      .then((r) => r.json() as Promise<{ items?: { id: string; regulations?: string[] }[] }>)
+      .then((d) => setRegulations(Object.fromEntries((d.items ?? []).map((c) => [c.id, c.regulations ?? []]))))
+      .catch(() => { /* regulation list just stays empty */ });
+  }, []);
+
   const courseGroups = useMemo(() => {
     const groups = new Map<string, { key: string; name: string; ids: string[] }>();
     for (const c of courses) {
@@ -106,6 +141,7 @@ export default function SubjectsPage() {
   }, [courses]);
   const topDepartments = useMemo(() => departments.filter((d) => !d.parentDepartmentId), [departments]);
   const subDepartments = useMemo(() => departments.filter((d) => d.parentDepartmentId === deptId), [departments, deptId]);
+  const dialogSubDepartments = useMemo(() => departments.filter((d) => d.parentDepartmentId === nonTeachingForm.deptId), [departments, nonTeachingForm.deptId]);
   const activeDeptId = subDeptId || deptId;
 
   async function fetchAssignments(
@@ -174,6 +210,144 @@ export default function SubjectsPage() {
     if (next.has(id)) next.delete(id);
     else next.add(id);
     setSelectedIds(next);
+  }
+
+  function openAdd() {
+    setAddError("");
+    setAddForm({ ...EMPTY_ADD, regulation: (regulations[courseKey] ?? [])[0] ?? "" });
+  }
+
+  async function handleAdd() {
+    if (!addForm) return;
+    setAddError("");
+    const group = courseGroups.find((g) => g.key === courseKey);
+    // A sub-department owns no Course doc: its subjects live on the parent's course.
+    const owner = departments.find((d) => d.id === activeDeptId);
+    const ownerIds = [activeDeptId, owner?.parentDepartmentId];
+    const course = courses.find((c) => group?.ids.includes(c.id) && ownerIds.includes(c.departmentId));
+    if (!course) { setAddError("No course found for this department."); return; }
+    if (!addForm.name.trim() || !addForm.code.trim()) { setAddError("Name and code are required."); return; }
+    if (addForm.serialNumber.trim() === "") { setAddError("S.No. is required."); return; }
+    if (!addForm.category) { setAddError("Category is required."); return; }
+    if (addForm.category === "OTHER" && !addForm.customCategory.trim()) { setAddError("Enter a name for the custom category."); return; }
+    setIsAdding(true);
+    try {
+      const sres = await fetch("/api/college/subjects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          courseId: course.id,
+          regulation: addForm.regulation,
+          serialNumber: Number(addForm.serialNumber),
+          category: addForm.category,
+          customCategory: addForm.customCategory.trim(),
+          name: addForm.name.trim(),
+          code: addForm.code.trim(),
+          shortCode: addForm.shortCode.trim(),
+          type: addForm.type,
+          lectureHours: Number(addForm.lectureHours) || 0,
+          tutorialHours: Number(addForm.tutorialHours) || 0,
+          practicalHours: Number(addForm.practicalHours) || 0,
+          credits: Number(addForm.credits) || 0,
+        }),
+      });
+      const sbody = await sres.json() as { id?: string; subject?: { id: string }; error?: string };
+      const subjectId = sbody.id ?? sbody.subject?.id;
+      if (!sres.ok || !subjectId) { setAddError(sbody.error ?? "Failed to add the subject."); return; }
+
+      const ares = await fetch("/api/college/subject-semester-assignments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subjectId, departmentId: activeDeptId, courseId: course.id, year: Number(year), semester: Number(semester) }),
+      });
+      if (!ares.ok) {
+        const abody = await ares.json() as { error?: string };
+        setAddError(`Subject created, but not assigned to Year ${year} Sem ${semester}: ${abody.error ?? "failed"}. Use Course Structure to assign it.`);
+        return;
+      }
+      toast({ variant: "success", title: "Subject added" });
+      setAddForm(null);
+      handleLoad();
+    } catch {
+      setAddError("Network error.");
+    } finally {
+      setIsAdding(false);
+    }
+  }
+
+  function openAddNonTeaching() {
+    setNonTeachingError("");
+    setNonTeachingForm({
+      courseKey: courseKey || (courseGroups[0]?.key ?? ""),
+      deptId: deptId || (topDepartments[0]?.id ?? ""),
+      subDeptId: subDeptId || "",
+      year: year || "1",
+      semester: semester || "1",
+      name: "",
+      shortCode: "",
+    });
+    setIsAddNonTeachingOpen(true);
+  }
+
+  async function handleAddNonTeaching() {
+    setNonTeachingError("");
+    if (!nonTeachingForm.name.trim() || !nonTeachingForm.shortCode.trim()) {
+      setNonTeachingError("Subject Name and Short Code are required.");
+      return;
+    }
+    const group = courseGroups.find((g) => g.key === nonTeachingForm.courseKey);
+    const targetDeptId = nonTeachingForm.subDeptId || nonTeachingForm.deptId;
+    const targetDept = departments.find((d) => d.id === targetDeptId);
+    const ownerIds = [targetDeptId, targetDept?.parentDepartmentId].filter((id): id is string => !!id);
+    const course = courses.find((c) => group?.ids.includes(c.id) && !!c.departmentId && ownerIds.includes(c.departmentId))
+      ?? courses.find((c) => group?.ids.includes(c.id));
+    if (!course || !targetDeptId) {
+      setNonTeachingError("Course and Department are required.");
+      return;
+    }
+
+    setIsSubmittingNonTeaching(true);
+    try {
+      const res = await fetch("/api/college/subjects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          courseId: course.id,
+          departmentId: targetDeptId,
+          year: Number(nonTeachingForm.year),
+          semester: Number(nonTeachingForm.semester),
+          name: nonTeachingForm.name.trim(),
+          code: nonTeachingForm.shortCode.trim().toUpperCase(),
+          shortCode: nonTeachingForm.shortCode.trim().toUpperCase(),
+          type: "NON_TEACHING",
+          isNonTeachingLoad: true,
+          isCustom: true,
+          excludeFromResume: true,
+          lectureHours: 0,
+          tutorialHours: 0,
+          practicalHours: 0,
+          hoursPerWeek: 0,
+          credits: 0,
+          serialNumber: 999,
+          category: "OTHER",
+          customCategory: "Non-Teaching / Attendance Only",
+        }),
+      });
+
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setNonTeachingError(json.error ?? "Failed to add non-teaching subject.");
+        return;
+      }
+
+      toast({ variant: "success", title: "Non-Teaching Subject added successfully" });
+      setIsAddNonTeachingOpen(false);
+      void fetchAssignments(nonTeachingForm.courseKey, nonTeachingForm.deptId, nonTeachingForm.subDeptId, nonTeachingForm.year, nonTeachingForm.semester);
+    } catch {
+      setNonTeachingError("Network error.");
+    } finally {
+      setIsSubmittingNonTeaching(false);
+    }
   }
 
   function openEdit(item: AssignmentWithMaster) {
@@ -324,9 +498,17 @@ export default function SubjectsPage() {
         title="Subjects"
         description="View and manage subjects by department, year and semester"
         actions={
-          <Button variant="outline" asChild>
-            <Link href="/academics"><ArrowLeft className="h-4 w-4 mr-1" />Back</Link>
-          </Button>
+          <div className="flex gap-2 flex-wrap">
+            <Button onClick={openAdd} disabled={!courseKey || !deptId}>
+              <Plus className="h-4 w-4 mr-1" />Add Subject
+            </Button>
+            <Button variant="outline" onClick={openAddNonTeaching}>
+              <Award className="h-4 w-4 mr-1 text-purple-600 dark:text-purple-400" />Add Non-Teaching Subject
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/academics"><ArrowLeft className="h-4 w-4 mr-1" />Back</Link>
+            </Button>
+          </div>
         }
       />
 
@@ -441,6 +623,7 @@ export default function SubjectsPage() {
             <tbody className="divide-y divide-border">
               {assignments.map((item) => {
                 const isSelected = selectedIds.has(item.assignment.id);
+                const isNonTeaching = item.master.type === "NON_TEACHING" || item.assignment.type === "NON_TEACHING" || (item.master as any).isNonTeachingLoad || (item.assignment as any).isNonTeachingLoad;
                 const lec = item.assignment.lectureHours ?? item.master.lectureHours ?? 0;
                 const tut = item.assignment.tutorialHours ?? item.master.tutorialHours ?? 0;
                 const prac = item.assignment.practicalHours ?? item.master.practicalHours ?? 0;
@@ -465,19 +648,26 @@ export default function SubjectsPage() {
                       </span>
                     </td>
                     <td className="p-3">
-                      <p className="font-semibold text-foreground">{item.master.name}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold text-foreground">{item.master.name}</p>
+                        {isNonTeaching && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-100 text-purple-800 dark:bg-purple-950/70 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                            Non-Teaching
+                          </span>
+                        )}
+                      </div>
                       {item.master.shortCode && (
                         <p className="text-xs text-muted-foreground font-mono">{item.master.shortCode}</p>
                       )}
                     </td>
                     <td className="p-3 text-xs text-muted-foreground">
-                      {item.master.category || "—"}
+                      {isNonTeaching ? "Attendance Only" : (item.master.category || "—")}
                     </td>
-                    <td className="p-3 text-center font-medium">{lec}</td>
-                    <td className="p-3 text-center font-medium">{tut}</td>
-                    <td className="p-3 text-center font-medium">{prac}</td>
-                    <td className="p-3 text-center font-bold text-foreground">{totalHours}</td>
-                    <td className="p-3 text-center font-semibold text-primary">{credits}</td>
+                    <td className="p-3 text-center font-medium">{isNonTeaching ? "—" : lec}</td>
+                    <td className="p-3 text-center font-medium">{isNonTeaching ? "—" : tut}</td>
+                    <td className="p-3 text-center font-medium">{isNonTeaching ? "—" : prac}</td>
+                    <td className="p-3 text-center font-bold text-foreground">{isNonTeaching ? "—" : totalHours}</td>
+                    <td className="p-3 text-center font-semibold text-primary">{isNonTeaching ? "—" : credits}</td>
                     <td className="p-3 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <Button
@@ -507,6 +697,75 @@ export default function SubjectsPage() {
           </table>
         </div>
       )}
+
+      {/* Add Dialog */}
+      <Dialog open={!!addForm} onOpenChange={(open) => !open && setAddForm(null)}>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Add Subject</DialogTitle></DialogHeader>
+          {addForm && (
+            <div className="grid gap-3">
+              <p className="text-xs text-muted-foreground rounded-md border bg-muted/40 p-2">
+                Adds the subject to <strong>{departments.find((d) => d.id === activeDeptId)?.name}</strong>
+                {subDeptId ? " (sub-department)" : ""}, Year {year}, Sem {semester}.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Regulation</Label>
+                  <select className={SELECT_CLASS} value={addForm.regulation} onChange={(e) => setAddForm({ ...addForm, regulation: e.target.value })}>
+                    {(regulations[courseKey] ?? []).map((r) => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>S.No.</Label>
+                  <Input type="number" min={0} value={addForm.serialNumber} onChange={(e) => setAddForm({ ...addForm, serialNumber: e.target.value })} />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Subject Name</Label>
+                <Input value={addForm.name} onChange={(e) => setAddForm({ ...addForm, name: e.target.value })} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Code</Label>
+                  <Input value={addForm.code} onChange={(e) => setAddForm({ ...addForm, code: e.target.value })} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Short Code</Label>
+                  <Input value={addForm.shortCode} onChange={(e) => setAddForm({ ...addForm, shortCode: e.target.value })} />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Type</Label>
+                <select className={SELECT_CLASS} value={addForm.type} onChange={(e) => setAddForm({ ...addForm, type: e.target.value })}>
+                  {Object.entries(SUBJECT_TYPE_LABELS).map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Category</Label>
+                <CategoryField
+                  category={addForm.category as SubjectCategory | ""}
+                  customCategory={addForm.customCategory}
+                  onCategoryChange={(c) => setAddForm({ ...addForm, category: c })}
+                  onCustomCategoryChange={(v) => setAddForm({ ...addForm, customCategory: v })}
+                />
+              </div>
+              <div className="grid grid-cols-4 gap-3">
+                {([["lectureHours", "L"], ["tutorialHours", "T"], ["practicalHours", "P"], ["credits", "Credits"]] as const).map(([k, label]) => (
+                  <div key={k} className="space-y-1.5">
+                    <Label>{label}</Label>
+                    <Input type="number" min={0} step={k === "credits" ? "0.5" : "1"} value={addForm[k]} onChange={(e) => setAddForm({ ...addForm, [k]: e.target.value })} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {addError && <p className="text-sm text-red-600">{addError}</p>}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setAddForm(null)}>Cancel</Button>
+            <Button onClick={() => void handleAdd()} loading={isAdding}>Add</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Dialog */}
       <Dialog open={!!editForm} onOpenChange={(open) => !open && setEditForm(null)}>
@@ -608,6 +867,134 @@ export default function SubjectsPage() {
         loading={isBulkDeleting}
         onConfirm={() => void handleBulkDelete()}
       />
+
+      {/* Add Non-Teaching Subject Dialog */}
+      <Dialog open={isAddNonTeachingOpen} onOpenChange={setIsAddNonTeachingOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Award className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+              Add Non-Teaching Subject
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="rounded-md border border-purple-200 bg-purple-50/70 p-3 text-xs text-purple-900 dark:border-purple-900/40 dark:bg-purple-950/40 dark:text-purple-200">
+              Non-teaching load subjects (e.g. Sports, Library, NSS, Placement Training, Skill Building, Mentoring) are used strictly for <strong>attendance tracking</strong>. They do not have LTP hours or credits and are excluded from faculty resume teaching load.
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="nt-course" className="text-xs">Course *</Label>
+                <select
+                  id="nt-course"
+                  className={SELECT_CLASS}
+                  value={nonTeachingForm.courseKey}
+                  onChange={(e) => setNonTeachingForm({ ...nonTeachingForm, courseKey: e.target.value })}
+                >
+                  <option value="">Select Course…</option>
+                  {courseGroups.map((g) => (
+                    <option key={g.key} value={g.key}>{g.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="nt-dept" className="text-xs">Department *</Label>
+                <select
+                  id="nt-dept"
+                  className={SELECT_CLASS}
+                  value={nonTeachingForm.deptId}
+                  onChange={(e) => setNonTeachingForm({ ...nonTeachingForm, deptId: e.target.value, subDeptId: "" })}
+                >
+                  <option value="">Select Dept…</option>
+                  {topDepartments.map((d) => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {dialogSubDepartments.length > 0 && (
+              <div className="space-y-1">
+                <Label htmlFor="nt-subdept" className="text-xs">Sub-Department (Optional)</Label>
+                <select
+                  id="nt-subdept"
+                  className={SELECT_CLASS}
+                  value={nonTeachingForm.subDeptId}
+                  onChange={(e) => setNonTeachingForm({ ...nonTeachingForm, subDeptId: e.target.value })}
+                >
+                  <option value="">Main Department ({topDepartments.find((d) => d.id === nonTeachingForm.deptId)?.name})</option>
+                  {dialogSubDepartments.map((d) => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="nt-yr" className="text-xs">Year *</Label>
+                <select
+                  id="nt-yr"
+                  className={SELECT_CLASS}
+                  value={nonTeachingForm.year}
+                  onChange={(e) => setNonTeachingForm({ ...nonTeachingForm, year: e.target.value })}
+                >
+                  {[1, 2, 3, 4].map((y) => (
+                    <option key={y} value={String(y)}>Year {y}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="nt-sem" className="text-xs">Semester *</Label>
+                <select
+                  id="nt-sem"
+                  className={SELECT_CLASS}
+                  value={nonTeachingForm.semester}
+                  onChange={(e) => setNonTeachingForm({ ...nonTeachingForm, semester: e.target.value })}
+                >
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+                    <option key={s} value={String(s)}>Sem {s}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="nt-name" className="text-xs">Subject Name *</Label>
+              <Input
+                id="nt-name"
+                placeholder="e.g. Sports & Physical Education, Library, NSS"
+                value={nonTeachingForm.name}
+                onChange={(e) => setNonTeachingForm({ ...nonTeachingForm, name: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="nt-code" className="text-xs">Short Code / Code *</Label>
+              <Input
+                id="nt-code"
+                placeholder="e.g. SPORTS, LIB, NSS, SKILL"
+                value={nonTeachingForm.shortCode}
+                onChange={(e) => setNonTeachingForm({ ...nonTeachingForm, shortCode: e.target.value })}
+              />
+            </div>
+
+            {nonTeachingError && (
+              <p className="text-sm font-medium text-red-600 dark:text-red-400">{nonTeachingError}</p>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setIsAddNonTeachingOpen(false)}>Cancel</Button>
+            <Button onClick={() => void handleAddNonTeaching()} loading={isSubmittingNonTeaching}>
+              Add Subject
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
