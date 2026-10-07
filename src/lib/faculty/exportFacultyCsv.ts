@@ -29,8 +29,8 @@ function s(v: unknown): string {
   return v === null || v === undefined ? "" : String(v);
 }
 
-function yesNo(v: boolean | undefined): string {
-  return v === undefined ? "" : v ? "Yes" : "No";
+function yesNo(v: boolean | null | undefined): string {
+  return v == null ? "" : v ? "Yes" : "No";
 }
 
 const PHD_STATUS_LABELS: Record<string, string> = { AWARDED: "Awarded", PURSUING: "Pursuing" };

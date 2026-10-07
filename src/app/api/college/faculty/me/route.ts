@@ -20,6 +20,7 @@ import { mobileNoFromBody } from "@/lib/faculty/mobileNo";
 import { FieldValue } from "firebase-admin/firestore";
 import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { resolveHonorific } from "@/lib/honorifics/validate";
 import { isSingleSourceCollege } from "@/lib/faculty/singleSource";
 import { resolvePreviousTeachingUpdate } from "@/lib/faculty/previousTeaching";
 import type { TrainingEntry } from "@/types";
@@ -131,6 +132,7 @@ export async function PATCH(request: Request) {
       // the caller's own linked record (looked up by userUid below).
       apaarFacultyId: string;
       aicteFacultyId: string;
+      honorific: string;
       highestQualification: string;
       specialization: string;
       additionalPhoneNumbers: { label?: string; number: string }[];
@@ -175,6 +177,20 @@ export async function PATCH(request: Request) {
     if (body.email?.trim()) facultyUpdates.email = body.email.trim();
     if (mobileNoFromBody(body) !== undefined) facultyUpdates.mobileNo = mobileNoFromBody(body);
     if (body.apaarFacultyId !== undefined) facultyUpdates.apaarFacultyId = body.apaarFacultyId;
+    // Optional and clearable; a non-blank value must be in this college's own
+    // Honorific Catalog, same rule as the HOD/Principal-side PATCH.
+    if (body.honorific !== undefined) {
+      const rawHonorific = body.honorific.trim();
+      if (!rawHonorific) {
+        facultyUpdates.honorific = "";
+      } else {
+        const honorificResult = await resolveHonorific(db, session.collegeId, rawHonorific);
+        if ("error" in honorificResult) {
+          return NextResponse.json({ error: honorificResult.error }, { status: 400 });
+        }
+        facultyUpdates.honorific = honorificResult.name;
+      }
+    }
     if (body.aicteFacultyId !== undefined) facultyUpdates.aicteFacultyId = body.aicteFacultyId.trim();
     if (body.highestQualification?.trim()) facultyUpdates.highestQualification = normalizeHighestQualification(body.highestQualification);
     if (body.specialization !== undefined) facultyUpdates.specialization = body.specialization;
@@ -226,12 +242,18 @@ export async function PATCH(request: Request) {
       ).total;
     }
 
-    const previousFacultyData = facultyDoc.data() as { legalName?: string; academicProfile?: { fdpsWorkshopsMoocsCertifications?: TrainingEntry[] } };
+    const previousFacultyData = facultyDoc.data() as { legalName?: string; honorific?: string; academicProfile?: { fdpsWorkshopsMoocsCertifications?: TrainingEntry[] } };
 
-    // The display name is legalName only (facultyDisplayName()).
-    const newDisplayName = facultyDisplayName({ legalName: body.legalName !== undefined ? body.legalName : previousFacultyData.legalName });
+    // The display name is legalName, honorific-prefixed (facultyDisplayName()).
+    // Recomputed from the post-update legalName and honorific so an honorific-only
+    // change still reaches the login/seat copies, same as the HOD-side PATCH.
+    const newHonorific = facultyUpdates.honorific !== undefined ? (facultyUpdates.honorific as string) : previousFacultyData.honorific;
+    const newDisplayName = facultyDisplayName({
+      legalName: body.legalName !== undefined ? body.legalName : previousFacultyData.legalName,
+      honorific: newHonorific,
+    });
     const oldDisplayName = facultyDisplayName(previousFacultyData);
-    const displayNameChanged = body.legalName !== undefined && newDisplayName !== oldDisplayName;
+    const displayNameChanged = newDisplayName !== oldDisplayName;
 
     // Drop the old-named twin of any key written above on a not-yet-migrated doc.
     await facultyDoc.ref.update(withLegacyFacultyKeysDeleted(facultyUpdates, FieldValue.delete()));

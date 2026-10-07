@@ -510,6 +510,22 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
         </Card>
       )}
 
+      {/* Department-level, outside the section form: the subject is added for the
+          department's semester and then picked like any regular subject. */}
+      <CustomSubjectAdder
+        departments={departments.filter((d) => sections.some((s) => s.department === d.name))}
+        courseIdFor={(deptId) => {
+          const name = departments.find((d) => d.id === deptId)?.name;
+          return sections.find((s) => s.department === name)?.courseId ?? courseId;
+        }}
+        year={Number(year)}
+        semester={effectiveSemester}
+        onAdded={({ subject, assignment }) => {
+          setMasterSubjects((p) => [...p.filter((x) => x.id !== subject.id), subject]);
+          setSemesterAssignments((p) => [...p.filter((x) => x.id !== assignment.id), assignment]);
+        }}
+      />
+
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-base">Unstaffed Subjects</CardTitle></CardHeader>
@@ -588,7 +604,7 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
                       <div className="px-2 py-1.5 text-xs text-muted-foreground">
                         {assignedSubjects.length === 0
                           ? "No subjects assigned to this department for this semester"
-                          : "All subjects already staffed for this section"}
+                          : `No subjects are assigned to ${sections.find((s) => s.id === assignForm.sectionId)?.department ?? "this section's department"} for this semester yet, or all are already staffed - check Assign to Semester`}
                       </div>
                     )}
                     {availableSubjectsForAssign.map((s) => (
@@ -596,16 +612,6 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
                     ))}
                   </SelectContent>
                 </Select>
-                <CustomSubjectAdder
-                  courseId={courseId}
-                  sectionId={assignForm.sectionId}
-                  semester={effectiveSemester}
-                  onAdded={({ subject, assignment }) => {
-                    setMasterSubjects((p) => [...p, subject]);
-                    setSemesterAssignments((p) => [...p, assignment]);
-                    setAssignForm((f) => ({ ...f, subjectId: subject.id }));
-                  }}
-                />
               </div>
               <div className="space-y-2">
                 <Label>Faculty</Label>

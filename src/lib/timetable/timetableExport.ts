@@ -16,6 +16,9 @@ import {
   buildAllocationList,
   buildTimetableColumns,
   timetableClassLine,
+  buildClassTimetableSubtitle,
+  getHodSignatureLabel,
+  latestEffectiveDate,
   resolveTimetableDays,
   slotShortCode, mergeCoTaughtSlots,} from "./gridModel";
 
@@ -38,6 +41,8 @@ export interface SectionTimetableXlsxOptions {
   classroom?: string;
   classInchargeName?: string;
   effectiveDate?: string;
+  /** Show faculty/batches of one subject in a period as one entry (default true). */
+  mergeCoTaught?: boolean;
   days: DayOfWeek[];
   periods: number[];
   periodTimings: PeriodTiming[];
@@ -215,8 +220,15 @@ export async function buildSectionTimetableXlsxBuffer(opts: SectionTimetableXlsx
 
   putAcross("TIME TABLE", { bold: true, size: 13 });
 
+  const subtitleText = buildClassTimetableSubtitle({
+    academicYear: opts.academicYear,
+    semesterLabel,
+    effectiveDate: opts.effectiveDate ?? latestEffectiveDate(slots),
+  });
+  putAcross(subtitleText, { bold: true, size: 10 });
+
   const classLine = [
-    timetableClassLine({ courseName, year: sectionYear, semesterLabel, sectionName, departmentName }),
+    timetableClassLine({ courseName, year: sectionYear, semesterLabel, sectionName, departmentName, classroom: opts.classroom }),
     classInchargeName ? `Class In-charge: ${classInchargeName}` : undefined,
   ].filter((v): v is string => !!v);
   if (classLine.length) putAcross(classLine.join("  |  "), { size: 10 });
@@ -253,12 +265,14 @@ export async function buildSectionTimetableXlsxBuffer(opts: SectionTimetableXlsx
     columns.forEach((col, i) => {
       if (col.kind === "break") return;
       // Faculty of one subject sharing the period print the subject once.
-      const cellSlots = mergeCoTaughtSlots(slots.filter((s) => s.day === day && s.periodNumber === col.periodNumber));
+      const rawCell = slots.filter((s) => s.day === day && s.periodNumber === col.periodNumber);
+      const cellSlots = opts.mergeCoTaught === false ? rawCell : mergeCoTaughtSlots(rawCell);
       if (cellSlots.length === 0) return;
       const blocks = cellSlots.map((s) =>
         [
           slotShortCode(s, subjectMap),
           s.labBatch,
+          s.classroom ? (/^room/i.test(s.classroom.trim()) ? s.classroom.trim() : `Room: ${s.classroom.trim()}`) : undefined,
           s.substituteFacultyName ? `Sub: ${s.substituteFacultyName}` : undefined,
         ].filter((v): v is string => !!v)
       );
@@ -270,16 +284,18 @@ export async function buildSectionTimetableXlsxBuffer(opts: SectionTimetableXlsx
     row.height = Math.max(28, maxLines * LINE_HEIGHT + 6);
     r++;
   }
-  // A break column reads as one continuous band: no horizontal lines between
-  // its day rows, only the column's outer edges.
+  const lastBodyRow = r - 1;
+
+  // Break columns: vertically merged across all day rows with vertical text rotation
   columns.forEach((col, i) => {
     if (col.kind !== "break") return;
-    for (let row = firstBodyRow; row < r; row++) {
-      sheet.getCell(row, i + 2).border = {
-        left: BORDER.left,
-        right: BORDER.right,
-        ...(row === r - 1 ? { bottom: BORDER.bottom } : {}),
-      };
+    const colIdx = i + 2;
+    if (lastBodyRow >= firstBodyRow) {
+      sheet.mergeCells(firstBodyRow, colIdx, lastBodyRow, colIdx);
+      const cell = sheet.getCell(firstBodyRow, colIdx);
+      cell.value = col.breakKind === "lunch" ? "LUNCH BREAK" : "SHORT BREAK";
+      styleRange(sheet, firstBodyRow, colIdx, colIdx, { bold: true, size: 10 });
+      cell.alignment = { horizontal: "center", vertical: "middle", textRotation: 90, wrapText: true };
     }
   });
 
@@ -314,6 +330,19 @@ export async function buildSectionTimetableXlsxBuffer(opts: SectionTimetableXlsx
       r++;
     }
   }
+
+  // ── 3 Horizontally equally-spaced signature blocks ─────────────────────────
+  r += 2; // spacer
+  const sigHeadings = ["TimeTable In-Charge", getHodSignatureLabel(departmentName), "PRINCIPAL"];
+  const sigGroups = splitColumns(lastCol, [1, 1, 1]);
+  const sigRowIndex = r;
+  sigHeadings.forEach((label, i) => {
+    const [from, to] = sigGroups[i];
+    sheet.getCell(sigRowIndex, from).value = label;
+    if (to > from) sheet.mergeCells(sigRowIndex, from, sigRowIndex, to);
+    styleRange(sheet, sigRowIndex, from, to, { bold: true, align: "center" });
+  });
+  sheet.getRow(sigRowIndex).height = 24;
 
   return workbook.xlsx.writeBuffer() as Promise<ArrayBuffer>;
 }

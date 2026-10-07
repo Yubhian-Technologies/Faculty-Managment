@@ -7,7 +7,8 @@ import { lateralEntryBatch } from "@/lib/college/academicSession";
 import type { Section, StudentStatus } from "@/types";
 
 export interface StudentImportRow {
-  rollNumber: string;
+  // Optional: the Office often enrols students before roll numbers exist (stored as "" until one is set).
+  rollNumber?: string;
   name: string;
   studentType?: string;
   status?: string;
@@ -140,9 +141,9 @@ export function buildStudentDoc(
     // regulation above.
     ...(batch ? { batch } : {}),
     ...(section.courseId ? { courseId: section.courseId } : {}),
-    rollNumber: row.rollNumber.trim(),
-    // Case-insensitive roll key for the uniqueness check and the login lookup.
-    ...(row.rollNumber.trim() ? { rollNumberUpper: row.rollNumber.trim().toUpperCase() } : {}),
+    rollNumber: (row.rollNumber ?? "").trim(),
+    // Case-insensitive roll key for the uniqueness check and the login lookup - only when there is a roll.
+    ...((row.rollNumber ?? "").trim() ? { rollNumberUpper: (row.rollNumber ?? "").trim().toUpperCase() } : {}),
     name: row.name.trim(),
     ...(row.studentType?.trim() ? { studentType: row.studentType.trim() } : {}),
     status: parseStudentStatus(row.status),

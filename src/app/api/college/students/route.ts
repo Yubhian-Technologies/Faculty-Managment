@@ -25,6 +25,7 @@ import { findRollNumberConflict, rollNumberTakenMessage } from "@/lib/students/r
 import { rollNumberUpperOf } from "@/lib/students/loginDefaults";
 import { projectStudentsForRole } from "@/lib/students/listProjection";
 import { validateYearForCourseDuration } from "@/lib/students/rosterValidation";
+import { normalizeStudentMobile, studentMobileProblem, reserveStudentMobile, releaseStudentMobile, isStudentMobileTaken } from "@/lib/students/studentMobile";
 import type { Course, Section, StudentRecord, StudentStatus, DepartmentCourseScope } from "@/types";
 import { loadDepartmentIndex, stampDepartmentIds } from "@/lib/departments/stampIds";
 import { whereIn, type QueryLike } from "@/lib/firestore/inQuery";
@@ -395,17 +396,19 @@ export async function POST(request: Request) {
       [key: string]: unknown;
     };
 
-    // The roll number is the student's unique identity: required on every add
-    // (placed or unassigned) and unique across the whole college - checked
-    // below once the target is resolved. The department can still correct one
-    // later via students/[id] PATCH, under the same uniqueness rule.
+    // The roll number is OPTIONAL: the Office often enrols students before roll numbers exist and sets them later
+    // (students/[id] PATCH, same uniqueness rule). When given it is unique across all colleges - checked below once the
+    // target is resolved. A student with none is identified by their Student Mobile No (unique within the college).
     if (!body.name?.trim() || !body.year) {
       return NextResponse.json({ error: "name and year are required" }, { status: 400 });
     }
     const providedRoll = typeof body.rollNumber === "string" ? body.rollNumber.trim() : "";
-    if (!providedRoll) {
-      return NextResponse.json({ error: "Roll number is required" }, { status: 400 });
-    }
+    // Student Mobile No is REQUIRED: a real 10-digit number (stored in that form) that no other student - in this or any
+    // other college - holds, claimed atomically just before the write below (lib/students/studentMobile.ts).
+    const typedMobile = typeof body.mobileNo === "string" ? body.mobileNo.trim() : "";
+    const mobileProblem = studentMobileProblem(typedMobile);
+    if (mobileProblem) return NextResponse.json({ error: mobileProblem }, { status: 400 });
+    const mobile10 = normalizeStudentMobile(typedMobile);
     // Optional: the password for the student's login, chosen by the office. When
     // given, the login is created right after the student. It is validated up
     // front (nothing is written for a bad one), handed to Firebase Auth only and
@@ -662,7 +665,7 @@ export async function POST(request: Request) {
     // A roll number is unique across the whole college, wherever the student
     // is (or isn't) placed - checked first, for placed and unassigned adds alike.
     // (Uniqueness across ALL colleges is claimed atomically just before the write below.)
-    {
+    if (providedRoll) {
       const clash = await findRollNumberConflict(collegeRef.collection("students"), providedRoll);
       if (clash) {
         return NextResponse.json({ error: rollNumberTakenMessage(providedRoll, clash.name) }, { status: 409 });
@@ -746,6 +749,8 @@ export async function POST(request: Request) {
       // without one still writes the "" the rest of the app expects.
       rollNumber: "",
       ...normalizeRosterDetails(body),
+      // The 10-digit form of the Student Mobile No (what the uniqueness claim is on).
+      mobileNo: mobile10,
       createdAt: now,
       updatedAt: now,
     }, deptIndex) as Record<string, unknown>;
@@ -757,22 +762,36 @@ export async function POST(request: Request) {
     batch.set(studentRef, newStudent);
     batch.set(history.ref, history.data);
 
-    // Roll numbers are unique across ALL colleges: claim this one in the global
-    // registry (atomically - two colleges adding the same roll at once cannot both
-    // win) just before the student is written, and give it back if that write fails.
-    const claim = await claimStudentRoll(db, { roll: providedRoll, collegeId: session.collegeId, studentDocId: studentRef.id, name: body.name.trim() });
-    if (!claim.ok) {
-      return NextResponse.json(
-        { error: claim.code === "TAKEN" ? rollTakenMessage(providedRoll, claim.holder) : "Roll number must contain letters or digits" },
-        { status: claim.code === "TAKEN" ? 409 : 400 }
-      );
+    // Student Mobile No and Roll Number (each unique across ALL colleges) are each claimed atomically just before the
+    // student is written, and given back if anything after that fails.
+    try {
+      await reserveStudentMobile(db, session.collegeId, mobile10, studentRef.id);
+    } catch (mobileErr) {
+      if (isStudentMobileTaken(mobileErr)) return NextResponse.json({ error: mobileErr.userMessage }, { status: 409 });
+      throw mobileErr;
+    }
+    let rollClaimCreated = false;
+    if (providedRoll) {
+      const claim = await claimStudentRoll(db, { roll: providedRoll, collegeId: session.collegeId, studentDocId: studentRef.id, name: body.name.trim() }).catch(async (claimErr) => {
+        await releaseStudentMobile(db, session.collegeId, mobile10, studentRef.id);
+        throw claimErr;
+      });
+      if (!claim.ok) {
+        await releaseStudentMobile(db, session.collegeId, mobile10, studentRef.id);
+        return NextResponse.json(
+          { error: claim.code === "TAKEN" ? rollTakenMessage(providedRoll, claim.holder) : "Roll number must contain letters or digits" },
+          { status: claim.code === "TAKEN" ? 409 : 400 }
+        );
+      }
+      rollClaimCreated = claim.created;
     }
     try {
       await batch.commit();
     } catch (commitErr) {
-      if (claim.created) {
+      if (rollClaimCreated) {
         await releaseStudentRoll(db, providedRoll, session.collegeId, studentRef.id).catch((e) => console.error("[college/students POST] could not release roll claim", e));
       }
+      await releaseStudentMobile(db, session.collegeId, mobile10, studentRef.id);
       throw commitErr;
     }
 

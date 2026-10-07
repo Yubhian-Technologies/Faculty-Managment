@@ -28,9 +28,14 @@ import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_STAFF");
-    const body = (await readJsonBody(request)) as { sectionId?: string; semester?: number };
+    const body = (await readJsonBody(request)) as { sectionId?: string; semester?: number; effectiveDate?: string };
     const sectionId = body.sectionId;
     if (!sectionId) return NextResponse.json({ error: "sectionId is required" }, { status: 400 });
+    // The "w.e.f" date printed on the timetable - asked for at publish time.
+    const effectiveDate = body.effectiveDate?.trim() || undefined;
+    if (effectiveDate && (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveDate) || Number.isNaN(Date.parse(effectiveDate)))) {
+      return NextResponse.json({ error: "effectiveDate must be a valid date (YYYY-MM-DD)" }, { status: 400 });
+    }
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
@@ -113,6 +118,7 @@ export async function POST(request: Request) {
       isLiveSlot,
       publishedByName: session.email,
       writer: session.uid,
+      effectiveDate,
     });
 
     if (!outcome.ok) {

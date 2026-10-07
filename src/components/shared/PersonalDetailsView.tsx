@@ -121,7 +121,7 @@ export function PersonalDetailsView({ value, hideLegalName = false, hiddenFields
         <Field label="Aadhar No" value={p.aadharNo} />
         <Field label="PAN No" value={p.panNo} />
         <Field label="Passport No" value={p.passportNo} />
-        <Field label="Differently Abled" value={p.differentlyAbled === undefined ? undefined : p.differentlyAbled ? "Yes" : "No"} />
+        <Field label="Differently Abled" value={p.differentlyAbled == null ? undefined : p.differentlyAbled ? "Yes" : "No"} />
         {p.differentlyAbled && <Field label="Differently Abled Details" value={p.differentlyAbledDetails} />}
       </div>
 

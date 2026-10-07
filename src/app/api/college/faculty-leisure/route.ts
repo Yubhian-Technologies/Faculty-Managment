@@ -5,7 +5,10 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, ownDepartmentNames } from "@/lib/departments/scope";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
-import { resolveCurrentSemester, matchesCurrentSemester } from "@/lib/college/semester";
+import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
+import { makeLiveSlotPredicate } from "@/lib/timetable/liveSlots";
+import { timingLookupFrom } from "@/lib/timetable/facultyOverlap";
+import { getActiveSubstitutionsForDates } from "@/lib/leave/periodCoverage";
 import { isFacultyAvailable, DEFAULT_TIMETABLE_RULES } from "@/types";
 import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
 import { REQUESTS_COL } from "@/lib/leave/balanceEngine";
@@ -151,8 +154,13 @@ export async function GET(request: Request) {
         : WHOLE_DAY);
     }
 
-    const inCurrentSemester = (courseId: string, year: number, semester: number | null | undefined) =>
-      matchesCurrentSemester(semester ?? null, resolveCurrentSemester(timingByCourseYear.get(`${courseId}_${year}`) ?? null));
+    // "Live" = this course-year's current semester AND this academic session. The
+    // semester check alone counted a past cohort's slots (same semester number,
+    // last year) as busy, so people wrongly dropped off the free list.
+    const currentAcademicYear = await resolveCollegeAcademicYear(db, session.collegeId);
+    const isLive = makeLiveSlotPredicate(timingLookupFrom(Array.from(timingByCourseYear.values())), currentAcademicYear);
+    const inCurrentSemester = (courseId: string, year: number, semester: number | null | undefined, academicYear?: string | null) =>
+      isLive({ courseId, year, semester, academicYear });
 
     const periodRange = (courseId: string, year: number, periodNumber: number): Range | null => {
       const pt = periodsFor(courseId, year).find((x) => x.period === periodNumber);
@@ -167,12 +175,21 @@ export async function GET(request: Request) {
     };
     for (const d of slotsSnap.docs) {
       const s = d.data() as TimetableSlot;
-      if (!s.facultyId || !inCurrentSemester(s.courseId, s.year, s.semester)) continue;
+      if (!s.facultyId || !inCurrentSemester(s.courseId, s.year, s.semester, s.academicYear)) continue;
       markBusy(s.facultyId, s.courseId, s.year, s.periodNumber);
+    }
+    // Someone covering a colleague's period on this date is busy then, whatever
+    // their own timetable says (the slot stays under the colleague's name).
+    if (dateParam) {
+      const slotById = new Map(slotsSnap.docs.map((d) => [d.id, d.data() as TimetableSlot]));
+      for (const sub of await getActiveSubstitutionsForDates(db, session.collegeId, [dateParam])) {
+        const slot = slotById.get(sub.timetableSlotId);
+        if (slot && sub.substituteFacultyId) markBusy(sub.substituteFacultyId, slot.courseId, slot.year, slot.periodNumber);
+      }
     }
     for (const d of draftsSnap.docs) {
       const draft = d.data() as TimetableDraft;
-      if (draft.status !== "DRAFT" || !inCurrentSemester(draft.courseId, draft.year, draft.semester)) continue;
+      if (draft.status !== "DRAFT" || !inCurrentSemester(draft.courseId, draft.year, draft.semester, (draft as { academicYear?: string }).academicYear)) continue;
       for (const ds of draft.slots ?? []) {
         if (!ds.facultyId || ds.day !== day) continue;
         if (!byWindow && ds.periodNumber !== period) continue;

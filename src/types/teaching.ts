@@ -330,6 +330,11 @@ export interface TimetableSlot {
   // MANUAL slots carry through untouched. Never set by the generator/publish
   // flow, which has no concept of batches.
   labBatch?: string;
+  // The "w.e.f" date entered when this slot was published (YYYY-MM-DD); printed
+  // on the timetable's title line. Absent on slots published before it was asked.
+  effectiveDate?: string;
+  /** Merged with the NEXT period into one cell (chosen in the timetable editor; carried from the draft on publish). */
+  mergeWithNext?: boolean;
   source?: TimetableSlotSource; // absent on rows written before this field existed - treat as MANUAL
   isPinned?: boolean;
   // Which of the course-year's configured semesters (CourseYearTiming.
@@ -454,6 +459,8 @@ export interface DraftSlot {
   periodNumber: number;
   /** True for the 2nd..Nth period of a lab block - kept together when moved. */
   isBlockContinuation?: boolean;
+  /** Set by "Merge cells": this period is drawn as ONE cell with the next period (same subject). */
+  mergeWithNext?: boolean;
 }
 
 export interface TimetableDraft {

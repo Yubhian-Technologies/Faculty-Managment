@@ -102,9 +102,15 @@ export function StudentFormDialog({ open, onOpenChange, student, onSaved, rollEd
   const activeDepartments = departments.filter((d) => d.isActive).sort((a, b) => a.name.localeCompare(b.name));
 
   async function handleSave() {
-    // Roll No is the student's unique identity - required on Add. (On Edit it
-    // is shown read-only, so a legacy roll-less student can still be edited.)
-    if (!editTarget && !form.rollNumber?.trim()) { toast({ variant: "destructive", title: "Roll No is required" }); return; }
+    // Roll No is optional on Add - the Office often enrols students before roll numbers exist and sets them later.
+    // Student Mobile No is required (and unique across every college - the server checks that): on Add it must be
+    // filled in; on Edit an existing number can be corrected but not removed (a legacy student with none may be saved
+    // without one until it is entered).
+    if (!editTarget && !form.mobileNo?.trim()) { toast({ variant: "destructive", title: "Student Mobile No is required" }); return; }
+    if (editTarget && !form.mobileNo?.trim() && editTarget.mobileNo?.trim()) {
+      toast({ variant: "destructive", title: "A student's Student Mobile No can't be removed - change it to the correct number instead" });
+      return;
+    }
     // Edit with an editable Roll No: an existing roll can be corrected, never emptied
     // (the server refuses it too). A legacy roll-less student may still be saved blank.
     if (editTarget && rollEditable && !form.rollNumber?.trim() && editTarget.rollNumber?.trim()) {

@@ -82,6 +82,13 @@ There is **no env switch** (the old `READ_ONLY_FACULTY_COLLEGES` is gone and ign
 - **Never lose a row:** editors send `previousTeachingAssignmentsLoadedIds`; the server keeps any stored row the editor never loaded (`mergePreviousTeachingAssignments`) and drops only rows it loaded and removed, so a stale edit page cannot erase what someone else added. Rules (trim, External needs a College Name, caps) live in `src/lib/faculty/previousTeaching.ts`.
 - **Shown in:** the Teaching Load view (`TeachingLoadTable`) and the resume ("Previous Teaching Assignments" table).
 
+### Students: Roll No optional, Student Mobile No required and globally unique
+
+- **Roll No is optional** on add, bulk import and edit: the Office enrols students before roll numbers exist. A student with none is stored with `rollNumber: ""` (no `rollNumberUpper`, no roll claim) - the lists already order and display them (`compareStudentsForList`). When a roll is given it is still unique across ALL colleges (`studentUsernames` claim, `rollIdentity.ts`); a **login needs a roll** (`provisionStudentLogin` refuses a roll-less student with a clear message, import/bulk-create-login report it per row).
+- **Student Mobile No is REQUIRED and unique across ALL students of ALL colleges** (`src/lib/students/studentMobile.ts`): 10 digits starting 6-9 (a leading +91/91/0, spaces and dashes are dropped and the 10-digit form is what is stored). Blank is refused by import-excel (that row), `POST /students` (400) and the roster-details edit in `students/[id]` PATCH (a number can be changed, never cleared). Claimed atomically in the global `studentMobileKeys/{number}` collection (`{ studentId, collegeId }`, like the roll registry); a claim is live only while its student exists and still holds the number, so deleting a student or changing a number frees it with nothing to release. A clash with a student of another college is reported as "already used by a student of another college" - never naming them.
+- **Legacy students:** only a *changed* number is validated/claimed - an unchanged value is never re-judged, and a legacy student saved with no number may still be saved without one until it is entered. Students saved before the claims existed are covered for their OWN college by an exact-value lookup; another college's legacy students only after `scripts/backfill-student-mobile-keys.mjs` (global, dry run by default) has created their claims (it also reports duplicates, blanks and non-mobile values).
+- **Why:** the mobile number is the reference a later "Roll No + Student Mobile No" import will use to give each student their roll number (then logins are created from the roll).
+
 ## Architecture & Directory Map
 
 ```

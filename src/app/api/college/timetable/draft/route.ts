@@ -199,7 +199,9 @@ export async function PATCH(request: Request) {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_STAFF");
     const body = (await readJsonBody(request)) as {
       sectionId?: string;
-      action?: "move" | "add" | "remove";
+      // "merge" / "unmerge": draw back-to-back periods (fromPeriod..toPeriod on fromDay)
+      // of ONE subject as a single cell, or undo that.
+      action?: "move" | "add" | "remove" | "merge" | "unmerge";
       assignmentId?: string;
       fromDay?: string;
       fromPeriod?: number;
@@ -268,6 +270,33 @@ export async function PATCH(request: Request) {
       // break - surfaced to the client as a heads-up, not a warning (the
       // block still landed exactly where clicked/dragged).
       let adjustedNote: string | null = null;
+
+      if (action === "merge" || action === "unmerge") {
+        const day = body.fromDay;
+        const from = Number(body.fromPeriod);
+        const to = Number(body.toPeriod);
+        if (!day || !Number.isInteger(from) || !Number.isInteger(to) || to <= from) {
+          return { ok: false, status: 400, error: "fromDay, fromPeriod and a later toPeriod are required" };
+        }
+        const anchor = draft.slots.find((s) => s.assignmentId === assignmentId && s.day === day && s.periodNumber === from);
+        if (!anchor) return { ok: false, status: 404, error: "That slot is not in the draft" };
+        if (action === "merge") {
+          for (let p = from; p <= to; p++) {
+            if (!draft.slots.some((s) => s.day === day && s.periodNumber === p && s.subjectId === anchor.subjectId)) {
+              return { ok: false, status: 400, error: "Only back-to-back periods of the same subject can be merged into one cell" };
+            }
+          }
+        }
+        // Every period from..to-1 of this subject on that day links to its next period.
+        slots = draft.slots.map((s) => {
+          if (s.day !== day || s.subjectId !== anchor.subjectId || s.periodNumber < from || s.periodNumber >= to) return s;
+          if (action === "merge") return { ...s, mergeWithNext: true };
+          const { mergeWithNext: _unlinked, ...rest } = s; // drop the key: Firestore rejects undefined
+          void _unlinked;
+          return rest;
+        });
+        return { ok: true, slots, adjustedNote: null };
+      }
 
       if (action === "remove") {
         const { fromDay, fromPeriod } = body;
