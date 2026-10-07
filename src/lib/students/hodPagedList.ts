@@ -117,6 +117,14 @@ export interface HodListFilters {
   freshmanDept: string;
   /** Names a Department filter matches (rollup-expanded). null = no Department filter. */
   departmentNames: string[] | null;
+  /**
+   * The branch a shared-first-year department's list is narrowed to - the
+   * student's `secondaryDepartment`, which is what the app calls their Core
+   * Department. "" / absent = no filter. Only meaningful alongside a Department
+   * filter: Basic Science - Chemistry holds the first year for CSE and CSBS at
+   * once, and this picks one of them.
+   */
+  coreDepartment?: string;
   /** "" = no Course filter. */
   course: string;
   /** null = no Year filter. */
@@ -157,6 +165,7 @@ async function loadCandidates(
       seen.add(d.id);
       const data = d.data() as Omit<StudentRecord, "id">;
       if (classifyHodStudent(data, ctx) !== f.level) continue;
+      if (f.coreDepartment && data.secondaryDepartment !== f.coreDepartment) continue;
       out.push({ id: d.id, ...data, accessLevel: f.level });
     }
   }
@@ -327,6 +336,7 @@ export async function handleHodStudentsRequest(
     level,
     freshmanDept: incoming,
     departmentNames: department ? expandDepartmentNameForRollup(ctx.departments as DepartmentWithId[], department) : null,
+    coreDepartment: (params.get("coreDepartment") ?? "").trim(),
     course: (params.get("course") ?? "").trim(),
     year: yearParam && Number.isFinite(Number(yearParam)) ? Number(yearParam) : null,
     unassignedOnly: params.get("unassigned") === "1",
