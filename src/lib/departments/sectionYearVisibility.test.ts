@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { classifySectionForHod } from "@/lib/departments/managedBranches";
-import { sectionMatchesDepartmentFilter } from "@/lib/departments/hodScope";
+import { sectionMatchesDepartmentFilter, managedBranchYearsMap, yearsInScope } from "@/lib/departments/hodScope";
 import type { Department } from "@/types";
 
 // Shape of the live shared-first-year college: Basic Science teaches B.Tech
@@ -64,6 +64,41 @@ describe("classifySectionForHod (HOD list, managed-branch query)", () => {
   });
 });
 
+// The scope the sections API really passes carries managedDepartmentNames too (getHodDepartmentScope).
+// Passing it must change nothing: grouping a branch under a manager never reveals the branch's own years.
+describe("classifySectionForHod with the real scope shape (managedDepartmentNames present)", () => {
+  const managed = (names: string[]) => names;
+  const bsMainReal = { ...bsMain, managedDepartmentNames: managed(["Civil", "Mech", "CSE", "CSBS", "IT"]) };
+  const chemReal = { ...chemSub, managedDepartmentNames: managed(["CSE", "CSBS"]) };
+
+  it("main BS HOD never sees a managed branch's years 2-4", () => {
+    for (const b of ["Civil", "Mech", "CSE", "CSBS", "IT"]) {
+      expect(classifySectionForHod(bsMainReal, departments, b, 1, CAT)).toBe("primary");
+      for (const y of [2, 3, 4]) expect(classifySectionForHod(bsMainReal, departments, b, y, CAT)).toBe("hidden");
+    }
+  });
+
+  it("BS sub-HOD never sees years 2-4 of the branches it groups", () => {
+    for (const y of [2, 3, 4]) {
+      expect(classifySectionForHod(chemReal, departments, "CSE", y, CAT)).toBe("hidden");
+      expect(classifySectionForHod(chemReal, departments, "CSBS", y, CAT)).toBe("hidden");
+    }
+  });
+
+  it("a year the manager teaches comes from configuration, not a fixed number (years 1 and 2 shared)", () => {
+    const sharedTwo = departments.map((d) => (d.id === "bs" ? D("bs", "Basic Science", { hasSubDepartments: true, parentRunsOwnSections: true, courseScopes: { [CAT]: { assignedYears: [1, 2] } } }) : d))
+      .map((d) => (d.name === "CSE" ? branch("cse", "CSE", { courseScopes: { [CAT]: { assignedYears: [3, 4] } } }) : d));
+    expect(classifySectionForHod(chemReal, sharedTwo, "CSE", 2, CAT)).toBe("primary");
+    expect(classifySectionForHod(chemReal, sharedTwo, "CSE", 3, CAT)).toBe("hidden");
+  });
+
+  it("another course the manager does not teach stays hidden for the manager", () => {
+    const mtech = "mtech";
+    const withMtech = departments.map((d) => (d.name === "CSE" ? branch("cse", "CSE", { courseScopes: { [CAT]: { assignedYears: [2, 3, 4] }, [mtech]: { assignedYears: [1, 2] } } }) : d));
+    for (const y of [1, 2]) expect(classifySectionForHod(chemReal, withMtech, "CSE", y, mtech)).toBe("hidden");
+  });
+});
+
 describe("sectionMatchesDepartmentFilter (college-wide Sections)", () => {
   const match = (filter: string, dept: string, year: number) =>
     sectionMatchesDepartmentFilter(departments, filter, dept, year, CAT);
@@ -97,5 +132,27 @@ describe("sectionMatchesDepartmentFilter (college-wide Sections)", () => {
   it("across the whole college every section stays reachable from its own branch", () => {
     const all = ["Civil", "Mech", "CSE", "CSBS", "IT"].flatMap((b) => [1, 2, 3, 4].map((y) => ({ b, y })));
     for (const s of all) expect(match(s.b, s.b, s.y)).toBe(true);
+  });
+});
+
+describe("yearsInScope for a manager who picks a managed branch (Sections year tabs)", () => {
+  // courseScopes as the app stores them always carry secondaryDepartments (fedYears reads it).
+  const full: Department[] = departments.map((d) => {
+    const cs = (d as unknown as { courseScopes?: Record<string, { assignedYears: number[] }> }).courseScopes;
+    return cs ? ({ ...d, courseScopes: Object.fromEntries(Object.entries(cs).map(([k, v]) => [k, { ...v, secondaryDepartments: [] }])) } as unknown as Department) : d;
+  });
+  const managedYears = managedBranchYearsMap(full, CAT);
+  const cse = full.filter((d) => d.name === "CSE");
+
+  it("offers only the shared year(s), never the branch's own later years", () => {
+    expect(yearsInScope(4, cse, managedYears, true, CAT, full, new Set(["CSE"]))).toEqual([1]);
+  });
+
+  it("without the managed-only flag the branch's own years leak in (the old behaviour)", () => {
+    expect(yearsInScope(4, cse, managedYears, true, CAT, full)).toEqual([1, 2, 3, 4]);
+  });
+
+  it("the branch's own HOD still gets its own years, untouched", () => {
+    expect(yearsInScope(4, cse, managedYears, false, CAT, full)).toEqual([2, 3, 4]);
   });
 });

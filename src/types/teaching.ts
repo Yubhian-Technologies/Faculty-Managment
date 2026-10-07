@@ -2,13 +2,14 @@ import type { Timestamp } from "firebase/firestore";
 
 // ─── Subject ──────────────────────────────────────────────────────────────────
 
-export type SubjectType = "THEORY" | "PRACTICAL" | "TUTORIAL" | "PROJECT";
+export type SubjectType = "THEORY" | "PRACTICAL" | "TUTORIAL" | "PROJECT" | "NON_TEACHING";
 
 export const SUBJECT_TYPE_LABELS: Record<SubjectType, string> = {
   THEORY: "Theory",
   PRACTICAL: "Practical",
   TUTORIAL: "Tutorial",
   PROJECT: "Project",
+  NON_TEACHING: "Non-Teaching / Attendance Only",
 };
 
 // Standard AICTE model-curriculum categories, used across most Indian
@@ -100,6 +101,9 @@ export interface Subject {
   internalMarks?: number;
   externalMarks?: number;
   totalMarks?: number;
+  isCustom?: boolean;
+  isNonTeachingLoad?: boolean;
+  excludeFromResume?: boolean;
   isActive: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -141,6 +145,9 @@ export interface SubjectSemesterAssignment {
   internalMarks?: number;
   externalMarks?: number;
   totalMarks?: number;
+  isCustom?: boolean;
+  isNonTeachingLoad?: boolean;
+  excludeFromResume?: boolean;
   isCustomized?: boolean;
   isActive?: boolean;
   createdAt: Timestamp;
@@ -196,6 +203,8 @@ export interface TeachingAssignment {
   assignmentSemester?: string;
   passPercentage?: number;
   studentFeedback?: number;   // average student feedback rating for this teaching period, as a %
+  isNonTeachingLoad?: boolean;
+  excludeFromResume?: boolean;
 
   // Course/section-scoped rows only - which of the course-year's configured
   // CourseYearTiming.semesters (src/types/core.ts) this assignment is
@@ -208,6 +217,9 @@ export interface TeachingAssignment {
   // HOD types by hand, unrelated to CourseYearTiming) and from `semester`
   // near the top of this interface (the independent semester-scoped shape).
   timetableSemester?: number;
+
+  // Cell color picked in the timetable editor (key of SUBJECT_COLORS); absent = default.
+  cellColor?: string;
 }
 
 // ─── Faculty Assignment Request ────────────────────────────────────────────────
@@ -320,6 +332,8 @@ export interface TimetableSlot {
   day: DayOfWeek;
   periodNumber: number;         // resolved against that course-year's CourseYearTiming for clock time
   classroom?: string;
+  /** Display-only, attached on read from the slot's TeachingAssignment.cellColor - never stored on the slot. */
+  cellColor?: string;
   // Free-text lab sub-group label (e.g. "Batch 1") for a PRACTICAL subject
   // split across parallel sessions - set only at creation time, via the
   // per-row "Lab Batch" field in TeachingAssignmentsEditor (see

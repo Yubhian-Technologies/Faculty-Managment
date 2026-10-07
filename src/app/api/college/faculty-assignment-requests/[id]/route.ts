@@ -10,11 +10,11 @@ import { isTimetableInchargeForDepartment } from "@/lib/departments/timetableInc
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { isFacultyAvailable } from "@/types";
 import { allocationFields, facultyNamesText, requestAllocations } from "@/lib/teaching/requestAllocations";
-import { matchesCurrentSemester, resolveCurrentSemester } from "@/lib/college/semester";
+import { matchesCurrentSemester, resolveCurrentSemester, loadEffectiveTiming } from "@/lib/college/semester";
 import {
   expandDeclaredBusy, loadUserRole, notifyLendRecipients, requesterRequestsLink, requesterTimetableLink,
 } from "@/lib/timetable/declaredBusy";
-import type { CourseYearTiming, DayOfWeek, FacultyAssignmentRequest, TimetableDraft, TimetableSlot } from "@/types";
+import type { DayOfWeek, FacultyAssignmentRequest, TimetableDraft, TimetableSlot } from "@/types";
 
 const VALID_DAYS = new Set<DayOfWeek>(["MON", "TUE", "WED", "THU", "FRI", "SAT"]);
 
@@ -134,8 +134,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (added.length > 0 && target.facultyId) {
         const timingSnaps = await Promise.all(
           Array.from(new Set([Number(reqData.year), ...added.map((bp) => bp.year).filter((y): y is number => y != null)])).map(async (y) => {
-            const snap = await collegeRef.collection("courseYearTimings").doc(`${reqData.courseId}_year${y}`).get();
-            return [y, snap.exists ? (snap.data() as CourseYearTiming) : null] as const;
+            return [y, await loadEffectiveTiming(db, session.collegeId, reqData.courseId, y)] as const;
           }),
         );
         const timings = new Map(timingSnaps);

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { sectionMatchesDepartmentFilter } from "@/lib/departments/hodScope";
 import { AlertTriangle, Eye, Pencil, RefreshCw, Search, Users, CheckCircle2, Clock, BarChart3 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -157,6 +158,15 @@ export default function PrincipalInternalMarksPage() {
   const matchingCourseIds = useMemo(() => new Set(matchingCourses.map((c) => c.id)), [matchingCourses]);
 
   const branchName = departmentId && departmentId !== ALL ? (departmentById.get(departmentId)?.name ?? "") : "";
+  // Year-1 records are filed under the real branch (CSE ...) while the Branch list offers the department
+  // that teaches that year (Basic Science), so a plain name match found nothing. Same year-aware rule the
+  // Sections tab uses: a branch keeps its own full roster, a shared-year manager matches the years it teaches.
+  const catalogIdByCourseId = useMemo(() => new Map(courses.map((c) => [c.id, c.catalogId])), [courses]);
+  const inBranch = useCallback(
+    (branch: string, department: string, rowYear: number, courseId: string | undefined) =>
+      sectionMatchesDepartmentFilter(departments, branch, department, rowYear, courseId ? catalogIdByCourseId.get(courseId) : undefined),
+    [departments, catalogIdByCourseId]
+  );
 
   // Sections for this course name + year, across every department that
   // offers it (Principal's session is college-wide, so omitting courseId
@@ -186,9 +196,9 @@ export default function PrincipalInternalMarksPage() {
   // values `sectionName` state has always held.
   const sectionOptions = useMemo(() => {
     if (!departmentId) return [];
-    const inScope = departmentId === ALL ? sections : sections.filter((s) => s.department === branchName);
+    const inScope = departmentId === ALL ? sections : sections.filter((s) => inBranch(branchName, s.department, s.year, s.courseId));
     return [...new Set(inScope.map((s) => s.name))].sort();
-  }, [sections, departmentId, branchName]);
+  }, [sections, departmentId, branchName, inBranch]);
 
   // Subjects for Course+Year, across every department offering it - sourced
   // from SubjectSemesterAssignment (the "Assign to Semester" output, actually
@@ -257,12 +267,12 @@ export default function PrincipalInternalMarksPage() {
     return allBatches.filter((b) => {
       if (!appliedCourseIds.has(b.courseId ?? "")) return false;
       if (b.year !== Number(applied.year)) return false;
-      if (applied.departmentId !== ALL && b.department !== appliedBranch) return false;
+      if (applied.departmentId !== ALL && !inBranch(appliedBranch, b.department, b.year, b.courseId)) return false;
       if (applied.sectionName !== ALL && b.sectionName !== applied.sectionName) return false;
       if (applied.subjectId !== ALL && b.subjectId !== applied.subjectId) return false;
       return true;
     });
-  }, [allBatches, applied, courses, departmentById]);
+  }, [allBatches, applied, courses, departmentById, inBranch]);
 
   // Any level set to "All" means matchingBatches can span multiple distinct
   // (department, section, subject) contexts at once, so it's rendered as one

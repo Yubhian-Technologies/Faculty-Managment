@@ -18,6 +18,8 @@ import { StudentsViewTabs } from "@/components/students/StudentsViewTabs";
 import { GraduatedStudentsView } from "@/components/students/GraduatedStudentsView";
 import type { StudentListItem, Department, AcademicYear, Course } from "@/types";
 import { selectableYears } from "@/lib/college/courseYears";
+import { coreDepartmentsWithSections, departmentsWithSections } from "@/lib/college/departmentSectionScope";
+import { useSectionDepartments } from "@/hooks/useSectionDepartments";
 
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -64,6 +66,7 @@ export default function PrincipalStudentsPage() {
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [deptFilter, setDeptFilter] = useState("all");
+  const [coreDeptFilter, setCoreDeptFilter] = useState("all");
   const [yearFilter, setYearFilter] = useState<string>("all");
   const [courseFilter, setCourseFilter] = useState<string>("all");
   const [page, setPage] = useState(1);
@@ -100,8 +103,16 @@ export default function PrincipalStudentsPage() {
       params.set("pageSize", String(targetPageSize));
       if (debouncedSearch) params.set("search", debouncedSearch);
       if (deptFilter !== "all") params.set("department", deptFilter);
+      if (coreDeptFilter !== "all") params.set("coreDepartment", coreDeptFilter);
       if (courseFilter !== "all") params.set("course", courseFilter);
       if (yearFilter !== "all") params.set("year", yearFilter);
+      // "All years" for a department means the years it actually teaches - a
+      // department filter matches Core Department too, so without this a branch
+      // teaching years 2-4 also returned its feeder's 1st years.
+      else if (deptFilter !== "all") {
+        const configured = yearOptionsForDepartment(departments, courses, deptFilter, courseFilter === "all" ? "" : courseFilter, years);
+        if (configured.length > 0) params.set("years", configured.join(","));
+      }
 
       const res = await fetch(`/api/college/students?${params.toString()}`);
       const json = await res.json() as { students?: StudentListItem[]; total?: number; error?: string };
@@ -124,7 +135,7 @@ export default function PrincipalStudentsPage() {
     } finally {
       setIsFetching(false);
     }
-  }, [page, pageSize, debouncedSearch, deptFilter, courseFilter, yearFilter]);
+  }, [page, pageSize, debouncedSearch, deptFilter, coreDeptFilter, courseFilter, yearFilter, departments, courses, years]);
 
   // Load filter metadata once on mount
   useEffect(() => {
@@ -135,18 +146,40 @@ export default function PrincipalStudentsPage() {
   useEffect(() => {
     if (!hasLoaded) return;
     void executeLoad(page, pageSize);
-  }, [hasLoaded, page, pageSize, debouncedSearch, deptFilter, courseFilter, yearFilter, executeLoad]);
+  }, [hasLoaded, page, pageSize, debouncedSearch, deptFilter, coreDeptFilter, courseFilter, yearFilter, executeLoad]);
+
+  // Which departments a section is actually filed under - the Department filter
+  // is drawn from these, not from the whole department list.
+  const sectionDepartments = useSectionDepartments();
 
   const activeDepartments = useMemo(
     () => departments.filter((d) => d.isActive).sort((a, b) => a.name.localeCompare(b.name)),
     [departments]
   );
 
+  // Only the departments that resolve to sections - their own, or those of a
+  // branch they manage. The same rule the College Office page applies; see
+  // lib/college/departmentSectionScope.ts for why a department with neither was
+  // a dead option.
   const departmentFilterOptions = useMemo(() => {
-    if (courseFilter === "all") return activeDepartments;
-    const offeringIds = new Set(departmentsOfferingCourse(departments, courses, courseFilter).map((d) => d.id));
-    return activeDepartments.filter((d) => offeringIds.has(d.id));
-  }, [courseFilter, activeDepartments, departments, courses]);
+    const offered = courseFilter === "all"
+      ? activeDepartments
+      : (() => {
+        const offeringIds = new Set(departmentsOfferingCourse(departments, courses, courseFilter).map((d) => d.id));
+        return activeDepartments.filter((d) => offeringIds.has(d.id));
+      })();
+    return departmentsWithSections(offered, sectionDepartments);
+  }, [courseFilter, activeDepartments, departments, courses, sectionDepartments]);
+
+  // The branches a feeder department teaches the shared first year for - the
+  // students' Core Department. Offered only when the picked department has any.
+  const coreDepartmentOptions = useMemo(
+    () => coreDepartmentsWithSections(
+      deptFilter === "all" ? undefined : departments.find((d) => d.name === deptFilter),
+      sectionDepartments
+    ),
+    [deptFilter, departments, sectionDepartments]
+  );
 
   const yearFilterOptions = useMemo(() => {
     if (deptFilter !== "all") {
@@ -169,7 +202,7 @@ export default function PrincipalStudentsPage() {
       ? activeDepartments
       : activeDepartments.filter((d) => new Set(departmentsOfferingCourse(departments, courses, value).map((o) => o.id)).has(d.id));
     const deptStillValid = deptFilter === "all" || nextDeptOptions.some((d) => d.name === deptFilter);
-    if (!deptStillValid) setDeptFilter("all");
+    if (!deptStillValid) { setDeptFilter("all"); setCoreDeptFilter("all"); }
     const nextDept = deptStillValid ? deptFilter : "all";
     const nextYearOptions = nextDept === "all"
       ? yearOptionsForCourse(courses, value === "all" ? undefined : value, years)
@@ -184,7 +217,13 @@ export default function PrincipalStudentsPage() {
       ? yearOptionsForCourse(courses, courseFilter === "all" ? undefined : courseFilter, years)
       : yearOptionsForDepartment(departments, courses, value, courseFilter === "all" ? "" : courseFilter, years);
     if (yearFilter !== "all" && !nextYearOptions.includes(Number(yearFilter))) setYearFilter("all");
+    setCoreDeptFilter("all");
     setDeptFilter(value);
+    setPage(1);
+  }
+
+  function onCoreDeptFilterChange(value: string) {
+    setCoreDeptFilter(value);
     setPage(1);
   }
 
@@ -274,6 +313,15 @@ export default function PrincipalStudentsPage() {
                 {departmentFilterOptions.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
               </SelectContent>
             </Select>
+            {coreDepartmentOptions.length > 0 && (
+              <Select value={coreDeptFilter} onValueChange={onCoreDeptFilterChange}>
+                <SelectTrigger className="sm:w-48"><SelectValue placeholder="All core departments" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All core departments</SelectItem>
+                  {coreDepartmentOptions.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
             <Select value={yearFilter} onValueChange={onYearFilterChange}>
               <SelectTrigger className="sm:w-36"><SelectValue placeholder="All years" /></SelectTrigger>
               <SelectContent>
