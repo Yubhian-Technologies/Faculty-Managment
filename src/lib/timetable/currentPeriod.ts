@@ -1,7 +1,7 @@
 import type { Firestore } from "firebase-admin/firestore";
 import type { CourseYearTiming, DayOfWeek, TimetableSlot } from "@/types";
 import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
-import { resolveCurrentSemester, matchesCurrentSemester } from "@/lib/college/semester";
+import { loadEffectiveTiming, resolveCurrentSemester, matchesCurrentSemester } from "@/lib/college/semester";
 import { resolveSubstituteSlotsForDate } from "@/lib/leave/periodCoverage";
 
 // Exported for callers that need to map an arbitrary calendar date (not just
@@ -67,31 +67,55 @@ function loadTiming(
 ): Promise<CourseYearTiming | null> {
   let hit = cache.get(timingId);
   if (!hit) {
-    hit = collegeRef.collection("courseYearTimings").doc(timingId).get().then((snap) =>
-      snap.exists ? ({ id: snap.id, ...snap.data() } as CourseYearTiming) : null
-    );
+    hit = collegeRef.collection("courseYearTimings").doc(timingId).get().then(async (snap) => {
+      if (snap.exists) return { id: snap.id, ...snap.data() } as CourseYearTiming;
+      // A shared-year branch (e.g. first-year CSE under Basic Science) stores its own courseId on
+      // its slots, but the year's timing lives on the managing department - same fallback the
+      // Timetable editor uses (see loadEffectiveTiming).
+      const m = /^(.+)_year(\d+)$/.exec(timingId);
+      if (!m) return null;
+      return loadEffectiveTiming(collegeRef.firestore, collegeRef.id, m[1], Number(m[2]));
+    });
     cache.set(timingId, hit);
   }
   return hit;
 }
 
+// Why an assigned period can be listed but not taken. `lenient` keeps such a
+// period (listing only - the attendance window checks stay strict) instead of
+// dropping it, so a faculty member still SEES everything assigned to them.
+export type UnavailableReason = "NO_TIMING" | "NO_PERIOD" | "OTHER_SEMESTER";
+
+export const UNAVAILABLE_MESSAGES: Record<UnavailableReason, string> = {
+  NO_TIMING: "College timings are not set for this course-year - contact the College Office.",
+  NO_PERIOD: "This period is not in the course-year's timings - contact the College Office.",
+  OTHER_SEMESTER: "This timetable belongs to a semester that is not the current one - contact your HOD.",
+};
+
 async function resolvePeriodWindow(
   collegeRef: FirebaseFirestore.DocumentReference,
   slot: Pick<TimetableSlot, "courseId" | "year" | "periodNumber" | "semester">,
   cache: TimingCache = new Map(),
-): Promise<{ startTime: string; endTime: string; closeTime: string } | null> {
+  lenient = false,
+): Promise<{ startTime: string; endTime: string; closeTime: string; unavailableReason?: UnavailableReason } | null> {
   const timingId = `${slot.courseId}_year${slot.year}`;
   const timing = await loadTiming(collegeRef, timingId, cache);
-  if (!timing) return null;
-  if (!matchesCurrentSemester(slot.semester, resolveCurrentSemester(timing))) return null;
+  const unavailable = (unavailableReason: UnavailableReason) =>
+    lenient ? { startTime: "", endTime: "", closeTime: "", unavailableReason } : null;
+  if (!timing) return unavailable("NO_TIMING");
+  const otherSemester = !matchesCurrentSemester(slot.semester, resolveCurrentSemester(timing));
+  if (otherSemester && !lenient) return null;
   const periods = timing.periods?.length ? timing.periods : defaultPeriodTimings(timing);
   const period = periods.find((p) => p.period === slot.periodNumber);
-  if (!period) return null;
+  if (!period) return unavailable("NO_PERIOD");
   // Attendance for a period stays postable until the course-year's college end
   // time (never earlier than the period's own end). endTime itself is unchanged:
   // on-time/late and not-posted reporting still measure against the period end.
   const closeTime = timing.collegeEndTime && toMinutes(timing.collegeEndTime) > toMinutes(period.endTime) ? timing.collegeEndTime : period.endTime;
-  return { startTime: period.startTime, endTime: period.endTime, closeTime };
+  return {
+    startTime: period.startTime, endTime: period.endTime, closeTime,
+    ...(otherSemester ? { unavailableReason: "OTHER_SEMESTER" as const } : {}),
+  };
 }
 
 export interface CurrentPeriodSlot {
@@ -160,6 +184,8 @@ export interface FacultyPeriodOnDate {
   startTime: string; // "HH:MM" 24h, resolved from the slot's own CourseYearTiming
   endTime: string;
   closeTime: string; // when posting closes: the year's college end time (>= endTime)
+  /** Set (with blank/other-semester times) only when listed leniently - see resolvePeriodWindow. */
+  unavailableReason?: UnavailableReason;
 }
 
 /**
@@ -184,6 +210,8 @@ export async function getFacultyPeriodsForDate(
   // Pass one cache across many calls (e.g. the cron looping over every
   // faculty in a college) so a shared course-year timing is read once.
   timingCache: TimingCache = new Map(),
+  // List periods whose timing/semester can't be resolved too (flagged with unavailableReason).
+  options: { lenient?: boolean } = {},
 ): Promise<FacultyPeriodOnDate[]> {
   // Same weekday-from-date convention as class-work-records/route.ts's
   // resolvePeriodNumber - a plain JS Date parsed from "YYYY-MM-DD" components
@@ -220,12 +248,14 @@ export async function getFacultyPeriodsForDate(
   const daySlots = [...ownDaySlots, ...subSlots];
 
   const resolved: FacultyPeriodOnDate[] = [];
-  const windows = await Promise.all(daySlots.map((slot) => resolvePeriodWindow(collegeRef, slot, timingCache)));
+  const windows = await Promise.all(daySlots.map((slot) => resolvePeriodWindow(collegeRef, slot, timingCache, options.lenient)));
   daySlots.forEach((slot, i) => {
     const window = windows[i];
     if (window) resolved.push({ slot, ...window });
   });
-  resolved.sort((a, b) => toMinutes(a.startTime) - toMinutes(b.startTime));
+  // Periods without a resolvable time go last.
+  const minutesOf = (t: string) => (t ? toMinutes(t) : Number.MAX_SAFE_INTEGER);
+  resolved.sort((a, b) => minutesOf(a.startTime) - minutesOf(b.startTime));
   return resolved;
 }
 
