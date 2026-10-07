@@ -1,10 +1,14 @@
 import ExcelJS from "exceljs";
-import { escapeHtml } from "./facultyTimetablePdf";
+import { escapeHtml, formatTime12h } from "./facultyTimetablePdf";
 import { renderHtmlToPdf } from "@/lib/pdf/htmlToPdf";
 
 export interface FreeFacultyRow { employeeId: string; name: string; department: string; freeRanges?: [string, string][] }
 
-const freeText = (f: FreeFacultyRow) => (f.freeRanges ? f.freeRanges.map(([a, b]) => `${a}-${b}`).join(", ") : "Whole range");
+// Free for the whole requested window has no freeRanges (see faculty-leisure's
+// route) - fall back to that window itself rather than a placeholder, so the
+// export always shows an actual time range.
+const freeText = (f: FreeFacultyRow, wholeWindow: [string, string]) =>
+  (f.freeRanges ?? [wholeWindow]).map(([a, b]) => `${formatTime12h(a)} - ${formatTime12h(b)}`).join(", ");
 
 // Downloads for the "Show free faculty" list: one block per department with
 // S.No / Employee ID / Name, matching the on-screen tables. `slotLabel` is e.g.
@@ -19,7 +23,7 @@ function groupByDepartment(rows: FreeFacultyRow[]): [string, FreeFacultyRow[]][]
   return Array.from(map.entries());
 }
 
-export async function downloadFreeFacultyXlsx(rows: FreeFacultyRow[], slotLabel: string, filename: string): Promise<void> {
+export async function downloadFreeFacultyXlsx(rows: FreeFacultyRow[], slotLabel: string, filename: string, wholeWindow: [string, string]): Promise<void> {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet("Free Faculty");
   // Same layout as the on-screen list and the PDF: each department is ONE
@@ -44,7 +48,7 @@ export async function downloadFreeFacultyXlsx(rows: FreeFacultyRow[], slotLabel:
     header.font = { bold: true };
     header.eachCell((c) => { c.border = border; });
     list.forEach((f, i) => {
-      const row = sheet.addRow([i + 1, f.employeeId || "-", f.name, freeText(f)]);
+      const row = sheet.addRow([i + 1, f.employeeId || "-", f.name, freeText(f, wholeWindow)]);
       row.eachCell({ includeEmpty: true }, (c) => { c.border = border; });
       row.getCell(1).alignment = { horizontal: "left" };
     });
@@ -61,7 +65,7 @@ export async function downloadFreeFacultyXlsx(rows: FreeFacultyRow[], slotLabel:
   URL.revokeObjectURL(url);
 }
 
-export async function downloadFreeFacultyPdf(rows: FreeFacultyRow[], slotLabel: string, filename: string): Promise<void> {
+export async function downloadFreeFacultyPdf(rows: FreeFacultyRow[], slotLabel: string, filename: string, wholeWindow: [string, string]): Promise<void> {
   const blocks = groupByDepartment(rows).map(([dept, list]) => `
     <h3 class="subheading" style="margin:16px 0 6px">${escapeHtml(dept)} (${list.length})</h3>
     <table class="data-table" style="width:100%;border-collapse:collapse;font-size:12px">
@@ -75,7 +79,7 @@ export async function downloadFreeFacultyPdf(rows: FreeFacultyRow[], slotLabel: 
         <td style="border:1px solid #999;padding:5px">${i + 1}</td>
         <td style="border:1px solid #999;padding:5px">${escapeHtml(f.employeeId || "-")}</td>
         <td style="border:1px solid #999;padding:5px">${escapeHtml(f.name)}</td>
-        <td style="border:1px solid #999;padding:5px">${escapeHtml(freeText(f))}</td>
+        <td style="border:1px solid #999;padding:5px">${escapeHtml(freeText(f, wholeWindow))}</td>
       </tr>`).join("")}</tbody>
     </table>`).join("");
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Free faculty</title></head>

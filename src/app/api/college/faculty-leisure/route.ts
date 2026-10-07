@@ -76,6 +76,13 @@ export async function GET(request: Request) {
     const rules: TimetableRules = rulesSnap.exists
       ? { ...DEFAULT_TIMETABLE_RULES, ...(rulesSnap.data() as Partial<TimetableRules>) }
       : DEFAULT_TIMETABLE_RULES;
+    // Some stored timings key each entry `periodNumber` instead of `period`
+    // (an older write path); every lookup below matches on `period`, so
+    // normalise here or those course-years' periods never match and their
+    // faculty read as free all day - see the same fix in faculty-schedule.
+    const normalizePeriods = (arr: PeriodTiming[]): PeriodTiming[] =>
+      arr.map((p) => ({ ...p, period: p.period ?? (p as { periodNumber?: number }).periodNumber ?? 0 }));
+
     const timingByCourseYear = new Map<string, CourseYearTiming>();
     let periodCount = 0;
     const semesterNumbers = new Set<number>();
@@ -89,13 +96,13 @@ export async function GET(request: Request) {
       const t = d.data() as CourseYearTiming;
       timingByCourseYear.set(`${t.courseId}_${t.year}`, t);
       for (const sem of t.semesters ?? []) semesterNumbers.add(sem.semester);
-      const own = t.periods && t.periods.length > 0 ? t.periods : defaultPeriodTimings(t);
+      const own = normalizePeriods(t.periods && t.periods.length > 0 ? t.periods : defaultPeriodTimings(t));
       if (own.length > periodCount) { periodCount = own.length; periods = own; }
     }
     const periodsFor = (courseId: string, year: number): PeriodTiming[] => {
       const t = timingByCourseYear.get(`${courseId}_${year}`);
       if (!t) return periods;
-      return t.periods && t.periods.length > 0 ? t.periods : defaultPeriodTimings(t);
+      return normalizePeriods(t.periods && t.periods.length > 0 ? t.periods : defaultPeriodTimings(t));
     };
     const overlapsWindow = (courseId: string, year: number, periodNumber: number): boolean => {
       const pt = periodsFor(courseId, year).find((x) => x.period === periodNumber);
