@@ -187,6 +187,7 @@ export default function TeachingLoadPage() {
     try {
       const semesterSlots = timetableSlots
         .filter((s) => !s.id.startsWith("substitute_"))
+        .filter((s) => !nonTeachingAssignmentIds.has(s.assignmentId) && s.subjectType !== "NON_TEACHING" && !(s as any).isNonTeachingLoad)
         .filter((s) => typeFilter === "ALL" || s.subjectType === typeFilter);
       const semesterNums = Array.from(new Set(semesterSlots.map((s) => s.semester).filter((n): n is number => n != null))).sort((a, b) => a - b);
       const courseCodeById = new Map(courses.map((c) => [c.id, c.code || c.name]));
@@ -201,6 +202,7 @@ export default function TeachingLoadPage() {
         slots: semesterSlots,
         assignmentById,
         periodTimeFor,
+        breakAfter: breakAfterFor,
         courseCodeById,
         departments,
         formatDMY,
@@ -222,6 +224,7 @@ export default function TeachingLoadPage() {
     try {
       const semesterSlots = timetableSlots
         .filter((s) => !s.id.startsWith("substitute_"))
+        .filter((s) => !nonTeachingAssignmentIds.has(s.assignmentId) && s.subjectType !== "NON_TEACHING" && !(s as any).isNonTeachingLoad)
         .filter((s) => typeFilter === "ALL" || s.subjectType === typeFilter);
       const semesterNums = Array.from(new Set(semesterSlots.map((s) => s.semester).filter((n): n is number => n != null))).sort((a, b) => a - b);
       const courseCodeById = new Map(courses.map((c) => [c.id, c.code || c.name]));
@@ -256,6 +259,7 @@ export default function TeachingLoadPage() {
     if (periods.length === 0) return;
     const semesterSlots = timetableSlots
       .filter((s) => !s.id.startsWith("substitute_"))
+      .filter((s) => !nonTeachingAssignmentIds.has(s.assignmentId) && s.subjectType !== "NON_TEACHING" && !(s as any).isNonTeachingLoad)
       .filter((s) => typeFilter === "ALL" || s.subjectType === typeFilter);
     const semesterNums = Array.from(new Set(semesterSlots.map((s) => s.semester).filter((n): n is number => n != null))).sort((a, b) => a - b);
     const courseCodeById = new Map(courses.map((c) => [c.id, c.code || c.name]));
@@ -270,6 +274,7 @@ export default function TeachingLoadPage() {
       slots: semesterSlots,
       assignmentById,
       periodTimeFor,
+      breakAfter: breakAfterFor,
       courseCodeById,
       departments,
       formatDMY,

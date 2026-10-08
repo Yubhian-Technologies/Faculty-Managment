@@ -253,9 +253,18 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
 
   const setCellColor = async (assignmentId: string, color: string | null) => {
     const prev = assignments;
-    setAssignments((list) => list.map((a) => (a.id === assignmentId ? { ...a, cellColor: color ?? undefined } : a)));
+    // A co-taught/split subject (several faculty, same subject, same section)
+    // is several assignment docs - colour every one of them together, so
+    // colouring any one faculty's half colours the whole subject everywhere
+    // it's shown, the editor included. The server does the same grouping
+    // (see subject-color PATCH), this is just the optimistic local mirror.
+    const subjectId = prev.find((a) => a.id === assignmentId)?.subjectId;
+    const siblingIds = new Set(
+      prev.filter((a) => a.id === assignmentId || (subjectId && a.subjectId === subjectId)).map((a) => a.id)
+    );
+    setAssignments((list) => list.map((a) => (siblingIds.has(a.id) ? { ...a, cellColor: color ?? undefined } : a)));
     // Published slots carry the colour too (see timetable-slots GET) - keep the Published view in step.
-    setSlots((list) => list.map((s) => (s.assignmentId === assignmentId ? { ...s, cellColor: color ?? undefined } : s)));
+    setSlots((list) => list.map((s) => (siblingIds.has(s.assignmentId) ? { ...s, cellColor: color ?? undefined } : s)));
     const res = await fetch("/api/college/timetable/subject-color", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -263,7 +272,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
     });
     if (!res.ok) {
       setAssignments(prev);
-      setSlots((list) => list.map((s) => (s.assignmentId === assignmentId ? { ...s, cellColor: prev.find((a) => a.id === assignmentId)?.cellColor } : s)));
+      setSlots((list) => list.map((s) => (siblingIds.has(s.assignmentId) ? { ...s, cellColor: prev.find((a) => a.id === s.assignmentId)?.cellColor } : s)));
       const err = (await res.json().catch(() => ({}))) as { error?: string };
       toast({ variant: "destructive", title: err.error ?? "Could not save the color" });
     }

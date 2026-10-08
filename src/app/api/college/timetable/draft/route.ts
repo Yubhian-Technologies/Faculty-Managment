@@ -289,9 +289,16 @@ export async function PATCH(request: Request) {
             }
           }
         }
-        // Every period from..to-1 of this subject on that day links to its next period.
+        // Every period from..to-1 on that day links to its next period - every
+        // slot there, not just the anchor subject's: a split period (two
+        // subjects taught in parallel) renders as one shared-width cell block
+        // (continuousSpans groups by the period's whole occupant set), so if
+        // only the anchor's own slot carried the flag, a reader that looks at
+        // one subject at a time (a faculty's own Teaching Load - see
+        // facultySpans) would see that subject as unmerged even though the
+        // section timetable already draws it merged.
         slots = draft.slots.map((s) => {
-          if (s.day !== day || s.subjectId !== anchor.subjectId || s.periodNumber < from || s.periodNumber >= to) return s;
+          if (s.day !== day || s.periodNumber < from || s.periodNumber >= to) return s;
           if (action === "merge") return { ...s, mergeWithNext: true };
           const { mergeWithNext: _unlinked, ...rest } = s; // drop the key: Firestore rejects undefined
           void _unlinked;
