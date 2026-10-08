@@ -80,6 +80,9 @@ export interface Subject {
   // showing their full name/code until someone fills it in; every display
   // surface that reads it falls back to `code`/`name` when absent.
   shortCode?: string;
+  // An optional second short code for the same subject. The timetable editor asks which of
+  // the two to show when a period of this subject is placed (stored on the slot as displayCode).
+  altShortCode?: string;
   hoursPerWeek: number;
   totalHoursPerSemester?: number;
   // L-T-P breakdown (Lecture/Tutorial/Practical hours per week) alongside
@@ -349,6 +352,8 @@ export interface TimetableSlot {
   effectiveDate?: string;
   /** Merged with the NEXT period into one cell (chosen in the timetable editor; carried from the draft on publish). */
   mergeWithNext?: boolean;
+  /** Which of the subject's short codes this period shows (picked when it was placed). */
+  displayCode?: string;
   source?: TimetableSlotSource; // absent on rows written before this field existed - treat as MANUAL
   isPinned?: boolean;
   // Which of the course-year's configured semesters (CourseYearTiming.
@@ -475,6 +480,8 @@ export interface DraftSlot {
   isBlockContinuation?: boolean;
   /** Set by "Merge cells": this period is drawn as ONE cell with the next period (same subject). */
   mergeWithNext?: boolean;
+  /** Which of the subject's short codes this period shows (picked when it was placed). */
+  displayCode?: string;
 }
 
 export interface TimetableDraft {

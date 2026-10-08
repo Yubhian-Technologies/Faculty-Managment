@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
-import { claimSubjectKey, isSubjectKeyTaken } from "@/lib/subjects/subjectKeys";
+import { claimSubjectKey, isSubjectKeyTaken, type SubjectKeyTakenError } from "@/lib/subjects/subjectKeys";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -243,12 +243,13 @@ export async function POST(request: Request) {
 
       const dupeSnap = await dupeQuery.get();
       let existingSubjectId: string | undefined;
+      let existingSubjectName: string | undefined;
       const hasDupe = dupeSnap.docs.some((d) => {
         const data = d.data() as { code?: string; name?: string; regulation?: string; semester?: number; year?: number };
-        // Same code AND name: the caller may reuse this subject instead of adding a copy.
-        if ((data.code ?? "").toUpperCase() === code && (data.regulation ?? "").trim() === regKey
-          && (data.name ?? "").trim().toLowerCase() === body.name!.trim().toLowerCase()) {
+        // Same code + regulation = same subject: the caller may reuse it instead of adding a copy.
+        if ((data.code ?? "").toUpperCase() === code && (data.regulation ?? "").trim() === regKey) {
           existingSubjectId = d.id;
+          existingSubjectName = data.name;
         }
         const sameCode = (data.code ?? "").toUpperCase() === code;
         const sameReg = (data.regulation ?? "").trim() === regKey;
@@ -260,7 +261,7 @@ export async function POST(request: Request) {
 
       if (hasDupe) {
         return NextResponse.json(
-          { error: `A subject with code "${code}" already exists for this regulation and department.`, existingSubjectId },
+          { error: `A subject with code "${code}" already exists for this regulation and department.`, existingSubjectId, existingSubjectName },
           { status: 409 },
         );
       }
@@ -308,7 +309,12 @@ export async function POST(request: Request) {
         });
       } catch (e) {
         if (isSubjectKeyTaken(e)) {
-          return NextResponse.json({ error: `A subject with code "${code}" already exists for this regulation and department.` }, { status: 409 });
+          // Same code held by a sibling department's course: offer it for reuse.
+          const taken = e as SubjectKeyTakenError;
+          return NextResponse.json({
+            error: `A subject with code "${code}" already exists for this regulation and department.`,
+            ...(taken.ownerId ? { existingSubjectId: taken.ownerId, existingSubjectName: taken.ownerName } : {}),
+          }, { status: 409 });
         }
         throw e;
       }

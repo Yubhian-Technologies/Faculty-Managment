@@ -179,6 +179,7 @@ export async function publishSectionDraft(input: PublishInput): Promise<PublishO
         academicYear: currentAcademicYear,
         ...(input.effectiveDate ? { effectiveDate: input.effectiveDate } : {}),
         ...(s.mergeWithNext ? { mergeWithNext: true } : {}),
+        ...(s.displayCode ? { displayCode: s.displayCode } : {}),
         createdAt: now,
         updatedAt: now,
       });

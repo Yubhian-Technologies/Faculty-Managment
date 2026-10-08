@@ -253,6 +253,7 @@ export async function PATCH(request: Request) {
         subjectName?: string;
         subjectCode?: string;
         shortCode?: string;
+        altShortCode?: string;
         category?: string;
         customCategory?: string | null;
         type?: string;
@@ -334,6 +335,7 @@ export async function PATCH(request: Request) {
       if (snap2.subjectName != null) fields.subjectName = String(snap2.subjectName).trim();
       if (snap2.subjectCode != null) fields.subjectCode = String(snap2.subjectCode).toUpperCase().trim();
       if (snap2.shortCode != null) fields.shortCode = String(snap2.shortCode).trim().toUpperCase();
+      if (snap2.altShortCode != null) fields.altShortCode = String(snap2.altShortCode).trim().toUpperCase();
       if (snap2.category != null) fields.category = snap2.category;
       if ("customCategory" in snap2) fields.customCategory = snap2.customCategory ?? null;
       if (snap2.type != null) fields.type = snap2.type;

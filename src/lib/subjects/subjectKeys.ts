@@ -8,7 +8,8 @@ import type { DocumentReference, Firestore, Transaction } from "firebase-admin/f
 
 export const SUBJECT_KEY_TAKEN = "SUBJECT_KEY_TAKEN";
 export class SubjectKeyTakenError extends Error {
-  constructor() {
+  // The live subject that already holds the key, so a caller can reuse it instead of refusing.
+  constructor(readonly ownerId?: string, readonly ownerName?: string) {
     super(SUBJECT_KEY_TAKEN);
   }
 }
@@ -43,7 +44,7 @@ export async function claimSubjectKey(
         owner.exists &&
         String(owner.get("code") ?? "").trim().toLowerCase() === identity.code.trim().toLowerCase() &&
         String(owner.get("regulation") ?? "").trim().toLowerCase() === identity.regulation.trim().toLowerCase();
-      if (live) throw new SubjectKeyTakenError();
+      if (live) throw new SubjectKeyTakenError(ownerId, String(owner.get("name") ?? ""));
     }
   }
   tx.set(keyRef, { subjectId: subjectRef.id, updatedAt: new Date() });
