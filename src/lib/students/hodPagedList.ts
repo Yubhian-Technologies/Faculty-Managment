@@ -3,10 +3,10 @@ import { getHodDepartmentScope, type HodDepartmentScope } from "@/lib/department
 import { resolveBranchYearOwner, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import {
   resolveCatalogId,
-  expandDepartmentNameForRollup,
   freshmanLandingDepartmentNames,
   type DepartmentWithId,
 } from "@/lib/college/academicStructure";
+import { resolveRollupDepartmentNames } from "@/lib/students/departmentRollup";
 import { sortStudentsForList } from "@/lib/students/listOrder";
 import { signStudentId, verifySignedStudentId } from "@/lib/students/signedIds";
 import { projectStudentsForRole } from "@/lib/students/listProjection";
@@ -340,7 +340,9 @@ export async function handleHodStudentsRequest(
   const filters: HodListFilters = {
     level,
     freshmanDept: incoming,
-    departmentNames: department ? expandDepartmentNameForRollup(ctx.departments as DepartmentWithId[], department) : null,
+    departmentNames: department
+      ? await resolveRollupDepartmentNames(db.collection("colleges").doc(session.collegeId), ctx.departments as DepartmentWithId[], department)
+      : null,
     coreDepartment: (params.get("coreDepartment") ?? "").trim(),
     course: (params.get("course") ?? "").trim(),
     year: yearParam && Number.isFinite(Number(yearParam)) ? Number(yearParam) : null,

@@ -14,7 +14,8 @@ import { loadAcademicYearConfig, resolveAcademicYearRequest, sessionInAcademicYe
 import { loadNotPostedIndex, resolveDenominatorMode, withNotPosted, type DenominatorResult } from "@/lib/studentAttendance/heldDenominator";
 import { istDateKey } from "@/lib/attendance/istTime";
 import { mapLimit } from "@/lib/firestore/sharedReads";
-import type { Section, StudentAttendanceSession, TeachingAssignment } from "@/types";
+import { managedSectionDepartments } from "@/lib/departments/managedSections";
+import type { Course, Department, Section, StudentAttendanceSession, TeachingAssignment } from "@/types";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -152,6 +153,37 @@ export async function GET(request: Request) {
         .where("year", "==", year)
         .get();
       sections = snap.docs.map((d) => ({ ...(d.data() as Section), id: d.id }));
+
+      // A section is filed under its real branch for every year (and under that
+      // branch's own Course doc), so a department that only runs a branch's
+      // shared first year owns none by name. ADD the branches it owns for this
+      // year - decided by the existing year-aware owner rule, never the
+      // branch's later years - and keep what the query above found.
+      const deptDocs = (await collegeRef.collection("departments").get()).docs
+        .map((d) => ({ id: d.id, ...(d.data() as object) }) as Department);
+      const requestedCourse = await collegeRef.collection("courses").doc(courseId).get();
+      const catalogId = requestedCourse.exists ? (requestedCourse.data() as Course).catalogId : undefined;
+      const owned = managedSectionDepartments(deptDocs, department, year, catalogId).filter((n) => !treeNames.includes(n));
+      if (owned.length > 0) {
+        const extraSnap = await collegeRef.collection("sections")
+          .where("department", "in", owned.slice(0, 30))
+          .where("year", "==", year)
+          .get();
+        const extra = extraSnap.docs.map((d) => ({ ...(d.data() as Section), id: d.id }));
+        const courseIds = Array.from(new Set(extra.map((s) => s.courseId).filter(Boolean)));
+        const catalogByCourse = new Map<string, string | undefined>();
+        if (courseIds.length > 0) {
+          for (const c of await db.getAll(...courseIds.map((id) => collegeRef.collection("courses").doc(id)))) {
+            if (c.exists) catalogByCourse.set(c.id, (c.data() as Course).catalogId);
+          }
+        }
+        const have = new Set(sections.map((s) => s.id));
+        for (const s of extra) {
+          if (have.has(s.id)) continue;
+          // Same programme: the very course asked for, or one sharing its catalog entry.
+          if (s.courseId === courseId || (!!catalogId && catalogByCourse.get(s.courseId) === catalogId)) sections.push(s);
+        }
+      }
     }
 
     // Just a lookup for the Section picker - department/course/year are

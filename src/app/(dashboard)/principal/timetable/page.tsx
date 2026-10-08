@@ -11,7 +11,8 @@ import { TeachingNowFilter } from "@/components/timetable/TeachingNowFilter";
 import { currentWeekDates } from "@/lib/utils";
 import { isoDateKey } from "@/lib/leave/dayCounter";
 import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
-import { resolveTaughtYears } from "@/lib/college/taughtYears";
+import { courseForDepartmentPick, timetableDepartmentOptions, yearsForDepartmentPick } from "@/lib/departments/timetablePick";
+import { sectionIsOfCore } from "@/lib/departments/sectionDepartmentPick";
 import { InstitutionalTimetableTable } from "@/components/timetable/InstitutionalTimetableTable";
 import { ordinalYear } from "@/lib/timetable/gridModel";
 import type { Course, Department, Section, CourseYearTiming, TimetableSlot, Subject, DayOfWeek } from "@/types";
@@ -51,6 +52,8 @@ export default function PrincipalTimetablePage() {
   const [semester, setSemester] = useState<number | null>(null);
   const [sections, setSections] = useState<Section[]>([]);
   const [sectionId, setSectionId] = useState("");
+  // Narrows the Section list to one branch when the picked department reaches several (a parent, a sub-department).
+  const [coreFilter, setCoreFilter] = useState("");
   const [timing, setTiming] = useState<CourseYearTiming | null>(null);
   const [slots, setSlots] = useState<TimetableSlot[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -80,6 +83,7 @@ export default function PrincipalTimetablePage() {
     setSemester(null);
     setSections([]);
     setSectionId("");
+    setCoreFilter("");
     setTiming(null);
     setSlots([]);
   }
@@ -94,6 +98,7 @@ export default function PrincipalTimetablePage() {
     setSemester(null);
     setSections([]);
     setSectionId("");
+    setCoreFilter("");
     setTiming(null);
     setSlots([]);
   }
@@ -103,6 +108,7 @@ export default function PrincipalTimetablePage() {
     setSemester(null);
     setSections([]);
     setSectionId("");
+    setCoreFilter("");
     setTiming(null);
     setSlots([]);
   }
@@ -129,30 +135,39 @@ export default function PrincipalTimetablePage() {
 
   // Distinct course names across every department.
   const courseNames = Array.from(new Set(courses.map((c) => c.name))).sort((a, b) => a.localeCompare(b));
-  // Departments that actually offer the chosen course name.
-  const departmentsForCourse = courseName
-    ? departments
-        .filter((d) => courses.some((c) => c.name === courseName && c.departmentId === d.id))
-        .sort((a, b) => a.name.localeCompare(b.name))
-    : [];
-  // The one concrete Course doc the two selections resolve to.
-  const course = courses.find((c) => c.name === courseName && c.departmentId === departmentId) ?? null;
+  // Every department that offers the chosen course, each sub-department listed under its parent: the
+  // departments that own a Course doc (as before) plus the sub-departments that share their parent's and a
+  // parent that only organises them. See lib/departments/timetablePick.ts.
+  const departmentOptions = useMemo(
+    () => timetableDepartmentOptions(departments, courses, courseName),
+    [departments, courses, courseName]
+  );
+  // The one concrete Course doc the two selections resolve to (a sub-department shares its parent's).
+  const course = useMemo(
+    () => (departmentId ? courseForDepartmentPick(courses, departments, courseName, departmentId) : null),
+    [courses, departments, courseName, departmentId]
+  );
   const courseId = course?.id ?? "";
-  // Scoped to the picked department's own "Years Taught" for this course
-  // (resolveDepartmentCourseScope), not the raw 1..durationYears span - e.g.
-  // Basic Science only ever published a 1st-year timetable for a shared
-  // 4-year B.Tech course, so 2nd-4th shouldn't even be offered here.
-  const yearOptions = (() => {
-    if (!course) return [];
-    const courseYears = Array.from({ length: course.durationYears }, (_, i) => i + 1);
-    const dept = departments.find((d) => d.id === departmentId);
-    // Own years, or - for a sub-department that has none of its own - its parent's. An empty result means the
-    // department isn't configured: no years (never every year of the course).
-    const assigned = dept ? resolveTaughtYears(dept, departments, course.catalogId).years : [];
-    return courseYears.filter((y) => assigned.includes(y));
-  })();
+  // The picked department's "Years Taught" for this course, not the raw 1..durationYears span - e.g. Basic
+  // Science only ever publishes a 1st-year timetable for a shared 4-year B.Tech course. Empty means the
+  // department isn't configured: no years (never every year of the course). A branch also offers the year its
+  // shared-year manager teaches, and a parent with none of its own the years of its sub-departments.
+  const yearOptions = useMemo(
+    () => (course ? yearsForDepartmentPick(departments, course, departmentId) : []),
+    [course, departments, departmentId]
+  );
 
-  const visibleSections = sections;
+  // The sections the picked department reaches can span several branches (Basic Science -> every branch it
+  // runs the first year for; AI -> both of its branches); a Core department narrows them to one.
+  const coreOptions = useMemo(() => {
+    const names = Array.from(new Set(sections.map((s) => s.department).filter(Boolean)));
+    return names.length > 1 ? names.sort((a, b) => a.localeCompare(b)) : [];
+  }, [sections]);
+  const activeCore = coreOptions.includes(coreFilter) ? coreFilter : "";
+  const visibleSections = useMemo(
+    () => (activeCore ? sections.filter((s) => sectionIsOfCore(departments, activeCore, s.department)) : sections),
+    [sections, activeCore, departments]
+  );
 
   const semesterOptions = useMemo(() => {
     if (!timing) return [];
@@ -194,7 +209,8 @@ export default function PrincipalTimetablePage() {
           .filter((sec) => courseIdsForName.has(sec.courseId))
           .sort((a, b) => a.name.localeCompare(b.name));
         setSections(list);
-            setSectionId("");
+        setSectionId("");
+        setCoreFilter("");
         setTiming((t.timings ?? []).find((x) => Number(x.year) === Number(year)) ?? null);
       } catch {
         if (!cancelled) toast({ variant: "destructive", title: "Failed to load sections" });
@@ -256,9 +272,15 @@ export default function PrincipalTimetablePage() {
             disabled={!courseName}
           >
             <option value="">
-              {courseName && departmentsForCourse.length === 0 ? "No departments" : "Select a department"}
+              {courseName && departmentOptions.length === 0 ? "No departments" : "Select a department"}
             </option>
-            {departmentsForCourse.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            {/* Sub-departments sit under their parent (a native option can't be padded, so the indent is a
+                leading em-space); picking a parent shows the sections of all its sub-departments. */}
+            {departmentOptions.map((o) => (
+              <option key={o.department.id} value={o.department.id}>
+                {o.depth === 1 ? " " : ""}{o.department.name}{o.coversSubDepartments ? " (all sub-departments)" : ""}
+              </option>
+            ))}
           </select>
         </div>
 
@@ -293,6 +315,21 @@ export default function PrincipalTimetablePage() {
              ))}
            </select>
          </div>
+
+         {coreOptions.length > 0 && (
+           <div className="space-y-1.5">
+             <label className="text-sm font-medium" htmlFor="tt-core">Core department</label>
+             <select
+               id="tt-core"
+               className={selectClass}
+               value={activeCore}
+               onChange={(e) => { setApplied(null); setCoreFilter(e.target.value); setSectionId(""); }}
+             >
+               <option value="">All core departments</option>
+               {coreOptions.map((n) => <option key={n} value={n}>{n}</option>)}
+             </select>
+           </div>
+         )}
 
          <div className="space-y-1.5">
            <label className="text-sm font-medium" htmlFor="tt-section">Section</label>

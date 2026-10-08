@@ -15,7 +15,8 @@ import { resolveDepartmentCourseScope, type DepartmentWithId } from "@/lib/colle
 import { RoleAssignmentsPage } from "@/components/roles/RoleAssignmentsPage";
 import { SectionCard } from "@/components/academics/SectionsPanel";
 import { SectionRoster } from "@/components/academics/SectionRoster";
-import { sectionsOfDepartment } from "@/lib/departments/departmentSections";
+import { sectionsOfDepartment, isFiledUnderDepartment } from "@/lib/departments/departmentSections";
+import { isContainerDepartment } from "@/lib/departments/departmentTree";
 import type { Course, Department, Section } from "@/types";
 
 type DeptWithMaybeId = Department & { id: string };
@@ -23,6 +24,11 @@ type DeptWithMaybeId = Department & { id: string };
 // In-place drill-down for one top-level department: sub-departments (if it has
 // any) -> that sub-department's sections -> a section's student roster. All of
 // it renders inside the Departments toggle - nothing navigates away.
+//
+// A department can have sub-departments AND run sections of its own (CSE ->
+// Cyber Security, ECE -> VLSI). It then lists both: the sub-department cards and
+// its own sections. Only a pure container (Basic Science: it organises
+// sub-departments and nothing is filed under it) lists the cards alone.
 function DepartmentDrillDown({ departments, courses, rootId, onExit }: {
   departments: Department[];
   courses: Course[];
@@ -53,10 +59,20 @@ function DepartmentDrillDown({ departments, courses, rootId, onExit }: {
   const children = current ? departments.filter((d) => d.parentDepartmentId === current.id) : [];
   // courseId -> catalogId: a manager's years are decided per course, so each section is resolved against its own course.
   const catalogIdByCourseId = useMemo(() => new Map(courses.map((c) => [c.id, c.catalogId])), [courses]);
-  const deptSections = useMemo(
-    () => (current && children.length === 0 ? sectionsOfDepartment(current as DeptWithMaybeId, departments, sections, catalogIdByCourseId) : []),
-    [current, departments, sections, catalogIdByCourseId, children.length]
+  // What is filed directly under this department. For a container this is normally empty; it is
+  // still listed when it isn't, so a section filed under a parent is never hidden by it having children.
+  const filedHere = useMemo(
+    () => (current ? sections.filter((s) => isFiledUnderDepartment(current as DeptWithMaybeId, s)) : []),
+    [current, sections]
   );
+  // `undefined` while sections load: nothing is guessed about a department until its sections are known.
+  const isContainer = current ? isContainerDepartment(current, departments, isLoading ? undefined : filedHere.length > 0) : false;
+  const deptSections = useMemo(() => {
+    if (!current) return [];
+    // A container keeps its old look (cards only); the direct-filed list is just the safety net above.
+    if (children.length > 0 && isContainer) return filedHere;
+    return sectionsOfDepartment(current as DeptWithMaybeId, departments, sections, catalogIdByCourseId);
+  }, [current, departments, sections, catalogIdByCourseId, children.length, isContainer, filedHere]);
   const byYear = useMemo(() => {
     const map = new Map<number, Section[]>();
     for (const s of deptSections) map.set(s.year, [...(map.get(s.year) ?? []), s]);
@@ -105,34 +121,48 @@ function DepartmentDrillDown({ departments, courses, rootId, onExit }: {
 
       <PageHeader
         title={current.name}
-        description={children.length > 0 ? "Select a sub-department to see its sections" : "Select a section to see its students"}
+        description={
+          children.length === 0
+            ? "Select a section to see its students"
+            : deptSections.length > 0
+              ? "Open a sub-department, or one of this department's own sections"
+              : "Select a sub-department to see its sections"
+        }
       />
 
-      {children.length > 0 ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {children.map((c) => (
-            <Card key={c.id} className="cursor-pointer transition-colors hover:border-primary/50" onClick={() => setPath([...path, c.id])}>
-              <CardContent className="p-4">
-                <span className="inline-flex items-center justify-center h-6 min-w-[1.5rem] px-1.5 rounded bg-muted text-xs font-mono font-semibold text-muted-foreground mb-1">{c.code}</span>
-                <p className="font-semibold text-sm leading-tight">{c.name}</p>
-                <p className="text-xs text-muted-foreground mt-1.5">
-                  {c.hodName ? `HOD: ${c.hodName}` : "No HOD assigned"}
-                </p>
-              </CardContent>
-            </Card>
-          ))}
+      {children.length > 0 && (
+        <div className="space-y-3">
+          {deptSections.length > 0 && <h2 className="font-semibold text-base">Sub-departments</h2>}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {children.map((c) => (
+              <Card key={c.id} className="cursor-pointer transition-colors hover:border-primary/50" onClick={() => setPath([...path, c.id])}>
+                <CardContent className="p-4">
+                  <span className="inline-flex items-center justify-center h-6 min-w-[1.5rem] px-1.5 rounded bg-muted text-xs font-mono font-semibold text-muted-foreground mb-1">{c.code}</span>
+                  <p className="font-semibold text-sm leading-tight">{c.name}</p>
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    {c.hodName ? `HOD: ${c.hodName}` : "No HOD assigned"}
+                  </p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
-      ) : isLoading ? (
+      )}
+
+      {children.length === 0 && isLoading ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3].map((i) => <div key={i} className="h-28 rounded-lg border bg-muted/30 animate-pulse" />)}
         </div>
       ) : byYear.length === 0 ? (
-        <Card><CardContent className="py-12 text-center text-sm text-muted-foreground">No sections in this department yet.</CardContent></Card>
+        children.length === 0 ? (
+          <Card><CardContent className="py-12 text-center text-sm text-muted-foreground">No sections in this department yet.</CardContent></Card>
+        ) : null
       ) : (
         <div className="space-y-8">
+          {children.length > 0 && <h2 className="font-semibold text-base">{current.name} - own sections</h2>}
           {byYear.map(([year, list]) => (
             <div key={year}>
-              <h2 className="font-semibold text-base mb-3">{yearOrdinalLabel(year)}</h2>
+              <h3 className={children.length > 0 ? "font-semibold text-sm text-muted-foreground mb-3" : "font-semibold text-base mb-3"}>{yearOrdinalLabel(year)}</h3>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {list.map((sec) => <SectionCard key={sec.id} sec={sec} onOpen={() => setOpenSectionId(sec.id)} />)}
               </div>

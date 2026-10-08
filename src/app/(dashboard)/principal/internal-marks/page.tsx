@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { sectionMatchesDepartmentFilter } from "@/lib/departments/hodScope";
+import { sectionMatchesPick } from "@/lib/departments/sectionDepartmentPick";
 import { AlertTriangle, Eye, Pencil, RefreshCw, Search, Users, CheckCircle2, Clock, BarChart3 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -162,10 +162,16 @@ export default function PrincipalInternalMarksPage() {
   // that teaches that year (Basic Science), so a plain name match found nothing. Same year-aware rule the
   // Sections tab uses: a branch keeps its own full roster, a shared-year manager matches the years it teaches.
   const catalogIdByCourseId = useMemo(() => new Map(courses.map((c) => [c.id, c.catalogId])), [courses]);
+  // Where the loaded sections / batches are filed - how a parent that holds nothing (AI, split into two
+  // branches that hold the real sections) is recognised, so picking it reaches those branches' rows.
+  const filedDepartmentNames = useMemo(
+    () => Array.from(new Set([...sections.map((s) => s.department), ...allBatches.map((b) => b.department)].filter(Boolean))),
+    [sections, allBatches]
+  );
   const inBranch = useCallback(
     (branch: string, department: string, rowYear: number, courseId: string | undefined) =>
-      sectionMatchesDepartmentFilter(departments, branch, department, rowYear, courseId ? catalogIdByCourseId.get(courseId) : undefined),
-    [departments, catalogIdByCourseId]
+      sectionMatchesPick(departments, branch, { department, year: rowYear }, courseId ? catalogIdByCourseId.get(courseId) : undefined, filedDepartmentNames),
+    [departments, catalogIdByCourseId, filedDepartmentNames]
   );
 
   // Sections for this course name + year, across every department that

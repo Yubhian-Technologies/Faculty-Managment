@@ -22,7 +22,7 @@ import { toast } from "@/hooks/useToast";
 import { yearOptionsForDepartment, yearOptionsForCourse } from "@/components/students/RosterFieldInputs";
 import { StudentStrengthDashboard } from "@/components/students/StudentStrengthDashboard";
 import { StudentsViewTabs } from "@/components/students/StudentsViewTabs";
-import { noOwnSectionsChildren, expandDepartmentNameForRollup, type DepartmentWithId } from "@/lib/college/academicStructure";
+import { noOwnSectionsChildren, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { yearOrdinalLabel } from "@/lib/college/academicYears";
 import { disambiguateSectionLabels, sectionFeedsTarget } from "@/lib/sections/sectionLabel";
 import { sectionsAcceptingAll } from "@/lib/students/sectionMove";
@@ -31,8 +31,12 @@ import type { StudentRow, SectionRow } from "@/components/students/hod/types";
 import { EditStudentDialog } from "@/components/students/hod/EditStudentDialog";
 import { AssignStudentDialog } from "@/components/students/hod/AssignStudentDialog";
 import { selectableYears } from "@/lib/college/courseYears";
-import { coreDepartmentsWithSections, departmentHasSections } from "@/lib/college/departmentSectionScope";
-import { useSectionDepartments } from "@/hooks/useSectionDepartments";
+import {
+  coreDepartmentOptions as buildCoreDepartmentOptions,
+  departmentFilterOptions as buildDepartmentFilterOptions,
+  rollupDepartmentNamesForPick,
+} from "@/lib/departments/departmentTree";
+import { useSectionDepartmentState } from "@/hooks/useSectionDepartments";
 
 
 type BulkMode = "move" | "unassign";
@@ -422,30 +426,39 @@ export default function HodStudentsPage() {
   }, [metaDepartmentNames, departments]);
 
   // Which departments a section is actually filed under.
-  const sectionDepartments = useSectionDepartments();
+  const { names: sectionDepartments, loaded: sectionDepartmentsLoaded } = useSectionDepartmentState();
 
   // Only the departments that resolve to sections - their own, or those of a
-  // branch they manage. A parent that organises sub-departments and holds
-  // nothing itself ("Basic Science") was a dead option: no section and no
-  // student is ever filed directly under it. Falls back to the whole scope when
-  // nothing would qualify, so a department list is never empty.
-  const departmentNames = useMemo(() => {
-    const kept = scopedDepartmentNames.filter((n) => {
-      const doc = departments.find((d) => d.name === n);
-      return doc ? departmentHasSections(doc, sectionDepartments) : true;
-    });
-    return kept.length > 0 ? kept : scopedDepartmentNames;
+  // branch they manage - plus a parent that organises sub-departments (picking
+  // it means "all of them"), each sub-department listed under its parent. Falls
+  // back to the whole scope when nothing would qualify, so the list is never
+  // empty. A scoped name with no department document is kept as typed. See
+  // lib/departments/departmentTree.ts.
+  const departmentOptions = useMemo(() => {
+    const docs = scopedDepartmentNames
+      .map((n) => departments.find((d) => d.name === n))
+      .filter((d): d is NonNullable<typeof d> => !!d);
+    const known = new Set(docs.map((d) => d.name));
+    const options = buildDepartmentFilterOptions(docs, departments, sectionDepartments)
+      .map((o) => ({ name: o.department.name, depth: o.depth, container: o.container }));
+    for (const n of scopedDepartmentNames) {
+      if (!known.has(n)) options.push({ name: n, depth: 0, container: false });
+    }
+    return options;
   }, [scopedDepartmentNames, departments, sectionDepartments]);
 
   // The branches a shared-first-year department holds the first year for -
-  // the students' Core Department. Offered only when the picked department
-  // actually manages any.
+  // the students' Core Department. For a parent, the ones its sub-departments
+  // hold it for; with no department picked, everything in this HOD's scope, so
+  // one pick ("AIDS") reaches that branch's first years across every
+  // sub-department. Offered only when there are any.
   const coreDepartmentOptions = useMemo(
-    () => coreDepartmentsWithSections(
-      deptFilter === "all" ? undefined : departments.find((d) => d.name === deptFilter),
+    () => buildCoreDepartmentOptions(
+      departments,
+      deptFilter === "all" ? scopedDepartmentNames : [deptFilter],
       sectionDepartments
     ),
-    [deptFilter, departments, sectionDepartments]
+    [deptFilter, departments, scopedDepartmentNames, sectionDepartments]
   );
   const coreDeptValue = coreDepartmentOptions.includes(coreDeptFilter) ? coreDeptFilter : "all";
   // The "Freshman's Department" view: students currently held by some OTHER
@@ -622,14 +635,17 @@ export default function HodStudentsPage() {
     return yearOptionsForCourse(courses, courseFilter === "all" ? undefined : courseFilter, fallbackYears);
   }, [deptFilter, courseFilter, departments, courses, fallbackYears]);
 
-  // A "no own sections" shared-first-year parent (e.g. VISHNU's "BASIC
-  // SCIENCE") never itself houses a student - picking it as a filter rolls
-  // up to match its children's students too (see
-  // expandDepartmentNameForRollup's own doc-comment). A no-op for every
-  // other department, same exact-match behaviour as before.
+  // A parent that organises sub-departments and holds nothing itself (e.g.
+  // VISHNU's "BASIC SCIENCE") never houses a student - picking it as a filter
+  // rolls up to match its children's students too (rollupDepartmentNames,
+  // lib/departments/departmentTree.ts - the same rule the server applies). A
+  // no-op for every other department, same exact-match behaviour as before.
+  // Until the section list has loaded only the explicit flag is trusted.
   const deptFilterRollupNames = useMemo(
-    () => (deptFilter !== "all" ? expandDepartmentNameForRollup(departments as DepartmentWithId[], deptFilter) : null),
-    [departments, deptFilter]
+    () => (deptFilter !== "all"
+      ? rollupDepartmentNamesForPick(departments, deptFilter, sectionDepartmentsLoaded ? sectionDepartments : null)
+      : null),
+    [departments, deptFilter, sectionDepartments, sectionDepartmentsLoaded]
   );
 
   // Which rows the current Department/Course/Year filters keep in view. The
@@ -1462,7 +1478,11 @@ export default function HodStudentsPage() {
                   <SelectTrigger className="w-48"><SelectValue placeholder="All departments" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All departments</SelectItem>
-                    {departmentNames.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                    {departmentOptions.map((o) => (
+                      <SelectItem key={o.name} value={o.name} className={o.depth === 1 ? "pl-8" : undefined}>
+                        {o.name}{o.container ? " (all sub-departments)" : ""}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 {coreDepartmentOptions.length > 0 && (

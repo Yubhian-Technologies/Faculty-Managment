@@ -18,8 +18,15 @@ export function sectionsOfDepartment<S extends Pick<Section, "department" | "yea
   catalogIdByCourseId: ReadonlyMap<string, string | undefined>
 ): S[] {
   return sections.filter((s) => {
-    const sid = (s as S & { departmentId?: string }).departmentId;
-    if (sid ? sid === dept.id : s.department === dept.name || s.department === dept.code) return true;
+    if (isFiledUnderDepartment(dept, s)) return true;
     return sectionMatchesDepartmentFilter(allDepartments, dept.name, s.department, s.year, catalogIdByCourseId.get(s.courseId));
   });
+}
+
+/** True when the section is filed directly under `dept` - by its id when the section carries one, else by name / code. */
+export function isFiledUnderDepartment(
+  dept: Pick<Department, "id" | "name" | "code">,
+  section: Pick<Section, "department"> & { departmentId?: string }
+): boolean {
+  return section.departmentId ? section.departmentId === dept.id : section.department === dept.name || section.department === dept.code;
 }
