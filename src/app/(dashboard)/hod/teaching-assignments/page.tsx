@@ -23,7 +23,7 @@ import { departmentPickNames, subjectCoversSection } from "@/lib/departments/sub
 import { coreDepartmentOptions, rollupDepartmentNames } from "@/lib/departments/departmentTree";
 import { assignmentsForFilter } from "@/lib/teaching/assignmentView";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
-import { yearSemesterLabelIn } from "@/lib/academic/format";
+import { yearSemesterLabelIn, semesterInYearLabel } from "@/lib/academic/format";
 import type {
   Course, CourseYearTiming, Department, SectionListItem, Subject, SubjectSemesterAssignment,
   TeachingAssignment, FacultyMember, FacultyAssignmentRequest,
@@ -1208,7 +1208,7 @@ const effectiveSemester = semesterOptions.length === 0
                 <Select value={String(effectiveSemester ?? "")} onValueChange={(v) => { setApplied(null); setSelectedSemester(Number(v)); }}>
                   <SelectTrigger><SelectValue placeholder="Select semester" /></SelectTrigger>
                   <SelectContent>
-                    {semesterOptions.map((s) => <SelectItem key={s} value={String(s)}>{yearSemesterLabelIn(Number(year), semesterOptions, s)}</SelectItem>)}
+                    {semesterOptions.map((s) => <SelectItem key={s} value={String(s)}>{semesterInYearLabel(semesterOptions, s, { format: "short" })}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>

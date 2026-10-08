@@ -16,7 +16,7 @@ import { sectionIsOfCore } from "@/lib/departments/sectionDepartmentPick";
 import { InstitutionalTimetableTable } from "@/components/timetable/InstitutionalTimetableTable";
 import { ordinalYear } from "@/lib/timetable/gridModel";
 import type { Course, Department, Section, CourseYearTiming, TimetableSlot, Subject, DayOfWeek } from "@/types";
-import { yearSemesterLabelIn } from "@/lib/academic/format";
+import { yearSemesterLabelIn, semesterInYearLabel } from "@/lib/academic/format";
 
 // Read-only view of PUBLISHED timetables for the Principal and Vice Principal.
 // Reads `timetableSlots`, which only ever contains published slots - drafts live
@@ -341,7 +341,7 @@ export default function PrincipalTimetablePage() {
                {!year ? "Select a year" : semesterOptions.length === 0 ? "No semesters configured" : "Select semester"}
              </option>
              {semesterOptions.map((s) => (
-               <option key={s} value={s}>{yearSemesterLabelIn(Number(year), semesterOptions, s)}</option>
+               <option key={s} value={s}>{semesterInYearLabel(semesterOptions, s, { format: "short" })}</option>
              ))}
            </select>
          </div>

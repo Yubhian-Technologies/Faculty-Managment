@@ -17,7 +17,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
 import { matchesCurrentSemester } from "@/lib/college/semester";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
-import { yearSemesterLabelIn } from "@/lib/academic/format";
+import { yearSemesterLabelIn, semesterInYearLabel } from "@/lib/academic/format";
 import type {
   Course, CourseYearTiming, Department, FacultyAssignmentRequest, FacultyMember, Section, Subject, TeachingAssignment, SubjectSemesterAssignment,
 } from "@/types";
@@ -502,7 +502,7 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
             <Select value={String(effectiveSemester ?? "")} onValueChange={(v) => setSelectedSemester(Number(v))}>
               <SelectTrigger><SelectValue placeholder="Select semester" /></SelectTrigger>
               <SelectContent>
-                {semesterOptions.map((s) => <SelectItem key={s} value={String(s)}>{yearSemesterLabelIn(Number(year), semesterOptions, s)}</SelectItem>)}
+                {semesterOptions.map((s) => <SelectItem key={s} value={String(s)}>{semesterInYearLabel(semesterOptions, s, { format: "short" })}</SelectItem>)}
               </SelectContent>
             </Select>
           </CardContent>
