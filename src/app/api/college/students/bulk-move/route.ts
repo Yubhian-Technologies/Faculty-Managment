@@ -124,6 +124,7 @@ export async function POST(request: Request) {
       if (!snap.exists) { skipped.push({ id, name: id, reason: "Student not found" }); continue; }
       const student = snap.data() as StudentRecord;
       const label = { id, name: student.name };
+      if (student.status === "DISCONTINUED") { skipped.push({ ...label, reason: "Discontinued - reinstate the student first" }); continue; }
 
       if (scope) {
         const catalogId = student.courseId

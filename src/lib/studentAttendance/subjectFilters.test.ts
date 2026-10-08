@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterSubjectRows, hasSubjectFilters, NO_SUBJECT_FILTERS, totalOfRows } from "./subjectFilters";
+import { describeSubjectFilters, filterSubjectRows, hasSubjectFilters, NO_SUBJECT_FILTERS, totalOfRows } from "./subjectFilters";
 
 const rows = [
   { subjectId: "a", held: 10, attended: 10, percent: 100 },
@@ -28,5 +28,17 @@ describe("totalOfRows", () => {
   it("sums held and attended and recomputes the percentage", () => {
     expect(totalOfRows(rows)).toEqual({ held: 20, attended: 16, percent: 80 });
     expect(totalOfRows([])).toEqual({ held: 0, attended: 0, percent: null });
+  });
+});
+
+describe("describeSubjectFilters", () => {
+  it("says nothing when no filter is on", () => {
+    expect(describeSubjectFilters(NO_SUBJECT_FILTERS, {}, 75)).toEqual([]);
+  });
+  it("lists each active filter in words", () => {
+    const f = { subjectIds: ["a", "b"], shortageOnly: true, minPercent: 40, maxPercent: null };
+    expect(describeSubjectFilters(f, { a: "MATHS", b: "PHY" }, 75)).toEqual([
+      "Subjects: MATHS, PHY", "Below 75% only", "Attendance 40% to 100%",
+    ]);
   });
 });

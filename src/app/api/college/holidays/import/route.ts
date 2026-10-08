@@ -7,6 +7,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { currentTimetableAcademicYear } from "@/lib/college/academicSession";
+import { parseHolidayAudience } from "@/lib/college/holidayImportColumns";
 import { HOLIDAY_TYPE_LABELS } from "@/types";
 import type { HolidayAudience, HolidayType } from "@/types";
 
@@ -15,6 +16,7 @@ interface ImportRow {
   occasion?: string;
   date?: string;
   type?: string;
+  appliesTo?: string;
 }
 
 // code (NATIONAL) or label (National) accepted, case-insensitive - matches
@@ -27,10 +29,9 @@ for (const code of Object.keys(HOLIDAY_TYPE_LABELS) as HolidayType[]) {
 
 // Bulk alternative to holidays/route.ts POST's one-at-a-time Add Holiday -
 // matches the S.No/Occasion/Date/Type CSV template (see
-// lib/college/holidayImportColumns.ts). Every imported row applies to BOTH
-// (the template has no Applies To column) - edit an individual one
-// afterward from the Holidays list if it needs to be students-only. Same
-// role gate as the single-add route.
+// lib/college/holidayImportColumns.ts). The optional Applies To column says
+// Both (the default) or Students only - the same field staff leave counts read.
+// Same role gate as the single-add route.
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE");
@@ -49,7 +50,7 @@ export async function POST(request: Request) {
     const now = new Date();
 
     const failed: { row: number; identifier: string; error: string }[] = [];
-    const toCreate: { date: Date; name: string; type: HolidayType; academicYear: string }[] = [];
+    const toCreate: { date: Date; name: string; type: HolidayType; appliesTo: HolidayAudience; academicYear: string }[] = [];
 
     for (let i = 0; i < records.length; i++) {
       const row = records[i];
@@ -73,7 +74,12 @@ export async function POST(request: Request) {
         failed.push({ row: rowNum, identifier, error: `Type must be National, Regional, College or Restricted, got "${rawType}"` });
         continue;
       }
-      toCreate.push({ date, name: occasion, type, academicYear: currentTimetableAcademicYear(date) });
+      const appliesTo = parseHolidayAudience(row.appliesTo);
+      if (!appliesTo) {
+        failed.push({ row: rowNum, identifier, error: `Applies To must be Both or Students, got "${row.appliesTo?.trim()}"` });
+        continue;
+      }
+      toCreate.push({ date, name: occasion, type, appliesTo, academicYear: currentTimetableAcademicYear(date) });
     }
 
     const holidaysRef = db.collection("colleges").doc(collegeId).collection("holidays");
@@ -85,7 +91,7 @@ export async function POST(request: Request) {
         date: h.date,
         name: h.name,
         type: h.type,
-        appliesTo: "BOTH" as HolidayAudience,
+        appliesTo: h.appliesTo,
         academicYear: h.academicYear,
         createdAt: now,
       });

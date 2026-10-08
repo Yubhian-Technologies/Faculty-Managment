@@ -11,7 +11,7 @@ import { TableSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
 import { toRoman } from "@/lib/academic/format";
 import { SubjectAttendanceFilters } from "@/components/attendance/SubjectAttendanceFilters";
-import { filterSubjectRows, hasSubjectFilters, NO_SUBJECT_FILTERS, totalOfRows, type SubjectFilters } from "@/lib/studentAttendance/subjectFilters";
+import { describeSubjectFilters, filterSubjectRows, hasSubjectFilters, NO_SUBJECT_FILTERS, totalOfRows, type SubjectFilters } from "@/lib/studentAttendance/subjectFilters";
 import { DEFAULT_SHORTAGE_THRESHOLD, isShortageByPercent } from "@/lib/studentAttendance/shortage";
 import {
   MONTH_NAMES,
@@ -129,7 +129,8 @@ export function StudentAttendanceReport() {
   const report = useMemo<StudentReportData | null>(() => {
     if (!loaded || !hasSubjectFilters(filters)) return loaded;
     const subjects = filterSubjectRows(loaded.subjects, filters, THRESHOLD);
-    return { ...loaded, subjects, total: totalOfRows(subjects) };
+    const names = Object.fromEntries(loaded.subjects.map((x) => [x.subjectId, x.code]));
+    return { ...loaded, subjects, total: totalOfRows(subjects), filters: describeSubjectFilters(filters, names, THRESHOLD) };
   }, [loaded, filters]);
 
   const letterhead = report ? studentReportLetterhead(report) : [];

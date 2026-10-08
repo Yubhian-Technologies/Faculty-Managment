@@ -33,12 +33,10 @@ export const LEAVE_IMPORT_COLUMNS: LeaveImportCsvColumn[] = [
   { key: "employeeId", label: "Employee Code", required: false, sample: "EMP1023", aliases: ["Emp Code", "Emp ID"] },
   { key: "employeeName", label: "Employee Name", required: false, sample: "Dr. A. Ravi Kumar", aliases: ["Name", "Staff Name"] },
   { key: "department", label: "Department", required: false, sample: "CSE" },
-  { key: "dateOfJoining", label: "Date of Joining", required: false, sample: "" },
   { key: "payrollMonth", label: "Payroll Month (YYYY/MM/DD)", required: true, sample: "2025/06/01", aliases: ["Payroll Month", "Month"] },
   { key: "leavesTaken", label: "Leaves Taken", required: false, sample: "" },
   { key: "daysAttended", label: "Days Attended", required: false, sample: "" },
   { key: "weeklyOffs", label: "Weekly Offs", required: false, sample: "" },
-  { key: "holidays", label: "Holidays", required: false, sample: "" },
   { key: "lop", label: "LOP", required: false, sample: "" },
   { key: "clOpb", label: "CL OPB", required: false, sample: "" },
   { key: "slOpb", label: "SL OPB", required: false, sample: "" },
@@ -52,15 +50,13 @@ export const LEAVE_IMPORT_COLUMNS: LeaveImportCsvColumn[] = [
   { key: "slClb", label: "SL CLB", required: false, sample: "" },
   { key: "elClb", label: "EL CLB", required: false, sample: "" },
   { key: "vcClb", label: "VC CLB", required: false, sample: "" },
-  { key: "category", label: "Category", required: false, sample: "" },
-  { key: "location", label: "Location", required: false, sample: "" },
 ];
 
 export const LEAVE_IMPORT_HINTS = [
   "Provide either Employee Code or Employee Name (or both) - Employee Code is matched exactly when present, otherwise the name is matched case/punctuation-insensitively against an existing staff login account.",
   "Payroll Month should be in YYYY/MM/DD format (e.g. \"2025/06/01\") - the day is ignored, only the month/year it falls in is used to record the row's leave against.",
   "CL, SL, EL and VC are the only leave figures read from the file - each is the number of days taken that month (VC = On Duty). Leave any blank/0 if none were taken.",
-  "OPB, CLB, Leaves Taken, LOP, Category, Department, Date of Joining and Location are all derived/informational - shown on Export, but ignored on Import (recomputed automatically from the CL/SL/EL/VC figures instead, so they're never out of sync).",
+  "OPB, CLB, Leaves Taken, LOP, Department, Days Attended and Weekly Offs are derived/informational - shown on Export, but ignored on Import (recomputed automatically from the CL/SL/EL/VC figures instead, so they're never out of sync). Date of Joining, Holidays, Category and Location aren't part of this template; if an exported file still has them they're simply ignored.",
   "Days beyond what the employee had remaining at the time aren't blocked - the excess is recorded as Loss of Pay, same as a normal approval. Rows are processed oldest Payroll Month first per employee so this comes out correct regardless of file order.",
   "Every imported figure is recorded as already-APPROVED leave (this is a record of leave already taken), not a new pending request.",
 ];

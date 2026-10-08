@@ -10,12 +10,17 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/useToast";
 import { toCSV, parseCSV, downloadCSV, matchHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
-import { LEAVE_IMPORT_COLUMNS as COLUMNS, LEAVE_IMPORT_HINTS as HINTS } from "@/lib/leave/importCsvColumns";
+import { LEAVE_IMPORT_COLUMNS, LEAVE_IMPORT_HINTS } from "@/lib/leave/importCsvColumns";
+import { YEARLY_IMPORT_COLUMNS, YEARLY_IMPORT_HINTS } from "@/lib/leave/yearlyImport";
+import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
 import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle } from "lucide-react";
 
 type ParsedRow = Record<string, string>;
+type ImportMode = "monthly" | "yearly";
 type ImportResult = {
   created: number;
+  leaveRecords?: number;
+  yearlyRecords?: number;
   failed: { row: number; identifier: string; error: string }[];
 };
 
@@ -27,11 +32,24 @@ export default function LeaveHistoryImportPage() {
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
+  // Monthly = one row per employee per Payroll Month; Year-wise = one row per employee per year (with Jan-Dec columns).
+  const [mode, setMode] = useState<ImportMode>("monthly");
+  const COLUMNS = mode === "yearly" ? YEARLY_IMPORT_COLUMNS : LEAVE_IMPORT_COLUMNS;
+  const HINTS = mode === "yearly" ? YEARLY_IMPORT_HINTS : LEAVE_IMPORT_HINTS;
+
+  function changeMode(next: ImportMode) {
+    if (next === mode) return;
+    setMode(next);
+    setRows([]);
+    setIgnoredHeaders([]);
+    setParseError("");
+    setResult(null);
+  }
 
   function downloadTemplate() {
     const headers = COLUMNS.map((c) => c.label);
     const sample1 = COLUMNS.map((c) => c.sample);
-    downloadCSV(toCSV([headers, sample1]), "leave_history_import_template.csv");
+    downloadCSV(toCSV([headers, sample1]), mode === "yearly" ? "leave_history_yearly_import_template.csv" : "leave_history_import_template.csv");
   }
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -96,7 +114,7 @@ export default function LeaveHistoryImportPage() {
     try {
       // Sent in chunks of 500 (the server's cap) with results merged and row numbers shifted back to
       // the file; a failing chunk stops the run, earlier chunks stay saved.
-      const { merged, stoppedAt, error } = await importInChunks<ImportResult>("/api/college/leave-history-report/import", rows, {
+      const { merged, stoppedAt, error } = await importInChunks<ImportResult>(mode === "yearly" ? "/api/college/leave-history-report/import-yearly" : "/api/college/leave-history-report/import", rows, {
         onProgress: (done, total) => setImportProgress({ done, total }),
       });
       if (stoppedAt === 0) { toast({ variant: "destructive", title: error ?? "Import failed" }); return; }
@@ -132,6 +150,15 @@ export default function LeaveHistoryImportPage() {
             <Link href="/college-office/leave-history"><ArrowLeft className="h-4 w-4 mr-1" />Back to Leave History</Link>
           </Button>
         }
+      />
+
+      <SegmentedTabs
+        value={mode}
+        onChange={(v) => changeMode(v as ImportMode)}
+        options={[
+          { key: "monthly", label: "Month-wise" },
+          { key: "yearly", label: "Year-wise" },
+        ]}
       />
 
       {/* Step 1: Download Template */}
@@ -275,6 +302,9 @@ export default function LeaveHistoryImportPage() {
               }
               <div>
                 <p className="font-semibold">{result.created} record{result.created !== 1 ? "s" : ""} imported successfully</p>
+                {result.yearlyRecords != null && (
+                  <p className="text-sm text-muted-foreground">{result.leaveRecords ?? 0} leave entr{(result.leaveRecords ?? 0) === 1 ? "y" : "ies"} and {result.yearlyRecords} year{result.yearlyRecords === 1 ? "" : "s"} of Weekly Offs / Holidays</p>
+                )}
                 {result.failed.length > 0 && (
                   <p className="text-sm text-muted-foreground">{result.failed.length} row{result.failed.length !== 1 ? "s" : ""} skipped</p>
                 )}

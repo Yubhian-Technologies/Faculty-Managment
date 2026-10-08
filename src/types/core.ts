@@ -2828,7 +2828,7 @@ export type SectionListItem = Section & {
 // fields exist independent of one, but see the Login linkage block below for
 // students who have been issued one (lib/students/provisionLogin.ts).
 
-export type StudentStatus = "REGULAR" | "DETAINED" | "GRADUATED";
+export type StudentStatus = "REGULAR" | "DETAINED" | "GRADUATED" | "DISCONTINUED";
 
 export interface StudentRecord {
   id: string;
@@ -3001,6 +3001,20 @@ export interface StudentRecord {
   graduationBatch?: string; // Section.batch at graduation, e.g. "2021-2025"
   graduationCourseId?: string;
   graduationCourseName?: string; // e.g. "B.Tech"
+  // ─── Detained / discontinued (students/[id]/lifecycle) ──────────────────
+  // Detained: held back to repeat the year; flagged first (nothing moves), placed in a junior-batch section later.
+  detainedAt?: Timestamp;
+  detainedReason?: string;
+  detainedFromYear?: number;
+  detainedFromSection?: string;
+  detainedFromDepartment?: string;
+  detainedPlacedAt?: Timestamp; // set when a detained student is later placed in the section they repeat in
+  // Discontinued: left the college. The record and its history stay, but section is cleared so
+  // the student is in no roster, attendance, timetable or strength count; login is disabled.
+  discontinuedAt?: Timestamp;
+  discontinuedReason?: string;
+  discontinuedFrom?: { department: string; secondaryDepartment: string | null; section: string; year: number; courseId: string | null; labBatch: string };
+  reinstatedAt?: Timestamp;
   // ─── Login linkage ──────────────────────────────────────────────────────
   // Absent until College Office issues this student a real login (see
   // lib/students/provisionLogin.ts) - mirrors FacultyMember.userUid's "links

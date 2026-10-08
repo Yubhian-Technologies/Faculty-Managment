@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
-import { exportToCSV } from "@/lib/utils";
+import { downloadCSV, toCSV } from "@/lib/utils/csv";
 import { formatPercent } from "@/lib/studentAttendance/percentage";
 import { applyStudentFilters, NO_FILTERS, type StudentReportFilters } from "@/lib/studentAttendance/reportFilters";
 import { offeredYears } from "@/lib/college/departmentYears";
@@ -439,13 +439,29 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
       }
     }
     if (!rows.length) { toast({ variant: "destructive", title: "No data to export" }); return; }
-    exportToCSV(rows, `student-attendance-${Date.now()}.csv`, [
+    // The sheet says what it is: which class, which dates and which filters produced these numbers.
+    const columns = [
       { key: "section", header: "Section" },
       ...(applied.filters.batches ? [{ key: "batch", header: "Batch" }] : []),
       { key: "rollNumber", header: "Registration No." },
       { key: "name", header: "Name" },
       { key: "percent", header: "Overall %" },
+    ];
+    const semesterText = semesterOptions.find((o) => o.key === semesterKey)?.label ?? semesterKey;
+    const csv = toCSV([
+      ["Student Attendance Report"],
+      ["Course", course],
+      ["Department", department],
+      ["Semester", semesterText],
+      ["Section", shownReports.map((r) => r.section.name).join(", ")],
+      ["Period", rangeText],
+      ["Filters applied", appliedChips.filter((c) => c !== rangeText).join("; ") || "None"],
+      ["Generated", new Date().toLocaleString("en-IN")],
+      [],
+      columns.map((c) => c.header),
+      ...rows.map((r) => columns.map((c) => r[c.key] ?? "")),
     ]);
+    downloadCSV(csv, `student-attendance-${Date.now()}.csv`);
   }
 
   // Back to everyone, till now: clears every draft filter and reloads.

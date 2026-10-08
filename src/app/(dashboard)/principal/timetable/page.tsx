@@ -247,6 +247,34 @@ export default function PrincipalTimetablePage() {
     <div className="space-y-6">
       <PageHeader title="Timetable View" description="Published section timetables across the college" />
 
+      {canSeeLeisure && (
+        <div className="flex flex-wrap gap-2" role="tablist">
+          {([
+            ["", "Section timetable"],
+            ["leisure", "Leisure faculty"],
+            ...(canSeeTeachingNow ? [["teaching", "Teaching at this time"]] : []),
+          ] as [typeof panel, string][]).map(([key, label]) => (
+            <button
+              key={key || "timetable"}
+              type="button"
+              role="tab"
+              aria-selected={panel === key}
+              className={`h-9 rounded-md border px-3 text-sm font-medium ${
+                panel === key ? "border-primary bg-primary text-primary-foreground" : "border-input bg-background hover:bg-muted"
+              }`}
+              onClick={() => setPanel(key)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {showLeisure && <FacultyLeisureFilter />}
+      {panel === "teaching" && canSeeTeachingNow && <TeachingNowFilter />}
+
+      {/* Kept mounted (just hidden) so the picked filters survive a visit to another tab. */}
+      <div className={panel === "" ? "space-y-6" : "hidden"}>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="space-y-1.5">
           <label className="text-sm font-medium" htmlFor="tt-course">Course</label>
@@ -309,7 +337,9 @@ export default function PrincipalTimetablePage() {
              onChange={(e) => { setApplied(null); setSemester(e.target.value ? Number(e.target.value) : null); }}
              disabled={!timing || semesterOptions.length === 0}
            >
-             <option value="">Select semester</option>
+             <option value="">
+               {!year ? "Select a year" : semesterOptions.length === 0 ? "No semesters configured" : "Select semester"}
+             </option>
              {semesterOptions.map((s) => (
                <option key={s} value={s}>{yearSemesterLabelIn(Number(year), semesterOptions, s)}</option>
              ))}
@@ -356,31 +386,6 @@ export default function PrincipalTimetablePage() {
          </div>
       </div>
 
-      {canSeeLeisure && (
-        <div className="space-y-3">
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              className="h-9 rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-muted"
-              onClick={() => setPanel((v) => (v === "leisure" ? "" : "leisure"))}
-            >
-              {showLeisure ? "Hide leisure faculty" : "Show leisure faculty"}
-            </button>
-            {canSeeTeachingNow && (
-              <button
-                type="button"
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-muted"
-                onClick={() => setPanel((v) => (v === "teaching" ? "" : "teaching"))}
-              >
-                {panel === "teaching" ? "Hide teaching at this time" : "Teaching at this time"}
-              </button>
-            )}
-          </div>
-          {showLeisure && <FacultyLeisureFilter />}
-          {panel === "teaching" && canSeeTeachingNow && <TeachingNowFilter />}
-        </div>
-      )}
-
       {!applied ? (
         <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
           Pick a course, department, year and section, then press Load Timetable.
@@ -413,6 +418,7 @@ export default function PrincipalTimetablePage() {
           subjects={subjects}
         />
       )}
+      </div>
     </div>
   );
 }
