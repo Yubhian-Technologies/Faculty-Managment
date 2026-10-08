@@ -119,7 +119,16 @@ export async function POST(request: Request) {
     // Self-submission can only ever credit the submitter's own login -
     // any `uid` in the body is ignored for everyone except R&D, who is
     // recording it on someone else's behalf.
-    const uid = isRnD ? body.uid : session.uid;
+    //
+    // R&D falls back to their OWN uid when the body names nobody. The
+    // Research & Innovation module posts `{ details }` with no uid by design
+    // ("the server infers the submitter from their own session"), which is
+    // right for every other role - but an R&D member recording their own
+    // publication through that module hit `uid === undefined` and was turned
+    // away with "uid, title, journalOrConference and publicationYear are
+    // required". Their own Add Publication page still names the staff member
+    // explicitly, so recording on someone else's behalf is unaffected.
+    const uid = (isRnD ? body.uid : undefined) ?? session.uid;
     const db = getAdminDb();
     const finalized = body.details ? await finalizePublicationDetails(db, session.collegeId, body.details) : undefined;
     const details = finalized?.details;

@@ -61,6 +61,21 @@ export function emptyPublicationDetails(): PublicationDetails {
 // from Crossref, so every fetched author starts External and can be
 // corrected by hand (e.g. flipped to Internal + Faculty ID for a co-author
 // who works here).
+// What Crossref calls a record, in our terms. Only the shapes this form can
+// actually hold; anything else (a dataset, a preprint, a posted item) leaves
+// the type alone for whoever is filling the form to decide.
+const CROSSREF_TYPES: Record<string, PublicationType> = {
+  "journal-article": "JOURNAL",
+  "proceedings-article": "CONFERENCE",
+  "book-chapter": "BOOK_CHAPTER",
+  "book-part": "BOOK_CHAPTER",
+  "book-section": "BOOK_CHAPTER",
+  book: "TEXT_BOOK",
+  monograph: "TEXT_BOOK",
+  "reference-book": "TEXT_BOOK",
+  "edited-book": "TEXT_BOOK",
+};
+
 async function fetchDoiMetadata(doi: string, type: PublicationType): Promise<Partial<PublicationDetails> | null> {
   const res = await fetch(`https://api.crossref.org/works/${encodeURIComponent(doi.trim())}`);
   if (!res.ok) return null;
@@ -68,6 +83,11 @@ async function fetchDoiMetadata(doi: string, type: PublicationType): Promise<Par
   const m = json.message;
   if (!m) return null;
 
+  // The DOI record knows what it is, so the venue lands in the right field
+  // first time. A conference paper fetched while the form still said Journal
+  // used to put the proceedings name in Journal Name and stay a Journal,
+  // leaving the type to be corrected by hand afterwards.
+  const resolved = CROSSREF_TYPES[String(m.type ?? "")] ?? type;
   const venueName = Array.isArray(m["container-title"]) ? (m["container-title"] as string[])[0] : undefined;
   const dateParts = (m["published-print"] ?? m["published-online"] ?? m.issued) as { "date-parts"?: number[][] } | undefined;
   const [year, month] = dateParts?.["date-parts"]?.[0] ?? [];
@@ -86,9 +106,10 @@ async function fetchDoiMetadata(doi: string, type: PublicationType): Promise<Par
     doi: (m.DOI as string | undefined) ?? doi.trim(),
     ...((m.title as string[] | undefined)?.[0] ? { title: (m.title as string[])[0] } : {}),
     ...(m.publisher ? { publisherName: m.publisher as string } : {}),
-    ...(venueName && type === "JOURNAL" ? { journalName: venueName } : {}),
-    ...(venueName && type === "CONFERENCE" ? { conferenceName: venueName } : {}),
-    ...(venueName && type === "BOOK_CHAPTER" ? { bookName: venueName } : {}),
+    ...(resolved !== type ? { type: resolved } : {}),
+    ...(venueName && resolved === "JOURNAL" ? { journalName: venueName } : {}),
+    ...(venueName && resolved === "CONFERENCE" ? { conferenceName: venueName } : {}),
+    ...(venueName && resolved === "BOOK_CHAPTER" ? { bookName: venueName } : {}),
     // Through the same formatter the field uses - a DOI lookup can hand back
     // an ISSN without its hyphen, which would prefill a value the form then
     // refuses to submit.
@@ -425,10 +446,27 @@ export function PublicationDetailsForm({
   }
 
   function setType(type: PublicationType) {
-    // Switching type clears the fields that belonged only to the previous
-    // type, so a half-filled Journal field set can't leak into a Conference
-    // submission.
-    onChange({ ...emptyPublicationDetails(), type, title: value.title, authors: value.authors });
+    // Switching type clears the fields that belonged only to the PREVIOUS
+    // type - venue names, ISSN/ISBN, quartile, the Text Book-only questions -
+    // so a half-filled Journal field set can't leak into a Conference
+    // submission. Everything that is true of the work whatever it appeared
+    // in is carried over: wiping those too meant correcting the type of a
+    // record just filled from a DOI threw away the DOI itself, the date, the
+    // publisher, the links and the citation, and they had to be typed again.
+    const {
+      title, authors, internalAuthorsCount, externalAuthorsCount, researchDomain, sdgGoals,
+      publisherName, indexedIn, impactFactor, monthYearOfPublication, monthYearOfIndex,
+      scopusOrWosLink, publishedPaperLink, doi, citeAs,
+      hasInternationalCollaboration, hasIndustryCollaboration,
+    } = value;
+    onChange({
+      ...emptyPublicationDetails(),
+      type,
+      title, authors, internalAuthorsCount, externalAuthorsCount, researchDomain, sdgGoals,
+      publisherName, indexedIn, impactFactor, monthYearOfPublication, monthYearOfIndex,
+      scopusOrWosLink, publishedPaperLink, doi, citeAs,
+      hasInternationalCollaboration, hasIndustryCollaboration,
+    });
   }
 
   const internalCount = value.authors.filter((a) => a.isInternal).length;
