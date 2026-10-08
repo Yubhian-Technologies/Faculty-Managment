@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
+import { planHoursSync } from "@/lib/subjects/hoursSync";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartmentId, canHodEditDepartment } from "@/lib/departments/scope";
 import { sectionAssignmentScope } from "@/lib/departments/sectionAssignmentScope";
@@ -282,6 +283,12 @@ export async function PATCH(request: Request) {
     const tutorialHours = body.tutorialHours !== undefined ? Number(body.tutorialHours) : cur.tutorialHours ?? 0;
     const practicalHours = body.practicalHours !== undefined ? Number(body.practicalHours) : cur.practicalHours ?? 0;
     const hoursPerWeek = lectureHours + tutorialHours + practicalHours;
+    // The Subjects dialog sends every field on every save, so a save that only
+    // renames a short code still arrives carrying the hours it already had.
+    // Whether this request CHANGES them decides whether an over-placed
+    // timetable is this save's doing - see planHoursSync.
+    const prevHoursPerWeek = (cur.lectureHours ?? 0) + (cur.tutorialHours ?? 0) + (cur.practicalHours ?? 0);
+    const hoursChanged = hoursPerWeek !== prevHoursPerWeek;
 
     // Teaching assignments copy hoursPerWeek (it caps their timetable periods),
     // so keep the ones relying on this instance in step - but never below the
@@ -295,7 +302,7 @@ export async function PATCH(request: Request) {
     ]);
     const departments = deptDocs.map((d) => ({ id: d.id, ...d.data() })) as (Department & { id: string })[];
     const coursesById = new Map(courseDocs.map((d) => [d.id, d.data() as Pick<Course, "departmentId" | "catalogId">]));
-    const stale = taSnap.docs.filter((d) => {
+    let stale = taSnap.docs.filter((d) => {
       const ta = d.data() as TeachingAssignment;
       return ta.hoursPerWeek !== hoursPerWeek && !!cur.departmentId
         && teachingAssignmentUsesInstance(ta, { departmentId: cur.departmentId, semester: cur.semester, year: cur.year }, departments, coursesById);
@@ -307,11 +314,22 @@ export async function PATCH(request: Request) {
         const id = (s.data() as { assignmentId: string }).assignmentId;
         placed.set(id, (placed.get(id) ?? 0) + 1);
       }
-      const over = stale.filter((d) => (placed.get(d.id) ?? 0) > hoursPerWeek);
-      if (over.length > 0) {
-        const who = over.slice(0, 3).map((d) => { const t = d.data() as TeachingAssignment; return `${t.facultyName} (${t.sectionName ?? "-"}, ${placed.get(d.id)} periods)`; }).join("; ");
+      const plan = planHoursSync(
+        stale.map((d) => ({ id: d.id, placedPeriods: placed.get(d.id) ?? 0 })),
+        hoursPerWeek,
+        hoursChanged
+      );
+      if (plan.blockedIds.length > 0) {
+        const blocked = new Set(plan.blockedIds);
+        const who = stale.filter((d) => blocked.has(d.id)).slice(0, 3)
+          .map((d) => { const t = d.data() as TeachingAssignment; return `${t.facultyName} (${t.sectionName ?? "-"}, ${placed.get(d.id)} periods)`; }).join("; ");
         return NextResponse.json({ error: `Can't lower hours below the periods already placed on the timetable: ${who}. Remove those periods first.` }, { status: 409 });
       }
+      // Hours untouched by this save: an assignment already over its cap keeps
+      // the hours it has. Lowering it here would put its timetable over the cap
+      // instead of refusing, which is the very thing the refusal guards against.
+      const syncIds = new Set(plan.syncIds);
+      stale = stale.filter((d) => syncIds.has(d.id));
     }
 
     await ref.update({
