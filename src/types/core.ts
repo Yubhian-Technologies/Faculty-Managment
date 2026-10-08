@@ -1383,6 +1383,15 @@ export const QUALIFYING_EXAM_LABELS: Record<QualifyingExamType, string> = {
   OTHER: "Others",
 };
 
+// One more NET/SLET/SET/GATE/Others result beyond the first (which lives in the scalar fields of
+// FacultyProfileFields) - see lib/faculty/qualifiedExams.ts.
+export interface QualifiedExamEntry {
+  exam?: QualifyingExamType;
+  pleaseSpecifyExam?: string; // only meaningful when exam === "OTHER"
+  examScore?: string;
+  qualifiedYear?: number;
+}
+
 export interface CourseAssignment {
   code: string;
   name: string;
@@ -2632,6 +2641,8 @@ export interface FacultyProfileFields {
   pleaseSpecifyExam?: string; // only meaningful when qualifiedExam === "OTHER"
   examScore?: string;
   qualifiedYear?: number;
+  // Exams 2, 3, ... (the first stays in the four fields above, so nothing stored before is touched).
+  additionalQualifiedExams?: QualifiedExamEntry[];
   // School-type colleges only - see SCHOOL_TEACHING_QUALIFICATION_LEVELS.
   educationalQualifications?: StaffQualification[];
 
@@ -2817,7 +2828,7 @@ export type SectionListItem = Section & {
 // fields exist independent of one, but see the Login linkage block below for
 // students who have been issued one (lib/students/provisionLogin.ts).
 
-export type StudentStatus = "REGULAR" | "DETAINED" | "GRADUATED";
+export type StudentStatus = "REGULAR" | "DETAINED" | "GRADUATED" | "DISCONTINUED";
 
 export interface StudentRecord {
   id: string;
@@ -2990,6 +3001,20 @@ export interface StudentRecord {
   graduationBatch?: string; // Section.batch at graduation, e.g. "2021-2025"
   graduationCourseId?: string;
   graduationCourseName?: string; // e.g. "B.Tech"
+  // ─── Detained / discontinued (students/[id]/lifecycle) ──────────────────
+  // Detained: held back to repeat the year; flagged first (nothing moves), placed in a junior-batch section later.
+  detainedAt?: Timestamp;
+  detainedReason?: string;
+  detainedFromYear?: number;
+  detainedFromSection?: string;
+  detainedFromDepartment?: string;
+  detainedPlacedAt?: Timestamp; // set when a detained student is later placed in the section they repeat in
+  // Discontinued: left the college. The record and its history stay, but section is cleared so
+  // the student is in no roster, attendance, timetable or strength count; login is disabled.
+  discontinuedAt?: Timestamp;
+  discontinuedReason?: string;
+  discontinuedFrom?: { department: string; secondaryDepartment: string | null; section: string; year: number; courseId: string | null; labBatch: string };
+  reinstatedAt?: Timestamp;
   // ─── Login linkage ──────────────────────────────────────────────────────
   // Absent until College Office issues this student a real login (see
   // lib/students/provisionLogin.ts) - mirrors FacultyMember.userUid's "links

@@ -16,7 +16,7 @@ import { StudentDayTimetable } from "@/components/timetable/StudentDayTimetable"
 import { ALL_DAYS, ordinalYear } from "@/lib/timetable/gridModel";
 import { toRoman, formatAcademicShortNotation } from "@/lib/academic/format";
 import type { Course, Department, Section, CourseYearTiming, TimetableSlot, SubjectType, Subject, TeachingAssignment, DayOfWeek } from "@/types";
-import { yearSemesterLabelIn } from "@/lib/academic/format";
+import { yearSemesterLabelIn, semesterInYearLabel } from "@/lib/academic/format";
 
 type TimetableSlotRow = TimetableSlot & { id: string; subjectType?: SubjectType };
 
@@ -207,7 +207,7 @@ export default function StudentTimetablePage() {
                     <SelectContent>
                       {availableSemesters.map((s) => (
                         <SelectItem key={s.semester} value={String(s.semester)}>
-                          {yearSemesterLabelIn(Number(section.year), availableSemesters.map((x) => x.semester), s.semester)}
+                          {semesterInYearLabel(availableSemesters.map((x) => x.semester), s.semester, { format: "short" })}
                         </SelectItem>
                       ))}
                     </SelectContent>

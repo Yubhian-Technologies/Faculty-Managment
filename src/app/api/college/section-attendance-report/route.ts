@@ -20,6 +20,7 @@ import {
   denominatorNumbers, loadNotPostedIndex, resolveDenominatorMode, type DenominatorResult, type HeldDenominatorMode,
 } from "@/lib/studentAttendance/heldDenominator";
 import { istDateKey } from "@/lib/attendance/istTime";
+import { reportCountsAllSubjects, withSessionSubjects } from "@/lib/studentAttendance/reportSubjects";
 import type { Section, StudentAttendanceMark, StudentAttendanceSession, TeachingAssignment } from "@/types";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -425,7 +426,9 @@ export async function GET(request: Request) {
         ? allSessions
         : allSessions.filter((r) => r.date >= fromParam! && r.date <= toParam!);
 
-      const subjects = await currentSectionSubjects(collegeRef, sectionId, requestedSemester);
+      const currentSubjects = await currentSectionSubjects(collegeRef, sectionId, requestedSemester);
+      // ATTENDANCE_REPORT_ALL_SUBJECTS=1: also count subjects that have sessions but no current assignment (as the student's own view does).
+      const subjects = reportCountsAllSubjects() ? withSessionSubjects(currentSubjects, rangeSessions) : currentSubjects;
       const sessionsBySubject = new Map<string, StudentAttendanceSession[]>();
       for (const r of rangeSessions) {
         if (!sessionsBySubject.has(r.subjectId)) sessionsBySubject.set(r.subjectId, []);
@@ -480,6 +483,8 @@ export async function GET(request: Request) {
         .sort((a, b) =>
           compareStudentsForList({ id: a.studentId, rollNumber: a.rollNumber, name: a.name }, { id: b.studentId, rollNumber: b.rollNumber, name: b.name }));
 
+      // The footer describes the whole section, so it is taken before the absent/shortage filters narrow the rows.
+      const allRows = students;
       if (absentOnly) {
         students = students.filter((s: {
           bySubject: Record<string, { held: number; attended: number; percentage: number | null }>;
@@ -514,12 +519,14 @@ export async function GET(request: Request) {
       // students joining/leaving mid-range, same approach as the Faculty
       // Attendance Report's subject-percentage feature).
       const totalPeriodsHeld = subjects.reduce((sum, s) => sum + (sessionsBySubject.get(s.subjectId)?.length ?? 0), 0);
-      const totalPresentMarks = rangeSessions.reduce((sum, r) => sum + r.presentCount, 0);
-      const totalPossibleMarks = rangeSessions.reduce((sum, r) => sum + r.totalStudents, 0);
+      // Summed from the per-student rows above, so the footer uses the same rule as every row:
+      // on-duty periods are in neither number and the percentage is calcPercent's 2 decimals.
+      const totalPresentMarks = allRows.reduce((sum, s) => sum + s.overall.attended, 0);
+      const totalPossibleMarks = allRows.reduce((sum, s) => sum + s.overall.held, 0);
       const summary = {
         totalPeriodsHeld,
         totalPeriodsAttended: totalPresentMarks,
-        overallPercentage: totalPossibleMarks > 0 ? Math.round((totalPresentMarks / totalPossibleMarks) * 100) : 0,
+        overallPercentage: calcPercent(totalPresentMarks, totalPossibleMarks) ?? 0,
       };
 
       return NextResponse.json({

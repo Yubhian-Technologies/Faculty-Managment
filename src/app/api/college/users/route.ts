@@ -327,7 +327,7 @@ export async function POST(request: Request) {
     // Class Leader logins aren't tied to one fixed student's identity - the
     // role can rotate (e.g. a boys' rep / girls' rep) per college rules - so
     // Office never enters a name; every such login gets this generic label.
-    const resolvedName = role === "CLASS_LEADER" ? "Class Representative" : name!;
+    const resolvedName = role === "CLASS_LEADER" ? (name?.trim() || "Class Representative") : name!;
 
     // College email is the login username (and the canonical `email` field
     // below) for every real staff hire - the personal `email` input is kept

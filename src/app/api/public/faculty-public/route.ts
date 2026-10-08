@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { qualifiedExamName } from "@/lib/faculty/qualifiedExams";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { experienceBreakdown, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
@@ -136,6 +137,11 @@ export async function GET(request: Request) {
               netSletSetGateOthers: ap.netSletSetGateOthers,
               qualifiedExam: ap.qualifiedExam,
               qualifiedYear: ap.qualifiedYear,
+              // Exams 2+ as display text (name + year only - the score stays off the public page, as for the first exam).
+              additionalQualifiedExams: (ap.additionalQualifiedExams ?? []).map((e) => ({
+                exam: qualifiedExamName(e.exam, e.pleaseSpecifyExam),
+                qualifiedYear: e.qualifiedYear,
+              })),
             }
           : undefined,
 

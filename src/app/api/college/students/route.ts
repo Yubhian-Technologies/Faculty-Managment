@@ -15,7 +15,8 @@ import { notConfiguredMessage } from "@/lib/college/taughtYears";
 import { resolveBranchYearOwner, resolveFreshmanLandingDepartment, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { isConfiguredSecondaryDepartmentOrChild, resolveDepartmentByNameOrCode } from "@/lib/departments/codeOrNameResolver";
 import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
-import { resolveDepartmentCourseScope, resolveCatalogId, freshmanLandingDepartmentNames, expandDepartmentNameForRollup, type DepartmentWithId } from "@/lib/college/academicStructure";
+import { resolveDepartmentCourseScope, resolveCatalogId, freshmanLandingDepartmentNames, type DepartmentWithId } from "@/lib/college/academicStructure";
+import { resolveRollupDepartmentNames } from "@/lib/students/departmentRollup";
 import { fetchStudentsPage, fetchMatchingStudentIds, fetchStudentsForExport, fetchGraduatesPage, fetchGraduatesByIds } from "@/lib/students/paginatedList";
 import { fetchPanelStudentsPage } from "@/lib/students/panelPagedList";
 import { handleHodStudentsRequest, isHodOnDemandRequest } from "@/lib/students/hodPagedList";
@@ -133,7 +134,11 @@ export async function GET(request: Request) {
         if (pickedDepartments.length > 0) {
           const allDeptsSnap = await collegeRef.collection("departments").get();
           const allDepts = allDeptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentWithId[];
-          departments = Array.from(new Set(pickedDepartments.flatMap((d) => expandDepartmentNameForRollup(allDepts, d))));
+          // Superset of the old flag-gated expansion: a parent that holds
+          // nothing (flagged, or with no section under its own name) rolls up
+          // to its sub-departments; every other department stays exact.
+          const rolled = await Promise.all(pickedDepartments.map((d) => resolveRollupDepartmentNames(collegeRef, allDepts, d)));
+          departments = Array.from(new Set(rolled.flat()));
         }
         const { students, total, truncated } = await fetchStudentsForExport(studentsColl, { search, departments, courses, years });
         return NextResponse.json({ students: projectStudentsForRole(session.role, students), total, truncated });
@@ -157,7 +162,7 @@ export async function GET(request: Request) {
       if (pickedDepartment) {
         const allDeptsSnap = await collegeRef.collection("departments").get();
         const allDepts = allDeptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentWithId[];
-        departments = expandDepartmentNameForRollup(allDepts, pickedDepartment);
+        departments = await resolveRollupDepartmentNames(collegeRef, allDepts, pickedDepartment);
       }
 
       if (searchParams.get("idsOnly") === "1") {

@@ -73,7 +73,13 @@ export type SyncOutcome =
   | { sessionId: string; result: "synced" }
   | { sessionId: string; result: "conflict"; error: string }
   | { sessionId: string; result: "rejected"; error: string }
-  | { sessionId: string; result: "still-offline" };
+  | { sessionId: string; result: "still-offline" }
+  // Transient server answer (5xx, 408, 429, 401): the marks stay queued for the next attempt.
+  | { sessionId: string; result: "retry"; status: number };
+
+// "Try again later", not "this can never work". Dropping the queued marks on one
+// of these would lose the faculty's only copy.
+const isTransientStatus = (status: number) => status >= 500 || status === 408 || status === 429 || status === 401;
 
 // Attempts every queued submission in order. A thrown fetch (no network)
 // stops the sweep immediately - no point burning through the rest of the
@@ -101,6 +107,9 @@ export async function trySyncQueue(): Promise<SyncOutcome[]> {
       if (res.ok) {
         removeFromQueue(item.queueId);
         outcomes.push({ sessionId: item.sessionId, result: "synced" });
+      } else if (isTransientStatus(res.status)) {
+        outcomes.push({ sessionId: item.sessionId, result: "retry", status: res.status });
+        break;
       } else if (res.status === 409) {
         removeFromQueue(item.queueId);
         outcomes.push({ sessionId: item.sessionId, result: "conflict", error: json.error ?? "Updated elsewhere" });

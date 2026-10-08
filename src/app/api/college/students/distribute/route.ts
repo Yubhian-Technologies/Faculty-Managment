@@ -194,7 +194,7 @@ export async function POST(request: Request) {
     // (surname -> full name -> id), so there's no point duplicating it.
     let cohort = deptYearSnap.docs
       .map((d) => ({ id: d.id, ...(d.data() as Omit<StudentRecord, "id">) }))
-      .filter((s) => s.section === "" || targetSectionNames.has(s.section));
+      .filter((s) => s.status !== "DISCONTINUED" && (s.section === "" || targetSectionNames.has(s.section)));
     if (secondaryDeptName) {
       cohort = cohort.filter((s) => (s.secondaryDepartment ?? "").trim() === secondaryDeptName);
     }

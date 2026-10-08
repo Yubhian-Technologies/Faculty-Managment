@@ -68,9 +68,12 @@ export function countStudentsInSection(
     if (identity.courseId) out = out.where("courseId", "==", identity.courseId);
     return out;
   };
-  return countUnion(
-    narrow(studentsColl.where("department", "==", identity.department)),
-    narrow(studentsColl.where("secondaryDepartment", "==", identity.department)),
-    narrow(studentsColl.where("department", "==", identity.department).where("secondaryDepartment", "==", identity.department))
+  // Graduated students keep their section/year but are not in the class: the same set
+  // as fetchSectionStudents, i.e. everyone matched minus the matched alumni.
+  const union = (extra: (q: StudentsQuery) => StudentsQuery) => countUnion(
+    extra(narrow(studentsColl.where("department", "==", identity.department))),
+    extra(narrow(studentsColl.where("secondaryDepartment", "==", identity.department))),
+    extra(narrow(studentsColl.where("department", "==", identity.department).where("secondaryDepartment", "==", identity.department)))
   );
+  return Promise.all([union((q) => q), union((q) => q.where("status", "==", "GRADUATED"))]).then(([all, alumni]) => all - alumni);
 }

@@ -69,6 +69,8 @@ export async function fetchSectionStudents(
   for (const d of [...primarySnap.docs, ...secondarySnap.docs]) {
     if (seen.has(d.id)) continue;
     seen.add(d.id);
+    // An alumnus keeps their section/year after graduation; they are not in the class any more.
+    if ((d.data() as { status?: string }).status === "GRADUATED") continue;
     students.push({ id: d.id, ...d.data() } as StudentRecord & { id: string });
   }
   if (identity.labBatch) {

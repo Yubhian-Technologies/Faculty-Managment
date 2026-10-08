@@ -289,10 +289,11 @@ function extractLinkAnnotations(
  *  just before any range it would otherwise cut through - the outermost one
  *  that starts on this page, repeated until nothing straddles it. Falls back to
  *  cutting anyway if a single element is taller than a full page. */
-function computePageBreaks(totalHeight: number, pageHeight: number, ranges: Range1D[]): number[] {
+function computePageBreaks(totalHeight: number, firstPageHeight: number, ranges: Range1D[], laterPageHeight = firstPageHeight): number[] {
   const breaks: number[] = [];
   let cursor = 0;
   while (cursor < totalHeight) {
+    const pageHeight = breaks.length === 0 ? firstPageHeight : laterPageHeight;
     let proposed = Math.min(cursor + pageHeight, totalHeight);
     if (proposed < totalHeight) {
       for (;;) {
@@ -316,7 +317,7 @@ function computePageBreaks(totalHeight: number, pageHeight: number, ranges: Rang
  *  breaks, so this iterates: lay out with the headers placed so far, find where
  *  the breaks now fall, and re-place headers - until the placement stops
  *  changing (it settles within a couple of passes; capped as a safety net). */
-function repeatTableHeaders(target: HTMLElement, pageHeightPx: number): void {
+function repeatTableHeaders(target: HTMLElement, pageHeightPx: number, laterPageHeightPx = pageHeightPx): void {
   const originTop = () => target.getBoundingClientRect().top;
   const headerOf = (table: HTMLTableElement): HTMLTableRowElement | null => {
     const first = table.querySelector<HTMLTableRowElement>("tr:not(.repeat-head)");
@@ -335,7 +336,7 @@ function repeatTableHeaders(target: HTMLElement, pageHeightPx: number): void {
     }
 
     const total = target.getBoundingClientRect().height * RENDER_SCALE;
-    const breaks = computePageBreaks(total, pageHeightPx, atomicRanges(target, pageHeightPx)).slice(0, -1);
+    const breaks = computePageBreaks(total, pageHeightPx, atomicRanges(target, pageHeightPx), laterPageHeightPx).slice(0, -1);
     const wanted = new Set<HTMLTableRowElement>();
     const top0 = originTop();
     for (const at of breaks) {
@@ -407,17 +408,23 @@ async function renderHtmlToPdfDocument(html: string): Promise<jsPDF> {
 
     // Repeat table headers on continuation pages BEFORE measuring the final
     // layout (it inserts rows, so the height and break positions change).
-    repeatTableHeaders(target, pageHeightPx);
+    // An element marked .pdf-page-header (the letterhead) is stamped again at the
+    // top of every continuation page, so later pages are that much shorter.
+    const pageHeaderEl = target.querySelector<HTMLElement>(".pdf-page-header");
+    const pageHeaderPx = pageHeaderEl ? Math.ceil(pageHeaderEl.getBoundingClientRect().height) * RENDER_SCALE : 0;
+    const laterPageHeightPx = pageHeightPx - pageHeaderPx;
+    repeatTableHeaders(target, pageHeightPx, laterPageHeightPx);
     const totalCss = Math.ceil(target.getBoundingClientRect().height);
     iframe.style.height = `${totalCss + 40}px`;
 
     // Canvas-px (CSS px x RENDER_SCALE) geometry, as the break helpers expect.
     const totalHeight = totalCss * RENDER_SCALE;
-    const breaks = computePageBreaks(totalHeight, pageHeightPx, atomicRanges(target, pageHeightPx));
+    const breaks = computePageBreaks(totalHeight, pageHeightPx, atomicRanges(target, pageHeightPx), laterPageHeightPx);
 
     // Extract link positions while the iframe is still in the DOM - before
     // the finally block removes it.
     const linkAnnotations = extractLinkAnnotations(target, pxPerMm, breaks);
+    const pageHeaderMm = pageHeaderPx / pxPerMm;
 
     // Each page is captured on its OWN small canvas (html2canvas crops to the
     // y/height window) instead of rasterising the whole document once and
@@ -427,6 +434,16 @@ async function renderHtmlToPdfDocument(html: string): Promise<jsPDF> {
     // resume came out blank/truncated past that point. A single page is always
     // well inside every browser's limit, so the full document is always kept.
     const pdf = new jsPDF({ unit: "mm", format: "a4" });
+    let pageHeaderImg: string | null = null;
+    if (pageHeaderEl && breaks.length > 1) {
+      const headTop = pageHeaderEl.getBoundingClientRect().top - target.getBoundingClientRect().top;
+      const headCanvas = await withCleanTextMetrics(() => html2canvas(target, {
+        scale: RENDER_SCALE, useCORS: true, backgroundColor: "#ffffff",
+        x: 0, y: headTop, width: widthCss, height: pageHeaderPx / RENDER_SCALE,
+        windowWidth: widthCss, windowHeight: totalCss, scrollX: 0, scrollY: 0,
+      }));
+      pageHeaderImg = headCanvas.toDataURL("image/jpeg", 0.95);
+    }
     let cursor = 0;
     for (let i = 0; i < breaks.length; i++) {
       const breakAt = breaks[i];
@@ -446,12 +463,14 @@ async function renderHtmlToPdfDocument(html: string): Promise<jsPDF> {
       }));
       const imgData = canvas.toDataURL("image/jpeg", 0.95);
       if (i > 0) pdf.addPage();
-      pdf.addImage(imgData, "JPEG", 0, 0, A4_WIDTH_MM, sliceHeightPx / pxPerMm);
+      const offsetMm = i > 0 && pageHeaderImg ? pageHeaderMm : 0;
+      if (offsetMm > 0 && pageHeaderImg) pdf.addImage(pageHeaderImg, "JPEG", 0, 0, A4_WIDTH_MM, pageHeaderMm);
+      pdf.addImage(imgData, "JPEG", 0, offsetMm, A4_WIDTH_MM, sliceHeightPx / pxPerMm);
 
       // Stamp invisible clickable hyperlink rectangles over each link on this page
       for (const ann of linkAnnotations) {
         if (ann.pageIndex === i) {
-          pdf.link(ann.x, ann.y, ann.w, ann.h, { url: ann.url });
+          pdf.link(ann.x, ann.y + offsetMm, ann.w, ann.h, { url: ann.url });
         }
       }
 

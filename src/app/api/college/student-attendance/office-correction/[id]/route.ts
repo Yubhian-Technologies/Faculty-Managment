@@ -13,7 +13,7 @@ import {
 import { istDateFromParts } from "@/lib/attendance/istTime";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { mergeMarkUpdates } from "@/lib/studentAttendance/onDuty";
-import { applyTallyDeltaInTx, tallyWritesEnabled } from "@/lib/studentAttendance/dayTally";
+import { applyTallyDeltaInTx } from "@/lib/studentAttendance/dayTally";
 import type { StudentAttendanceEntry, StudentAttendanceMark, StudentAttendanceSession } from "@/types";
 
 const VALID_MARKS: StudentAttendanceMark[] = ["PRESENT", "ABSENT"];
@@ -44,6 +44,7 @@ export async function PATCH(
       classNotes?: string;
       reason?: string;
       submit?: boolean;
+      expectedUpdatedAt?: string | null;
     };
 
     const db = getAdminDb();
@@ -85,7 +86,7 @@ export async function PATCH(
       // resolution the lookup always misses and the "period hasn't ended yet"
       // guard below silently never fires.
       const facultyMemberId = await resolveFacultyMemberId(db, session.collegeId, existing.facultyId);
-      const periodsForDate = await getFacultyPeriodsForDate(db, session.collegeId, facultyMemberId, existing.date);
+      const periodsForDate = await getFacultyPeriodsForDate(db, session.collegeId, facultyMemberId, existing.date, undefined, { semesterOnDate: true });
       const matchedPeriod = periodsForDate.find(
         (p) => p.slot.assignmentId === existing.assignmentId && p.slot.periodNumber === existing.periodNumber
       );
@@ -95,75 +96,97 @@ export async function PATCH(
       return NextResponse.json({ error: FACULTY_WINDOW_OPEN_MESSAGE }, { status: 403 });
     }
 
-    let entries: StudentAttendanceEntry[] = existing.entries;
-    if (body.entries) {
-      const updates = new Map(body.entries.map((e) => [e.studentId, e.status]));
+    if (body.entries !== undefined && !Array.isArray(body.entries)) {
+      return NextResponse.json({ error: "entries must be a list" }, { status: 400 });
+    }
+    if (body.classNotes !== undefined && typeof body.classNotes !== "string") {
+      return NextResponse.json({ error: "classNotes must be text" }, { status: 400 });
+    }
+    const updates = body.entries ? new Map(body.entries.map((e) => [e.studentId, e.status])) : null;
+    if (updates) {
       for (const status of updates.values()) {
         if (status !== null && !VALID_MARKS.includes(status)) {
           return NextResponse.json({ error: "Attendance status must be PRESENT or ABSENT" }, { status: 400 });
         }
       }
-      // ON_DUTY is locked here too: the Office can correct a mark, but not
-      // override an approved permission.
-      entries = mergeMarkUpdates(existing.entries, updates as Map<string, "PRESENT" | "ABSENT" | null>);
     }
-    const presentCount = entries.filter((e) => e.status === "PRESENT").length;
-    const markedCount = entries.filter((e) => e.status != null).length;
 
     const now = new Date();
-    const update: Record<string, unknown> = { entries, presentCount, updatedAt: now };
-    if (body.classNotes !== undefined) {
-      update.classNotes = body.classNotes.trim();
-    }
+    const markerName = (body.submit || wasSubmitted)
+      ? ((await collegeRef.collection("users").doc(session.uid).get()).data() as { name?: string } | undefined)?.name ?? ""
+      : "";
+    // Optional optimistic check: the updatedAt (ISO) the editor last loaded.
+    const expectedMs = typeof body.expectedUpdatedAt === "string" ? new Date(body.expectedUpdatedAt).getTime() : NaN;
 
-    if (body.submit || wasSubmitted) {
-      if (markedCount < existing.totalStudents || existing.totalStudents === 0) {
-        return NextResponse.json({ error: "Please mark attendance for all students before submitting" }, { status: 400 });
+    // Read, merge, write, audit and tally delta in ONE transaction: the merge is applied to the
+    // document as it is now (not the copy read above), and the audit entry exists only if the
+    // change does.
+    type TxResult = { error: { message: string; status: number } } | { update: Record<string, unknown>; fresh: StudentAttendanceSession };
+    const result: TxResult = await db.runTransaction(async (tx) => {
+      const freshSnap = await tx.get(ref);
+      if (!freshSnap.exists) return { error: { message: "Not found", status: 404 } };
+      const fresh = freshSnap.data() as StudentAttendanceSession;
+      const serverMs = (fresh.updatedAt as unknown as { toDate?: () => Date })?.toDate?.()?.getTime?.() ?? 0;
+      if (!Number.isNaN(expectedMs) && serverMs !== 0 && expectedMs !== serverMs) {
+        return { error: { message: "This attendance was updated elsewhere. Please reload and try again.", status: 409 } };
       }
-      const classNotes = ((update.classNotes as string | undefined) ?? existing.classNotes ?? "").trim();
-      if (!classNotes) {
-        return NextResponse.json({ error: "Record of the Class Work is required before submitting attendance" }, { status: 400 });
-      }
-      const reason = body.reason?.trim() || existing.correctionReason;
-      if (!reason) {
-        return NextResponse.json({ error: "A reason is required to post attendance on a faculty member's behalf" }, { status: 400 });
-      }
-      const markerSnap = await collegeRef.collection("users").doc(session.uid).get();
-      update.status = "SUBMITTED";
-      // A corrected record keeps the faculty's original submission time/attribution.
-      if (!wasSubmitted) {
-        update.submittedAt = now;
-        update.postedBy = "OFFICE";
-      }
-      update.correctedByUid = session.uid;
-      update.correctedByName = (markerSnap.data() as { name?: string } | undefined)?.name ?? "";
-      update.correctionReason = reason;
+      const freshSubmitted = fresh.status === "SUBMITTED";
+      // ON_DUTY is locked here too: the Office can correct a mark, but not
+      // override an approved permission.
+      const entries: StudentAttendanceEntry[] = updates ? mergeMarkUpdates(fresh.entries, updates as Map<string, "PRESENT" | "ABSENT" | null>) : fresh.entries;
+      const presentCount = entries.filter((e) => e.status === "PRESENT").length;
+      const markedCount = entries.filter((e) => e.status != null).length;
 
-      await collegeRef.collection("auditLogs").add({
-        collegeId: session.collegeId,
-        action: "STUDENT_ATTENDANCE_OFFICE_CORRECTED",
-        performedBy: session.uid,
-        performedByName: update.correctedByName,
-        targetId: id,
-        details: { facultyId: existing.facultyId, facultyName: existing.facultyName, date: existing.date, periodNumber: existing.periodNumber, subjectName: existing.subjectName, reason, previouslySubmitted: wasSubmitted },
-        timestamp: now,
-      });
-    }
+      const update: Record<string, unknown> = { entries, presentCount, updatedAt: now };
+      if (body.classNotes !== undefined) update.classNotes = body.classNotes.trim();
 
-    if (tallyWritesEnabled()) {
-      // The tally delta is taken against the document as it is NOW, so a faculty
-      // submit that landed after the read above can't leave the counts wrong.
-      await db.runTransaction(async (tx) => {
-        const freshSnap = await tx.get(ref);
-        if (!freshSnap.exists) throw new Error("NOT_FOUND");
-        const fresh = freshSnap.data() as StudentAttendanceSession;
-        tx.update(ref, update);
-        applyTallyDeltaInTx(tx, db, session.collegeId, fresh, { ...fresh, ...update, entries } as StudentAttendanceSession);
-      });
-    } else {
-      await ref.update(update);
+      if (body.submit || freshSubmitted) {
+        if (markedCount < fresh.totalStudents || fresh.totalStudents === 0) {
+          return { error: { message: "Please mark attendance for all students before submitting", status: 400 } };
+        }
+        const classNotes = ((update.classNotes as string | undefined) ?? fresh.classNotes ?? "").trim();
+        if (!classNotes) {
+          return { error: { message: "Record of the Class Work is required before submitting attendance", status: 400 } };
+        }
+        const reason = body.reason?.trim() || fresh.correctionReason;
+        if (!reason) {
+          return { error: { message: "A reason is required to post attendance on a faculty member's behalf", status: 400 } };
+        }
+        update.status = "SUBMITTED";
+        // A corrected record keeps the faculty's original submission time/attribution.
+        if (!freshSubmitted) {
+          update.submittedAt = now;
+          update.postedBy = "OFFICE";
+        }
+        update.correctedByUid = session.uid;
+        update.correctedByName = markerName;
+        update.correctionReason = reason;
+
+        const before = new Map(fresh.entries.map((e) => [e.studentId, e.status]));
+        const changes = entries
+          .filter((e) => before.get(e.studentId) !== e.status)
+          .slice(0, 200)
+          .map((e) => ({ studentId: e.studentId, from: before.get(e.studentId) ?? null, to: e.status }));
+        tx.set(collegeRef.collection("auditLogs").doc(), {
+          collegeId: session.collegeId,
+          action: "STUDENT_ATTENDANCE_OFFICE_CORRECTED",
+          performedBy: session.uid,
+          performedByName: markerName,
+          targetId: id,
+          details: { facultyId: fresh.facultyId, facultyName: fresh.facultyName, date: fresh.date, periodNumber: fresh.periodNumber, subjectName: fresh.subjectName, reason, previouslySubmitted: freshSubmitted, changes },
+          timestamp: now,
+        });
+      }
+
+      tx.update(ref, update);
+      // Counts the change against the document as it is NOW (no-op when the tally is off).
+      applyTallyDeltaInTx(tx, db, session.collegeId, fresh, { ...fresh, ...update, entries } as StudentAttendanceSession);
+      return { update, fresh };
+    });
+    if ("error" in result) {
+      return NextResponse.json({ error: result.error.message }, { status: result.error.status });
     }
-    return NextResponse.json({ session: { ...existing, ...update, id } });
+    return NextResponse.json({ session: { ...result.fresh, ...result.update, id } });
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;

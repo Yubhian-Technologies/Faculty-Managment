@@ -65,6 +65,7 @@ export interface FacultyPublicProfile {
     netSletSetGateOthers?: "YES" | "NO";
     qualifiedExam?: string;
     qualifiedYear?: number;
+    additionalQualifiedExams?: { exam?: string; qualifiedYear?: number }[];
   };
   // fromDate/toDate are the real dates the current forms write; fromYear/toYear
   // are the legacy year-only fallback (see publicProfileDates.ts).
@@ -211,6 +212,9 @@ export function FacultyPublicProfileView({ profile }: { profile: FacultyPublicPr
   const qualBadges = [
     p.education?.netSletSetGateOthers === "YES" && p.education?.qualifiedExam &&
       `${p.education.qualifiedExam} Qualified${p.education.qualifiedYear ? ` (${p.education.qualifiedYear})` : ""}`,
+    ...(p.education?.netSletSetGateOthers === "YES" ? (p.education?.additionalQualifiedExams ?? []) : [])
+      .filter((e) => !!e.exam)
+      .map((e) => `${e.exam} Qualified${e.qualifiedYear ? ` (${e.qualifiedYear})` : ""}`),
     p.education?.phdStatus === "PURSUING" && "Ph.D. Pursuing",
   ].filter(Boolean) as string[];
 

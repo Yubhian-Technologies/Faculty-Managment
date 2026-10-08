@@ -12,6 +12,7 @@ import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { StudentFormDialog } from "@/components/students/StudentFormDialog";
+import { StudentLifecycleActions } from "@/components/students/StudentLifecycleActions";
 import { DETAIL_ROSTER_FIELDS, ROSTER_DETAIL_GROUPS, rosterFieldDisplay, type RosterField } from "@/lib/students/rosterFields";
 import { formatDate } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
@@ -32,18 +33,23 @@ interface StudentDetailsPageProps {
   // own doc-comment), so this defaults to false rather than every caller
   // having to say "no" explicitly.
   editable?: boolean;
+  // Shows the Detain / Discontinue actions (HOD, College Office, Principal); `canReinstate` adds Reinstate (Principal).
+  lifecycle?: boolean;
+  canReinstate?: boolean;
 }
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = {
   REGULAR: "default",
   DETAINED: "destructive",
   GRADUATED: "secondary",
+  DISCONTINUED: "destructive",
 };
 
 const STATUS_LABEL: Record<string, string> = {
   REGULAR: "Regular",
   DETAINED: "Detained",
   GRADUATED: "Graduated",
+  DISCONTINUED: "Discontinued",
 };
 
 // Student Type ("Regular"/"Lateral" admission category) and Status ("Regular"
@@ -138,7 +144,7 @@ function GraduationCard({ student }: { student: StudentRecord }) {
 // canonical read-only student profile: every role's students list, section
 // roster, and graduated-students view routes here instead of its own dialog,
 // so there's exactly one place this layout is defined.
-export function StudentDetailsPage({ studentId, backHref, editable = false }: StudentDetailsPageProps) {
+export function StudentDetailsPage({ studentId, backHref, editable = false, lifecycle = false, canReinstate = false }: StudentDetailsPageProps) {
   const router = useRouter();
   const [student, setStudent] = useState<StudentRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -278,6 +284,8 @@ export function StudentDetailsPage({ studentId, backHref, editable = false }: St
       </Card>
 
       <GraduationCard student={student} />
+
+      {lifecycle && <StudentLifecycleActions student={student} canReinstate={canReinstate} onChanged={() => void loadStudent()} />}
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         {ROSTER_DETAIL_GROUPS.map((group) => (

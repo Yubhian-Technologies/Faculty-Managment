@@ -8,11 +8,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
-import { exportToCSV } from "@/lib/utils";
+import { downloadCSV, toCSV } from "@/lib/utils/csv";
 import { formatPercent } from "@/lib/studentAttendance/percentage";
 import { applyStudentFilters, NO_FILTERS, type StudentReportFilters } from "@/lib/studentAttendance/reportFilters";
 import { offeredYears } from "@/lib/college/departmentYears";
-import { coreDepartmentsWithSections, departmentsWithSections } from "@/lib/college/departmentSectionScope";
+import {
+  coreDepartmentOptions as buildCoreDepartmentOptions,
+  departmentFilterOptions as buildDepartmentFilterOptions,
+  managedCoreCandidates,
+  rollupDepartmentNames,
+} from "@/lib/departments/departmentTree";
 import type { Course, Department, SectionListItem } from "@/types";
 import { semesterLabel, semestersInYear, yearOfSemester } from "@/lib/college/courseYears";
 import { useCourseSemesterPlan } from "@/hooks/useCourseSemesterPlan";
@@ -149,27 +154,32 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
   // list instead. Deriving theirs from sections too meant a department with no
   // sections yet simply was not offered - Basic Science and its sub-departments
   // were missing from the picker at a college that plainly has them.
-  const departments = useMemo(() => {
+  const departmentOptions = useMemo(() => {
     const fromSections = Array.from(new Set(inCourse.map((s) => s.department).filter(Boolean)));
-    if (scoped) return fromSections.sort();
+    if (scoped) return fromSections.sort().map((name) => ({ name, depth: 0 as 0 | 1, container: false }));
     // Only departments that actually resolve to sections - their own, or those
-    // of a branch they manage. Listing every configured department offered
-    // choices that could only ever come back empty: at one college "Basic
-    // Science" holds nothing itself, its four sub-departments do.
-    return departmentsWithSections(departmentDocs, fromSections)
-      .map((d) => (d.name ?? "").trim())
-      .filter(Boolean)
-      .sort();
+    // of a branch they manage - plus a parent that organises sub-departments
+    // (picking it means "all of them"), with each sub-department listed under
+    // its parent. Listing every configured department offered choices that
+    // could only ever come back empty: at one college "Basic Science" holds
+    // nothing itself, its four sub-departments do.
+    const byName = [...departmentDocs].sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+    return buildDepartmentFilterOptions(byName, departmentDocs, fromSections)
+      .map((o) => ({ name: (o.department.name ?? "").trim(), depth: o.depth, container: o.container }))
+      .filter((o) => o.name);
   }, [inCourse, departmentDocs, scoped]);
+  const departments = useMemo(() => departmentOptions.map((o) => o.name), [departmentOptions]);
   const department = course ? only(departments, pickedDepartment) : "";
 
   // A shared-first-year department teaches for several branches at once (Basic
-  // Science - Chemistry runs CSE and CSBS). Those are its "core" departments,
-  // and this narrows the report to one of them. Only offered when there is
-  // more than nothing to choose from.
+  // Science - Chemistry runs CSE and CSBS). Those are its "core" departments -
+  // for a parent, the ones its sub-departments run - and this narrows the
+  // report to one of them. Only offered when there is more than nothing to
+  // choose from.
   const coreDepartments = useMemo(
-    () => coreDepartmentsWithSections(
-      departmentDocs.find((d) => d.name === department),
+    () => buildCoreDepartmentOptions(
+      departmentDocs,
+      department ? [department] : [],
       inCourse.map((x) => x.department).filter(Boolean)
     ),
     [departmentDocs, department, inCourse]
@@ -222,8 +232,15 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
   // Basic Science - Physics gets IT's year 1 and never IT's years 2-4, which
   // belong to IT's own HOD.
   const inDepartment = useMemo(() => {
-    const own = inCourse.filter((x) => x.department === department);
-    const managed = deptDoc?.managedDepartments ?? [];
+    // A parent that holds nothing itself (a container) covers its
+    // sub-departments' sections too; every other department is its own name only.
+    const sectionNames = inCourse.map((x) => x.department).filter(Boolean);
+    const rolled = new Set(department ? rollupDepartmentNames(departmentDocs, department, sectionNames.includes(department)) : []);
+    const own = inCourse.filter((x) => rolled.has(x.department) || x.department === department);
+    // What it manages - its own, its sub-departments', and the sub-branches of
+    // any managed branch that is itself split up (a managed "AI" whose sections
+    // are filed under AIDS/AIML).
+    const managed = managedCoreCandidates(departmentDocs, deptDoc);
     if (managed.length === 0 || assignedYears.length === 0) return own;
     const managedSet = new Set(managed);
     const yearSet = new Set(assignedYears);
@@ -235,7 +252,7 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
         && (!coreDepartment || x.department === coreDepartment)
     );
     return [...own, ...borrowed];
-  }, [inCourse, department, deptDoc, assignedYears, coreDepartment]);
+  }, [inCourse, department, departmentDocs, deptDoc, assignedYears, coreDepartment]);
 
   // A department offers the semesters of the years it is assigned. One given
   // years 2-4 offers 2-1 .. 4-2 and never 1-1; a freshman department given only
@@ -422,13 +439,29 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
       }
     }
     if (!rows.length) { toast({ variant: "destructive", title: "No data to export" }); return; }
-    exportToCSV(rows, `student-attendance-${Date.now()}.csv`, [
+    // The sheet says what it is: which class, which dates and which filters produced these numbers.
+    const columns = [
       { key: "section", header: "Section" },
       ...(applied.filters.batches ? [{ key: "batch", header: "Batch" }] : []),
       { key: "rollNumber", header: "Registration No." },
       { key: "name", header: "Name" },
       { key: "percent", header: "Overall %" },
+    ];
+    const semesterText = semesterOptions.find((o) => o.key === semesterKey)?.label ?? semesterKey;
+    const csv = toCSV([
+      ["Student Attendance Report"],
+      ["Course", course],
+      ["Department", department],
+      ["Semester", semesterText],
+      ["Section", shownReports.map((r) => r.section.name).join(", ")],
+      ["Period", rangeText],
+      ["Filters applied", appliedChips.filter((c) => c !== rangeText).join("; ") || "None"],
+      ["Generated", new Date().toLocaleString("en-IN")],
+      [],
+      columns.map((c) => c.header),
+      ...rows.map((r) => columns.map((c) => r[c.key] ?? "")),
     ]);
+    downloadCSV(csv, `student-attendance-${Date.now()}.csv`);
   }
 
   // Back to everyone, till now: clears every draft filter and reloads.
@@ -500,7 +533,13 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
                 <Label>Department</Label>
                 <Select value={department} onValueChange={pickDepartment} disabled={!course}>
                   <SelectTrigger><SelectValue placeholder="Select a department" /></SelectTrigger>
-                  <SelectContent>{departments.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
+                  <SelectContent>
+                    {departmentOptions.map((o) => (
+                      <SelectItem key={o.name} value={o.name} className={o.depth === 1 ? "pl-8" : undefined}>
+                        {o.name}{o.container ? " (all sub-departments)" : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
               </div>}
               {coreDepartments.length > 0 && (

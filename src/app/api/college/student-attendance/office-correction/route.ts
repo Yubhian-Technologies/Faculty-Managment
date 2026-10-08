@@ -69,11 +69,12 @@ export async function POST(request: Request) {
     }
     const faculty = facultySnap.data() as FacultyMember;
 
+    // The scope that matters is the SECTION's department (checked below once it is resolved, and by
+    // PATCH too); the faculty's own department is not what is being edited.
+    let hodScope: Awaited<ReturnType<typeof getHodDepartmentScope>> | null = null;
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (!canHodManageFacultyDepartment(scope, faculty.department)) {
-        return NextResponse.json({ error: "That faculty is not in your department" }, { status: 403 });
-      }
+      hodScope = scope;
       // A Department Office head holds the HOD's authority except here: the HOD must have switched this on.
       if (await departmentOfficeBlocked(db, session.collegeId, session, scope.ownDepartmentNames)) {
         return NextResponse.json({ error: OFFICE_ATTENDANCE_DENIED_MESSAGE }, { status: 403 });
@@ -104,7 +105,7 @@ export async function POST(request: Request) {
     // period that hasn't ended yet (the faculty still has their own window;
     // see resolvePeriodCompletionStatus's PENDING vs NOT_MARKED split, the
     // same rule the "Not Posted Faculty" report already applies).
-    const periodsForDate = await getFacultyPeriodsForDate(db, session.collegeId, facultyId, date);
+    const periodsForDate = await getFacultyPeriodsForDate(db, session.collegeId, facultyId, date, undefined, { semesterOnDate: true });
     const matchedPeriod = periodsForDate.find(
       (p) => p.slot.assignmentId === assignmentId && p.slot.periodNumber === periodNumber
     );
@@ -138,6 +139,9 @@ export async function POST(request: Request) {
     } else {
       department = assignment.department;
       sectionName = assignment.section?.trim() || "Section";
+    }
+    if (hodScope && !canHodManageFacultyDepartment(hodScope, department)) {
+      return NextResponse.json({ error: "That class is not in your department" }, { status: 403 });
     }
 
     const id = `${assignmentId}_${date}_${periodNumber}`;

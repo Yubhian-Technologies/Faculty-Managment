@@ -13,6 +13,7 @@ import { applyTallyDeltaInTx } from "@/lib/studentAttendance/dayTally";
 import type { StudentAttendanceEntry, StudentAttendanceMark, StudentAttendanceSession } from "@/types";
 
 const VALID_MARKS: StudentAttendanceMark[] = ["PRESENT", "ABSENT"];
+const MAX_CLASS_NOTES = 5000;
 
 export async function PATCH(
   request: Request,
@@ -98,8 +99,17 @@ export async function PATCH(
       }
     }
 
+    if (body.entries !== undefined && !Array.isArray(body.entries)) {
+      return NextResponse.json({ error: "entries must be a list" }, { status: 400 });
+    }
+    if (body.classNotes !== undefined && (typeof body.classNotes !== "string" || body.classNotes.length > MAX_CLASS_NOTES)) {
+      return NextResponse.json({ error: `classNotes must be text of at most ${MAX_CLASS_NOTES} characters` }, { status: 400 });
+    }
     if (body.entries) {
       for (const e of body.entries) {
+        if (!e || typeof e.studentId !== "string") {
+          return NextResponse.json({ error: "Each entry needs a studentId" }, { status: 400 });
+        }
         if (e.status !== null && !VALID_MARKS.includes(e.status)) {
           return NextResponse.json({ error: "Attendance status must be PRESENT or ABSENT" }, { status: 400 });
         }
@@ -132,7 +142,11 @@ export async function PATCH(
       if (body.classNotes !== undefined) update.classNotes = body.classNotes.trim();
 
       if (body.submit) {
-        if (fresh.totalStudents > 0 && markedCount < fresh.totalStudents) {
+        // An empty roster (e.g. a lab batch nobody is assigned to) must not read as "posted".
+        if (fresh.totalStudents === 0) {
+          return { error: { message: "This class has no students on its roster, so there is nothing to submit. Contact your HOD.", status: 400 } };
+        }
+        if (markedCount < fresh.totalStudents) {
           return { error: { message: "Please mark attendance for all students before submitting", status: 400 } };
         }
         const classNotes = ((update.classNotes as string | undefined) ?? fresh.classNotes ?? "").trim();
