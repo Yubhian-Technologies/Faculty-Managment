@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toRoman, yearSemesterLabel, yearSemesterLabelIn } from "./format";
+import { toRoman, yearSemesterLabel, yearSemesterLabelIn, semesterInYearLabel } from "./format";
 
 describe("yearSemesterLabel", () => {
   // The whole point: semesters are STORED running across the course, but
@@ -94,5 +94,16 @@ describe("yearSemesterLabelIn", () => {
 
   it("falls back when the year is unusable", () => {
     expect(yearSemesterLabelIn(0, [1, 2], 3)).toBe("2-1");
+  });
+});
+
+describe("semesterInYearLabel", () => {
+  it("formats relative semester when year is already selected", () => {
+    expect(semesterInYearLabel([3, 4], 3)).toBe("Sem 1");
+    expect(semesterInYearLabel([3, 4], 4)).toBe("Sem 2");
+    expect(semesterInYearLabel([5, 6], 5, { format: "full" })).toBe("Semester 1");
+    expect(semesterInYearLabel([5, 6], 6, { format: "full" })).toBe("Semester 2");
+    expect(semesterInYearLabel([1, 2], 1, { format: "number" })).toBe("1");
+    expect(semesterInYearLabel([1, 2], 2, { format: "number" })).toBe("2");
   });
 });
