@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
@@ -66,6 +67,9 @@ export default function EditSectionPage() {
   const [facultyList, setFacultyList] = useState<FacultyOption[]>([]);
   const [form, setForm] = useState<SectionForm>(EMPTY_FORM);
   const [sectionName, setSectionName] = useState("");
+  // null = not touched: the box then reflects whether the stored name already
+  // is the bare department code (a single-section department).
+  const [singleChoice, setSingleChoice] = useState<boolean | null>(null);
   const [sectionCourseName, setSectionCourseName] = useState("");
   const [enrolledCount, setEnrolledCount] = useState(0);
   // Owning department name + the section's current target branch (if any), so
@@ -347,6 +351,22 @@ export default function EditSectionPage() {
   }, [departments, ownerDept]);
   const isBranchMode = branchOptions.length > 0;
 
+  // A department with one section needs no letter: "CSE-A" becomes "CSE". The
+  // name is only text on the section - the save below moves its students to the
+  // new name exactly as any rename does, so nothing else changes.
+  const ownerCode = departments.find((d) => d.name === ownerDept)?.code?.trim().toUpperCase() ?? "";
+  const isSingle = singleChoice ?? (!!ownerCode && sectionName.toUpperCase() === ownerCode);
+  function toggleSingle(checked: boolean) {
+    setSingleChoice(checked);
+    if (checked) {
+      // Drop a trailing "-A"; a bare letter ("A") becomes the department code.
+      const stripped = sectionName.replace(/-[A-Z0-9]{1,2}$/i, "");
+      setF({ name: (stripped !== sectionName ? stripped : ownerCode || sectionName).toUpperCase() });
+    } else {
+      setF({ name: sectionName });
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.name.trim()) { toast({ variant: "destructive", title: "Section name is required" }); return; }
@@ -451,10 +471,17 @@ export default function EditSectionPage() {
                       value={form.name}
                       onChange={(e) => setF({ name: e.target.value.toUpperCase() })}
                       placeholder="A, B, C…"
-                      maxLength={10}
+                      maxLength={30}
                       className="uppercase"
+                      disabled={isSingle}
                     />
-                    <p className="text-xs text-muted-foreground">{isBranchMode ? "e.g. CSE-A" : "e.g. A, B, C or CS-A"}</p>
+                    <label className="flex items-center gap-2 pt-1 text-sm">
+                      <Checkbox checked={isSingle} onCheckedChange={(c) => toggleSingle(c === true)} />
+                      Only one section (no letter like A, B)
+                    </label>
+                    <p className="text-xs text-muted-foreground">
+                      {isSingle ? "Saving renames the section and keeps all its students and data." : isBranchMode ? "e.g. CSE-A" : "e.g. A, B, C or CS-A"}
+                    </p>
                   </div>
                   <div className="space-y-2">
                     <Label>Enrolled Students</Label>

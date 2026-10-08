@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DepartmentScopeSelect } from "@/components/shared/DepartmentScopeSelect";
@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
@@ -97,6 +98,15 @@ export default function NewSectionPage() {
   // different branch has a different set of sub-departments.
   const [branchSubDept, setBranchSubDept] = useState("");
   const [letter, setLetter] = useState("");
+  // A department with one section needs no letter: the name is the code alone ("CSE").
+  const [singleSection, setSingleSection] = useState(false);
+  // Until the departments (and so their Years Taught) have arrived, no year can be
+  // offered - showing the whole course span meanwhile flashed four years for a
+  // department that teaches only the first.
+  const [departmentsLoaded, setDepartmentsLoaded] = useState(false);
+  // Course lists already fetched, by query - re-picking a department is instant.
+  const courseCache = useRef(new Map<string, Course[]>());
+  const tail = singleSection ? "" : `-${letter.trim().toUpperCase()}`;
 
   useEffect(() => {
     fetch("/api/college/faculty?availableOnly=true")
@@ -110,8 +120,8 @@ export default function NewSectionPage() {
     // needed to scope the Year dropdown to what this department actually teaches.
     fetch("/api/college/departments")
       .then((r) => r.json() as Promise<{ departments: Department[] }>)
-      .then((d) => setDepartments(d.departments ?? []))
-      .catch(() => { /* non-critical - falls back to the full course span */ });
+      .then((d) => { setDepartments(d.departments ?? []); setDepartmentsLoaded(true); })
+      .catch(() => { setDepartmentsLoaded(true); /* no Years Taught known - the Year list stays empty rather than guessing */ });
 
     fetch("/api/college/course-catalog")
       .then((r) => r.json() as Promise<{ items: CourseCatalogItem[] }>)
@@ -140,10 +150,20 @@ export default function NewSectionPage() {
     // branches - an explicit departmentId here would skip that extra union.
     const effectiveId = departmentId || (myDepartments.length > 1 ? topDepartmentId : "");
     const qs = effectiveId ? `?departmentId=${encodeURIComponent(effectiveId)}` : "";
+    const cached = courseCache.current.get(qs);
+    if (cached) { setCourses(cached); return; }
+    // A slower answer for a department picked earlier must not overwrite the
+    // current one.
+    let stale = false;
     fetch(`/api/college/courses${qs}`)
       .then((r) => r.json() as Promise<{ courses: Course[] }>)
-      .then((d) => setCourses((d.courses ?? []).sort((a, b) => a.name.localeCompare(b.name))))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load courses" }));
+      .then((d) => {
+        const list = (d.courses ?? []).sort((a, b) => a.name.localeCompare(b.name));
+        courseCache.current.set(qs, list);
+        if (!stale) setCourses(list);
+      })
+      .catch(() => { if (!stale) toast({ variant: "destructive", title: "Failed to load courses" }); });
+    return () => { stale = true; };
   }, [departmentId, topDepartmentId, myDepartments]);
 
   function setF(patch: Partial<SectionForm>) {
@@ -312,7 +332,7 @@ export default function NewSectionPage() {
   // + the letter, e.g. "BS-ENGLISH-CIVIL-C". When the common department manages
   // the branch directly with no intermediate sub-department, managingDept IS
   // that common department, so its own code is used the same way.
-  const managedBranchName = `${managingDept?.code?.trim() ? `${managingDept.code.trim()}-` : ""}${activeDept?.code?.trim() || activeDeptName}-${letter.trim().toUpperCase()}`;
+  const managedBranchName = `${managingDept?.code?.trim() ? `${managingDept.code.trim()}-` : ""}${activeDept?.code?.trim() || activeDeptName}${tail}`;
 
   // Offer only the years this department is assigned to teach for the selected
   // course, intersected with the course's own span. A department set to
@@ -330,7 +350,7 @@ export default function NewSectionPage() {
   // fall back to the full course span so creation isn't blocked - the server
   // still rejects an unassigned year on submit.
   const formYearOptions = useMemo(() => {
-    if (!formCourse) return [];
+    if (!formCourse || !departmentsLoaded) return [];
     const courseYears = Array.from({ length: formCourse.durationYears }, (_, i) => i + 1);
     // managerEffectiveYears (not resolveDepartmentCourseScope directly) even
     // in the plain, non-managed-branch case: a sub-department targeted
@@ -341,8 +361,9 @@ export default function NewSectionPage() {
     const assigned = isManagedBranchMode
       ? managingYears
       : (activeDept ? managerEffectiveYears(activeDept, departments, formCourse.catalogId) : []);
-    return assigned.length > 0 ? courseYears.filter((y) => assigned.includes(y)) : courseYears;
-  }, [formCourse, isManagedBranchMode, managingYears, activeDept, departments]);
+    // Empty Years Taught = not configured, never "all years".
+    return courseYears.filter((y) => assigned.includes(y));
+  }, [formCourse, departmentsLoaded, isManagedBranchMode, managingYears, activeDept, departments]);
 
   // Legacy branch mode: the owning department cross-lists to one or more
   // branches (Department.secondaryDepartments, resolved per the selected
@@ -405,13 +426,20 @@ export default function NewSectionPage() {
   // and which branch it feeds) everywhere it appears - lists, rosters,
   // promotion dropdowns.
   const ownerCode = activeDept?.code?.trim() || "";
-  const derivedName = branch && letter
-    ? `${ownerCode ? `${ownerCode}-` : ""}${branchCodeOf(effectiveBranch)}-${letter.trim().toUpperCase()}`
+  const derivedName = branch && (letter || singleSection)
+    ? `${ownerCode ? `${ownerCode}-` : ""}${branchCodeOf(effectiveBranch)}${tail}`
     : "";
   // Plain mode: this department's own code + letter, e.g. CSE's own dedicated
   // HOD creating a 2nd-year section gets "CSE-A" - no shared-structure prefix,
   // since this department owns every year it's creating a section for directly.
-  const plainDerivedName = `${activeDept?.code?.trim() || activeDeptName}-${letter.trim().toUpperCase()}`;
+  const plainDerivedName = `${activeDept?.code?.trim() || activeDeptName}${tail}`;
+
+  const singleCheckbox = (
+    <label className="flex items-center gap-2 pt-1 text-sm">
+      <Checkbox checked={singleSection} onCheckedChange={(c) => { setSingleSection(c === true); if (c === true) setLetter(""); }} />
+      Only one section (no letter like A, B)
+    </label>
+  );
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -419,7 +447,7 @@ export default function NewSectionPage() {
     if (isBranchMode && !isManagedBranchMode && !branch) {
       toast({ variant: "destructive", title: "Branch is required" }); return;
     }
-    if (!letter.trim()) { toast({ variant: "destructive", title: "Section letter is required (e.g. A, B)" }); return; }
+    if (!singleSection && !letter.trim()) { toast({ variant: "destructive", title: "Section letter is required (e.g. A, B)" }); return; }
     if (!form.year) { toast({ variant: "destructive", title: "Year is required" }); return; }
     if (!form.batch.trim()) { toast({ variant: "destructive", title: "Batch is required (e.g. 2023-2027)" }); return; }
 
@@ -548,10 +576,12 @@ export default function NewSectionPage() {
                       placeholder="A, B…"
                       maxLength={2}
                       className="uppercase"
+                      disabled={singleSection}
                     />
+                    {singleCheckbox}
                     <p className="text-xs text-muted-foreground">
                       Section name will be{" "}
-                      {letter.trim()
+                      {(letter.trim() || singleSection)
                         ? <strong className="text-foreground">{managedBranchName}</strong>
                         : `e.g. ${managingDept?.code?.trim() ? `${managingDept.code.trim()}-` : ""}${activeDept?.code || "CIVIL"}-A`}
                     </p>
@@ -628,7 +658,9 @@ export default function NewSectionPage() {
                       placeholder="A, B…"
                       maxLength={2}
                       className="uppercase"
+                      disabled={singleSection}
                     />
+                    {singleCheckbox}
                     <p className="text-xs text-muted-foreground">
                       Section name will be {derivedName ? <strong className="text-foreground">{derivedName}</strong> : "e.g. BS-CSE-A"}
                     </p>
@@ -656,10 +688,12 @@ export default function NewSectionPage() {
                     placeholder="A, B…"
                     maxLength={2}
                     className="uppercase"
+                    disabled={singleSection}
                   />
+                  {singleCheckbox}
                   <p className="text-xs text-muted-foreground">
                     Section name will be{" "}
-                    {letter.trim()
+                    {(letter.trim() || singleSection)
                       ? <strong className="text-foreground">{plainDerivedName}</strong>
                       : `e.g. ${activeDept?.code || "CSE"}-A`}
                   </p>
