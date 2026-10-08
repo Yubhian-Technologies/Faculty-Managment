@@ -4,8 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { FileDown, FileSpreadsheet, Printer } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
-import { SubjectColorPicker } from "@/components/timetable/SubjectColorPicker";
-import { HIGHLIGHT_COLORS, highlightFor, type SubjectHighlights } from "@/lib/timetable/highlightColors";
+import { HIGHLIGHT_COLORS } from "@/lib/timetable/highlightColors";
+import { SUBJECT_COLORS, isSubjectColor } from "@/lib/timetable/subjectColors";
+import { facultySpans } from "@/lib/timetable/facultySpans";
 import { toast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
 import { useCollegeInfo } from "@/hooks/useCollegeInfo";
@@ -149,22 +150,6 @@ export default function TeachingLoadPage() {
   const periods = Array.from({ length: maxPeriod }, (_, i) => i + 1);
   const displaySlots = typeFilter === "ALL" ? filteredSlots : filteredSlots.filter((s) => s.subjectType === typeFilter);
 
-  // Subject color highlight state
-  const [highlights, setHighlights] = useState<SubjectHighlights>({});
-
-  const uniqueSubjects = useMemo(() => {
-    const map = new Map<string, { code: string; name: string; isLab: boolean }>();
-    for (const s of displaySlots) {
-      const a = assignmentById.get(s.assignmentId);
-      const code = (a?.shortCode || a?.subjectCode || (s as any).subjectCode || s.subjectId || "").toUpperCase().trim();
-      const name = a?.subjectName || s.subjectName || code;
-      if (code && !map.has(code)) {
-        const isLab = a?.subjectType === "PRACTICAL" || Boolean(s.labBatch) || /\b(lab|laboratory|practical)\b/i.test(name);
-        map.set(code, { code, name, isLab });
-      }
-    }
-    return Array.from(map.values());
-  }, [displaySlots, assignmentById]);
 
     // Each course-year's own period-by-period breakdown, resolved once up
   // front (falls back to the plain numberOfPeriods/periodDurationMinutes
@@ -179,6 +164,16 @@ export default function TeachingLoadPage() {
   function periodTimeFor(courseId: string | undefined, year: number | undefined, period: number) {
     if (!courseId || !year) return undefined;
     return periodsByCourseYear.get(`${courseId}_${year}`)?.find((p) => p.period === period);
+  }
+
+  // Periods a lunch/short break follows, for a slot's own course-year - a merged
+  // cell is cut there.
+  function breakAfterFor(slot: TimetableSlot) {
+    const t = timings.find((x) => x.courseId === slot.courseId && x.year === slot.year);
+    const set = new Set<number>();
+    if (t?.lunchBreak?.afterPeriod != null) set.add(t.lunchBreak.afterPeriod);
+    for (const b of t?.shortBreaks ?? []) set.add(b.afterPeriod);
+    return set;
   }
 
   const { collegeInfo } = useCollegeInfo();
@@ -210,7 +205,6 @@ export default function TeachingLoadPage() {
         departments,
         formatDMY,
         college,
-        highlightColors: highlights,
       });
       await renderHtmlToPdf(html, `Faculty-Teaching-Load-${isoDateKey(weekStart)}.pdf`);
       toast({ title: "Timetable downloaded", description: "Saved as PDF" });
@@ -280,7 +274,6 @@ export default function TeachingLoadPage() {
       departments,
       formatDMY,
       college,
-      highlightColors: highlights,
     });
     const printWindow = window.open("", "_blank");
     if (!printWindow) {
@@ -331,7 +324,6 @@ export default function TeachingLoadPage() {
               </Button>
             ))}
 
-            <SubjectColorPicker subjects={uniqueSubjects} value={highlights} onChange={setHighlights} />
             <Button size="sm" variant="outline" onClick={downloadPdf} disabled={isExportingPdf}>
               <FileDown className="h-3.5 w-3.5 mr-1.5" />
               {isExportingPdf ? "Generating PDF..." : "PDF"}
@@ -363,23 +355,32 @@ export default function TeachingLoadPage() {
               </tr>
             </thead>
             <tbody>
-              {DAYS.map((d, di) => (
+              {DAYS.map((d, di) => {
+                // Cells merged in the class timetable are one wide cell here too.
+                const { spans, skipped } = facultySpans(
+                  periods,
+                  (p) => displaySlots.filter((s) => s.day === d && s.periodNumber === p),
+                  breakAfterFor,
+                );
+                return (
                 <tr key={d} className="border-b last:border-b-0">
                   <td className="p-2 align-top font-medium text-muted-foreground">
                     <div className="text-foreground font-bold">{DAY_LABELS[d]}</div>
                     <div className="text-[9px] font-normal truncate">{formatDMY(weekDates[di])}</div>
                   </td>
-                  {periods.map((period) => {
+                  {periods.map((period, pi) => {
+                    if (skipped.has(pi)) return null;
                     // Every slot in the cell, not the first: one faculty can hold
                     // two sections in the same period (e.g. a combined class).
                     const cellSlots = displaySlots.filter((s) => s.day === d && s.periodNumber === period);
                     return (
-                      <td key={period} className="p-2 align-top">
+                      <td key={period} colSpan={spans.get(pi) ?? 1} className="p-2 align-top">
                         {cellSlots.length > 0 ? (
                           <div className="space-y-1.5">
                             {cellSlots.map((slot, idx) => {
                               const assignment = assignmentById.get(slot.assignmentId);
                               const time = periodTimeFor(slot.courseId, slot.year, slot.periodNumber);
+                              const lastTime = (spans.get(pi) ?? 1) > 1 ? periodTimeFor(slot.courseId, slot.year, periods[pi + (spans.get(pi) ?? 1) - 1]) : undefined;
                               const courseByIdMap = new Map(courses.map((c) => [c.id, c]));
                               const resolvedCourseName = assignment?.courseName || courseByIdMap.get(slot.courseId || "")?.name;
                               const subline = formatTeachingShorthand({
@@ -394,17 +395,16 @@ export default function TeachingLoadPage() {
                               const codeKey = (shortCode || assignment?.subjectCode || (slot as any).subjectCode || slot.subjectId || "").toUpperCase().trim();
                               
                               const nameKey = (subjectName || "").toUpperCase().trim();
-                              const hl = Object.keys(highlights).length > 0
-                                ? highlightFor(highlights, codeKey, nameKey, (slot.subjectId || "").toUpperCase().trim())
-                                : (assignment?.subjectType === "PRACTICAL" || Boolean(slot.labBatch) || /\b(lab|laboratory|practical)\b/i.test(subjectName)) ? HIGHLIGHT_COLORS.purple : null;
+                              const planned = assignment?.cellColor;
+                              const hl = isSubjectColor(planned) ? null : (assignment?.subjectType === "PRACTICAL" || Boolean(slot.labBatch) || /\b(lab|laboratory|practical)\b/i.test(subjectName)) ? HIGHLIGHT_COLORS.purple : null;
                               const isSubstitute = Boolean(slot.substituteFacultyName || slot.substituteForName);
 
                               return (
-                                <div key={`${slot.id ?? idx}`} className={`rounded-md border p-2 transition-all ${isSubstitute ? "bg-amber-50 border-amber-200" : hl ? "font-medium" : "bg-primary/5 border-primary/20"}`}
+                                <div key={`${slot.id ?? idx}`} className={`rounded-md border p-2 transition-all ${isSubstitute ? "bg-amber-50 border-amber-200" : isSubjectColor(planned) ? `font-medium ${SUBJECT_COLORS[planned].cell}` : hl ? "font-medium" : "bg-primary/5 border-primary/20"}`}
                                   style={!isSubstitute && hl ? { background: hl.bg, borderColor: hl.border, color: hl.text } : undefined}>
                                   {time && (
                                     <p className="text-[10px] font-medium text-muted-foreground/80 mb-0.5">
-                                      {formatTime12h(time.startTime)}&ndash;{formatTime12h(time.endTime)}
+                                      {formatTime12h(time.startTime)}&ndash;{formatTime12h((lastTime ?? time).endTime)}
                                     </p>
                                   )}
                                   <p className="text-xs font-semibold leading-tight">{titleDisplay}</p>
@@ -435,7 +435,8 @@ export default function TeachingLoadPage() {
                     );
                   })}
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

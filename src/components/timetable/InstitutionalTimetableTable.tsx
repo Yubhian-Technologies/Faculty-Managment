@@ -907,19 +907,13 @@ export function InstitutionalTimetableTable({
               </div>
 
               <div className="grid grid-cols-2 gap-3 text-xs">
-                <div className="p-2.5 rounded-lg border bg-card">
+                <div className="p-2.5 rounded-lg border bg-card col-span-2">
                   <span className="text-muted-foreground block text-[11px]">Timing</span>
                   <span className="font-semibold text-foreground text-sm">
                     {periodTimeRange(selectedMobileSlot.col.startTime, selectedMobileSlot.col.endTime) || `Period ${selectedMobileSlot.slot.periodNumber}`}
                   </span>
                 </div>
 
-                <div className="p-2.5 rounded-lg border bg-card">
-                  <span className="text-muted-foreground block text-[11px]">Classroom / Location</span>
-                  <span className="font-semibold text-foreground text-sm">
-                    {selectedMobileSlot.slot.classroom ? `Room ${selectedMobileSlot.slot.classroom}` : "To be announced"}
-                  </span>
-                </div>
 
                 <div className="p-2.5 rounded-lg border bg-card col-span-2">
                   <span className="text-muted-foreground block text-[11px]">Faculty In-Charge</span>

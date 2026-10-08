@@ -101,6 +101,7 @@ const EXPECTED: Record<string, string[]> = {
     "/panel/mark-attendance",
     "/panel/student-permissions",
     "/panel/monthly-records",
+    "/panel/topics-covered",
     "/panel/students",
     "/panel/students/batches",
     "/panel/feedback",
