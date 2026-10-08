@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { sectionsOfDepartment } from "@/lib/departments/departmentSections";
+import { sectionsOfDepartment, isFiledUnderDepartment } from "@/lib/departments/departmentSections";
+import { isContainerDepartment } from "@/lib/departments/departmentTree";
 import type { Department } from "@/types";
 
 // Live shape (VIT): sections are filed under the real branch for EVERY year; the Basic Science sub-departments
@@ -57,5 +58,51 @@ describe("sectionsOfDepartment (Principal Departments drill-down)", () => {
     const mixed = [...sections, sec("cse1m", "CSE", 1, "c2")];
     const got = sectionsOfDepartment(departments.find((d) => d.id === "chem")!, departments, mixed, new Map([["c1", CAT], ["c2", "mtech"]])).map((s) => s.id);
     expect(got).not.toContain("cse1m");
+  });
+});
+
+// CSE runs its own sections AND has a Cyber Security sub-department that runs its own. The drill-down
+// lists the sub-department cards plus the parent's own sections - neither list may swallow the other.
+describe("a department with its own sections and a sub-department that has sections too", () => {
+  const tree: Department[] = [
+    D("cse", "CSE", { hasSubDepartments: true, courseScopes: scope([2, 3, 4]) }),
+    D("cs", "CSE [CYBER SECURITY]", { parentDepartmentId: "cse", courseScopes: scope([2, 3, 4]) }),
+    D("bs", "Basic Science", { hasSubDepartments: true, parentRunsOwnSections: false, courseScopes: scope([1]) }),
+    D("bsm", "BS Maths", { parentDepartmentId: "bs", managedDepartments: ["CSE"] }),
+  ];
+  const both = [
+    { id: "a", department: "CSE", year: 2, courseId: "c1", departmentId: "cse" },
+    { id: "b", department: "CSE", year: 3, courseId: "c1", departmentId: "cse" },
+    { id: "x", department: "CSE [CYBER SECURITY]", year: 2, courseId: "c1", departmentId: "cs" },
+  ];
+  const of = (id: string) => sectionsOfDepartment(tree.find((d) => d.id === id)!, tree, both, cat).map((s) => s.id).sort();
+
+  it("the parent lists exactly its own sections, not the sub-department's", () => {
+    expect(of("cse")).toEqual(["a", "b"]);
+  });
+
+  it("the sub-department still lists its own", () => {
+    expect(of("cs")).toEqual(["x"]);
+  });
+
+  it("is not a container while sections are filed under it, so the drill-down shows them", () => {
+    const parent = tree.find((d) => d.id === "cse")!;
+    const filed = both.filter((s) => isFiledUnderDepartment(parent, s));
+    expect(filed.map((s) => s.id)).toEqual(["a", "b"]);
+    expect(isContainerDepartment(parent, tree, filed.length > 0)).toBe(false);
+  });
+
+  it("a pure container stays a container, and a stray section filed under it is still found", () => {
+    const bs = tree.find((d) => d.id === "bs")!;
+    expect(isContainerDepartment(bs, tree, false)).toBe(true);
+    const stray = { id: "s", department: "Basic Science", year: 1, courseId: "c1", departmentId: "bs" };
+    expect(isFiledUnderDepartment(bs, stray)).toBe(true);
+    expect(isFiledUnderDepartment(bs, both[0])).toBe(false);
+  });
+
+  it("a section carrying a departmentId is matched by id, not by a same-named department", () => {
+    const parent = tree.find((d) => d.id === "cse")!;
+    expect(isFiledUnderDepartment(parent, { department: "CSE", departmentId: "other" })).toBe(false);
+    expect(isFiledUnderDepartment(parent, { department: "CSE" })).toBe(true);
   });
 });

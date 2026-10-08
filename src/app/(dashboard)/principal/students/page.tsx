@@ -18,7 +18,7 @@ import { StudentsViewTabs } from "@/components/students/StudentsViewTabs";
 import { GraduatedStudentsView } from "@/components/students/GraduatedStudentsView";
 import type { StudentListItem, Department, AcademicYear, Course } from "@/types";
 import { selectableYears } from "@/lib/college/courseYears";
-import { coreDepartmentsWithSections, departmentsWithSections } from "@/lib/college/departmentSectionScope";
+import { coreDepartmentOptions as buildCoreDepartmentOptions, departmentFilterOptions as buildDepartmentFilterOptions } from "@/lib/departments/departmentTree";
 import { useSectionDepartments } from "@/hooks/useSectionDepartments";
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -158,9 +158,10 @@ export default function PrincipalStudentsPage() {
   );
 
   // Only the departments that resolve to sections - their own, or those of a
-  // branch they manage. The same rule the College Office page applies; see
-  // lib/college/departmentSectionScope.ts for why a department with neither was
-  // a dead option.
+  // branch they manage - plus a parent that organises sub-departments (picking
+  // it means "all of them"), with each sub-department listed beneath its
+  // parent. The same rule every Students screen applies; see
+  // lib/departments/departmentTree.ts.
   const departmentFilterOptions = useMemo(() => {
     const offered = courseFilter === "all"
       ? activeDepartments
@@ -168,16 +169,14 @@ export default function PrincipalStudentsPage() {
         const offeringIds = new Set(departmentsOfferingCourse(departments, courses, courseFilter).map((d) => d.id));
         return activeDepartments.filter((d) => offeringIds.has(d.id));
       })();
-    return departmentsWithSections(offered, sectionDepartments);
+    return buildDepartmentFilterOptions(offered, departments, sectionDepartments);
   }, [courseFilter, activeDepartments, departments, courses, sectionDepartments]);
 
-  // The branches a feeder department teaches the shared first year for - the
-  // students' Core Department. Offered only when the picked department has any.
+  // The branches the picked department (or, for a parent, its sub-departments)
+  // teaches the shared first year for - the students' Core Department. Offered
+  // only when there are any.
   const coreDepartmentOptions = useMemo(
-    () => coreDepartmentsWithSections(
-      deptFilter === "all" ? undefined : departments.find((d) => d.name === deptFilter),
-      sectionDepartments
-    ),
+    () => buildCoreDepartmentOptions(departments, deptFilter === "all" ? [] : [deptFilter], sectionDepartments),
     [deptFilter, departments, sectionDepartments]
   );
 
@@ -310,7 +309,11 @@ export default function PrincipalStudentsPage() {
               <SelectTrigger className="sm:w-48"><SelectValue placeholder="All departments" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All departments</SelectItem>
-                {departmentFilterOptions.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
+                {departmentFilterOptions.map((o) => (
+                  <SelectItem key={o.department.id} value={o.department.name} className={o.depth === 1 ? "pl-8" : undefined}>
+                    {o.department.name}{o.container ? " (all sub-departments)" : ""}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             {coreDepartmentOptions.length > 0 && (

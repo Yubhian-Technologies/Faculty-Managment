@@ -58,8 +58,9 @@ type AcademicStructure =
   | { kind: "COMMON_FIRST_YEAR", freshmanDepartmentIds, subDepartments... }  // shared dept owns year 1 + manages branches
   | { kind: "DEPARTMENT_DIRECT" }                                            // default
 
-// StudentRecord (colleges/{id}/students): real branch ALWAYS in student.department;
-// sub-department is a management view only. Optional secondaryDepartment, labBatch.
+// StudentRecord (colleges/{id}/students): a first-year is filed under the shared-first-year
+// (sub-)department in student.department; the real branch is student.secondaryDepartment
+// ("Core Department"), and promotion moves it into student.department. Optional labBatch.
 
 // Sections, Courses, CourseYearTiming, ExamConfiguration: see src/types/*.ts
 ```
@@ -77,7 +78,7 @@ type AcademicStructure =
 
 - Structure is **derived** — never add a stored "structure type" flag; change only `academicStructure.ts`.
 - Firestore `in` limit 30 → department name lists capped (`.slice(0, 30)`); an HOD with >30 departments silently loses scope (known, deliberate fail-closed).
-- A first-year student keeps their real branch — any feature keying on the freshman sub-department must use `getHodDepartmentScope`, not `student.department`.
+- A first-year student's `department` is the freshman (sub-)department and their real branch is `secondaryDepartment` — nobody is filed under a parent that only organises sub-departments, so Department filters roll such a parent up to its sub-departments and Core Department filters read `secondaryDepartment` (`lib/departments/departmentTree.ts`, `lib/students/departmentRollup.ts`). HOD-facing lists key on `getHodDepartmentScope` + `classifyHodStudent`.
 - `academicYear`-less subjects match any session (History dropdown built from actual data, not a fixed window).
 - Cohort ops use `ChunkedBatch` for >500-doc writes; `dryRun` exists precisely because mis-targeted section naming is destructive. (Note: an `advance-year` route referenced by older docs no longer exists — do not reintroduce it without checking git history.)
 - E2E coverage for this module in `tests/e2e/api/{subjects,sections,course-catalog,...}.spec.ts` + unit tests under `src/lib/college/__tests__/`.

@@ -150,7 +150,9 @@ async function resolveCandidates(
     // a bare "==" for the common single-name case needs no composite index,
     // same reasoning as every other branch in this file (see top-of-file
     // comment).
-    const names = params.departments;
+    // Firestore's `in` takes at most 30 values - a rollup over a very wide
+    // hierarchy is capped rather than thrown, like every other `in` here.
+    const names = params.departments.slice(0, 30);
     const byDeptQuery = names.length > 1
       ? studentsColl.where("department", "in", names)
       : studentsColl.where("department", "==", names[0]);

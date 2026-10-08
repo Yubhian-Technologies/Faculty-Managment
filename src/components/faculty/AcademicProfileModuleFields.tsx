@@ -8,6 +8,7 @@ import { CertificateUploadField } from "@/components/shared/CertificateUploadFie
 import { DesignationSelect } from "@/components/faculty/DesignationOptions";
 import { validatePromotionHistory, suggestedNextFromDate } from "@/lib/faculty/promotionHistory";
 import { designationKey } from "@/lib/designations/config";
+import { QualifiedExamFields } from "@/components/faculty/QualifiedExamFields";
 import { TrainingEntryFields } from "@/components/faculty/TrainingEntryFields";
 import {
   NumInput, TextInput, DateInput, DegreeFields, DegreeFieldsList, RepeatingGroup, QualificationsFields, StringListInput,
@@ -33,7 +34,7 @@ import type {
 } from "@/types";
 import {
   PROFESSIONAL_BODY_LABELS, MEMBERSHIP_VALIDITY_LABELS,
-  ADMIN_RESPONSIBILITY_CATEGORY_LABELS, AWARD_CATEGORY_LABELS, QUALIFYING_EXAM_LABELS,
+  ADMIN_RESPONSIBILITY_CATEGORY_LABELS, AWARD_CATEGORY_LABELS,
   AWARD_LEVEL_LABELS,
 } from "@/types";
 
@@ -85,38 +86,7 @@ export function QualificationFields({ value: rawValue, onChange, collegeType }: 
     <div className="space-y-5">
       <TextInput label="Highest Qualification" value={value.highestQualification} onChange={(v) => set("highestQualification", v)} placeholder="e.g. Ph.D" />
       <StringListInput label="Research Areas/Interests" values={value.researchAreasInterests} onChange={(v) => set("researchAreasInterests", v)} placeholder="e.g. Machine Learning - press Enter or Add" />
-      <div className="space-y-3 rounded-lg border p-3">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label>NET/SLET/SET/GATE/Others</Label>
-            <Select value={value.netSletSetGateOthers ?? ""} onValueChange={(v) => set("netSletSetGateOthers", v as FacultyProfileFields["netSletSetGateOthers"])}>
-              <SelectTrigger onClear={value.netSletSetGateOthers ? () => set("netSletSetGateOthers", undefined) : undefined}><SelectValue placeholder="Select" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="YES">Yes</SelectItem>
-                <SelectItem value="NO">No</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        {value.netSletSetGateOthers === "YES" && (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div className="space-y-2">
-              <Label>Qualified Exam</Label>
-              <Select value={value.qualifiedExam ?? ""} onValueChange={(v) => set("qualifiedExam", v as FacultyProfileFields["qualifiedExam"])}>
-                <SelectTrigger onClear={value.qualifiedExam ? () => set("qualifiedExam", undefined) : undefined}><SelectValue placeholder="Select exam" /></SelectTrigger>
-                <SelectContent>
-                  {Object.entries(QUALIFYING_EXAM_LABELS).map(([k, lbl]) => <SelectItem key={k} value={k}>{lbl}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            {value.qualifiedExam === "OTHER" && (
-              <TextInput label="Please specify exam" value={value.pleaseSpecifyExam} onChange={(v) => set("pleaseSpecifyExam", v)} />
-            )}
-            <TextInput label="Exam Score" value={value.examScore} onChange={(v) => set("examScore", v)} />
-            <NumInput label="Qualified Year" value={value.qualifiedYear} onChange={(v) => set("qualifiedYear", v)} />
-          </div>
-        )}
-      </div>
+      <QualifiedExamFields value={value} onChange={(next) => onChange(next as typeof value)} />
       <DegreeFields label="Secondary Education" level="HIGH_SCHOOL" value={value.secondaryEducation} onChange={(v) => set("secondaryEducation", v)} />
       <DegreeFields label="Intermediate / Diploma / ITI" level="INTERMEDIATE" value={value.intermediateDiplomaIti} onChange={(v) => set("intermediateDiplomaIti", v)} />
       <DegreeFields label="UG Details" level="UG" value={value.ugDetails} onChange={(v) => set("ugDetails", v)} />

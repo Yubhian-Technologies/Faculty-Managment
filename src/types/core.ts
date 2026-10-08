@@ -1383,6 +1383,15 @@ export const QUALIFYING_EXAM_LABELS: Record<QualifyingExamType, string> = {
   OTHER: "Others",
 };
 
+// One more NET/SLET/SET/GATE/Others result beyond the first (which lives in the scalar fields of
+// FacultyProfileFields) - see lib/faculty/qualifiedExams.ts.
+export interface QualifiedExamEntry {
+  exam?: QualifyingExamType;
+  pleaseSpecifyExam?: string; // only meaningful when exam === "OTHER"
+  examScore?: string;
+  qualifiedYear?: number;
+}
+
 export interface CourseAssignment {
   code: string;
   name: string;
@@ -2632,6 +2641,8 @@ export interface FacultyProfileFields {
   pleaseSpecifyExam?: string; // only meaningful when qualifiedExam === "OTHER"
   examScore?: string;
   qualifiedYear?: number;
+  // Exams 2, 3, ... (the first stays in the four fields above, so nothing stored before is touched).
+  additionalQualifiedExams?: QualifiedExamEntry[];
   // School-type colleges only - see SCHOOL_TEACHING_QUALIFICATION_LEVELS.
   educationalQualifications?: StaffQualification[];
 
