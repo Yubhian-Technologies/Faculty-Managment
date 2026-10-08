@@ -490,6 +490,7 @@ interface MergeableSlot {
   substituteForName?: string;
   substituteDate?: string;
   labBatch?: string;
+  cellColor?: string;
 }
 
 /**
@@ -511,8 +512,13 @@ export function mergeCoTaughtSlots<T extends MergeableSlot>(cellSlots: T[]): T[]
     const unique = (values: (string | undefined)[]) => Array.from(new Set(values.filter((v): v is string => !!v)));
     const faculty = unique(group.map((g) => (g.substituteFacultyName ? `Sub: ${g.substituteFacultyName}` : g.facultyName)));
     const batches = unique(group.map((g) => g.labBatch));
+    // Only one half of a split subject may have been given a colour (the
+    // picker sets it one teaching-assignment at a time) - a plain group[0]
+    // would silently drop that colour whenever the coloured half isn't
+    // first, so prefer whichever member actually has one.
+    const coloredBase = group.find((g) => g.cellColor) ?? group[0];
     return {
-      ...group[0],
+      ...coloredBase,
       facultyName: faculty.join(", "),
       labBatch: batches.length > 0 ? batches.join(", ") : undefined,
       // The names above already carry any cover; a merged entry is not itself "a substitution".

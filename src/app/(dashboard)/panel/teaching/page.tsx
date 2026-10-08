@@ -210,7 +210,6 @@ export default function TeachingLoadPage() {
         departments,
         formatDMY,
         college,
-        highlightColors: highlights,
       });
       await renderHtmlToPdf(html, `Faculty-Teaching-Load-${isoDateKey(weekStart)}.pdf`);
       toast({ title: "Timetable downloaded", description: "Saved as PDF" });
@@ -280,7 +279,6 @@ export default function TeachingLoadPage() {
       departments,
       formatDMY,
       college,
-      highlightColors: highlights,
     });
     const printWindow = window.open("", "_blank");
     if (!printWindow) {
