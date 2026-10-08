@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/hooks/useToast";
-import { formatTime12h } from "@/lib/timetable/facultyTimetablePdf";
 import { downloadFreeFacultyPdf, downloadFreeFacultyXlsx } from "@/lib/timetable/freeFacultyExport";
+import { formatTime12h } from "@/lib/timetable/facultyTimetablePdf";
 interface LeisureFaculty { id: string; employeeId: string; name: string; department: string; freeRanges?: [string, string][] }
 
 // College-wide "who is free at this time" (Principal, Vice Principal, Exam
@@ -89,8 +89,8 @@ export function FacultyLeisureFilter({ scopeLabel = "in the college" }: { scopeL
     setExporting(kind);
     try {
       const base = `free-faculty-${loadedSlot.replace(/[^A-Za-z0-9]+/g, "-")}`;
-      if (kind === "pdf") await downloadFreeFacultyPdf(faculty, loadedSlot, base);
-      else await downloadFreeFacultyXlsx(faculty, loadedSlot, base);
+      if (kind === "pdf") await downloadFreeFacultyPdf(faculty, loadedSlot, base, [from, to]);
+      else await downloadFreeFacultyXlsx(faculty, loadedSlot, base, [from, to]);
     } catch {
       toast({ variant: "destructive", title: "Download failed" });
     } finally {
@@ -195,7 +195,11 @@ export function FacultyLeisureFilter({ scopeLabel = "in the college" }: { scopeL
                             <td className="px-3 py-2">{i + 1}</td>
                             <td className="px-3 py-2">{f.employeeId || "-"}</td>
                             <td className="px-3 py-2">{f.name}</td>
-                            <td className="px-3 py-2 text-muted-foreground">{f.freeRanges ? f.freeRanges.map(([a, b]) => `${formatTime12h(a)} - ${formatTime12h(b)}`).join(", ") : "Whole range"}</td>
+                            <td className="px-3 py-2 text-muted-foreground">
+                              {f.freeRanges
+                                ? f.freeRanges.map(([a, b]) => `${formatTime12h(a)} - ${formatTime12h(b)}`).join(", ")
+                                : `${formatTime12h(from)} - ${formatTime12h(to)}`}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
