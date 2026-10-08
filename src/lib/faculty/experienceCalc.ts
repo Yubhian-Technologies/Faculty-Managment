@@ -149,17 +149,51 @@ export function findOverlappingExperience(
   return undefined;
 }
 
-// Sum of every Previous Experience row's exact day count.
-function totalPreviousExperienceDays(rows: PreviousInstitutionLike[] | undefined): number {
-  if (!rows || rows.length === 0) return 0;
-  return rows.reduce((sum, r) => {
+// Valid [from, to] ranges of the rows as UTC day numbers. Open-ended or
+// inverted rows are skipped (not counted).
+function rowRanges(rows: PreviousInstitutionLike[] | undefined): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  for (const r of rows ?? []) {
     const { fromDate, toDate } = rowDates(r);
-    if (!fromDate || !toDate) return sum;
+    if (!fromDate || !toDate) continue;
     const from = new Date(fromDate);
     const to = new Date(toDate);
-    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || to < from) return sum;
-    return sum + exactDays(from, to);
-  }, 0);
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || to < from) continue;
+    out.push([Math.round(from.getTime() / 86400000), Math.round(to.getTime() / 86400000)]);
+  }
+  return out;
+}
+
+// Days covered by the UNION of the ranges, so periods that overlap (within a
+// tab, across tabs, or with service at this college) are counted once.
+function unionDays(ranges: Array<[number, number]>): number {
+  const sorted = [...ranges].sort((x, y) => x[0] - y[0]);
+  let total = 0;
+  let curFrom = 0;
+  let curTo = 0;
+  let open = false;
+  for (const [f, t] of sorted) {
+    if (!open) { curFrom = f; curTo = t; open = true; continue; }
+    if (f <= curTo) { curTo = Math.max(curTo, t); continue; }
+    total += curTo - curFrom;
+    curFrom = f; curTo = t;
+  }
+  if (open) total += curTo - curFrom;
+  return total;
+}
+
+// Tenure range [joining, asOf] in the same day numbers, if any.
+function tenureRange(joiningDate: Parameters<typeof toDate>[0], asOf: Date): [number, number] | undefined {
+  const joined = toDate(joiningDate);
+  if (!joined) return undefined;
+  const f = Math.round(joined.getTime() / 86400000);
+  const t = Math.round(asOf.getTime() / 86400000);
+  return t > f ? [f, t] : undefined;
+}
+
+// Exact day count of the previous-experience rows, overlaps counted once.
+function totalPreviousExperienceDays(rows: PreviousInstitutionLike[] | undefined): number {
+  return unionDays(rowRanges(rows));
 }
 
 // Sum of every Previous Experience row's duration, as a plain decimal-years
@@ -190,10 +224,8 @@ export function totalYearsOfExperience(
   joiningDate: Parameters<typeof toDate>[0],
   asOf: Date = new Date()
 ): DateDuration {
-  const prevDays = totalPreviousExperienceDays(entries);
-  const joined = toDate(joiningDate);
-  const tenureDays = joined ? Math.max(0, exactDays(joined, asOf)) : 0;
-  const totalDays = prevDays + tenureDays;
+  const tenure = tenureRange(joiningDate, asOf);
+  const totalDays = unionDays([...rowRanges(entries), ...(tenure ? [tenure] : [])]);
   if (totalDays <= 0) return ZERO_DURATION;
   const anchorStart = new Date(asOf.getTime() - totalDays * 86400000);
   return calendarDiff(anchorStart, asOf);
@@ -218,13 +250,16 @@ export function experienceBreakdown(
   joiningDate: Parameters<typeof toDate>[0],
   asOf: Date = new Date()
 ): ExperienceBreakdown {
-  const externalDays = totalPreviousExperienceDays(entries);
-  const joined = toDate(joiningDate);
-  const internalDays = joined ? Math.max(0, exactDays(joined, asOf)) : 0;
+  const tenure = tenureRange(joiningDate, asOf);
+  const internalDays = tenure ? tenure[1] - tenure[0] : 0;
+  // Total counts every calendar day once; external is what lies outside
+  // service at this college, so internal + external = total.
+  const totalDays = unionDays([...rowRanges(entries), ...(tenure ? [tenure] : [])]);
+  const externalDays = totalDays - internalDays;
   const daysToYears = (days: number) => Math.round((days / 365.25) * 10) / 10;
   return {
     internal: daysToYears(internalDays),
     external: daysToYears(externalDays),
-    total: daysToYears(internalDays + externalDays),
+    total: daysToYears(totalDays),
   };
 }
