@@ -13,6 +13,7 @@ import { compareStudentsForList } from "@/lib/students/listOrder";
 import { loadAcademicYearConfig, resolveAcademicYearRequest, sessionInAcademicYear, windowForAcademicYear } from "@/lib/studentAttendance/academicYearWindow";
 import { loadNotPostedIndex, resolveDenominatorMode, withNotPosted, type DenominatorResult } from "@/lib/studentAttendance/heldDenominator";
 import { istDateKey } from "@/lib/attendance/istTime";
+import { reportCountsAllSubjects, withSessionSubjects } from "@/lib/studentAttendance/reportSubjects";
 import { mapLimit } from "@/lib/firestore/sharedReads";
 import type { Section, StudentAttendanceSession, TeachingAssignment } from "@/types";
 
@@ -180,7 +181,7 @@ export async function GET(request: Request) {
     const perSection = await mapLimit(sections, 4, async (section) => {
       const rows: typeof results = [];
       let unavailable: DenominatorResult["unavailable"];
-      const subjectIds = subjectIdsOf.get(section.id) ?? [];
+      let subjectIds = subjectIdsOf.get(section.id) ?? [];
       let sessionsQuery: FirebaseFirestore.Query = collegeRef.collection("studentAttendance")
         .where("sectionId", "==", section.id)
         .where("status", "==", "SUBMITTED");
@@ -202,6 +203,10 @@ export async function GET(request: Request) {
         // A stamped session belongs to its own academic year (a session written
         // before stamping existed was placed by its date, in the query above).
         .filter((r) => sessionInAcademicYear(r, window));
+      // ATTENDANCE_REPORT_ALL_SUBJECTS=1: also count subjects with sessions but no current assignment, as the student's own view does.
+      if (reportCountsAllSubjects()) {
+        subjectIds = withSessionSubjects(subjectIds.map((subjectId) => ({ subjectId, subjectName: "", subjectCode: "" })), sessions).map((s) => s.subjectId);
+      }
       // One shared definition of held/attended (lib/studentAttendance/counting.ts):
       // only sessions that list the student count, so a split lab's other
       // batch is never charged to them as an absence.
