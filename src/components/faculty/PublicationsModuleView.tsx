@@ -11,6 +11,7 @@ import {
 import { toast } from "@/hooks/useToast";
 import { useAuthStore } from "@/store/authStore";
 import { PublicationDetailsForm, emptyPublicationDetails, isPublicationDetailsValid } from "@/components/research/PublicationDetailsForm";
+import { externalHref } from "@/lib/publications/externalHref";
 import type { FacultyProfileFields, ResearchPublication, PublicationDetails } from "@/types";
 
 const PREVIEW_COUNT = 3;
@@ -117,9 +118,13 @@ function PublicationRow({
           )}
         </div>
       )}
-      {pub.driveLink && (
+      {/* Only when the stored value is actually an address. Without a scheme
+          a browser reads it as a path relative to THIS page, so "ds" became
+          /panel/profile/ds and the app answered "Unknown section." - the link
+          never left the site. See externalHref. */}
+      {externalHref(pub.driveLink) && (
         <a
-          href={pub.driveLink}
+          href={externalHref(pub.driveLink)!}
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"

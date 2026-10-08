@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { checkIsbn, isIsbnRequired } from "@/lib/publications/isbn";
 import type {
   PublicationDetails, PublicationType, PublicationAuthor, PublicationIndex, PublicationQuartile,
   AuthorCategory, AuthorRoleType,
@@ -61,6 +62,21 @@ export function emptyPublicationDetails(): PublicationDetails {
 // from Crossref, so every fetched author starts External and can be
 // corrected by hand (e.g. flipped to Internal + Faculty ID for a co-author
 // who works here).
+// What Crossref calls a record, in our terms. Only the shapes this form can
+// actually hold; anything else (a dataset, a preprint, a posted item) leaves
+// the type alone for whoever is filling the form to decide.
+const CROSSREF_TYPES: Record<string, PublicationType> = {
+  "journal-article": "JOURNAL",
+  "proceedings-article": "CONFERENCE",
+  "book-chapter": "BOOK_CHAPTER",
+  "book-part": "BOOK_CHAPTER",
+  "book-section": "BOOK_CHAPTER",
+  book: "TEXT_BOOK",
+  monograph: "TEXT_BOOK",
+  "reference-book": "TEXT_BOOK",
+  "edited-book": "TEXT_BOOK",
+};
+
 async function fetchDoiMetadata(doi: string, type: PublicationType): Promise<Partial<PublicationDetails> | null> {
   const res = await fetch(`https://api.crossref.org/works/${encodeURIComponent(doi.trim())}`);
   if (!res.ok) return null;
@@ -68,6 +84,11 @@ async function fetchDoiMetadata(doi: string, type: PublicationType): Promise<Par
   const m = json.message;
   if (!m) return null;
 
+  // The DOI record knows what it is, so the venue lands in the right field
+  // first time. A conference paper fetched while the form still said Journal
+  // used to put the proceedings name in Journal Name and stay a Journal,
+  // leaving the type to be corrected by hand afterwards.
+  const resolved = CROSSREF_TYPES[String(m.type ?? "")] ?? type;
   const venueName = Array.isArray(m["container-title"]) ? (m["container-title"] as string[])[0] : undefined;
   const dateParts = (m["published-print"] ?? m["published-online"] ?? m.issued) as { "date-parts"?: number[][] } | undefined;
   const [year, month] = dateParts?.["date-parts"]?.[0] ?? [];
@@ -86,9 +107,10 @@ async function fetchDoiMetadata(doi: string, type: PublicationType): Promise<Par
     doi: (m.DOI as string | undefined) ?? doi.trim(),
     ...((m.title as string[] | undefined)?.[0] ? { title: (m.title as string[])[0] } : {}),
     ...(m.publisher ? { publisherName: m.publisher as string } : {}),
-    ...(venueName && type === "JOURNAL" ? { journalName: venueName } : {}),
-    ...(venueName && type === "CONFERENCE" ? { conferenceName: venueName } : {}),
-    ...(venueName && type === "BOOK_CHAPTER" ? { bookName: venueName } : {}),
+    ...(resolved !== type ? { type: resolved } : {}),
+    ...(venueName && resolved === "JOURNAL" ? { journalName: venueName } : {}),
+    ...(venueName && resolved === "CONFERENCE" ? { conferenceName: venueName } : {}),
+    ...(venueName && resolved === "BOOK_CHAPTER" ? { bookName: venueName } : {}),
     // Through the same formatter the field uses - a DOI lookup can hand back
     // an ISSN without its hyphen, which would prefill a value the form then
     // refuses to submit.
@@ -125,14 +147,16 @@ export function formatIssn(raw: string): string {
 export function isPublicationDetailsValid(details: PublicationDetails): boolean {
   if (details.title.trim().length < 2) return false;
   if (!details.citeAs?.trim()) return false;
-  if (details.type === "TEXT_BOOK") return true;
+  if (details.type === "TEXT_BOOK") return !checkIsbn(details.type, details.isbnNumber);
   if (!details.sdgGoals || details.sdgGoals.length === 0) return false;
   if (!details.indexedIn || details.indexedIn.length === 0) return false;
   if (details.hasInternationalCollaboration === undefined || details.hasIndustryCollaboration === undefined) return false;
   // Present AND well-formed - a half-typed "1234-56" is as unusable to
   // whoever verifies this record as an empty box.
   if (details.type === "JOURNAL" && !ISSN_REGEX.test(details.issnNumber?.trim() ?? "")) return false;
-  if ((details.type === "CONFERENCE" || details.type === "BOOK_CHAPTER") && !details.isbnNumber?.trim()) return false;
+  // Still compulsory for Conference and Book Chapter, as it always was - and
+  // now checked as a real ISBN rather than accepted as any string of digits.
+  if (checkIsbn(details.type, details.isbnNumber)) return false;
   // Scopus/WoS Link and Published Paper Link are compulsory for every type
   // except Text Book (which has its own separate "Provide link of the Book"
   // field instead - see providedBookLink).
@@ -425,10 +449,27 @@ export function PublicationDetailsForm({
   }
 
   function setType(type: PublicationType) {
-    // Switching type clears the fields that belonged only to the previous
-    // type, so a half-filled Journal field set can't leak into a Conference
-    // submission.
-    onChange({ ...emptyPublicationDetails(), type, title: value.title, authors: value.authors });
+    // Switching type clears the fields that belonged only to the PREVIOUS
+    // type - venue names, ISSN/ISBN, quartile, the Text Book-only questions -
+    // so a half-filled Journal field set can't leak into a Conference
+    // submission. Everything that is true of the work whatever it appeared
+    // in is carried over: wiping those too meant correcting the type of a
+    // record just filled from a DOI threw away the DOI itself, the date, the
+    // publisher, the links and the citation, and they had to be typed again.
+    const {
+      title, authors, internalAuthorsCount, externalAuthorsCount, researchDomain, sdgGoals,
+      publisherName, indexedIn, impactFactor, monthYearOfPublication, monthYearOfIndex,
+      scopusOrWosLink, publishedPaperLink, doi, citeAs,
+      hasInternationalCollaboration, hasIndustryCollaboration,
+    } = value;
+    onChange({
+      ...emptyPublicationDetails(),
+      type,
+      title, authors, internalAuthorsCount, externalAuthorsCount, researchDomain, sdgGoals,
+      publisherName, indexedIn, impactFactor, monthYearOfPublication, monthYearOfIndex,
+      scopusOrWosLink, publishedPaperLink, doi, citeAs,
+      hasInternationalCollaboration, hasIndustryCollaboration,
+    });
   }
 
   const internalCount = value.authors.filter((a) => a.isInternal).length;
@@ -445,6 +486,29 @@ export function PublicationDetailsForm({
   function addAuthor() {
     set("authors", [...value.authors, emptyAuthor()]);
   }
+
+  // One ISBN field wherever an ISBN belongs. It was three `type="number"`
+  // inputs, which could not accept the hyphens an ISBN is written with and
+  // would drop the leading zero off an ISBN-10 like 0-306-40615-2 - the same
+  // trap the ISSN field above already documents. Whatever grouping is typed is
+  // kept as typed; only the checksum decides.
+  const isbnError = checkIsbn(value.type, value.isbnNumber);
+  const isbnField = (
+    <div className="space-y-1.5">
+      <Label>ISBN Number {isIsbnRequired(value.type) && <span className="text-destructive">*</span>}</Label>
+      <Input
+        value={value.isbnNumber ?? ""}
+        onChange={(e) => set("isbnNumber", e.target.value)}
+        placeholder="978-0-306-40615-7"
+        inputMode="numeric"
+        aria-invalid={!!value.isbnNumber?.trim() && !!isbnError}
+      />
+      {!!value.isbnNumber?.trim() && !!isbnError && <p className="text-xs text-destructive">{isbnError}</p>}
+      {!value.isbnNumber?.trim() && !isIsbnRequired(value.type) && (
+        <p className="text-xs text-muted-foreground">Optional.</p>
+      )}
+    </div>
+  );
 
   const hasResearchDomainAndSdg = value.type !== "TEXT_BOOK";
   const hasCollaborationFields = value.type !== "TEXT_BOOK";
@@ -533,10 +597,7 @@ export function PublicationDetailsForm({
             <Label>Organized By <span className="text-destructive">*</span></Label>
             <Input value={value.organizedBy ?? ""} onChange={(e) => set("organizedBy", e.target.value)} />
           </div>
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label>ISBN Number <span className="text-destructive">*</span></Label>
-            <Input type="number" value={value.isbnNumber ?? ""} onChange={(e) => set("isbnNumber", e.target.value)} />
-          </div>
+          <div className="sm:col-span-2">{isbnField}</div>
         </div>
       )}
 
@@ -546,10 +607,7 @@ export function PublicationDetailsForm({
             <Label>Name of the Book <span className="text-destructive">*</span></Label>
             <Input value={value.bookName ?? ""} onChange={(e) => set("bookName", e.target.value)} />
           </div>
-          <div className="space-y-1.5">
-            <Label>ISBN Number <span className="text-destructive">*</span></Label>
-            <Input type="number" value={value.isbnNumber ?? ""} onChange={(e) => set("isbnNumber", e.target.value)} />
-          </div>
+          {isbnField}
           <div className="space-y-1.5 sm:col-span-2">
             <Label>Is this extension of Conference?</Label>
             <YesNoToggle value={value.isExtensionOfConference} onChange={(v) => set("isExtensionOfConference", v)} />
@@ -557,12 +615,7 @@ export function PublicationDetailsForm({
         </div>
       )}
 
-      {value.type === "TEXT_BOOK" && (
-        <div className="space-y-1.5">
-          <Label>ISBN Number</Label>
-          <Input type="number" value={value.isbnNumber ?? ""} onChange={(e) => set("isbnNumber", e.target.value)} />
-        </div>
-      )}
+      {value.type === "TEXT_BOOK" && isbnField}
 
       <div className="space-y-1.5">
         <Label>Name of the Publisher {value.type !== "TEXT_BOOK" && <span className="text-destructive">*</span>}</Label>
