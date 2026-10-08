@@ -60,7 +60,11 @@ describe("sectionParityGap", () => {
     const gap = sectionParityGap(sections, "AIDS", "c1", 1, 2);
     expect(gap.missing).toEqual(["BSM-AIDS-A", "BSM-AIDS-B", "BSM-AIDS-C"]);
     expect(gap.extra).toEqual(["AIDS-A", "AIDS-B"]);
-    expect(describeSectionParityGap(gap, 1, 2)).toContain("add Section BSM-AIDS-A, BSM-AIDS-B, BSM-AIDS-C to Year 2");
+    const text = describeSectionParityGap(gap, 1, 2);
+    expect(text).toContain("Section BSM-AIDS-A, BSM-AIDS-B, BSM-AIDS-C has no Year 2 section of the same name");
+    expect(text).toContain("Section AIDS-A, AIDS-B exists only in Year 2");
+    // It is a note, not a refusal - nothing in it tells anyone to stop.
+    expect(text).toContain("Each student still goes to the target picked below");
   });
 
   it("is empty when both years carry the same names", () => {

@@ -34,11 +34,19 @@ export function sectionParityGap(
   };
 }
 
+/**
+ * Says what differs between the two years. This is a NOTE, not a refusal:
+ * promotion does not depend on the names lining up, because every student
+ * carries an explicit target section (the default target, a per-student pick,
+ * or an allotment file). Sections are routinely named for the year they are in
+ * - a first year named after the department that teaches it, a renamed branch -
+ * and that is not a reason to stop a cohort moving up.
+ */
 export function describeSectionParityGap(gap: SectionParityGap, sourceYear: number, targetYear: number): string {
   const parts: string[] = [];
-  if (gap.missing.length) parts.push(`add Section ${gap.missing.join(", ")} to Year ${targetYear}`);
-  if (gap.extra.length) parts.push(`remove Section ${gap.extra.join(", ")} from Year ${targetYear} (or add it to Year ${sourceYear})`);
-  return `Year ${sourceYear} and Year ${targetYear} sections don't match - ${parts.join(" and ")} before promoting.`;
+  if (gap.missing.length) parts.push(`Section ${gap.missing.join(", ")} has no Year ${targetYear} section of the same name`);
+  if (gap.extra.length) parts.push(`Section ${gap.extra.join(", ")} exists only in Year ${targetYear}`);
+  return `Year ${sourceYear} and Year ${targetYear} section names differ - ${parts.join("; ")}. Each student still goes to the target picked below.`;
 }
 
 /**
