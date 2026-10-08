@@ -2,6 +2,7 @@ import type { Department, DayOfWeek, PeriodTiming, TeachingAssignment, Timetable
 import { DAY_LABELS } from "@/types";
 import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
 import { resolveLogoUrl } from "./logoAsset";
+import { facultySpans } from "./facultySpans";
 
 // Shared by hod/teaching and panel/teaching's own "Download"/"Print" buttons -
 // both pages lay a faculty member's own slots out identically and, until this
@@ -62,6 +63,8 @@ export interface FacultyTimetablePdfOptions {
   slots: (TimetableSlot & { id: string })[];
   assignmentById: Map<string, TeachingAssignment>;
   periodTimeFor: (courseId: string | undefined, year: number | undefined, period: number) => PeriodTiming | undefined;
+  /** Periods a lunch/short break follows, for a slot's own course-year - same as the on-screen grid, a merged cell is cut there. */
+  breakAfter: (slot: TimetableSlot) => Set<number>;
   /** courseId -> Course.code (Course Catalog's short code) - falls back to the full courseName when a course isn't found (e.g. a legacy assignment). */
   courseCodeById: Map<string, string>;
   departments: Department[];
@@ -73,7 +76,7 @@ export interface FacultyTimetablePdfOptions {
 }
 
 export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): string {
-  const { facultyName, departmentName, semesterLabel, weekStart, weekEnd, days, periods, slots, assignmentById, periodTimeFor, courseCodeById, departments, formatDMY, title } = opts;
+  const { facultyName, departmentName, semesterLabel, weekStart, weekEnd, days, periods, slots, assignmentById, periodTimeFor, breakAfter, courseCodeById, departments, formatDMY, title } = opts;
 
   // ── Letterhead ────────────────────────────────────────────────────────────
   const identityLines = [opts.college?.affiliation, opts.college?.address, opts.college?.phone ? `Tel : ${opts.college.phone}` : ""]
@@ -85,7 +88,11 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
     : "";
   const resolvedLogo = resolveLogoUrl(opts.college?.logoUrl);
 
-  const uniqueAssignments = Array.from(assignmentById.values());
+  // Scoped to what the grid actually shows: `assignmentById` is whatever the
+  // caller holds (can include non-teaching load already dropped from `slots`
+  // upstream), so the summary follows the slots, not the whole map.
+  const workloadAssignmentIds = new Set(slots.map((s) => s.assignmentId));
+  const uniqueAssignments = Array.from(assignmentById.values()).filter((a) => workloadAssignmentIds.has(a.id));
   const resolvedDept = departmentName || Array.from(new Set(uniqueAssignments.map((a) => a.department).filter(Boolean))).join(", ");
 
   const headerHtml = `
@@ -112,29 +119,38 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
   </table>`;
 
   // ── Grid: Day rows x Period columns ─────────────────────────────────────
-  // Each period column's header time only prints when every cell placed in
-  // that period (across every day shown) agrees on the clock time - a
-  // faculty's periods can come from different course-years with different
-  // timings, so a column has no single "true" time otherwise.
-  const headerCells = periods.map((period) => {
-    const colTimes = new Set(
-      days
-        .flatMap((d) => slots.filter((s) => s.day === d && s.periodNumber === period))
-        .map((s) => periodTimeFor(s.courseId, s.year, period))
-        .filter((t): t is PeriodTiming => !!t)
-        .map((t) => `${t.startTime}-${t.endTime}`)
-    );
-    const timeHtml = colTimes.size === 1
-      ? (() => {
-          const [start, end] = [...colTimes][0].split("-");
-          return `<div class="col-time">${escapeHtml(formatTime12h(start))}</div><div class="col-time">${escapeHtml(formatTime12h(end))}</div>`;
-        })()
-      : "";
-    return `<th class="cell"><div class="fx"><div class="head-label">Period ${period}</div>${timeHtml}</div></th>`;
-  }).join("");
+  // The header just names the period - a faculty's periods can come from
+  // different course-years with different timings, so there's no single
+  // "true" time for a whole column. Each occupied cell prints its OWN clock
+  // time instead (resolved from its own slot's course/year), same as the
+  // on-screen Teaching Load grid.
+  const headerCells = periods
+    .map((period) => `<th class="cell"><div class="fx"><div class="head-label">Period ${period}</div></div></th>`)
+    .join("");
+
+  const DAY_MM = 24;
+  const periodMm = periods.length > 0 ? (190 - DAY_MM) / periods.length : 20;
+  // A code sized to its cell's actual width (merged cells get the combined
+  // width of every period they span) so "NSS/SPORTS" fits on one line
+  // instead of wrapping mid-word - same formula sectionTimetablePdf.ts uses.
+  const UPPERCASE_EM_MM = 0.65 * 0.3528;
+  const codeFontSize = (code: string, widthMm: number) =>
+    Math.max(6, Math.min(8, (widthMm * 0.92) / (Math.max(1, code.length) * UPPERCASE_EM_MM)));
 
   const bodyRows = days.map((day) => {
-    const cells = periods.map((period) => {
+    // Cells merged in the class timetable editor (a lab spanning several
+    // consecutive periods) print as one wide cell here too, same rule as the
+    // on-screen Teaching Load grid (facultySpans) - a merge never crosses a
+    // lunch/short break, and only continues while each period is flagged
+    // `mergeWithNext`.
+    const { spans, skipped } = facultySpans(
+      periods,
+      (p) => slots.filter((s) => s.day === day && s.periodNumber === p),
+      breakAfter
+    );
+    const cells = periods.map((period, pi) => {
+      if (skipped.has(pi)) return "";
+      const span = spans.get(pi) ?? 1;
       const cellSlots = slots.filter((s) => s.day === day && s.periodNumber === period);
       if (cellSlots.length === 0) {
         return `<td class="cell"><div class="fx"><span class="empty-dash">${EN_DASH}</span></div></td>`;
@@ -148,23 +164,25 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
         const subline = [courseCode ?? assignment?.courseName, assignment?.year ? romanYear(assignment.year) : null, sectionLabel]
           .filter(Boolean)
           .join(" · ");
-        const subjectDisplay = readable(assignment?.shortCode, assignment?.subjectName) || readable(assignment?.subjectCode, assignment?.subjectName) || slot.subjectName;
+        const subjectDisplay = readable(assignment?.shortCode, assignment?.subjectName) || readable(assignment?.subjectCode, assignment?.subjectName) || slot.subjectName || "—";
         const room = slot.classroom ? `Room: ${slot.classroom}` : null;
         const sub = slot.substituteFacultyName ? `Sub: ${slot.substituteFacultyName}` : null;
+        const time = periodTimeFor(slot.courseId, slot.year, period);
+        const lastTime = span > 1 ? periodTimeFor(slot.courseId, slot.year, periods[pi + span - 1]) : undefined;
+        const timeLine = time ? `<div class="slot-time">${escapeHtml(formatTime12h(time.startTime))}&ndash;${escapeHtml(formatTime12h((lastTime ?? time).endTime))}</div>` : "";
+        const codePt = codeFontSize(subjectDisplay, periodMm * span);
         return `<div class="slot"${i > 0 ? ' style="border-top:1px dashed #999;margin-top:3px;padding-top:3px;"' : ""}>
+          ${timeLine}
           ${subline ? `<div class="slot-class">${escapeHtml(subline)}</div>` : ""}
-          <div class="slot-code">${escapeHtml(subjectDisplay || "—")}</div>
+          <div class="slot-code" style="font-size:${codePt.toFixed(1)}pt;white-space:nowrap;">${escapeHtml(subjectDisplay)}</div>
           ${room ? `<div class="slot-note">${escapeHtml(room)}</div>` : ""}
           ${sub ? `<div class="slot-note">${escapeHtml(sub)}</div>` : ""}
         </div>`;
       }).join("");
-      return `<td class="cell"><div class="fx">${inner}</div></td>`;
+      return `<td class="cell"${span > 1 ? ` colspan="${span}"` : ""}><div class="fx">${inner}</div></td>`;
     }).join("");
     return `<tr><th class="cell day-cell"><div class="fx fx-left">${escapeHtml(DAY_LABELS[day] ?? day)}</div></th>${cells}</tr>`;
   }).join("");
-
-  const DAY_MM = 24;
-  const periodMm = periods.length > 0 ? (190 - DAY_MM) / periods.length : 20;
 
   const gridHtml = `
   <table class="grid" cellspacing="0" cellpadding="0">
@@ -241,7 +259,6 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
     th.cell { font-weight: 700; font-size: 8.5pt; background: #fff; }
     th.cell > .fx { min-height: 30px; }
     .head-label { font-size: 8.5pt; font-weight: 700; }
-    .col-time { font-size: 7pt; font-weight: 400; white-space: nowrap; }
 
     .col-day { width: 24mm; }
     th.day-cell { font-weight: 700; font-size: 8.5pt; }
@@ -249,6 +266,7 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
 
     .empty-dash { color: #999; font-weight: 700; font-size: 10pt; }
     .slot { text-align: center; }
+    .slot-time { font-size: 6.5pt; font-weight: 600; color: #333; white-space: nowrap; line-height: 1.2; }
     .slot-class { font-size: 6.5pt; font-weight: 700; text-transform: uppercase; color: #333; overflow-wrap: anywhere; line-height: 1.2; }
     .slot-code { font-size: 8pt; font-weight: 800; margin-top: 1px; overflow-wrap: anywhere; line-height: 1.2; }
     .slot-note { font-size: 6.5pt; color: #333; margin-top: 1px; overflow-wrap: anywhere; line-height: 1.2; }
