@@ -9,6 +9,7 @@ import { isVisibleToRnD, notifyReviewer, resolveSubmissionRoute, routeFields } f
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import { resolveOwnerDesignation } from "@/lib/publications/resolveOwnerDesignation";
 import { finalizePublicationDetails, deriveFlatFields } from "@/lib/publications/deriveFlatFields";
+import { checkIsbnForSave } from "@/lib/publications/isbnGuard";
 import type { PublicationDetails, PublicationStatus, UserRole } from "@/types";
 
 // Every college-scoped staff role - any of them can read their own
@@ -143,6 +144,11 @@ export async function POST(request: Request) {
 
     if (!uid || !title || (!details && (!journalOrConference || !publicationYear))) {
       return NextResponse.json({ error: "uid, title, journalOrConference and publicationYear are required" }, { status: 400 });
+    }
+
+    if (details) {
+      const isbnError = await checkIsbnForSave(db, session.collegeId, details.type, details.isbnNumber);
+      if (isbnError) return NextResponse.json({ error: isbnError }, { status: 400 });
     }
 
     const ownerSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(uid).get();

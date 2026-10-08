@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { checkIsbn, isIsbnRequired } from "@/lib/publications/isbn";
 import type {
   PublicationDetails, PublicationType, PublicationAuthor, PublicationIndex, PublicationQuartile,
   AuthorCategory, AuthorRoleType,
@@ -146,14 +147,16 @@ export function formatIssn(raw: string): string {
 export function isPublicationDetailsValid(details: PublicationDetails): boolean {
   if (details.title.trim().length < 2) return false;
   if (!details.citeAs?.trim()) return false;
-  if (details.type === "TEXT_BOOK") return true;
+  if (details.type === "TEXT_BOOK") return !checkIsbn(details.type, details.isbnNumber);
   if (!details.sdgGoals || details.sdgGoals.length === 0) return false;
   if (!details.indexedIn || details.indexedIn.length === 0) return false;
   if (details.hasInternationalCollaboration === undefined || details.hasIndustryCollaboration === undefined) return false;
   // Present AND well-formed - a half-typed "1234-56" is as unusable to
   // whoever verifies this record as an empty box.
   if (details.type === "JOURNAL" && !ISSN_REGEX.test(details.issnNumber?.trim() ?? "")) return false;
-  if ((details.type === "CONFERENCE" || details.type === "BOOK_CHAPTER") && !details.isbnNumber?.trim()) return false;
+  // Optional for these two - some proceedings have no ISBN, and a chapter's is
+  // the parent book's - but checked properly when one is given.
+  if (checkIsbn(details.type, details.isbnNumber)) return false;
   // Scopus/WoS Link and Published Paper Link are compulsory for every type
   // except Text Book (which has its own separate "Provide link of the Book"
   // field instead - see providedBookLink).
@@ -484,6 +487,29 @@ export function PublicationDetailsForm({
     set("authors", [...value.authors, emptyAuthor()]);
   }
 
+  // One ISBN field wherever an ISBN belongs. It was three `type="number"`
+  // inputs, which could not accept the hyphens an ISBN is written with and
+  // would drop the leading zero off an ISBN-10 like 0-306-40615-2 - the same
+  // trap the ISSN field above already documents. Whatever grouping is typed is
+  // kept as typed; only the checksum decides.
+  const isbnError = checkIsbn(value.type, value.isbnNumber);
+  const isbnField = (
+    <div className="space-y-1.5">
+      <Label>ISBN Number {isIsbnRequired(value.type) && <span className="text-destructive">*</span>}</Label>
+      <Input
+        value={value.isbnNumber ?? ""}
+        onChange={(e) => set("isbnNumber", e.target.value)}
+        placeholder="978-0-306-40615-7"
+        inputMode="numeric"
+        aria-invalid={!!value.isbnNumber?.trim() && !!isbnError}
+      />
+      {!!value.isbnNumber?.trim() && !!isbnError && <p className="text-xs text-destructive">{isbnError}</p>}
+      {!value.isbnNumber?.trim() && !isIsbnRequired(value.type) && (
+        <p className="text-xs text-muted-foreground">Optional{value.type === "BOOK_CHAPTER" ? " - the ISBN of the book this chapter is in" : ""}.</p>
+      )}
+    </div>
+  );
+
   const hasResearchDomainAndSdg = value.type !== "TEXT_BOOK";
   const hasCollaborationFields = value.type !== "TEXT_BOOK";
   const indexOptions = INDEX_OPTIONS_BY_TYPE[value.type];
@@ -571,10 +597,7 @@ export function PublicationDetailsForm({
             <Label>Organized By <span className="text-destructive">*</span></Label>
             <Input value={value.organizedBy ?? ""} onChange={(e) => set("organizedBy", e.target.value)} />
           </div>
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label>ISBN Number <span className="text-destructive">*</span></Label>
-            <Input type="number" value={value.isbnNumber ?? ""} onChange={(e) => set("isbnNumber", e.target.value)} />
-          </div>
+          <div className="sm:col-span-2">{isbnField}</div>
         </div>
       )}
 
@@ -584,10 +607,7 @@ export function PublicationDetailsForm({
             <Label>Name of the Book <span className="text-destructive">*</span></Label>
             <Input value={value.bookName ?? ""} onChange={(e) => set("bookName", e.target.value)} />
           </div>
-          <div className="space-y-1.5">
-            <Label>ISBN Number <span className="text-destructive">*</span></Label>
-            <Input type="number" value={value.isbnNumber ?? ""} onChange={(e) => set("isbnNumber", e.target.value)} />
-          </div>
+          {isbnField}
           <div className="space-y-1.5 sm:col-span-2">
             <Label>Is this extension of Conference?</Label>
             <YesNoToggle value={value.isExtensionOfConference} onChange={(v) => set("isExtensionOfConference", v)} />
@@ -595,12 +615,7 @@ export function PublicationDetailsForm({
         </div>
       )}
 
-      {value.type === "TEXT_BOOK" && (
-        <div className="space-y-1.5">
-          <Label>ISBN Number</Label>
-          <Input type="number" value={value.isbnNumber ?? ""} onChange={(e) => set("isbnNumber", e.target.value)} />
-        </div>
-      )}
+      {value.type === "TEXT_BOOK" && isbnField}
 
       <div className="space-y-1.5">
         <Label>Name of the Publisher {value.type !== "TEXT_BOOK" && <span className="text-destructive">*</span>}</Label>
