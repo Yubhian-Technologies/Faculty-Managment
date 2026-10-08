@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,20 +12,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { buildCourseGroups } from "@/lib/departments/hodScope";
-import { regulationsForBatchStartYear } from "@/lib/college/academicStructure";
-import { currentAcademicStartYear, admissionStartYearForCourseYear, deriveBatch, sectionBatchIntakeYears, parseBatchStartYear } from "@/lib/college/academicSession";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
-import type { Course, CourseCatalogItem, Department, Section, Subject, TeachingAssignment } from "@/types";
+import type { Course, Department, Section, StudentRecord } from "@/types";
 
 type SectionRow = Section & { id: string };
-// `id` is the facultyMembers doc id — used for teachingAssignments.facultyId
-// (per-subject "Subjects & Faculty" assignment below), which is keyed off
-// the facultyMembers doc, not the login uid. `userUid` is the faculty
-// member's actual Firebase Auth uid (set once HOD creates their login via
-// "Set Login") — used only for Section.facultyInchargeUid, which sections
-// queries match directly against session.uid.
+// `id` is the facultyMembers doc id. `userUid` is the faculty member's actual
+// Firebase Auth uid (set once HOD creates their login via "Set Login") — used
+// only for Section.facultyInchargeUid, which sections queries match directly
+// against session.uid.
 type FacultyOption = { id: string; name: string; designation: string; department?: string; accessLevel?: "primary" | "secondary"; userUid?: string };
-type SubjectRow = Subject & { id: string };
 
 function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
@@ -47,9 +42,17 @@ const EMPTY_FORM: SectionForm = {
   courseId: "", name: "", year: "", batch: "", regulation: "", classroomNumber: "", facultyInchargeUid: "", facultyInchargeName: "",
 };
 
+type ClassDetails = Pick<SectionForm, "facultyInchargeUid" | "facultyInchargeName" | "classroomNumber">;
+const EMPTY_CLASS_DETAILS: ClassDetails = { facultyInchargeUid: "", facultyInchargeName: "", classroomNumber: "" };
+
 type ClassLeaderUser = { uid: string; name: string; email: string };
-type NewClassLeaderForm = { email: string; password: string };
-const EMPTY_NEW_CLASS_LEADER: NewClassLeaderForm = { email: "", password: "" };
+type NewClassLeaderForm = { email: string; password: string; name?: string };
+const EMPTY_NEW_CLASS_LEADER: NewClassLeaderForm = { email: "", password: "", name: "" };
+
+// A value shown as plain text, in the same box shape as the inputs around it.
+function ReadOnlyValue({ children }: { children: React.ReactNode }) {
+  return <p className="flex min-h-11 items-center rounded-md border bg-muted/30 px-3 py-2 text-sm">{children}</p>;
+}
 
 export default function EditSectionPage() {
   const router = useRouter();
@@ -63,12 +66,17 @@ export default function EditSectionPage() {
   const [facultyList, setFacultyList] = useState<FacultyOption[]>([]);
   const [form, setForm] = useState<SectionForm>(EMPTY_FORM);
   const [sectionName, setSectionName] = useState("");
+  const [sectionCourseName, setSectionCourseName] = useState("");
   const [enrolledCount, setEnrolledCount] = useState(0);
   // Owning department name + the section's current target branch (if any), so
   // a shared-first-year section (e.g. Basic Science → CSE) can be re-pointed.
   const [ownerDept, setOwnerDept] = useState("");
   const [branch, setBranch] = useState("");
-  const [catalogItems, setCatalogItems] = useState<CourseCatalogItem[]>([]);
+
+  // Class incharge and room are shown as plain text until "Edit" is pressed; "Cancel"
+  // puts back what the section had when the page loaded.
+  const [editingClassDetails, setEditingClassDetails] = useState(false);
+  const [savedClassDetails, setSavedClassDetails] = useState<ClassDetails>(EMPTY_CLASS_DETAILS);
 
   // Class Leader (CR) login - bound to this section via Section.classLeaderUid.
   const [classLeaderUid, setClassLeaderUid] = useState<string | undefined>(undefined);
@@ -82,65 +90,10 @@ export default function EditSectionPage() {
   const [removeClassLeaderOpen, setRemoveClassLeaderOpen] = useState(false);
   const [removingClassLeader, setRemovingClassLeader] = useState(false);
 
-  // Subjects & faculty (per-subject teaching assignments for this section)
-  const [subjects, setSubjects] = useState<SubjectRow[]>([]);
-  const [subjectsLoading, setSubjectsLoading] = useState(false);
-  const [originalFaculty, setOriginalFaculty] = useState<Record<string, string>>({}); // subjectId -> facultyId
-  const [stagedFaculty, setStagedFaculty] = useState<Record<string, string>>({});
-  const assignmentIdBySubject = useRef<Record<string, string>>({});
-
-  // Scoped to this section's own regulation (when set) AND narrowed down to
-  // only the subjects Academics has actually mapped into this section's own
-  // department+year via Assign to Semester (subject-semester-assignments) -
-  // the plain /api/college/subjects list otherwise returns every master
-  // subject ever created for this course+year+regulation, most of which no
-  // department has been assigned to teach yet. `departmentId` empty (this
-  // section's own department hasn't resolved from the `departments` fetch
-  // yet - see the effect below) leaves the list unfiltered rather than
-  // empty; the effect re-fires and narrows it down the moment it resolves.
-  const loadSubjects = useCallback((courseId: string, year: string, regulation: string, departmentId: string, catalogId?: string) => {
-    if (!courseId || !year) { setSubjects([]); return; }
-    setSubjectsLoading(true);
-    const regParam = regulation ? `&regulation=${encodeURIComponent(regulation)}` : "";
-    // catalogId when available, not courseId alone - a master subject is
-    // department-independent (see /api/college/subjects GET's own
-    // doc-comment), physically filed under whichever ONE department's
-    // Course doc created it, which can differ from this section's own
-    // courseId. Without this, a subject legitimately assigned to this
-    // department (assignedIds below, correctly scoped) could be silently
-    // dropped by the join below because `master` never contained it.
-    Promise.all([
-      fetch(catalogId
-        ? `/api/college/subjects?catalogId=${encodeURIComponent(catalogId)}${regParam}`
-        : `/api/college/subjects?courseId=${courseId}&year=${year}${regParam}`)
-        .then((r) => r.json() as Promise<{ subjects?: SubjectRow[] }>),
-      departmentId
-        ? fetch(`/api/college/subject-semester-assignments?courseId=${encodeURIComponent(courseId)}&departmentId=${encodeURIComponent(departmentId)}&year=${encodeURIComponent(year)}`)
-            .then((r) => r.json() as Promise<{ assignments?: { subjectId: string }[] }>)
-        : Promise.resolve({ assignments: [] as { subjectId: string }[] }),
-    ])
-      .then(([subjectsData, assignData]) => {
-        const master = subjectsData.subjects ?? [];
-        if (!departmentId) { setSubjects(master); return; }
-        const assignedIds = new Set(assignData.assignments?.map((a) => a.subjectId));
-        setSubjects(master.filter((s) => assignedIds.has(s.id)));
-      })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load subjects" }))
-      .finally(() => setSubjectsLoading(false));
-  }, []);
-
-  // Single reactive trigger for loadSubjects, replacing 4 separate imperative
-  // call sites (initial load, course/batch/regulation changes) that each had
-  // to remember to pass a resolved departmentId - `ownerDept` and
-  // `departments` resolve from two independent fetches, so any call made
-  // before both landed would fall back to the unfiltered list until this
-  // effect re-fires with the real departmentId anyway.
-  useEffect(() => {
-    if (!form.courseId || !form.year) { setSubjects([]); return; }
-    const departmentId = departments.find((d) => d.name === ownerDept)?.id ?? "";
-    const catalogId = courses.find((c) => c.id === form.courseId)?.catalogId;
-    loadSubjects(form.courseId, form.year, form.regulation, departmentId, catalogId);
-  }, [form.courseId, form.year, form.regulation, ownerDept, departments, courses, loadSubjects]);
+  // Section Students for CR selection
+  const [sectionStudents, setSectionStudents] = useState<StudentRecord[]>([]);
+  const [selectedStudentId, setSelectedStudentId] = useState<string>("none");
+  const [studentsLoading, setStudentsLoading] = useState(false);
 
   useEffect(() => {
     fetch("/api/college/faculty?availableOnly=true")
@@ -152,17 +105,10 @@ export default function EditSectionPage() {
       })
       .catch(() => { /* non-critical */ });
 
-    // Departments carry each department's configured branches
-    // (secondaryDepartments) - needed to offer the branch picker below.
     fetch("/api/college/departments")
       .then((r) => r.json() as Promise<{ departments: Department[] }>)
       .then((d) => setDepartments(d.departments ?? []))
-      .catch(() => { /* non-critical - falls back to no branch picker */ });
-
-    fetch("/api/college/course-catalog")
-      .then((r) => r.json() as Promise<{ items: CourseCatalogItem[] }>)
-      .then((d) => setCatalogItems(d.items ?? []))
-      .catch(() => { /* non-critical - regulation picker just stays empty */ });
+      .catch(() => { /* non-critical */ });
 
     fetch("/api/college/sections")
       .then((r) => r.json() as Promise<{ sections: SectionRow[] }>)
@@ -174,11 +120,12 @@ export default function EditSectionPage() {
           return;
         }
         setSectionName(s.name);
+        setSectionCourseName(s.courseName ?? "");
         setEnrolledCount(s.studentCount ?? 0);
         setOwnerDept(s.department ?? "");
         setBranch(s.secondaryDepartments?.[0] ?? "");
         setClassLeaderUid(s.classLeaderUid);
-        setForm({
+        const loaded: SectionForm = {
           courseId: s.courseId ?? "",
           name: s.name,
           year: String(s.year),
@@ -187,37 +134,42 @@ export default function EditSectionPage() {
           classroomNumber: s.classroomNumber ?? "",
           facultyInchargeUid: s.facultyInchargeUid ?? "",
           facultyInchargeName: s.facultyInchargeName ?? "",
+        };
+        setForm(loaded);
+        setSavedClassDetails({
+          facultyInchargeUid: loaded.facultyInchargeUid,
+          facultyInchargeName: loaded.facultyInchargeName,
+          classroomNumber: loaded.classroomNumber,
         });
-        // Subjects load via the reactive effect below (needs `departments`
-        // too, which resolves from a separate, parallel fetch).
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load section" }))
       .finally(() => setLoading(false));
+  }, [sectionId, router]);
 
-    fetch(`/api/college/teaching-assignments?sectionId=${sectionId}`)
-      .then((r) => r.json() as Promise<{ assignments?: (TeachingAssignment & { id: string })[] }>)
+  // Fetch section students for CR selection dropdown
+  useEffect(() => {
+    if (!sectionName || !form.year) return;
+    setStudentsLoading(true);
+    fetch(`/api/college/students?section=${encodeURIComponent(sectionName)}&year=${encodeURIComponent(form.year)}`)
+      .then((r) => r.json() as Promise<{ students?: StudentRecord[] }>)
       .then((d) => {
-        const faculty: Record<string, string> = {};
-        const ids: Record<string, string> = {};
-        (d.assignments ?? []).forEach((a) => {
-          faculty[a.subjectId] = a.facultyId;
-          ids[a.subjectId] = a.id;
-        });
-        assignmentIdBySubject.current = ids;
-        setOriginalFaculty(faculty);
-        setStagedFaculty(faculty);
+        const list = d.students ?? [];
+        const filtered = list.filter(
+          (s) =>
+            s.section === sectionName ||
+            s.department === ownerDept ||
+            s.secondaryDepartment === ownerDept ||
+            (branch && (s.department === branch || s.secondaryDepartment === branch))
+        );
+        const finalStudents = (filtered.length > 0 ? filtered : list).sort((a, b) =>
+          (a.name ?? "").localeCompare(b.name ?? "")
+        );
+        setSectionStudents(finalStudents);
       })
-      .catch(() => { /* non-critical */ });
-  }, [sectionId, router, loadSubjects]);
+      .catch(() => {})
+      .finally(() => setStudentsLoading(false));
+  }, [sectionName, form.year, ownerDept, branch]);
 
-  // Courses are scoped to this section's own (owning) department, same as the
-  // Add Section form's `?departmentId=` fetch - without this, the Course
-  // dropdown listed every course in the whole college (e.g. an unrelated
-  // department's Master of Technology showing up while editing a Civil
-  // Engineering section), not just what this department actually offers.
-  // Depends on `departments` too since the department name -> id lookup needs
-  // it, and both `ownerDept` and `departments` resolve asynchronously from
-  // separate fetches above.
   useEffect(() => {
     if (!ownerDept) return;
     const deptId = departments.find((d) => d.name === ownerDept)?.id;
@@ -241,14 +193,27 @@ export default function EditSectionPage() {
     }
   }, []);
 
-  // classLeaderUser is already null both times classLeaderUid can be falsy
-  // here - initial state, and right after handleRemoveClassLeader (which
-  // nulls it itself) - so there's nothing to sync in that case, only a fetch
-  // to kick off when it's set.
   useEffect(() => {
     if (!classLeaderUid) return;
     void (async () => { await loadClassLeaderUser(classLeaderUid); })();
   }, [classLeaderUid, loadClassLeaderUser]);
+
+  function handleStudentSelect(studentId: string) {
+    setSelectedStudentId(studentId);
+    if (studentId === "none") {
+      setNewClassLeader(EMPTY_NEW_CLASS_LEADER);
+      return;
+    }
+    const st = sectionStudents.find((s) => s.id === studentId);
+    if (st) {
+      const defaultEmail = st.email || (st.rollNumber ? `${st.rollNumber.toLowerCase()}@student.college` : "");
+      setNewClassLeader((c) => ({
+        ...c,
+        email: defaultEmail,
+        name: st.name,
+      }));
+    }
+  }
 
   async function handleCreateClassLeader(e: React.FormEvent) {
     e.preventDefault();
@@ -270,6 +235,7 @@ export default function EditSectionPage() {
           password: newClassLeader.password,
           role: "CLASS_LEADER",
           sectionId,
+          name: newClassLeader.name?.trim() || undefined,
         }),
       });
       const json = await res.json() as { uid?: string; error?: string };
@@ -279,6 +245,7 @@ export default function EditSectionPage() {
       }
       toast({ variant: "success", title: "Class Leader account created" });
       setNewClassLeader(EMPTY_NEW_CLASS_LEADER);
+      setSelectedStudentId("none");
       setClassLeaderUid(json.uid);
     } catch {
       toast({ variant: "destructive", title: "Network error, please try again" });
@@ -344,52 +311,6 @@ export default function EditSectionPage() {
     setForm((f) => ({ ...f, ...patch }));
   }
 
-  function handleSubjectFacultyChange(subjectId: string, facultyId: string) {
-    setStagedFaculty((s) => {
-      const next = { ...s };
-      if (facultyId) next[subjectId] = facultyId; else delete next[subjectId];
-      return next;
-    });
-  }
-
-  async function syncSubjectFaculty(): Promise<string[]> {
-    const errors: string[] = [];
-    for (const subj of subjects) {
-      const before = originalFaculty[subj.id] ?? "";
-      const after = stagedFaculty[subj.id] ?? "";
-      if (before === after) continue;
-
-      const assignmentId = assignmentIdBySubject.current[subj.id];
-      try {
-        if (assignmentId) {
-          await fetch(`/api/college/teaching-assignments/${assignmentId}`, { method: "DELETE" });
-        }
-        if (after) {
-          const fac = facultyList.find((f) => f.id === after);
-          const res = await fetch("/api/college/teaching-assignments", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              facultyId: after,
-              facultyName: fac?.name ?? "",
-              courseId: form.courseId,
-              sectionId,
-              subjectId: subj.id,
-              hoursPerWeek: subj.hoursPerWeek,
-            }),
-          });
-          if (!res.ok) {
-            const j = (await res.json().catch(() => ({}))) as { error?: string };
-            errors.push(`${subj.name}: ${j.error ?? "failed to assign faculty"}`);
-          }
-        }
-      } catch {
-        errors.push(`${subj.name}: network error while saving faculty`);
-      }
-    }
-    return errors;
-  }
-
   function handleFacultySelect(userUid: string) {
     if (!userUid) {
       setF({ facultyInchargeUid: "", facultyInchargeName: "" });
@@ -403,86 +324,22 @@ export default function EditSectionPage() {
     setF({ facultyInchargeUid: userUid, facultyInchargeName: f.name });
   }
 
-  const formCourse = useMemo(() => courses.find((c) => c.id === form.courseId) ?? null, [courses, form.courseId]);
-
-  // Candidate intake years for the Batch picker (same derivation as the New
-  // Section page), centered on this fixed year-slot's admission year for the
-  // real current academic year - plus, whenever this section's ALREADY-SAVED
-  // batch doesn't match any derivable candidate (older free-typed data, or a
-  // batch that's simply aged out of the window), that saved value is kept in
-  // the list too, so opening Edit on a legacy section never silently
-  // blanks/discards it. Anchored on currentAcademicStartYear rather than the
-  // stored session pin (currentSessionStart), which can be years stale.
-  const batchOptions = useMemo(() => {
-    if (!formCourse || !form.year) return form.batch ? [form.batch] : [];
-    const center = admissionStartYearForCourseYear(currentAcademicStartYear(), Number(form.year));
-    const derived = sectionBatchIntakeYears(center).map((y) => deriveBatch(y, formCourse.durationYears));
-    return form.batch && !derived.includes(form.batch) ? [form.batch, ...derived] : derived;
-  }, [formCourse, form.year, form.batch]);
-
-  // This course's own regulations, resolved directly from the SELECTED
-  // batch's own admission year - not from "current session as of now" - so
-  // picking a different Batch (an HOD deliberately choosing an off-cycle
-  // admission year, or correcting a transition-year section - see
-  // Section.regulation's own doc-comment) immediately re-narrows Regulation
-  // to whatever actually covers THAT batch, instead of staying stuck on
-  // whatever the previous batch resolved to. Same resolution the Add Section
-  // form and Academics' Add Subject page use. Also called directly (not just via
-  // the memo below) from the Batch picker's onValueChange, to decide whether
-  // the currently-picked regulation survives the change.
-  const regulationsForBatch = useCallback((batchValue: string): string[] => {
-    if (!formCourse?.catalogId || !batchValue) return form.regulation ? [form.regulation] : [];
-    const batchStart = parseBatchStartYear(batchValue);
-    if (batchStart == null) return form.regulation ? [form.regulation] : [];
-    const catalogItem = catalogItems.find((c) => c.id === formCourse.catalogId);
-    return regulationsForBatchStartYear(catalogItem?.regulationBatches ?? {}, batchStart, catalogItem?.regulations);
-  }, [formCourse, catalogItems, form.regulation]);
-  const regulationOptions = useMemo(() => regulationsForBatch(form.batch), [regulationsForBatch, form.batch]);
-  // A section's already-saved regulation can disagree in CASE with the
-  // catalog's own canonical code (e.g. a legacy write of "r23" against the
-  // catalog's "R23" - see sections/[id]/route.ts PATCH's own case-insensitive
-  // match/self-heal) - resolve that here too, so the Select shows the
-  // existing selection instead of rendering blank as if nothing were set.
-  const regulationSelectValue = useMemo(
-    () => regulationOptions.find((r) => r.toLowerCase() === form.regulation.toLowerCase()) ?? form.regulation,
-    [regulationOptions, form.regulation]
-  );
-
-  // Collapse the several Course docs that represent one catalog programme into
-  // a single dropdown choice - `courses` legitimately holds one row per related
-  // department, so without this the Course dropdown lists "Bachelor of
-  // Technology" once per department instead of once.
-  const courseGroups = useMemo(() => buildCourseGroups(courses), [courses]);
-  const selectedCourseGroupKey = useMemo(
-    () => courseGroups.find((g) => g.courseIds.includes(form.courseId))?.key ?? "",
-    [courseGroups, form.courseId]
-  );
-  function selectCourseGroup(groupKey: string) {
-    const group = courseGroups.find((g) => g.key === groupKey);
-    // Year is fixed (see the read-only Year field below) - a course change
-    // never resets it, only revalidates subjects against the (unchanged) year;
-    // the server rejects a course whose own span or teaching-years no longer
-    // fit that fixed year.
-    if (!group) { setF({ courseId: "", regulation: "" }); setSubjects([]); return; }
-    // Prefer the course doc owned by this section's own department, so the
-    // stored courseId doesn't drift to a feeder department's row.
-    const ownerDeptId = departments.find((d) => d.name === ownerDept)?.id;
-    const own = group.courseIds.find((id) => courses.find((c) => c.id === id)?.departmentId === ownerDeptId);
-    const newCourseId = own ?? group.courseIds[0];
-    // A different course may not offer the previously-picked regulation for
-    // this (fixed) year - clear it and let the HOD re-pick. Subjects
-    // reload via the reactive effect above once form.courseId changes.
-    setF({ courseId: newCourseId, regulation: "" });
+  function cancelClassDetailsEdit() {
+    setF(savedClassDetails);
+    setEditingClassDetails(false);
   }
 
-  // Branch mode: this section's owning department cross-lists to one or more
-  // branches (a shared-first-year department). Offer them so the section's
-  // target branch can be changed. Unchanged for standalone departments.
+  const formCourse = useMemo(() => courses.find((c) => c.id === form.courseId) ?? null, [courses, form.courseId]);
+  const courseGroups = useMemo(() => buildCourseGroups(courses), [courses]);
+  const courseName = useMemo(
+    () => courseGroups.find((g) => g.courseIds.includes(form.courseId))?.name || formCourse?.name || sectionCourseName,
+    [courseGroups, form.courseId, formCourse, sectionCourseName]
+  );
+
   const branchOptions = useMemo(() => {
     const dept = departments.find((d) => d.name === ownerDept);
     if (!dept) return [];
     if (dept.secondaryDepartments?.length) return dept.secondaryDepartments;
-    // A sub-department inherits its parent's configured branches.
     if (dept.parentDepartmentId) {
       return departments.find((d) => d.id === dept.parentDepartmentId)?.secondaryDepartments ?? [];
     }
@@ -492,10 +349,7 @@ export default function EditSectionPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.courseId) { toast({ variant: "destructive", title: "Course is required" }); return; }
     if (!form.name.trim()) { toast({ variant: "destructive", title: "Section name is required" }); return; }
-    if (!form.year) { toast({ variant: "destructive", title: "Year is required" }); return; }
-    if (!form.batch.trim()) { toast({ variant: "destructive", title: "Batch is required (e.g. 2023-2027)" }); return; }
 
     setSaving(true);
     try {
@@ -503,18 +357,10 @@ export default function EditSectionPage() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          courseId: form.courseId,
           name: form.name,
-          // Year is deliberately not sent - it's fixed once the section is
-          // created (see the read-only Year field below); the server also
-          // rejects an HOD attempting to change it directly regardless.
-          batch: form.batch,
-          regulation: form.regulation || null,
           classroomNumber: form.classroomNumber.trim() || null,
           facultyInchargeUid: form.facultyInchargeUid || null,
           facultyInchargeName: form.facultyInchargeName,
-          // Only sent for a shared-first-year department; re-points the section
-          // to a branch (its students' promotion target).
           ...(isBranchMode && branch ? { secondaryDepartment: branch } : {}),
         }),
       });
@@ -524,16 +370,7 @@ export default function EditSectionPage() {
         return;
       }
 
-      const facultyErrors = await syncSubjectFaculty();
-      if (facultyErrors.length) {
-        toast({
-          variant: "destructive",
-          title: "Section saved, but some faculty assignments failed",
-          description: facultyErrors.join("; "),
-        });
-      } else {
-        toast({ variant: "success", title: "Section updated" });
-      }
+      toast({ variant: "success", title: "Section updated" });
       router.push("/hod/sections");
     } catch {
       toast({ variant: "destructive", title: "Network error, please try again" });
@@ -544,258 +381,229 @@ export default function EditSectionPage() {
 
   if (loading) {
     return (
-      <div className="max-w-xl">
+      <div className="max-w-6xl">
         <PageHeader title="Edit Section" description="Loading…" />
       </div>
     );
   }
 
   return (
-    <div className="max-w-xl">
+    <div className="max-w-6xl">
       <PageHeader
         title={`Edit Section ${sectionName}`}
         description="Update this section's details"
       />
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Section Details</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="space-y-2">
-              <Label>Course *</Label>
-              <Select value={selectedCourseGroupKey} onValueChange={selectCourseGroup}>
-                <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>
-                <SelectContent>
-                  {courseGroups.map((g) => <SelectItem key={g.key} value={g.key}>{g.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
+          {/* Left Column: Section Details */}
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Section Details</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Course</Label>
+                    <ReadOnlyValue>{courseName || "—"}</ReadOnlyValue>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Year</Label>
+                    <ReadOnlyValue>{form.year ? ordinalYear(Number(form.year)) : "—"}</ReadOnlyValue>
+                    <p className="text-xs text-muted-foreground">
+                      Fixed once created - moving a cohort to the next year is a promotion, not an edit here.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Batch</Label>
+                    <ReadOnlyValue>{form.batch || "—"}</ReadOnlyValue>
+                    <p className="text-xs text-muted-foreground">Admission year to passout year.</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Regulation</Label>
+                    <ReadOnlyValue>{form.regulation || "None assigned"}</ReadOnlyValue>
+                    <p className="text-xs text-muted-foreground">The curriculum this batch follows.</p>
+                  </div>
+                </div>
 
-            {isBranchMode && (
-              <div className="space-y-2">
-                <Label>Core Department *</Label>
-                <Select value={branch} onValueChange={setBranch}>
-                  <SelectTrigger><SelectValue placeholder="Select core department" /></SelectTrigger>
-                  <SelectContent>
-                    {branchOptions.map((b) => (
-                      <SelectItem key={b} value={b}>{b}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Students in this section are promoted into this core department next year.
-                </p>
-              </div>
-            )}
+                {isBranchMode && (
+                  <div className="space-y-2">
+                    <Label>Core Department *</Label>
+                    <Select value={branch} onValueChange={setBranch}>
+                      <SelectTrigger><SelectValue placeholder="Select core department" /></SelectTrigger>
+                      <SelectContent>
+                        {branchOptions.map((b) => (
+                          <SelectItem key={b} value={b}>{b}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Students in this section are promoted into this core department next year.
+                    </p>
+                  </div>
+                )}
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Section Name *</Label>
-                <Input
-                  value={form.name}
-                  onChange={(e) => setF({ name: e.target.value.toUpperCase() })}
-                  placeholder="A, B, C…"
-                  maxLength={10}
-                  className="uppercase"
-                />
-                <p className="text-xs text-muted-foreground">{isBranchMode ? "e.g. CSE-A" : "e.g. A, B, C or CS-A"}</p>
-              </div>
-              <div className="space-y-2">
-                <Label>Year</Label>
-                <Input value={form.year ? ordinalYear(Number(form.year)) : ""} disabled readOnly />
-                <p className="text-xs text-muted-foreground">
-                  Fixed once created - moving a cohort to the next year is a promotion, not an edit here.
-                </p>
-              </div>
-            </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Section Name *</Label>
+                    <Input
+                      value={form.name}
+                      onChange={(e) => setF({ name: e.target.value.toUpperCase() })}
+                      placeholder="A, B, C…"
+                      maxLength={10}
+                      className="uppercase"
+                    />
+                    <p className="text-xs text-muted-foreground">{isBranchMode ? "e.g. CSE-A" : "e.g. A, B, C or CS-A"}</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Enrolled Students</Label>
+                    <ReadOnlyValue>
+                      <span><strong>{enrolledCount}</strong> student{enrolledCount !== 1 ? "s" : ""} currently enrolled</span>
+                    </ReadOnlyValue>
+                  </div>
+                </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Batch *</Label>
-                <Select
-                  value={form.batch}
-                  onValueChange={(v) => {
-                    // Keep the current regulation only if it still covers the
-                    // newly-picked batch - otherwise it's stale (belonged to
-                    // the previous batch) and must be re-picked.
-                    const stillValid = regulationsForBatch(v).some((r) => r.toLowerCase() === form.regulation.toLowerCase());
-                    const nextRegulation = stillValid ? form.regulation : "";
-                    setF({ batch: v, regulation: nextRegulation });
-                  }}
-                >
-                  <SelectTrigger><SelectValue placeholder="Select batch" /></SelectTrigger>
-                  <SelectContent>
-                    {batchOptions.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">Admission year to passout year, derived from this course&apos;s duration</p>
-              </div>
-              <div className="space-y-2">
-                <Label>Regulation</Label>
-                <Select
-                  value={regulationSelectValue}
-                  onValueChange={(v) => setF({ regulation: v })}
-                  disabled={!form.batch || regulationOptions.length === 0}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={regulationOptions.length ? "Select regulation" : "None assigned for this batch"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {regulationOptions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Which curriculum the batch currently in this class follows. Update this when a new batch moves in.
-                </p>
-              </div>
-            </div>
+                <div className="space-y-3 border-t pt-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium">Class Details</p>
+                    {editingClassDetails ? (
+                      <Button type="button" variant="ghost" size="sm" onClick={cancelClassDetailsEdit}>Cancel</Button>
+                    ) : (
+                      <Button type="button" variant="outline" size="sm" onClick={() => setEditingClassDetails(true)}>Edit</Button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Faculty Incharge</Label>
+                      {editingClassDetails ? (
+                        <>
+                          <Select
+                            value={form.facultyInchargeUid || "none"}
+                            onValueChange={(v) => handleFacultySelect(v === "none" ? "" : v)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select faculty incharge" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">- Not assigned -</SelectItem>
+                              {facultyList.map((f) => (
+                                <SelectItem key={f.id} value={f.userUid || f.id} disabled={!f.userUid}>
+                                  {f.name}{f.accessLevel === "secondary" ? ` (${f.department})` : ""}{!f.userUid ? " (no login yet)" : ""}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {facultyList.length === 0 && (
+                            <p className="text-xs text-muted-foreground">No active faculty found in your department.</p>
+                          )}
+                        </>
+                      ) : (
+                        <ReadOnlyValue>{form.facultyInchargeName || "Not assigned"}</ReadOnlyValue>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Classroom Number</Label>
+                      {editingClassDetails ? (
+                        <Input
+                          value={form.classroomNumber}
+                          maxLength={40}
+                          placeholder="e.g. B-204"
+                          onChange={(e) => setF({ classroomNumber: e.target.value })}
+                        />
+                      ) : (
+                        <ReadOnlyValue>{form.classroomNumber || "Not set"}</ReadOnlyValue>
+                      )}
+                    </div>
+                  </div>
+                  {editingClassDetails && (
+                    <p className="text-xs text-muted-foreground">Changes apply when you press Save Changes.</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
-            <div className="space-y-2">
-              <Label>Classroom Number</Label>
-              <Input
-                value={form.classroomNumber}
-                maxLength={40}
-                placeholder="e.g. B-204"
-                onChange={(e) => setF({ classroomNumber: e.target.value })}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Enrolled Students</Label>
-              <p className="text-sm rounded-md border px-3 py-2 text-muted-foreground">
-                <strong className="text-foreground">{enrolledCount}</strong> student{enrolledCount !== 1 ? "s" : ""} currently enrolled
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Faculty Incharge</Label>
-              <Select
-                value={form.facultyInchargeUid || "none"}
-                onValueChange={(v) => handleFacultySelect(v === "none" ? "" : v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select faculty incharge" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">- Not assigned -</SelectItem>
-                  {facultyList.map((f) => (
-                    <SelectItem key={f.id} value={f.userUid || f.id} disabled={!f.userUid}>
-                      {f.name}{f.accessLevel === "secondary" ? ` (${f.department})` : ""}{!f.userUid ? " (no login yet)" : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {facultyList.length === 0 && (
-                <p className="text-xs text-muted-foreground">No active faculty found in your department.</p>
-              )}
-            </div>
-
-            <div className="space-y-3 pt-4 border-t">
-              <Label>Subjects & Faculty</Label>
-              {!form.courseId || !form.year ? (
-                <p className="text-xs text-muted-foreground">Select a course and year to assign faculty per subject.</p>
-              ) : subjectsLoading ? (
-                <p className="text-xs text-muted-foreground">Loading subjects…</p>
-              ) : subjects.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  No subjects assigned to your department for {formCourse?.name} · {ordinalYear(Number(form.year))} yet - use Assign to Semester first.
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {subjects.map((subj) => (
-                    <div key={subj.id} className="flex items-center gap-3 rounded-md border p-2">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{subj.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {subj.code} · {subj.hoursPerWeek} hrs/week{subj.regulation ? ` · ${subj.regulation}` : ""}
-                        </p>
-                      </div>
-                      <Select
-                        value={stagedFaculty[subj.id] || "none"}
-                        onValueChange={(v) => handleSubjectFacultyChange(subj.id, v === "none" ? "" : v)}
-                      >
-                        <SelectTrigger className="w-48">
-                          <SelectValue placeholder="Assign faculty" />
+          {/* Right Column: Class Leader Login */}
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Class Leader Login</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {classLeaderLoading ? (
+                  <div className="h-16 animate-pulse rounded-md border bg-muted/30" />
+                ) : classLeaderUser ? (
+                  <div className="space-y-4">
+                    <div className="rounded-md border px-3 py-2">
+                      <p className="text-sm font-medium">{classLeaderUser.name}</p>
+                      <p className="text-xs text-muted-foreground">{classLeaderUser.email}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="button" variant="outline" size="sm" onClick={() => setResetPasswordOpen(true)}>
+                        Reset Password
+                      </Button>
+                      <Button type="button" variant="destructive" size="sm" onClick={() => setRemoveClassLeaderOpen(true)}>
+                        Remove
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <p className="text-xs text-muted-foreground">
+                      No Class Leader (CR) login yet for this section. Select a student from this section to create their account.
+                    </p>
+                    <div className="space-y-2">
+                      <Label>Select Student (CR)</Label>
+                      <Select value={selectedStudentId} onValueChange={handleStudentSelect}>
+                        <SelectTrigger>
+                          <SelectValue placeholder={studentsLoading ? "Loading section students…" : "Select student"} />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="none">- Unassigned -</SelectItem>
-                          {facultyList.map((f) => (
-                            <SelectItem key={f.id} value={f.id}>
-                              {f.name}{f.accessLevel === "secondary" ? ` (${f.department})` : ""}
+                          <SelectItem value="none">- Select student -</SelectItem>
+                          {sectionStudents.map((st) => (
+                            <SelectItem key={st.id} value={st.id}>
+                              {st.name} {st.rollNumber ? `(${st.rollNumber})` : st.email ? `(${st.email})` : ""}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                    <div className="space-y-2">
+                      <Label>Email</Label>
+                      <Input
+                        type="email"
+                        autoComplete="off"
+                        value={newClassLeader.email}
+                        onChange={(e) => setNewClassLeader((c) => ({ ...c, email: e.target.value }))}
+                        placeholder="classleader@college.edu"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Temporary Password</Label>
+                      <Input
+                        type="password"
+                        autoComplete="new-password"
+                        value={newClassLeader.password}
+                        onChange={(e) => setNewClassLeader((c) => ({ ...c, password: e.target.value }))}
+                        placeholder="Min 6 characters"
+                      />
+                    </div>
+                    <Button type="button" size="sm" loading={creatingClassLeader} onClick={(e) => void handleCreateClassLeader(e)}>
+                      Create Class Leader
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
 
-            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
-              <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
-              <Button type="submit" loading={saving}>Save Changes</Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle className="text-base">Class Leader Login</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {classLeaderLoading ? (
-            <div className="h-16 rounded-md border bg-muted/30 animate-pulse" />
-          ) : classLeaderUser ? (
-            <div className="space-y-4">
-              <div className="rounded-md border px-3 py-2">
-                <p className="text-sm font-medium">{classLeaderUser.name}</p>
-                <p className="text-xs text-muted-foreground">{classLeaderUser.email}</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={() => setResetPasswordOpen(true)}>
-                  Reset Password
-                </Button>
-                <Button type="button" variant="destructive" size="sm" onClick={() => setRemoveClassLeaderOpen(true)}>
-                  Remove
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <form onSubmit={(e) => void handleCreateClassLeader(e)} className="space-y-4">
-              <p className="text-xs text-muted-foreground">
-                No Class Leader (CR) login yet for this section - create one below. Just an email and password -
-                the login isn&apos;t tied to a specific student&apos;s name, since who holds the role can change
-                per your college&apos;s rules.
-              </p>
-              <div className="space-y-2">
-                <Label>Email</Label>
-                <Input
-                  type="email"
-                  autoComplete="off"
-                  value={newClassLeader.email}
-                  onChange={(e) => setNewClassLeader((c) => ({ ...c, email: e.target.value }))}
-                  placeholder="classleader@college.edu"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Temporary Password</Label>
-                <Input
-                  type="password"
-                  autoComplete="new-password"
-                  value={newClassLeader.password}
-                  onChange={(e) => setNewClassLeader((c) => ({ ...c, password: e.target.value }))}
-                  placeholder="Min 6 characters"
-                />
-              </div>
-              <Button type="submit" size="sm" loading={creatingClassLeader}>Create Class Leader</Button>
-            </form>
-          )}
-        </CardContent>
-      </Card>
+        <div className="flex flex-col-reverse gap-3 border-t pt-4 sm:flex-row sm:justify-end">
+          <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
+          <Button type="submit" loading={saving}>Save Changes</Button>
+        </div>
+      </form>
 
       <Dialog open={resetPasswordOpen} onOpenChange={setResetPasswordOpen}>
         <DialogContent>

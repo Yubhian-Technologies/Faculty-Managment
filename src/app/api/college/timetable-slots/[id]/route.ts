@@ -5,6 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
+import { hasOpenDraftToday, OPEN_DRAFT_DELETE_MESSAGE } from "@/lib/studentAttendance/openDraft";
 
 export async function DELETE(
   _request: Request,
@@ -35,6 +36,12 @@ export async function DELETE(
       if (!ok) {
         return NextResponse.json({ error: "You are not the Timetable Incharge for this course & year" }, { status: 403 });
       }
+    }
+
+    // A faculty member with this exact period open today would be left unable to save it.
+    const slotKey = snap.data() as { assignmentId?: string; periodNumber?: number };
+    if (slotKey.assignmentId && await hasOpenDraftToday(db, session.collegeId, slotKey.assignmentId, slotKey.periodNumber)) {
+      return NextResponse.json({ error: OPEN_DRAFT_DELETE_MESSAGE }, { status: 409 });
     }
 
     await ref.delete();

@@ -89,6 +89,21 @@ export async function GET(request: Request) {
       return !!pt && pt.startTime < to && pt.endTime > from;
     });
 
+    // Non-teaching subjects (Counselling, Library, ... - "Don't include in teaching load" or
+    // type NON_TEACHING) are not classes being taught, so they are left out of the list.
+    const subjectIds = Array.from(new Set(inSession.map((s) => s.subjectId).filter(Boolean)));
+    const subjectSnaps = subjectIds.length > 0
+      ? await db.getAll(...subjectIds.map((id) => collegeRef.collection("subjects").doc(id)))
+      : [];
+    const nonTeachingSubjectIds = new Set(
+      subjectSnaps
+        .filter((d) => {
+          const sub = d.data() as { isNonTeachingLoad?: boolean; type?: string } | undefined;
+          return !!sub && (sub.isNonTeachingLoad === true || sub.type === "NON_TEACHING");
+        })
+        .map((d) => d.id),
+    );
+
     const sectionIds = Array.from(new Set(inSession.map((s) => s.sectionId).filter(Boolean)));
     const sectionSnaps = sectionIds.length > 0
       ? await db.getAll(...sectionIds.map((id) => collegeRef.collection("sections").doc(id)))
@@ -135,6 +150,7 @@ export async function GET(request: Request) {
     type Row = { classroom: string; year: number; department: string; sectionName: string; classLabel: string; subject: string; faculty: string[] };
     const rowsByKey = new Map<string, Row>();
     for (const s of inSession) {
+      if (nonTeachingSubjectIds.has(s.subjectId)) continue;
       const sec = sectionById.get(s.sectionId);
       if (!sec) continue;
       const dept = (sec.department ?? "").trim();

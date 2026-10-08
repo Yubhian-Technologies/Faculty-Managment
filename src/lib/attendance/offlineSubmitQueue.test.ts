@@ -51,6 +51,44 @@ describe("offlineSubmitQueue", () => {
     expect(queue[0].classNotes).toBe("Edited before reconnecting");
   });
 
+  describe("trySyncQueue", () => {
+    const respond = (status: number) => vi.stubGlobal("fetch", vi.fn(async () => ({ ok: status < 400, status, json: async () => ({ error: "x" }) })));
+
+    it.each([500, 503, 429, 408, 401])("keeps the marks queued on a transient %i", async (status) => {
+      const { enqueueSubmission, getQueue, trySyncQueue } = await import("./offlineSubmitQueue");
+      enqueueSubmission(baseItem);
+      respond(status);
+      const out = await trySyncQueue();
+      expect(out).toEqual([{ sessionId: baseItem.sessionId, result: "retry", status }]);
+      expect(getQueue()).toHaveLength(1);
+    });
+
+    it("stops the sweep at the first transient failure and leaves the rest queued", async () => {
+      const { enqueueSubmission, getQueue, trySyncQueue } = await import("./offlineSubmitQueue");
+      enqueueSubmission(baseItem);
+      enqueueSubmission({ ...baseItem, sessionId: "assign1_2026-09-25_2", periodNumber: 2 });
+      respond(503);
+      await trySyncQueue();
+      expect(getQueue()).toHaveLength(2);
+    });
+
+    it("removes the item on success", async () => {
+      const { enqueueSubmission, getQueue, trySyncQueue } = await import("./offlineSubmitQueue");
+      enqueueSubmission(baseItem);
+      respond(200);
+      expect((await trySyncQueue())[0].result).toBe("synced");
+      expect(getQueue()).toHaveLength(0);
+    });
+
+    it.each([[409, "conflict"], [403, "rejected"], [400, "rejected"]])("still removes a terminal %i (%s)", async (status, result) => {
+      const { enqueueSubmission, getQueue, trySyncQueue } = await import("./offlineSubmitQueue");
+      enqueueSubmission(baseItem);
+      respond(status);
+      expect((await trySyncQueue())[0].result).toBe(result);
+      expect(getQueue()).toHaveLength(0);
+    });
+  });
+
   it("keeps queued submissions for different sessions independent", async () => {
     const { enqueueSubmission, getQueue } = await import("./offlineSubmitQueue");
     enqueueSubmission(baseItem);

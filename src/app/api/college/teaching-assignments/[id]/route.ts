@@ -6,6 +6,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { deleteAssignmentWithSlots } from "@/lib/teaching/deleteAssignment";
+import { hasOpenDraftToday, OPEN_DRAFT_DELETE_MESSAGE } from "@/lib/studentAttendance/openDraft";
 import { getHodDepartmentScope, canHodManageAssignment } from "@/lib/departments/scope";
 import type { Department } from "@/types";
 import type { DepartmentYearRow } from "@/lib/departments/managedBranches";
@@ -112,6 +113,11 @@ export async function DELETE(
       if (!(await assertHodOwnsAssignment(db, session.collegeId, session.uid, assignmentData))) {
         return NextResponse.json({ error: "You can only remove assignments in your own department, its sub-departments, a year your department manages, or one of your own faculty's assignments elsewhere" }, { status: 403 });
       }
+    }
+
+    // A faculty member with a period of this assignment open today would be left unable to save it.
+    if (await hasOpenDraftToday(db, session.collegeId, id)) {
+      return NextResponse.json({ error: OPEN_DRAFT_DELETE_MESSAGE }, { status: 409 });
     }
 
     const removed = await deleteAssignmentWithSlots(db, session.collegeId, id, session.uid);
