@@ -11,8 +11,9 @@ import { loadTimingLookup } from "@/lib/timetable/facultyOverlap";
 import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
 import { normalizeHHMM, dayOfWeekFromISODate } from "@/lib/timetable/leisureQuery";
 import { facultyActiveOn, loadLabWindows } from "@/lib/students/labFacultyWindow";
+import { sectionMatchesDepartmentFilter } from "@/lib/departments/hodScope";
 import { DEFAULT_TIMETABLE_RULES } from "@/types";
-import type { CourseYearTiming, PeriodTiming, Section, TimetableRules, TimetableSlot } from "@/types";
+import type { CourseYearTiming, Department, PeriodTiming, Section, TimetableRules, TimetableSlot } from "@/types";
 
 // "Teaching at this time": every class in session RIGHT NOW (IST) - or in a
 // date + clock window when the caller sends one - college-wide - which room, which year / department / section, which subject
@@ -88,6 +89,21 @@ export async function GET(request: Request) {
       return !!pt && pt.startTime < to && pt.endTime > from;
     });
 
+    // Non-teaching subjects (Counselling, Library, ... - "Don't include in teaching load" or
+    // type NON_TEACHING) are not classes being taught, so they are left out of the list.
+    const subjectIds = Array.from(new Set(inSession.map((s) => s.subjectId).filter(Boolean)));
+    const subjectSnaps = subjectIds.length > 0
+      ? await db.getAll(...subjectIds.map((id) => collegeRef.collection("subjects").doc(id)))
+      : [];
+    const nonTeachingSubjectIds = new Set(
+      subjectSnaps
+        .filter((d) => {
+          const sub = d.data() as { isNonTeachingLoad?: boolean; type?: string } | undefined;
+          return !!sub && (sub.isNonTeachingLoad === true || sub.type === "NON_TEACHING");
+        })
+        .map((d) => d.id),
+    );
+
     const sectionIds = Array.from(new Set(inSession.map((s) => s.sectionId).filter(Boolean)));
     const sectionSnaps = sectionIds.length > 0
       ? await db.getAll(...sectionIds.map((id) => collegeRef.collection("sections").doc(id)))
@@ -113,6 +129,22 @@ export async function GET(request: Request) {
       }
     }
 
+    // A section is filed under its real branch for every year, so a department
+    // that only runs a branch's shared first year (Basic Science - Maths running
+    // CSE's year 1) owns no section by name. For those, the year-aware owner rule
+    // the Sections tab uses decides - ADDED to the name match above, never
+    // replacing it, so nothing that matched before drops out.
+    const catalogIdByCourseId = new Map<string, string | undefined>();
+    let deptDocs: Department[] = [];
+    if (departmentFilter) {
+      deptDocs = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) }) as Department);
+      const courseIds = Array.from(new Set(Array.from(sectionById.values()).map((s) => s.courseId).filter(Boolean)));
+      if (courseIds.length > 0) {
+        const courseSnaps = await db.getAll(...courseIds.map((id) => collegeRef.collection("courses").doc(id)));
+        for (const c of courseSnaps) if (c.exists) catalogIdByCourseId.set(c.id, (c.data() as { catalogId?: string }).catalogId);
+      }
+    }
+
     // One row per class + subject + room; co-teachers and lab batches of the
     // same class fold into it with their names joined.
     const codeByDeptName = new Map(deptsSnap.docs.map((d) => {
@@ -129,10 +161,14 @@ export async function GET(request: Request) {
     type Row = { classroom: string; year: number; yearLabel: string; deptSection: string; department: string; sectionName: string; classLabel: string; subject: string; faculty: string[] };
     const rowsByKey = new Map<string, Row>();
     for (const s of inSession) {
+      if (nonTeachingSubjectIds.has(s.subjectId)) continue;
       const sec = sectionById.get(s.sectionId);
       if (!sec) continue;
       const dept = (sec.department ?? "").trim();
-      if (departmentScope && !departmentScope.has(dept)) continue;
+      if (
+        departmentScope && !departmentScope.has(dept) &&
+        !sectionMatchesDepartmentFilter(deptDocs, departmentFilter, dept, Number(sec.year), catalogIdByCourseId.get(sec.courseId))
+      ) continue;
       const classroom = (s.classroom ?? "").trim() || (sec.classroomNumber ?? "").trim();
       const key = `${s.sectionId}|${s.subjectId}|${classroom}`;
       const row = rowsByKey.get(key) ?? {

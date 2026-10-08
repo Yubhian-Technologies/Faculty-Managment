@@ -29,6 +29,7 @@ type EditForm = {
   name: string;
   code: string;
   shortCode: string;
+  altShortCode: string;
   serialNumber: string;
   category: string;
   customCategory: string;
@@ -249,9 +250,11 @@ export default function SubjectsPage() {
           excludeFromTeachingLoad: addForm.excludeFromTeachingLoad,
         }),
       });
-      const sbody = await sres.json() as { id?: string; subject?: { id: string }; error?: string };
-      const subjectId = sbody.id ?? sbody.subject?.id;
-      if (!sres.ok || !subjectId) { setAddError(sbody.error ?? "Failed to add the subject."); return; }
+      const sbody = await sres.json() as { id?: string; subject?: { id: string }; error?: string; existingSubjectId?: string; existingSubjectName?: string };
+      // Same code + name already exists for this course (e.g. added under another department):
+      // reuse it and just list it under this department, instead of refusing.
+      const subjectId = sbody.id ?? sbody.subject?.id ?? (sres.status === 409 ? sbody.existingSubjectId : undefined);
+      if (!subjectId || (!sres.ok && sres.status !== 409)) { setAddError(sbody.error ?? "Failed to add the subject."); return; }
 
       const ares = await fetch("/api/college/subject-semester-assignments", {
         method: "POST",
@@ -278,6 +281,7 @@ export default function SubjectsPage() {
         handleLoad();
         return;
       }
+      if (!sres.ok) toast({ title: `Used the existing subject "${sbody.existingSubjectName ?? addForm.code}" (same code)` });
       toast({ variant: "success", title: addForm.alsoDeptIds.length > 0 ? `Subject added to ${addForm.alsoDeptIds.length + 1} departments` : "Subject added" });
       setAddForm(null);
       handleLoad();
@@ -297,6 +301,7 @@ export default function SubjectsPage() {
       name: a.subjectName ?? item.master.name ?? "",
       code: a.subjectCode ?? item.master.code ?? "",
       shortCode: a.shortCode ?? item.master.shortCode ?? "",
+      altShortCode: a.altShortCode ?? item.master.altShortCode ?? "",
       serialNumber: a.serialNumber != null ? String(a.serialNumber) : "",
       category: a.category ?? item.master.category ?? "",
       customCategory: a.customCategory ?? "",
@@ -324,6 +329,7 @@ export default function SubjectsPage() {
         name: editForm.name.trim(),
         code: editForm.code.trim(),
         shortCode: editForm.shortCode.trim(),
+        altShortCode: editForm.altShortCode.trim(),
         type: editForm.type,
         totalHoursPerSemester: totalSem,
         excludeFromTeachingLoad: editForm.excludeFromTeachingLoad,
@@ -351,6 +357,7 @@ export default function SubjectsPage() {
             subjectName: master.name,
             subjectCode: master.code,
             shortCode: master.shortCode,
+            altShortCode: master.altShortCode,
             type: master.type,
             totalHoursPerSemester: master.totalHoursPerSemester,
             ...(master.serialNumber != null ? { serialNumber: master.serialNumber } : {}),
@@ -759,6 +766,14 @@ export default function SubjectsPage() {
                 <div className="space-y-1.5">
                   <Label>Short Code</Label>
                   <Input value={editForm.shortCode} onChange={(e) => setEditForm({ ...editForm, shortCode: e.target.value })} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Second Short Code (optional)</Label>
+                  <Input
+                    value={editForm.altShortCode}
+                    placeholder="Asked when placing in the timetable"
+                    onChange={(e) => setEditForm({ ...editForm, altShortCode: e.target.value })}
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label>S.No.</Label>

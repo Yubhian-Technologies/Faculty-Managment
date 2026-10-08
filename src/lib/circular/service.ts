@@ -4,7 +4,7 @@
 
 import type { Firestore } from "firebase-admin/firestore";
 import type { Circular, CircularAudience, EmployeeScope } from "@/types/circular";
-import { notify } from "@/lib/notify";
+import { batchNotify } from "@/lib/notify";
 import { sendMail } from "@/lib/email/mailer";
 
 function circularsCol(db: Firestore, collegeId: string) {
@@ -151,6 +151,7 @@ async function notifyCircularAudience(db: Firestore, collegeId: string, circular
   const title = circular.subject;
   const message = `${circular.messageFrom}: ${circular.subject}`;
 
+  const recipientUids: string[] = [];
   for (const doc of snap.docs) {
     const u = doc.data() as { role?: string; department?: string };
     const role = u.role as string | undefined;
@@ -164,8 +165,10 @@ async function notifyCircularAudience(db: Firestore, collegeId: string, circular
       const inDept = deptIds.includes(dept ?? "") || (circular.audience.departmentNames ?? []).includes(dept ?? "");
       if (!inDept) continue;
     }
-    await notify(db, collegeId, doc.id, "CIRCULAR_PUBLISHED", title, message, link);
+    recipientUids.push(doc.id);
   }
+
+  await batchNotify(db, collegeId, recipientUids, "CIRCULAR_PUBLISHED", title, message, link);
 }
 
 // Students have no login/notification box (see CircularAudience's own

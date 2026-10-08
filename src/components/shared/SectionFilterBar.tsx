@@ -6,6 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/hooks/useToast";
 import { ordinalYear } from "@/lib/timetable/gridModel";
 import { offeredYears } from "@/lib/college/departmentYears";
+import { resolveBranchYearOwner } from "@/lib/departments/managedBranches";
+import { isContainerDepartment } from "@/lib/departments/departmentTree";
 import type { Course, Department, SectionListItem } from "@/types";
 
 // Department -> Course -> Year -> Section as four cascading filters on ONE
@@ -68,12 +70,44 @@ export function SectionFilterBar({
   const courseKey = (s: SectionListItem) => s.courseName || s.courseId || "";
   const only = <T,>(options: T[], picked: T | ""): T | "" => (picked !== "" ? picked : options.length === 1 ? options[0] : "");
 
-  const departments = useMemo(
-    () => Array.from(new Set(sections.map((s) => s.department).filter(Boolean))).sort(),
-    [sections]
-  );
+  // A section is filed under its real branch for every year, but the department
+  // that RUNS it depends on the year: Basic Science - Maths runs CSE's first
+  // year, CSE's own HOD runs years 2-4. Grouping by that year-aware owner (the
+  // rule the Sections tab already uses) is what lets a manager reach the first
+  // year it runs - listing only the branch name offered it years 2-4 and the
+  // sections it could actually see sat in none of them. Without department
+  // documents the owner is simply the branch, exactly as before.
+  const catalogIdOfSection = (s: SectionListItem) => courseDocs.find((c) => c.id === s.courseId || c.mergedCourseIds?.includes(s.courseId)
+    || (!!s.courseName && c.name.toLowerCase() === s.courseName.toLowerCase()))?.catalogId;
+  const ownerOf = (s: SectionListItem): string =>
+    departmentDocs.length > 0
+      ? resolveBranchYearOwner(departmentDocs, s.department, Number(s.year), catalogIdOfSection(s))
+      : s.department;
+  const departments = useMemo(() => {
+    const owners = new Set(sections.map(ownerOf).filter(Boolean));
+    // A parent that organises its sub-departments and runs no section itself
+    // is offered too: picking it means "all of its sub-departments".
+    for (const name of Array.from(owners)) {
+      const doc = departmentDocs.find((d) => d.name === name);
+      const parent = doc?.parentDepartmentId ? departmentDocs.find((d) => d.id === doc.parentDepartmentId) : undefined;
+      if (parent?.name && !owners.has(parent.name) && isContainerDepartment(parent, departmentDocs)) owners.add(parent.name);
+    }
+    return Array.from(owners).sort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sections, departmentDocs, courseDocs]);
   const department = only(departments, pickedDepartment);
-  const inDepartment = useMemo(() => sections.filter((s) => s.department === department), [sections, department]);
+  const inDepartment = useMemo(() => {
+    const picked = departmentDocs.find((d) => d.name === department);
+    return sections.filter((s) => {
+      const owner = ownerOf(s);
+      if (owner === department) return true;
+      // Picked a parent: the sections run by any of its sub-departments.
+      const ownerDoc = departmentDocs.find((d) => d.name === owner);
+      return !!picked && !!ownerDoc?.parentDepartmentId && ownerDoc.parentDepartmentId === picked.id
+        && isContainerDepartment(picked, departmentDocs);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sections, department, departmentDocs, courseDocs]);
   const courses = useMemo(
     () => Array.from(new Set(inDepartment.map(courseKey).filter(Boolean))).sort(),
     [inDepartment]

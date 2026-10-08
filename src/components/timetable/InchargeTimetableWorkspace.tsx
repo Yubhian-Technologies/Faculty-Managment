@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { TimetableGridEditor } from "@/components/timetable/TimetableGridEditor";
 import { LabAttendanceAllocation, TimetableViewSwitch, type AllocAssignment, type TimetableView } from "@/components/timetable/LabAttendanceAllocation";
 import { toast } from "@/hooks/useToast";
-import { yearSemesterLabel } from "@/lib/academic/format";
+import { yearSemesterLabel, semesterInYearLabel } from "@/lib/academic/format";
 import { ordinalYear } from "@/lib/timetable/gridModel";
 import { findBranchManager } from "@/lib/departments/managedBranches";
 import type { CourseYearTiming, Department, Section, TimetableIncharge } from "@/types";
@@ -222,7 +222,7 @@ export function InchargeTimetableWorkspace({ basePath }: { basePath: string }) {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All semesters</SelectItem>
-                      {semesterOptions.map((n) => <SelectItem key={n} value={String(n)}>{yearSemesterLabel(n)}</SelectItem>)}
+                      {semesterOptions.map((n) => <SelectItem key={n} value={String(n)}>{semesterInYearLabel(semesterOptions, n, { format: "short" })}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>

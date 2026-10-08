@@ -21,8 +21,10 @@ const namesOf = (names: Iterable<string>) =>
   new Set([...names].map((n) => n.trim()).filter(Boolean));
 
 /** The departments a department manages that themselves hold sections. */
+type DepartmentRef = Pick<Department, "name"> & Partial<Pick<Department, "hasSubDepartments" | "managedDepartments">>;
+
 export function coreDepartmentsWithSections(
-  department: Department | undefined,
+  department: DepartmentRef | undefined,
   sectionDepartmentNames: Iterable<string>
 ): string[] {
   if (!department) return [];
@@ -44,7 +46,7 @@ export function coreDepartmentsWithSections(
  * run its own sections still qualifies on that basis.
  */
 export function departmentHasSections(
-  department: Department,
+  department: DepartmentRef,
   sectionDepartmentNames: Iterable<string>
 ): boolean {
   const have = namesOf(sectionDepartmentNames);

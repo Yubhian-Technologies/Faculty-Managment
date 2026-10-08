@@ -396,7 +396,7 @@ export default function TeachingLoadPage() {
                               
                               const nameKey = (subjectName || "").toUpperCase().trim();
                               const planned = assignment?.cellColor;
-                              const hl = isSubjectColor(planned) ? null : (assignment?.subjectType === "PRACTICAL" || Boolean(slot.labBatch) || /(lab|laboratory|practical)/i.test(subjectName)) ? HIGHLIGHT_COLORS.purple : null;
+                              const hl = isSubjectColor(planned) ? null : (assignment?.subjectType === "PRACTICAL" || Boolean(slot.labBatch) || /\b(lab|laboratory|practical)\b/i.test(subjectName)) ? HIGHLIGHT_COLORS.purple : null;
                               const isSubstitute = Boolean(slot.substituteFacultyName || slot.substituteForName);
 
                               return (

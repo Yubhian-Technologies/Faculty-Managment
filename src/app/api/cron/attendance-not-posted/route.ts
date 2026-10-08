@@ -28,18 +28,13 @@ function isAuthorized(request: Request): boolean {
 // systemJobs/attendance-not-posted for a staleness check.
 export async function POST(request: Request) {
   if (!isAuthorized(request)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  try {
-    const result = await runNotPostedSweep(getAdminDb(), new Date());
-    const body = {
-      collegesChecked: result.collegesChecked,
-      collegesSwept: result.collegesSwept,
-      facultyNotified: result.facultyNotified,
-      periodsNotified: result.periodsNotified,
-      ...(result.failed.length > 0 ? { failed: result.failed } : {}),
-    };
-    return NextResponse.json(body, { status: result.failed.length > 0 ? 500 : 200 });
-  } catch (err) {
-    console.error("[cron/attendance-not-posted]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
-  }
+  // Notifications are PAUSED for cost optimization.
+  return NextResponse.json({
+    status: "paused",
+    message: "Attendance not-posted sweep is paused for cost optimization.",
+    collegesChecked: 0,
+    collegesSwept: 0,
+    facultyNotified: 0,
+    periodsNotified: 0,
+  });
 }

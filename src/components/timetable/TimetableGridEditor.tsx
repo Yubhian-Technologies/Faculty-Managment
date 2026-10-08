@@ -138,7 +138,9 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
   const [addingAt, setAddingAt] = useState<{ day: DayOfWeek; period: number } | null>(null);
   // A subject with more than one faculty in this section was picked: ask whether they all go in
   // this cell together, or only the picked one (the others are added separately).
-  const [sharePrompt, setSharePrompt] = useState<{ picked: TeachingAssignment; others: TeachingAssignment[] } | null>(null);
+  const [sharePrompt, setSharePrompt] = useState<{ picked: TeachingAssignment; others: TeachingAssignment[]; code?: string } | null>(null);
+  // A subject with a second short code asks which one this period shows.
+  const [codePrompt, setCodePrompt] = useState<{ picked: TeachingAssignment; codes: string[] } | null>(null);
   // Faculty ids this HOD actually manages (own + managed branches + true
   // sub-departments - "primary" per /api/college/faculty, excluding a
   // feeder's view-only "secondary" pool) - used to scope "Update" to only
@@ -612,7 +614,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
    * already in the cell (another faculty of it); `allowSplit`: it joins a different lab.
    * Returns an error message, or null once placed.
    */
-  async function placeOne(assignment: TeachingAssignment, flags: { coTeach: boolean; allowSplit: boolean }): Promise<string | null> {
+  async function placeOne(assignment: TeachingAssignment, flags: { coTeach: boolean; allowSplit: boolean }, displayCode?: string): Promise<string | null> {
     if (!addingAt) return "No cell selected";
     const res = await fetch("/api/college/timetable/draft", {
       method: "PATCH",
@@ -626,6 +628,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
         toPeriod: addingAt.period,
         allowSplit: flags.allowSplit,
         ...(flags.coTeach ? { coTeach: true } : {}),
+        ...(displayCode ? { displayCode } : {}),
       }),
     });
     const json = (await res.json()) as { slots?: DraftSlot[]; error?: string; adjustedNote?: string | null };
@@ -642,27 +645,35 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
   }
 
   /** Picked a subject in the "Add a subject" list. A subject with other faculty in this section asks first. */
-  function handleAdd(assignment: TeachingAssignment) {
+  function handleAdd(assignment: TeachingAssignment, code?: string) {
     if (!addingAt) return;
+    // Two short codes on the subject: ask which one this period shows, then carry on.
+    const subj = subjects.find((s) => s.id === assignment.subjectId);
+    const alt = subj?.altShortCode?.trim();
+    if (!code && alt) {
+      const first = subj?.shortCode?.trim() || assignment.shortCode || readableCode(assignment.subjectCode, assignment.subjectName) || assignment.subjectName;
+      setCodePrompt({ picked: assignment, codes: [first, alt] });
+      return;
+    }
     const others = assignments.filter(
       (x) => x.id !== assignment.id && x.subjectId === assignment.subjectId && !x.isPast
         && myAssignmentIds.includes(x.id) && !occupyingAtTarget.has(x.id),
     );
     if (others.length > 0) {
-      setSharePrompt({ picked: assignment, others });
+      setSharePrompt({ picked: assignment, others, code });
       return;
     }
-    void placeAssignments([assignment]);
+    void placeAssignments([assignment], code);
   }
 
   /** Places the given faculty of one subject in the clicked cell, the first as the cell allows and the rest alongside it. */
-  async function placeAssignments(list: TeachingAssignment[]) {
+  async function placeAssignments(list: TeachingAssignment[], displayCode?: string) {
     if (!addingAt || list.length === 0) return;
     setBusy("move");
     try {
       for (let i = 0; i < list.length; i++) {
         const flags = i === 0 ? flagsForCell(list[i]) : { coTeach: true, allowSplit: false };
-        const problem = await placeOne(list[i], flags);
+        const problem = await placeOne(list[i], flags, displayCode);
         if (problem) {
           toast({
             variant: "destructive",
@@ -1401,7 +1412,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
                                 >
                                   <p className="text-xs font-bold leading-tight flex items-center gap-1 uppercase tracking-wide">
                                     {isLocked && <Lock className="h-3 w-3 shrink-0 text-muted-foreground" />}
-                                    {("subjectCode" in slot && readableCode(slot.subjectCode, slot.subjectName)) || ("shortCode" in slot && (slot as unknown as { shortCode?: string }).shortCode) || slot.subjectName}
+                                    {("displayCode" in slot && slot.displayCode) || ("subjectCode" in slot && readableCode(slot.subjectCode, slot.subjectName)) || ("shortCode" in slot && (slot as unknown as { shortCode?: string }).shortCode) || slot.subjectName}
                                   </p>
                                   {("subjectCode" in slot && readableCode(slot.subjectCode, slot.subjectName) && readableCode(slot.subjectCode, slot.subjectName) !== slot.subjectName) && (
                                     <p className="text-[10px] font-medium text-muted-foreground line-clamp-1 mt-0.5" title={slot.subjectName}>
@@ -1584,18 +1595,44 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
           <div className="flex flex-col gap-2">
             <Button
               loading={busy !== null}
-              onClick={() => sharePrompt && void placeAssignments([sharePrompt.picked, ...sharePrompt.others])}
+              onClick={() => sharePrompt && void placeAssignments([sharePrompt.picked, ...sharePrompt.others], sharePrompt.code)}
             >
               Place all {sharePrompt ? 1 + sharePrompt.others.length : ""} faculty here
             </Button>
             <Button
               variant="outline"
               disabled={busy !== null}
-              onClick={() => sharePrompt && void placeAssignments([sharePrompt.picked])}
+              onClick={() => sharePrompt && void placeAssignments([sharePrompt.picked], sharePrompt.code)}
             >
               Only {sharePrompt?.picked.facultyName} here - add the others separately
             </Button>
             <Button variant="ghost" disabled={busy !== null} onClick={() => setSharePrompt(null)}>Cancel</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={codePrompt !== null} onOpenChange={(o) => { if (!o) setCodePrompt(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Which short code?</DialogTitle>
+            <DialogDescription>
+              {codePrompt?.picked.subjectName} has two short codes. Pick the one this period should show.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-wrap gap-2">
+            {codePrompt?.codes.map((c) => (
+              <Button
+                key={c}
+                onClick={() => {
+                  const p = codePrompt.picked;
+                  setCodePrompt(null);
+                  handleAdd(p, c);
+                }}
+              >
+                {c}
+              </Button>
+            ))}
+            <Button variant="ghost" onClick={() => setCodePrompt(null)}>Cancel</Button>
           </div>
         </DialogContent>
       </Dialog>

@@ -3,6 +3,7 @@ import type { CourseYearTiming, DayOfWeek, TimetableSlot } from "@/types";
 import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
 import { loadEffectiveTiming, resolveCurrentSemester, matchesCurrentSemester } from "@/lib/college/semester";
 import { resolveSubstituteSlotsForDate } from "@/lib/leave/periodCoverage";
+import { istDateFromParts } from "@/lib/attendance/istTime";
 
 // Exported for callers that need to map an arbitrary calendar date (not just
 // "now") to a DayOfWeek against published timetableSlots - e.g. backfilling
@@ -97,13 +98,15 @@ async function resolvePeriodWindow(
   slot: Pick<TimetableSlot, "courseId" | "year" | "periodNumber" | "semester">,
   cache: TimingCache = new Map(),
   lenient = false,
+  // The date whose semester applies (default: now). Office corrections of a past day pass that day.
+  asOf?: Date,
 ): Promise<{ startTime: string; endTime: string; closeTime: string; unavailableReason?: UnavailableReason } | null> {
   const timingId = `${slot.courseId}_year${slot.year}`;
   const timing = await loadTiming(collegeRef, timingId, cache);
   const unavailable = (unavailableReason: UnavailableReason) =>
     lenient ? { startTime: "", endTime: "", closeTime: "", unavailableReason } : null;
   if (!timing) return unavailable("NO_TIMING");
-  const otherSemester = !matchesCurrentSemester(slot.semester, resolveCurrentSemester(timing));
+  const otherSemester = !matchesCurrentSemester(slot.semester, resolveCurrentSemester(timing, asOf));
   if (otherSemester && !lenient) return null;
   const periods = timing.periods?.length ? timing.periods : defaultPeriodTimings(timing);
   const period = periods.find((p) => p.period === slot.periodNumber);
@@ -211,7 +214,9 @@ export async function getFacultyPeriodsForDate(
   // faculty in a college) so a shared course-year timing is read once.
   timingCache: TimingCache = new Map(),
   // List periods whose timing/semester can't be resolved too (flagged with unavailableReason).
-  options: { lenient?: boolean } = {},
+  // semesterOnDate: judge each slot against the semester that was active ON dateISO, not today
+  // (used to correct a past day that belongs to an earlier semester).
+  options: { lenient?: boolean; semesterOnDate?: boolean } = {},
 ): Promise<FacultyPeriodOnDate[]> {
   // Same weekday-from-date convention as class-work-records/route.ts's
   // resolvePeriodNumber - a plain JS Date parsed from "YYYY-MM-DD" components
@@ -248,7 +253,7 @@ export async function getFacultyPeriodsForDate(
   const daySlots = [...ownDaySlots, ...subSlots];
 
   const resolved: FacultyPeriodOnDate[] = [];
-  const windows = await Promise.all(daySlots.map((slot) => resolvePeriodWindow(collegeRef, slot, timingCache, options.lenient)));
+  const windows = await Promise.all(daySlots.map((slot) => resolvePeriodWindow(collegeRef, slot, timingCache, options.lenient, options.semesterOnDate ? istDateFromParts(y, m, d) : undefined)));
   daySlots.forEach((slot, i) => {
     const window = windows[i];
     if (window) resolved.push({ slot, ...window });

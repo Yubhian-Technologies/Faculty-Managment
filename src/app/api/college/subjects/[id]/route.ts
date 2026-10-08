@@ -19,6 +19,7 @@ export async function PATCH(
       name?: string;
       code?: string;
       shortCode?: string;
+      altShortCode?: string;
       hoursPerWeek?: number;
       totalHoursPerSemester?: number | null;
       credits?: number;
@@ -73,6 +74,8 @@ export async function PATCH(
     if (body.name != null) updates.name = body.name.trim();
     if (body.code != null) updates.code = body.code.toUpperCase().trim();
     if (body.shortCode != null) updates.shortCode = body.shortCode.trim().toUpperCase();
+    // Second short code: display-only, picked per placed period in the timetable editor, so no cascade.
+    if (body.altShortCode != null) updates.altShortCode = body.altShortCode.trim().toUpperCase();
     if (body.hoursPerWeek != null) updates.hoursPerWeek = Number(body.hoursPerWeek);
     if ("totalHoursPerSemester" in body) updates.totalHoursPerSemester = body.totalHoursPerSemester ?? null;
     if (body.credits != null) updates.credits = Number(body.credits);
