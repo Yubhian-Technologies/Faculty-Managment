@@ -76,21 +76,24 @@ describe("isValidIsbn", () => {
 });
 
 describe("checkIsbn", () => {
-  it("requires one for a Text Book", () => {
-    expect(checkIsbn("TEXT_BOOK", "")).toBe("ISBN Number is required for a Text Book.");
-    expect(checkIsbn("TEXT_BOOK", "978-0-306-40615-7")).toBeNull();
-    expect(checkIsbn("TEXT_BOOK", "978-0-306-40615-8")).toBe(ISBN_ERROR);
+  // Which fields are compulsory is unchanged - this only decides whether what
+  // was typed is a real ISBN.
+  it("still requires one for a Conference paper and a Book Chapter", () => {
+    expect(checkIsbn("CONFERENCE", "")).toBe("ISBN Number is required.");
+    expect(checkIsbn("BOOK_CHAPTER", "   ")).toBe("ISBN Number is required.");
   });
 
-  // Some proceedings have no ISBN, and a chapter's is the parent book's.
-  it("leaves it optional for a Conference paper and a Book Chapter", () => {
-    expect(checkIsbn("CONFERENCE", "")).toBeNull();
-    expect(checkIsbn("BOOK_CHAPTER", "   ")).toBeNull();
+  it("still leaves a Text Book's optional", () => {
+    expect(checkIsbn("TEXT_BOOK", "")).toBeNull();
   });
 
-  it("still checks one that was typed for those types", () => {
+  it("checks whatever is typed, whichever type it is", () => {
     expect(checkIsbn("CONFERENCE", "1234567890")).toBe(ISBN_ERROR);
+    expect(checkIsbn("CONFERENCE", "978-0-306-40615-7")).toBeNull();
     expect(checkIsbn("BOOK_CHAPTER", "0-306-40615-2")).toBeNull();
+    expect(checkIsbn("BOOK_CHAPTER", "978-0-306-40615-8")).toBe(ISBN_ERROR);
+    expect(checkIsbn("TEXT_BOOK", "2134567")).toBe(ISBN_ERROR);
+    expect(checkIsbn("TEXT_BOOK", "9780306406157")).toBeNull();
   });
 
   it("says nothing about a type that carries no ISBN", () => {

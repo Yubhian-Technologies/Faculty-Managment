@@ -154,8 +154,8 @@ export function isPublicationDetailsValid(details: PublicationDetails): boolean 
   // Present AND well-formed - a half-typed "1234-56" is as unusable to
   // whoever verifies this record as an empty box.
   if (details.type === "JOURNAL" && !ISSN_REGEX.test(details.issnNumber?.trim() ?? "")) return false;
-  // Optional for these two - some proceedings have no ISBN, and a chapter's is
-  // the parent book's - but checked properly when one is given.
+  // Still compulsory for Conference and Book Chapter, as it always was - and
+  // now checked as a real ISBN rather than accepted as any string of digits.
   if (checkIsbn(details.type, details.isbnNumber)) return false;
   // Scopus/WoS Link and Published Paper Link are compulsory for every type
   // except Text Book (which has its own separate "Provide link of the Book"
@@ -505,7 +505,7 @@ export function PublicationDetailsForm({
       />
       {!!value.isbnNumber?.trim() && !!isbnError && <p className="text-xs text-destructive">{isbnError}</p>}
       {!value.isbnNumber?.trim() && !isIsbnRequired(value.type) && (
-        <p className="text-xs text-muted-foreground">Optional{value.type === "BOOK_CHAPTER" ? " - the ISBN of the book this chapter is in" : ""}.</p>
+        <p className="text-xs text-muted-foreground">Optional.</p>
       )}
     </div>
   );

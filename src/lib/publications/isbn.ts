@@ -55,14 +55,15 @@ export function isValidIsbn(raw: string | null | undefined): boolean {
 export const ISBN_ERROR = "Enter a valid ISBN-10 or ISBN-13.";
 
 /**
- * Which publication types carry an ISBN, and whether it is compulsory.
+ * Which types carry an ISBN, and which must have one.
  *
- * A published textbook always has one. Conference proceedings often do not, and
- * a book chapter's ISBN is the parent book's, which the author may not have to
- * hand - so for those it is optional, and only checked when something is typed.
+ * Unchanged from before this validation existed: compulsory for a Conference
+ * paper and a Book Chapter, optional for a Text Book. This module only decides
+ * whether a value is a REAL ISBN - which fields are compulsory is a product
+ * decision that belongs to whoever set the form up, not to a format check.
  */
 export function isIsbnRequired(type: string): boolean {
-  return type === "TEXT_BOOK";
+  return type === "CONFERENCE" || type === "BOOK_CHAPTER";
 }
 
 export function isIsbnUsed(type: string): boolean {
@@ -75,7 +76,7 @@ export function isIsbnUsed(type: string): boolean {
  */
 export function checkIsbn(type: string, raw: string | null | undefined): string | null {
   const typed = (raw ?? "").trim();
-  if (!typed) return isIsbnRequired(type) ? "ISBN Number is required for a Text Book." : null;
+  if (!typed) return isIsbnRequired(type) ? "ISBN Number is required." : null;
   if (!isIsbnUsed(type)) return null;
   return isValidIsbn(typed) ? null : ISBN_ERROR;
 }
