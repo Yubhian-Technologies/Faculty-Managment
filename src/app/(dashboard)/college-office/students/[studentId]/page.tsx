@@ -5,5 +5,5 @@ import { StudentDetailsPage } from "@/components/students/StudentDetailsPage";
 
 export default function CollegeOfficeStudentDetailsPage() {
   const { studentId } = useParams<{ studentId: string }>();
-  return <StudentDetailsPage studentId={studentId} backHref="/college-office/students" editable />;
+  return <StudentDetailsPage studentId={studentId} backHref="/college-office/students" editable lifecycle />;
 }
