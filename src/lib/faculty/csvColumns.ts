@@ -181,6 +181,8 @@ export const EXPORT_FIELDS: ExportField[] = [
   scalar("qualification", "pleaseSpecifyExam", "Please specify exam"),
   scalar("qualification", "examScore", "Exam Score"),
   scalar("qualification", "qualifiedYear", "Qualified Year"),
+  // Export only: exams 2, 3, ... (the first exam is the four columns above).
+  group("qualification", "additionalQualifiedExams", "Additional Qualified Exams", ["Qualified Exam", "Exam Score", "Qualified Year"]),
   group("qualification", "secondaryEducation", "Secondary Education", SCHOOL_DEGREE_SUBFIELDS),
   group("qualification", "intermediateDiplomaIti", "Intermediate / Diploma / ITI", SCHOOL_DEGREE_SUBFIELDS),
   group("qualification", "ugDetailsGroup", "UG Details", DEGREE_SUBFIELDS),

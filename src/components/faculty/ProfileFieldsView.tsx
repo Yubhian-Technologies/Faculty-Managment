@@ -1,5 +1,6 @@
 "use client";
 
+import { qualifiedExamName } from "@/lib/faculty/qualifiedExams";
 import {
   Section, SubLabel, Field, OptionalField, DegreeView, DocField, QualificationsView, hasValue, hasAnyValue,
 } from "@/components/shared/ProfileFieldPrimitives";
@@ -87,6 +88,13 @@ export function QualificationModule({ profile, collegeType }: { profile: Partial
           )}
         </div>
       )}
+      {p.netSletSetGateOthers === "YES" && (p.additionalQualifiedExams ?? []).map((e, i) => (
+        <div key={`exam-${i}`} className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <OptionalField label={`Qualified Exam ${i + 2}`} value={qualifiedExamName(e.exam, e.pleaseSpecifyExam) || undefined} />
+          <OptionalField label="Exam Score" value={e.examScore} />
+          <OptionalField label="Qualified Year" value={e.qualifiedYear} />
+        </div>
+      ))}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <DegreeView label="Secondary Education" degree={p.secondaryEducation} level="HIGH_SCHOOL" />
         <DegreeView label="Intermediate / Diploma / ITI" degree={p.intermediateDiplomaIti} level="INTERMEDIATE" />

@@ -12,15 +12,21 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import { ArrowLeft, Edit2, Trash2, BookOpen, Plus } from "lucide-react";
-import type { Subject, SubjectCategory } from "@/types";
+import type { Department, Subject, SubjectCategory } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
 import { CategoryField } from "@/components/academics/CategoryField";
+import { offeredYears } from "@/lib/college/departmentYears";
+import { courseYearNumbers, semesterLabel } from "@/lib/college/courseYears";
+import { useCourseSemesterPlan } from "@/hooks/useCourseSemesterPlan";
 
 // Academics > Subjects. View and manage subjects assigned to departments
 // by year and semester in a horizontal table with CRUD & bulk delete capabilities.
 
-type CourseOption = { id: string; name: string; catalogId?: string; departmentId?: string; isActive?: boolean };
-type DepartmentOption = { id: string; name: string; parentDepartmentId?: string };
+type CourseOption = { id: string; name: string; catalogId?: string; departmentId?: string; isActive?: boolean; durationYears?: number };
+// The whole Department doc, not a three-field shape: the Year dropdown is
+// built from the department's own Years Taught (assignedYears / per-course
+// courseScopes / the parent it inherits from), which that shape dropped.
+type DepartmentOption = Department;
 type AssignmentWithMaster = { assignment: any; master: Subject };
 type EditForm = {
   assignmentId?: string;
@@ -29,6 +35,7 @@ type EditForm = {
   name: string;
   code: string;
   shortCode: string;
+  altShortCode: string;
   serialNumber: string;
   category: string;
   customCategory: string;
@@ -64,8 +71,10 @@ export default function SubjectsPage() {
   const [courseKey, setCourseKey] = useState("");
   const [deptId, setDeptId] = useState("");
   const [subDeptId, setSubDeptId] = useState("");
-  const [year, setYear] = useState("1");
-  const [semester, setSemester] = useState("1");
+  // Nothing is pre-picked: the page opens asking for a course, a department,
+  // a year and a semester rather than silently loading somebody else's.
+  const [year, setYear] = useState("");
+  const [semester, setSemester] = useState("");
   const [assignments, setAssignments] = useState<AssignmentWithMaster[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -95,19 +104,12 @@ export default function SubjectsPage() {
           fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses?: CourseOption[] }>),
           fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments?: DepartmentOption[] }>),
         ]);
-        const courses = (c.courses ?? []).filter((x) => x.isActive !== false);
-        const all = d.departments ?? [];
-        setCourses(courses);
-        setDepartments(all);
-        const firstCourseKey = courses[0] ? (courses[0].catalogId ?? `name:${courses[0].name}`) : "";
-        if (firstCourseKey) setCourseKey(firstCourseKey);
-        const firstDept = all.find((x) => !x.parentDepartmentId);
-        const firstDeptId = firstDept ? firstDept.id : "";
-        if (firstDeptId) setDeptId(firstDeptId);
-
-        if (firstCourseKey && firstDeptId) {
-          void fetchAssignments(firstCourseKey, firstDeptId, "", "1", "1", courses);
-        }
+        // Only the options. The first course and the first department used to be
+        // picked here and loaded straight away, which answered a question nobody
+        // had asked - and for a department that teaches neither the year nor the
+        // semester it was loaded for.
+        setCourses((c.courses ?? []).filter((x) => x.isActive !== false));
+        setDepartments(d.departments ?? []);
       } catch {
         setLoadError("Couldn't load courses or departments.");
       }
@@ -134,6 +136,50 @@ export default function SubjectsPage() {
   const topDepartments = useMemo(() => departments.filter((d) => !d.parentDepartmentId), [departments]);
   const subDepartments = useMemo(() => departments.filter((d) => d.parentDepartmentId === deptId), [departments, deptId]);
   const activeDeptId = subDeptId || deptId;
+
+  // Years and semesters come from the configuration, never from a fixed 1-4 /
+  // 1-8. A department teaches the years the Principal assigned it (Basic
+  // Science only year 1), and a course's semesters and their numbering come
+  // from its own Semester Timings - so the labels read 1-1, 1-2, 2-1 ... in
+  // whatever shape that college set up, not a flat "Sem 1 ... Sem 8".
+  const catalogId = courseKey.startsWith("name:") ? undefined : courseKey || undefined;
+  const courseIdsOfGroup = useMemo(
+    () => new Set(courseGroups.find((g) => g.key === courseKey)?.ids ?? []),
+    [courseGroups, courseKey]
+  );
+  // The department's own Course doc for this programme decides the semester
+  // shape; every department owns one, and they can differ.
+  const planCourse = useMemo(
+    () => courses.find((c) => courseIdsOfGroup.has(c.id) && c.departmentId === activeDeptId)
+      ?? courses.find((c) => courseIdsOfGroup.has(c.id))
+      ?? null,
+    [courses, courseIdsOfGroup, activeDeptId]
+  );
+  const plan = useCourseSemesterPlan(planCourse);
+  const activeDept = useMemo(() => departments.find((d) => d.id === activeDeptId), [departments, activeDeptId]);
+  // Falls back to the course's own span, never an invented 1-4, for a
+  // department whose Years Taught has not been set yet.
+  const yearOptions = useMemo(
+    () => offeredYears(activeDept, departments, catalogId, courseYearNumbers(planCourse?.durationYears)),
+    [activeDept, departments, catalogId, planCourse]
+  );
+  // Derived rather than corrected in an effect, so what is shown and what Load
+  // sends can never disagree. A pick that falls outside the options - after
+  // changing department, say - clears rather than silently becoming another
+  // year, so the choice goes back to whoever is looking at it.
+  const yearValue = yearOptions.includes(Number(year)) ? year : "";
+  // Strictly what this course has configured for this year - read off the
+  // plan's own timings, never semestersInYear, whose two-per-year default is a
+  // LABEL fallback for pages that must still show something, not configuration.
+  // A course with no Semester Timings offers no semesters here, and says so.
+  const semesterOptions = useMemo(
+    () => (yearValue && plan.source === "timings"
+      ? plan.semesters.filter((sem) => plan.yearOf(sem) === Number(yearValue))
+      : []),
+    [plan, yearValue]
+  );
+  const semestersNotConfigured = !!courseKey && !!activeDeptId && !!yearValue && semesterOptions.length === 0;
+  const semesterValue = semesterOptions.includes(Number(semester)) ? semester : "";
   // Sibling sub-departments (or the children of a parent picked "itself") that can share one added subject.
   const siblingDepts = useMemo(() => {
     const active = departments.find((d) => d.id === activeDeptId);
@@ -159,6 +205,7 @@ export default function SubjectsPage() {
     const group = groups.get(cKey);
     const targetDeptId = sDeptId || aDeptId;
     if (!group || !targetDeptId) { setLoadError("Please select course and department."); return; }
+    if (!yr || !sem) { setLoadError("Please select year and semester."); return; }
 
     setIsLoading(true);
     setLoadError("");
@@ -188,7 +235,7 @@ export default function SubjectsPage() {
   }
 
   function handleLoad() {
-    void fetchAssignments(courseKey, deptId, subDeptId, year, semester);
+    void fetchAssignments(courseKey, deptId, subDeptId, yearValue, semesterValue);
   }
 
   const allSelected = assignments.length > 0 && selectedIds.size === assignments.length;
@@ -249,18 +296,20 @@ export default function SubjectsPage() {
           excludeFromTeachingLoad: addForm.excludeFromTeachingLoad,
         }),
       });
-      const sbody = await sres.json() as { id?: string; subject?: { id: string }; error?: string };
-      const subjectId = sbody.id ?? sbody.subject?.id;
-      if (!sres.ok || !subjectId) { setAddError(sbody.error ?? "Failed to add the subject."); return; }
+      const sbody = await sres.json() as { id?: string; subject?: { id: string }; error?: string; existingSubjectId?: string; existingSubjectName?: string };
+      // Same code + name already exists for this course (e.g. added under another department):
+      // reuse it and just list it under this department, instead of refusing.
+      const subjectId = sbody.id ?? sbody.subject?.id ?? (sres.status === 409 ? sbody.existingSubjectId : undefined);
+      if (!subjectId || (!sres.ok && sres.status !== 409)) { setAddError(sbody.error ?? "Failed to add the subject."); return; }
 
       const ares = await fetch("/api/college/subject-semester-assignments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subjectId, departmentId: activeDeptId, courseId: course.id, year: Number(year), semester: Number(semester) }),
+        body: JSON.stringify({ subjectId, departmentId: activeDeptId, courseId: course.id, year: Number(yearValue), semester: Number(semesterValue) }),
       });
       if (!ares.ok) {
         const abody = await ares.json() as { error?: string };
-        setAddError(`Subject created, but not assigned to Year ${year} Sem ${semester}: ${abody.error ?? "failed"}. Use Course Structure to assign it.`);
+        setAddError(`Subject created, but not assigned to Year ${yearValue} Sem ${semesterLabel(plan, Number(semesterValue))}: ${abody.error ?? "failed"}. Use Course Structure to assign it.`);
         return;
       }
       // The same subject, listed under the other ticked departments too (one row each, no copies).
@@ -269,7 +318,7 @@ export default function SubjectsPage() {
         const r = await fetch("/api/college/subject-semester-assignments", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ subjectId, departmentId: extraId, courseId: course.id, year: Number(year), semester: Number(semester) }),
+          body: JSON.stringify({ subjectId, departmentId: extraId, courseId: course.id, year: Number(yearValue), semester: Number(semesterValue) }),
         });
         if (!r.ok) failedDepts.push(departments.find((d) => d.id === extraId)?.name ?? extraId);
       }
@@ -278,6 +327,7 @@ export default function SubjectsPage() {
         handleLoad();
         return;
       }
+      if (!sres.ok) toast({ title: `Used the existing subject "${sbody.existingSubjectName ?? addForm.code}" (same code)` });
       toast({ variant: "success", title: addForm.alsoDeptIds.length > 0 ? `Subject added to ${addForm.alsoDeptIds.length + 1} departments` : "Subject added" });
       setAddForm(null);
       handleLoad();
@@ -297,6 +347,7 @@ export default function SubjectsPage() {
       name: a.subjectName ?? item.master.name ?? "",
       code: a.subjectCode ?? item.master.code ?? "",
       shortCode: a.shortCode ?? item.master.shortCode ?? "",
+      altShortCode: a.altShortCode ?? item.master.altShortCode ?? "",
       serialNumber: a.serialNumber != null ? String(a.serialNumber) : "",
       category: a.category ?? item.master.category ?? "",
       customCategory: a.customCategory ?? "",
@@ -324,6 +375,7 @@ export default function SubjectsPage() {
         name: editForm.name.trim(),
         code: editForm.code.trim(),
         shortCode: editForm.shortCode.trim(),
+        altShortCode: editForm.altShortCode.trim(),
         type: editForm.type,
         totalHoursPerSemester: totalSem,
         excludeFromTeachingLoad: editForm.excludeFromTeachingLoad,
@@ -351,6 +403,7 @@ export default function SubjectsPage() {
             subjectName: master.name,
             subjectCode: master.code,
             shortCode: master.shortCode,
+            altShortCode: master.altShortCode,
             type: master.type,
             totalHoursPerSemester: master.totalHoursPerSemester,
             ...(master.serialNumber != null ? { serialNumber: master.serialNumber } : {}),
@@ -439,7 +492,7 @@ export default function SubjectsPage() {
         description="View and manage subjects by department, year and semester"
         actions={
           <div className="flex gap-2 flex-wrap">
-            <Button onClick={openAdd} disabled={!courseKey || !deptId}>
+            <Button onClick={openAdd} disabled={!courseKey || !deptId || !yearValue || !semesterValue}>
               <Plus className="h-4 w-4 mr-1" />Add Subject
             </Button>
             <Button variant="outline" asChild>
@@ -455,14 +508,14 @@ export default function SubjectsPage() {
           <div className="space-y-1.5">
             <Label htmlFor="course">Course</Label>
             <select id="course" className={SELECT_CLASS} value={courseKey} onChange={(e) => setCourseKey(e.target.value)}>
-              <option value="">Select…</option>
+              <option value="">Select course</option>
               {courseGroups.map((g) => <option key={g.key} value={g.key}>{g.name}</option>)}
             </select>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="dept">Department</Label>
             <select id="dept" className={SELECT_CLASS} value={deptId} onChange={(e) => { setDeptId(e.target.value); setSubDeptId(""); }}>
-              <option value="">Select…</option>
+              <option value="">Select department</option>
               {topDepartments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </div>
@@ -477,18 +530,27 @@ export default function SubjectsPage() {
           )}
           <div className="space-y-1.5">
             <Label htmlFor="yr">Year</Label>
-            <select id="yr" className={SELECT_CLASS} value={year} onChange={(e) => setYear(e.target.value)}>
-              {[1, 2, 3, 4].map((y) => <option key={y} value={String(y)}>Year {y}</option>)}
+            <select id="yr" className={SELECT_CLASS} value={yearValue} onChange={(e) => setYear(e.target.value)}>
+              <option value="">Select year</option>
+              {yearOptions.map((y) => <option key={y} value={String(y)}>Year {y}</option>)}
             </select>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="sem">Semester</Label>
-            <select id="sem" className={SELECT_CLASS} value={semester} onChange={(e) => setSemester(e.target.value)}>
-              {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => <option key={s} value={String(s)}>Sem {s}</option>)}
+            <select id="sem" className={SELECT_CLASS} value={semesterValue} onChange={(e) => setSemester(e.target.value)}>
+              <option value="">Select semester</option>
+              {/* The label is the course's own year-semester position - "1-1",
+                  "1-2", "1-3" where a year has three - and nothing else. */}
+              {semesterOptions.map((s) => <option key={s} value={String(s)}>{semesterLabel(plan, s)}</option>)}
             </select>
+            {semestersNotConfigured && (
+              <p className="text-xs text-muted-foreground">
+                No semesters set for this year — ask the Office to add them under Semester Timings.
+              </p>
+            )}
           </div>
           <div className="flex items-end">
-            <Button onClick={() => void handleLoad()} className="w-full" disabled={!courseKey || !deptId}>
+            <Button onClick={() => void handleLoad()} className="w-full" disabled={!courseKey || !deptId || !yearValue || !semesterValue}>
               Load
             </Button>
           </div>
@@ -643,7 +705,7 @@ export default function SubjectsPage() {
             <div className="grid gap-3">
               <p className="text-xs text-muted-foreground rounded-md border bg-muted/40 p-2">
                 Adds the subject to <strong>{departments.find((d) => d.id === activeDeptId)?.name}</strong>
-                {subDeptId ? " (sub-department)" : ""}, Year {year}, Sem {semester}.
+                {subDeptId ? " (sub-department)" : ""}, Year {yearValue}, Sem {semesterLabel(plan, Number(semesterValue))}.
               </p>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
@@ -759,6 +821,14 @@ export default function SubjectsPage() {
                 <div className="space-y-1.5">
                   <Label>Short Code</Label>
                   <Input value={editForm.shortCode} onChange={(e) => setEditForm({ ...editForm, shortCode: e.target.value })} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Second Short Code (optional)</Label>
+                  <Input
+                    value={editForm.altShortCode}
+                    placeholder="Asked when placing in the timetable"
+                    onChange={(e) => setEditForm({ ...editForm, altShortCode: e.target.value })}
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label>S.No.</Label>

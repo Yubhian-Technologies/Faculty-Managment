@@ -140,6 +140,7 @@ export async function buildSeededDraft(
     day: s.day,
     periodNumber: s.periodNumber,
     isBlockContinuation: continuationKeys.has(`${s.assignmentId}|${s.day}|${s.periodNumber}`),
+    ...(s.displayCode ? { displayCode: s.displayCode } : {}),
   }));
 
   return {

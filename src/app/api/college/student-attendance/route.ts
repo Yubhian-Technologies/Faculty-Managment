@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { effectiveLabBatch, loadLabBatchModes } from "@/lib/students/labBatchMode";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
+import { FieldValue } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
@@ -193,6 +194,9 @@ export async function POST(request: Request) {
       loadOnDutyDay(db, session.collegeId, date),
     ]);
     const students = sortStudentsForList(rosterDocs);
+    if (students.length === 0) {
+      return NextResponse.json({ error: "No students are on this class's roster (check the section and, for a lab, the lab batch). Contact your HOD." }, { status: 400 });
+    }
 
     // Which academic year this session belongs to - a Section is a year-slot a
     // new cohort occupies each year, so reports select sessions by it (audit
@@ -237,7 +241,26 @@ export async function POST(request: Request) {
         const semesterFix = existing.semester == null && semester != null ? { semester } : {};
         // Same self-heal for the academic year (never overwrites one already set).
         const academicYearFix = existing.academicYear == null ? { academicYear } : {};
+        // This caller passed the assignment / substitute check above, so a DRAFT that another
+        // person opened (assignment reassigned, or the covering faculty and the original both
+        // opening the period) becomes theirs; otherwise PATCH would refuse them (403) and the
+        // period would stay stuck until the Dept Office corrects it.
+        let ownerFix: Record<string, unknown> = {};
+        if (existing.facultyId !== session.uid) {
+          let name = assignment.facultyName ?? "";
+          if (substituteFor) {
+            const subFacSnap = await tx.get(collegeRef.collection("facultyMembers").doc(facultyMemberId));
+            if (subFacSnap.exists) name = facultyDisplayName(subFacSnap.data() as FacultyMember);
+          }
+          ownerFix = {
+            facultyId: session.uid,
+            facultyName: name,
+            substituteForFacultyId: substituteFor ? substituteFor.originalFacultyId : FieldValue.delete(),
+            substituteForFacultyName: substituteFor ? substituteFor.originalFacultyName : FieldValue.delete(),
+          };
+        }
         tx.update(ref, {
+          ...ownerFix,
           entries,
           totalStudents: entries.length,
           presentCount,
@@ -245,7 +268,10 @@ export async function POST(request: Request) {
           ...semesterFix,
           ...academicYearFix,
         });
-        resultSession = { ...existing, id, entries, totalStudents: entries.length, presentCount, updatedAt: now as unknown as StudentAttendanceSession["updatedAt"], ...semesterFix, ...academicYearFix } as unknown as StudentAttendanceSession & { id: string };
+        resultSession = {
+          ...existing, id, entries, totalStudents: entries.length, presentCount, updatedAt: now as unknown as StudentAttendanceSession["updatedAt"], ...semesterFix, ...academicYearFix,
+          ...(ownerFix.facultyId ? { facultyId: session.uid, facultyName: ownerFix.facultyName as string } : {}),
+        } as unknown as StudentAttendanceSession & { id: string };
         resultStatus = 200;
         return;
       }
@@ -291,6 +317,19 @@ export async function POST(request: Request) {
       resultSession = { id, ...attendanceSession } as unknown as StudentAttendanceSession & { id: string };
       resultStatus = 201;
     });
+
+    // Warn-only (not enforced): another assignment already has a session for this very class and
+    // period, so both would count as held. Logged so the data can be checked before enforcing.
+    if (resultStatus === 201 && sectionId) {
+      try {
+        const clash = await collegeRef.collection("studentAttendance")
+          .where("sectionId", "==", sectionId).where("date", "==", date).where("periodNumber", "==", periodNumber).limit(5).get();
+        const others = clash.docs.filter((d) => d.id !== id && (d.data() as { labBatch?: string }).labBatch === (labBatch || undefined));
+        if (others.length > 0) console.warn("[student-attendance duplicate-period]", { id, sectionId, date, periodNumber, others: others.map((d) => d.id) });
+      } catch (err) {
+        console.warn("[student-attendance duplicate-period check failed]", err);
+      }
+    }
 
     return NextResponse.json({ session: resultSession! }, { status: resultStatus as unknown as number });
 

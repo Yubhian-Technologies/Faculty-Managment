@@ -133,3 +133,24 @@ export function yearSemesterLabelIn(year: number, semestersInYear: number[], sem
   if (index < 0) return yearSemesterLabel(semester);
   return `${year}-${index + 1}`;
 }
+
+/**
+ * Display label for a semester when its parent YEAR is already known/selected.
+ * When "2nd Year" is selected, showing "2-1" or "2-2" repeats the year "2".
+ * This returns "Sem 1", "Sem 2" (or "Semester 1", "Semester 2") based on its position within that year.
+ */
+export function semesterInYearLabel(
+  semestersInYear: number[],
+  semester: number,
+  options?: { format?: "full" | "short" | "number" }
+): string {
+  if (!Number.isFinite(semester) || semester < 1) return "";
+  const sorted = [...new Set(semestersInYear.filter((n) => Number.isFinite(n)))].sort((a, b) => a - b);
+  const index = sorted.indexOf(semester);
+  const semNum = index >= 0 ? index + 1 : semester;
+
+  const fmt = options?.format ?? "short";
+  if (fmt === "number") return `${semNum}`;
+  if (fmt === "full") return `Semester ${semNum}`;
+  return `Sem ${semNum}`;
+}

@@ -16,7 +16,7 @@ import { fedYears, regulationsForCourseYearByBatch } from "@/lib/college/academi
 import { deriveHodScope, managerEffectiveYears } from "@/lib/departments/hodScope";
 import { parseAcademicYearStart } from "@/lib/college/academicSession";
 import { resolveCurrentSemester } from "@/lib/college/semester";
-import { yearSemesterLabelIn } from "@/lib/academic/format";
+import { yearSemesterLabelIn, semesterInYearLabel } from "@/lib/academic/format";
 
 const ALL_REGULATIONS = "__all__"; // sentinel: Radix Select items can't use an empty string value
 
@@ -424,7 +424,7 @@ export default function HODSubjectsPage() {
                   >
                     <SelectTrigger><SelectValue placeholder="Select semester" /></SelectTrigger>
                     <SelectContent>
-                      {semesterOptions.map((s) => <SelectItem key={s} value={String(s)}>{yearSemesterLabelIn(Number(selectedYear), semesterOptions, s)}</SelectItem>)}
+                      {semesterOptions.map((s) => <SelectItem key={s} value={String(s)}>{semesterInYearLabel(semesterOptions, s, { format: "short" })}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 )}

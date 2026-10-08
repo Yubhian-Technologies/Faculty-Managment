@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import type { SemesterDuration, SubjectSemesterAssignment } from "@/types";
-import { yearSemesterLabelIn } from "@/lib/academic/format";
+import { yearSemesterLabelIn, semesterInYearLabel } from "@/lib/academic/format";
 
 interface SemesterColumnCardProps {
   semester: number;
@@ -92,7 +92,7 @@ export function SemesterColumnCard({
       <div className="space-y-1.5">
         <div className="flex items-center justify-between gap-2">
           <span className="font-bold text-sm text-foreground">
-            Sem {yearSemesterLabelIn(year, semestersInYear, semester)}
+            {semesterInYearLabel(semestersInYear, semester, { format: "short" })}
           </span>
           <span
             className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-0.5 rounded-md border ${

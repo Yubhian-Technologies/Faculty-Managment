@@ -30,7 +30,7 @@ import { StudentStrengthDashboard } from "@/components/students/StudentStrengthD
 import { StudentsViewTabs } from "@/components/students/StudentsViewTabs";
 import type { StudentListItem, Department, AcademicYear, Course } from "@/types";
 import { selectableYears } from "@/lib/college/courseYears";
-import { coreDepartmentsWithSections, departmentsWithSections } from "@/lib/college/departmentSectionScope";
+import { coreDepartmentOptions as buildCoreDepartmentOptions, departmentFilterOptions as buildDepartmentFilterOptions } from "@/lib/departments/departmentTree";
 import { useSectionDepartments } from "@/hooks/useSectionDepartments";
 
 // The Add and Edit forms collect every field the roster import collects, in the
@@ -281,9 +281,9 @@ export default function OfficeStudentsPage() {
   // department/year combination that couldn't really exist.
   //
   // Narrowed once more to the departments that actually resolve to sections -
-  // their own, or those of a branch they manage. A department that holds
-  // neither ("Basic Science" at a college whose four sub-departments do the
-  // work) could only ever return an empty list.
+  // their own, or those of a branch they manage - plus a parent that organises
+  // sub-departments (picking it means "all of them"), with each sub-department
+  // listed beneath its parent. See lib/departments/departmentTree.ts.
   const departmentFilterOptions = useMemo(() => {
     const offered = courseFilter === "all"
       ? activeDepartments
@@ -291,18 +291,16 @@ export default function OfficeStudentsPage() {
         const offeringIds = new Set(departmentsOfferingCourse(departments, courses, courseFilter).map((d) => d.id));
         return activeDepartments.filter((d) => offeringIds.has(d.id));
       })();
-    return departmentsWithSections(offered, sectionDepartments);
+    return buildDepartmentFilterOptions(offered, departments, sectionDepartments);
   }, [courseFilter, activeDepartments, departments, courses, sectionDepartments]);
 
   // A feeder department teaches the shared first year for several branches at
   // once (Basic Science - Chemistry runs CSE and CSBS). Those are its Core
-  // Departments, and picking one narrows the list to the students filed under
-  // it. Offered only when the picked department has any.
+  // Departments - for a parent, the ones its sub-departments run - and picking
+  // one narrows the list to the students filed under it. Offered only when
+  // there are any.
   const coreDepartmentOptions = useMemo(
-    () => coreDepartmentsWithSections(
-      deptFilter === "all" ? undefined : departments.find((d) => d.name === deptFilter),
-      sectionDepartments
-    ),
+    () => buildCoreDepartmentOptions(departments, deptFilter === "all" ? [] : [deptFilter], sectionDepartments),
     [deptFilter, departments, sectionDepartments]
   );
   const coreDeptValue = coreDepartmentOptions.includes(coreDeptFilter) ? coreDeptFilter : "all";
@@ -765,7 +763,11 @@ export default function OfficeStudentsPage() {
           <SelectTrigger className="sm:w-56"><SelectValue placeholder="All departments" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All departments</SelectItem>
-            {departmentFilterOptions.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
+            {departmentFilterOptions.map((o) => (
+              <SelectItem key={o.department.id} value={o.department.name} className={o.depth === 1 ? "pl-8" : undefined}>
+                {o.department.name}{o.container ? " (all sub-departments)" : ""}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
         {coreDepartmentOptions.length > 0 && (

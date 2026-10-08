@@ -425,6 +425,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "My Feedback", href: "/panel/feedback", iconName: "MessageSquare", roles: ["PANEL_MEMBER"] },
   { label: "Student Attendance", href: "/panel/mark-attendance", iconName: "CalendarCheck", roles: ["PANEL_MEMBER"], section: "Students & Attendance", module: "attendance", legacyModule: "My Work" },
   { label: "Attendance Report", href: "/panel/monthly-records", iconName: "CalendarRange", roles: ["PANEL_MEMBER"], module: "attendance", legacyModule: "My Work" },
+  { label: "Topics Covered", href: "/panel/topics-covered", iconName: "BookOpenCheck", roles: ["PANEL_MEMBER"], module: "attendance" },
   { label: "Student Permissions", href: "/panel/student-permissions", iconName: "ShieldCheck", roles: ["PANEL_MEMBER"], legacyModule: "My Work" },
   { label: "Students", href: "/panel/students", iconName: "GraduationCap", roles: ["PANEL_MEMBER"], module: "students", legacyModule: "My Work" },
   // Dividing a section's own roster into lab sub-groups (StudentRecord.

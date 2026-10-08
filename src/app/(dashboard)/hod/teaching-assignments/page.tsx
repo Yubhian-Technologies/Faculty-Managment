@@ -19,8 +19,11 @@ import { sectionDisplayLabel, departmentCode } from "@/lib/sections/sectionLabel
 import { deriveHodScope, buildCourseGroups, managerEffectiveYears } from "@/lib/departments/hodScope";
 import { fedYears } from "@/lib/college/academicStructure";
 import { matchesCurrentSemester } from "@/lib/college/semester";
+import { departmentPickNames, subjectCoversSection } from "@/lib/departments/subjectCoverage";
+import { coreDepartmentOptions, rollupDepartmentNames } from "@/lib/departments/departmentTree";
+import { assignmentsForFilter } from "@/lib/teaching/assignmentView";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
-import { yearSemesterLabelIn } from "@/lib/academic/format";
+import { yearSemesterLabelIn, semesterInYearLabel } from "@/lib/academic/format";
 import type {
   Course, CourseYearTiming, Department, SectionListItem, Subject, SubjectSemesterAssignment,
   TeachingAssignment, FacultyMember, FacultyAssignmentRequest,
@@ -84,6 +87,9 @@ export default function TeachingAssignmentsPage() {
   const [applied, setApplied] = useState<{ key: string; year: string } | null>(null);
   // "" = every department this HOD manages. Set once a sub-department is picked.
   const [departmentFilter, setDepartmentFilter] = useState("");
+  // "" = every branch the picked sub-department (or, with none picked, this
+  // HOD's whole scope) manages. Set once a Core department is picked.
+  const [coreFilter, setCoreFilter] = useState("");
   const [sectionsCache, setSectionsCache] = useState<Record<string, SectionListItem[]>>({});
   // Needed only to resolve department codes for section labels: a parent HOD
   // sees their own department's "A" next to each sub-department's "A", so the
@@ -356,12 +362,35 @@ const effectiveSemester = semesterOptions.length === 0
 
   // Picking a sub-department also brings in the branches it manages: BS-ENGLISH
   // runs the shared first year for CIVIL and IT, so those sections are its
-  // even though each one's own `department` names the branch.
+  // even though each one's own `department` names the branch. Picking the
+  // parent (which holds nothing itself) stands for every sub-department and
+  // every branch they manage; a managed branch that is split into sub-branches
+  // (AI -> AIML / AIDS) stands for the sub-branches the sections are filed
+  // under. Read from the department configuration - see departmentPickNames.
+  const loadedSectionDepartments = useMemo(
+    () => (sectionsCache[sectionsCacheKey] ?? []).map((s) => s.department),
+    [sectionsCache, sectionsCacheKey]
+  );
+
+  // The Core departments on offer: the branches the picked sub-department - or,
+  // with none picked, this whole scope - runs the shared year for, that actually
+  // have sections in what was loaded. A managed branch split into sub-branches
+  // is offered as those sub-branches. See coreDepartmentOptions.
+  const coreOptions = useMemo(() => {
+    const picked = departmentFilter
+      ? [departmentFilter]
+      : subDepartmentOptions.length > 0 ? subDepartmentOptions.map((d) => d.name) : scope.ownDept ? [scope.ownDept.name] : [];
+    return coreDepartmentOptions(departments, picked, loadedSectionDepartments);
+  }, [departmentFilter, subDepartmentOptions, scope.ownDept, departments, loadedSectionDepartments]);
+  const activeCore = coreOptions.includes(coreFilter) ? coreFilter : "";
+
   const filterDepartmentNames = useMemo(() => {
+    // A Core department stands for itself and, if it holds no sections of its
+    // own, the sub-branches they are filed under.
+    if (activeCore) return new Set([activeCore, ...rollupDepartmentNames(departments, activeCore)]);
     if (!departmentFilter) return null;
-    const d = departments.find((x) => x.name === departmentFilter);
-    return new Set<string>([departmentFilter, ...(d?.managedDepartments ?? [])]);
-  }, [departmentFilter, departments]);
+    return departmentPickNames(departments, departmentFilter, loadedSectionDepartments);
+  }, [activeCore, departmentFilter, departments, loadedSectionDepartments]);
 
   const sections = useMemo(
     () =>
@@ -542,7 +571,7 @@ const effectiveSemester = semesterOptions.length === 0
     // A different top-level department has a different course list, sub-
     // department cascade, and assigned years - clear everything downstream.
     setApplied(null);
-    setCourseKey(""); setYear(""); setDepartmentFilter(""); setSelectedSemester(null);
+    setCourseKey(""); setYear(""); setDepartmentFilter(""); setCoreFilter(""); setSelectedSemester(null);
     setAssignForm({ sectionId: "", subjectId: "", facultyId: "" });
   }
 
@@ -550,7 +579,7 @@ const effectiveSemester = semesterOptions.length === 0
     setApplied(null);
     setCourseKey(v);
     setYear("");
-    setDepartmentFilter("");
+    setDepartmentFilter(""); setCoreFilter("");
     setSelectedSemester(null);
     setAssignForm({ sectionId: "", subjectId: "", facultyId: "" });
   }
@@ -558,7 +587,7 @@ const effectiveSemester = semesterOptions.length === 0
   function handleYearChange(v: string) {
     setApplied(null);
     setYear(v);
-    setDepartmentFilter("");
+    setDepartmentFilter(""); setCoreFilter("");
     setSelectedSemester(null);
     setAssignForm({ sectionId: "", subjectId: "", facultyId: "" });
   }
@@ -617,6 +646,7 @@ const effectiveSemester = semesterOptions.length === 0
     // ALL is a sentinel: Radix Select can't hold "" as an item value.
     setApplied(null);
     setDepartmentFilter(v === ALL_DEPARTMENTS ? "" : v);
+    setCoreFilter("");
     setAssignForm({ sectionId: "", subjectId: "", facultyId: "" });
   }
 
@@ -668,21 +698,16 @@ const effectiveSemester = semesterOptions.length === 0
   function sectionMatchesSubjectDepartment(section: SectionListItem, subjectId: string) {
     if (effectiveSemester == null) return true;
     const { deptIds, deptNames } = subjectDepartmentSets(subjectId);
-    const d = departments.find((dept) => dept.name === section.department);
-    if (d && deptIds.has(d.id)) return true;
-    if (section.department && deptNames.has(section.department)) return true;
-    // A shared-first-year department (e.g. BS-English) owns no sections of
-    // its own - its subjects are taught inside the sections of whichever
-    // branches it feeds (CIVIL, IT, ...), named on that department's own
-    // managedDepartments and carried as each fed section's plain `department`
-    // string (mirrors filterDepartmentNames' identical managedDepartments
-    // handling above, used for the department-filter dropdown). Without
-    // this, a subject assigned to a feeder department with no sections of
-    // its own matched zero sections, so gapRows dropped it from Unstaffed
-    // Subjects entirely instead of surfacing the fed branches' real gaps.
-    const assignedDepts = departments.filter((dept) => deptIds.has(dept.id) || deptNames.has(dept.name));
-    if (assignedDepts.some((dept) => dept.managedDepartments?.includes(section.department))) return true;
-    return false;
+    // The exact department match, plus - for a shared-first-year department
+    // (e.g. BS-English) that owns no sections of its own - the branches it feeds
+    // (CIVIL, IT, ...), named on that department's own managedDepartments and
+    // carried as each fed section's plain `department` string, including the
+    // sub-branches of a managed branch that is itself split up (AI -> AIML /
+    // AIDS). Without this, a subject assigned to a feeder department with no
+    // sections of its own matched zero sections, so gapRows dropped it from
+    // Unstaffed Subjects entirely instead of surfacing the fed branches' real
+    // gaps. See subjectCoversSection (lib/departments/subjectCoverage.ts).
+    return subjectCoversSection(departments, { ids: deptIds, names: deptNames }, section.department);
   }
 
   // Which subject/section combos for the selected course+year (and, once
@@ -933,6 +958,24 @@ const effectiveSemester = semesterOptions.length === 0
     }
   }
 
+  // The Current Assignments list follows the same filters the Unstaffed Subjects
+  // and Assign Faculty panels were loaded with - course, year, semester and
+  // sub-department - so the three always agree. Before Load there is nothing to
+  // follow, so everything shows as it always did, and "Show all" brings the
+  // full list back at any time. Display only: nothing is removed from
+  // `assignments`, and the exports / Delete all keep using the full list.
+  const [showAllAssignments, setShowAllAssignments] = useState(false);
+  const assignmentsInView = useMemo(() => {
+    if (!applied || showAllAssignments || !course || !year) return assignments;
+    return assignmentsForFilter(assignments, {
+      courseIds: new Set(activeCourseIds),
+      year: Number(year),
+      semester: effectiveSemester,
+      departmentNames: filterDepartmentNames,
+    });
+  }, [assignments, applied, showAllAssignments, course, year, activeCourseIds, effectiveSemester, filterDepartmentNames]);
+  const hiddenAssignmentCount = assignments.length - assignmentsInView.length;
+
   // Group current assignments by course → year → section for display. Any assignment
   // missing that context (shouldn't happen going forward, but data can be old) falls into
   // its own bucket rather than silently disappearing.
@@ -945,7 +988,7 @@ const effectiveSemester = semesterOptions.length === 0
       department?: string; items: AssignmentRow[];
     }>();
     const ungrouped: AssignmentRow[] = [];
-    for (const a of assignments) {
+    for (const a of assignmentsInView) {
       if (!a.courseId || a.year == null || !a.sectionId) { ungrouped.push(a); continue; }
       const k = `${a.courseId}_${a.year}_${a.sectionId}`;
       if (!map.has(k)) {
@@ -965,7 +1008,7 @@ const effectiveSemester = semesterOptions.length === 0
       (x, y) => x.courseName.localeCompare(y.courseName) || x.year - y.year || x.sectionName.localeCompare(y.sectionName)
     );
     return { groups, ungrouped };
-  }, [assignments]);
+  }, [assignmentsInView]);
 
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isExportingXlsx, setIsExportingXlsx] = useState(false);
@@ -1165,7 +1208,7 @@ const effectiveSemester = semesterOptions.length === 0
                 <Select value={String(effectiveSemester ?? "")} onValueChange={(v) => { setApplied(null); setSelectedSemester(Number(v)); }}>
                   <SelectTrigger><SelectValue placeholder="Select semester" /></SelectTrigger>
                   <SelectContent>
-                    {semesterOptions.map((s) => <SelectItem key={s} value={String(s)}>{yearSemesterLabelIn(Number(year), semesterOptions, s)}</SelectItem>)}
+                    {semesterOptions.map((s) => <SelectItem key={s} value={String(s)}>{semesterInYearLabel(semesterOptions, s, { format: "short" })}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -1196,9 +1239,31 @@ const effectiveSemester = semesterOptions.length === 0
                 </Select>
               </div>
             )}
+            {/* The branches the picked sub-department (or this whole scope) runs
+                the shared year for. Only with a choice to make. */}
+            {coreOptions.length > 1 && (
+              <div className="space-y-2">
+                <Label>Core department</Label>
+                <Select
+                  value={activeCore || ALL_DEPARTMENTS}
+                  onValueChange={(v) => {
+                    setApplied(null);
+                    setCoreFilter(v === ALL_DEPARTMENTS ? "" : v);
+                    setAssignForm({ sectionId: "", subjectId: "", facultyId: "" });
+                  }}
+                  disabled={!year}
+                >
+                  <SelectTrigger><SelectValue placeholder="All core departments" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL_DEPARTMENTS}>All core departments</SelectItem>
+                    {coreOptions.map((n) => <SelectItem key={n} value={n}>{n}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="space-y-2 flex flex-col justify-end">
               <Button
-                onClick={() => courseKey && year && setApplied({ key: courseKey, year })}
+                onClick={() => { if (courseKey && year) { setApplied({ key: courseKey, year }); setShowAllAssignments(false); } }}
                 disabled={!courseKey || !year || !timingsLoaded || (semesterOptions.length > 0 && effectiveSemester == null)}
               >
                 <Search className="h-4 w-4 mr-2" />{applied ? "Reload" : "Load"}
@@ -1425,12 +1490,35 @@ const effectiveSemester = semesterOptions.length === 0
       </div>
 
       <Card>
-        <CardHeader className="pb-3"><CardTitle className="text-base">Current Assignments</CardTitle></CardHeader>
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle className="text-base">Current Assignments</CardTitle>
+            {/* Only once Load has applied a filter to follow. */}
+            {applied && course && !isLoading && assignments.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span>
+                  {showAllAssignments
+                    ? `Showing all ${assignments.length} assignments`
+                    : `Showing ${course.name} · ${ordinalYear(Number(year))}${effectiveSemester != null ? ` · Sem ${effectiveSemester}` : ""}${departmentFilter ? ` · ${departmentFilter}` : ""}${hiddenAssignmentCount > 0 ? ` - ${hiddenAssignmentCount} other${hiddenAssignmentCount === 1 ? "" : "s"} hidden` : ""}`}
+                </span>
+                {(showAllAssignments || hiddenAssignmentCount > 0) && (
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowAllAssignments((v) => !v)}>
+                    {showAllAssignments ? "Follow filters" : "Show all"}
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+        </CardHeader>
         <CardContent>
           {isLoading ? (
             <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-14 bg-muted animate-pulse rounded-lg" />)}</div>
           ) : assignments.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">No teaching assignments yet.</p>
+          ) : assignmentsInView.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">
+              No teaching assignments yet for this selection{hiddenAssignmentCount > 0 ? " - use Show all to see the others" : ""}.
+            </p>
           ) : (
             <div className="space-y-5">
               {groups.map((g) => (

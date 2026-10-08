@@ -214,6 +214,8 @@ export async function PATCH(request: Request) {
       // "add" only - place this faculty in a cell that already holds the SAME subject for
       // another of its faculty ("place here with both faculty"). Any subject type.
       coTeach?: boolean;
+      // "add" only - which of the subject's short codes (shortCode / altShortCode) this period shows.
+      displayCode?: string;
     };
 
     const { sectionId, assignmentId } = body;
@@ -366,7 +368,18 @@ export async function PATCH(request: Request) {
           adjustedNote = `This lab spans a break between periods ${placeAt} and ${placeAt + blockSize - 1} - placed as requested.`;
         }
 
+        // Only one of the subject's own short codes may be chosen.
+        const displayCode = body.displayCode?.trim().toUpperCase();
+        if (displayCode) {
+          const allowed = [subject?.shortCode, (subject as { altShortCode?: string } | undefined)?.altShortCode]
+            .map((c) => c?.trim().toUpperCase());
+          if (!allowed.includes(displayCode)) {
+            return { ok: false, status: 400, error: "That short code isn't one of this subject's short codes" };
+          }
+        }
+
         const added: DraftSlot[] = Array.from({ length: blockSize }, (_, i) => ({
+          ...(displayCode ? { displayCode } : {}),
           assignmentId,
           facultyId: assignment.facultyId,
           facultyName: assignment.facultyName,

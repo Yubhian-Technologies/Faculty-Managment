@@ -1,4 +1,5 @@
 import { formatCurrency, formatDMY } from "@/lib/utils";
+import { qualifiedExamName } from "@/lib/faculty/qualifiedExams";
 import { isResumeSectionEnabled, type ResumeSectionKey } from "@/lib/pdf/resumeSections";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { facultyMobileNo } from "@/lib/faculty/mobileNo";
@@ -89,6 +90,7 @@ interface FacultyProfileFieldsLike {
   qualifiedExam?: string;
   examScore?: string;
   qualifiedYear?: number;
+  additionalQualifiedExams?: { exam?: import("@/types").QualifyingExamType; pleaseSpecifyExam?: string; examScore?: string; qualifiedYear?: number }[];
 
   teachingAssignment?: TeachingAssignmentSummary;
   teachingRolesResponsibilities?: string;
@@ -389,6 +391,11 @@ export function getResumeHTML(rawData: ResumeData): string {
     (ap?.postdoctoralFellowshipDetails?.status || ap?.postdoctoralFellowshipDetails?.mode) && `Postdoctoral Status: ${[esc(ap?.postdoctoralFellowshipDetails?.status), ap?.postdoctoralFellowshipDetails?.mode ? `(${esc(ap.postdoctoralFellowshipDetails.mode)})` : ""].filter(Boolean).join(" ")}`,
     ap?.netSletSetGateOthers === "YES" && ap?.qualifiedExam &&
       `${esc(ap.qualifiedExam)} Qualified${ap.qualifiedYear ? ` (${esc(ap.qualifiedYear)})` : ""}${ap.examScore ? ` - Exam Score: ${esc(ap.examScore)}` : ""}`,
+    // Exams 2, 3, ... (the first is the line above, unchanged).
+    ...(ap?.netSletSetGateOthers === "YES" ? (ap?.additionalQualifiedExams ?? []) : []).flatMap((e) => {
+      const name = qualifiedExamName(e.exam, e.pleaseSpecifyExam);
+      return name ? [`${esc(name)} Qualified${e.qualifiedYear ? ` (${esc(e.qualifiedYear)})` : ""}${e.examScore ? ` - Exam Score: ${esc(e.examScore)}` : ""}`] : [];
+    }),
   ]);
   const educationBody = educationEntries + educationExtras;
 

@@ -165,6 +165,8 @@ export function slotShortCode(
   slot: TimetableSlot,
   subjects?: Map<string, Subject> | Subject[],
 ): string {
+  // The short code picked when this period was placed wins over the subject's default.
+  if (slot.displayCode) return slot.displayCode;
   const subject = subjects instanceof Map ? subjects.get(slot.subjectId) : subjects?.find((s) => s.id === slot.subjectId);
   if (subject?.shortCode && !GENERATED_CODE.test(subject.shortCode)) return subject.shortCode;
   if (subject?.code) return readableCode(subject.code, subject.name) as string;

@@ -67,15 +67,11 @@ async function sweepCollege(db: FirebaseFirestore.Firestore, collegeId: string, 
 
 export async function POST(request: Request) {
   if (!isAuthorized(request)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  try {
-    const db = getAdminDb();
-    const now = new Date();
-    const collegesSnap = await db.collection("colleges").get();
-    const results = await Promise.all(collegesSnap.docs.map((c) => sweepCollege(db, c.id, now)));
-    const notified = results.reduce((sum, r) => sum + r, 0);
-    return NextResponse.json({ collegesChecked: results.length, requestersNotified: notified });
-  } catch (err) {
-    console.error("[cron/od-proof-reminders]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
-  }
+  // Notifications are PAUSED for cost optimization.
+  return NextResponse.json({
+    status: "paused",
+    message: "OD proof reminders sweep is paused for cost optimization.",
+    collegesChecked: 0,
+    requestersNotified: 0,
+  });
 }

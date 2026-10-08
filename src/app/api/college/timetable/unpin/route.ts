@@ -74,6 +74,7 @@ export async function POST(request: Request) {
         day: s.day,
         periodNumber: s.periodNumber,
         isBlockContinuation: periodsByKey.get(`${s.assignmentId}|${s.day}`)?.has(s.periodNumber - 1) ?? false,
+        ...(s.displayCode ? { displayCode: s.displayCode } : {}),
       });
 
       if (draftSnap.exists) {

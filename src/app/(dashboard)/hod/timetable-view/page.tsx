@@ -10,7 +10,7 @@ import { isoDateKey } from "@/lib/leave/dayCounter";
 import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
 import { ordinalYear } from "@/lib/timetable/gridModel";
 import type { Course, CourseYearTiming, DayOfWeek, Department, Section, Subject, TimetableSlot } from "@/types";
-import { yearSemesterLabelIn } from "@/lib/academic/format";
+import { yearSemesterLabelIn, semesterInYearLabel } from "@/lib/academic/format";
 import { offeredYearsAcross } from "@/lib/college/departmentYears";
 import { useAuthStore } from "@/store/authStore";
 import { useWorkContext } from "@/hooks/useWorkContext";
@@ -224,7 +224,7 @@ export default function HODTimetableViewPage() {
             disabled={!year || semesterOptions.length === 0}
           >
             <option value="">{!year ? "Select a year" : semesterOptions.length === 0 ? "No semesters" : "Select semester"}</option>
-            {semesterOptions.map((n) => <option key={n} value={n}>{yearSemesterLabelIn(Number(year), semesterOptions, n)}</option>)}
+            {semesterOptions.map((n) => <option key={n} value={n}>{semesterInYearLabel(semesterOptions, n, { format: "short" })}</option>)}
           </select>
         </div>
         <div className="space-y-1.5">

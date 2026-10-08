@@ -3,8 +3,11 @@ export const dynamic = "force-dynamic";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
+import { planHoursSync } from "@/lib/subjects/hoursSync";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { getHodDepartmentScope, canHodEditDepartmentId } from "@/lib/departments/scope";
+import { getHodDepartmentScope, canHodEditDepartmentId, canHodEditDepartment } from "@/lib/departments/scope";
+import { sectionAssignmentScope } from "@/lib/departments/sectionAssignmentScope";
+import { resolveSectionCurrentSemester } from "@/lib/college/semester";
 import { SubjectInstanceService, teachingAssignmentUsesInstance } from "@/lib/subjects/services/SubjectInstanceService";
 import { cachedCollectionDocs } from "@/lib/firestore/sharedReads";
 import { getInChunks } from "@/lib/firestore/inQuery";
@@ -25,9 +28,11 @@ export async function GET(request: Request) {
     const departmentId = searchParams.get("departmentId");
     const semester = searchParams.get("semester");
     const year = searchParams.get("year");
+    // "The subjects assigned to THIS section" - resolved from the section itself (see below).
+    const forSectionId = searchParams.get("forSectionId");
 
     // Need at least courseId or subjectId to narrow the query
-    if (!courseId && !subjectId) {
+    if (!courseId && !subjectId && !forSectionId) {
       return NextResponse.json({ error: "courseId or subjectId is required" }, { status: 400 });
     }
 
@@ -45,6 +50,49 @@ export async function GET(request: Request) {
       if (departmentId && !canHodEditDepartmentId(hodScope, departmentId)) {
         return NextResponse.json({ error: "That department is not yours or one of your sub-departments" }, { status: 403 });
       }
+    }
+
+    // Section mode: the caller starts from a section, not from a department it already resolved.
+    // Assign to Semester files a shared first year's subjects under the MANAGING department
+    // (e.g. BS-ENGLISH), never under each branch it feeds (CE) - so asking by the branch's own
+    // department found nothing for a managed branch. sectionAssignmentScope resolves the
+    // governing department(s) and the programme's course docs exactly as teaching-assignments
+    // does. `currentSemesterOnly=1` keeps just the semester the section's course-year is in now
+    // (a course-year with no semesters configured keeps every row, as before).
+    if (forSectionId) {
+      const sectionSnap = await collegeRef.collection("sections").doc(forSectionId).get();
+      if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found" }, { status: 404 });
+      const section = sectionSnap.data() as { department: string; courseId?: string; year: number };
+      if (hodScope && !canHodEditDepartment(hodScope, section.department)) {
+        return NextResponse.json({ error: "This section isn't in your department" }, { status: 403 });
+      }
+      const [courseDocs, deptDocs] = await Promise.all([
+        cachedCollectionDocs(db, session.collegeId, "courses"),
+        cachedCollectionDocs(db, session.collegeId, "departments"),
+      ]);
+      const scope = sectionAssignmentScope(
+        section,
+        courseDocs.map((d) => ({ id: d.id, ...d.data() })) as Pick<Course, "id" | "departmentId" | "catalogId">[],
+        deptDocs.map((d) => ({ id: d.id, ...d.data() })) as (Department & { id: string })[]
+      );
+      const currentSemester = section.courseId
+        ? await resolveSectionCurrentSemester(db, session.collegeId, section.courseId, section.year)
+        : null;
+      // Narrowed by department (a single-field `in`, so no composite index) rather than by
+      // course: every department files its assignments under its own Course doc.
+      const docs = scope.departmentIds.length
+        ? await getInChunks(scope.departmentIds, (chunk) => collegeRef.collection("subjectSemesterAssignments").where("departmentId", "in", chunk))
+        : [];
+      const courseSet = new Set(scope.courseIds);
+      let rows = docs.map((d) => ({ id: d.id, ...d.data() } as Record<string, unknown>));
+      rows = rows.filter((a) =>
+        (a.courseId == null || courseSet.has(String(a.courseId))) &&
+        (a.year == null || a.year === Number(section.year))
+      );
+      if (searchParams.get("currentSemesterOnly") === "1" && currentSemester != null) {
+        rows = rows.filter((a) => a.semester === currentSemester);
+      }
+      return NextResponse.json({ assignments: rows, semester: currentSemester });
     }
 
     // If a departmentId is provided, also include assignments for any
@@ -206,6 +254,7 @@ export async function PATCH(request: Request) {
         subjectName?: string;
         subjectCode?: string;
         shortCode?: string;
+        altShortCode?: string;
         category?: string;
         customCategory?: string | null;
         type?: string;
@@ -234,6 +283,12 @@ export async function PATCH(request: Request) {
     const tutorialHours = body.tutorialHours !== undefined ? Number(body.tutorialHours) : cur.tutorialHours ?? 0;
     const practicalHours = body.practicalHours !== undefined ? Number(body.practicalHours) : cur.practicalHours ?? 0;
     const hoursPerWeek = lectureHours + tutorialHours + practicalHours;
+    // The Subjects dialog sends every field on every save, so a save that only
+    // renames a short code still arrives carrying the hours it already had.
+    // Whether this request CHANGES them decides whether an over-placed
+    // timetable is this save's doing - see planHoursSync.
+    const prevHoursPerWeek = (cur.lectureHours ?? 0) + (cur.tutorialHours ?? 0) + (cur.practicalHours ?? 0);
+    const hoursChanged = hoursPerWeek !== prevHoursPerWeek;
 
     // Teaching assignments copy hoursPerWeek (it caps their timetable periods),
     // so keep the ones relying on this instance in step - but never below the
@@ -247,7 +302,7 @@ export async function PATCH(request: Request) {
     ]);
     const departments = deptDocs.map((d) => ({ id: d.id, ...d.data() })) as (Department & { id: string })[];
     const coursesById = new Map(courseDocs.map((d) => [d.id, d.data() as Pick<Course, "departmentId" | "catalogId">]));
-    const stale = taSnap.docs.filter((d) => {
+    let stale = taSnap.docs.filter((d) => {
       const ta = d.data() as TeachingAssignment;
       return ta.hoursPerWeek !== hoursPerWeek && !!cur.departmentId
         && teachingAssignmentUsesInstance(ta, { departmentId: cur.departmentId, semester: cur.semester, year: cur.year }, departments, coursesById);
@@ -259,11 +314,22 @@ export async function PATCH(request: Request) {
         const id = (s.data() as { assignmentId: string }).assignmentId;
         placed.set(id, (placed.get(id) ?? 0) + 1);
       }
-      const over = stale.filter((d) => (placed.get(d.id) ?? 0) > hoursPerWeek);
-      if (over.length > 0) {
-        const who = over.slice(0, 3).map((d) => { const t = d.data() as TeachingAssignment; return `${t.facultyName} (${t.sectionName ?? "-"}, ${placed.get(d.id)} periods)`; }).join("; ");
+      const plan = planHoursSync(
+        stale.map((d) => ({ id: d.id, placedPeriods: placed.get(d.id) ?? 0 })),
+        hoursPerWeek,
+        hoursChanged
+      );
+      if (plan.blockedIds.length > 0) {
+        const blocked = new Set(plan.blockedIds);
+        const who = stale.filter((d) => blocked.has(d.id)).slice(0, 3)
+          .map((d) => { const t = d.data() as TeachingAssignment; return `${t.facultyName} (${t.sectionName ?? "-"}, ${placed.get(d.id)} periods)`; }).join("; ");
         return NextResponse.json({ error: `Can't lower hours below the periods already placed on the timetable: ${who}. Remove those periods first.` }, { status: 409 });
       }
+      // Hours untouched by this save: an assignment already over its cap keeps
+      // the hours it has. Lowering it here would put its timetable over the cap
+      // instead of refusing, which is the very thing the refusal guards against.
+      const syncIds = new Set(plan.syncIds);
+      stale = stale.filter((d) => syncIds.has(d.id));
     }
 
     await ref.update({
@@ -287,6 +353,7 @@ export async function PATCH(request: Request) {
       if (snap2.subjectName != null) fields.subjectName = String(snap2.subjectName).trim();
       if (snap2.subjectCode != null) fields.subjectCode = String(snap2.subjectCode).toUpperCase().trim();
       if (snap2.shortCode != null) fields.shortCode = String(snap2.shortCode).trim().toUpperCase();
+      if (snap2.altShortCode != null) fields.altShortCode = String(snap2.altShortCode).trim().toUpperCase();
       if (snap2.category != null) fields.category = snap2.category;
       if ("customCategory" in snap2) fields.customCategory = snap2.customCategory ?? null;
       if (snap2.type != null) fields.type = snap2.type;

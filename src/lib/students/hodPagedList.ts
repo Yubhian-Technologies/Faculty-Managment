@@ -3,10 +3,10 @@ import { getHodDepartmentScope, type HodDepartmentScope } from "@/lib/department
 import { resolveBranchYearOwner, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import {
   resolveCatalogId,
-  expandDepartmentNameForRollup,
   freshmanLandingDepartmentNames,
   type DepartmentWithId,
 } from "@/lib/college/academicStructure";
+import { resolveRollupDepartmentNames } from "@/lib/students/departmentRollup";
 import { sortStudentsForList } from "@/lib/students/listOrder";
 import { signStudentId, verifySignedStudentId } from "@/lib/students/signedIds";
 import { projectStudentsForRole } from "@/lib/students/listProjection";
@@ -274,8 +274,13 @@ export async function fetchHodMeta(
   studentsColl: FirebaseFirestore.CollectionReference,
   ctx: HodStudentsContext
 ): Promise<{ departmentNames: string[]; freshmanDepartments: string[] }> {
+  // Picker options only: the HOD's own departments and their sub-departments.
+  // The branches they merely manage (managedDepartmentNames - e.g. every
+  // branch a Basic Science HOD handles first year for) are other
+  // departments' names, so they are not offered as filters. Their students are
+  // still part of the roster ("All departments") - only the option is omitted.
   const departmentNames = Array.from(
-    new Set([...ctx.scope.ownDepartmentNames, ...ctx.scope.childDepartmentNames, ...ctx.scope.managedDepartmentNames])
+    new Set([...ctx.scope.ownDepartmentNames, ...ctx.scope.childDepartmentNames])
   ).sort();
 
   let freshmanDepartments: string[] = [];
@@ -337,7 +342,9 @@ export async function handleHodStudentsRequest(
   const filters: HodListFilters = {
     level,
     freshmanDept: incoming,
-    departmentNames: department ? expandDepartmentNameForRollup(ctx.departments as DepartmentWithId[], department) : null,
+    departmentNames: department
+      ? await resolveRollupDepartmentNames(db.collection("colleges").doc(session.collegeId), ctx.departments as DepartmentWithId[], department)
+      : null,
     coreDepartment: (params.get("coreDepartment") ?? "").trim(),
     course: (params.get("course") ?? "").trim(),
     year: yearParam && Number.isFinite(Number(yearParam)) ? Number(yearParam) : null,
