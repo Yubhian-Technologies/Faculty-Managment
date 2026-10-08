@@ -13,10 +13,10 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
 import { yearOrdinalLabel } from "@/lib/college/academicYears";
-import { sectionParityGap, describeSectionParityGap } from "@/lib/college/sectionParity";
+import { sectionParityGap, describeSectionParityGap, isSharedYearSection } from "@/lib/college/sectionParity";
 import { parseExcelFile, parseCSV, matchHeaders, getUnmatchedHeaders, readFileAsText } from "@/lib/utils/csv";
 import { cn } from "@/lib/utils";
-import type { AcademicYear, Course, Section, StudentRecord } from "@/types";
+import type { AcademicYear, Course, Department, Section, StudentRecord } from "@/types";
 
 const GRADUATE = "GRADUATE" as const;
 
@@ -134,6 +134,9 @@ export function StudentPromotionsPanel({ showHeader = true }: { showHeader?: boo
   const allotmentFileRef = useRef<HTMLInputElement>(null);
   const [allotmentError, setAllotmentError] = useState("");
   const [allotmentSummary, setAllotmentSummary] = useState<AllotmentSummary | null>(null);
+  // Only for the parity rule below - which department actually runs a given
+  // (branch, year). Nothing here reads or writes a student.
+  const [departments, setDepartments] = useState<Department[]>([]);
 
   useEffect(() => {
     setIsLoadingContext(true);
@@ -141,11 +144,13 @@ export function StudentPromotionsPanel({ showHeader = true }: { showHeader?: boo
       fetch("/api/college/sections").then((r) => r.json() as Promise<{ sections: Section[] }>).then((d) => d.sections ?? []),
       fetch("/api/college/academic-years").then((r) => r.json() as Promise<{ academicYears: AcademicYear[] }>).then((d) => (d.academicYears ?? []).filter((y) => y.isActive)),
       fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses: Course[] }>).then((d) => d.courses ?? []),
+      fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments?: Department[] }>).then((d) => d.departments ?? []).catch(() => []),
     ])
-      .then(([sections, years, courses]) => {
+      .then(([sections, years, courses, departments]) => {
         setSections(sections);
         setOpenYears(years);
         setCourses(courses);
+        setDepartments(departments);
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load sections" }))
       .finally(() => setIsLoadingContext(false));
@@ -173,10 +178,12 @@ export function StudentPromotionsPanel({ showHeader = true }: { showHeader?: boo
   // (same course + department) - otherwise a section has nowhere to go, or an
   // extra one is left empty. Shared-first-year feeder sections are exempt.
   const parityError = useMemo(() => {
-    if (!sourceSection || isFinalYear || (sourceSection.secondaryDepartments?.length ?? 0) > 0) return "";
+    if (!sourceSection || isFinalYear) return "";
+    const catalogId = courses.find((c) => c.id === sourceSection.courseId)?.catalogId;
+    if (isSharedYearSection(sourceSection, departments, catalogId)) return "";
     const gap = sectionParityGap(sections, sourceSection.department, sourceSection.courseId, sourceSection.year, sourceSection.year + 1);
     return gap.missing.length || gap.extra.length ? describeSectionParityGap(gap, sourceSection.year, sourceSection.year + 1) : "";
-  }, [sections, sourceSection, isFinalYear]);
+  }, [sections, sourceSection, isFinalYear, departments, courses]);
 
   useEffect(() => {
     if (!sourceSection) {

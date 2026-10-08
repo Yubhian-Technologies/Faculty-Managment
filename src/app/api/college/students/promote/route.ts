@@ -8,10 +8,10 @@ import { getAdminAuth, getAdminDb } from "@/lib/firebase/admin";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import type { Firestore } from "firebase-admin/firestore";
-import { sectionParityGap, describeSectionParityGap } from "@/lib/college/sectionParity";
+import { sectionParityGap, describeSectionParityGap, isSharedYearSection } from "@/lib/college/sectionParity";
 import { invalidPromotion, notInFinalYear, notInSourceSection } from "@/lib/students/promotionRules";
 import { setStudentLoginActive } from "@/lib/students/provisionLogin";
-import type { Section, StudentRecord } from "@/types";
+import type { Department, Section, StudentRecord } from "@/types";
 
 const MAX_STUDENTS_PER_CALL = 400;
 
@@ -87,7 +87,15 @@ export async function POST(request: Request) {
       const sourceSnap = await collegeRef.collection("sections").doc(body.sourceSectionId).get();
       if (sourceSnap.exists) {
         promoteSource = { id: sourceSnap.id, ...(sourceSnap.data() as object) } as Section;
-        const isFeeder = (promoteSource.secondaryDepartments?.length ?? 0) > 0;
+        // A shared first year is arranged two ways: the section filed under the
+        // feeder and naming the branch it feeds, or filed under the branch with
+        // the relationship on the departments. Both fan out, so neither carries
+        // its section name upward - see isSharedYearSection.
+        const sourceCourse = await collegeRef.collection("courses").doc(promoteSource.courseId).get();
+        const sourceCatalogId = sourceCourse.exists ? (sourceCourse.data() as { catalogId?: string }).catalogId : undefined;
+        const allDeptsSnap = await collegeRef.collection("departments").get();
+        const allDepts = allDeptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as Department[];
+        const isFeeder = isSharedYearSection(promoteSource, allDepts, sourceCatalogId);
         if (!isFeeder && promoteSource.courseId === targetSection!.courseId) {
           const courseSections = await collegeRef.collection("sections").where("courseId", "==", promoteSource.courseId).get();
           const gap = sectionParityGap(
