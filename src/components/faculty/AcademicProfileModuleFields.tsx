@@ -185,8 +185,8 @@ export function ExperienceFields({ value: rawValue, onChange, includeTeachingAss
           const overlap = findOverlappingExperience(allExperienceEntries, item);
           return (
             <>
-              <TextInput label="Institution Name" value={item.institutionName} onChange={(v) => update({ institutionName: v })} />
-              <TextInput label="Place of the University/College" value={item.place} onChange={(v) => update({ place: v })} placeholder="e.g. Bhimavaram" />
+              <TextInput label={activeTab.key === "academic" ? "Name of the Institution" : activeTab.key === "industry" ? "Name of the Industry" : "Name of the Research Organization"} value={item.institutionName} onChange={(v) => update({ institutionName: v })} />
+              <TextInput label={activeTab.key === "academic" ? "Location of the Institution" : activeTab.key === "industry" ? "Location of the Industry" : "Location of the Research Organization"} value={item.place} onChange={(v) => update({ place: v })} placeholder="e.g. Bhimavaram" />
               <TextInput label="Designation" value={item.designation} onChange={(v) => update({ designation: v })} />
               <DateInput
                 label="From Date"

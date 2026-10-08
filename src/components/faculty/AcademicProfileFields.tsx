@@ -102,8 +102,8 @@ export function AcademicProfileFields({ value: rawValue, onChange, includeTeachi
         onChange={(v) => set("academicExperience", v)}
         renderRow={(item, update) => (
           <>
-            <TextInput label="Institution Name" value={item.institutionName} onChange={(v) => update({ institutionName: v })} />
-            <TextInput label="Place of the University/College" value={item.place} onChange={(v) => update({ place: v })} placeholder="e.g. Bhimavaram" />
+            <TextInput label="Name of the Institution" value={item.institutionName} onChange={(v) => update({ institutionName: v })} />
+            <TextInput label="Location of the Institution" value={item.place} onChange={(v) => update({ place: v })} placeholder="e.g. Bhimavaram" />
             <TextInput label="Designation" value={item.designation} onChange={(v) => update({ designation: v })} />
             {(() => {
               const fromDate = item.fromDate ?? (item.fromYear ? `${item.fromYear}-01-01` : undefined);
@@ -121,6 +121,17 @@ export function AcademicProfileFields({ value: rawValue, onChange, includeTeachi
                   />
                 </>
               );
+            })()}
+            {(() => {
+              const d = durationBetween(
+                item.fromDate ?? (item.fromYear ? `${item.fromYear}-01-01` : undefined),
+                item.toDate ?? (item.toYear ? `${item.toYear}-01-01` : undefined),
+              );
+              return (d.years > 0 || d.months > 0 || d.days > 0) ? (
+                <p className="sm:col-span-2 text-xs text-muted-foreground">
+                  Experience: <span className="font-medium text-foreground">{formatDuration(d)}</span>
+                </p>
+              ) : null;
             })()}
             <NumInput label="Joining Salary" value={item.joiningSalary} onChange={(v) => update({ joiningSalary: v })} />
             <NumInput label="Leaving Salary" value={item.leavingSalary} onChange={(v) => update({ leavingSalary: v })} />
