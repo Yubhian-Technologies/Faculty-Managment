@@ -34,6 +34,49 @@ export async function notify(
   }
 }
 
+/**
+ * Batches notification writes to multiple recipients using Firestore WriteBatch.
+ * Chunks recipient UIDs into 500-item limits per batch to eliminate N sequential network calls.
+ */
+export async function batchNotify(
+  db: Firestore,
+  collegeId: string,
+  toUids: string[],
+  type: string,
+  title: string,
+  message: string,
+  link?: string
+) {
+  if (toUids.length === 0) return;
+  const uniqueUids = Array.from(new Set(toUids));
+  const notificationsCol = db.collection("colleges").doc(collegeId).collection("notifications");
+  const createdAt = new Date();
+
+  for (let i = 0; i < uniqueUids.length; i += 500) {
+    const chunk = uniqueUids.slice(i, i + 500);
+    const batch = db.batch();
+    for (const toUid of chunk) {
+      const ref = notificationsCol.doc();
+      batch.set(ref, {
+        collegeId,
+        toUid,
+        type,
+        title,
+        message,
+        read: false,
+        link: link ?? null,
+        createdAt,
+      });
+    }
+    try {
+      await batch.commit();
+    } catch (err) {
+      console.error("[batchNotify] Batch commit failed:", err);
+    }
+  }
+}
+
+
 // Principal/VP/College Admin are locked into every interview panel, but the
 // panel-stage prompts (candidate arrived, scoring open, feedback unlocked) are
 // meant for the HOD-side panel and would only be noise on their bell. Keeps

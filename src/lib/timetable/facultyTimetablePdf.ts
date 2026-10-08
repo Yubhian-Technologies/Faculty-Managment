@@ -204,8 +204,8 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
       <tr>
         <td class="logo-cell"><img src="${escapeHtml(resolveLogoUrl(opts.college?.logoUrl))}" alt="logo"></td>
         <td class="letterhead-text">
-          <div class="college-name">${escapeHtml(opts.college?.name || "VISHNU INSTITUTE OF TECHNOLOGY")}${opts.college?.code ? ` (${escapeHtml(opts.college.code)})` : ""}</div>
-          ${[opts.college?.affiliation || "(Approved by AICTE, Affiliated to JNTUK, Kakinada)", opts.college?.address || "Vishnupur, Bhimavaram-534202", opts.college?.phone ? `Tel: ${opts.college.phone}` : ""].filter(Boolean).map((l) => `<div class="identity-line">${escapeHtml(l)}</div>`).join("")}
+          ${opts.college?.name ? `<div class="college-name">${escapeHtml(opts.college.name)}${opts.college.code ? ` (${escapeHtml(opts.college.code)})` : ""}</div>` : ""}
+          ${[opts.college?.affiliation, opts.college?.address, opts.college?.phone ? `Tel: ${opts.college.phone}` : ""].filter(Boolean).map((l) => `<div class="identity-line">${escapeHtml(l as string)}</div>`).join("")}
         </td>
         <td class="logo-cell"></td>
       </tr>

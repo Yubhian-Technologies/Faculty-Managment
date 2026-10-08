@@ -405,7 +405,7 @@ export default function HODTeachingPage() {
                               const nameKey = (subjectName || "").toUpperCase().trim();
                               const hl = Object.keys(highlights).length > 0
                                 ? highlightFor(highlights, codeKey, nameKey, (slot.subjectId || "").toUpperCase().trim())
-                                : (assignment?.subjectType === "PRACTICAL" || Boolean(slot.labBatch) || /(lab|laboratory|practical)/i.test(subjectName)) ? HIGHLIGHT_COLORS.purple : null;
+                                : (assignment?.subjectType === "PRACTICAL" || Boolean(slot.labBatch) || /\b(lab|laboratory|practical)\b/i.test(subjectName)) ? HIGHLIGHT_COLORS.purple : null;
                               const isSubstitute = Boolean(slot.substituteFacultyName || slot.substituteForName);
 
                               return (

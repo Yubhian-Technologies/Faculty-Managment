@@ -132,26 +132,18 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
   const subjectMap = new Map(subjects.map((s) => [s.id, s]));
 
   // ── Letterhead ────────────────────────────────────────────────────────────
-  const displayCollegeName = collegeName || "VISHNU INSTITUTE OF TECHNOLOGY";
-  const displayAddress = address || "Vishnupur, Bhimavaram-534202";
-  const displayAffiliation = affiliation || "(Approved by AICTE, Affiliated to JNTUK, Kakinada)";
-
-  const deptLine = resolvedDepartment
-    ? `<div class="dept-line" style="font-size:10.5pt;font-weight:700;margin-top:2px;color:#1e293b;">${escapeHtml(
-        /^department/i.test(resolvedDepartment.trim()) ? resolvedDepartment.trim() : `Department of ${resolvedDepartment.trim()}`
-      )}</div>`
-    : "";
-
   const identityLines = [
-    displayAffiliation,
-    displayAddress,
+    affiliation,
+    address,
     phone ? `Tel : ${phone}` : "",
   ]
     .filter(Boolean)
     .map((line) => `<div class="identity-line">${escapeHtml(line)}</div>`)
     .join("");
 
-  const nameLine = `<div class="inst-name">${escapeHtml(displayCollegeName)}${collegeCode ? ` ( Code: ${escapeHtml(collegeCode)} )` : ""}</div>`;
+  const nameLine = collegeName
+    ? `<div class="inst-name">${escapeHtml(collegeName)}${collegeCode ? ` ( Code: ${escapeHtml(collegeCode)} )` : ""}</div>`
+    : "";
 
   // Header metadata: Year /Sem/Branch and Class In-charge on left, ROOM NO on right.
   const resolvedRoom = opts.classroom || section?.classroomNumber || (section as { classroom?: string })?.classroom;
@@ -167,7 +159,7 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
 
   // Always a logo: the college's own, else the bundled Vishnu logo.
   const resolvedLogo = resolveLogoUrl(logoUrl);
-  const logoTd = `<td class="logo-cell"><img src="${escapeHtml(resolvedLogo)}" alt="${escapeHtml(displayCollegeName)} logo"></td>`;
+  const logoTd = `<td class="logo-cell"><img src="${escapeHtml(resolvedLogo)}" alt="${escapeHtml(collegeName)} logo"></td>`;
 
   const subtitleText = buildClassTimetableSubtitle({
     academicYear: opts.academicYear,
@@ -182,7 +174,6 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
       <td class="letterhead-text">
         ${nameLine}
         ${identityLines}
-        ${deptLine}
       </td>
       <td class="logo-cell"></td>
     </tr>
