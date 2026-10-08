@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/hooks/useToast";
+import { useCollegeInfo } from "@/hooks/useCollegeInfo";
 import { downloadFreeFacultyPdf, downloadFreeFacultyXlsx } from "@/lib/timetable/freeFacultyExport";
 import { formatTime12h } from "@/lib/timetable/facultyTimetablePdf";
 interface LeisureFaculty { id: string; employeeId: string; name: string; department: string; freeRanges?: [string, string][] }
@@ -19,6 +20,8 @@ interface LeisureFaculty { id: string; employeeId: string; name: string; departm
 // any period it OVERLAPS, so it never has to line up with period boundaries -
 // which is why there is no period picker here.
 export function FacultyLeisureFilter({ scopeLabel = "in the college" }: { scopeLabel?: string } = {}) {
+  const { collegeInfo } = useCollegeInfo();
+  const college = collegeInfo ?? undefined;
   const [departments, setDepartments] = useState<string[]>([]);
 
   const [department, setDepartment] = useState("");
@@ -89,8 +92,8 @@ export function FacultyLeisureFilter({ scopeLabel = "in the college" }: { scopeL
     setExporting(kind);
     try {
       const base = `free-faculty-${loadedSlot.replace(/[^A-Za-z0-9]+/g, "-")}`;
-      if (kind === "pdf") await downloadFreeFacultyPdf(faculty, loadedSlot, base, [from, to]);
-      else await downloadFreeFacultyXlsx(faculty, loadedSlot, base, [from, to]);
+      if (kind === "pdf") await downloadFreeFacultyPdf(faculty, loadedSlot, base, [from, to], college);
+      else await downloadFreeFacultyXlsx(faculty, loadedSlot, base, [from, to], college);
     } catch {
       toast({ variant: "destructive", title: "Download failed" });
     } finally {

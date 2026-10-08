@@ -638,7 +638,7 @@ export function WeeklyTimetableMatrix({
               </div>
 
               <div className="grid grid-cols-2 gap-3 text-xs">
-                <div className="p-2.5 rounded-lg border bg-card">
+                <div className="p-2.5 rounded-lg border bg-card col-span-2">
                   <span className="text-muted-foreground block text-[11px]">Timing</span>
                   {selectedSlotCol && periodTimeRange(selectedSlotCol.startTime, selectedSlotCol.endTime) ? (
                     <span className="font-semibold text-foreground text-sm">
@@ -649,12 +649,6 @@ export function WeeklyTimetableMatrix({
                   )}
                 </div>
 
-                <div className="p-2.5 rounded-lg border bg-card">
-                  <span className="text-muted-foreground block text-[11px]">Classroom / Location</span>
-                  <span className="font-semibold text-foreground text-sm">
-                    {selectedSlot.classroom ? `Room ${selectedSlot.classroom}` : "To be announced"}
-                  </span>
-                </div>
 
                 <div className="p-2.5 rounded-lg border bg-card col-span-2">
                   <span className="text-muted-foreground block text-[11px]">Faculty In-Charge</span>

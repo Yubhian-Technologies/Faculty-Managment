@@ -115,7 +115,18 @@ export async function GET(request: Request) {
 
     // One row per class + subject + room; co-teachers and lab batches of the
     // same class fold into it with their names joined.
-    type Row = { classroom: string; year: number; department: string; sectionName: string; classLabel: string; subject: string; faculty: string[] };
+    const codeByDeptName = new Map(deptsSnap.docs.map((d) => {
+      const x = d.data() as { name?: string; code?: string };
+      return [(x.name ?? "").trim().toLowerCase(), (x.code ?? "").trim()] as const;
+    }));
+    // "Dept - Section" in short form: the section name without its BS?- prefix,
+    // led by the department's short code when the name doesn't already carry it.
+    const deptSectionOf = (dept: string, name: string) => {
+      const sec = (name ?? "").trim().replace(/^BS[A-Z]?[-_]/i, "");
+      const code = codeByDeptName.get(dept.toLowerCase()) ?? "";
+      return code && !sec.toUpperCase().includes(code.toUpperCase()) ? `${code}-${sec}` : sec;
+    };
+    type Row = { classroom: string; year: number; yearLabel: string; deptSection: string; department: string; sectionName: string; classLabel: string; subject: string; faculty: string[] };
     const rowsByKey = new Map<string, Row>();
     for (const s of inSession) {
       const sec = sectionById.get(s.sectionId);
@@ -127,6 +138,8 @@ export async function GET(request: Request) {
       const row = rowsByKey.get(key) ?? {
         classroom,
         year: Number(sec.year),
+        yearLabel: ordinalYearLabel(sec.year),
+        deptSection: deptSectionOf(dept, sec.name),
         department: dept,
         sectionName: sec.name,
         classLabel: `${ordinalYearLabel(sec.year)} - ${dept} - ${sec.name}`,
@@ -139,7 +152,7 @@ export async function GET(request: Request) {
 
     const classes = Array.from(rowsByKey.values())
       .sort((a, b) => a.department.localeCompare(b.department) || a.year - b.year || a.sectionName.localeCompare(b.sectionName))
-      .map((r) => ({ classroom: r.classroom, classLabel: r.classLabel, subject: r.subject, faculty: r.faculty.join(", ") }));
+      .map((r) => ({ classroom: r.classroom, classLabel: r.classLabel, year: r.yearLabel, deptSection: r.deptSection, subject: r.subject, faculty: r.faculty.join(", ") }));
 
     return NextResponse.json({ classes, asOf: { date, from } });
   } catch (err) {

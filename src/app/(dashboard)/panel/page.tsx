@@ -9,6 +9,7 @@ import {
   GraduationCap,
   CalendarCheck,
   CalendarRange,
+  BookOpenCheck,
   ClipboardList,
   MessageSquare,
   UserCircle,
@@ -52,6 +53,13 @@ const FACULTY_MODULES = [
     href: "/panel/monthly-records",
     icon: CalendarRange,
     color: "bg-blue-50 text-blue-600",
+  },
+  {
+    label: "Topics Covered",
+    description: "Class work you recorded",
+    href: "/panel/topics-covered",
+    icon: BookOpenCheck,
+    color: "bg-rose-50 text-rose-600",
   },
   {
     label: "Students",
