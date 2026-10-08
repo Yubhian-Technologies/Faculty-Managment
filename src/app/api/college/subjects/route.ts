@@ -242,8 +242,14 @@ export async function POST(request: Request) {
             .where("courseId", "==", courseId);
 
       const dupeSnap = await dupeQuery.get();
+      let existingSubjectId: string | undefined;
       const hasDupe = dupeSnap.docs.some((d) => {
-        const data = d.data() as { code?: string; regulation?: string; semester?: number; year?: number };
+        const data = d.data() as { code?: string; name?: string; regulation?: string; semester?: number; year?: number };
+        // Same code AND name: the caller may reuse this subject instead of adding a copy.
+        if ((data.code ?? "").toUpperCase() === code && (data.regulation ?? "").trim() === regKey
+          && (data.name ?? "").trim().toLowerCase() === body.name!.trim().toLowerCase()) {
+          existingSubjectId = d.id;
+        }
         const sameCode = (data.code ?? "").toUpperCase() === code;
         const sameReg = (data.regulation ?? "").trim() === regKey;
         if (body.semester && data.semester != null) {
@@ -254,7 +260,7 @@ export async function POST(request: Request) {
 
       if (hasDupe) {
         return NextResponse.json(
-          { error: `A subject with code "${code}" already exists for this regulation and department.` },
+          { error: `A subject with code "${code}" already exists for this regulation and department.`, existingSubjectId },
           { status: 409 },
         );
       }

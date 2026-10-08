@@ -249,9 +249,11 @@ export default function SubjectsPage() {
           excludeFromTeachingLoad: addForm.excludeFromTeachingLoad,
         }),
       });
-      const sbody = await sres.json() as { id?: string; subject?: { id: string }; error?: string };
-      const subjectId = sbody.id ?? sbody.subject?.id;
-      if (!sres.ok || !subjectId) { setAddError(sbody.error ?? "Failed to add the subject."); return; }
+      const sbody = await sres.json() as { id?: string; subject?: { id: string }; error?: string; existingSubjectId?: string };
+      // Same code + name already exists for this course (e.g. added under another department):
+      // reuse it and just list it under this department, instead of refusing.
+      const subjectId = sbody.id ?? sbody.subject?.id ?? (sres.status === 409 ? sbody.existingSubjectId : undefined);
+      if (!subjectId || (!sres.ok && sres.status !== 409)) { setAddError(sbody.error ?? "Failed to add the subject."); return; }
 
       const ares = await fetch("/api/college/subject-semester-assignments", {
         method: "POST",
