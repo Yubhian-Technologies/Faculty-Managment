@@ -3060,6 +3060,7 @@ export interface StudentDepartmentHistoryEntry {
 // ─── Notifications ──────────────────────────────────────────────────────────── 
 
 export type NotificationType =
+  | "COLLEGE_EMAIL_CHANGED"
   // Recruitment
   | "VACANCY_APPROVED"
   | "VACANCY_REJECTED"
@@ -3237,6 +3238,8 @@ export type AuditAction =
   // Faculty module
   | "FACULTY_CREATED"
   | "FACULTY_UPDATED"
+  | "FACULTY_COLLEGE_EMAIL_CHANGED"
+  | "FACULTY_COLLEGE_EMAIL_BULK_IMPORT"
   | "FACULTY_STATUS_CHANGED"
   | "FACULTY_DELETED"
   // Academic structure (sections, teaching assignments, published timetables)
