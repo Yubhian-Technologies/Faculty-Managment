@@ -1,6 +1,5 @@
 import { managerEffectiveYears } from "@/lib/departments/hodScope";
 import type { DepartmentYearRow } from "@/lib/departments/managedBranches";
-import { resolveCatalogId } from "@/lib/college/academicStructure";
 import { cleanLabel, isKnownStatus, normKey, normStatus, statusRule, STATUS_RULES, UNSET_LABELS } from "./config";
 import type {
   BranchMeta,
@@ -100,13 +99,17 @@ export function effectiveBranchName(row: Pick<StrengthRow, "department" | "secon
  * teaches. Otherwise they count under the department they are FILED in, which
  * is the one teaching them that year.
  *
+ * Used to decide WHOSE students they are, not which column they appear in.
  * Computer Science and Engineering teaches years 2-4 of the B.Tech; its first
- * year is taught by BASIC SCIENCE - ENGLISH, which is where those 175 students
- * are filed. Counting them under CSE because they are headed there put a first
- * year on a department that has none - its B.Tech strength read 175 when it
- * should read 0, and an "I Year" column appeared against a year it does not
- * teach. They are counted under Basic Science - English instead, which is
- * configured for year 1 and is where they are.
+ * year is taught by BASIC SCIENCE - ENGLISH, where those 175 students are
+ * filed. They are not CSE's strength - its dashboard should read 0 - so the
+ * CSE HOD's scan does not admit them (filterRowsForHod).
+ *
+ * The cube itself still buckets every student by the branch they are headed
+ * for, so the department actually teaching them can pick that branch and find
+ * them: a BASIC SCIENCE - PHYSICS HOD selecting "Information Technology" gets
+ * the 176 first-years headed there. Bucketing them under the feeder instead
+ * made every branch read 0 for the one person who needs to see them.
  *
  * With nothing configured either way, the old answer stands - a college that
  * has not set Years Taught is not second-guessed.
@@ -180,17 +183,6 @@ export function buildStrengthCube(rows: StrengthRow[], catalog: StrengthCatalog)
     return { key: normKey(label), label };
   };
 
-  // The programme a student's course belongs to - Years Taught is configured
-  // per catalog entry, so the branch check below has to be asked per course.
-  const catalogCache = new Map<string, string | undefined>();
-  const catalogIdOf = (row: Pick<StrengthRow, "courseId" | "course">): string | undefined => {
-    const key = `${row.courseId ?? ""}${SEP}${row.course ?? ""}`;
-    if (!catalogCache.has(key)) {
-      const fromDoc = row.courseId ? courseById.get(row.courseId)?.catalogId : undefined;
-      catalogCache.set(key, fromDoc ?? resolveCatalogId(catalog.courses as never, undefined, row.course));
-    }
-    return catalogCache.get(key);
-  };
 
   const cellMap = new Map<string, StrengthCell>();
   const rollHolders = new Map<string, { roll: string; holders: { id: string; name: string }[] }>();
@@ -213,7 +205,7 @@ export function buildStrengthCube(rows: StrengthRow[], catalog: StrengthCatalog)
     const program = programOf(row);
     remember(programLabels, program.key, program.label);
 
-    const branchName = resolveBranchName(row, catalog.departments as never, catalogIdOf);
+    const branchName = effectiveBranchName(row);
     const branch = normKey(branchName);
     remember(branchLabels, branch, branchName);
 

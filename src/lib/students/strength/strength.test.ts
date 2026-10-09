@@ -501,31 +501,15 @@ describe("a cross-listing feeder's own filters", () => {
     expect(meta.branches.find((b) => b.key === "bs english")?.isFeeder).toBe(true);
   });
 
-  // CSE teaches years 2-4 of the B.Tech; its first year is BS English's. A
-  // student headed for CSE but sitting in year 1 is counted where they are,
-  // not where they are going - otherwise CSE's B.Tech strength reads 175 for a
-  // year it does not teach.
-  it("counts a first year under the department that teaches it", () => {
+  // The cube buckets by the branch a student is HEADED FOR, so the department
+  // teaching them can pick that branch and find them: a feeder HOD selecting
+  // "CSE" gets their CSE-bound first years. Whether those students are CSE's
+  // OWN strength is a different question, answered by filterRowsForHod - see
+  // hodScope.test.ts.
+  it("counts them under the branch they are headed for, so the feeder can find them", () => {
     const { cells } = buildStrengthCube(rows, CATALOG);
-    expect(totalFor(cells, F({ branch: "cse" }))).toBe(0);
-    expect(totalFor(cells, F({ branch: "bs english" }))).toBe(175);
-  });
-
-  it("counts them under the branch once they reach a year it teaches", () => {
-    const promoted = rows.map((r) => ({ ...r, year: 2 }));
-    const { cells } = buildStrengthCube(promoted, CATALOG);
     expect(totalFor(cells, F({ branch: "cse" }))).toBe(175);
     expect(totalFor(cells, F({ branch: "bs english" }))).toBe(0);
-  });
-
-  // A college that has not set Years Taught is not second-guessed.
-  it("keeps the old answer when the branch has no years configured", () => {
-    const unconfigured = {
-      ...CATALOG,
-      departments: CATALOG.departments.map((d) => (d.id === "cse" ? { ...d, assignedYears: [] } : d)),
-    };
-    const { cells } = buildStrengthCube(rows, unconfigured);
-    expect(totalFor(cells, F({ branch: "cse" }))).toBe(175);
   });
 
   // The Year filter offered I-IV because the COURSE is four years long, though
