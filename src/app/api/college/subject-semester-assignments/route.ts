@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { planHoursSync } from "@/lib/subjects/hoursSync";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { FieldValue } from "firebase-admin/firestore";
 import { getHodDepartmentScope, canHodEditDepartmentId, canHodEditDepartment } from "@/lib/departments/scope";
 import { sectionAssignmentScope } from "@/lib/departments/sectionAssignmentScope";
 import { resolveSectionCurrentSemester } from "@/lib/college/semester";
@@ -99,9 +100,17 @@ export async function GET(request: Request) {
     // child sub-departments (e.g. selecting "Basic Science" shows
     // assignments for BS-Chemistry, BS-Mathematics, etc.).
     let targetDeptIds: string[] | null = null;
+    // The requested department's own NAME - a row narrowed via "Target core
+    // departments" (secondaryDepartmentNames, see academics/subjects) is
+    // filed under some OTHER department's id (the feeder sub-department that
+    // owns it) but should still surface here when browsing straight to the
+    // core department it was narrowed to, same as Teaching Assignments
+    // already recognises it by.
+    let requestedDeptName: string | null = null;
     if (departmentId) {
       const deptSnap = await collegeRef.collection("departments").doc(departmentId).get();
-      const dept = deptSnap.data() as { parentDepartmentId?: string; hasSubDepartments?: boolean } | undefined;
+      const dept = deptSnap.data() as { name?: string; parentDepartmentId?: string; hasSubDepartments?: boolean } | undefined;
+      requestedDeptName = dept?.name ?? null;
       const deptIds = new Set([departmentId]);
       if (dept?.hasSubDepartments) {
         const childrenSnap = await collegeRef.collection("departments")
@@ -126,11 +135,13 @@ export async function GET(request: Request) {
     if (academicYear) {
       assignments = assignments.filter((a) => !a.academicYear || a.academicYear === academicYear);
     }
+    const narrowedToHere = (a: Record<string, unknown>) =>
+      !!requestedDeptName && Array.isArray(a.secondaryDepartmentNames) && (a.secondaryDepartmentNames as unknown[]).includes(requestedDeptName);
     if (targetDeptIds && targetDeptIds.length > 0) {
       const set = new Set(targetDeptIds);
-      assignments = assignments.filter((a) => a.departmentId && set.has(String(a.departmentId)));
+      assignments = assignments.filter((a) => (a.departmentId && set.has(String(a.departmentId))) || narrowedToHere(a));
     } else if (departmentId) {
-      assignments = assignments.filter((a) => a.departmentId === departmentId);
+      assignments = assignments.filter((a) => a.departmentId === departmentId || narrowedToHere(a));
     }
     if (semester != null) {
       const semNum = Number(semester);
@@ -142,9 +153,14 @@ export async function GET(request: Request) {
     }
     // No explicit departmentId (already validated above when present) - an
     // HOD's courseId/subjectId-only query must still never surface another
-    // department's mapping.
+    // department's mapping. A row narrowed to this HOD's own department via
+    // secondaryDepartmentNames passes too, even though its own departmentId
+    // belongs to whichever feeder sub-department actually owns it.
     if (hodScope && !departmentId) {
-      assignments = assignments.filter((a) => canHodEditDepartmentId(hodScope!, String(a.departmentId ?? "")));
+      assignments = assignments.filter((a) =>
+        canHodEditDepartmentId(hodScope!, String(a.departmentId ?? "")) ||
+        (Array.isArray(a.secondaryDepartmentNames) && (a.secondaryDepartmentNames as unknown[]).some((n) => typeof n === "string" && canHodEditDepartment(hodScope!, n)))
+      );
     }
 
     return NextResponse.json({ assignments });
@@ -247,6 +263,16 @@ export async function PATCH(request: Request) {
       tutorialHours?: number;
       practicalHours?: number;
       credits?: number;
+      // Narrows this row's own broad `departmentId` (a feeder sub-department
+      // like "Basic Science - Chemistry", which manages several core
+      // departments and would otherwise cover all of them - see
+      // subjectCoverage.ts's managed-department fallback) down to specific
+      // core department NAMES. Set when a core department isn't itself
+      // scoped to teach this year (e.g. a shared first year, where CSE/CSBS
+      // explicitly exclude Year 1 from their own Years Taught) and so can
+      // never be `departmentId` directly - this narrows without requiring
+      // that. `null` clears it back to broad coverage.
+      secondaryDepartmentNames?: string[] | null;
       // Subject-level fields already saved on the master subject (PATCH
       // subjects/[id]); mirrored onto every assignment row of that subject so
       // the Academics table, which reads these copies, doesn't show stale values.
@@ -268,6 +294,11 @@ export async function PATCH(request: Request) {
     for (const [k, v] of Object.entries(nums)) {
       if (v !== undefined && (!Number.isFinite(Number(v)) || Number(v) < 0)) {
         return NextResponse.json({ error: `${k} must be a non-negative number` }, { status: 400 });
+      }
+    }
+    if (body.secondaryDepartmentNames !== undefined && body.secondaryDepartmentNames !== null) {
+      if (!Array.isArray(body.secondaryDepartmentNames) || body.secondaryDepartmentNames.some((n) => typeof n !== "string" || !n.trim())) {
+        return NextResponse.json({ error: "secondaryDepartmentNames must be a list of non-empty names" }, { status: 400 });
       }
     }
 
@@ -338,6 +369,9 @@ export async function PATCH(request: Request) {
       practicalHours,
       hoursPerWeek,
       ...(body.credits !== undefined ? { credits: Number(body.credits) } : {}),
+      ...(body.secondaryDepartmentNames !== undefined
+        ? { secondaryDepartmentNames: body.secondaryDepartmentNames && body.secondaryDepartmentNames.length > 0 ? body.secondaryDepartmentNames : FieldValue.delete() }
+        : {}),
       isCustomized: true,
       updatedAt: new Date(),
     });
