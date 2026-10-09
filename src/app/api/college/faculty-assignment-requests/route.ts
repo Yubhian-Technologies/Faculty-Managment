@@ -42,14 +42,15 @@ export async function GET(request: Request) {
         coll.where("requestedBy", "==", session.uid).get(),
         myDeptNames.length > 0 ? coll.where("targetDepartmentName", "in", myDeptNames.slice(0, 30)).get() : Promise.resolve(null),
       ]);
+      const incomingIds = new Set((incomingSnap?.docs ?? []).map((d) => d.id));
       const seen = new Set<string>();
       const requests: { id: string; [key: string]: unknown }[] = [];
-      for (const d of outgoingSnap.docs) { seen.add(d.id); requests.push({ id: d.id, ...d.data() }); }
+      for (const d of outgoingSnap.docs) { seen.add(d.id); requests.push({ id: d.id, ...d.data(), incomingForMe: incomingIds.has(d.id) }); }
       if (incomingSnap) {
         for (const d of incomingSnap.docs) {
           if (seen.has(d.id)) continue;
           seen.add(d.id);
-          requests.push({ id: d.id, ...d.data() });
+          requests.push({ id: d.id, ...d.data(), incomingForMe: true });
         }
       }
       // Timetable editor only: allocated lends onto the section this Incharge
@@ -98,17 +99,20 @@ export async function GET(request: Request) {
       myNames.length > 0 ? coll.where("targetDepartmentName", "in", myNames.slice(0, 30)).get() : Promise.resolve(null),
     ]);
 
+    // Addressed to one of this HOD's departments - includes a request they raised
+    // themselves to another department they also head (it is still theirs to fulfil).
+    const incomingIds = new Set((incomingSnap?.docs ?? []).map((d) => d.id));
     const seen = new Set<string>();
     const requests: { id: string; [key: string]: unknown }[] = [];
     for (const d of outgoingSnap.docs) {
       seen.add(d.id);
-      requests.push({ id: d.id, ...d.data() });
+      requests.push({ id: d.id, ...d.data(), incomingForMe: incomingIds.has(d.id) });
     }
     if (incomingSnap) {
       for (const d of incomingSnap.docs) {
         if (seen.has(d.id)) continue;
         seen.add(d.id);
-        requests.push({ id: d.id, ...d.data() });
+        requests.push({ id: d.id, ...d.data(), incomingForMe: true });
       }
     }
     // Timetable editor only: every allocated lend onto this section, not just

@@ -111,7 +111,7 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
       setRequests(reqData.requests ?? []);
       setFaculty(facData.faculty ?? []);
       const targetDepts = Array.from(new Set(
-        (reqData.requests ?? []).filter((r) => r.requestedBy !== user?.uid).map((r) => r.targetDepartmentName).filter(Boolean),
+        (reqData.requests ?? []).filter((r) => r.incomingForMe ?? r.requestedBy !== user?.uid).map((r) => r.targetDepartmentName).filter(Boolean),
       ));
       if (user?.role === "HOD" && targetDepts.length > 0) {
         const entries = await Promise.all(targetDepts.map(async (dept) => {
@@ -140,7 +140,9 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
   // shared + notified). Those live in their own tab so the other two only hold
   // requests that still need someone to act.
   const isCompleted = (r: FacultyAssignmentRequest) => r.status === "DECLINED" || (r.status === "ALLOCATED" && !!r.busyClosed);
-  const incoming = requests.filter((r) => r.requestedBy !== user?.uid && !isCompleted(r));
+  // A request the viewer raised to another department they also head is BOTH: sent by them, and theirs to fulfil.
+  const isIncoming = (r: FacultyAssignmentRequest) => r.incomingForMe ?? r.requestedBy !== user?.uid;
+  const incoming = requests.filter((r) => isIncoming(r) && !isCompleted(r));
   const outgoing = requests.filter((r) => r.requestedBy === user?.uid && !isCompleted(r));
   const completed = requests.filter(isCompleted);
 
@@ -362,7 +364,7 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
           {visible.map((r) => {
             // Which side THIS request is on for the viewer - the Completed tab
             // mixes both directions, so it can't come from the active tab.
-            const dir = r.requestedBy !== user?.uid ? "incoming" : "outgoing";
+            const dir = tab === "incoming" ? "incoming" : tab === "outgoing" ? "outgoing" : isIncoming(r) ? "incoming" : "outgoing";
             return (
             <Card key={r.id}>
               <CardContent className="p-4 space-y-3">
