@@ -89,6 +89,16 @@ export interface StrengthMeta {
   batches: { key: string; label: string }[];
   /** Highest year of study seen anywhere (configured duration or observed). */
   maxYear: number;
+  /**
+   * The years this view may offer, when the viewer is scoped to departments
+   * that teach only some of them - an HOD. Absent for the college-wide view,
+   * where every year of a course is a real choice.
+   *
+   * Without it the Year filter offered 1..durationYears for any course in
+   * scope, so a shared-first-year department that teaches year 1 alone still
+   * listed II, III and IV Year - three choices that can only come back 0.
+   */
+  scopeYears?: number[];
 }
 
 /** "ENROLLED" = every status that counts toward strength; "ALL" = every status incl. graduated/other. */

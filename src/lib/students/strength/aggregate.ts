@@ -32,6 +32,23 @@ export interface CatalogDepartment {
   hasSubDepartments?: boolean;
   parentRunsOwnSections?: boolean;
   managedDepartments?: string[];
+  /**
+   * The other field a college may hold the same "I run a shared year for these
+   * branches" relationship in - the cross-listing. VISHNU WOMEN'S UNIVERSITY
+   * and YUBHIAN configure it this way; VISHNU INSTITUTE OF TECHNOLOGY uses
+   * managedDepartments. No department anywhere uses both.
+   */
+  secondaryDepartments?: string[];
+  assignedYears?: number[];
+  courseScopes?: Record<string, { assignedYears?: number[]; secondaryDepartments?: string[] }>;
+}
+
+/** The branches a department groups, from either field it may be configured in. */
+export function groupedBranchNames(d: Pick<CatalogDepartment, "managedDepartments" | "secondaryDepartments" | "courseScopes">): string[] {
+  const perCourse = Object.values(d.courseScopes ?? {}).flatMap((s) => s.secondaryDepartments ?? []);
+  return [...(d.managedDepartments ?? []), ...(d.secondaryDepartments ?? []), ...perCourse]
+    .map((n) => cleanLabel(n))
+    .filter(Boolean);
 }
 
 export interface CatalogSection {
@@ -220,7 +237,12 @@ export function buildStrengthCube(rows: StrengthRow[], catalog: StrengthCatalog)
       key,
       label: cleanLabel(d.name),
       code: cleanLabel(d.code),
-      isFeeder: (d.hasSubDepartments === true && d.parentRunsOwnSections === false) || (d.managedDepartments?.length ?? 0) > 0,
+      // A department that groups branches is a feeder however that grouping is
+      // configured. Reading managedDepartments alone meant BASIC SCIENCE -
+      // ENGLISH, which cross-lists instead, was offered as a Department of its
+      // own - a choice that can only come back 0, since its students are all
+      // counted under the branch they are headed for.
+      isFeeder: (d.hasSubDepartments === true && d.parentRunsOwnSections === false) || groupedBranchNames(d).length > 0,
       unknown: false,
     });
   }

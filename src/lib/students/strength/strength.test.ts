@@ -455,3 +455,49 @@ describe("the college's spreadsheet, regenerated from student rows", () => {
     expect(summarize(cells, meta, "ENROLLED").total).toBe(4974);
   });
 });
+
+// ── A shared-first-year department, as VISHNU WOMEN'S UNIVERSITY configures it:
+//    the branches are a CROSS-LISTING (secondaryDepartments), not
+//    managedDepartments, and the department teaches year 1 alone. ──
+describe("a cross-listing feeder's own filters", () => {
+  const CATALOG = {
+    courses: [{ id: "c1", name: "B.Tech", departmentId: "cse", durationYears: 4 }],
+    departments: [
+      { id: "bse", name: "BS English", code: "BSE", secondaryDepartments: ["CSE", "Cyber Security"], assignedYears: [1] },
+      { id: "cse", name: "CSE", code: "CSE", assignedYears: [2, 3, 4] },
+      { id: "cyb", name: "Cyber Security", code: "CYB", assignedYears: [2, 3, 4] },
+    ],
+    sections: [],
+  };
+  // Its 175 students are all filed under it with CSE as their real branch.
+  const rows = Array.from({ length: 175 }, (_, i) => ({
+    id: `s${i}`, department: "BS English", secondaryDepartment: "CSE",
+    course: "B.Tech", year: 1, section: "A", status: "REGULAR",
+  }));
+
+  it("does not offer the feeder itself as a Department", () => {
+    const { meta } = buildStrengthCube(rows, CATALOG);
+    expect(meta.branches.find((b) => b.key === "bs english")?.isFeeder).toBe(true);
+  });
+
+  it("counts them under the branch they are headed for, not the feeder", () => {
+    const { cells } = buildStrengthCube(rows, CATALOG);
+    expect(totalFor(cells, F({ branch: "cse" }))).toBe(175);
+    expect(totalFor(cells, F({ branch: "bs english" }))).toBe(0);
+  });
+
+  // The Year filter offered I-IV because the COURSE is four years long, though
+  // this department teaches only the first.
+  it("offers only the years the scope teaches", () => {
+    const { cells, meta } = buildStrengthCube(rows, CATALOG);
+    expect(filterOptions(cells, meta, F()).years).toEqual([1, 2, 3, 4]);
+    expect(filterOptions(cells, { ...meta, scopeYears: [1] }, F()).years).toEqual([1]);
+  });
+
+  // ...but never hides a year somebody is actually counted in.
+  it("keeps a year that has students even when it is outside the configuration", () => {
+    const strays = [...rows, { id: "x", department: "BS English", secondaryDepartment: "CSE", course: "B.Tech", year: 3, section: "A", status: "REGULAR" }];
+    const { cells, meta } = buildStrengthCube(strays, CATALOG);
+    expect(filterOptions(cells, { ...meta, scopeYears: [1] }, F()).years).toEqual([1, 3]);
+  });
+});

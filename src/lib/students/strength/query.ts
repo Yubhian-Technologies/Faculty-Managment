@@ -239,6 +239,14 @@ export function filterOptions(cells: StrengthCell[], meta: StrengthMeta, f: Stre
     if (f.branch !== undefined && !p.branchKeys.includes(f.branch)) continue;
     for (let y = 1; y <= p.durationYears; y++) yearSet.add(y);
   }
+  // A scoped viewer is offered only the years their departments teach. A year
+  // a student is actually counted in is always kept, so a mis-filed record can
+  // never become invisible by being outside the configuration.
+  if (meta.scopeYears && meta.scopeYears.length > 0) {
+    const allowed = new Set(meta.scopeYears);
+    const counted = new Set(above("year").map((c) => c.year));
+    for (const y of [...yearSet]) if (!allowed.has(y) && !counted.has(y)) yearSet.delete(y);
+  }
   const years = [...yearSet].sort((a, b) => a - b);
 
   const withinYear = (c: StrengthCell) => cellMatches(c, { status: "ALL", program: f.program, branch: f.branch, year: f.year });
