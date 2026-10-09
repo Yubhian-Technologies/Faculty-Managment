@@ -19,8 +19,7 @@ import { sectionDisplayLabel, departmentCode } from "@/lib/sections/sectionLabel
 import { deriveHodScope, buildCourseGroups, managerEffectiveYears } from "@/lib/departments/hodScope";
 import { fedYears } from "@/lib/college/academicStructure";
 import { matchesCurrentSemester } from "@/lib/college/semester";
-import { departmentPickNames, subjectCoversSection } from "@/lib/departments/subjectCoverage";
-import { coreDepartmentOptions, rollupDepartmentNames } from "@/lib/departments/departmentTree";
+import { departmentPickNames } from "@/lib/departments/subjectCoverage";
 import { assignmentsForFilter } from "@/lib/teaching/assignmentView";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { yearSemesterLabelIn, semesterInYearLabel } from "@/lib/academic/format";
@@ -87,9 +86,6 @@ export default function TeachingAssignmentsPage() {
   const [applied, setApplied] = useState<{ key: string; year: string } | null>(null);
   // "" = every department this HOD manages. Set once a sub-department is picked.
   const [departmentFilter, setDepartmentFilter] = useState("");
-  // "" = every branch the picked sub-department (or, with none picked, this
-  // HOD's whole scope) manages. Set once a Core department is picked.
-  const [coreFilter, setCoreFilter] = useState("");
   const [sectionsCache, setSectionsCache] = useState<Record<string, SectionListItem[]>>({});
   // Needed only to resolve department codes for section labels: a parent HOD
   // sees their own department's "A" next to each sub-department's "A", so the
@@ -372,25 +368,10 @@ const effectiveSemester = semesterOptions.length === 0
     [sectionsCache, sectionsCacheKey]
   );
 
-  // The Core departments on offer: the branches the picked sub-department - or,
-  // with none picked, this whole scope - runs the shared year for, that actually
-  // have sections in what was loaded. A managed branch split into sub-branches
-  // is offered as those sub-branches. See coreDepartmentOptions.
-  const coreOptions = useMemo(() => {
-    const picked = departmentFilter
-      ? [departmentFilter]
-      : subDepartmentOptions.length > 0 ? subDepartmentOptions.map((d) => d.name) : scope.ownDept ? [scope.ownDept.name] : [];
-    return coreDepartmentOptions(departments, picked, loadedSectionDepartments);
-  }, [departmentFilter, subDepartmentOptions, scope.ownDept, departments, loadedSectionDepartments]);
-  const activeCore = coreOptions.includes(coreFilter) ? coreFilter : "";
-
   const filterDepartmentNames = useMemo(() => {
-    // A Core department stands for itself and, if it holds no sections of its
-    // own, the sub-branches they are filed under.
-    if (activeCore) return new Set([activeCore, ...rollupDepartmentNames(departments, activeCore)]);
     if (!departmentFilter) return null;
     return departmentPickNames(departments, departmentFilter, loadedSectionDepartments);
-  }, [activeCore, departmentFilter, departments, loadedSectionDepartments]);
+  }, [departmentFilter, departments, loadedSectionDepartments]);
 
   const sections = useMemo(
     () =>
@@ -571,7 +552,7 @@ const effectiveSemester = semesterOptions.length === 0
     // A different top-level department has a different course list, sub-
     // department cascade, and assigned years - clear everything downstream.
     setApplied(null);
-    setCourseKey(""); setYear(""); setDepartmentFilter(""); setCoreFilter(""); setSelectedSemester(null);
+    setCourseKey(""); setYear(""); setDepartmentFilter(""); setSelectedSemester(null);
     setAssignForm({ sectionId: "", subjectId: "", facultyId: "" });
   }
 
@@ -579,7 +560,7 @@ const effectiveSemester = semesterOptions.length === 0
     setApplied(null);
     setCourseKey(v);
     setYear("");
-    setDepartmentFilter(""); setCoreFilter("");
+    setDepartmentFilter("");
     setSelectedSemester(null);
     setAssignForm({ sectionId: "", subjectId: "", facultyId: "" });
   }
@@ -587,7 +568,7 @@ const effectiveSemester = semesterOptions.length === 0
   function handleYearChange(v: string) {
     setApplied(null);
     setYear(v);
-    setDepartmentFilter(""); setCoreFilter("");
+    setDepartmentFilter("");
     setSelectedSemester(null);
     setAssignForm({ sectionId: "", subjectId: "", facultyId: "" });
   }
@@ -646,7 +627,6 @@ const effectiveSemester = semesterOptions.length === 0
     // ALL is a sentinel: Radix Select can't hold "" as an item value.
     setApplied(null);
     setDepartmentFilter(v === ALL_DEPARTMENTS ? "" : v);
-    setCoreFilter("");
     setAssignForm({ sectionId: "", subjectId: "", facultyId: "" });
   }
 
@@ -680,6 +660,14 @@ const effectiveSemester = semesterOptions.length === 0
     const deptNames = new Set<string>();
     for (const a of semesterAssignments) {
       if (a.subjectId !== subjectId) continue;
+      // Narrowed to specific core departments (see "Target core departments"
+      // in Academics > Subjects) - use ONLY those exact names, never the
+      // row's own broad departmentId/Name, so the managed-department
+      // fallback (subjectCoverage.ts) can't re-widen it back out.
+      if (a.secondaryDepartmentNames && a.secondaryDepartmentNames.length > 0) {
+        for (const n of a.secondaryDepartmentNames) deptNames.add(n);
+        continue;
+      }
       if (a.departmentId) deptIds.add(a.departmentId);
       const n = a.departmentName ?? a.department;
       if (n) deptNames.add(n);
@@ -698,16 +686,30 @@ const effectiveSemester = semesterOptions.length === 0
   function sectionMatchesSubjectDepartment(section: SectionListItem, subjectId: string) {
     if (effectiveSemester == null) return true;
     const { deptIds, deptNames } = subjectDepartmentSets(subjectId);
-    // The exact department match, plus - for a shared-first-year department
-    // (e.g. BS-English) that owns no sections of its own - the branches it feeds
-    // (CIVIL, IT, ...), named on that department's own managedDepartments and
-    // carried as each fed section's plain `department` string, including the
-    // sub-branches of a managed branch that is itself split up (AI -> AIML /
-    // AIDS). Without this, a subject assigned to a feeder department with no
-    // sections of its own matched zero sections, so gapRows dropped it from
-    // Unstaffed Subjects entirely instead of surfacing the fed branches' real
-    // gaps. See subjectCoversSection (lib/departments/subjectCoverage.ts).
-    return subjectCoversSection(departments, { ids: deptIds, names: deptNames }, section.department);
+    // EXACT match only - deliberately no fallback to "this subject's own
+    // department manages the section's branch" (subjectCoversSection's
+    // managed-department half, lib/departments/subjectCoverage.ts). A
+    // subject assigned broadly to a feeder sub-department (e.g. BS
+    // Chemistry, which owns no sections of its own) now shows for NO core
+    // department until someone explicitly targets it via "Target core
+    // departments" (Academics > Subjects, secondaryDepartmentNames) - every
+    // subject requires an explicit per-core-department decision, not an
+    // implicit "covers everything the sub-department manages" default.
+    const doc = departments.find((d) => (d.name ?? "").trim() === section.department.trim());
+    return !!(doc?.id && deptIds.has(doc.id)) || deptNames.has(section.department);
+  }
+
+  // A subject from a different curriculum regulation than the section's own
+  // (e.g. an R26 subject semester-mapped alongside an R23 one for the same
+  // course+year, ahead of that regulation's own sections existing yet) can
+  // never actually be assigned to this section - Assign Faculty already
+  // excludes it (see availableSubjectsForAssign below), so Unstaffed
+  // Subjects must agree, or it lists a "gap" nothing can ever fill. Lenient
+  // when either side has no regulation set at all.
+  function sectionMatchesSubjectRegulation(section: SectionListItem, subjectId: string) {
+    const subject = subjects.find((s) => s.id === subjectId);
+    if (!subject?.regulation || !section.regulation) return true;
+    return subject.regulation === section.regulation;
   }
 
   // Which subject/section combos for the selected course+year (and, once
@@ -727,7 +729,7 @@ const effectiveSemester = semesterOptions.length === 0
     const courseIdSet = new Set(activeCourseIds);
     return subjects
       .map((subject) => {
-        const matchedSections = sections.filter((s) => sectionMatchesSubjectDepartment(s, subject.id));
+        const matchedSections = sections.filter((s) => sectionMatchesSubjectDepartment(s, subject.id) && sectionMatchesSubjectRegulation(s, subject.id));
         const staffedSectionIds = new Set(
           assignments
             .filter((a) =>
@@ -1235,28 +1237,6 @@ const effectiveSemester = semesterOptions.length === 0
                         {d.id === scope.ownDept?.id ? " (your department)" : ""}
                       </SelectItem>
                     ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            {/* The branches the picked sub-department (or this whole scope) runs
-                the shared year for. Only with a choice to make. */}
-            {coreOptions.length > 1 && (
-              <div className="space-y-2">
-                <Label>Core department</Label>
-                <Select
-                  value={activeCore || ALL_DEPARTMENTS}
-                  onValueChange={(v) => {
-                    setApplied(null);
-                    setCoreFilter(v === ALL_DEPARTMENTS ? "" : v);
-                    setAssignForm({ sectionId: "", subjectId: "", facultyId: "" });
-                  }}
-                  disabled={!year}
-                >
-                  <SelectTrigger><SelectValue placeholder="All core departments" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={ALL_DEPARTMENTS}>All core departments</SelectItem>
-                    {coreOptions.map((n) => <SelectItem key={n} value={n}>{n}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>

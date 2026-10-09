@@ -455,3 +455,128 @@ describe("the college's spreadsheet, regenerated from student rows", () => {
     expect(summarize(cells, meta, "ENROLLED").total).toBe(4974);
   });
 });
+
+// ── A shared-first-year department, as VISHNU WOMEN'S UNIVERSITY configures it:
+//    the branches are a CROSS-LISTING (secondaryDepartments), not
+//    managedDepartments, and the department teaches year 1 alone. ──
+describe("a cross-listing feeder's own filters", () => {
+  const CATALOG = {
+    courses: [{ id: "c1", name: "B.Tech", departmentId: "cse", durationYears: 4 }],
+    departments: [
+      { id: "bse", name: "BS English", code: "BSE", secondaryDepartments: ["CSE", "Cyber Security"], assignedYears: [1] },
+      { id: "cse", name: "CSE", code: "CSE", assignedYears: [2, 3, 4] },
+      { id: "cyb", name: "Cyber Security", code: "CYB", assignedYears: [2, 3, 4] },
+    ],
+    sections: [],
+  };
+  // Its 175 students are all filed under it with CSE as their real branch.
+  const rows = Array.from({ length: 175 }, (_, i) => ({
+    id: `s${i}`, department: "BS English", secondaryDepartment: "CSE",
+    course: "B.Tech", year: 1, section: "A", status: "REGULAR",
+  }));
+
+  // What a feeder's own HOD is offered: the branches below them, not their own
+  // name - everything on their page is already theirs.
+  it("hides the viewer's own department when there are branches to offer", () => {
+    const { cells, meta } = buildStrengthCube(rows, CATALOG);
+    const scoped = { ...meta, hiddenBranchKeys: ["bs english"] };
+    const keys = filterOptions(cells, scoped, F()).branches.map((b) => b.key);
+    expect(keys).not.toContain("bs english");
+  });
+
+  it("offers a configured branch that holds no Course doc of its own", () => {
+    const { cells, meta } = buildStrengthCube(rows, CATALOG);
+    // Cyber Security is a sub-department of CSE - no Course doc, so it is in
+    // no program's branchKeys until it is added as a core department.
+    const withCore = {
+      ...meta,
+      programs: meta.programs.map((p) => ({ ...p, branchKeys: [...p.branchKeys, "cyber security"] })),
+      branches: [...meta.branches, { key: "cyber security", label: "Cyber Security", code: "CYB", isFeeder: false, unknown: false }],
+    };
+    expect(filterOptions(cells, withCore, F()).branches.map((b) => b.label)).toContain("Cyber Security");
+  });
+
+  it("does not offer the feeder itself as a Department", () => {
+    const { meta } = buildStrengthCube(rows, CATALOG);
+    expect(meta.branches.find((b) => b.key === "bs english")?.isFeeder).toBe(true);
+  });
+
+  // The cube buckets by the branch a student is HEADED FOR, so the department
+  // teaching them can pick that branch and find them: a feeder HOD selecting
+  // "CSE" gets their CSE-bound first years. Whether those students are CSE's
+  // OWN strength is a different question, answered by filterRowsForHod - see
+  // hodScope.test.ts.
+  it("counts them under the branch they are headed for, so the feeder can find them", () => {
+    const { cells } = buildStrengthCube(rows, CATALOG);
+    expect(totalFor(cells, F({ branch: "cse" }))).toBe(175);
+    expect(totalFor(cells, F({ branch: "bs english" }))).toBe(0);
+  });
+
+  // The Year filter offered I-IV because the COURSE is four years long, though
+  // this department teaches only the first.
+  it("offers only the years the scope teaches", () => {
+    const { cells, meta } = buildStrengthCube(rows, CATALOG);
+    expect(filterOptions(cells, meta, F()).years).toEqual([1, 2, 3, 4]);
+    expect(filterOptions(cells, { ...meta, scopeYearsByProgram: { "b.tech": [1] } }, F()).years).toEqual([1]);
+  });
+
+  // The sections are filed under the feeder but belong to the branch they feed,
+  // which is where their students are counted - so a branch pick must find them.
+  it("lists a shared-first-year section under the branch it feeds", () => {
+    const withSections = {
+      ...CATALOG,
+      sections: [
+        { department: "BS English", courseId: "c1", name: "BSE-CSE-A", year: 1, secondaryDepartments: ["CSE"] },
+        { department: "BS English", courseId: "c1", name: "BSE-CSE-B", year: 1, secondaryDepartments: ["CSE"] },
+        { department: "BS English", courseId: "c1", name: "BSE-CS", year: 1, secondaryDepartments: ["Cyber Security"] },
+      ],
+    };
+    const { cells, meta } = buildStrengthCube(rows, withSections);
+    expect(filterOptions(cells, meta, F({ branch: "cse" })).sections.map((x) => x.label))
+      .toEqual(expect.arrayContaining(["BSE-CSE-A", "BSE-CSE-B"]));
+    expect(filterOptions(cells, meta, F({ branch: "cyber security" })).sections.map((x) => x.label))
+      .toEqual(["BSE-CS"]);
+  });
+
+  // A plain section, with no branch to feed, still goes under its own department.
+  it("leaves an ordinary section under its own department", () => {
+    const plain = { ...CATALOG, sections: [{ department: "CSE", courseId: "c1", name: "CSE-A", year: 2 }] };
+    const { cells, meta } = buildStrengthCube(rows, plain);
+    expect(filterOptions(cells, meta, F({ branch: "cse", year: 2 })).sections.map((x) => x.label)).toEqual(["CSE-A"]);
+  });
+
+  // Configured means configured: a year outside it is not offered even when it
+  // holds students. Those students are still counted - "All years" and the
+  // year breakdown include them - they just cannot be isolated by year here.
+  // At a college whose shared first year is held by Basic Science, every
+  // branch is configured 2-4 while all its students sit in year 1.
+  it("offers only the configured years, even where students sit outside them", () => {
+    const strays = [...rows, { id: "x", department: "BS English", secondaryDepartment: "CSE", course: "B.Tech", year: 3, section: "A", status: "REGULAR" }];
+    const { cells, meta } = buildStrengthCube(strays, CATALOG);
+    expect(filterOptions(cells, { ...meta, scopeYearsByProgram: { "b.tech": [1] } }, F()).years).toEqual([1]);
+    // A branch HOD: configured 2-4, every student counted in year 1.
+    expect(filterOptions(cells, { ...meta, scopeYearsByProgram: { "b.tech": [2, 3, 4] } }, F()).years).toEqual([2, 3, 4]);
+    expect(totalFor(cells, F())).toBe(176); // ...and none of them stop being counted
+  });
+
+  // The reason the years are kept per program: one department runs several
+  // with different years - CSE teaches years 2-4 of the B.Tech and 1-2 of the
+  // M.Tech. Merged into one list those became 1-4, and the B.Tech picker went
+  // on offering a first year the department does not teach.
+  it("keeps each course's configured years to itself", () => {
+    const two = {
+      ...CATALOG,
+      courses: [
+        { id: "c1", name: "B.Tech", departmentId: "cse", durationYears: 4 },
+        { id: "c2", name: "M.Tech", departmentId: "cse", durationYears: 2 },
+      ],
+    };
+    const { cells, meta } = buildStrengthCube(rows, two);
+    const scoped = { ...meta, scopeYearsByProgram: { "b.tech": [2, 3, 4], "m.tech": [1, 2] } };
+    expect(filterOptions(cells, scoped, F({ program: "b.tech" })).years).toEqual([2, 3, 4]);
+    expect(filterOptions(cells, scoped, F({ program: "m.tech" })).years).toEqual([1, 2]);
+    // Across every course, the union is each course's own years - year 1
+    // belongs to the M.Tech, never to the B.Tech.
+    expect(filterOptions(cells, scoped, F()).years).toEqual([1, 2, 3, 4]);
+  });
+});

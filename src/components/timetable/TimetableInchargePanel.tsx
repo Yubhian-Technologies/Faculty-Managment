@@ -1,18 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { UserCog, X } from "lucide-react";
+import { Check, ChevronsUpDown, UserCog, X } from "lucide-react";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import { findBranchManager, managerTeachingYears } from "@/lib/departments/managedBranches";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
 import { ordinalYear } from "@/lib/timetable/gridModel";
+import { cn } from "@/lib/utils";
 import { isFacultyAvailable } from "@/types";
 import type {
   Course, Department, FacultyMember, Section, SupportingStaffMember, TimetableIncharge,
@@ -53,6 +55,12 @@ export function TimetableInchargePanel({
   const [assignUnit, setAssignUnit] = useState<Unit | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [selectedKey, setSelectedKey] = useState("");
+  // A department can run to dozens of faculty, so the list is typed into
+  // rather than scrolled - the same picker Role Assignments uses to choose a
+  // person. Filtered here (shouldFilter={false}) so the label shown and the
+  // text matched against are the same string.
+  const [personSearch, setPersonSearch] = useState("");
+  const [personOpen, setPersonOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [revokeUnit, setRevokeUnit] = useState<Unit | null>(null);
   const [revoking, setRevoking] = useState(false);
@@ -131,9 +139,21 @@ export function TimetableInchargePanel({
     void (async () => { for (const u of units) await loadHolder(u); })();
   }, [units, loadHolder]);
 
+  // One label, so the trigger, the options and the text searched all read the
+  // same - a name alone would hide why someone cannot be picked.
+  const candidateLabel = (c: Candidate) =>
+    `${c.name}${c.personType === "SUPPORTING_STAFF" ? " (Supporting Staff)" : ""}${!c.userUid ? " (no login yet)" : ""}`;
+  const selectedCandidate = candidates.find((c) => `${c.personType}_${c.id}` === selectedKey);
+  const matchingCandidates = (() => {
+    const q = personSearch.trim().toLowerCase();
+    return q ? candidates.filter((c) => candidateLabel(c).toLowerCase().includes(q)) : candidates;
+  })();
+
   function openAssign(unit: Unit) {
     setAssignUnit(unit);
     setSelectedKey("");
+    setPersonSearch("");
+    setPersonOpen(false);
     setCandidates([]);
     // The unit's owning department, its parent (a sub-department's faculty
     // mostly sit there) and every branch it manages - same eligibility as the
@@ -261,16 +281,47 @@ export function TimetableInchargePanel({
           </DialogHeader>
           <div className="space-y-2">
             <Label>Faculty / Supporting Staff</Label>
-            <Select value={selectedKey} onValueChange={setSelectedKey}>
-              <SelectTrigger><SelectValue placeholder={candidates.length ? "Select a person" : "No one eligible here yet"} /></SelectTrigger>
-              <SelectContent>
-                {candidates.map((c) => (
-                  <SelectItem key={`${c.personType}_${c.id}`} value={`${c.personType}_${c.id}`} disabled={!c.userUid}>
-                    {c.name}{c.personType === "SUPPORTING_STAFF" ? " (Supporting Staff)" : ""}{!c.userUid ? " (no login yet)" : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Popover open={personOpen} onOpenChange={setPersonOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={personOpen}
+                  className="w-full justify-between font-normal"
+                  disabled={candidates.length === 0}
+                >
+                  <span className={cn("truncate", !selectedCandidate && "text-muted-foreground")}>
+                    {selectedCandidate ? candidateLabel(selectedCandidate) : candidates.length ? "Search by name" : "No one eligible here yet"}
+                  </span>
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                <Command shouldFilter={false}>
+                  <CommandInput placeholder="Search by name" value={personSearch} onValueChange={setPersonSearch} />
+                  <CommandList>
+                    <CommandEmpty>No matching person.</CommandEmpty>
+                    <CommandGroup>
+                      {matchingCandidates.map((c) => {
+                        const key = `${c.personType}_${c.id}`;
+                        return (
+                          <CommandItem
+                            key={key}
+                            value={key}
+                            disabled={!c.userUid}
+                            onSelect={() => { if (!c.userUid) return; setSelectedKey(key); setPersonOpen(false); }}
+                          >
+                            <Check className={cn("mr-2 h-4 w-4", selectedKey === key ? "opacity-100" : "opacity-0")} />
+                            {candidateLabel(c)}
+                          </CommandItem>
+                        );
+                      })}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAssignUnit(null)}>Cancel</Button>

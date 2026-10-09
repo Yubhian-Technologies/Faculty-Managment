@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { notify } from "@/lib/notify";
-import { getHodDepartmentScope, canHodEditDepartment, ownDepartmentNames } from "@/lib/departments/scope";
+import { getHodDepartmentScope, canHodEditDepartment, facultyManageableDepartmentNames } from "@/lib/departments/scope";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
 
 // Lets an HOD ask an unrelated department (one they have no direct
@@ -42,14 +42,15 @@ export async function GET(request: Request) {
         coll.where("requestedBy", "==", session.uid).get(),
         myDeptNames.length > 0 ? coll.where("targetDepartmentName", "in", myDeptNames.slice(0, 30)).get() : Promise.resolve(null),
       ]);
+      const incomingIds = new Set((incomingSnap?.docs ?? []).map((d) => d.id));
       const seen = new Set<string>();
       const requests: { id: string; [key: string]: unknown }[] = [];
-      for (const d of outgoingSnap.docs) { seen.add(d.id); requests.push({ id: d.id, ...d.data() }); }
+      for (const d of outgoingSnap.docs) { seen.add(d.id); requests.push({ id: d.id, ...d.data(), incomingForMe: incomingIds.has(d.id) }); }
       if (incomingSnap) {
         for (const d of incomingSnap.docs) {
           if (seen.has(d.id)) continue;
           seen.add(d.id);
-          requests.push({ id: d.id, ...d.data() });
+          requests.push({ id: d.id, ...d.data(), incomingForMe: true });
         }
       }
       // Timetable editor only: allocated lends onto the section this Incharge
@@ -87,24 +88,33 @@ export async function GET(request: Request) {
     // department (or its real parent, if it's a sub-department with no HOD
     // of its own) should see it, not whoever else happens to administer it
     // via a managedDepartments grouping (see ownDepartmentNames doc).
-    const myNames = ownDepartmentNames(scope);
-
+    // Only the department picked in "Working as" (and its sub-departments): IT's
+    // page shows IT's requests, CSBS's page shows CSBS's - an HOD of both never
+    // sees one department's requests mixed into the other's.
+    const myNames = facultyManageableDepartmentNames(scope);
     const [outgoingSnap, incomingSnap] = await Promise.all([
       coll.where("requestedBy", "==", session.uid).get(),
       myNames.length > 0 ? coll.where("targetDepartmentName", "in", myNames.slice(0, 30)).get() : Promise.resolve(null),
     ]);
 
+    // Addressed to one of this HOD's departments - includes a request they raised
+    // themselves to another department they also head (it is still theirs to fulfil).
+    const incomingIds = new Set((incomingSnap?.docs ?? []).map((d) => d.id));
     const seen = new Set<string>();
     const requests: { id: string; [key: string]: unknown }[] = [];
     for (const d of outgoingSnap.docs) {
+      // A request this HOD raised from another of their departments belongs to that
+      // department's page - unless it was addressed to this one.
+      const from = (d.data() as { requestingDepartment?: string }).requestingDepartment;
+      if (from && !canHodEditDepartment(scope, from) && !incomingIds.has(d.id)) continue;
       seen.add(d.id);
-      requests.push({ id: d.id, ...d.data() });
+      requests.push({ id: d.id, ...d.data(), incomingForMe: incomingIds.has(d.id) });
     }
     if (incomingSnap) {
       for (const d of incomingSnap.docs) {
         if (seen.has(d.id)) continue;
         seen.add(d.id);
-        requests.push({ id: d.id, ...d.data() });
+        requests.push({ id: d.id, ...d.data(), incomingForMe: true });
       }
     }
     // Timetable editor only: every allocated lend onto this section, not just

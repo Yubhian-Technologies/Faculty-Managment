@@ -5,6 +5,7 @@ import { FileDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ResumeSectionsDialog } from "@/components/faculty/ResumeSectionsDialog";
 import { downloadResumePdf } from "@/lib/pdf/downloadResume";
+import { fetchCurrentAcademicYear } from "@/lib/faculty/downloadFacultyResume";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { toast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
@@ -59,8 +60,16 @@ export function MyResumeDownloadButton() {
           researchPublications = ((await r.json()) as { publications?: unknown[] }).publications ?? [];
         } catch { /* non-critical - resume falls back to self-reported publications, if any */ }
       }
+      // The college's name heads the resume's internal-experience block and
+      // its header line - the HOD's download passes it the same way.
+      let collegeName = "";
+      try {
+        const r = await fetch("/api/college/info");
+        collegeName = ((await r.json()) as { name?: string }).name ?? "";
+      } catch { /* non-critical - the block falls back to "Internal Experience" */ }
+      const currentAcademicYear = await fetchCurrentAcademicYear();
       await downloadResumePdf(
-        { ...faculty, teachingAssignments, researchPublications, sections },
+        { ...faculty, teachingAssignments, researchPublications, collegeName, currentAcademicYear, sections },
         faculty.employeeId || facultyDisplayName(faculty) || "resume"
       );
       setOpen(false);

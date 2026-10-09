@@ -135,6 +135,16 @@ describe("publishSectionDraft - section cells are re-validated (F-23)", () => {
     section(mixed, "s1", 1, [ds("a1", "f1", "MON", 1, "PRACTICAL"), ds("a2", "f2", "MON", 1, "THEORY")]);
     expect(await publishSectionDraft(input(mixed, "s1", 1))).toMatchObject({ ok: false, status: 409 });
   });
+
+  it("also allows exactly two non-teaching subjects sharing a cell, but not mixed with a lab", async () => {
+    const nonTeaching = new FakeFirestore();
+    section(nonTeaching, "s1", 1, [ds("a1", "f1", "MON", 1, "NON_TEACHING"), ds("a2", "f2", "MON", 1, "NON_TEACHING")]);
+    expect(await publishSectionDraft(input(nonTeaching, "s1", 1))).toMatchObject({ ok: true, published: 2 });
+
+    const mixedWithLab = new FakeFirestore();
+    section(mixedWithLab, "s1", 1, [ds("a1", "f1", "MON", 1, "NON_TEACHING"), ds("a2", "f2", "MON", 1, "PRACTICAL")]);
+    expect(await publishSectionDraft(input(mixedWithLab, "s1", 1))).toMatchObject({ ok: false, status: 409 });
+  });
 });
 
 describe("publishSectionDraft - faculty in two sections at the same time is allowed", () => {

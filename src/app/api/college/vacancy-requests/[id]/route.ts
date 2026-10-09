@@ -72,6 +72,11 @@ export async function PATCH(
     if (!status) {
       return NextResponse.json({ error: "status required" }, { status: 400 });
     }
+    // Only a real decision may be written; any other text (e.g. "COMPLETED")
+    // would otherwise be stored as the vacancy's status.
+    if (status !== "APPROVED" && status !== "REJECTED" && status !== "MODIFIED") {
+      return NextResponse.json({ error: "status must be APPROVED, REJECTED or MODIFIED" }, { status: 400 });
+    }
 
     const db = getAdminDb();
     const principalName = await getUserName(db, session.collegeId, session.uid);

@@ -348,9 +348,10 @@ export async function PATCH(request: Request) {
 
         // Same gate as timetable-slots/route.ts's manual pin path - a split
         // period (two+ subjects/faculty sharing one cell) only makes sense for
-        // parallel lab batches, not two theory classes at once.
-        if (body.allowSplit && !body.coTeach && subjectType !== "PRACTICAL") {
-          return { ok: false, status: 400, error: "Only lab (PRACTICAL) subjects can be split into batches" };
+        // parallel lab batches or two non-teaching subjects, not two theory
+        // classes at once.
+        if (body.allowSplit && !body.coTeach && subjectType !== "PRACTICAL" && subjectType !== "NON_TEACHING") {
+          return { ok: false, status: 400, error: "Only lab (PRACTICAL) or non-teaching subjects can be split into batches" };
         }
 
         const placeAt = Number(toPeriod);

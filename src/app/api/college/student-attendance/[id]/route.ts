@@ -60,7 +60,13 @@ export async function PATCH(
         else if (typeof o._seconds === "number") clientMs = o._seconds * 1000;
         else if (typeof o.seconds === "number") clientMs = o.seconds * 1000;
       }
-      if (!Number.isNaN(clientMs) && serverMs !== 0 && clientMs !== serverMs) {
+      // The list endpoint hands the browser a raw Firestore Timestamp ({_seconds}),
+      // which loses the milliseconds; a whole-second client value is compared
+      // at second precision so an unchanged session isn't reported as stale.
+      const sameVersion = clientMs % 1000 === 0
+        ? Math.floor(serverMs / 1000) === clientMs / 1000
+        : clientMs === serverMs;
+      if (!Number.isNaN(clientMs) && serverMs !== 0 && !sameVersion) {
         return NextResponse.json(
           { error: "This attendance was updated elsewhere. Please reload and try again.", session: { ...existing, id } },
           { status: 409 }

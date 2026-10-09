@@ -10,9 +10,11 @@ import { parseAcademicYearStart } from "@/lib/college/academicSession";
 // same value timetables, teaching assignments and leave stamp their records
 // with (resolveCollegeAcademicYear). Exposed for pages that need it to derive
 // per-year batches, since the college's start day lives in its settings.
+// Faculty roles are included for their own resume download, which prints it
+// against their current teaching assignments.
 export async function GET() {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD", "COLLEGE_OFFICE", "ACADEMICS");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD", "COLLEGE_OFFICE", "ACADEMICS", "PANEL_MEMBER", "COLLEGE_STAFF");
     const label = await resolveCollegeAcademicYear(getAdminDb(), session.collegeId);
     const startYear = parseAcademicYearStart(label);
     if (startYear == null) {
