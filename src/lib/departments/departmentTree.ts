@@ -1,5 +1,6 @@
 import type { Department } from "@/types";
 import { departmentHasSections } from "@/lib/college/departmentSectionScope";
+import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
 
 /**
  * One place that answers "what does picking this department mean?" for the
@@ -30,11 +31,39 @@ import { departmentHasSections } from "@/lib/college/departmentSectionScope";
  */
 
 export type TreeDepartment = Pick<Department, "name"> &
-  Partial<Pick<Department, "hasSubDepartments" | "parentRunsOwnSections" | "managedDepartments" | "parentDepartmentId" | "isActive">> & {
+  Partial<Pick<Department,
+    | "hasSubDepartments" | "parentRunsOwnSections" | "managedDepartments" | "parentDepartmentId" | "isActive"
+    // The other field a college may hold the same relationship in - see
+    // groupedBranches below.
+    | "secondaryDepartments" | "assignedYears" | "courseScopes"
+  >> & {
     id?: string;
   };
 
 const clean = (n: string | null | undefined) => (n ?? "").trim();
+
+/**
+ * The branches one department groups, from EITHER field a college configures
+ * them in. Both say the same thing - "this department holds a shared year for
+ * these branches" - and no department anywhere uses both:
+ *
+ *  - `managedDepartments` (VISHNU INSTITUTE OF TECHNOLOGY, dummy college)
+ *  - `secondaryDepartments`, the cross-listing (VISHNU WOMEN'S UNIVERSITY,
+ *    YUBHIAN, and siva's own "BASIC SCIENCE")
+ *
+ * Reading only the first left every department at the cross-listing colleges
+ * with no Core Department filter at all: BASIC SCIENCE - MATHS groups
+ * CSE [AI & DS] and CSE [AI & ML] there, and the filter never appeared.
+ *
+ * The cross-listing goes through resolveDepartmentCourseScope so a per-course
+ * override wins over the flat field, as everywhere else that reads it.
+ */
+function groupedBranches<T extends TreeDepartment>(dept: T, catalogId?: string): string[] {
+  return [
+    ...(dept.managedDepartments ?? []),
+    ...resolveDepartmentCourseScope(dept, catalogId).secondaryDepartments,
+  ];
+}
 
 /** The sub-departments of `dept` (the hierarchy is one level deep). */
 export function childrenOfDepartment<T extends TreeDepartment>(all: T[], dept: Pick<TreeDepartment, "id">): T[] {
@@ -106,10 +135,10 @@ export function managedCoreCandidates<T extends TreeDepartment>(
 ): string[] {
   if (!dept) return [];
   const names = new Set<string>();
-  for (const n of dept.managedDepartments ?? []) if (clean(n)) names.add(clean(n));
+  for (const n of groupedBranches(dept)) if (clean(n)) names.add(clean(n));
   if (includeSubDepartmentsManaged && dept.hasSubDepartments) {
     for (const child of childrenOfDepartment(all, dept)) {
-      for (const n of child.managedDepartments ?? []) if (clean(n)) names.add(clean(n));
+      for (const n of groupedBranches(child)) if (clean(n)) names.add(clean(n));
     }
   }
   for (const n of Array.from(names)) {
