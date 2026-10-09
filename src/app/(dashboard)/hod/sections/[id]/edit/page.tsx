@@ -72,9 +72,6 @@ export default function EditSectionPage() {
     [myDepartments, myDepartment],
   );
   const [pickedFacultyDept, setPickedFacultyDept] = useState("");
-  const facultyDept = pickedFacultyDept && allMyDepartments.includes(pickedFacultyDept)
-    ? pickedFacultyDept
-    : allMyDepartments.includes(ownerDept) ? ownerDept : allMyDepartments[0] ?? "";
   const [form, setForm] = useState<SectionForm>(EMPTY_FORM);
   const [sectionName, setSectionName] = useState("");
   const [sectionCourseName, setSectionCourseName] = useState("");
@@ -83,6 +80,9 @@ export default function EditSectionPage() {
   // a shared-first-year section (e.g. Basic Science → CSE) can be re-pointed.
   const [ownerDept, setOwnerDept] = useState("");
   const [branch, setBranch] = useState("");
+  const facultyDept = pickedFacultyDept && allMyDepartments.includes(pickedFacultyDept)
+    ? pickedFacultyDept
+    : allMyDepartments.includes(ownerDept) ? ownerDept : allMyDepartments[0] ?? "";
 
   // Class incharge and room are shown as plain text until "Edit" is pressed; "Cancel"
   // puts back what the section had when the page loaded.
