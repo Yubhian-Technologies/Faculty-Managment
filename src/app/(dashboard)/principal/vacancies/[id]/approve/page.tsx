@@ -42,11 +42,14 @@ export default function ApproveVacancyPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "APPROVED" }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error);
+      }
       toast({ variant: "success", title: "Approved", description: "HOD has been notified." });
       router.push("/principal/vacancies");
-    } catch {
-      toast({ variant: "destructive", title: "Action failed", description: "Please try again." });
+    } catch (err) {
+      toast({ variant: "destructive", title: "Action failed", description: err instanceof Error && err.message ? err.message : "Please try again." });
     } finally {
       setSaving(false);
     }
