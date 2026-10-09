@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { notify } from "@/lib/notify";
-import { getHodDepartmentScope, canHodEditDepartment, ownDepartmentNames } from "@/lib/departments/scope";
+import { getHodDepartmentScope, canHodEditDepartment, facultyManageableDepartmentNames } from "@/lib/departments/scope";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
 
 // Lets an HOD ask an unrelated department (one they have no direct
@@ -87,7 +87,11 @@ export async function GET(request: Request) {
     // department (or its real parent, if it's a sub-department with no HOD
     // of its own) should see it, not whoever else happens to administer it
     // via a managedDepartments grouping (see ownDepartmentNames doc).
-    const myNames = ownDepartmentNames(scope);
+    // Every department this HOD heads, not just the one picked in "Working
+    // as": a request from one of their departments (IT) to another they also
+    // head (CSBS) must reach them, whichever one they happen to be working in.
+    const allScope = await getHodDepartmentScope(db, session.collegeId, session.uid, { activeOnly: false });
+    const myNames = facultyManageableDepartmentNames(allScope);
 
     const [outgoingSnap, incomingSnap] = await Promise.all([
       coll.where("requestedBy", "==", session.uid).get(),

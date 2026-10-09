@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
+import { useAuthStore } from "@/store/authStore";
 import { buildCourseGroups } from "@/lib/departments/hodScope";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { Course, Department, Section, StudentRecord } from "@/types";
@@ -64,6 +65,16 @@ export default function EditSectionPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [facultyList, setFacultyList] = useState<FacultyOption[]>([]);
+  const myDepartments = useAuthStore((st) => st.user?.departments);
+  const myDepartment = useAuthStore((st) => st.user?.department);
+  const allMyDepartments = useMemo(
+    () => Array.from(new Set(myDepartments && myDepartments.length > 0 ? myDepartments : myDepartment ? [myDepartment] : [])),
+    [myDepartments, myDepartment],
+  );
+  const [pickedFacultyDept, setPickedFacultyDept] = useState("");
+  const facultyDept = pickedFacultyDept && allMyDepartments.includes(pickedFacultyDept)
+    ? pickedFacultyDept
+    : allMyDepartments.includes(ownerDept) ? ownerDept : allMyDepartments[0] ?? "";
   const [form, setForm] = useState<SectionForm>(EMPTY_FORM);
   const [sectionName, setSectionName] = useState("");
   const [sectionCourseName, setSectionCourseName] = useState("");
@@ -95,8 +106,10 @@ export default function EditSectionPage() {
   const [selectedStudentId, setSelectedStudentId] = useState<string>("none");
   const [studentsLoading, setStudentsLoading] = useState(false);
 
+  // Faculty come from the department picked above the Faculty Incharge list - an HOD of
+  // several departments (e.g. IT and CSBS) chooses which department's faculty to pick from.
   useEffect(() => {
-    fetch("/api/college/faculty?availableOnly=true")
+    fetch(`/api/college/faculty?availableOnly=true${facultyDept ? `&department=${encodeURIComponent(facultyDept)}` : ""}`)
       .then((r) => r.json())
       .then((d: { faculty?: (FacultyOption & { legalName?: string })[] }) => {
         setFacultyList((d.faculty ?? []).map((f) => ({
@@ -104,7 +117,9 @@ export default function EditSectionPage() {
         })));
       })
       .catch(() => { /* non-critical */ });
+  }, [facultyDept]);
 
+  useEffect(() => {
     fetch("/api/college/departments")
       .then((r) => r.json() as Promise<{ departments: Department[] }>)
       .then((d) => setDepartments(d.departments ?? []))
@@ -478,6 +493,14 @@ export default function EditSectionPage() {
                       <Label>Faculty Incharge</Label>
                       {editingClassDetails ? (
                         <>
+                          {allMyDepartments.length > 1 && (
+                            <Select value={facultyDept} onValueChange={setPickedFacultyDept}>
+                              <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
+                              <SelectContent>
+                                {allMyDepartments.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          )}
                           <Select
                             value={form.facultyInchargeUid || "none"}
                             onValueChange={(v) => handleFacultySelect(v === "none" ? "" : v)}
@@ -495,7 +518,7 @@ export default function EditSectionPage() {
                             </SelectContent>
                           </Select>
                           {facultyList.length === 0 && (
-                            <p className="text-xs text-muted-foreground">No active faculty found in your department.</p>
+                            <p className="text-xs text-muted-foreground">No active faculty found in {facultyDept || "your department"}.</p>
                           )}
                         </>
                       ) : (
