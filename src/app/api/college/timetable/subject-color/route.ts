@@ -19,10 +19,11 @@ export async function PATCH(request: Request) {
     if (color !== null && !isSubjectColor(color)) return NextResponse.json({ error: "Unknown color" }, { status: 400 });
 
     const db = getAdminDb();
-    const ref = db.collection("colleges").doc(session.collegeId).collection("teachingAssignments").doc(assignmentId);
+    const collegeRef = db.collection("colleges").doc(session.collegeId);
+    const ref = collegeRef.collection("teachingAssignments").doc(assignmentId);
     const snap = await ref.get();
     if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    const a = snap.data() as { department?: string; courseId?: string; year?: number };
+    const a = snap.data() as { department?: string; courseId?: string; year?: number; sectionId?: string; subjectId?: string };
 
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
@@ -35,7 +36,23 @@ export async function PATCH(request: Request) {
       if (!ok) return NextResponse.json({ error: "You are not the Timetable Incharge for this course & year" }, { status: 403 });
     }
 
-    await ref.update({ cellColor: color });
+    // A co-taught/split subject (several faculty teaching the same subject in
+    // the same section, e.g. a lab split into batches) is several separate
+    // teaching-assignment docs - colour all of them together, so the colour
+    // reflects on every faculty's half, on screen and after publish, not just
+    // whichever one was clicked.
+    const batch = db.batch();
+    batch.update(ref, { cellColor: color });
+    if (a.sectionId && a.subjectId) {
+      const siblingsSnap = await collegeRef.collection("teachingAssignments")
+        .where("sectionId", "==", a.sectionId)
+        .where("subjectId", "==", a.subjectId)
+        .get();
+      for (const d of siblingsSnap.docs) {
+        if (d.id !== assignmentId) batch.update(d.ref, { cellColor: color });
+      }
+    }
+    await batch.commit();
     return NextResponse.json({ success: true });
   } catch (err) {
     const badBody = badBodyResponse(err);

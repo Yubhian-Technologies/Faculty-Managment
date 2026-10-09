@@ -281,7 +281,7 @@ export const NAV_ITEMS: NavItem[] = [
   // Sits directly below Teaching Assignments: subjects are assigned there first,
   // then scheduled here.
   { label: "Timetable", href: "/hod/timetable", iconName: "CalendarDays", roles: ["HOD"], module: "timetable-incharge", legacyModule: "Department" },
-  { label: "Timetable View", href: "/hod/timetable-view", iconName: "CalendarSearch", roles: ["HOD"], module: "timetable-incharge", legacyModule: "Department" },
+  // No separate "Timetable View" item: it is the Published mode of the Timetable page.
   { label: "Internal Exam", href: "/hod/internal-exam", iconName: "ClipboardCheck", roles: ["HOD"], legacyModule: "Department" },
   { label: "Mid Paper Setter", href: "/hod/mid-paper-setter", iconName: "UserCog", roles: ["HOD"], legacyModule: "Department" },
   { label: "Leave Approvals", href: "/hod/leave-approvals", iconName: "CalendarClock", roles: ["HOD"], section: "Approvals", module: "leave-approvals" },

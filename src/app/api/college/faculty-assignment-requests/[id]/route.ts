@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { notify } from "@/lib/notify";
-import { getHodDepartmentScope, canHodEditDepartment, ownDepartmentNames } from "@/lib/departments/scope";
+import { getHodDepartmentScope, getDepartmentTreeNames, canHodManageFacultyDepartment, facultyManageableDepartmentNames } from "@/lib/departments/scope";
 import { isTimetableInchargeForDepartment } from "@/lib/departments/timetableIncharge";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { isFacultyAvailable } from "@/types";
@@ -52,7 +52,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (!reqSnap.exists) return NextResponse.json({ error: "Request not found" }, { status: 404 });
     const reqData = reqSnap.data() as FacultyAssignmentRequest;
 
-    const scope = session.role === "HOD" ? await getHodDepartmentScope(db, session.collegeId, session.uid) : null;
+    // Full scope (not narrowed to "Working as"): a request sent to any department
+    // this HOD heads may be acted on from any of them.
+    const scope = session.role === "HOD" ? await getHodDepartmentScope(db, session.collegeId, session.uid, { activeOnly: false }) : null;
     if (scope) {
       // Own department/sub-departments only, not managed branches (see
       // ownDepartmentNames doc) - matches the GET route's incoming-list
@@ -61,7 +63,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       // common cause is the "Working As" switcher having moved to a
       // different department since the (now-stale) request list was loaded,
       // not a real permissions gap, and that's invisible without saying so.
-      if (!ownDepartmentNames(scope).includes(reqData.targetDepartmentName)) {
+      if (!facultyManageableDepartmentNames(scope).includes(reqData.targetDepartmentName)) {
         return NextResponse.json(
           { error: `This request was sent to ${reqData.targetDepartmentName}, not ${scope.departmentName || "your department"} - switch "Working As" and reload if you meant to act on it` },
           { status: 403 },
@@ -266,8 +268,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         if (parentName) inchargeDepartments = [...inchargeDepartments, parentName];
       }
     }
+    // An HOD lends from the department the request was SENT TO (plus its
+    // sub-departments, e.g. every Basic Science branch) - never from another
+    // department they also head: an IT request to CSBS is filled from CSBS only.
+    let hodTreeNames: string[] = [];
+    if (scope) {
+      hodTreeNames = (await getDepartmentTreeNames(db, session.collegeId, reqData.targetDepartmentName))
+        .filter((n) => canHodManageFacultyDepartment(scope, n));
+    }
     const facultyInScope = scope
-      ? canHodEditDepartment(scope, faculty.department ?? "")
+      ? hodTreeNames.includes(faculty.department ?? "")
       : inchargeDepartments.includes(faculty.department ?? "");
     if (!facultyInScope) {
       return NextResponse.json({ error: "That faculty member isn't in your department" }, { status: 403 });

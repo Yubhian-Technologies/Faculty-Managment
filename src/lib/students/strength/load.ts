@@ -3,7 +3,8 @@ import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
 import type { DepartmentYearRow } from "@/lib/departments/managedBranches";
 import type { HodDepartmentScope } from "@/lib/departments/scope";
 import type { Course } from "@/types";
-import { buildStrengthCube, type CatalogCourse, type CatalogDepartment, type CatalogSection } from "./aggregate";
+import { managerEffectiveYears } from "@/lib/departments/hodScope";
+import { buildStrengthCube, groupedBranchNames, type CatalogCourse, type CatalogDepartment, type CatalogSection } from "./aggregate";
 import { normKey } from "./config";
 import { filterRowsForHod } from "./hodScope";
 import type { StrengthPayload, StrengthRow } from "./types";
@@ -114,15 +115,63 @@ export async function loadStrengthPayload(
   // of the rest of the college must not appear (or leak) in their tables.
   if (opts.hodScope) {
     const scope = opts.hodScope;
+    const ownNames = [...scope.ownDepartmentNames, ...scope.childDepartmentNames];
+    const ownDepts = departments.filter((d) => ownNames.includes((d.name ?? "").trim()));
+    // The branches these departments hold a shared year FOR - their core
+    // departments - listed even with nobody in them yet, so the Department
+    // filter offers every branch the department is configured for rather than
+    // only the ones that happen to have students today. Read from both fields
+    // a college may configure them in: BASIC SCIENCE - ENGLISH cross-lists to
+    // CSE [CYBER SECURITY] and COMPUTER SCIENCE AND ENGINEERING, and only the
+    // second had students, so the first never appeared.
+    const coreNames = ownDepts.flatMap(groupedBranchNames);
     const visible = new Set([
       ...cells.map((c) => c.branch),
-      ...[...scope.ownDepartmentNames, ...scope.childDepartmentNames, ...scope.managedDepartmentNames].map(normKey),
+      ...[...ownNames, ...scope.managedDepartmentNames, ...coreNames].map(normKey),
     ]);
     meta.branches = meta.branches.filter((b) => visible.has(b.key));
     for (const p of meta.programs) p.branchKeys = p.branchKeys.filter((k) => visible.has(k));
+    // Their core departments are offered whether or not anything is filed
+    // under them. A branch that holds no Course doc of its own - a
+    // sub-department of another branch, say - is in no program's branchKeys,
+    // so it would never be offered however much it is configured.
+    const coreKeys = coreNames.map(normKey);
+    for (const p of meta.programs) {
+      for (const k of coreKeys) if (!p.branchKeys.includes(k)) p.branchKeys.push(k);
+    }
     // ...and only programs they have students in or run a department under.
     const programsWithCells = new Set(cells.map((c) => c.program));
     meta.programs = meta.programs.filter((p) => programsWithCells.has(p.key) || p.branchKeys.length > 0);
+
+    // With branches to offer, the HOD's own department is not one of them:
+    // everything on the page is already theirs, so picking it narrows nothing.
+    if (coreKeys.length > 0) meta.hiddenBranchKeys = ownNames.map(normKey);
+
+    // The years these departments are configured to teach, PER PROGRAM - what
+    // the Year filter may offer. managerEffectiveYears is the same rule the
+    // rest of the app scopes years by (own Years Taught, else the parent's,
+    // minus any year fed to another department), resolved against the catalog
+    // entry of the course in question. Per program because one department
+    // commonly runs several with different years.
+    const byProgram: Record<string, number[]> = {};
+    const catalogsByProgram = new Map<string, Set<string>>();
+    for (const c of courseDocs) {
+      const key = normKey(c.name ?? "");
+      if (!key || !c.catalogId) continue;
+      const set = catalogsByProgram.get(key) ?? new Set<string>();
+      set.add(c.catalogId);
+      catalogsByProgram.set(key, set);
+    }
+    for (const p of meta.programs) {
+      const years = new Set<number>();
+      for (const d of ownDepts) {
+        for (const catalogId of catalogsByProgram.get(p.key) ?? [undefined]) {
+          for (const y of managerEffectiveYears(d as never, departments as never, catalogId)) years.add(y);
+        }
+      }
+      if (years.size > 0) byProgram[p.key] = [...years].sort((a, b) => a - b);
+    }
+    if (Object.keys(byProgram).length > 0) meta.scopeYearsByProgram = byProgram;
   }
 
   return {

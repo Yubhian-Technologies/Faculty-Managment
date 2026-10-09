@@ -61,9 +61,9 @@ describe("experience: Place of the University/College", () => {
 
   it("the edit form shows it right after Institution Name (Academic tab is the default)", () => {
     const form = html(createElement(ExperienceFields, { value: profile as FacultyProfileFields, onChange: noop }));
-    expect(form).toContain("Place of the University/College");
-    expect(form.indexOf("Institution Name")).toBeLessThan(form.indexOf("Place of the University/College"));
-    expect(form.indexOf("Place of the University/College")).toBeLessThan(form.indexOf("Designation"));
+    expect(form).toContain("Location of the Institution");
+    expect(form.indexOf("Name of the Institution")).toBeLessThan(form.indexOf("Location of the Institution"));
+    expect(form.indexOf("Location of the Institution")).toBeLessThan(form.indexOf("Designation"));
     expect(form).toContain("Hyderabad");
   });
 

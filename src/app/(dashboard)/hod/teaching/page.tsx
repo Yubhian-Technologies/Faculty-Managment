@@ -188,6 +188,7 @@ export default function HODTeachingPage() {
     try {
       const semesterSlots = timetableSlots
         .filter((s) => !s.id.startsWith("substitute_"))
+        .filter((s) => !nonTeachingAssignmentIds.has(s.assignmentId) && s.subjectType !== "NON_TEACHING" && !(s as any).isNonTeachingLoad)
         .filter((s) => typeFilter === "ALL" || s.subjectType === typeFilter);
       const courseCodeById = new Map(courses.map((c) => [c.id, c.code || c.name]));
       const html = buildFacultyTimetablePdfHtml({
@@ -201,6 +202,7 @@ export default function HODTeachingPage() {
         slots: semesterSlots,
         assignmentById,
         periodTimeFor,
+        breakAfter: breakAfterFor,
         courseCodeById,
         departments,
         formatDMY,
@@ -221,6 +223,7 @@ export default function HODTeachingPage() {
     try {
       const semesterSlots = timetableSlots
         .filter((s) => !s.id.startsWith("substitute_"))
+        .filter((s) => !nonTeachingAssignmentIds.has(s.assignmentId) && s.subjectType !== "NON_TEACHING" && !(s as any).isNonTeachingLoad)
         .filter((s) => typeFilter === "ALL" || s.subjectType === typeFilter);
       const courseCodeById = new Map(courses.map((c) => [c.id, c.code || c.name]));
       await downloadFacultyTimetableXlsx(
@@ -253,6 +256,7 @@ export default function HODTeachingPage() {
     if (periods.length === 0) return;
     const semesterSlots = timetableSlots
       .filter((s) => !s.id.startsWith("substitute_"))
+      .filter((s) => !nonTeachingAssignmentIds.has(s.assignmentId) && s.subjectType !== "NON_TEACHING" && !(s as any).isNonTeachingLoad)
       .filter((s) => typeFilter === "ALL" || s.subjectType === typeFilter);
     const courseCodeById = new Map(courses.map((c) => [c.id, c.code || c.name]));
     const html = buildFacultyTimetablePdfHtml({
@@ -266,6 +270,7 @@ export default function HODTeachingPage() {
       slots: semesterSlots,
       assignmentById,
       periodTimeFor,
+      breakAfter: breakAfterFor,
       courseCodeById,
       departments,
       formatDMY,

@@ -24,7 +24,7 @@ describe("timetableClassLine", () => {
 import { mergeCoTaughtSlots } from "@/lib/timetable/gridModel";
 
 describe("mergeCoTaughtSlots", () => {
-  type Slot = { subjectId: string; subjectName: string; facultyName: string; labBatch?: string; substituteFacultyName?: string; substituteDate?: string };
+  type Slot = { subjectId: string; subjectName: string; facultyName: string; labBatch?: string; substituteFacultyName?: string; substituteDate?: string; cellColor?: string };
   const s = (over: Partial<Slot>): Slot => ({ subjectId: "chem", subjectName: "Chemistry Lab", facultyName: "A", ...over });
 
   it("merges the faculty of one subject into one entry, subject once", () => {
@@ -49,5 +49,9 @@ describe("mergeCoTaughtSlots", () => {
     const merged = mergeCoTaughtSlots([s({ facultyName: "A", substituteFacultyName: "Z" }), s({ facultyName: "B" })]);
     expect(merged[0].facultyName).toBe("Sub: Z, B");
     expect(merged[0].substituteFacultyName).toBeUndefined();
+  });
+  it("keeps the colour when only the second co-taught half has one", () => {
+    const merged = mergeCoTaughtSlots([s({ facultyName: "A" }), s({ facultyName: "B", cellColor: "orange" })]);
+    expect(merged[0].cellColor).toBe("orange");
   });
 });

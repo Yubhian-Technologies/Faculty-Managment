@@ -122,6 +122,13 @@ export interface SubjectSemesterAssignment {
   department?: string;
   departmentName?: string;
   departmentId?: string;
+  // Narrows this row's own `departmentId`/`departmentName` (a feeder
+  // sub-department managing several core branches - see subjectCoverage.ts's
+  // managed-department fallback) down to specific core department NAMES, for
+  // when a core branch isn't itself scoped to teach this year (a shared
+  // first year) and so can't be `departmentId` directly. Unset means the
+  // row covers every department `departmentId` manages, as before.
+  secondaryDepartmentNames?: string[];
   courseId?: string;
   courseName?: string;
   regulation?: string;
@@ -246,6 +253,8 @@ export interface RequestAllocation {
 
 export interface FacultyAssignmentRequest {
   id: string;
+  /** Set by GET: true when the request is addressed to a department the viewer heads / is Timetable Incharge for (even if they raised it themselves). */
+  incomingForMe?: boolean;
   collegeId: string;
   courseId: string;
   courseName: string;

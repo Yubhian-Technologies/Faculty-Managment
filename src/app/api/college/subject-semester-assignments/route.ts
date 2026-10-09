@@ -3,7 +3,9 @@ export const dynamic = "force-dynamic";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
+import { planHoursSync } from "@/lib/subjects/hoursSync";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { FieldValue } from "firebase-admin/firestore";
 import { getHodDepartmentScope, canHodEditDepartmentId, canHodEditDepartment } from "@/lib/departments/scope";
 import { sectionAssignmentScope } from "@/lib/departments/sectionAssignmentScope";
 import { resolveSectionCurrentSemester } from "@/lib/college/semester";
@@ -98,9 +100,17 @@ export async function GET(request: Request) {
     // child sub-departments (e.g. selecting "Basic Science" shows
     // assignments for BS-Chemistry, BS-Mathematics, etc.).
     let targetDeptIds: string[] | null = null;
+    // The requested department's own NAME - a row narrowed via "Target core
+    // departments" (secondaryDepartmentNames, see academics/subjects) is
+    // filed under some OTHER department's id (the feeder sub-department that
+    // owns it) but should still surface here when browsing straight to the
+    // core department it was narrowed to, same as Teaching Assignments
+    // already recognises it by.
+    let requestedDeptName: string | null = null;
     if (departmentId) {
       const deptSnap = await collegeRef.collection("departments").doc(departmentId).get();
-      const dept = deptSnap.data() as { parentDepartmentId?: string; hasSubDepartments?: boolean } | undefined;
+      const dept = deptSnap.data() as { name?: string; parentDepartmentId?: string; hasSubDepartments?: boolean } | undefined;
+      requestedDeptName = dept?.name ?? null;
       const deptIds = new Set([departmentId]);
       if (dept?.hasSubDepartments) {
         const childrenSnap = await collegeRef.collection("departments")
@@ -125,11 +135,13 @@ export async function GET(request: Request) {
     if (academicYear) {
       assignments = assignments.filter((a) => !a.academicYear || a.academicYear === academicYear);
     }
+    const narrowedToHere = (a: Record<string, unknown>) =>
+      !!requestedDeptName && Array.isArray(a.secondaryDepartmentNames) && (a.secondaryDepartmentNames as unknown[]).includes(requestedDeptName);
     if (targetDeptIds && targetDeptIds.length > 0) {
       const set = new Set(targetDeptIds);
-      assignments = assignments.filter((a) => a.departmentId && set.has(String(a.departmentId)));
+      assignments = assignments.filter((a) => (a.departmentId && set.has(String(a.departmentId))) || narrowedToHere(a));
     } else if (departmentId) {
-      assignments = assignments.filter((a) => a.departmentId === departmentId);
+      assignments = assignments.filter((a) => a.departmentId === departmentId || narrowedToHere(a));
     }
     if (semester != null) {
       const semNum = Number(semester);
@@ -141,9 +153,14 @@ export async function GET(request: Request) {
     }
     // No explicit departmentId (already validated above when present) - an
     // HOD's courseId/subjectId-only query must still never surface another
-    // department's mapping.
+    // department's mapping. A row narrowed to this HOD's own department via
+    // secondaryDepartmentNames passes too, even though its own departmentId
+    // belongs to whichever feeder sub-department actually owns it.
     if (hodScope && !departmentId) {
-      assignments = assignments.filter((a) => canHodEditDepartmentId(hodScope!, String(a.departmentId ?? "")));
+      assignments = assignments.filter((a) =>
+        canHodEditDepartmentId(hodScope!, String(a.departmentId ?? "")) ||
+        (Array.isArray(a.secondaryDepartmentNames) && (a.secondaryDepartmentNames as unknown[]).some((n) => typeof n === "string" && canHodEditDepartment(hodScope!, n)))
+      );
     }
 
     return NextResponse.json({ assignments });
@@ -246,6 +263,16 @@ export async function PATCH(request: Request) {
       tutorialHours?: number;
       practicalHours?: number;
       credits?: number;
+      // Narrows this row's own broad `departmentId` (a feeder sub-department
+      // like "Basic Science - Chemistry", which manages several core
+      // departments and would otherwise cover all of them - see
+      // subjectCoverage.ts's managed-department fallback) down to specific
+      // core department NAMES. Set when a core department isn't itself
+      // scoped to teach this year (e.g. a shared first year, where CSE/CSBS
+      // explicitly exclude Year 1 from their own Years Taught) and so can
+      // never be `departmentId` directly - this narrows without requiring
+      // that. `null` clears it back to broad coverage.
+      secondaryDepartmentNames?: string[] | null;
       // Subject-level fields already saved on the master subject (PATCH
       // subjects/[id]); mirrored onto every assignment row of that subject so
       // the Academics table, which reads these copies, doesn't show stale values.
@@ -269,6 +296,11 @@ export async function PATCH(request: Request) {
         return NextResponse.json({ error: `${k} must be a non-negative number` }, { status: 400 });
       }
     }
+    if (body.secondaryDepartmentNames !== undefined && body.secondaryDepartmentNames !== null) {
+      if (!Array.isArray(body.secondaryDepartmentNames) || body.secondaryDepartmentNames.some((n) => typeof n !== "string" || !n.trim())) {
+        return NextResponse.json({ error: "secondaryDepartmentNames must be a list of non-empty names" }, { status: 400 });
+      }
+    }
 
     const ref = getAdminDb().collection("colleges").doc(session.collegeId).collection("subjectSemesterAssignments").doc(body.id);
     const snap = await ref.get();
@@ -282,6 +314,12 @@ export async function PATCH(request: Request) {
     const tutorialHours = body.tutorialHours !== undefined ? Number(body.tutorialHours) : cur.tutorialHours ?? 0;
     const practicalHours = body.practicalHours !== undefined ? Number(body.practicalHours) : cur.practicalHours ?? 0;
     const hoursPerWeek = lectureHours + tutorialHours + practicalHours;
+    // The Subjects dialog sends every field on every save, so a save that only
+    // renames a short code still arrives carrying the hours it already had.
+    // Whether this request CHANGES them decides whether an over-placed
+    // timetable is this save's doing - see planHoursSync.
+    const prevHoursPerWeek = (cur.lectureHours ?? 0) + (cur.tutorialHours ?? 0) + (cur.practicalHours ?? 0);
+    const hoursChanged = hoursPerWeek !== prevHoursPerWeek;
 
     // Teaching assignments copy hoursPerWeek (it caps their timetable periods),
     // so keep the ones relying on this instance in step - but never below the
@@ -295,7 +333,7 @@ export async function PATCH(request: Request) {
     ]);
     const departments = deptDocs.map((d) => ({ id: d.id, ...d.data() })) as (Department & { id: string })[];
     const coursesById = new Map(courseDocs.map((d) => [d.id, d.data() as Pick<Course, "departmentId" | "catalogId">]));
-    const stale = taSnap.docs.filter((d) => {
+    let stale = taSnap.docs.filter((d) => {
       const ta = d.data() as TeachingAssignment;
       return ta.hoursPerWeek !== hoursPerWeek && !!cur.departmentId
         && teachingAssignmentUsesInstance(ta, { departmentId: cur.departmentId, semester: cur.semester, year: cur.year }, departments, coursesById);
@@ -307,11 +345,22 @@ export async function PATCH(request: Request) {
         const id = (s.data() as { assignmentId: string }).assignmentId;
         placed.set(id, (placed.get(id) ?? 0) + 1);
       }
-      const over = stale.filter((d) => (placed.get(d.id) ?? 0) > hoursPerWeek);
-      if (over.length > 0) {
-        const who = over.slice(0, 3).map((d) => { const t = d.data() as TeachingAssignment; return `${t.facultyName} (${t.sectionName ?? "-"}, ${placed.get(d.id)} periods)`; }).join("; ");
+      const plan = planHoursSync(
+        stale.map((d) => ({ id: d.id, placedPeriods: placed.get(d.id) ?? 0 })),
+        hoursPerWeek,
+        hoursChanged
+      );
+      if (plan.blockedIds.length > 0) {
+        const blocked = new Set(plan.blockedIds);
+        const who = stale.filter((d) => blocked.has(d.id)).slice(0, 3)
+          .map((d) => { const t = d.data() as TeachingAssignment; return `${t.facultyName} (${t.sectionName ?? "-"}, ${placed.get(d.id)} periods)`; }).join("; ");
         return NextResponse.json({ error: `Can't lower hours below the periods already placed on the timetable: ${who}. Remove those periods first.` }, { status: 409 });
       }
+      // Hours untouched by this save: an assignment already over its cap keeps
+      // the hours it has. Lowering it here would put its timetable over the cap
+      // instead of refusing, which is the very thing the refusal guards against.
+      const syncIds = new Set(plan.syncIds);
+      stale = stale.filter((d) => syncIds.has(d.id));
     }
 
     await ref.update({
@@ -320,6 +369,9 @@ export async function PATCH(request: Request) {
       practicalHours,
       hoursPerWeek,
       ...(body.credits !== undefined ? { credits: Number(body.credits) } : {}),
+      ...(body.secondaryDepartmentNames !== undefined
+        ? { secondaryDepartmentNames: body.secondaryDepartmentNames && body.secondaryDepartmentNames.length > 0 ? body.secondaryDepartmentNames : FieldValue.delete() }
+        : {}),
       isCustomized: true,
       updatedAt: new Date(),
     });

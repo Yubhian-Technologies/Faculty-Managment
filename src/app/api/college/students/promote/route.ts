@@ -8,7 +8,6 @@ import { getAdminAuth, getAdminDb } from "@/lib/firebase/admin";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import type { Firestore } from "firebase-admin/firestore";
-import { sectionParityGap, describeSectionParityGap } from "@/lib/college/sectionParity";
 import { invalidPromotion, notInFinalYear, notInSourceSection } from "@/lib/students/promotionRules";
 import { setStudentLoginActive } from "@/lib/students/provisionLogin";
 import type { Section, StudentRecord } from "@/types";
@@ -76,34 +75,21 @@ export async function POST(request: Request) {
       targetSection = { id: targetSnap.id, ...(targetSnap.data() as object) } as Section;
     }
 
-    // A cohort moves up a year into the SAME course's next-year sections, so
-    // the two years must have exactly the same section names - a missing one
-    // has nowhere to receive its students, an extra one would be left empty.
-    // The Principal fixes the sections first (add/remove), then promotes.
-    // Skipped for a shared-first-year feeder section (it fans out into other
-    // departments' sections, so its names legitimately differ).
+    // The section a cohort is moving OUT of, for the batch/regulation carry
+    // further down. Promotion deliberately does NOT require the two years to
+    // carry the same section names: every student arrives here with an
+    // explicit target section (the default target, a per-student pick, or an
+    // allotment file), so a differing name decides nothing. Sections are
+    // routinely named for the year they sit in - a first year named after the
+    // department that teaches it (VISHNU INSTITUTE OF TECHNOLOGY's
+    // "BSP-ECE-A" into "ECE-A"), a renamed branch - and this used to refuse
+    // the whole promotion with a 409. The Promotion screen still points the
+    // difference out, so an empty or missing section is noticed.
     let promoteSource: Section | null = null;
     if (body.action === "PROMOTE" && body.sourceSectionId) {
       const sourceSnap = await collegeRef.collection("sections").doc(body.sourceSectionId).get();
       if (sourceSnap.exists) {
         promoteSource = { id: sourceSnap.id, ...(sourceSnap.data() as object) } as Section;
-        const isFeeder = (promoteSource.secondaryDepartments?.length ?? 0) > 0;
-        if (!isFeeder && promoteSource.courseId === targetSection!.courseId) {
-          const courseSections = await collegeRef.collection("sections").where("courseId", "==", promoteSource.courseId).get();
-          const gap = sectionParityGap(
-            courseSections.docs.map((d) => d.data() as Section),
-            promoteSource.department,
-            promoteSource.courseId,
-            promoteSource.year,
-            targetSection!.year
-          );
-          if (gap.missing.length > 0 || gap.extra.length > 0) {
-            return NextResponse.json(
-              { error: describeSectionParityGap(gap, promoteSource.year, targetSection!.year), ...gap },
-              { status: 409 }
-            );
-          }
-        }
       }
     }
 
