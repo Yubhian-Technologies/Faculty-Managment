@@ -494,6 +494,31 @@ describe("a cross-listing feeder's own filters", () => {
     expect(filterOptions(cells, { ...meta, scopeYears: [1] }, F()).years).toEqual([1]);
   });
 
+  // The sections are filed under the feeder but belong to the branch they feed,
+  // which is where their students are counted - so a branch pick must find them.
+  it("lists a shared-first-year section under the branch it feeds", () => {
+    const withSections = {
+      ...CATALOG,
+      sections: [
+        { department: "BS English", courseId: "c1", name: "BSE-CSE-A", year: 1, secondaryDepartments: ["CSE"] },
+        { department: "BS English", courseId: "c1", name: "BSE-CSE-B", year: 1, secondaryDepartments: ["CSE"] },
+        { department: "BS English", courseId: "c1", name: "BSE-CS", year: 1, secondaryDepartments: ["Cyber Security"] },
+      ],
+    };
+    const { cells, meta } = buildStrengthCube(rows, withSections);
+    expect(filterOptions(cells, meta, F({ branch: "cse" })).sections.map((x) => x.label))
+      .toEqual(expect.arrayContaining(["BSE-CSE-A", "BSE-CSE-B"]));
+    expect(filterOptions(cells, meta, F({ branch: "cyber security" })).sections.map((x) => x.label))
+      .toEqual(["BSE-CS"]);
+  });
+
+  // A plain section, with no branch to feed, still goes under its own department.
+  it("leaves an ordinary section under its own department", () => {
+    const plain = { ...CATALOG, sections: [{ department: "CSE", courseId: "c1", name: "CSE-A", year: 2 }] };
+    const { cells, meta } = buildStrengthCube(rows, plain);
+    expect(filterOptions(cells, meta, F({ branch: "cse", year: 2 })).sections.map((x) => x.label)).toEqual(["CSE-A"]);
+  });
+
   // ...but never hides a year somebody is actually counted in.
   it("keeps a year that has students even when it is outside the configuration", () => {
     const strays = [...rows, { id: "x", department: "BS English", secondaryDepartment: "CSE", course: "B.Tech", year: 3, section: "A", status: "REGULAR" }];

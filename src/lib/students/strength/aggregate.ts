@@ -57,6 +57,13 @@ export interface CatalogSection {
   courseName?: string;
   name?: string;
   year?: number;
+  /**
+   * The branch this section feeds, for a shared first year - stored plural for
+   * legacy shape, but a section commits to one (see Section.secondaryDepartments).
+   * Every student imported into it inherits it as their own
+   * secondaryDepartment, which is what they are counted under.
+   */
+  secondaryDepartments?: string[];
 }
 
 export interface StrengthCatalog {
@@ -263,7 +270,14 @@ export function buildStrengthCube(rows: StrengthRow[], catalog: StrengthCatalog)
     const year = Number(s.year);
     sections.push({
       program: normKey(programName),
-      branch: normKey(s.department),
+      // The same rule a STUDENT is bucketed by (effectiveBranchName): the
+      // branch it feeds when it has one, else its own department. Indexing a
+      // section by its filing department instead put it under the feeder
+      // while its students sat under the branch, so picking a branch emptied
+      // the Section list: BSE-CSE-A/B/C are filed under BASIC SCIENCE -
+      // ENGLISH but belong to COMPUTER SCIENCE AND ENGINEERING, and BSE-CS to
+      // CSE [CYBER SECURITY].
+      branch: normKey(cleanLabel(s.secondaryDepartments?.[0]) || cleanLabel(s.department)),
       year: Number.isFinite(year) && year > 0 ? Math.trunc(year) : 0,
       section: normKey(label),
       label,
