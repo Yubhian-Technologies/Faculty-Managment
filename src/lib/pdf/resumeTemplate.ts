@@ -7,6 +7,7 @@ import { migratePersonalFlat } from "@/lib/faculty/fieldRenames";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { DESIGNATION_LABELS, FACULTY_STATUS_LABELS, ROLE_LABELS, RELIGION_LABELS, CASTE_LABELS } from "@/types";
 import type { Religion, Caste } from "@/types";
+import { currentTimetableAcademicYear } from "@/lib/college/academicSession";
 import { buildTeachingLoadRows, formatClassColumn, type TeachingLoadRow } from "@/lib/teaching/buildTeachingLoadRows";
 import { readPreviousTeachingAssignments, formatPassPercentage } from "@/lib/faculty/previousTeaching";
 import type { PreviousTeachingAssignment } from "@/types";
@@ -146,6 +147,9 @@ export interface ResumeData {
   phone?: string;
   profilePhotoUrl?: string;
   collegeName?: string;
+  /** The college's current academic year ("2026-27"), for current teaching
+   *  assignments that store none. Absent = worked out from today's date. */
+  currentAcademicYear?: string;
   /** Uploaded Resume/CV file (Faculty edit page Documents section) - distinct
    *  from this generated document, surfaced as a link when present. */
   resumeUrl?: string;
@@ -503,7 +507,13 @@ export function getResumeHTML(rawData: ResumeData): string {
   // current and the previous rows ("SKILL-BUILDING", "Skill Building", "NSS/Sports"...).
   const NOT_TEACHING_LOAD = /\b(nss|sports?)\b|skill[\s_-]*building/i;
   const keep = (r: { subject?: string; courseName?: string }) => !NOT_TEACHING_LOAD.test(`${r.subject ?? ""} ${r.courseName ?? ""}`);
-  teachingLoadGroups.current = teachingLoadGroups.current.filter(keep);
+  // A current assignment is by definition this academic year's, but most are
+  // stored without one (only a past assignment is ever asked for it), which
+  // left the column blank. A year the row does carry is kept as it is.
+  const currentAcademicYear = data.currentAcademicYear?.trim() || currentTimetableAcademicYear();
+  teachingLoadGroups.current = teachingLoadGroups.current
+    .filter(keep)
+    .map((r) => (r.academicYear?.trim() ? r : { ...r, academicYear: currentAcademicYear }));
   teachingLoadGroups.past = teachingLoadGroups.past.filter(keep);
   const previousTeaching = readPreviousTeachingAssignments(data).filter((p) => !NOT_TEACHING_LOAD.test(p.subject ?? ""));
   const teachingLoadTables = renderTeachingLoadGroups(teachingLoadGroups, previousTeaching);

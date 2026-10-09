@@ -30,8 +30,22 @@ export async function downloadFacultyResume(
     } catch { /* resume falls back to self-reported publications, if any */ }
   }
 
+  const currentAcademicYear = await fetchCurrentAcademicYear();
+
   await downloadResumePdf(
-    { ...row, teachingAssignments, researchPublications, collegeName, sections },
+    { ...row, teachingAssignments, researchPublications, collegeName, currentAcademicYear, sections },
     (row.employeeId as string) || facultyDisplayName(row)
   );
+}
+
+/** The college's current academic year ("2026-27"), printed against a current
+ *  teaching assignment that stores none of its own. Empty when it can't be
+ *  read - the resume then works it out from today's date. */
+export async function fetchCurrentAcademicYear(): Promise<string> {
+  try {
+    const res = await fetch("/api/college/academic-year/current");
+    return ((await res.json()) as { label?: string }).label ?? "";
+  } catch {
+    return "";
+  }
 }
