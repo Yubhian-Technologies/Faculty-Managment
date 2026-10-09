@@ -475,6 +475,27 @@ describe("a cross-listing feeder's own filters", () => {
     course: "B.Tech", year: 1, section: "A", status: "REGULAR",
   }));
 
+  // What a feeder's own HOD is offered: the branches below them, not their own
+  // name - everything on their page is already theirs.
+  it("hides the viewer's own department when there are branches to offer", () => {
+    const { cells, meta } = buildStrengthCube(rows, CATALOG);
+    const scoped = { ...meta, hiddenBranchKeys: ["bs english"] };
+    const keys = filterOptions(cells, scoped, F()).branches.map((b) => b.key);
+    expect(keys).not.toContain("bs english");
+  });
+
+  it("offers a configured branch that holds no Course doc of its own", () => {
+    const { cells, meta } = buildStrengthCube(rows, CATALOG);
+    // Cyber Security is a sub-department of CSE - no Course doc, so it is in
+    // no program's branchKeys until it is added as a core department.
+    const withCore = {
+      ...meta,
+      programs: meta.programs.map((p) => ({ ...p, branchKeys: [...p.branchKeys, "cyber security"] })),
+      branches: [...meta.branches, { key: "cyber security", label: "Cyber Security", code: "CYB", isFeeder: false, unknown: false }],
+    };
+    expect(filterOptions(cells, withCore, F()).branches.map((b) => b.label)).toContain("Cyber Security");
+  });
+
   it("does not offer the feeder itself as a Department", () => {
     const { meta } = buildStrengthCube(rows, CATALOG);
     expect(meta.branches.find((b) => b.key === "bs english")?.isFeeder).toBe(true);

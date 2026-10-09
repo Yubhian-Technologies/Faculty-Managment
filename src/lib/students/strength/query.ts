@@ -227,6 +227,7 @@ export function filterOptions(cells: StrengthCell[], meta: StrengthMeta, f: Stre
 
   const branchKeys = new Set(above("branch").map((c) => c.branch));
   for (const p of programsInScope) for (const bk of p.branchKeys) if (!branchInfo(meta, bk).isFeeder) branchKeys.add(bk);
+  for (const key of meta.hiddenBranchKeys ?? []) branchKeys.delete(key);
   const branches = [...branchKeys]
     .map((key) => {
       const b = branchInfo(meta, key);

@@ -131,9 +131,21 @@ export async function loadStrengthPayload(
     ]);
     meta.branches = meta.branches.filter((b) => visible.has(b.key));
     for (const p of meta.programs) p.branchKeys = p.branchKeys.filter((k) => visible.has(k));
+    // Their core departments are offered whether or not anything is filed
+    // under them. A branch that holds no Course doc of its own - a
+    // sub-department of another branch, say - is in no program's branchKeys,
+    // so it would never be offered however much it is configured.
+    const coreKeys = coreNames.map(normKey);
+    for (const p of meta.programs) {
+      for (const k of coreKeys) if (!p.branchKeys.includes(k)) p.branchKeys.push(k);
+    }
     // ...and only programs they have students in or run a department under.
     const programsWithCells = new Set(cells.map((c) => c.program));
     meta.programs = meta.programs.filter((p) => programsWithCells.has(p.key) || p.branchKeys.length > 0);
+
+    // With branches to offer, the HOD's own department is not one of them:
+    // everything on the page is already theirs, so picking it narrows nothing.
+    if (coreKeys.length > 0) meta.hiddenBranchKeys = ownNames.map(normKey);
 
     // The years these departments are configured to teach, PER PROGRAM - what
     // the Year filter may offer. managerEffectiveYears is the same rule the

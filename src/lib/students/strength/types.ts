@@ -101,6 +101,16 @@ export interface StrengthMeta {
    * does not teach - which is the whole thing this exists to stop.
    */
   scopeYearsByProgram?: Record<string, number[]>;
+  /**
+   * Branch keys this view must not offer in its Department filter.
+   *
+   * Set only for a department head who has core departments to offer instead:
+   * everything they are shown is already theirs, so their OWN department is
+   * not a choice - "Basic Science - English" filtering a Basic Science -
+   * English HOD's own page narrows nothing. The branches below them are what
+   * is worth picking. Never set where it would leave nothing to pick.
+   */
+  hiddenBranchKeys?: string[];
 }
 
 /** "ENROLLED" = every status that counts toward strength; "ALL" = every status incl. graduated/other. */
