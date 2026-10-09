@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { experienceBreakdown, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
+import { degreeHasData } from "@/lib/faculty/degreeHasData";
 import { migrateFacultyDoc, migrateUserDoc } from "@/lib/faculty/fieldRenames";
 import type { FacultyMember, FMSUser, DegreeDetail } from "@/types";
 
@@ -33,7 +34,9 @@ import type { FacultyMember, FMSUser, DegreeDetail } from "@/types";
 // Post-Doctoral entries, yearOfPassing for everything else. The other key is
 // omitted (not set to undefined) so the JSON stays minimal.
 function publicDegree(d: DegreeDetail | undefined, doctoral: boolean) {
-  if (!d) return undefined;
+  // An entry with nothing real on it (e.g. every field cleared, a year saved as 0)
+  // is left out, so the public page doesn't show an empty card. Stored data is untouched.
+  if (!d || !degreeHasData(d, doctoral ? "DOCTORAL" : "UG")) return undefined;
   return {
     course: d.course,
     degreeType: d.degreeType,

@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { Suspense, useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Users, Pencil, Trash2, Plus, GraduationCap, UserCog, Eye } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,8 @@ import { Pagination } from "@/components/shared/Pagination";
 import { usePagination } from "@/hooks/usePagination";
 import { getFreshmanDepartmentIds, type DepartmentWithId } from "@/lib/college/academicStructure";
 import type { SectionListItem, Course, Department } from "@/types";
+import { useListUrlSync } from "@/hooks/useListUrlSync";
+import { buildListUrl, readListInt, readListString, withListBack } from "@/lib/listReturn";
 
 type SectionRow = SectionListItem;
 
@@ -51,9 +53,27 @@ function ordinalYear(year: number) {
 // the real departments in scope, never a grouping container (sub-department
 // or common parent) itself. See useCascadeFilter's comment for the two shapes.
 const STUDENT_FACULTY_RATIO = 15;
+const LIST_PATH = "/hod/sections";
+const SECTIONS_PAGE_SIZE = 12;
+const PAGE_SIZES = [SECTIONS_PAGE_SIZE, 10, 20, 30, 50];
 
-export default function HODSectionsPage() {
+function HODSectionsContent() {
   const router = useRouter();
+  // The course / year / department / branch filters and the page this list was
+  // showing when a section was opened from it, or when the page was refreshed -
+  // read once, on arrival; the list then mirrors them back into the URL (listUrl
+  // below).
+  const searchParams = useSearchParams();
+  const [restored] = useState(() => ({
+    course: readListString(searchParams, "course", "all"),
+    year: readListInt(searchParams, "year", 0),
+    department: readListString(searchParams, "department", "all"),
+    subDepartment: searchParams.get("subDepartment") || null,
+    owned: searchParams.get("owned") || null,
+    branch: searchParams.get("branch") || null,
+    page: readListInt(searchParams, "page", 1),
+    pageSize: readListInt(searchParams, "pageSize", SECTIONS_PAGE_SIZE, { allowed: PAGE_SIZES }),
+  }));
   const myDepartments = useMyDepartments();
   // An HOD running two or more departments at once gets a flat list of every
   // owned department (+ their own sub-departments/managed branches) instead
@@ -64,16 +84,16 @@ export default function HODSectionsPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeCourseKey, setActiveCourseKey] = useState<string>("all");
-  const [activeYear, setActiveYear] = useState<number | "all">("all");
-  const [deptFilter, setDeptFilter] = useState<string>("all");
+  const [activeCourseKey, setActiveCourseKey] = useState<string>(restored.course);
+  const [activeYear, setActiveYear] = useState<number | "all">(restored.year > 0 ? restored.year : "all");
+  const [deptFilter, setDeptFilter] = useState<string>(restored.department);
   // Which sub-department's managed branches are currently drilled into (the
   // two-tier chip flow below) - null until one is picked.
-  const [subDeptFilter, setSubDeptFilter] = useState<string | null>(null);
+  const [subDeptFilter, setSubDeptFilter] = useState<string | null>(restored.subDepartment);
   // Which of THIS HOD's own top-level departments (primary or secondary -
   // myDepartments) is currently focused, for the multi-department "Your
   // Departments" chip row below - null shows every owned department combined.
-  const [ownedDeptFilter, setOwnedDeptFilter] = useState<string | null>(null);
+  const [ownedDeptFilter, setOwnedDeptFilter] = useState<string | null>(restored.owned);
   // Which cross-listed branch (Section.secondaryDepartments) is focused, for
   // the "Branches" chip row below - null shows every branch this department
   // feeds combined. Distinct from deptFilter/subDeptFilter above: those narrow
@@ -82,7 +102,7 @@ export default function HODSectionsPage() {
   // section feeds into (s.secondaryDepartments) - the dimension a department
   // like Physics that cross-lists directly (no sub-department layer, so
   // useCascadeFilter never applies) has no other way to filter by at all.
-  const [secondaryDeptFilter, setSecondaryDeptFilter] = useState<string | null>(null);
+  const [secondaryDeptFilter, setSecondaryDeptFilter] = useState<string | null>(restored.branch);
 
   const [deleteTarget, setDeleteTarget] = useState<SectionRow | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -554,7 +574,22 @@ export default function HODSectionsPage() {
 
   // Paginated over the flat section list (in group order), so a page can end
   // mid-group; the group header keeps its FULL-group counts either way.
-  const sectionPager = usePagination(groups.flatMap((g) => g.sections), 12);
+  const sectionPager = usePagination(groups.flatMap((g) => g.sections), SECTIONS_PAGE_SIZE, { page: restored.page, pageSize: restored.pageSize });
+
+  // The list's own URL: the filters and page above. Kept in the address bar so a
+  // refresh or the browser's Back button restores them, and carried to a section's
+  // page in `?back=` so its Back button returns to the same view. (The page is
+  // clamped to the data, so until the sections arrive the restored one is kept.)
+  const listUrl = buildListUrl(
+    LIST_PATH,
+    {
+      course: activeCourseKey, year: activeYear === "all" ? 0 : activeYear, department: deptFilter,
+      subDepartment: subDeptFilter, owned: ownedDeptFilter, branch: secondaryDeptFilter,
+      page: isLoading ? restored.page : sectionPager.page, pageSize: sectionPager.pageSize,
+    },
+    { course: "all", year: 0, department: "all", page: 1, pageSize: SECTIONS_PAGE_SIZE }
+  );
+  useListUrlSync(listUrl, LIST_PATH);
   const pageSectionIds = new Set(sectionPager.pageItems.map((x) => x.id));
   const pageGroups = groups
     .map((g) => ({ g, shown: g.sections.filter((x) => pageSectionIds.has(x.id)) }))
@@ -837,7 +872,7 @@ export default function HODSectionsPage() {
                     >
                       {/* Header row */}
                       <div className="flex items-start justify-between">
-                        <Link href={`/hod/sections/${sec.id}`} className="hover:underline">
+                        <Link href={withListBack(`/hod/sections/${sec.id}`, listUrl, LIST_PATH)} className="hover:underline">
                           <div className="flex items-center gap-2 flex-wrap">
                             <p className="text-2xl font-bold tracking-tight">{sec.name}</p>
                             {sec.accessLevel === "secondary" && (
@@ -860,7 +895,7 @@ export default function HODSectionsPage() {
                         </Link>
                         <div className="flex gap-1">
                           <button
-                            onClick={() => router.push(`/hod/sections/${sec.id}`)}
+                            onClick={() => router.push(withListBack(`/hod/sections/${sec.id}`, listUrl, LIST_PATH))}
                             className="p-1.5 rounded-md hover:bg-black/10 transition-colors"
                             title="View students"
                           >
@@ -869,7 +904,7 @@ export default function HODSectionsPage() {
                           {sec.accessLevel !== "secondary" && (
                             <>
                               <button
-                                onClick={() => router.push(`/hod/sections/${sec.id}/edit`)}
+                                onClick={() => router.push(withListBack(`/hod/sections/${sec.id}/edit`, listUrl, LIST_PATH))}
                                 className="p-1.5 rounded-md hover:bg-black/10 transition-colors"
                                 title="Edit section"
                               >
@@ -946,5 +981,13 @@ export default function HODSectionsPage() {
         loading={isDeleting}
       />
     </div>
+  );
+}
+
+export default function HODSectionsPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground animate-pulse">Loading sections...</div>}>
+      <HODSectionsContent />
+    </Suspense>
   );
 }

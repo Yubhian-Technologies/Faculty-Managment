@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Search, Users } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
@@ -20,8 +20,12 @@ import type { StudentListItem, Department, AcademicYear, Course } from "@/types"
 import { selectableYears } from "@/lib/college/courseYears";
 import { coreDepartmentOptions as buildCoreDepartmentOptions, departmentFilterOptions as buildDepartmentFilterOptions } from "@/lib/departments/departmentTree";
 import { useSectionDepartments } from "@/hooks/useSectionDepartments";
+import { useListUrlSync } from "@/hooks/useListUrlSync";
+import { buildListUrl, readListChoice, readListInt, readListString, withListBack } from "@/lib/listReturn";
 
 const DEFAULT_PAGE_SIZE = 20;
+const PAGE_SIZES = [10, 20, 30, 50]; // Pagination's options
+const LIST_PATH = "/principal/students";
 
 // Promotion and Graduated Students used to be separate sidebar tabs; they now
 // live here as sub-tabs (top-right pills, next to the page title) so all
@@ -48,9 +52,24 @@ function ordinalYear(year: number) {
 // here too - see StudentRecord.secondaryDepartment's own doc-comment).
 // Deliberately no Add/Edit/Delete/Import/Export - Principal browses here,
 // the department (HOD) and Office own the roster itself.
-export default function PrincipalStudentsPage() {
+function PrincipalStudentsContent() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<StudentTabKey>("roster");
+  // What the list was showing (tab, filters, search, page) when a student was
+  // opened from it, or when the page was refreshed - read once, on arrival; the
+  // list then mirrors its own state back into the URL (listUrl below).
+  const searchParams = useSearchParams();
+  const [restored] = useState(() => ({
+    load: searchParams.get("load") === "1",
+    tab: readListChoice(searchParams, "tab", STUDENT_TABS.map((t) => t.key), "roster"),
+    search: readListString(searchParams, "q", ""),
+    department: readListString(searchParams, "department", "all"),
+    coreDepartment: readListString(searchParams, "coreDepartment", "all"),
+    course: readListString(searchParams, "course", "all"),
+    year: /^\d+$/.test(searchParams.get("year") ?? "") ? (searchParams.get("year") as string) : "all",
+    page: readListInt(searchParams, "page", 1),
+    pageSize: readListInt(searchParams, "pageSize", DEFAULT_PAGE_SIZE, { allowed: PAGE_SIZES }),
+  }));
+  const [activeTab, setActiveTab] = useState<StudentTabKey>(restored.tab);
   const [students, setStudents] = useState<StudentListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -58,19 +77,21 @@ export default function PrincipalStudentsPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [courseNames, setCourseNames] = useState<string[]>([]);
   const [isMetadataLoading, setIsMetadataLoading] = useState(true);
-  const [isFetching, setIsFetching] = useState(false);
-  const [hasLoaded, setHasLoaded] = useState(false);
+  // A restored list loads itself on arrival (once the filter options are in), so
+  // it starts out loading rather than flashing the empty state.
+  const [isFetching, setIsFetching] = useState(restored.load);
+  const [hasLoaded, setHasLoaded] = useState(restored.load);
 
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [search, setSearch] = useState(restored.search);
+  const [debouncedSearch, setDebouncedSearch] = useState(restored.search.trim().toLowerCase());
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [deptFilter, setDeptFilter] = useState("all");
-  const [coreDeptFilter, setCoreDeptFilter] = useState("all");
-  const [yearFilter, setYearFilter] = useState<string>("all");
-  const [courseFilter, setCourseFilter] = useState<string>("all");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [deptFilter, setDeptFilter] = useState(restored.department);
+  const [coreDeptFilter, setCoreDeptFilter] = useState(restored.coreDepartment);
+  const [yearFilter, setYearFilter] = useState<string>(restored.year);
+  const [courseFilter, setCourseFilter] = useState<string>(restored.course);
+  const [page, setPage] = useState(restored.page);
+  const [pageSize, setPageSize] = useState(restored.pageSize);
 
   const loadMetadata = useCallback(async () => {
     try {
@@ -142,11 +163,29 @@ export default function PrincipalStudentsPage() {
     void (async () => { await loadMetadata(); })();
   }, [loadMetadata]);
 
-  // Once loaded, automatically re-fetch when page, pageSize, search or any filter changes
+  // Once loaded, automatically re-fetch when page, pageSize, search or any filter changes.
+  // Waits for the filter options (a restored list is "loaded" before they arrive):
+  // the department's configured years, part of the query, come from them.
   useEffect(() => {
-    if (!hasLoaded) return;
+    if (!hasLoaded || isMetadataLoading) return;
     void executeLoad(page, pageSize);
-  }, [hasLoaded, page, pageSize, debouncedSearch, deptFilter, coreDeptFilter, courseFilter, yearFilter, executeLoad]);
+  }, [hasLoaded, isMetadataLoading, page, pageSize, debouncedSearch, deptFilter, coreDeptFilter, courseFilter, yearFilter, executeLoad]);
+
+  // The list's own URL: tab, what is loaded, filters, search, page and page size.
+  // Kept in the address bar so a refresh or the browser's Back button restores the
+  // view, and carried to a student's profile in `?back=` for its Back button.
+  const listUrl = useMemo(
+    () => buildListUrl(
+      LIST_PATH,
+      {
+        tab: activeTab, load: hasLoaded, department: deptFilter, coreDepartment: coreDeptFilter, course: courseFilter,
+        year: yearFilter, q: debouncedSearch, page, pageSize,
+      },
+      { tab: "roster", department: "all", coreDepartment: "all", course: "all", year: "all", page: 1, pageSize: DEFAULT_PAGE_SIZE }
+    ),
+    [activeTab, hasLoaded, deptFilter, coreDeptFilter, courseFilter, yearFilter, debouncedSearch, page, pageSize]
+  );
+  useListUrlSync(listUrl, LIST_PATH);
 
   // Which departments a section is actually filed under - the Department filter
   // is drawn from these, not from the whole department list.
@@ -273,7 +312,7 @@ export default function PrincipalStudentsPage() {
       ) : activeTab === "promotion" ? (
         <StudentPromotionsPanel showHeader={false} />
       ) : activeTab === "graduates" ? (
-        <GraduatedStudentsView showHeader={false} studentDetailHref={(id) => `/principal/students/${id}`} />
+        <GraduatedStudentsView showHeader={false} studentDetailHref={(id) => withListBack(`/principal/students/${id}`, listUrl, LIST_PATH)} />
       ) : (
         <>
           {hasLoaded && (
@@ -379,7 +418,7 @@ export default function PrincipalStudentsPage() {
                       {students.map((s, i) => (
                         <tr
                           key={s.id}
-                          onClick={() => router.push(`/principal/students/${s.id}`)}
+                          onClick={() => router.push(withListBack(`/principal/students/${s.id}`, listUrl, LIST_PATH))}
                           className={`border-b last:border-0 cursor-pointer hover:bg-muted/40 transition-colors ${i % 2 === 0 ? "" : "bg-muted/20"}`}
                         >
                           <td className="p-3 text-muted-foreground whitespace-nowrap">{(page - 1) * pageSize + i + 1}</td>
@@ -413,5 +452,13 @@ export default function PrincipalStudentsPage() {
         </>
       )}
     </div>
+  );
+}
+
+export default function PrincipalStudentsPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground animate-pulse">Loading students...</div>}>
+      <PrincipalStudentsContent />
+    </Suspense>
   );
 }

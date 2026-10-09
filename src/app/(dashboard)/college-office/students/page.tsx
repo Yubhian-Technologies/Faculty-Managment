@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Plus, Trash2, Upload, Download, Search, Users, Pencil, KeyRound, FileText } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
@@ -32,6 +32,8 @@ import type { StudentListItem, Department, AcademicYear, Course } from "@/types"
 import { selectableYears } from "@/lib/college/courseYears";
 import { coreDepartmentOptions as buildCoreDepartmentOptions, departmentFilterOptions as buildDepartmentFilterOptions } from "@/lib/departments/departmentTree";
 import { useSectionDepartments } from "@/hooks/useSectionDepartments";
+import { useListUrlSync } from "@/hooks/useListUrlSync";
+import { buildListUrl, readListChoice, readListInt, readListString, withListBack } from "@/lib/listReturn";
 
 // The Add and Edit forms collect every field the roster import collects, in the
 // template's order - see src/lib/students/rosterFields.ts, the one definition
@@ -48,6 +50,8 @@ import { useSectionDepartments } from "@/hooks/useSectionDepartments";
 // Student profile page's own Edit button both use.
 
 const DEFAULT_PAGE_SIZE = 20;
+const PAGE_SIZES = [10, 20, 30, 50]; // Pagination's options
+const LIST_PATH = "/college-office/students";
 
 // What a list request is filtered by - the values behind the filter bar, frozen
 // at the moment Load was pressed. Empty string / "all" mean "no filter".
@@ -114,9 +118,35 @@ const SELECT_CHECKBOX_CLASS =
   "data-[state=checked]:border-primary data-[state=indeterminate]:border-primary " +
   "data-[state=indeterminate]:bg-primary data-[state=indeterminate]:text-primary-foreground";
 
-export default function OfficeStudentsPage() {
+function OfficeStudentsContent() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<StudentTabKey>("roster");
+  // What the list was showing (tab, applied filters, page) when a student was
+  // opened from it, or when the page was refreshed - read once, on arrival; the
+  // list then mirrors its own applied state back into the URL (listUrl below).
+  const searchParams = useSearchParams();
+  const [restored] = useState(() => {
+    const yearParam = searchParams.get("year") ?? "";
+    const yearsParam = searchParams.get("years") ?? "";
+    const filters: StudentListFilters = {
+      search: readListString(searchParams, "q", ""),
+      department: readListString(searchParams, "department", "all"),
+      coreDepartment: readListString(searchParams, "coreDepartment", "all"),
+      years: /^\d+(,\d+)*$/.test(yearsParam) ? yearsParam : "",
+      course: readListString(searchParams, "course", "all"),
+      year: /^\d+$/.test(yearParam) ? yearParam : "all",
+      studentType: readListChoice<string>(searchParams, "studentType", ["Regular", "Lateral"], "all"),
+      rollFrom: readListString(searchParams, "rollFrom", ""),
+      rollTo: readListString(searchParams, "rollTo", ""),
+    };
+    return {
+      load: searchParams.get("load") === "1",
+      tab: readListChoice(searchParams, "tab", STUDENT_TABS.map((t) => t.key), "roster"),
+      filters,
+      page: readListInt(searchParams, "page", 1),
+      pageSize: readListInt(searchParams, "pageSize", DEFAULT_PAGE_SIZE, { allowed: PAGE_SIZES }),
+    };
+  });
+  const [activeTab, setActiveTab] = useState<StudentTabKey>(restored.tab);
   const [students, setStudents] = useState<StudentListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -124,7 +154,9 @@ export default function OfficeStudentsPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [courseNames, setCourseNames] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isFetching, setIsFetching] = useState(false);
+  // A restored list loads itself on arrival, so it starts out loading rather
+  // than flashing the "Load Students" prompt.
+  const [isFetching, setIsFetching] = useState(restored.load);
 
   // The filter controls below (search, course, department, year, type, roll
   // range) only EDIT a draft - nothing is read from the database while they
@@ -133,18 +165,19 @@ export default function OfficeStudentsPage() {
   // request is built from. It stays null until the first Load, so the page
   // reads no students on open. Paging and the page size re-read with the
   // applied snapshot - never with a half-edited draft.
-  const [search, setSearch] = useState("");
-  const [deptFilter, setDeptFilter] = useState("all");
-  const [coreDeptFilter, setCoreDeptFilter] = useState("all");
-  const [yearFilter, setYearFilter] = useState<string>("all");
-  const [courseFilter, setCourseFilter] = useState<string>("all");
-  const [studentTypeFilter, setStudentTypeFilter] = useState<string>("all");
-  const [rollFrom, setRollFrom] = useState("");
-  const [rollTo, setRollTo] = useState("");
-  const [appliedFilters, setAppliedFilters] = useState<StudentListFilters | null>(null);
+  // A restored list starts with the draft equal to the snapshot it was showing.
+  const [search, setSearch] = useState(restored.filters.search);
+  const [deptFilter, setDeptFilter] = useState(restored.filters.department);
+  const [coreDeptFilter, setCoreDeptFilter] = useState(restored.filters.coreDepartment);
+  const [yearFilter, setYearFilter] = useState<string>(restored.filters.year);
+  const [courseFilter, setCourseFilter] = useState<string>(restored.filters.course);
+  const [studentTypeFilter, setStudentTypeFilter] = useState<string>(restored.filters.studentType);
+  const [rollFrom, setRollFrom] = useState(restored.filters.rollFrom);
+  const [rollTo, setRollTo] = useState(restored.filters.rollTo);
+  const [appliedFilters, setAppliedFilters] = useState<StudentListFilters | null>(restored.load ? restored.filters : null);
   const loadSeq = useRef(0);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [page, setPage] = useState(restored.page);
+  const [pageSize, setPageSize] = useState(restored.pageSize);
 
   const [addOpen, setAddOpen] = useState(false);
   // Set when the dialog is editing an existing student rather than adding one -
@@ -262,6 +295,27 @@ export default function OfficeStudentsPage() {
     if (!appliedFilters) return;
     void (async () => { await loadStudents(); })();
   }, [loadStudents, appliedFilters]);
+
+  // The list's own URL: tab, the APPLIED filters (what is on screen - not a
+  // half-edited draft), page and page size. Kept in the address bar so a refresh
+  // or the browser's Back button restores the view, and carried to a student's
+  // profile in `?back=` for its Back button.
+  const listUrl = useMemo(
+    () => buildListUrl(
+      LIST_PATH,
+      {
+        tab: activeTab,
+        load: appliedFilters !== null,
+        q: appliedFilters?.search, department: appliedFilters?.department, coreDepartment: appliedFilters?.coreDepartment,
+        years: appliedFilters?.years, course: appliedFilters?.course, year: appliedFilters?.year,
+        studentType: appliedFilters?.studentType, rollFrom: appliedFilters?.rollFrom, rollTo: appliedFilters?.rollTo,
+        page, pageSize,
+      },
+      { tab: "roster", department: "all", coreDepartment: "all", course: "all", year: "all", studentType: "all", page: 1, pageSize: DEFAULT_PAGE_SIZE }
+    ),
+    [activeTab, appliedFilters, page, pageSize]
+  );
+  useListUrlSync(listUrl, LIST_PATH);
 
   // Which departments a section is actually filed under - the Department
   // filter's options are drawn from these, not from the whole department list.
@@ -729,7 +783,7 @@ export default function OfficeStudentsPage() {
       ) : activeTab === "promotion" ? (
         <StudentPromotionsPanel showHeader={false} />
       ) : activeTab === "graduates" ? (
-        <GraduatedStudentsView showHeader={false} studentDetailHref={(id) => `/college-office/students/${id}`} />
+        <GraduatedStudentsView showHeader={false} studentDetailHref={(id) => withListBack(`/college-office/students/${id}`, listUrl, LIST_PATH)} />
       ) : (
         <>
       {/* Summary */}
@@ -912,7 +966,7 @@ export default function OfficeStudentsPage() {
                   {students.map((s, i) => (
                     <tr
                       key={s.id}
-                      onClick={() => router.push(`/college-office/students/${s.id}`)}
+                      onClick={() => router.push(withListBack(`/college-office/students/${s.id}`, listUrl, LIST_PATH))}
                       className={`border-b last:border-0 cursor-pointer hover:bg-muted/40 transition-colors ${i % 2 === 0 ? "" : "bg-muted/20"}`}
                     >
                       <td className="p-3" onClick={(e) => e.stopPropagation()}>
@@ -936,7 +990,7 @@ export default function OfficeStudentsPage() {
                           doesn't fire behind the action being taken. */}
                       <td className="p-3 text-right whitespace-nowrap">
                         <button
-                          onClick={(e) => { e.stopPropagation(); router.push(`/college-office/students/${s.id}/documents`); }}
+                          onClick={(e) => { e.stopPropagation(); router.push(withListBack(`/college-office/students/${s.id}/documents`, listUrl, LIST_PATH)); }}
                           className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                           title="Documents"
                         >
@@ -1168,5 +1222,13 @@ function ExportFilterGroup({
         </div>
       )}
     </div>
+  );
+}
+
+export default function OfficeStudentsPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground animate-pulse">Loading students...</div>}>
+      <OfficeStudentsContent />
+    </Suspense>
   );
 }

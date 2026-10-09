@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { Suspense, useEffect, useState, useMemo } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   Plus,
@@ -22,17 +23,28 @@ import {
 } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import { useActiveLocationDept } from "@/hooks/useActiveLocationDept";
+import { useListUrlSync } from "@/hooks/useListUrlSync";
+import { buildListUrl, readListString, withListBack } from "@/lib/listReturn";
 import type { LocationStaffMember, LocationShift } from "@/types/locationStaff";
 
-export default function LocationStaffRosterPage() {
+const LIST_PATH = "/location-dept-head/staff";
+
+function LocationStaffRosterContent() {
   const { activeDept, activeDeptId } = useActiveLocationDept();
+  // The search and filters this roster was showing when a profile was opened from
+  // it, or when the page was refreshed - read once, on arrival; the page then
+  // mirrors them back into the URL (listUrl below) and carries it to the profile
+  // in `?back=` so its Back button returns to the same view.
+  const searchParams = useSearchParams();
 
   const [staffList, setStaffList] = useState<LocationStaffMember[]>([]);
   const [shifts, setShifts] = useState<LocationShift[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [selectedShift, setSelectedShift] = useState("ALL");
-  const [selectedRole, setSelectedRole] = useState("ALL");
+  const [search, setSearch] = useState(() => readListString(searchParams, "q", ""));
+  const [selectedShift, setSelectedShift] = useState(() => readListString(searchParams, "shift", "ALL"));
+  const [selectedRole, setSelectedRole] = useState(() => readListString(searchParams, "role", "ALL"));
+  const listUrl = buildListUrl(LIST_PATH, { q: search, shift: selectedShift, role: selectedRole }, { shift: "ALL", role: "ALL" });
+  useListUrlSync(listUrl, LIST_PATH);
 
   useEffect(() => {
     let isCancelled = false;
@@ -180,7 +192,7 @@ export default function LocationStaffRosterPage() {
       ) : (
         <div className="space-y-2.5">
           {filteredStaff.map((staff) => (
-            <Link key={staff.id} href={`/location-dept-head/staff/${staff.id}`} className="block">
+            <Link key={staff.id} href={withListBack(`/location-dept-head/staff/${staff.id}`, listUrl, LIST_PATH)} className="block">
               <Card className="border-border/80 shadow-xs hover:border-primary/40 transition-colors cursor-pointer">
                 <CardContent className="p-3 sm:p-4">
                   <div className="flex items-center justify-between gap-3">
@@ -231,5 +243,13 @@ export default function LocationStaffRosterPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function LocationStaffRosterPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground animate-pulse">Loading staff...</div>}>
+      <LocationStaffRosterContent />
+    </Suspense>
   );
 }
