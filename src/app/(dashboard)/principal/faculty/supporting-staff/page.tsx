@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, UsersRound } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
@@ -18,6 +18,8 @@ import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
 import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS, FACULTY_STATUS_LABELS, STAFF_CATEGORY_LABELS } from "@/types";
 import type { FacultyStatus, SupportingStaffCategory, SupportingStaffMember } from "@/types";
+import { useListUrlSync } from "@/hooks/useListUrlSync";
+import { buildListUrl, readListChoice, withListBack } from "@/lib/listReturn";
 
 // Principal / College Admin's READ-ONLY view of the college's Supporting
 // Staff, reached from the Faculty section's "Supporting Staff" tab (shown only
@@ -43,12 +45,22 @@ function roleLabel(row: StaffRow): string {
   return (NON_TECHNICAL_STAFF_DESIGNATION_LABELS as Record<string, string>)[row.designation] ?? row.designation;
 }
 
-export default function PrincipalSupportingStaffViewPage() {
+const LIST_PATH = "/principal/faculty/supporting-staff";
+
+function PrincipalSupportingStaffViewContent() {
   const router = useRouter();
+  // The category tab this list was showing when a profile was opened from it, or
+  // when the page was refreshed - read once, on arrival; the page then mirrors it
+  // back into the URL (listUrl below) and carries it to the profile in `?back=`.
+  const searchParams = useSearchParams();
   const { collegeType, loading: collegeTypeLoading } = useCollegeType();
   const [staff, setStaff] = useState<StaffRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [category, setCategory] = useState<"" | SupportingStaffCategory>("");
+  const [category, setCategory] = useState<"" | SupportingStaffCategory>(() =>
+    readListChoice<"" | SupportingStaffCategory>(searchParams, "category", ["NON_TECHNICAL", "TECHNICAL"], "")
+  );
+  const listUrl = buildListUrl(LIST_PATH, { category });
+  useListUrlSync(listUrl, LIST_PATH);
 
   useEffect(() => {
     fetch("/api/college/supporting-staff")
@@ -117,7 +129,7 @@ export default function PrincipalSupportingStaffViewPage() {
           size="sm"
           className="h-8 w-8 p-0"
           title="View profile"
-          onClick={(e) => { e.stopPropagation(); router.push(`/principal/faculty/supporting-staff/${row.id}`); }}
+          onClick={(e) => { e.stopPropagation(); router.push(withListBack(`/principal/faculty/supporting-staff/${row.id}`, listUrl, LIST_PATH)); }}
         >
           <Eye className="h-4 w-4" /><span className="sr-only">View</span>
         </Button>
@@ -179,12 +191,20 @@ export default function PrincipalSupportingStaffViewPage() {
         columns={columns}
         isLoading={isLoading}
         keyExtractor={(r) => r.id}
-        onRowClick={(row) => router.push(`/principal/faculty/supporting-staff/${row.id}`)}
+        onRowClick={(row) => router.push(withListBack(`/principal/faculty/supporting-staff/${row.id}`, listUrl, LIST_PATH))}
         searchPlaceholder="Search by name, email, employee ID, department..."
         searchKeys={["legalName", "nameAsPerPan", "email", "collegeEmail", "employeeId", "department"] as (keyof StaffRow)[]}
         emptyTitle="No Supporting Staff records"
         emptyDescription="Supporting staff added by College Office or the department HODs will appear here."
       />
     </div>
+  );
+}
+
+export default function PrincipalSupportingStaffViewPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground animate-pulse">Loading Supporting Staff...</div>}>
+      <PrincipalSupportingStaffViewContent />
+    </Suspense>
   );
 }

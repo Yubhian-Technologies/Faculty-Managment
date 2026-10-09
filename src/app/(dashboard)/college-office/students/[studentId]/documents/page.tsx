@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, FileText, Plus, Trash2, Download } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -16,12 +16,17 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { FileUpload } from "@/components/shared/FileUpload";
 import { toast } from "@/hooks/useToast";
+import { LIST_BACK_PARAM, safeListBack, withListBack } from "@/lib/listReturn";
 import { STUDENT_DOCUMENT_TYPE_LABELS, resolveStudentDocumentTypeLabel } from "@/types";
 import type { StudentDocument, StudentDocumentType } from "@/types";
 
 export default function StudentDocumentsPage() {
   const { studentId } = useParams<{ studentId: string }>();
   const router = useRouter();
+  // The profile this page sits under keeps the Students list it was opened from,
+  // so its own Back still returns to that list (filters, page).
+  const listBack = safeListBack(useSearchParams().get(LIST_BACK_PARAM), "/college-office/students");
+  const profileHref = withListBack(`/college-office/students/${studentId}`, listBack, "/college-office/students");
   const [documents, setDocuments] = useState<StudentDocument[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -127,7 +132,7 @@ export default function StudentDocumentsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <PageHeader title="Student Documents" description="Certificates and documents on file for this student" />
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => router.push(`/college-office/students/${studentId}`)}>
+          <Button variant="outline" size="sm" onClick={() => router.push(profileHref)}>
             <ArrowLeft className="h-4 w-4 mr-1.5" /> Back to Student
           </Button>
           <Button size="sm" onClick={() => setDialogOpen(true)}>
@@ -219,7 +224,7 @@ export default function StudentDocumentsPage() {
       />
 
       <div className="pt-2">
-        <Link href={`/college-office/students/${studentId}`} className="text-xs text-muted-foreground hover:text-foreground hover:underline">
+        <Link href={profileHref} className="text-xs text-muted-foreground hover:text-foreground hover:underline">
           ← Back to student profile
         </Link>
       </div>

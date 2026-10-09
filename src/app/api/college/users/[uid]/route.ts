@@ -15,6 +15,7 @@ import { degreeTypeError } from "@/lib/faculty/degreeType";
 import { migrateUserDoc, migrateFacultyDoc, migrateSupportingStaffDoc } from "@/lib/faculty/fieldRenames";
 import { withLegacyPersonalKeysDeleted } from "@/lib/faculty/legacyKeyDeletes";
 import { assignSeat } from "@/lib/roles/seats";
+import { changesFacultyLoginEmail, COLLEGE_EMAIL_CHANGE_REDIRECT_MESSAGE } from "@/lib/faculty/changeCollegeEmail";
 import { setLinkedFacultyPhoto } from "@/lib/faculty/syncFacultyPhoto";
 import { hasLinkedFacultyRecord, isSingleSourceCollege, mergeFacultyWithLogin, singleSourceBlockFor } from "@/lib/faculty/singleSource";
 import type { UserRole } from "@/types";
@@ -185,6 +186,12 @@ export async function PATCH(
     const { targetSnap, error, status } = await loadTargetInScope(db, session, uid);
     if (!targetSnap) return NextResponse.json({ error }, { status });
     const target = targetSnap.data() as { role: string; sectionId?: string; name?: string; department?: string; departments?: string[]; email?: string; collegeEmail?: string };
+
+    // A faculty member's login email is changed by the College Office only (it also has to change the Faculty record,
+    // the mirrors and every signed-in device) - see lib/faculty/changeCollegeEmail.ts. Other roles are unchanged.
+    if (target.role === "PANEL_MEMBER" && changesFacultyLoginEmail(target, body)) {
+      return NextResponse.json({ error: COLLEGE_EMAIL_CHANGE_REDIRECT_MESSAGE, code: "COLLEGE_EMAIL_MANAGED_BY_OFFICE" }, { status: 409 });
+    }
 
     // Single source of truth (switch-gated, no-op elsewhere): a faculty-linked person's profile content and
     // mirrored identity fields are edited on the Faculty record, never copied onto the login. Refused BEFORE

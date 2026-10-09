@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, BookOpen, ChevronRight, Eye, FileDown, LogIn, Pencil, Trash2, Upload, UserPlus, UsersRound, History } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -24,6 +24,9 @@ import type { ResumeSectionKey } from "@/lib/pdf/resumeSections";
 import { isFacultyDestination } from "@/lib/departments/facultyDepartmentOptions";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import type { CollegeType, Department, FMSUser } from "@/types";
+import { withReturnTo } from "@/lib/faculty/returnTo";
+import { useListUrlSync } from "@/hooks/useListUrlSync";
+import { buildListUrl, readListChoice } from "@/lib/listReturn";
 
 // Selection checkboxes on this list (header "select all" + every row) - same
 // sizing as the HOD Faculty Register's own export selection so both read
@@ -45,11 +48,22 @@ const STATUS_TABS = [
   { key: "RETIRED", label: "Retired" },
 ];
 
-export default function PrincipalDepartmentFacultyPage() {
+function PrincipalDepartmentFacultyContent() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { deptId } = useParams<{ deptId: string }>();
-  const [statusFilter, setStatusFilter] = useState("");
+  // The status tab this list was showing when a profile was opened from it, or
+  // when the page was refreshed - read once, on arrival; the page then mirrors it
+  // back into the URL (listUrl below), and carries that URL to the profile pages
+  // in `?from=` (the same mechanism the main Faculty Register already uses) so
+  // their Back button returns to the same tab.
+  const searchParams = useSearchParams();
+  const [statusFilter, setStatusFilter] = useState(() =>
+    readListChoice(searchParams, "status", STATUS_TABS.map((t) => t.key).filter(Boolean), "")
+  );
+  const listPath = `/principal/faculty/${deptId}`;
+  const listUrl = buildListUrl(listPath, { status: statusFilter });
+  useListUrlSync(listUrl, listPath);
   const [removingHod, setRemovingHod] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<FacultyRow | null>(null);
@@ -327,7 +341,7 @@ export default function PrincipalDepartmentFacultyPage() {
               size="sm"
               className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
               title="Create login account"
-              onClick={(e) => { e.stopPropagation(); router.push(`/principal/faculty/${deptId}/${row.id}/credentials`); }}
+              onClick={(e) => { e.stopPropagation(); router.push(withReturnTo(`/principal/faculty/${deptId}/${row.id}/credentials`, listUrl)); }}
             >
               <LogIn className="h-4 w-4" /><span className="sr-only">Set Login</span>
             </Button>
@@ -337,7 +351,7 @@ export default function PrincipalDepartmentFacultyPage() {
             size="sm"
             className="h-8 w-8 p-0"
             title="View profile"
-            onClick={(e) => { e.stopPropagation(); router.push(`/principal/faculty/${deptId}/${row.id}`); }}
+            onClick={(e) => { e.stopPropagation(); router.push(withReturnTo(`/principal/faculty/${deptId}/${row.id}`, listUrl)); }}
           >
             <Eye className="h-4 w-4" /><span className="sr-only">View</span>
           </Button>
@@ -356,7 +370,7 @@ export default function PrincipalDepartmentFacultyPage() {
             size="sm"
             className="h-8 w-8 p-0"
             title="Edit faculty details"
-            onClick={(e) => { e.stopPropagation(); router.push(`/principal/faculty/${deptId}/${row.id}/edit`); }}
+            onClick={(e) => { e.stopPropagation(); router.push(withReturnTo(`/principal/faculty/${deptId}/${row.id}/edit`, listUrl)); }}
           >
             <Pencil className="h-4 w-4" /><span className="sr-only">Edit</span>
           </Button>
@@ -453,7 +467,7 @@ export default function PrincipalDepartmentFacultyPage() {
                     <Link
                       href={
                         hodFaculty
-                          ? `/principal/faculty/${deptId}/${hodFaculty.id}`
+                          ? withReturnTo(`/principal/faculty/${deptId}/${hodFaculty.id}`, listUrl)
                           : `/principal/faculty/new?linkUid=${hod.uid}&department=${encodeURIComponent(department?.name ?? "")}&name=${encodeURIComponent(hod.name)}`
                       }
                     >
@@ -538,13 +552,13 @@ export default function PrincipalDepartmentFacultyPage() {
             // Timeline, scoped to this department - kept beside the search box
             // via DataTable's own filterComponent slot, same placement as hod/faculty.
             filterComponent={
-              <Button variant="outline" size="sm" onClick={() => router.push(`/principal/faculty/${deptId}/timeline`)}>
+              <Button variant="outline" size="sm" onClick={() => router.push(withReturnTo(`/principal/faculty/${deptId}/timeline`, listUrl))}>
                 <History className="h-4 w-4 mr-1" />Faculty Timeline
               </Button>
             }
             emptyTitle="No faculty in this department"
             emptyDescription="Faculty added by the HOD for this department will appear here."
-            onRowClick={(f) => router.push(`/principal/faculty/${deptId}/${f.id}`)}
+            onRowClick={(f) => router.push(withReturnTo(`/principal/faculty/${deptId}/${f.id}`, listUrl))}
           />
         </>
       )}
@@ -586,5 +600,13 @@ export default function PrincipalDepartmentFacultyPage() {
         onConfirm={() => void handleRemoveHod()}
       />
     </div>
+  );
+}
+
+export default function PrincipalDepartmentFacultyPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground animate-pulse">Loading faculty...</div>}>
+      <PrincipalDepartmentFacultyContent />
+    </Suspense>
   );
 }

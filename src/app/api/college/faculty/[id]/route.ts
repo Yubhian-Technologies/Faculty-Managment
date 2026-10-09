@@ -4,6 +4,7 @@ import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { isEmployeeIdReserved, reserveEmployeeId } from "@/lib/firestore/employeeIdKeys";
 import { NextResponse } from "next/server";
+import { COLLEGE_EMAIL_CHANGE_REDIRECT_MESSAGE, normalizeCollegeEmail } from "@/lib/faculty/changeCollegeEmail";
 import { resolvePreviousTeachingUpdate } from "@/lib/faculty/previousTeaching";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb, getAdminAuth } from "@/lib/firebase/admin";
@@ -146,6 +147,16 @@ export async function PATCH(
       if (!canHodManageFacultyDepartment(scope, facultyDept)) {
         return NextResponse.json({ error: "That faculty member is outside your department scope" }, { status: 403 });
       }
+    }
+
+    // The college email is the faculty member's LOGIN. Changing it here used to rewrite only this record and leave the
+    // login, its mirrors and Firebase Auth on the old address. It is changed by the College Office only
+    // (PATCH .../college-email); the edit pages re-send the stored value on every save, which is simply ignored.
+    if (body.collegeEmail !== undefined) {
+      if (normalizeCollegeEmail(body.collegeEmail) !== normalizeCollegeEmail((snap.data() as { collegeEmail?: string }).collegeEmail)) {
+        return NextResponse.json({ error: COLLEGE_EMAIL_CHANGE_REDIRECT_MESSAGE, code: "COLLEGE_EMAIL_MANAGED_BY_OFFICE" }, { status: 409 });
+      }
+      delete body.collegeEmail;
     }
 
     // Empty string clears the photo - everything else must be a real upload of

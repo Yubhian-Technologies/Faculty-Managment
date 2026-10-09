@@ -195,6 +195,15 @@ export async function POST(request: Request) {
       realRole = role;
     }
 
+    // Signed out everywhere (users/{uid}.sessionsValidAfter - e.g. the College Office changed this person's college
+    // email): a Firebase token issued before that moment must not mint a new session. The client signs out on this code.
+    const validAfter = (profile as { sessionsValidAfter?: unknown } | null)?.sessionsValidAfter;
+    if (typeof validAfter === "number" && decoded.iat < validAfter) {
+      const revoked = NextResponse.json({ error: "Your session was ended - please sign in again", code: "SESSION_REVOKED" }, { status: 401 });
+      revoked.cookies.delete({ name: "fms-session", path: "/" });
+      return revoked;
+    }
+
     const sessionData = {
       uid: decoded.uid,
       email,
@@ -204,6 +213,8 @@ export async function POST(request: Request) {
       collegeId,
       locationId,
       exp: decoded.exp,
+      // When the Firebase token behind this cookie was issued - what a "sign out everywhere" compares against.
+      iat: decoded.iat,
     };
 
     const sessionCookie = await signSession(sessionData);
