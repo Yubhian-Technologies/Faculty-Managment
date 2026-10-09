@@ -98,8 +98,11 @@ describe("core departments configured as a cross-listing", () => {
     expect(coreDepartmentOptions(XLIST, ["BS Maths X"], XLIST_SECTIONS)).toEqual(["CSD", "CSM"]);
   });
 
-  it("still leaves out one with no sections", () => {
-    expect(coreDepartmentOptions(XLIST, ["BS Maths X"], ["CSD"])).toEqual(["CSD"]);
+  it("offers both even when only one has sections, and when none has", () => {
+    expect(coreDepartmentOptions(XLIST, ["BS Maths X"], ["CSD"])).toEqual(["CSD", "CSM"]);
+    // VISHNU WOMEN'S UNIVERSITY files the shared year's sections under the
+    // feeder, so an HOD there sees no section under any branch at all.
+    expect(coreDepartmentOptions(XLIST, ["BS Maths X"], ["BS Maths X"])).toEqual(["CSD", "CSM"]);
   });
 
   it("merges the two fields without repeating a branch named in both", () => {
@@ -139,8 +142,13 @@ describe("managedCoreCandidates / coreDepartmentOptions", () => {
   it("offers a managed branch's sub-department (CSE2 -> Cyber Security) for the other manager", () => {
     expect(coreDepartmentOptions(VWU, ["BS English"], VWU_SECTIONS)).toEqual(["CSE2", "Cyber Security"]);
   });
-  it("drops a configured branch that has no sections yet", () => {
-    expect(coreDepartmentOptions(VIT, [BSM.name], ["CSE"])).toEqual(["CSE"]);
+  // Configured is enough. A branch with nothing in it yet is still one of this
+  // department's branches, and seeing it sit at zero is the point of offering
+  // it - at a college that files the shared year's sections under the FEEDER,
+  // no branch would ever qualify and the filter would never appear.
+  it("offers a configured branch that has no sections yet", () => {
+    expect(coreDepartmentOptions(VIT, [BSM.name], ["CSE"])).toEqual(["AIDS", "CSE"]);
+    expect(coreDepartmentOptions(VIT, [BSM.name], [])).toEqual(["AIDS", "CSE"]);
   });
   it("is empty for a department that manages nothing, or when nothing is picked", () => {
     expect(coreDepartmentOptions(VIT, ["CSE"], VIT_SECTIONS)).toEqual([]);

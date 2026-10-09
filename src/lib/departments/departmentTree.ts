@@ -150,21 +150,41 @@ export function managedCoreCandidates<T extends TreeDepartment>(
 
 /**
  * The Core Department options for one or more picked departments (an HOD's
- * whole scope when nothing is picked): the candidates above that actually have
- * sections filed under them, sorted. A name configured but with no section
- * would be an option that can only come back empty, so it is left out - which
- * is also what drops a container such as AI while keeping AIDS and AIML.
+ * whole scope when nothing is picked): every branch they are configured to
+ * hold a shared year for, sorted.
+ *
+ * Configured is enough - a branch with no sections and no students yet is
+ * still one of this department's branches, and seeing it sit at zero is the
+ * point of having it in the filter. It used to be offered only when a section
+ * was filed under it, which at a college that files the shared year's sections
+ * under the FEEDER (VISHNU WOMEN'S UNIVERSITY: BSE-CSE-A is filed under BASIC
+ * SCIENCE - ENGLISH) meant no branch ever qualified and the filter never
+ * appeared at all.
+ *
+ * A container is still left out, because its own sub-branches are listed in
+ * its place - AI drops while AIDS and AIML stay.
  */
 export function coreDepartmentOptions<T extends TreeDepartment>(
   all: T[],
   departmentNames: string[],
-  sectionDepartmentNames: Iterable<string>
+  sectionDepartmentNames: Iterable<string> = []
 ): string[] {
   const have = new Set(Array.from(sectionDepartmentNames, clean).filter(Boolean));
   const out = new Set<string>();
   for (const name of departmentNames) {
     const dept = all.find((d) => clean(d.name) === clean(name));
-    for (const n of managedCoreCandidates(all, dept)) if (have.has(n)) out.add(n);
+    for (const n of managedCoreCandidates(all, dept)) {
+      // Seeing a section under the branch PROVES it holds its own; not seeing
+      // one proves nothing, because the list a caller has is the viewer's own
+      // scope - an HOD sees their own sections and no others. Read the other
+      // way round, "no section of mine is filed under CSE" would mean "CSE
+      // holds nothing", and a branch that plainly runs its own sections would
+      // vanish from the filter. Unknown leaves it to the Principal's explicit
+      // flag, which is what still drops AI while keeping AIDS and AIML.
+      const branch = all.find((d) => clean(d.name) === n);
+      if (branch && isContainerDepartment(branch, all, have.has(n) || undefined)) continue;
+      out.add(n);
+    }
   }
   return Array.from(out).sort((a, b) => a.localeCompare(b));
 }
