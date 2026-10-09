@@ -491,7 +491,7 @@ describe("a cross-listing feeder's own filters", () => {
   it("offers only the years the scope teaches", () => {
     const { cells, meta } = buildStrengthCube(rows, CATALOG);
     expect(filterOptions(cells, meta, F()).years).toEqual([1, 2, 3, 4]);
-    expect(filterOptions(cells, { ...meta, scopeYears: [1] }, F()).years).toEqual([1]);
+    expect(filterOptions(cells, { ...meta, scopeYearsByProgram: { "b.tech": [1] } }, F()).years).toEqual([1]);
   });
 
   // The sections are filed under the feeder but belong to the branch they feed,
@@ -527,9 +527,30 @@ describe("a cross-listing feeder's own filters", () => {
   it("offers only the configured years, even where students sit outside them", () => {
     const strays = [...rows, { id: "x", department: "BS English", secondaryDepartment: "CSE", course: "B.Tech", year: 3, section: "A", status: "REGULAR" }];
     const { cells, meta } = buildStrengthCube(strays, CATALOG);
-    expect(filterOptions(cells, { ...meta, scopeYears: [1] }, F()).years).toEqual([1]);
+    expect(filterOptions(cells, { ...meta, scopeYearsByProgram: { "b.tech": [1] } }, F()).years).toEqual([1]);
     // A branch HOD: configured 2-4, every student counted in year 1.
-    expect(filterOptions(cells, { ...meta, scopeYears: [2, 3, 4] }, F()).years).toEqual([2, 3, 4]);
+    expect(filterOptions(cells, { ...meta, scopeYearsByProgram: { "b.tech": [2, 3, 4] } }, F()).years).toEqual([2, 3, 4]);
     expect(totalFor(cells, F())).toBe(176); // ...and none of them stop being counted
+  });
+
+  // The reason the years are kept per program: one department runs several
+  // with different years - CSE teaches years 2-4 of the B.Tech and 1-2 of the
+  // M.Tech. Merged into one list those became 1-4, and the B.Tech picker went
+  // on offering a first year the department does not teach.
+  it("keeps each course's configured years to itself", () => {
+    const two = {
+      ...CATALOG,
+      courses: [
+        { id: "c1", name: "B.Tech", departmentId: "cse", durationYears: 4 },
+        { id: "c2", name: "M.Tech", departmentId: "cse", durationYears: 2 },
+      ],
+    };
+    const { cells, meta } = buildStrengthCube(rows, two);
+    const scoped = { ...meta, scopeYearsByProgram: { "b.tech": [2, 3, 4], "m.tech": [1, 2] } };
+    expect(filterOptions(cells, scoped, F({ program: "b.tech" })).years).toEqual([2, 3, 4]);
+    expect(filterOptions(cells, scoped, F({ program: "m.tech" })).years).toEqual([1, 2]);
+    // Across every course, the union is each course's own years - year 1
+    // belongs to the M.Tech, never to the B.Tech.
+    expect(filterOptions(cells, scoped, F()).years).toEqual([1, 2, 3, 4]);
   });
 });

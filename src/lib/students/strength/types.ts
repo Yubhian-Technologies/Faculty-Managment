@@ -90,15 +90,17 @@ export interface StrengthMeta {
   /** Highest year of study seen anywhere (configured duration or observed). */
   maxYear: number;
   /**
-   * The years this view may offer, when the viewer is scoped to departments
-   * that teach only some of them - an HOD. Absent for the college-wide view,
-   * where every year of a course is a real choice.
+   * Program key -> the years this view's departments are configured to teach
+   * FOR THAT PROGRAM. Absent for the college-wide view, where every year of a
+   * course is a real choice.
    *
-   * Without it the Year filter offered 1..durationYears for any course in
-   * scope, so a shared-first-year department that teaches year 1 alone still
-   * listed II, III and IV Year - three choices that can only come back 0.
+   * Per program, because one department commonly runs more than one with
+   * different years: Computer Science and Engineering teaches years 2-4 of the
+   * B.Tech and years 1-2 of the M.Tech. Merged into a single list those became
+   * 1-4, and the B.Tech picker went on offering a first year the department
+   * does not teach - which is the whole thing this exists to stop.
    */
-  scopeYears?: number[];
+  scopeYearsByProgram?: Record<string, number[]>;
 }
 
 /** "ENROLLED" = every status that counts toward strength; "ALL" = every status incl. graduated/other. */

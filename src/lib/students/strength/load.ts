@@ -135,18 +135,31 @@ export async function loadStrengthPayload(
     const programsWithCells = new Set(cells.map((c) => c.program));
     meta.programs = meta.programs.filter((p) => programsWithCells.has(p.key) || p.branchKeys.length > 0);
 
-    // The years these departments are configured to teach - what the Year
-    // filter may offer. managerEffectiveYears is the same rule the rest of the
-    // app scopes years by (own Years Taught, else the parent's, minus any year
-    // fed to another department), resolved per course the department runs.
-    const catalogIds = [...new Set(courseDocs.map((c) => c.catalogId).filter((c): c is string => !!c))];
-    const years = new Set<number>();
-    for (const d of ownDepts) {
-      for (const catalogId of [undefined, ...catalogIds]) {
-        for (const y of managerEffectiveYears(d as never, departments as never, catalogId)) years.add(y);
-      }
+    // The years these departments are configured to teach, PER PROGRAM - what
+    // the Year filter may offer. managerEffectiveYears is the same rule the
+    // rest of the app scopes years by (own Years Taught, else the parent's,
+    // minus any year fed to another department), resolved against the catalog
+    // entry of the course in question. Per program because one department
+    // commonly runs several with different years.
+    const byProgram: Record<string, number[]> = {};
+    const catalogsByProgram = new Map<string, Set<string>>();
+    for (const c of courseDocs) {
+      const key = normKey(c.name ?? "");
+      if (!key || !c.catalogId) continue;
+      const set = catalogsByProgram.get(key) ?? new Set<string>();
+      set.add(c.catalogId);
+      catalogsByProgram.set(key, set);
     }
-    if (years.size > 0) meta.scopeYears = [...years].sort((a, b) => a - b);
+    for (const p of meta.programs) {
+      const years = new Set<number>();
+      for (const d of ownDepts) {
+        for (const catalogId of catalogsByProgram.get(p.key) ?? [undefined]) {
+          for (const y of managerEffectiveYears(d as never, departments as never, catalogId)) years.add(y);
+        }
+      }
+      if (years.size > 0) byProgram[p.key] = [...years].sort((a, b) => a - b);
+    }
+    if (Object.keys(byProgram).length > 0) meta.scopeYearsByProgram = byProgram;
   }
 
   return {

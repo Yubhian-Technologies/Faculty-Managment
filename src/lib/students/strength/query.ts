@@ -234,24 +234,24 @@ export function filterOptions(cells: StrengthCell[], meta: StrengthMeta, f: Stre
     })
     .sort((a, b) => collator.compare(a.code || a.label, b.code || b.label));
 
-  const yearSet = new Set(above("year").map((c) => c.year));
+  // A scoped viewer is offered the years their departments are CONFIGURED to
+  // teach, per program, and nothing else - a year holding students is not kept
+  // (see scopeYearsByProgram). Everyone else gets every year of the course.
+  //
+  // At a college whose shared first year is held by Basic Science and
+  // pre-registered to the branches, every branch is configured for years 2-4
+  // while its students sit in year 1, so that year is not offered and they
+  // cannot be isolated by year. They are still counted - "All years" and the
+  // year breakdown both include them - only unselectable here.
+  const scoped = meta.scopeYearsByProgram;
+  const yearSet = new Set(scoped ? [] : above("year").map((c) => c.year));
   for (const p of programsInScope) {
     if (f.branch !== undefined && !p.branchKeys.includes(f.branch)) continue;
-    for (let y = 1; y <= p.durationYears; y++) yearSet.add(y);
-  }
-  // A scoped viewer is offered the years their departments are CONFIGURED to
-  // teach, and nothing else - asked for explicitly, with the consequence below
-  // understood.
-  //
-  // A year holding students is not kept. At a college whose shared first year
-  // is held by Basic Science and pre-registered to the branches, every branch
-  // is configured for years 2-4 while all of its students sit in year 1, so
-  // that year is not offered and those students cannot be isolated by year.
-  // They are still counted - "All years" and the year breakdown both include
-  // them - only unselectable here.
-  if (meta.scopeYears && meta.scopeYears.length > 0) {
-    const allowed = new Set(meta.scopeYears);
-    for (const y of [...yearSet]) if (!allowed.has(y)) yearSet.delete(y);
+    if (scoped) {
+      for (const y of scoped[p.key] ?? []) yearSet.add(y);
+    } else {
+      for (let y = 1; y <= p.durationYears; y++) yearSet.add(y);
+    }
   }
   const years = [...yearSet].sort((a, b) => a - b);
 
