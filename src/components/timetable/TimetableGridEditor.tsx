@@ -515,9 +515,16 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
   const occupantsAllLabs = addingAt
     ? rawCellEntriesFor(addingAt.day, addingAt.period).every((e) => assignments.find((a) => a.id === e.slot.assignmentId)?.subjectType === "PRACTICAL")
     : false;
+  // Same idea for non-teaching subjects (Counselling, Mentoring, NSS, ...) -
+  // a different one can join a period that holds non-teaching subjects alone.
+  const occupantsAllNonTeaching = addingAt
+    ? rawCellEntriesFor(addingAt.day, addingAt.period).every((e) => assignments.find((a) => a.id === e.slot.assignmentId)?.subjectType === "NON_TEACHING")
+    : false;
   const pickableAssignments = assignments.filter(
     (a) => myAssignmentIds.includes(a.id) && !occupyingAtTarget.has(a.id)
-      && (!isSplitTarget || occupantSubjectIds.has(a.subjectId) || (a.subjectType === "PRACTICAL" && occupantsAllLabs))
+      && (!isSplitTarget || occupantSubjectIds.has(a.subjectId)
+        || (a.subjectType === "PRACTICAL" && occupantsAllLabs)
+        || (a.subjectType === "NON_TEACHING" && occupantsAllNonTeaching))
   );
   // Lent-in subjects not offered yet (their lender has not closed the request and nothing is placed).
   const heldBackList = assignments.filter((a) => heldBack(a.id) && !a.isPast);
@@ -1397,13 +1404,15 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
                     // the existing entries, never replacing the "empty cell"
                     // Add button below, and never available in move-mode
                     // (a slot is selected) to avoid ambiguity with "Place here".
-                    // Only a cell of lab (PRACTICAL) subjects, and not already
-                    // shared by two, can be split any further.
+                    // Only a cell of lab (PRACTICAL) subjects, or of
+                    // non-teaching subjects, and not already shared by two,
+                    // can be split any further.
                     const rawEntries = rawCellEntriesFor(d, row.period);
                     // ...or another faculty of the same subject that is not in the cell yet (co-teaching).
                     // (counted by subject: a lab with two faculty is still one lab, so a second lab may join it)
                     const labCanSplit = new Set(rawEntries.map((e) => e.slot.subjectId)).size < 2
-                      && rawEntries.every((e) => assignments.find((a) => a.id === e.slot.assignmentId)?.subjectType === "PRACTICAL");
+                      && (rawEntries.every((e) => assignments.find((a) => a.id === e.slot.assignmentId)?.subjectType === "PRACTICAL")
+                        || rawEntries.every((e) => assignments.find((a) => a.id === e.slot.assignmentId)?.subjectType === "NON_TEACHING"));
                     const sameSubjectFacultyLeft = assignments.some((a) =>
                       myAssignmentIds.includes(a.id) && !a.isPast
                       && !rawEntries.some((e) => e.slot.assignmentId === a.id)
@@ -1613,7 +1622,9 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
             </DialogTitle>
             <DialogDescription>
               {isSplitTarget
-                ? `This period already has a subject - another faculty of the same subject, or a lab (Practical) subject alongside a lab, can be added to it.`
+                ? occupantsAllNonTeaching
+                  ? `This period already has a subject - another faculty of the same subject, or another non-teaching subject alongside it, can be added to it.`
+                  : `This period already has a subject - another faculty of the same subject, or a lab (Practical) subject alongside a lab, can be added to it.`
                 : `Pick a subject assigned to this section. Its faculty comes along automatically; a subject with custom continuous slots (set in Settings) takes that many periods.`}
             </DialogDescription>
           </DialogHeader>
@@ -1621,7 +1632,9 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
           {pickableAssignments.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               {isSplitTarget
-                ? "None of your remaining lab (Practical) subjects can be added here - only a lab may share an already-occupied period."
+                ? occupantsAllNonTeaching
+                  ? "None of your remaining non-teaching subjects can be added here - only another non-teaching subject may share this period."
+                  : "None of your remaining lab (Practical) subjects can be added here - only a lab may share an already-occupied period."
                 : isCrossDepartment
                   ? "None of your faculty are assigned to this section yet. Add that under Teaching Assignments first."
                   : heldBackList.length > 0

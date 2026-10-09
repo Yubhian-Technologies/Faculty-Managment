@@ -11,13 +11,14 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
-import { ArrowLeft, Edit2, Trash2, BookOpen, Plus } from "lucide-react";
+import { ArrowLeft, Edit2, Trash2, BookOpen, Plus, X } from "lucide-react";
 import type { Department, Subject, SubjectCategory } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
 import { CategoryField } from "@/components/academics/CategoryField";
 import { offeredYears } from "@/lib/college/departmentYears";
 import { courseYearNumbers, semesterLabel } from "@/lib/college/courseYears";
 import { useCourseSemesterPlan } from "@/hooks/useCourseSemesterPlan";
+import { managedCoreCandidates } from "@/lib/departments/departmentTree";
 
 // Academics > Subjects. View and manage subjects assigned to departments
 // by year and semester in a horizontal table with CRUD & bulk delete capabilities.
@@ -96,6 +97,10 @@ export default function SubjectsPage() {
 
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [showBulkConfirm, setShowBulkConfirm] = useState(false);
+
+  const [showTargetDialog, setShowTargetDialog] = useState(false);
+  const [targetDeptIds, setTargetDeptIds] = useState<Set<string>>(new Set());
+  const [isTargeting, setIsTargeting] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -186,6 +191,21 @@ export default function SubjectsPage() {
     const parentId = active?.parentDepartmentId ?? activeDeptId;
     return departments.filter((d) => d.parentDepartmentId === parentId && d.id !== activeDeptId);
   }, [departments, activeDeptId]);
+
+  // The CORE (managed) departments a feeder sub-department like "BS Chemistry"
+  // actually teaches - CSE, CSBS, ... - as opposed to its own organisational
+  // siblings (siblingDepts above, e.g. BS Physics). A subject assigned broadly
+  // to the sub-department covers every one of these (see subjectCoverage.ts's
+  // managed-department fallback); picking specific ones here narrows it to
+  // just those, via "Target core departments" below. Empty for a department
+  // that doesn't manage anything - the bulk action stays hidden then.
+  const coreDepartments = useMemo(() => {
+    if (!activeDept) return [];
+    const names = managedCoreCandidates(departments, activeDept, false);
+    return names
+      .map((n) => departments.find((d) => d.name === n))
+      .filter((d): d is DepartmentOption => !!d);
+  }, [departments, activeDept]);
 
   async function fetchAssignments(
     cKey: string,
@@ -485,6 +505,86 @@ export default function SubjectsPage() {
     await handleLoad();
   }
 
+  // Narrow the selected subjects from "covers every department this
+  // sub-department manages" to just the ticked core department(s): sets
+  // `secondaryDepartmentNames` on each selected row (via PATCH, not a new
+  // department-owned row) - this works even for a core department that
+  // isn't itself scoped to teach this year (e.g. CSE/CSBS deliberately
+  // excluding Year 1, a shared first year Basic Science owns instead), since
+  // it never needs that department to own a row of its own. Timetables and
+  // teaching assignments are never touched - only which subjects a
+  // section's Teaching Assignments screen offers going forward (Current
+  // Assignments there reads each assignment's own saved fields, never this
+  // mapping).
+  async function handleRetarget(clear = false) {
+    if (selectedIds.size === 0 || (!clear && targetDeptIds.size === 0)) return;
+    setIsTargeting(true);
+    const selectedItems = assignments.filter((item) => selectedIds.has(item.assignment.id));
+    const names = clear ? [] : Array.from(targetDeptIds).map((id) => departments.find((d) => d.id === id)?.name).filter((n): n is string => !!n);
+
+    const results = await Promise.allSettled(
+      selectedItems.map(async (item) => {
+        const res = await fetch("/api/college/subject-semester-assignments", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: item.assignment.id, secondaryDepartmentNames: names.length > 0 ? names : null }),
+        });
+        if (!res.ok) {
+          const json = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new Error(json.error ?? "Failed to update");
+        }
+      })
+    );
+    const successCount = results.filter((r) => r.status === "fulfilled").length;
+    const failResults = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+
+    setIsTargeting(false);
+    setShowTargetDialog(false);
+    setSelectedIds(new Set());
+    setTargetDeptIds(new Set());
+
+    if (clear) {
+      toast({
+        variant: failResults.length > 0 ? "default" : "success",
+        title: `${successCount} subject(s) back to covering every department${failResults.length > 0 ? `, ${failResults.length} failed` : ""}`,
+      });
+    } else {
+      const deptLabel = names.join(", ");
+      toast({
+        variant: failResults.length > 0 ? "default" : "success",
+        title: successCount > 0 ? `${successCount} subject(s) now target ${deptLabel} only` : "Couldn't narrow the selected subjects",
+        description: failResults.length > 0 ? failResults[0]?.reason?.message : undefined,
+      });
+    }
+
+    await handleLoad();
+  }
+
+  // Drop one department from a single row's targeting - the quick, one-click
+  // undo for the "Targets: X" badge, without opening the bulk dialog to
+  // untick and reapply. Reverts to broad (covers every department again)
+  // once the last targeted department is removed.
+  async function handleRemoveTarget(item: AssignmentWithMaster, nameToRemove: string) {
+    const current: string[] = item.assignment.secondaryDepartmentNames ?? [];
+    const next = current.filter((n) => n !== nameToRemove);
+    const res = await fetch("/api/college/subject-semester-assignments", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: item.assignment.id, secondaryDepartmentNames: next.length > 0 ? next : null }),
+    });
+    if (!res.ok) {
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      toast({ variant: "destructive", title: json.error ?? "Failed to remove" });
+      return;
+    }
+    toast({
+      variant: "success",
+      title: `${nameToRemove} removed`,
+      description: next.length === 0 ? "This subject now covers every department again." : undefined,
+    });
+    await handleLoad();
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -574,14 +674,36 @@ export default function SubjectsPage() {
             </span>
           </div>
           {selectedIds.size > 0 && (
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => setShowBulkConfirm(true)}
-            >
-              <Trash2 className="h-4 w-4 mr-1.5" />
-              Delete Selected ({selectedIds.size})
-            </Button>
+            <div className="flex items-center gap-2">
+              {coreDepartments.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    // Pre-check whatever the selection already agrees on, so
+                    // re-opening this to adjust a narrowing already applied
+                    // doesn't look like starting from "covers everything".
+                    const selectedItems = assignments.filter((item) => selectedIds.has(item.assignment.id));
+                    const lists: string[][] = selectedItems.map((item) => item.assignment.secondaryDepartmentNames ?? []);
+                    const [first, ...rest] = lists;
+                    const agree = first && rest.every((n: string[]) => n.length === first.length && n.every((x: string) => first.includes(x)));
+                    const names: string[] = agree ? first : [];
+                    setTargetDeptIds(new Set(names.map((n) => departments.find((d) => d.name === n)?.id).filter((id): id is string => !!id)));
+                    setShowTargetDialog(true);
+                  }}
+                >
+                  Target core departments ({selectedIds.size})
+                </Button>
+              )}
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setShowBulkConfirm(true)}
+              >
+                <Trash2 className="h-4 w-4 mr-1.5" />
+                Delete Selected ({selectedIds.size})
+              </Button>
+            </div>
           )}
         </div>
       )}
@@ -647,13 +769,33 @@ export default function SubjectsPage() {
                       </span>
                     </td>
                     <td className="p-3">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-semibold text-foreground">{item.master.name}</p>
                         {notInLoad && (
                           <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-100 text-purple-800 dark:bg-purple-950/70 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
                             Not in teaching load
                           </span>
                         )}
+                        {item.assignment.secondaryDepartmentNames?.length > 0 && (
+                          <span className="text-[10px] text-muted-foreground">Targets:</span>
+                        )}
+                        {(item.assignment.secondaryDepartmentNames ?? []).map((name: string) => (
+                          <span
+                            key={name}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-800 dark:bg-blue-950/70 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                            title={`Only ticked core departments see this subject in Teaching Assignments - everyone else ${activeDept?.name ?? "this department"} manages does not.`}
+                          >
+                            {name}
+                            <button
+                              type="button"
+                              aria-label={`Stop targeting ${name}`}
+                              onClick={() => void handleRemoveTarget(item, name)}
+                              className="hover:text-blue-950 dark:hover:text-blue-100"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        ))}
                       </div>
                       {item.master.shortCode && (
                         <p className="text-xs text-muted-foreground font-mono">{item.master.shortCode}</p>
@@ -920,6 +1062,49 @@ export default function SubjectsPage() {
         loading={isBulkDeleting}
         onConfirm={() => void handleBulkDelete()}
       />
+
+      {/* Target Core Departments Dialog */}
+      <Dialog open={showTargetDialog} onOpenChange={setShowTargetDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Target core departments</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Pick which of {activeDept?.name}&apos;s core departments the {selectedIds.size} selected subject(s)
+              actually apply to - sections outside those won&apos;t see them in Teaching Assignments going forward.
+              Leaving none ticked (or Clear narrowing) covers every department again. Already-made faculty
+              assignments and timetables are never affected.
+            </p>
+            <div className="space-y-2">
+              {coreDepartments.map((d) => (
+                <label key={d.id} className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={targetDeptIds.has(d.id)}
+                    onCheckedChange={(checked) => {
+                      const next = new Set(targetDeptIds);
+                      if (checked) next.add(d.id); else next.delete(d.id);
+                      setTargetDeptIds(next);
+                    }}
+                  />
+                  {d.name}
+                </label>
+              ))}
+            </div>
+          </div>
+          <DialogFooter className="sm:justify-between">
+            <Button variant="ghost" className="text-xs text-muted-foreground" onClick={() => void handleRetarget(true)} disabled={isTargeting}>
+              Clear narrowing (cover every department again)
+            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setShowTargetDialog(false)}>Cancel</Button>
+              <Button onClick={() => void handleRetarget()} disabled={targetDeptIds.size === 0 || isTargeting}>
+                {isTargeting ? "Applying..." : "Apply"}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

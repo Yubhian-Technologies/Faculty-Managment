@@ -254,14 +254,27 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
         .map((a) => a.departmentId)
         .filter(Boolean)
     );
+    // A row narrowed to specific core departments (see "Target core
+    // departments" in Academics > Subjects) is recognised by those exact
+    // names instead of its own broad departmentName - the feeder
+    // sub-department's own name would never match a core department's
+    // section anyway, so without this a narrowed subject would show for
+    // NEITHER department rather than just the one it was narrowed to.
     const subjectDeptNames = new Set(
       semesterAssignments
         .filter((a) => a.subjectId === subject.id && a.semester === effectiveSemester)
-        .map((a) => a.departmentName ?? a.department)
-        .filter(Boolean)
+        .flatMap((a) => (a.secondaryDepartmentNames?.length ? a.secondaryDepartmentNames : [a.departmentName ?? a.department]))
+        .filter((n): n is string => !!n)
     );
 
     const relevantSections = sections.filter((s) => {
+      // A subject from a different curriculum regulation than the section's
+      // own (e.g. an R26 subject semester-mapped alongside an R23 one for
+      // the same course+year) can never actually be assigned to this
+      // section - availableSubjectsForAssign below already excludes it, so
+      // this list must agree, or it lists a "gap" nothing can ever fill.
+      // Lenient when either side has no regulation set.
+      if (subject.regulation && s.regulation && subject.regulation !== s.regulation) return false;
       if (subjectDeptIds.size === 0 && subjectDeptNames.size === 0) return true;
       const d = departments.find((dept) => dept.name === s.department);
       if (d && subjectDeptIds.has(d.id)) return true;
@@ -291,6 +304,10 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
         .filter((a) => {
           if (a.semester !== effectiveSemester) return false;
           if (a.year != null && a.year !== Number(year)) return false;
+          // Narrowed to specific core departments (see "Target core
+          // departments" in Academics > Subjects) - match those exact names
+          // only, never the row's own broad departmentId/Name.
+          if (a.secondaryDepartmentNames?.length) return a.secondaryDepartmentNames.includes(selectedSection.department ?? "");
           if (sectionDeptId && a.departmentId) return a.departmentId === sectionDeptId;
           const aDeptName = a.departmentName ?? a.department;
           if (selectedSection.department && aDeptName) return aDeptName === selectedSection.department;
