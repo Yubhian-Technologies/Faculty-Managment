@@ -88,12 +88,10 @@ export async function GET(request: Request) {
     // department (or its real parent, if it's a sub-department with no HOD
     // of its own) should see it, not whoever else happens to administer it
     // via a managedDepartments grouping (see ownDepartmentNames doc).
-    // Every department this HOD heads, not just the one picked in "Working
-    // as": a request from one of their departments (IT) to another they also
-    // head (CSBS) must reach them, whichever one they happen to be working in.
-    const allScope = await getHodDepartmentScope(db, session.collegeId, session.uid, { activeOnly: false });
-    const myNames = facultyManageableDepartmentNames(allScope);
-
+    // Only the department picked in "Working as" (and its sub-departments): IT's
+    // page shows IT's requests, CSBS's page shows CSBS's - an HOD of both never
+    // sees one department's requests mixed into the other's.
+    const myNames = facultyManageableDepartmentNames(scope);
     const [outgoingSnap, incomingSnap] = await Promise.all([
       coll.where("requestedBy", "==", session.uid).get(),
       myNames.length > 0 ? coll.where("targetDepartmentName", "in", myNames.slice(0, 30)).get() : Promise.resolve(null),
@@ -105,6 +103,10 @@ export async function GET(request: Request) {
     const seen = new Set<string>();
     const requests: { id: string; [key: string]: unknown }[] = [];
     for (const d of outgoingSnap.docs) {
+      // A request this HOD raised from another of their departments belongs to that
+      // department's page - unless it was addressed to this one.
+      const from = (d.data() as { requestingDepartment?: string }).requestingDepartment;
+      if (from && !canHodEditDepartment(scope, from) && !incomingIds.has(d.id)) continue;
       seen.add(d.id);
       requests.push({ id: d.id, ...d.data(), incomingForMe: incomingIds.has(d.id) });
     }

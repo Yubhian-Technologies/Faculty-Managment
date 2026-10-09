@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
+import { useWorkContext } from "@/hooks/useWorkContext";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { CourseYearTiming, DayOfWeek, FacultyAssignmentRequest, FacultyMember, RequestAllocation } from "@/types";
 import { requestAllocations } from "@/lib/teaching/requestAllocations";
@@ -48,6 +49,7 @@ interface AssignmentRequestsPanelProps {
 // this component has no role-specific logic of its own.
 export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequestsPanelProps) {
   const { user } = useAuth();
+  const { active: activeContext } = useWorkContext();
   const [requests, setRequests] = useState<FacultyAssignmentRequest[]>([]);
   const [faculty, setFaculty] = useState<FacultyMember[]>([]);
   // Faculty of each request's target department. The default list above follows
@@ -128,7 +130,7 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
     } finally {
       setIsLoading(false);
     }
-  }, [user?.uid, user?.role]);
+  }, [user?.uid, user?.role, activeContext]);
 
   useEffect(() => {
     // Awaited in a wrapper so load()'s setState calls aren't reachable
