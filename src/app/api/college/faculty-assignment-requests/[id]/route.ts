@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { notify } from "@/lib/notify";
-import { getHodDepartmentScope, canHodEditDepartment, facultyManageableDepartmentNames } from "@/lib/departments/scope";
+import { getHodDepartmentScope, getDepartmentTreeNames, canHodManageFacultyDepartment, facultyManageableDepartmentNames } from "@/lib/departments/scope";
 import { isTimetableInchargeForDepartment } from "@/lib/departments/timetableIncharge";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { isFacultyAvailable } from "@/types";
@@ -268,8 +268,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         if (parentName) inchargeDepartments = [...inchargeDepartments, parentName];
       }
     }
+    // An HOD lends from the department the request was SENT TO (plus its
+    // sub-departments, e.g. every Basic Science branch) - never from another
+    // department they also head: an IT request to CSBS is filled from CSBS only.
+    let hodTreeNames: string[] = [];
+    if (scope) {
+      hodTreeNames = (await getDepartmentTreeNames(db, session.collegeId, reqData.targetDepartmentName))
+        .filter((n) => canHodManageFacultyDepartment(scope, n));
+    }
     const facultyInScope = scope
-      ? canHodEditDepartment(scope, faculty.department ?? "")
+      ? hodTreeNames.includes(faculty.department ?? "")
       : inchargeDepartments.includes(faculty.department ?? "");
     if (!facultyInScope) {
       return NextResponse.json({ error: "That faculty member isn't in your department" }, { status: 403 });

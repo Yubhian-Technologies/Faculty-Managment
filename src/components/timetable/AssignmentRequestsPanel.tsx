@@ -142,6 +142,11 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
   const isCompleted = (r: FacultyAssignmentRequest) => r.status === "DECLINED" || (r.status === "ALLOCATED" && !!r.busyClosed);
   // A request the viewer raised to another department they also head is BOTH: sent by them, and theirs to fulfil.
   const isIncoming = (r: FacultyAssignmentRequest) => r.incomingForMe ?? r.requestedBy !== user?.uid;
+  // Who can be lent for a request: the department it was SENT TO only (an HOD of several
+  // departments gets the target's own roster, not the one they happen to be working in).
+  // A Timetable Incharge's own list is already just their department.
+  const facultyFor = (r: FacultyAssignmentRequest): FacultyMember[] =>
+    user?.role === "HOD" ? (facultyByDept[r.targetDepartmentName] ?? []) : faculty;
   const incoming = requests.filter((r) => isIncoming(r) && !isCompleted(r));
   const outgoing = requests.filter((r) => r.requestedBy === user?.uid && !isCompleted(r));
   const completed = requests.filter(isCompleted);
@@ -388,7 +393,7 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
                 {r.status === "ALLOCATED" && (() => {
                   const allocs = requestAllocations(r);
                   const takenIds = new Set(allocs.map((x) => x.facultyId));
-                  const pickable = (facultyByDept[r.targetDepartmentName] ?? faculty).filter((f) => !takenIds.has(f.id));
+                  const pickable = facultyFor(r).filter((f) => !takenIds.has(f.id));
                   return (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -631,9 +636,9 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
                       value={pickedFaculty[r.id] ?? ""}
                       onValueChange={(v) => setPickedFaculty((p) => ({ ...p, [r.id]: v }))}
                     >
-                      <SelectTrigger className="w-64"><SelectValue placeholder={(facultyByDept[r.targetDepartmentName] ?? faculty).length ? "Select faculty" : "No faculty in your department"} /></SelectTrigger>
+                      <SelectTrigger className="w-64"><SelectValue placeholder={facultyFor(r).length ? "Select faculty" : "No faculty in your department"} /></SelectTrigger>
                       <SelectContent>
-                        {(facultyByDept[r.targetDepartmentName] ?? faculty).map((f) => <SelectItem key={f.id} value={f.id}>{facultyDisplayName(f)}</SelectItem>)}
+                        {facultyFor(r).map((f) => <SelectItem key={f.id} value={f.id}>{facultyDisplayName(f)}</SelectItem>)}
                       </SelectContent>
                     </Select>
                     <Button size="sm" loading={busyId === r.id} onClick={() => void handleAllocate(r.id)}>
