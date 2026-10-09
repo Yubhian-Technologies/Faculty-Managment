@@ -1,3 +1,5 @@
+import { managerEffectiveYears } from "@/lib/departments/hodScope";
+import type { DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { cleanLabel, isKnownStatus, normKey, normStatus, statusRule, STATUS_RULES, UNSET_LABELS } from "./config";
 import type {
   BranchMeta,
@@ -22,6 +24,8 @@ export interface CatalogCourse {
   departmentId?: string;
   durationYears?: number;
   isActive?: boolean;
+  /** The programme this Course doc is one department's copy of. */
+  catalogId?: string;
 }
 
 export interface CatalogDepartment {
@@ -32,6 +36,23 @@ export interface CatalogDepartment {
   hasSubDepartments?: boolean;
   parentRunsOwnSections?: boolean;
   managedDepartments?: string[];
+  /**
+   * The other field a college may hold the same "I run a shared year for these
+   * branches" relationship in - the cross-listing. VISHNU WOMEN'S UNIVERSITY
+   * and YUBHIAN configure it this way; VISHNU INSTITUTE OF TECHNOLOGY uses
+   * managedDepartments. No department anywhere uses both.
+   */
+  secondaryDepartments?: string[];
+  assignedYears?: number[];
+  courseScopes?: Record<string, { assignedYears?: number[]; secondaryDepartments?: string[] }>;
+}
+
+/** The branches a department groups, from either field it may be configured in. */
+export function groupedBranchNames(d: Pick<CatalogDepartment, "managedDepartments" | "secondaryDepartments" | "courseScopes">): string[] {
+  const perCourse = Object.values(d.courseScopes ?? {}).flatMap((s) => s.secondaryDepartments ?? []);
+  return [...(d.managedDepartments ?? []), ...(d.secondaryDepartments ?? []), ...perCourse]
+    .map((n) => cleanLabel(n))
+    .filter(Boolean);
 }
 
 export interface CatalogSection {
@@ -40,6 +61,13 @@ export interface CatalogSection {
   courseName?: string;
   name?: string;
   year?: number;
+  /**
+   * The branch this section feeds, for a shared first year - stored plural for
+   * legacy shape, but a section commits to one (see Section.secondaryDepartments).
+   * Every student imported into it inherits it as their own
+   * secondaryDepartment, which is what they are counted under.
+   */
+  secondaryDepartments?: string[];
 }
 
 export interface StrengthCatalog {
@@ -63,6 +91,46 @@ export interface StrengthCatalog {
  */
 export function effectiveBranchName(row: Pick<StrengthRow, "department" | "secondaryDepartment">): string {
   return cleanLabel(row.secondaryDepartment) || cleanLabel(row.department);
+}
+
+/**
+ * The same question, answered against the configuration: a student counts
+ * under the branch they are headed for only for a year that branch actually
+ * teaches. Otherwise they count under the department they are FILED in, which
+ * is the one teaching them that year.
+ *
+ * Used to decide WHOSE students they are, not which column they appear in.
+ * Computer Science and Engineering teaches years 2-4 of the B.Tech; its first
+ * year is taught by BASIC SCIENCE - ENGLISH, where those 175 students are
+ * filed. They are not CSE's strength - its dashboard should read 0 - so the
+ * CSE HOD's scan does not admit them (filterRowsForHod).
+ *
+ * The cube itself still buckets every student by the branch they are headed
+ * for, so the department actually teaching them can pick that branch and find
+ * them: a BASIC SCIENCE - PHYSICS HOD selecting "Information Technology" gets
+ * the 176 first-years headed there. Bucketing them under the feeder instead
+ * made every branch read 0 for the one person who needs to see them.
+ *
+ * With nothing configured either way, the old answer stands - a college that
+ * has not set Years Taught is not second-guessed.
+ */
+export function resolveBranchName(
+  row: Pick<StrengthRow, "department" | "secondaryDepartment" | "year" | "courseId" | "course">,
+  departments: (CatalogDepartment & DepartmentYearRow)[],
+  catalogIdOf: (row: Pick<StrengthRow, "courseId" | "course">) => string | undefined
+): string {
+  const secondary = cleanLabel(row.secondaryDepartment);
+  const filed = cleanLabel(row.department);
+  if (!secondary || !filed || secondary === filed) return secondary || filed;
+
+  const year = Number(row.year);
+  if (!Number.isInteger(year) || year < 1) return secondary;
+
+  const branch = departments.find((d) => cleanLabel(d.name) === secondary);
+  if (!branch) return secondary;
+  const taught = managerEffectiveYears(branch as never, departments as never, catalogIdOf(row));
+  if (taught.length === 0) return secondary;
+  return taught.includes(year) ? secondary : filed;
 }
 
 const SEP = "\u0001";
@@ -114,6 +182,7 @@ export function buildStrengthCube(rows: StrengthRow[], catalog: StrengthCatalog)
     const label = cleanLabel(fromDoc?.name) || cleanLabel(row.course);
     return { key: normKey(label), label };
   };
+
 
   const cellMap = new Map<string, StrengthCell>();
   const rollHolders = new Map<string, { roll: string; holders: { id: string; name: string }[] }>();
@@ -220,7 +289,12 @@ export function buildStrengthCube(rows: StrengthRow[], catalog: StrengthCatalog)
       key,
       label: cleanLabel(d.name),
       code: cleanLabel(d.code),
-      isFeeder: (d.hasSubDepartments === true && d.parentRunsOwnSections === false) || (d.managedDepartments?.length ?? 0) > 0,
+      // A department that groups branches is a feeder however that grouping is
+      // configured. Reading managedDepartments alone meant BASIC SCIENCE -
+      // ENGLISH, which cross-lists instead, was offered as a Department of its
+      // own - a choice that can only come back 0, since its students are all
+      // counted under the branch they are headed for.
+      isFeeder: (d.hasSubDepartments === true && d.parentRunsOwnSections === false) || groupedBranchNames(d).length > 0,
       unknown: false,
     });
   }
@@ -241,7 +315,14 @@ export function buildStrengthCube(rows: StrengthRow[], catalog: StrengthCatalog)
     const year = Number(s.year);
     sections.push({
       program: normKey(programName),
-      branch: normKey(s.department),
+      // The same rule a STUDENT is bucketed by (effectiveBranchName): the
+      // branch it feeds when it has one, else its own department. Indexing a
+      // section by its filing department instead put it under the feeder
+      // while its students sat under the branch, so picking a branch emptied
+      // the Section list: BSE-CSE-A/B/C are filed under BASIC SCIENCE -
+      // ENGLISH but belong to COMPUTER SCIENCE AND ENGINEERING, and BSE-CS to
+      // CSE [CYBER SECURITY].
+      branch: normKey(cleanLabel(s.secondaryDepartments?.[0]) || cleanLabel(s.department)),
       year: Number.isFinite(year) && year > 0 ? Math.trunc(year) : 0,
       section: normKey(label),
       label,

@@ -26,11 +26,28 @@ describe("experienceBreakdown", () => {
     const entries = [
       { fromDate: yearsAgo(10), toDate: yearsAgo(8) }, // Academic: 2 years
       { fromDate: yearsAgo(6), toDate: yearsAgo(5) }, // Industry: 1 year
-      { fromDate: "2020-01-01", toDate: "2022-07-01" }, // Research: 2.5 years
+      { fromDate: "2022-01-01", toDate: "2024-07-01" }, // Research: 2.5 years
     ];
     const result = experienceBreakdown(entries, joiningDate, asOf);
     expect(result.external).toBeCloseTo(5.5, 1);
     expect(result.total).toBeCloseTo(6.5, 1);
+  });
+
+  it("overlapping rows (same or different tabs) are counted once", () => {
+    const entries = [
+      { fromDate: "2015-01-01", toDate: "2018-01-01" },
+      { fromDate: "2016-01-01", toDate: "2019-01-01" }, // 2 yrs overlap
+    ];
+    const result = experienceBreakdown(entries, undefined, asOf);
+    expect(result.external).toBe(4); // 2015-2019, not 6
+  });
+
+  it("external time overlapping service at this college is not counted twice", () => {
+    const entries = [{ fromDate: "2023-01-01", toDate: "2025-01-01" }];
+    const result = experienceBreakdown(entries, "2024-01-01", asOf);
+    expect(result.internal).toBe(2);
+    expect(result.total).toBe(3); // 2023-01-01 .. 2026-01-01
+    expect(result.external).toBe(1);
   });
 
   it("a future joining date gives Internal 0, never negative", () => {

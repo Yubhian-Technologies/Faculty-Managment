@@ -34,6 +34,7 @@ describe("downloadFacultyResume", () => {
     expect(calls).toEqual([
       "/api/college/teaching-assignments?facultyId=f1",
       "/api/college/publications?uid=u9",
+      "/api/college/academic-year/current",
     ]);
     expect(downloadResumePdf).toHaveBeenCalledTimes(1);
     const [record, hint] = downloadResumePdf.mock.calls[0] as unknown as [Record<string, unknown>, string];
@@ -56,7 +57,7 @@ describe("downloadFacultyResume", () => {
   it("uses the faculty id with URL encoding, and skips publications when there is no login uid", async () => {
     const calls = mockFetch(() => ({ assignments: [] }));
     await downloadFacultyResume({ id: "a b/c", employeeId: "E1" }, "", sections);
-    expect(calls).toEqual(["/api/college/teaching-assignments?facultyId=a%20b%2Fc"]);
+    expect(calls).toEqual(["/api/college/teaching-assignments?facultyId=a%20b%2Fc", "/api/college/academic-year/current"]);
   });
 
   it("still produces the resume when both lookups fail", async () => {

@@ -10,6 +10,7 @@ import { notify } from "@/lib/notify";
 import { notifyReviewer, resolveSubmissionRoute, routeFields } from "@/lib/research/coordinatorReview";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import { finalizePublicationDetails, deriveFlatFields, summarizeChanges } from "@/lib/publications/deriveFlatFields";
+import { checkIsbnForSave } from "@/lib/publications/isbnGuard";
 import type { PublicationDetails, PublicationStatus } from "@/types";
 
 export async function GET(
@@ -149,6 +150,8 @@ export async function PATCH(
 
       let changes: string[] = [];
       if (body.details) {
+        const isbnError = await checkIsbnForSave(db, session.collegeId, body.details.type, body.details.isbnNumber, { publicationId: id, previousIsbn: pub.details?.isbnNumber });
+        if (isbnError) return NextResponse.json({ error: isbnError }, { status: 400 });
         const { details, internalAuthorUids } = await finalizePublicationDetails(db, session.collegeId, body.details);
         if (wasApproved && pub.details) changes = summarizeChanges(pub.details, details);
         Object.assign(updates, { details, internalAuthorUids }, deriveFlatFields(details));
@@ -184,6 +187,8 @@ export async function PATCH(
     // R&D's own full edit - any field, any status.
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (body.details) {
+      const isbnError = await checkIsbnForSave(db, session.collegeId, body.details.type, body.details.isbnNumber, { publicationId: id, previousIsbn: pub.details?.isbnNumber });
+      if (isbnError) return NextResponse.json({ error: isbnError }, { status: 400 });
       const { details, internalAuthorUids } = await finalizePublicationDetails(db, session.collegeId, body.details);
       Object.assign(updates, { details, internalAuthorUids }, deriveFlatFields(details));
     }

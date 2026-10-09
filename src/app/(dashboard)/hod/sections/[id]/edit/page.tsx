@@ -7,10 +7,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
+import { useAuthStore } from "@/store/authStore";
 import { buildCourseGroups } from "@/lib/departments/hodScope";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { Course, Department, Section, StudentRecord } from "@/types";
@@ -64,14 +66,27 @@ export default function EditSectionPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [facultyList, setFacultyList] = useState<FacultyOption[]>([]);
+  const myDepartments = useAuthStore((st) => st.user?.departments);
+  const myDepartment = useAuthStore((st) => st.user?.department);
+  const allMyDepartments = useMemo(
+    () => Array.from(new Set(myDepartments && myDepartments.length > 0 ? myDepartments : myDepartment ? [myDepartment] : [])),
+    [myDepartments, myDepartment],
+  );
+  const [pickedFacultyDept, setPickedFacultyDept] = useState("");
   const [form, setForm] = useState<SectionForm>(EMPTY_FORM);
   const [sectionName, setSectionName] = useState("");
+  // null = not touched: the box then reflects whether the stored name already
+  // is the bare department code (a single-section department).
+  const [singleChoice, setSingleChoice] = useState<boolean | null>(null);
   const [sectionCourseName, setSectionCourseName] = useState("");
   const [enrolledCount, setEnrolledCount] = useState(0);
   // Owning department name + the section's current target branch (if any), so
   // a shared-first-year section (e.g. Basic Science → CSE) can be re-pointed.
   const [ownerDept, setOwnerDept] = useState("");
   const [branch, setBranch] = useState("");
+  const facultyDept = pickedFacultyDept && allMyDepartments.includes(pickedFacultyDept)
+    ? pickedFacultyDept
+    : allMyDepartments.includes(ownerDept) ? ownerDept : allMyDepartments[0] ?? "";
 
   // Class incharge and room are shown as plain text until "Edit" is pressed; "Cancel"
   // puts back what the section had when the page loaded.
@@ -95,8 +110,10 @@ export default function EditSectionPage() {
   const [selectedStudentId, setSelectedStudentId] = useState<string>("none");
   const [studentsLoading, setStudentsLoading] = useState(false);
 
+  // Faculty come from the department picked above the Faculty Incharge list - an HOD of
+  // several departments (e.g. IT and CSBS) chooses which department's faculty to pick from.
   useEffect(() => {
-    fetch("/api/college/faculty?availableOnly=true")
+    fetch(`/api/college/faculty?availableOnly=true${facultyDept ? `&department=${encodeURIComponent(facultyDept)}` : ""}`)
       .then((r) => r.json())
       .then((d: { faculty?: (FacultyOption & { legalName?: string })[] }) => {
         setFacultyList((d.faculty ?? []).map((f) => ({
@@ -104,7 +121,9 @@ export default function EditSectionPage() {
         })));
       })
       .catch(() => { /* non-critical */ });
+  }, [facultyDept]);
 
+  useEffect(() => {
     fetch("/api/college/departments")
       .then((r) => r.json() as Promise<{ departments: Department[] }>)
       .then((d) => setDepartments(d.departments ?? []))
@@ -347,6 +366,22 @@ export default function EditSectionPage() {
   }, [departments, ownerDept]);
   const isBranchMode = branchOptions.length > 0;
 
+  // A department with one section needs no letter: "CSE-A" becomes "CSE". The
+  // name is only text on the section - the save below moves its students to the
+  // new name exactly as any rename does, so nothing else changes.
+  const ownerCode = departments.find((d) => d.name === ownerDept)?.code?.trim().toUpperCase() ?? "";
+  const isSingle = singleChoice ?? (!!ownerCode && sectionName.toUpperCase() === ownerCode);
+  function toggleSingle(checked: boolean) {
+    setSingleChoice(checked);
+    if (checked) {
+      // Drop a trailing "-A"; a bare letter ("A") becomes the department code.
+      const stripped = sectionName.replace(/-[A-Z0-9]{1,2}$/i, "");
+      setF({ name: (stripped !== sectionName ? stripped : ownerCode || sectionName).toUpperCase() });
+    } else {
+      setF({ name: sectionName });
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.name.trim()) { toast({ variant: "destructive", title: "Section name is required" }); return; }
@@ -451,10 +486,17 @@ export default function EditSectionPage() {
                       value={form.name}
                       onChange={(e) => setF({ name: e.target.value.toUpperCase() })}
                       placeholder="A, B, C…"
-                      maxLength={10}
+                      maxLength={30}
                       className="uppercase"
+                      disabled={isSingle}
                     />
-                    <p className="text-xs text-muted-foreground">{isBranchMode ? "e.g. CSE-A" : "e.g. A, B, C or CS-A"}</p>
+                    <label className="flex items-center gap-2 pt-1 text-sm">
+                      <Checkbox checked={isSingle} onCheckedChange={(c) => toggleSingle(c === true)} />
+                      Only one section (no letter like A, B)
+                    </label>
+                    <p className="text-xs text-muted-foreground">
+                      {isSingle ? "Saving renames the section and keeps all its students and data." : isBranchMode ? "e.g. CSE-A" : "e.g. A, B, C or CS-A"}
+                    </p>
                   </div>
                   <div className="space-y-2">
                     <Label>Enrolled Students</Label>
@@ -478,6 +520,14 @@ export default function EditSectionPage() {
                       <Label>Faculty Incharge</Label>
                       {editingClassDetails ? (
                         <>
+                          {allMyDepartments.length > 1 && (
+                            <Select value={facultyDept} onValueChange={setPickedFacultyDept}>
+                              <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
+                              <SelectContent>
+                                {allMyDepartments.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          )}
                           <Select
                             value={form.facultyInchargeUid || "none"}
                             onValueChange={(v) => handleFacultySelect(v === "none" ? "" : v)}
@@ -495,7 +545,7 @@ export default function EditSectionPage() {
                             </SelectContent>
                           </Select>
                           {facultyList.length === 0 && (
-                            <p className="text-xs text-muted-foreground">No active faculty found in your department.</p>
+                            <p className="text-xs text-muted-foreground">No active faculty found in {facultyDept || "your department"}.</p>
                           )}
                         </>
                       ) : (

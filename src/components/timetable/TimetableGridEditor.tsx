@@ -1,7 +1,7 @@
 "use client";
 
 import { FacultyTimetableLookup } from "@/components/timetable/FacultyTimetableLookup";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft, ChevronDown, ChevronRight, Clock, Coffee, Lock, PencilLine, Plus, Send,
@@ -23,6 +23,9 @@ import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { buildRows, defaultPeriodTimings } from "@/lib/timetable/buildGrid";
 import { continuousSpans, ordinalYear, readableCode, resolveTimetableDays } from "@/lib/timetable/gridModel";
 import { InstitutionalTimetableTable } from "@/components/timetable/InstitutionalTimetableTable";
+import { FacultyLeisureFilter } from "@/components/timetable/FacultyLeisureFilter";
+import { currentWeekDates } from "@/lib/utils";
+import { isoDateKey } from "@/lib/leave/dayCounter";
 import { requestAssignmentIds } from "@/lib/teaching/requestAllocations";
 import type {
   Course, SectionListItem, CourseYearTiming, TimetableSlot, DayOfWeek, DraftSlot, TimetableDraft,
@@ -51,6 +54,18 @@ interface TimetableGridEditorProps {
   // Which semester's timetable this grid shows and edits. Omitted (or null) lets
   // the server resolve whichever semester is running today, as before.
   semester?: number | null;
+  // Published mode also gets week navigation (that week's substitutions) and
+  // the leisure-faculty check - what the HOD's separate "Timetable View" page
+  // used to offer. Only hod/timetable passes it; every other caller is unchanged.
+  publishedWeekTools?: boolean;
+  // The timetable grid comes straight after the toolbar, with the Period
+  // Timings summary (and, in Published mode, the faculty lookup) below it
+  // instead of above. Only hod/timetable passes it.
+  gridFirst?: boolean;
+  // Rendered below everything else of the editor but above its Danger zone, so
+  // a page's own section (hod/timetable's Timetable Incharge panel) does not
+  // push the Danger zone off the bottom of the page.
+  footer?: ReactNode;
 }
 
 // Shared by both hod/timetable/[courseId]/[year]/[sectionId]/page.tsx and
@@ -61,7 +76,7 @@ interface TimetableGridEditorProps {
 // goes through the same API routes either visitor already had server-side
 // authorization checks added for (see teaching-assignments/timetable/
 // timetable-slots routes' isTimetableIncharge branches).
-export function TimetableGridEditor({ courseId, year, sectionId, backHref, semester }: TimetableGridEditorProps) {
+export function TimetableGridEditor({ courseId, year, sectionId, backHref, semester, publishedWeekTools = false, gridFirst = false, footer }: TimetableGridEditorProps) {
   const semesterQuery = semester != null ? `&semester=${semester}` : "";
   const semesterBody = semester != null ? { semester } : {};
   const router = useRouter();
@@ -115,6 +130,14 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [draft, setDraft] = useState<TimetableDraft | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  // Published mode's week navigation (publishedWeekTools only). `slots` above
+  // always stays THIS week's - everything the draft/edit logic reads - so
+  // another week's copy (the same timetable with that week's substitutions
+  // overlaid) is held apart, tagged with the week it was fetched for.
+  const [thisWeekKey] = useState(() => isoDateKey(currentWeekDates()[0]));
+  const [weekStart, setWeekStart] = useState<Date>(() => currentWeekDates()[0]);
+  const [otherWeek, setOtherWeek] = useState<{ key: string; slots: TimetableSlot[] } | null>(null);
+  const [showLeisure, setShowLeisure] = useState(false);
 
   const [modeState, setModeState] = useState<Mode>("published");
   // View filter, independent of edit mode - "ALL" shows everything as before.
@@ -244,6 +267,28 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
     })();
     return () => { cancelled = true; };
   }, [loadAll]);
+
+  const weekKey = isoDateKey(weekStart);
+  useEffect(() => {
+    if (!publishedWeekTools || weekKey === thisWeekKey) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const d = await fetch(`/api/college/timetable-slots?sectionId=${encodeURIComponent(sectionId)}&week=${weekKey}${semesterQuery}`)
+          .then((r) => r.json() as Promise<{ slots: TimetableSlot[] }>);
+        if (!cancelled) setOtherWeek({ key: weekKey, slots: d.slots ?? [] });
+      } catch {
+        if (!cancelled) {
+          toast({ variant: "destructive", title: "Failed to load timetable" });
+          setOtherWeek({ key: weekKey, slots: [] });
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [publishedWeekTools, weekKey, thisWeekKey, sectionId, semesterQuery]);
+  const isOtherWeek = weekKey !== thisWeekKey;
+  const isLoadingWeek = isOtherWeek && otherWeek?.key !== weekKey;
+  const publishedSlots = isOtherWeek && otherWeek?.key === weekKey ? otherWeek.slots : slots;
 
   // The color the editor picked for a subject's cells (default tint when none).
   const cellTint = (assignmentId: string) => {
@@ -955,6 +1000,108 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
   const departmentName = section?.department;
 
 
+  // Every year's college-day shape for this course, at a glance - handy
+  // at the start of a semester to see all years' periods/breaks without
+  // switching the year in the URL one at a time. Shows Year 1 through
+  // the course's own duration (falling back to 4 before `course` has
+  // loaded), with "Not configured yet" for a year the Principal hasn't
+  // set up. A const so `gridFirst` can place it below the grid instead.
+  const lookupBelowGrid = gridFirst && mode === "published";
+  const periodTimingsSummary = !isLoading && allTimings.length > 0 && (
+      <div className="rounded-lg border overflow-hidden">
+        <div className="bg-muted/40 px-4 py-2 border-b">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Period Timings - {course?.name ?? "This Course"}
+          </p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b bg-muted/20">
+                <th className="p-2 text-left font-medium text-muted-foreground w-8" />
+                <th className="p-2 text-left font-medium text-muted-foreground">Year</th>
+                <th className="p-2 text-left font-medium text-muted-foreground">College Hours</th>
+                <th className="p-2 text-left font-medium text-muted-foreground">Periods</th>
+                <th className="p-2 text-left font-medium text-muted-foreground">Lunch Break</th>
+                <th className="p-2 text-left font-medium text-muted-foreground">Short Breaks</th>
+              </tr>
+            </thead>
+            <tbody>
+              {courseYearNumbers(course?.durationYears ?? Math.max(0, ...allTimings.map((t) => Number(t.year) || 0))).map((y) => {
+                const t = allTimings.find((at) => Number(at.year) === y);
+                const isCurrentYear = y === Number(year);
+                const isExpanded = expandedTimingYears.has(y);
+                const periodTimes = t
+                  ? (t.periods && t.periods.length > 0 ? t.periods : defaultPeriodTimings(t))
+                  : [];
+                return (
+                  <Fragment key={y}>
+                    <tr className={`${isExpanded ? "" : "border-b last:border-b-0"} ${isCurrentYear ? "bg-primary/5" : ""}`}>
+                      <td className="p-2">
+                        {t && (
+                          <button
+                            type="button"
+                            onClick={() => setExpandedTimingYears((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(y)) next.delete(y); else next.add(y);
+                              return next;
+                            })}
+                            className="text-muted-foreground hover:text-foreground"
+                            aria-label={isExpanded ? "Hide period times" : "Show period times"}
+                          >
+                            {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                          </button>
+                        )}
+                      </td>
+                      <td className="p-2 font-medium text-foreground whitespace-nowrap">
+                        {ordinalYear(y)}
+                        {isCurrentYear && <span className="ml-1.5 text-[10px] font-normal text-primary">(current)</span>}
+                      </td>
+                      {t ? (
+                        <>
+                          <td className="p-2 text-muted-foreground whitespace-nowrap">
+                            {formatTime12h(t.collegeStartTime)}&ndash;{formatTime12h(t.collegeEndTime)}
+                          </td>
+                          <td className="p-2 text-muted-foreground whitespace-nowrap">
+                            {t.numberOfPeriods} &times; {t.periodDurationMinutes}m
+                          </td>
+                          <td className="p-2 text-muted-foreground whitespace-nowrap">
+                            {t.lunchBreak ? `After P${t.lunchBreak.afterPeriod} · ${t.lunchBreak.durationMinutes}m` : "—"}
+                          </td>
+                          <td className="p-2 text-muted-foreground">
+                            {t.shortBreaks && t.shortBreaks.length > 0
+                              ? t.shortBreaks.map((sb) => `After P${sb.afterPeriod} · ${sb.durationMinutes}m`).join(", ")
+                              : "—"}
+                          </td>
+                        </>
+                      ) : (
+                        <td className="p-2 text-muted-foreground/60 italic" colSpan={4}>Not configured yet</td>
+                      )}
+                    </tr>
+                    {isExpanded && t && (
+                      <tr className={`border-b last:border-b-0 ${isCurrentYear ? "bg-primary/5" : ""}`}>
+                        <td className="p-2" />
+                        <td className="p-2 pt-0 pb-2.5 text-muted-foreground" colSpan={5}>
+                          <div className="flex flex-wrap gap-x-3 gap-y-1">
+                            {periodTimes.map((p) => (
+                              <span key={p.period} className="whitespace-nowrap">
+                                <span className="font-medium text-foreground">P{p.period}</span>{" "}
+                                {formatTime12h(p.startTime)}&ndash;{formatTime12h(p.endTime)}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+  );
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -1000,106 +1147,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
         }
       />
 
-      {/* Every year's college-day shape for this course, at a glance - handy
-          at the start of a semester to see all years' periods/breaks without
-          switching the year in the URL one at a time. Shows Year 1 through
-          the course's own duration (falling back to 4 before `course` has
-          loaded), with "Not configured yet" for a year the Principal hasn't
-          set up. */}
-      {!isLoading && allTimings.length > 0 && (
-        <div className="rounded-lg border overflow-hidden">
-          <div className="bg-muted/40 px-4 py-2 border-b">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Period Timings - {course?.name ?? "This Course"}
-            </p>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b bg-muted/20">
-                  <th className="p-2 text-left font-medium text-muted-foreground w-8" />
-                  <th className="p-2 text-left font-medium text-muted-foreground">Year</th>
-                  <th className="p-2 text-left font-medium text-muted-foreground">College Hours</th>
-                  <th className="p-2 text-left font-medium text-muted-foreground">Periods</th>
-                  <th className="p-2 text-left font-medium text-muted-foreground">Lunch Break</th>
-                  <th className="p-2 text-left font-medium text-muted-foreground">Short Breaks</th>
-                </tr>
-              </thead>
-              <tbody>
-                {courseYearNumbers(course?.durationYears ?? Math.max(0, ...allTimings.map((t) => Number(t.year) || 0))).map((y) => {
-                  const t = allTimings.find((at) => Number(at.year) === y);
-                  const isCurrentYear = y === Number(year);
-                  const isExpanded = expandedTimingYears.has(y);
-                  const periodTimes = t
-                    ? (t.periods && t.periods.length > 0 ? t.periods : defaultPeriodTimings(t))
-                    : [];
-                  return (
-                    <Fragment key={y}>
-                      <tr className={`${isExpanded ? "" : "border-b last:border-b-0"} ${isCurrentYear ? "bg-primary/5" : ""}`}>
-                        <td className="p-2">
-                          {t && (
-                            <button
-                              type="button"
-                              onClick={() => setExpandedTimingYears((prev) => {
-                                const next = new Set(prev);
-                                if (next.has(y)) next.delete(y); else next.add(y);
-                                return next;
-                              })}
-                              className="text-muted-foreground hover:text-foreground"
-                              aria-label={isExpanded ? "Hide period times" : "Show period times"}
-                            >
-                              {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                            </button>
-                          )}
-                        </td>
-                        <td className="p-2 font-medium text-foreground whitespace-nowrap">
-                          {ordinalYear(y)}
-                          {isCurrentYear && <span className="ml-1.5 text-[10px] font-normal text-primary">(current)</span>}
-                        </td>
-                        {t ? (
-                          <>
-                            <td className="p-2 text-muted-foreground whitespace-nowrap">
-                              {formatTime12h(t.collegeStartTime)}&ndash;{formatTime12h(t.collegeEndTime)}
-                            </td>
-                            <td className="p-2 text-muted-foreground whitespace-nowrap">
-                              {t.numberOfPeriods} &times; {t.periodDurationMinutes}m
-                            </td>
-                            <td className="p-2 text-muted-foreground whitespace-nowrap">
-                              {t.lunchBreak ? `After P${t.lunchBreak.afterPeriod} · ${t.lunchBreak.durationMinutes}m` : "—"}
-                            </td>
-                            <td className="p-2 text-muted-foreground">
-                              {t.shortBreaks && t.shortBreaks.length > 0
-                                ? t.shortBreaks.map((sb) => `After P${sb.afterPeriod} · ${sb.durationMinutes}m`).join(", ")
-                                : "—"}
-                            </td>
-                          </>
-                        ) : (
-                          <td className="p-2 text-muted-foreground/60 italic" colSpan={4}>Not configured yet</td>
-                        )}
-                      </tr>
-                      {isExpanded && t && (
-                        <tr className={`border-b last:border-b-0 ${isCurrentYear ? "bg-primary/5" : ""}`}>
-                          <td className="p-2" />
-                          <td className="p-2 pt-0 pb-2.5 text-muted-foreground" colSpan={5}>
-                            <div className="flex flex-wrap gap-x-3 gap-y-1">
-                              {periodTimes.map((p) => (
-                                <span key={p.period} className="whitespace-nowrap">
-                                  <span className="font-medium text-foreground">P{p.period}</span>{" "}
-                                  {formatTime12h(p.startTime)}&ndash;{formatTime12h(p.endTime)}
-                                </span>
-                              ))}
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+      {!gridFirst && periodTimingsSummary}
 
       {/* History tab removed from this editor: the view is always the live timetable. */}
       <>
@@ -1124,9 +1172,6 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
               needing the HOD to first discover the Draft toggle above. */}
           {mode === "published" && !isCrossDepartment && (
             <div className="ml-auto flex flex-wrap items-center gap-2">
-              <Button size="sm" variant="outline" onClick={() => setConfirmReset(true)} className="text-destructive hover:text-destructive">
-                <Trash2 className="h-4 w-4 mr-1.5" />Delete entire timetable
-              </Button>
               <Button
                 size="sm"
                 variant="outline"
@@ -1167,11 +1212,6 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
               {!isCrossDepartment && (
                 <Button size="sm" variant="outline" onClick={() => setConfirmDiscard(true)} className="text-destructive hover:text-destructive">
                   <Trash2 className="h-4 w-4 mr-1.5" />Discard
-                </Button>
-              )}
-              {!isCrossDepartment && (
-                <Button size="sm" variant="outline" onClick={() => setConfirmReset(true)} className="text-destructive hover:text-destructive">
-                  <Trash2 className="h-4 w-4 mr-1.5" />Delete entire timetable
                 </Button>
               )}
               <Button
@@ -1262,11 +1302,22 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
       ) : null}
 
       {/* Any department's faculty and their real week - to check who is free
-          before placing a subject. Replaces the old Theory/Practical toggle. */}
-      <FacultyTimetableLookup embedded />
+          before placing a subject. Replaces the old Theory/Practical toggle.
+          With `gridFirst` it follows the grid while only viewing (Published),
+          and stays here in Draft, where it is used while placing subjects. */}
+      {!lookupBelowGrid && <FacultyTimetableLookup embedded />}
+
+      {publishedWeekTools && mode === "published" && (
+        <div className="space-y-3">
+          <Button type="button" variant="outline" size="sm" onClick={() => setShowLeisure((v) => !v)}>
+            {showLeisure ? "Hide leisure faculty" : "Show leisure faculty"}
+          </Button>
+          {showLeisure && <FacultyLeisureFilter scopeLabel="in your department" />}
+        </div>
+      )}
 
       {/* ── Grid ──────────────────────────────────────────────────────────── */}
-      {isLoading ? (
+      {isLoading || (mode === "published" && isLoadingWeek) ? (
         <div className="h-96 rounded-lg border bg-muted/30 animate-pulse" />
       ) : !timing ? (
         <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
@@ -1276,11 +1327,14 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
         <InstitutionalTimetableTable
           section={section}
           timing={timing}
-          slots={slots}
+          slots={publishedSlots}
           courseName={course?.name || fallbackCourseName || undefined}
           departmentName={departmentName}
           academicYear={slots[0]?.academicYear}
           workingDays={workingDays}
+          weekStart={publishedWeekTools ? weekStart : undefined}
+          onWeekChange={publishedWeekTools ? setWeekStart : undefined}
+          showWeekNav={publishedWeekTools}
           typeFilter={typeFilter}
           onTypeFilterChange={setTypeFilter}
           subjects={subjects}
@@ -1532,6 +1586,28 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
                 ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {lookupBelowGrid && <FacultyTimetableLookup embedded />}
+      {gridFirst && periodTimingsSummary}
+      {footer}
+
+      {/* "Delete entire timetable" used to sit in the toolbar beside Edit and
+          Publish, one mis-click away. It is the last thing on the page now, on
+          its own, under the same conditions the toolbar buttons had (a
+          timetable exists, and it is this viewer's to delete). */}
+      {hasDraft && !isCrossDepartment && (
+        <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4">
+          <p className="text-sm font-semibold text-destructive">Danger zone</p>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              Removes this section&rsquo;s published timetable, its draft, its teaching assignments and open assignment requests for this semester. This cannot be undone.
+            </p>
+            <Button size="sm" variant="destructive" onClick={() => setConfirmReset(true)} disabled={busy !== null}>
+              <Trash2 className="h-4 w-4 mr-1.5" />Delete entire timetable
+            </Button>
+          </div>
         </div>
       )}
 
