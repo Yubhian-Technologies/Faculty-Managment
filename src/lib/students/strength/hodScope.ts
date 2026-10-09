@@ -2,6 +2,7 @@ import { resolveCatalogId } from "@/lib/college/academicStructure";
 import { resolveBranchYearOwner, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import type { HodDepartmentScope } from "@/lib/departments/scope";
 import type { Course } from "@/types";
+import { resolveBranchName } from "./aggregate";
 import { cleanLabel } from "./config";
 import type { StrengthRow } from "./types";
 
@@ -17,7 +18,13 @@ import type { StrengthRow } from "./types";
  *    managed:   filed under a sub-department or a branch grouped under them
  *               (a managed branch only for the years the manager teaches);
  *  - secondary: pre-registered to one of their branches while still filed
- *               under a shared first-year department.
+ *               under a shared first-year department - and only for a year
+ *               that branch actually teaches. A branch whose first year is
+ *               taught by someone else does not count that year's students as
+ *               its own strength; they belong to the department teaching them
+ *               (the same rule resolveBranchName buckets by, so a student is
+ *               never admitted under one branch and then counted under
+ *               another).
  *
  * An HOD with no department on file sees nothing, never the whole college.
  * A student passes if ANY rule admits them, so nobody is counted twice: the
@@ -59,7 +66,9 @@ export function filterRowsForHod(
         return true;
       }
     }
-    if (secondary && (own.has(secondary) || child.has(secondary))) return true;
+    if (secondary && (own.has(secondary) || child.has(secondary))) {
+      return resolveBranchName(row, departments as never, () => catalogIdFor(dept, row.course)) === secondary;
+    }
     return false;
   });
 }

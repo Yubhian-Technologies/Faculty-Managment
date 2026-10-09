@@ -39,10 +39,26 @@ const all = Object.values(rows);
 const ids = (rs: StrengthRow[]) => rs.map((r) => r.id).sort();
 
 describe("filterRowsForHod", () => {
-  it("a plain department HOD sees their own years plus fresh-year students pre-registered to them, nobody else", () => {
+  // A branch does not count a year it does not teach. CSE teaches 2-4, so its
+  // first-years - taught by the Basic Science manager, pre-registered to CSE -
+  // are that manager's strength, not CSE's. They become CSE's on promotion
+  // into a year it teaches.
+  it("a plain department HOD sees their own years, and no year taught by someone else", () => {
     const seen = filterRowsForHod(all, scope({ ownDepartmentNames: ["CSE"] }), departments, courses);
-    // CSE year 1 is owned by the Basic Science manager, so it is NOT the CSE HOD's.
-    expect(ids(seen)).toEqual(ids([rows.cse2, rows.cse3, rows.freshCse]));
+    expect(ids(seen)).toEqual(ids([rows.cse2, rows.cse3]));
+  });
+
+  it("...but does see a pre-registered student once they sit in a year it teaches", () => {
+    const promoted = { ...rows.freshCse, id: "promoted", year: 2 };
+    const seen = filterRowsForHod([...all, promoted], scope({ ownDepartmentNames: ["CSE"] }), departments, courses);
+    expect(ids(seen)).toContain("promoted");
+  });
+
+  // A department with nothing configured is not second-guessed.
+  it("keeps the pre-registered student when the branch has no years configured", () => {
+    const unconfigured = departments.map((d) => (d.name === "CSE" ? { ...d, assignedYears: [] } : d));
+    const seen = filterRowsForHod(all, scope({ ownDepartmentNames: ["CSE"] }), unconfigured, courses);
+    expect(ids(seen)).toContain(rows.freshCse.id);
   });
 
   it("the sub-HOD who runs the shared first year sees the branch's first-years, never its other years", () => {
