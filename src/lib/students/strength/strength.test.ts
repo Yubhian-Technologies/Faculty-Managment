@@ -519,10 +519,17 @@ describe("a cross-listing feeder's own filters", () => {
     expect(filterOptions(cells, meta, F({ branch: "cse", year: 2 })).sections.map((x) => x.label)).toEqual(["CSE-A"]);
   });
 
-  // ...but never hides a year somebody is actually counted in.
-  it("keeps a year that has students even when it is outside the configuration", () => {
+  // Configured means configured: a year outside it is not offered even when it
+  // holds students. Those students are still counted - "All years" and the
+  // year breakdown include them - they just cannot be isolated by year here.
+  // At a college whose shared first year is held by Basic Science, every
+  // branch is configured 2-4 while all its students sit in year 1.
+  it("offers only the configured years, even where students sit outside them", () => {
     const strays = [...rows, { id: "x", department: "BS English", secondaryDepartment: "CSE", course: "B.Tech", year: 3, section: "A", status: "REGULAR" }];
     const { cells, meta } = buildStrengthCube(strays, CATALOG);
-    expect(filterOptions(cells, { ...meta, scopeYears: [1] }, F()).years).toEqual([1, 3]);
+    expect(filterOptions(cells, { ...meta, scopeYears: [1] }, F()).years).toEqual([1]);
+    // A branch HOD: configured 2-4, every student counted in year 1.
+    expect(filterOptions(cells, { ...meta, scopeYears: [2, 3, 4] }, F()).years).toEqual([2, 3, 4]);
+    expect(totalFor(cells, F())).toBe(176); // ...and none of them stop being counted
   });
 });
