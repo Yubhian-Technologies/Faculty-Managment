@@ -246,6 +246,8 @@ export interface RequestAllocation {
 
 export interface FacultyAssignmentRequest {
   id: string;
+  /** Set by GET: true when the request is addressed to a department the viewer heads / is Timetable Incharge for (even if they raised it themselves). */
+  incomingForMe?: boolean;
   collegeId: string;
   courseId: string;
   courseName: string;

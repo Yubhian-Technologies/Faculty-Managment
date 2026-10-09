@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
+import { useWorkContext } from "@/hooks/useWorkContext";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { CourseYearTiming, DayOfWeek, FacultyAssignmentRequest, FacultyMember, RequestAllocation } from "@/types";
 import { requestAllocations } from "@/lib/teaching/requestAllocations";
@@ -48,8 +49,13 @@ interface AssignmentRequestsPanelProps {
 // this component has no role-specific logic of its own.
 export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequestsPanelProps) {
   const { user } = useAuth();
+  const { active: activeContext } = useWorkContext();
   const [requests, setRequests] = useState<FacultyAssignmentRequest[]>([]);
   const [faculty, setFaculty] = useState<FacultyMember[]>([]);
+  // Faculty of each request's target department. The default list above follows
+  // "Working as", so a request to another department the same HOD heads (IT -> CSBS)
+  // needs that department's own roster.
+  const [facultyByDept, setFacultyByDept] = useState<Record<string, FacultyMember[]>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [tab, setTab] = useState<"incoming" | "outgoing" | "completed">("incoming");
   const [pickedFaculty, setPickedFaculty] = useState<Record<string, string>>({});
@@ -106,12 +112,25 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
       const facData = await facRes.json() as { faculty: FacultyMember[] };
       setRequests(reqData.requests ?? []);
       setFaculty(facData.faculty ?? []);
+      const targetDepts = Array.from(new Set(
+        (reqData.requests ?? []).filter((r) => r.incomingForMe ?? r.requestedBy !== user?.uid).map((r) => r.targetDepartmentName).filter(Boolean),
+      ));
+      if (user?.role === "HOD" && targetDepts.length > 0) {
+        const entries = await Promise.all(targetDepts.map(async (dept) => {
+          try {
+            const res = await fetch(`/api/college/faculty?availableOnly=true&department=${encodeURIComponent(dept)}`);
+            const d = await res.json() as { faculty?: FacultyMember[] };
+            return [dept, d.faculty ?? []] as const;
+          } catch { return [dept, null] as const; }
+        }));
+        setFacultyByDept(Object.fromEntries(entries.filter((e): e is readonly [string, FacultyMember[]] => e[1] !== null)));
+      }
     } catch {
       toast({ variant: "destructive", title: "Failed to load assignment requests" });
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [user?.uid, user?.role, activeContext]);
 
   useEffect(() => {
     // Awaited in a wrapper so load()'s setState calls aren't reachable
@@ -123,7 +142,14 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
   // shared + notified). Those live in their own tab so the other two only hold
   // requests that still need someone to act.
   const isCompleted = (r: FacultyAssignmentRequest) => r.status === "DECLINED" || (r.status === "ALLOCATED" && !!r.busyClosed);
-  const incoming = requests.filter((r) => r.requestedBy !== user?.uid && !isCompleted(r));
+  // A request the viewer raised to another department they also head is BOTH: sent by them, and theirs to fulfil.
+  const isIncoming = (r: FacultyAssignmentRequest) => r.incomingForMe ?? r.requestedBy !== user?.uid;
+  // Who can be lent for a request: the department it was SENT TO only (an HOD of several
+  // departments gets the target's own roster, not the one they happen to be working in).
+  // A Timetable Incharge's own list is already just their department.
+  const facultyFor = (r: FacultyAssignmentRequest): FacultyMember[] =>
+    user?.role === "HOD" ? (facultyByDept[r.targetDepartmentName] ?? []) : faculty;
+  const incoming = requests.filter((r) => isIncoming(r) && !isCompleted(r));
   const outgoing = requests.filter((r) => r.requestedBy === user?.uid && !isCompleted(r));
   const completed = requests.filter(isCompleted);
 
@@ -345,7 +371,7 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
           {visible.map((r) => {
             // Which side THIS request is on for the viewer - the Completed tab
             // mixes both directions, so it can't come from the active tab.
-            const dir = r.requestedBy !== user?.uid ? "incoming" : "outgoing";
+            const dir = tab === "incoming" ? "incoming" : tab === "outgoing" ? "outgoing" : isIncoming(r) ? "incoming" : "outgoing";
             return (
             <Card key={r.id}>
               <CardContent className="p-4 space-y-3">
@@ -369,7 +395,7 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
                 {r.status === "ALLOCATED" && (() => {
                   const allocs = requestAllocations(r);
                   const takenIds = new Set(allocs.map((x) => x.facultyId));
-                  const pickable = faculty.filter((f) => !takenIds.has(f.id));
+                  const pickable = facultyFor(r).filter((f) => !takenIds.has(f.id));
                   return (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -612,9 +638,9 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
                       value={pickedFaculty[r.id] ?? ""}
                       onValueChange={(v) => setPickedFaculty((p) => ({ ...p, [r.id]: v }))}
                     >
-                      <SelectTrigger className="w-64"><SelectValue placeholder={faculty.length ? "Select faculty" : "No faculty in your department"} /></SelectTrigger>
+                      <SelectTrigger className="w-64"><SelectValue placeholder={facultyFor(r).length ? "Select faculty" : "No faculty in your department"} /></SelectTrigger>
                       <SelectContent>
-                        {faculty.map((f) => <SelectItem key={f.id} value={f.id}>{facultyDisplayName(f)}</SelectItem>)}
+                        {facultyFor(r).map((f) => <SelectItem key={f.id} value={f.id}>{facultyDisplayName(f)}</SelectItem>)}
                       </SelectContent>
                     </Select>
                     <Button size="sm" loading={busyId === r.id} onClick={() => void handleAllocate(r.id)}>

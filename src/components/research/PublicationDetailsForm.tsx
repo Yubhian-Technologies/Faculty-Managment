@@ -9,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
-import { checkIsbn, isIsbnRequired } from "@/lib/publications/isbn";
+import { checkIsbn, isIsbnRequired, isValidIsbn } from "@/lib/publications/isbn";
 import type {
   PublicationDetails, PublicationType, PublicationAuthor, PublicationIndex, PublicationQuartile,
   AuthorCategory, AuthorRoleType,
@@ -77,8 +77,24 @@ const CROSSREF_TYPES: Record<string, PublicationType> = {
   "edited-book": "TEXT_BOOK",
 };
 
+// A book record can list several ISBNs (print, electronic, one per edition).
+// Take the first that is a real ISBN, print before electronic, so the form is
+// never prefilled with a value it would then refuse to submit. Only a book-like
+// record carries one, so a journal article is left alone.
+function crossrefIsbn(m: Record<string, unknown>): string | undefined {
+  const typed = (m["isbn-type"] as { value?: string; type?: string }[] | undefined) ?? [];
+  const candidates = [
+    ...typed.filter((t) => t.type === "print").map((t) => t.value ?? ""),
+    ...typed.filter((t) => t.type !== "print").map((t) => t.value ?? ""),
+    ...((m.ISBN as string[] | undefined) ?? []),
+  ].map((v) => v.replace(/^.*(?:\/isbn\/|urn:isbn:)/i, "").trim());
+  return candidates.find((v) => isValidIsbn(v));
+}
+
 async function fetchDoiMetadata(doi: string, type: PublicationType): Promise<Partial<PublicationDetails> | null> {
-  const res = await fetch(`https://api.crossref.org/works/${encodeURIComponent(doi.trim())}`);
+  // Accept a pasted link as well as a bare DOI.
+  const bareDoi = doi.trim().replace(/^(?:https?:\/\/)?(?:dx\.)?doi\.org\//i, "").replace(/^doi:\s*/i, "");
+  const res = await fetch(`https://api.crossref.org/works/${encodeURIComponent(bareDoi)}`);
   if (!res.ok) return null;
   const json = await res.json() as { message?: Record<string, unknown> };
   const m = json.message;
@@ -104,7 +120,7 @@ async function fetchDoiMetadata(doi: string, type: PublicationType): Promise<Par
   );
 
   const patch: Partial<PublicationDetails> = {
-    doi: (m.DOI as string | undefined) ?? doi.trim(),
+    doi: (m.DOI as string | undefined) ?? bareDoi,
     ...((m.title as string[] | undefined)?.[0] ? { title: (m.title as string[])[0] } : {}),
     ...(m.publisher ? { publisherName: m.publisher as string } : {}),
     ...(resolved !== type ? { type: resolved } : {}),
@@ -115,7 +131,7 @@ async function fetchDoiMetadata(doi: string, type: PublicationType): Promise<Par
     // an ISSN without its hyphen, which would prefill a value the form then
     // refuses to submit.
     ...((m.ISSN as string[] | undefined)?.[0] ? { issnNumber: formatIssn((m.ISSN as string[])[0]) } : {}),
-    ...((m.ISBN as string[] | undefined)?.[0] ? { isbnNumber: (m.ISBN as string[])[0] } : {}),
+    ...(crossrefIsbn(m) ? { isbnNumber: crossrefIsbn(m) } : {}),
     ...(year ? { monthYearOfPublication: `${year}-${String(month ?? 1).padStart(2, "0")}` } : {}),
     ...(m.URL ? { publishedPaperLink: m.URL as string } : {}),
     ...(authors.length > 0 ? { authors } : {}),
@@ -500,7 +516,6 @@ export function PublicationDetailsForm({
         value={value.isbnNumber ?? ""}
         onChange={(e) => set("isbnNumber", e.target.value)}
         placeholder="978-0-306-40615-7"
-        inputMode="numeric"
         aria-invalid={!!value.isbnNumber?.trim() && !!isbnError}
       />
       {!!value.isbnNumber?.trim() && !!isbnError && <p className="text-xs text-destructive">{isbnError}</p>}
