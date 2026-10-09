@@ -72,7 +72,6 @@ const EXPECTED: Record<string, string[]> = {
     "/hod/internal-exam",
     "/hod/mid-paper-setter",
     "/hod/timetable",
-    "/hod/timetable-view",
     "/hod/leave-approvals",
     "/hod/leave-history",
     "/hod/student-permissions",

@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ClipboardList, Search, Users } from "lucide-react";
+import { Search, Users } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +10,6 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TimetableInchargePanel } from "@/components/timetable/TimetableInchargePanel";
 import { TimetableGridEditor } from "@/components/timetable/TimetableGridEditor";
-import { LabAttendanceAllocation, TimetableViewSwitch, type AllocAssignment, type TimetableView } from "@/components/timetable/LabAttendanceAllocation";
 import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import {
@@ -47,13 +45,6 @@ interface LoadedSection {
   semester: number | null;
 }
 
-// The HOD's (and a Sub-HOD's) own Teaching Assignments - the labs among them are what can be allocated.
-async function loadHodAssignments(): Promise<AllocAssignment[]> {
-  const res = await fetch("/api/college/teaching-assignments?dept=true");
-  const json = (await res.json()) as { assignments?: AllocAssignment[] };
-  return json.assignments ?? [];
-}
-
 function SectionTimetable() {
   const myDepartments = useMyDepartments();
   // Optional deep link (?courseId=&year=) - preselects the filters only; the
@@ -74,7 +65,6 @@ function SectionTimetable() {
   const [isLoadingSections, setIsLoadingSections] = useState(false);
   const [isLoadingTimings, setIsLoadingTimings] = useState(false);
   const [loaded, setLoaded] = useState<LoadedSection | null>(null);
-  const [view, setView] = useState<TimetableView>("timetable");
 
   useEffect(() => {
     Promise.all([
@@ -211,7 +201,7 @@ function SectionTimetable() {
   }, [selectedGroup, selectedCourse, year]);
 
   // Semesters are configured per course-year (CourseYearTiming), filed under
-  // each section's own courseId - same lookup hod/timetable-view uses. The list
+  // each section's own courseId. The list
   // is every semester any section of the picked year runs.
   useEffect(() => {
     if (!year || !selectedGroup || selectedGroup.courseIds.length === 0) return;
@@ -286,11 +276,14 @@ function SectionTimetable() {
     setLoaded({ courseId: section.courseId, year, sectionId: section.id, semester });
   }
 
-  // Same rule as hod/timetable-view: with semesters configured, one must be
-  // picked. "All" would silently resolve to whichever semester today falls in
+  // With semesters configured, one must be picked. "All" would silently resolve to whichever semester today falls in
   // and show/seed a blank timetable if the slots were published under another.
   const canLoad = !!selectedCourse && !!year && !!sectionId && !isLoadingSections
     && (semesterOptions.length === 0 || semester != null);
+
+  const inchargePanel = selectedCourse && year ? (
+    <TimetableInchargePanel courses={courses} departments={departments} sections={sections} catalogId={selectedCourse.catalogId} year={Number(year)} />
+  ) : null;
 
   return (
     <div className="space-y-6">
@@ -298,13 +291,6 @@ function SectionTimetable() {
         title="Timetable"
         description="Pick a course, year, semester and section, then load that section's timetable to build or publish it"
       />
-
-      <TimetableViewSwitch value={view} onChange={setView} />
-
-      {view === "labs" ? (
-        <LabAttendanceAllocation loadAssignments={loadHodAssignments} />
-      ) : (
-      <>
 
       <Card>
         <CardHeader>
@@ -414,25 +400,8 @@ function SectionTimetable() {
             </div>
           )}
 
-          {/* The department-wide Teaching Assignments editor is per course-YEAR,
-              not per section, so it stays on its own page - linked from here
-              once a course and year are picked. */}
-          {selectedCourse && year && (
-            <div className="mt-4 flex flex-wrap items-center gap-2 border-t pt-4">
-              <span className="text-xs text-muted-foreground">{ordinalYear(Number(year))} tools:</span>
-              <Button variant="outline" size="sm" asChild>
-                <Link href={`/hod/timetable/${selectedCourse.id}/${year}/teaching-assignments`}>
-                  <ClipboardList className="h-3.5 w-3.5 mr-1.5" />Teaching Assignments
-                </Link>
-              </Button>
-            </div>
-          )}
         </CardContent>
       </Card>
-
-      {selectedCourse && year && (
-        <TimetableInchargePanel courses={courses} departments={departments} sections={sections} catalogId={selectedCourse.catalogId} year={Number(year)} />
-      )}
 
       {loaded ? (
         <TimetableGridEditor
@@ -441,6 +410,9 @@ function SectionTimetable() {
           year={loaded.year}
           sectionId={loaded.sectionId}
           semester={loaded.semester}
+          publishedWeekTools
+          gridFirst
+          footer={inchargePanel}
         />
       ) : (
         !isLoading && (
@@ -450,8 +422,10 @@ function SectionTimetable() {
           </div>
         )
       )}
-      </>
-      )}
+
+      {/* With a section loaded the panel is handed to the editor (footer), so
+          it sits below the timetable but above the editor's Danger zone. */}
+      {!loaded && inchargePanel}
     </div>
   );
 }

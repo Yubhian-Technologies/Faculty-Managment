@@ -21,6 +21,14 @@ import type { Course, Department, Section } from "@/types";
 
 type DeptWithMaybeId = Department & { id: string };
 
+/** Sections by year, ascending, each year's own list by name. */
+function groupByYear(list: Section[]): [number, Section[]][] {
+  const map = new Map<number, Section[]>();
+  for (const s of list) map.set(s.year, [...(map.get(s.year) ?? []), s]);
+  for (const group of map.values()) group.sort((a, b) => a.name.localeCompare(b.name));
+  return Array.from(map.entries()).sort((a, b) => a[0] - b[0]);
+}
+
 // In-place drill-down for one top-level department: sub-departments (if it has
 // any) -> that sub-department's sections -> a section's student roster. All of
 // it renders inside the Departments toggle - nothing navigates away.
@@ -79,6 +87,24 @@ function DepartmentDrillDown({ departments, courses, rootId, onExit }: {
     for (const list of map.values()) list.sort((a, b) => a.name.localeCompare(b.name));
     return Array.from(map.entries()).sort((a, b) => a[0] - b[0]);
   }, [deptSections]);
+
+  // Each sub-department's own sections, so the parent's page shows everything in
+  // its tree rather than only what is filed directly under it. VWU's Computer
+  // Science and Engineering runs 9 sections of its own and CSE [CYBER SECURITY]
+  // another 3; all 12 belong on that page, each under the name of the
+  // department that owns it. A sub-department owns its own years outright
+  // (sectionsOfDepartment resolves the owner per year), so nothing is listed
+  // twice.
+  const childGroups = useMemo(() => {
+    if (!current) return [];
+    return departments
+      .filter((d) => d.parentDepartmentId === current.id)
+      .map((owner) => ({
+        owner,
+        byYear: groupByYear(sectionsOfDepartment(owner as DeptWithMaybeId, departments, sections, catalogIdByCourseId)),
+      }))
+      .filter((g) => g.byYear.length > 0);
+  }, [current, departments, sections, catalogIdByCourseId]);
 
   if (!current) return null;
   if (openSectionId) {
@@ -170,6 +196,21 @@ function DepartmentDrillDown({ departments, courses, rootId, onExit }: {
           ))}
         </div>
       )}
+
+      {/* Each sub-department's own sections, under its name. */}
+      {childGroups.map(({ owner, byYear: childYears }) => (
+        <div key={owner.id} className="space-y-8">
+          <h2 className="font-semibold text-base">{owner.name} - own sections</h2>
+          {childYears.map(([year, list]) => (
+            <div key={year}>
+              <h3 className="font-semibold text-sm text-muted-foreground mb-3">{yearOrdinalLabel(year)}</h3>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {list.map((sec) => <SectionCard key={sec.id} sec={sec} onOpen={() => setOpenSectionId(sec.id)} />)}
+              </div>
+            </div>
+          ))}
+        </div>
+      ))}
     </div>
   );
 }

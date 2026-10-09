@@ -13,10 +13,10 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
 import { yearOrdinalLabel } from "@/lib/college/academicYears";
-import { sectionParityGap, describeSectionParityGap } from "@/lib/college/sectionParity";
+import { sectionParityGap, describeSectionParityGap, isSharedYearSection } from "@/lib/college/sectionParity";
 import { parseExcelFile, parseCSV, matchHeaders, getUnmatchedHeaders, readFileAsText } from "@/lib/utils/csv";
 import { cn } from "@/lib/utils";
-import type { AcademicYear, Course, Section, StudentRecord } from "@/types";
+import type { AcademicYear, Course, Department, Section, StudentRecord } from "@/types";
 
 const GRADUATE = "GRADUATE" as const;
 
@@ -134,6 +134,9 @@ export function StudentPromotionsPanel({ showHeader = true }: { showHeader?: boo
   const allotmentFileRef = useRef<HTMLInputElement>(null);
   const [allotmentError, setAllotmentError] = useState("");
   const [allotmentSummary, setAllotmentSummary] = useState<AllotmentSummary | null>(null);
+  // Only for the parity rule below - which department actually runs a given
+  // (branch, year). Nothing here reads or writes a student.
+  const [departments, setDepartments] = useState<Department[]>([]);
 
   useEffect(() => {
     setIsLoadingContext(true);
@@ -141,11 +144,13 @@ export function StudentPromotionsPanel({ showHeader = true }: { showHeader?: boo
       fetch("/api/college/sections").then((r) => r.json() as Promise<{ sections: Section[] }>).then((d) => d.sections ?? []),
       fetch("/api/college/academic-years").then((r) => r.json() as Promise<{ academicYears: AcademicYear[] }>).then((d) => (d.academicYears ?? []).filter((y) => y.isActive)),
       fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses: Course[] }>).then((d) => d.courses ?? []),
+      fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments?: Department[] }>).then((d) => d.departments ?? []).catch(() => []),
     ])
-      .then(([sections, years, courses]) => {
+      .then(([sections, years, courses, departments]) => {
         setSections(sections);
         setOpenYears(years);
         setCourses(courses);
+        setDepartments(departments);
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load sections" }))
       .finally(() => setIsLoadingContext(false));
@@ -172,11 +177,13 @@ export function StudentPromotionsPanel({ showHeader = true }: { showHeader?: boo
   // A cohort can only move up when the next year has exactly the same sections
   // (same course + department) - otherwise a section has nowhere to go, or an
   // extra one is left empty. Shared-first-year feeder sections are exempt.
-  const parityError = useMemo(() => {
-    if (!sourceSection || isFinalYear || (sourceSection.secondaryDepartments?.length ?? 0) > 0) return "";
+  const parityNote = useMemo(() => {
+    if (!sourceSection || isFinalYear) return "";
+    const catalogId = courses.find((c) => c.id === sourceSection.courseId)?.catalogId;
+    if (isSharedYearSection(sourceSection, departments, catalogId)) return "";
     const gap = sectionParityGap(sections, sourceSection.department, sourceSection.courseId, sourceSection.year, sourceSection.year + 1);
     return gap.missing.length || gap.extra.length ? describeSectionParityGap(gap, sourceSection.year, sourceSection.year + 1) : "";
-  }, [sections, sourceSection, isFinalYear]);
+  }, [sections, sourceSection, isFinalYear, departments, courses]);
 
   useEffect(() => {
     if (!sourceSection) {
@@ -369,10 +376,6 @@ export function StudentPromotionsPanel({ showHeader = true }: { showHeader?: boo
       toast({ variant: "destructive", title: "Select at least one student" });
       return;
     }
-    if (parityError) {
-      toast({ variant: "destructive", title: parityError });
-      return;
-    }
     // Final year has no per-student target to fill in - every row shows the
     // same static "Graduate" label instead of a Select (see the table below),
     // so rowTargets is never populated for these rows. Only non-final-year
@@ -450,10 +453,12 @@ export function StudentPromotionsPanel({ showHeader = true }: { showHeader?: boo
 
       {sourceSection && (
         <>
-          {parityError && (
+          {/* Informational. Differing names never block a promotion - every
+              student carries an explicit target. */}
+          {parityNote && (
             <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-              <span>{parityError}</span>
+              <span>{parityNote}</span>
             </div>
           )}
           <Card>
@@ -540,7 +545,7 @@ export function StudentPromotionsPanel({ showHeader = true }: { showHeader?: boo
                   <Users className="h-4 w-4 text-muted-foreground" />
                   <span><strong>{regularCount}</strong> regular students · <strong>{selectedCount}</strong> selected</span>
                 </div>
-                <Button onClick={() => void handleSubmit()} loading={isSubmitting} disabled={selectedCount === 0 || !!parityError}>
+                <Button onClick={() => void handleSubmit()} loading={isSubmitting} disabled={selectedCount === 0}>
                   <GraduationCap className="h-4 w-4 mr-2" />
                   {isFinalYear ? "Graduate Selected" : "Promote Selected"}
                 </Button>
