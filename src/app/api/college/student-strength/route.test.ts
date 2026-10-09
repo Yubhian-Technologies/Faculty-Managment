@@ -304,7 +304,11 @@ describe("HOD scope isolation", () => {
     asHod();
     const cy = courseYears(await fetchPayload());
     const total = cy.reduce((n, c) => n + c.count, 0);
-    expect(total).toBe(2); // the pre-registered fresher + their own second-year student - never IT's students
+    // Their own second-year student, and nobody else. The pre-registered
+    // fresher sits in a year DS does not teach - that year is Basic Science's,
+    // and so is its strength (see the test above, which counts them there).
+    // Never IT's students either.
+    expect(total).toBe(1);
     for (const c of cy) expect(c.years.reduce((n, y) => n + y.count, 0)).toBe(c.count);
     expect(JSON.stringify(cy)).not.toMatch(/IT|Second-year IT/);
   });

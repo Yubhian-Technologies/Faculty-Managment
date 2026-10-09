@@ -1,5 +1,6 @@
 import type { Department } from "@/types";
 import { departmentHasSections } from "@/lib/college/departmentSectionScope";
+import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
 
 /**
  * One place that answers "what does picking this department mean?" for the
@@ -30,11 +31,39 @@ import { departmentHasSections } from "@/lib/college/departmentSectionScope";
  */
 
 export type TreeDepartment = Pick<Department, "name"> &
-  Partial<Pick<Department, "hasSubDepartments" | "parentRunsOwnSections" | "managedDepartments" | "parentDepartmentId" | "isActive">> & {
+  Partial<Pick<Department,
+    | "hasSubDepartments" | "parentRunsOwnSections" | "managedDepartments" | "parentDepartmentId" | "isActive"
+    // The other field a college may hold the same relationship in - see
+    // groupedBranches below.
+    | "secondaryDepartments" | "assignedYears" | "courseScopes"
+  >> & {
     id?: string;
   };
 
 const clean = (n: string | null | undefined) => (n ?? "").trim();
+
+/**
+ * The branches one department groups, from EITHER field a college configures
+ * them in. Both say the same thing - "this department holds a shared year for
+ * these branches" - and no department anywhere uses both:
+ *
+ *  - `managedDepartments` (VISHNU INSTITUTE OF TECHNOLOGY, dummy college)
+ *  - `secondaryDepartments`, the cross-listing (VISHNU WOMEN'S UNIVERSITY,
+ *    YUBHIAN, and siva's own "BASIC SCIENCE")
+ *
+ * Reading only the first left every department at the cross-listing colleges
+ * with no Core Department filter at all: BASIC SCIENCE - MATHS groups
+ * CSE [AI & DS] and CSE [AI & ML] there, and the filter never appeared.
+ *
+ * The cross-listing goes through resolveDepartmentCourseScope so a per-course
+ * override wins over the flat field, as everywhere else that reads it.
+ */
+function groupedBranches<T extends TreeDepartment>(dept: T, catalogId?: string): string[] {
+  return [
+    ...(dept.managedDepartments ?? []),
+    ...resolveDepartmentCourseScope(dept, catalogId).secondaryDepartments,
+  ];
+}
 
 /** The sub-departments of `dept` (the hierarchy is one level deep). */
 export function childrenOfDepartment<T extends TreeDepartment>(all: T[], dept: Pick<TreeDepartment, "id">): T[] {
@@ -106,10 +135,10 @@ export function managedCoreCandidates<T extends TreeDepartment>(
 ): string[] {
   if (!dept) return [];
   const names = new Set<string>();
-  for (const n of dept.managedDepartments ?? []) if (clean(n)) names.add(clean(n));
+  for (const n of groupedBranches(dept)) if (clean(n)) names.add(clean(n));
   if (includeSubDepartmentsManaged && dept.hasSubDepartments) {
     for (const child of childrenOfDepartment(all, dept)) {
-      for (const n of child.managedDepartments ?? []) if (clean(n)) names.add(clean(n));
+      for (const n of groupedBranches(child)) if (clean(n)) names.add(clean(n));
     }
   }
   for (const n of Array.from(names)) {
@@ -121,21 +150,41 @@ export function managedCoreCandidates<T extends TreeDepartment>(
 
 /**
  * The Core Department options for one or more picked departments (an HOD's
- * whole scope when nothing is picked): the candidates above that actually have
- * sections filed under them, sorted. A name configured but with no section
- * would be an option that can only come back empty, so it is left out - which
- * is also what drops a container such as AI while keeping AIDS and AIML.
+ * whole scope when nothing is picked): every branch they are configured to
+ * hold a shared year for, sorted.
+ *
+ * Configured is enough - a branch with no sections and no students yet is
+ * still one of this department's branches, and seeing it sit at zero is the
+ * point of having it in the filter. It used to be offered only when a section
+ * was filed under it, which at a college that files the shared year's sections
+ * under the FEEDER (VISHNU WOMEN'S UNIVERSITY: BSE-CSE-A is filed under BASIC
+ * SCIENCE - ENGLISH) meant no branch ever qualified and the filter never
+ * appeared at all.
+ *
+ * A container is still left out, because its own sub-branches are listed in
+ * its place - AI drops while AIDS and AIML stay.
  */
 export function coreDepartmentOptions<T extends TreeDepartment>(
   all: T[],
   departmentNames: string[],
-  sectionDepartmentNames: Iterable<string>
+  sectionDepartmentNames: Iterable<string> = []
 ): string[] {
   const have = new Set(Array.from(sectionDepartmentNames, clean).filter(Boolean));
   const out = new Set<string>();
   for (const name of departmentNames) {
     const dept = all.find((d) => clean(d.name) === clean(name));
-    for (const n of managedCoreCandidates(all, dept)) if (have.has(n)) out.add(n);
+    for (const n of managedCoreCandidates(all, dept)) {
+      // Seeing a section under the branch PROVES it holds its own; not seeing
+      // one proves nothing, because the list a caller has is the viewer's own
+      // scope - an HOD sees their own sections and no others. Read the other
+      // way round, "no section of mine is filed under CSE" would mean "CSE
+      // holds nothing", and a branch that plainly runs its own sections would
+      // vanish from the filter. Unknown leaves it to the Principal's explicit
+      // flag, which is what still drops AI while keeping AIDS and AIML.
+      const branch = all.find((d) => clean(d.name) === n);
+      if (branch && isContainerDepartment(branch, all, have.has(n) || undefined)) continue;
+      out.add(n);
+    }
   }
   return Array.from(out).sort((a, b) => a.localeCompare(b));
 }

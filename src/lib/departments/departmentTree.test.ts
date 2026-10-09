@@ -83,6 +83,42 @@ describe("rollupDepartmentNames", () => {
   });
 });
 
+// ── Shape E: the branches configured as a CROSS-LISTING rather than as
+//    managedDepartments. Every department at VISHNU WOMEN'S UNIVERSITY and
+//    YUBHIAN is set up this way, and reading only managedDepartments left them
+//    with no Core Department filter at all.
+const X_MATHS = dept({ id: "xm", name: "BS Maths X", secondaryDepartments: ["CSD", "CSM"] });
+const X_CSD = dept({ id: "xd", name: "CSD" });
+const X_CSM = dept({ id: "xs", name: "CSM" });
+const XLIST = [X_MATHS, X_CSD, X_CSM];
+const XLIST_SECTIONS = ["CSD", "CSM"];
+
+describe("core departments configured as a cross-listing", () => {
+  it("offers them exactly as managedDepartments would", () => {
+    expect(coreDepartmentOptions(XLIST, ["BS Maths X"], XLIST_SECTIONS)).toEqual(["CSD", "CSM"]);
+  });
+
+  it("offers both even when only one has sections, and when none has", () => {
+    expect(coreDepartmentOptions(XLIST, ["BS Maths X"], ["CSD"])).toEqual(["CSD", "CSM"]);
+    // VISHNU WOMEN'S UNIVERSITY files the shared year's sections under the
+    // feeder, so an HOD there sees no section under any branch at all.
+    expect(coreDepartmentOptions(XLIST, ["BS Maths X"], ["BS Maths X"])).toEqual(["CSD", "CSM"]);
+  });
+
+  it("merges the two fields without repeating a branch named in both", () => {
+    const both = dept({ id: "b", name: "Both", managedDepartments: ["CSD"], secondaryDepartments: ["CSD", "CSM"] });
+    expect(coreDepartmentOptions([both, X_CSD, X_CSM], ["Both"], XLIST_SECTIONS)).toEqual(["CSD", "CSM"]);
+  });
+
+  // A container parent picks up what its children cross-list, the same way it
+  // picks up what they manage.
+  it("rolls up a child's cross-listing to the parent", () => {
+    const parent = dept({ id: "p", name: "BS X", hasSubDepartments: true });
+    const child = dept({ id: "c", name: "BS X - Maths", parentDepartmentId: "p", secondaryDepartments: ["CSD"] });
+    expect(coreDepartmentOptions([parent, child, X_CSD], ["BS X"], XLIST_SECTIONS)).toEqual(["CSD"]);
+  });
+});
+
 describe("managedCoreCandidates / coreDepartmentOptions", () => {
   it("a sub-department lists what it manages", () => {
     expect(coreDepartmentOptions(VIT, [BSM.name], VIT_SECTIONS)).toEqual(["AIDS", "CSE"]);
@@ -106,8 +142,13 @@ describe("managedCoreCandidates / coreDepartmentOptions", () => {
   it("offers a managed branch's sub-department (CSE2 -> Cyber Security) for the other manager", () => {
     expect(coreDepartmentOptions(VWU, ["BS English"], VWU_SECTIONS)).toEqual(["CSE2", "Cyber Security"]);
   });
-  it("drops a configured branch that has no sections yet", () => {
-    expect(coreDepartmentOptions(VIT, [BSM.name], ["CSE"])).toEqual(["CSE"]);
+  // Configured is enough. A branch with nothing in it yet is still one of this
+  // department's branches, and seeing it sit at zero is the point of offering
+  // it - at a college that files the shared year's sections under the FEEDER,
+  // no branch would ever qualify and the filter would never appear.
+  it("offers a configured branch that has no sections yet", () => {
+    expect(coreDepartmentOptions(VIT, [BSM.name], ["CSE"])).toEqual(["AIDS", "CSE"]);
+    expect(coreDepartmentOptions(VIT, [BSM.name], [])).toEqual(["AIDS", "CSE"]);
   });
   it("is empty for a department that manages nothing, or when nothing is picked", () => {
     expect(coreDepartmentOptions(VIT, ["CSE"], VIT_SECTIONS)).toEqual([]);
