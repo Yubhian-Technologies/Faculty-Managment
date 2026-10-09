@@ -225,12 +225,15 @@ export function sectionTitle(title: string): string {
 /** Two-line entry header used by Education / Experience / Projects - bold title
  *  + right-aligned meta on the first line, plain subtitle + bold right-aligned
  *  meta (usually dates) on the second. Either line's right side may be omitted. */
-export function entry(title: string, titleRight: string, subtitle?: string, subtitleRight?: string): string {
+export function entry(title: string, titleRight: string, subtitle?: string, subtitleRight?: string, plainRight = false): string {
   const t = esc(title);
   if (!t) return "";
-  const row1 = `<div class="entry-row"><span class="l">${t}</span><span class="r">${esc(titleRight)}</span></div>`;
+  // plainRight: the right-hand meta in ordinary weight rather than bold (the
+  // Experience section's dates).
+  const r = plainRight ? "r plain" : "r";
+  const row1 = `<div class="entry-row"><span class="l">${t}</span><span class="${r}">${esc(titleRight)}</span></div>`;
   const row2 = subtitle || subtitleRight
-    ? `<div class="entry-sub"><span class="l">${esc(subtitle)}</span><span class="r">${esc(subtitleRight)}</span></div>`
+    ? `<div class="entry-sub"><span class="l">${esc(subtitle)}</span><span class="${r}">${esc(subtitleRight)}</span></div>`
     : "";
   return `<div class="entry">${row1}${row2}</div>`;
 }
@@ -427,14 +430,24 @@ export function getResumeHTML(rawData: ResumeData): string {
   const experienceOverviewBullets = bullets([
     (hasJoiningDate || hasPreviousExperience) &&
       `Total Professional Experience: ${esc(totalExperienceYears)} years`,
+    // Only worth a line of its own with several previous institutions (it
+    // counts overlapping stints once). With one, that institution's own
+    // "External Experience" line below already says exactly this.
+    previousExperienceEntries.length > 1 &&
+      `Total External Experience: ${formatDuration(externalExperienceDuration)}`,
     data.specialization && `Specialization: ${esc(data.specialization)}`,
   ]);
 
+  // The college's own name heads this block (printed in capitals by
+  // .subheading), so it is not repeated beside the designation below. A resume
+  // generated without a college name keeps the plain "Internal Experience".
+  const internalHeading = data.collegeName?.trim() || "Internal Experience";
   const internalEntry = entry(
     designationLabel || roleLabel || "Faculty",
-    data.collegeName || "",
+    "",
     data.department || "",
-    data.joiningDate ? `${formatDMY(data.joiningDate)} - ${data.isActive === false ? "Left" : "Present"}` : ""
+    data.joiningDate ? `${formatDMY(data.joiningDate)} - ${data.isActive === false ? "Left" : "Present"}` : "",
+    true
   );
   const internalBullets = bullets([
     hasJoiningDate && `Internal Experience: ${formatDuration(internalExperienceDuration)}`,
@@ -443,11 +456,8 @@ export function getResumeHTML(rawData: ResumeData): string {
   const internalContent = hasInternalData
     ? `${internalEntry}${internalBullets}`
     : `<div class="empty-note">No internal experience recorded.</div>`;
-  const internalSection = `<div class="subheading">Internal Experience</div>${internalContent}`;
+  const internalSection = `<div class="subheading">${esc(internalHeading)}</div>${internalContent}`;
 
-  const externalBullets = bullets([
-    hasPreviousExperience && `Total External Experience: ${formatDuration(externalExperienceDuration)}`,
-  ]);
   const externalEntries = previousExperienceEntries.length
     ? previousExperienceEntries
         .map((pi) => {
@@ -463,14 +473,22 @@ export function getResumeHTML(rawData: ResumeData): string {
             pi.toDate ?? (pi.toYear ? `${pi.toYear}-01-01` : undefined),
           );
           const hasDuration = rowDuration.years > 0 || rowDuration.months > 0 || rowDuration.days > 0;
-          return entry(pi.place ? `${institution}, ${pi.place}` : institution, range, pi.designation || "") +
+          // Laid out like the internal block above: the institution's name as
+          // the heading (capitals, by .subheading), then designation and dates.
+          return `<div class="subheading">${esc(pi.place ? `${institution}, ${pi.place}` : institution)}</div>` +
+            entry(pi.designation || "Experience", range, undefined, undefined, true) +
             bullets([hasDuration && `External Experience: ${formatDuration(rowDuration)}`]);
         })
         .join("")
-    : `<div class="empty-note">No external experience recorded.</div>`;
-  const externalSection = `<div class="subheading">External Experience</div>${externalBullets}${externalEntries}`;
+    : `<div class="subheading">External Experience</div><div class="empty-note">No external experience recorded.</div>`;
+  const externalSection = externalEntries;
 
-  const experienceBody = experienceOverviewBullets + rolesBullets + internalSection + externalSection;
+  // The institutions first; the totals, specialization and roles close the
+  // section, set apart by a rule so they don't read as part of the last
+  // institution above them.
+  const experienceSummary = experienceOverviewBullets + rolesBullets;
+  const experienceBody = internalSection + externalSection +
+    (experienceSummary ? `<div class="exp-summary">${experienceSummary}</div>` : "");
 
   // ── Teaching load ────────────────────────────────────────────────────────
   // Current and past assignments, kept as two separate tables - current
@@ -638,6 +656,8 @@ export const DOCUMENT_STYLES = `
   .entry-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; font-weight: bold; font-size: 12.5px; color: #000000; }
   .entry-row .l { flex: 1 1 auto; min-width: 0; }
   .entry-row .r { flex: 0 1 auto; max-width: 45%; text-align: right; }
+  .exp-summary { margin-top: 12px; padding-top: 8px; border-top: 1px solid #d1d5db; }
+  .entry-row .r.plain, .entry-sub .r.plain { font-weight: normal; font-style: normal; font-size: 12px; color: #374151; }
   .entry-sub { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; font-size: 12px; font-style: italic; color: #374151; }
   .entry-sub .l { flex: 1 1 auto; min-width: 0; }
   .entry-sub .r { flex: 0 1 auto; max-width: 45%; text-align: right; font-weight: bold; font-style: normal; }

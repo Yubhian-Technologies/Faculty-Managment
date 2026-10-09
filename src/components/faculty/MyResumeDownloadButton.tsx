@@ -59,8 +59,15 @@ export function MyResumeDownloadButton() {
           researchPublications = ((await r.json()) as { publications?: unknown[] }).publications ?? [];
         } catch { /* non-critical - resume falls back to self-reported publications, if any */ }
       }
+      // The college's name heads the resume's internal-experience block and
+      // its header line - the HOD's download passes it the same way.
+      let collegeName = "";
+      try {
+        const r = await fetch("/api/college/info");
+        collegeName = ((await r.json()) as { name?: string }).name ?? "";
+      } catch { /* non-critical - the block falls back to "Internal Experience" */ }
       await downloadResumePdf(
-        { ...faculty, teachingAssignments, researchPublications, sections },
+        { ...faculty, teachingAssignments, researchPublications, collegeName, sections },
         faculty.employeeId || facultyDisplayName(faculty) || "resume"
       );
       setOpen(false);
