@@ -12,14 +12,18 @@ import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
 import { normalizeHHMM, dayOfWeekFromISODate } from "@/lib/timetable/leisureQuery";
 import { facultyActiveOn, loadLabWindows } from "@/lib/students/labFacultyWindow";
 import { sectionMatchesDepartmentFilter } from "@/lib/departments/hodScope";
+import { getHodDepartmentScope, ownDepartmentNames } from "@/lib/departments/scope";
 import { DEFAULT_TIMETABLE_RULES } from "@/types";
 import type { CourseYearTiming, Department, PeriodTiming, Section, TimetableRules, TimetableSlot } from "@/types";
 
 // "Teaching at this time": every class in session RIGHT NOW (IST) - or in a
-// date + clock window when the caller sends one - college-wide - which room, which year / department / section, which subject
-// and who is taking it. The counterpart of faculty-leisure (who is NOT
-// teaching). Principal, Vice Principal and admins only; unlike the leisure list
-// it is never narrowed to an HOD's department.
+// date + clock window when the caller sends one - which room, which year /
+// department / section, which subject and who is taking it. The counterpart
+// of faculty-leisure (who is NOT teaching). Principal, Vice Principal and
+// admins get the whole college; an HOD gets the same auto-narrowed-to-their-
+// own-department-tree scope faculty-leisure already gives them (own
+// department(s) plus true sub-departments and managed branches) - never an
+// arbitrary department they ask for.
 //
 // A slot counts when it is live (this course-year's current semester and this
 // academic session), a lab's faculty is within their own dates that day, and
@@ -28,9 +32,15 @@ import type { CourseYearTiming, Department, PeriodTiming, Section, TimetableRule
 // Published slots only: an unpublished draft is not a class being held.
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN", "DIRECTOR", "SUPER_ADMIN");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN", "DIRECTOR", "SUPER_ADMIN");
     const { searchParams } = new URL(request.url);
     const departmentFilter = (searchParams.get("department") ?? "").trim();
+    // HOD: own department tree only (ownDepartmentNames, the narrowest scope) -
+    // never whatever `department` they asked for, same rule faculty-leisure
+    // already enforces.
+    const hodOwnNames = session.role === "HOD"
+      ? ownDepartmentNames(await getHodDepartmentScope(getAdminDb(), session.collegeId, session.uid))
+      : null;
     // No date / window given = right now, in IST: the classes whose period
     // contains this minute. A window is only used when a caller sends one.
     const nowIST = new Date();
@@ -112,11 +122,15 @@ export async function GET(request: Request) {
 
     // A parent department also covers its sub-departments (BASIC SCIENCE
     // includes BASIC SCIENCE MATHS), the same grouping Leisure faculty uses.
+    // An HOD's own department(s) always seed this (never the `department`
+    // they asked for - resolved above into hodOwnNames); everyone else uses
+    // whatever `department` they sent, if any.
+    const seedNames = hodOwnNames && hodOwnNames.length > 0 ? hodOwnNames : (departmentFilter ? [departmentFilter] : []);
     let departmentScope: Set<string> | null = null;
-    if (departmentFilter) {
-      departmentScope = new Set([departmentFilter]);
+    if (seedNames.length > 0) {
+      departmentScope = new Set(seedNames);
       const rows = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as { name?: string; parentDepartmentId?: string | null }) }));
-      const rootIds = new Set(rows.filter((r) => (r.name ?? "").trim() === departmentFilter).map((r) => r.id));
+      const rootIds = new Set(rows.filter((r) => seedNames.includes((r.name ?? "").trim())).map((r) => r.id));
       for (let grew = true; grew;) {
         grew = false;
         for (const r of rows) {
@@ -136,7 +150,7 @@ export async function GET(request: Request) {
     // replacing it, so nothing that matched before drops out.
     const catalogIdByCourseId = new Map<string, string | undefined>();
     let deptDocs: Department[] = [];
-    if (departmentFilter) {
+    if (seedNames.length > 0) {
       deptDocs = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) }) as Department);
       const courseIds = Array.from(new Set(Array.from(sectionById.values()).map((s) => s.courseId).filter(Boolean)));
       if (courseIds.length > 0) {
@@ -167,7 +181,7 @@ export async function GET(request: Request) {
       const dept = (sec.department ?? "").trim();
       if (
         departmentScope && !departmentScope.has(dept) &&
-        !sectionMatchesDepartmentFilter(deptDocs, departmentFilter, dept, Number(sec.year), catalogIdByCourseId.get(sec.courseId))
+        !seedNames.some((name) => sectionMatchesDepartmentFilter(deptDocs, name, dept, Number(sec.year), catalogIdByCourseId.get(sec.courseId)))
       ) continue;
       const classroom = (s.classroom ?? "").trim() || (sec.classroomNumber ?? "").trim();
       const key = `${s.sectionId}|${s.subjectId}|${classroom}`;

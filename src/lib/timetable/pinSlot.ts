@@ -80,11 +80,12 @@ export async function pinSlotWithChecks(input: PinSlotInput): Promise<PinSlotOut
         return { ok: false, error: `Conflict: this section already has a subject scheduled on ${day} period ${periodNumber}` };
       }
     } else if (cellSlotsNow.length > 0) {
-      // A period may only ever be split between exactly two subjects of the
-      // SAME splittable kind - two lab (PRACTICAL) subjects, or two
-      // non-teaching subjects (Counselling, Mentoring, NSS, ...) - never a
-      // third occupant, and never mixed across the two kinds or with a
-      // theory/tutorial/project class.
+      // Two labs (parallel batches) may share a period - capped at exactly
+      // two. Once a non-teaching subject (Counselling, Mentoring, NSS, ...)
+      // is on either side, any NUMBER of subjects may share it instead - a
+      // non-teaching session splits freely with anything, uncapped. Two
+      // theory classes (or a theory and a lab) with neither side
+      // non-teaching still never share a period.
       // Two subjects may share a period, each with any number of faculty - count subjects, not slots.
       const existingSubjectIdSet = new Set(cellSlotsNow.map((s) => s.subjectId));
       const existingSubjectIds = Array.from(existingSubjectIdSet);
@@ -93,23 +94,16 @@ export async function pinSlotWithChecks(input: PinSlotInput): Promise<PinSlotOut
         ...existingSubjectIds.map((id) => collegeRef.collection("subjects").doc(id))
       );
       const incomingType = (incomingSubjectDoc.data() as { type?: string } | undefined)?.type;
-      const isNonTeaching = incomingType === "NON_TEACHING";
-      if (existingSubjectIdSet.size >= 2 && !existingSubjectIdSet.has(input.subjectId)) {
-        return {
-          ok: false,
-          error: isNonTeaching
-            ? `Period ${periodNumber} on ${day} already has 2 non-teaching subjects sharing it - a period can only be split between two.`
-            : `Period ${periodNumber} on ${day} already has 2 labs sharing it - a period can only be split between two labs.`,
-        };
-      }
-      const splittable = incomingType === "PRACTICAL" || isNonTeaching;
-      if (!splittable || existingSubjectDocs.some((d) => (d.data() as { type?: string } | undefined)?.type !== incomingType)) {
-        return {
-          ok: false,
-          error: isNonTeaching
-            ? `Period ${periodNumber} on ${day} already has a subject that isn't non-teaching - a period can only be split between two non-teaching subjects.`
-            : `Period ${periodNumber} on ${day} already has a theory class scheduled - it can't be split with a lab.`,
-        };
+      const existingTypes = existingSubjectDocs.map((d) => (d.data() as { type?: string } | undefined)?.type);
+      const involvesNonTeaching = incomingType === "NON_TEACHING" || existingTypes.includes("NON_TEACHING");
+      if (!involvesNonTeaching) {
+        if (existingSubjectIdSet.size >= 2 && !existingSubjectIdSet.has(input.subjectId)) {
+          return { ok: false, error: `Period ${periodNumber} on ${day} already has 2 labs sharing it - a period can only be split between two labs.` };
+        }
+        const allLabs = existingTypes.every((t) => t === "PRACTICAL");
+        if (!allLabs || incomingType !== "PRACTICAL") {
+          return { ok: false, error: `Period ${periodNumber} on ${day} already has a theory class scheduled - it can't be split with a lab.` };
+        }
       }
     }
 
