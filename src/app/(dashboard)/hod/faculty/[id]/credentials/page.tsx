@@ -1,9 +1,12 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { FacultyCredentialsPage } from "@/components/faculty/FacultyCredentialsPage";
+import { resolveListBack } from "@/lib/listReturn";
 
 export default function HodFacultyCredentialsPage() {
   const { id } = useParams<{ id: string }>();
-  return <FacultyCredentialsPage facultyId={id} listHref="/hod/faculty" />;
+  // Returns to the register as it was opened from (status tab, department).
+  const listHref = resolveListBack(useSearchParams(), "/hod/faculty");
+  return <FacultyCredentialsPage facultyId={id} listHref={listHref} />;
 }

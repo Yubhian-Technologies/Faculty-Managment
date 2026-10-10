@@ -11,6 +11,7 @@ import { Trash2, ExternalLink, X } from "lucide-react";
 import { splitDegreeAndBranch } from "@/lib/faculty/legacyProfileFallbacks";
 import { migrateDegree, migrateStaffQualifications } from "@/lib/faculty/fieldRenames";
 import { degreeTypeOptions, isValidDegreeType } from "@/lib/faculty/degreeType";
+import { degreeHasData, isRealYear } from "@/lib/faculty/degreeHasData";
 import { degreeYear } from "@/types";
 import type { DegreeDetail, DegreeType, StaffQualification, PhdStatus, PhdMode } from "@/types";
 
@@ -800,24 +801,15 @@ export function OptionalField({ label, value }: { label: string; value: string |
 const PHD_STATUS_VIEW_LABELS: Record<PhdStatus, string> = { AWARDED: "Awarded", PURSUING: "Pursuing" };
 const PHD_MODE_VIEW_LABELS: Record<PhdMode, string> = { FULL_TIME: "Full-Time", PART_TIME: "Part-Time" };
 
-// Every key a DegreeDetail can actually hold real data under - checked on the
-// RAW (pre-default) value, before resolveDegree fills in EMPTY_DEGREE's
-// placeholders (a blank Year of Passing/Award defaults to the current
-// calendar year for the edit form's number input, which must never be read
-// back as "this entry has data").
-const DEGREE_DATA_KEYS = [
-  "course", "branch", "specialization", "institutionName", "departmentName", "thesisTitle", "place", "percentageCgpa",
-  "hallTicketNumber", "certificateUrl", "domain", "board", "institutionType",
-  "affiliatedUniversity", "status", "mode", "nameOfTheGuideSupervisor", "yearOfRegistration",
-  "yearOfAward", "yearOfPassing", "degreeType",
-] as const;
-
-/** True when this qualification entry has any real data on it - see DEGREE_DATA_KEYS. */
-export function hasDegreeData(degree: DegreeDetail | undefined): boolean {
-  if (!degree) return false;
-  // Lift legacy key names first, so data still under an old key isn't missed.
-  const migrated = migrateDegree(degree as unknown as Record<string, unknown>, false) as Record<string, unknown>;
-  return DEGREE_DATA_KEYS.some((k) => hasValue(migrated[k]));
+/**
+ * True when this qualification entry has anything the view would show - see
+ * degreeHasData. Checked on the RAW stored value, before resolveDegree fills in
+ * EMPTY_DEGREE's placeholders (a blank Year of Passing/Award defaults to the
+ * current calendar year for the edit form, which must never be read back as
+ * "this entry has data"), and a cleared year (stored as 0) counts as blank.
+ */
+export function hasDegreeData(degree: DegreeDetail | undefined, level?: DegreeLevel): boolean {
+  return degreeHasData(degree, level);
 }
 
 export function DegreeView({
@@ -825,7 +817,7 @@ export function DegreeView({
 }: { label: string; degree: DegreeDetail | undefined; level?: DegreeLevel }) {
   // Nothing was ever entered for this qualification level - don't render an
   // empty card just because the slot exists in the schema.
-  if (!hasDegreeData(degreeInput)) return null;
+  if (!hasDegreeData(degreeInput, level)) return null;
   const degree = resolveDegree(degreeInput, level === "DOCTORAL" || level === "POST_DOCTORAL");
   const isDoctoral = level === "DOCTORAL";
   const isDoctoralOrPostDoc = level === "DOCTORAL" || level === "POST_DOCTORAL";
@@ -867,15 +859,15 @@ export function DegreeView({
       <OptionalField label="Place" value={degree?.place} />
       {!isDoctoral && <OptionalField label="Percentage / CGPA" value={degree?.percentageCgpa} />}
       {isDoctoral && degree?.percentageCgpa && <OptionalField label="Percentage / CGPA (legacy)" value={degree.percentageCgpa} />}
-      {isDoctoralOrPostDoc && <OptionalField label="Year of Registration" value={degree?.yearOfRegistration} />}
+      {isDoctoralOrPostDoc && <OptionalField label="Year of Registration" value={isRealYear(degree?.yearOfRegistration) ? degree?.yearOfRegistration : undefined} />}
       {isDoctoralOrPostDoc ? (
         degree?.status === "AWARDED" ? (
-          <OptionalField label="Year of Award" value={degreeYear(degree, true)} />
+          <OptionalField label="Year of Award" value={isRealYear(degreeYear(degree, true)) ? degreeYear(degree, true) : undefined} />
         ) : degree?.status === "PURSUING" ? (
           <OptionalField label="Name of the Guide / Supervisor" value={degree?.nameOfTheGuideSupervisor} />
         ) : null
       ) : (
-        <OptionalField label="Year of Passing" value={degreeYear(degree, false)} />
+        <OptionalField label="Year of Passing" value={isRealYear(degreeYear(degree, false)) ? degreeYear(degree, false) : undefined} />
       )}
       <OptionalField label="Hall Ticket Number" value={degree?.hallTicketNumber} />
       {degree?.certificateUrl && (

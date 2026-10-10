@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Wallet, Share2 } from "lucide-react";
+import Link from "next/link";
+import { Wallet, Share2, Mail, Upload } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/shared/Avatar";
 import { toast } from "@/hooks/useToast";
+import { ChangeCollegeEmailDialog } from "@/components/faculty/ChangeCollegeEmailDialog";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { DESIGNATION_LABELS } from "@/types";
 import type { FacultyMember, Designation } from "@/types";
@@ -22,6 +24,7 @@ export default function CollegeOfficeFacultyPage() {
   const router = useRouter();
   const [faculty, setFaculty] = useState<FacultyRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [emailTarget, setEmailTarget] = useState<{ id: string; employeeId: string; name: string } | null>(null);
 
   useEffect(() => {
     fetch("/api/college/faculty")
@@ -70,6 +73,12 @@ export default function CollegeOfficeFacultyPage() {
           <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); router.push(`/college-office/faculty/${row.id}/promotion-salary`); }}>
             <Wallet className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">Promotion & Salary</span>
           </Button>
+          <Button
+            variant="ghost" size="sm"
+            onClick={(e) => { e.stopPropagation(); setEmailTarget({ id: row.id as string, employeeId: (row.employeeId as string) ?? "", name: facultyDisplayName(row) || (row.employeeId as string) }); }}
+          >
+            <Mail className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">Change College Email</span>
+          </Button>
           <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); copyPublicProfileLink(row); }}>
             <Share2 className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">Copy Public Link</span>
           </Button>
@@ -80,7 +89,15 @@ export default function CollegeOfficeFacultyPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Faculty" description="Update promotion history and salary details for faculty" />
+      <PageHeader
+        title="Faculty"
+        description="Update promotion history and salary details, and change a faculty member's college email"
+        actions={
+          <Button variant="outline" asChild>
+            <Link href="/college-office/faculty/college-email-import"><Upload className="mr-2 h-4 w-4" />Bulk Update College Emails</Link>
+          </Button>
+        }
+      />
 
       <DataTable
         data={faculty}
@@ -93,6 +110,12 @@ export default function CollegeOfficeFacultyPage() {
         paginate={false}
         groupBy={(row) => (row.department as string) || "Unassigned"}
         emptyTitle="No faculty records yet"
+      />
+
+      <ChangeCollegeEmailDialog
+        faculty={emailTarget}
+        onClose={() => setEmailTarget(null)}
+        onChanged={(id, email) => setFaculty((rows) => rows.map((r) => (r.id === id ? ({ ...r, collegeEmail: email } as FacultyRow) : r)))}
       />
     </div>
   );

@@ -5,6 +5,7 @@ import { onIdTokenChanged, signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase/client";
 import { getUserById } from "@/lib/firestore/users";
 import { useAuthStore } from "@/store/authStore";
+import { endSessionNow } from "@/hooks/useSessionRevocationWatch";
 import type { FMSUser, UserRole } from "@/types";
 import { LOCATION_SCOPED_ROLES, ROLE_SCOPE } from "@/types";
 
@@ -60,6 +61,11 @@ export function useAuth() {
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ token }),
             });
+            // Signed out everywhere (api/auth/session answers 401 SESSION_REVOKED): end this browser's session too.
+            if (res.status === 401 && (await res.clone().json().catch(() => ({})) as { code?: string }).code === "SESSION_REVOKED") {
+              await endSessionNow("Your login details were changed - please sign in again.");
+              return;
+            }
             if (res.ok) {
               const data = await res.json() as {
                 role?: string; realRole?: string; roles?: string[]; delegatedDepartments?: string[]; collegeId?: string; locationId?: string;
@@ -93,6 +99,11 @@ export function useAuth() {
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ token }),
             });
+            // Signed out everywhere (api/auth/session answers 401 SESSION_REVOKED): end this browser's session too.
+            if (res.status === 401 && (await res.clone().json().catch(() => ({})) as { code?: string }).code === "SESSION_REVOKED") {
+              await endSessionNow("Your login details were changed - please sign in again.");
+              return;
+            }
             if (res.ok) {
               const data = await res.json() as { roles?: string[]; realRole?: string; delegatedDepartments?: string[]; readOnlyAccess?: boolean };
               serverRoles = data.roles as UserRole[] | undefined;

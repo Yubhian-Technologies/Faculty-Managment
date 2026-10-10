@@ -36,13 +36,15 @@ interface Props {
   staff: Partial<SupportingStaffMember>;
   basePath: string; // e.g. "/college-office/non-technical-staff/abc123"
   backHref?: string;
+  /** Appended to every module link (e.g. "?back=..."), so a page opened from a list keeps its way back. */
+  linkQuery?: string;
   editHref?: string;
 }
 
 // Landing page for a Supporting Staff member's details - identity summary +
 // one tile per module, mirroring FacultyProfileHub (see that file's own
 // comment) but for the simpler SupportingStaffProfileFields shape.
-export function SupportingStaffProfileHub({ staff, basePath, backHref, editHref }: Props) {
+export function SupportingStaffProfileHub({ staff, basePath, backHref, editHref, linkQuery }: Props) {
   const designationLabel = staff.designation === "OTHER" && staff.otherDesignationTitle
     ? staff.otherDesignationTitle
     : staff.designation
@@ -105,7 +107,7 @@ export function SupportingStaffProfileHub({ staff, basePath, backHref, editHref 
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {modules.map((m) => (
-          <Link key={m.key} href={`${basePath}/${m.key}`}>
+          <Link key={m.key} href={`${basePath}/${m.key}${linkQuery ?? ""}`}>
             <Card className="cursor-pointer hover:border-primary hover:shadow-md transition-all duration-200">
               <CardContent className="p-5 flex items-center justify-between">
                 <div className="flex items-center gap-3">

@@ -1,17 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { FacultyProfileHub } from "@/components/faculty/FacultyProfileHub";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { toast } from "@/hooks/useToast";
+import { LIST_BACK_PARAM, resolveListBack, withListBack } from "@/lib/listReturn";
 import type { FacultyMember } from "@/types";
 
 export default function HodFacultyViewPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const facultyId = params.id;
+  // The Faculty Register as this profile was opened from (status tab, department).
+  const listHref = resolveListBack(useSearchParams(), "/hod/faculty");
 
   const [faculty, setFaculty] = useState<FacultyMember | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -24,14 +27,14 @@ export default function HodFacultyViewPage() {
       .then((d) => {
         if (!d.faculty) {
           toast({ variant: "destructive", title: "Faculty record not found" });
-          router.push("/hod/faculty");
+          router.push(listHref);
           return;
         }
         setFaculty(d.faculty);
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load faculty record" }))
       .finally(() => setIsLoading(false));
-  }, [facultyId, router]);
+  }, [facultyId, router, listHref]);
 
   async function handleReRegisterFace() {
     setIsResetting(true);
@@ -63,8 +66,9 @@ export default function HodFacultyViewPage() {
       <FacultyProfileHub
         faculty={faculty}
         basePath={`/hod/faculty/${facultyId}`}
-        backHref="/hod/faculty"
-        editHref={`/hod/faculty/${facultyId}/edit`}
+        backHref={listHref}
+        linkQuery={listHref !== "/hod/faculty" ? `?${LIST_BACK_PARAM}=${encodeURIComponent(listHref)}` : ""}
+        editHref={withListBack(`/hod/faculty/${facultyId}/edit`, listHref, "/hod/faculty")}
         onReRegisterFace={() => setConfirmingReRegister(true)}
       />
 

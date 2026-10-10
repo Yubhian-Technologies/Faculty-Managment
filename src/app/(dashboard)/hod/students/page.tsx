@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Shuffle, Pencil, ArrowRightLeft, CalendarCheck, Search, Filter, Users } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import type { Column } from "@/components/shared/DataTable";
@@ -37,6 +37,12 @@ import {
   rollupDepartmentNamesForPick,
 } from "@/lib/departments/departmentTree";
 import { useSectionDepartmentState } from "@/hooks/useSectionDepartments";
+import {
+  HOD_STUDENTS_LIST_PATH,
+  buildHodStudentsListUrl,
+  parseHodStudentsListState,
+  withHodStudentsBack,
+} from "@/lib/students/hodListReturn";
 
 
 type BulkMode = "move" | "unassign";
@@ -46,8 +52,6 @@ interface BulkPlan {
   moves: { id: string; name: string; rollNumber: string; from: string; to: string }[];
   skipped: { id: string; name: string; reason: string }[];
 }
-
-const DEFAULT_PAGE_SIZE = 20;
 
 const STATUS_VARIANTS: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
   REGULAR: "default",
@@ -73,8 +77,14 @@ const HOD_VIEWS = [
   { key: "strength", label: "Students Strength" },
 ] as const;
 
-export default function HodStudentsPage() {
+function HodStudentsContent() {
   const router = useRouter();
+  // The list's state as the address bar describes it: what the list was showing
+  // (filters, search, page, page size) when a student's profile was opened from
+  // it, or when the page was refreshed. Read once, on arrival; the list then
+  // mirrors its own state back into the URL (listUrl below).
+  const searchParams = useSearchParams();
+  const [restored] = useState(() => parseHodStudentsListState(searchParams));
   const [view, setView] = useState<(typeof HOD_VIEWS)[number]["key"]>("roster");
   // Only the CURRENT PAGE of the roster (or of the read-only incoming list) is
   // ever held here - never the whole department. The list is fetched on Load
@@ -83,19 +93,25 @@ export default function HodStudentsPage() {
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [total, setTotal] = useState(0);
   const [unassignedTotal, setUnassignedTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const [hasLoaded, setHasLoaded] = useState(false);
-  const [isFetching, setIsFetching] = useState(false);
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [page, setPage] = useState(restored.page);
+  const [pageSize, setPageSize] = useState(restored.pageSize);
+  // A restored list loads itself on arrival (no second press of Load), so it
+  // starts out loading rather than flashing the empty state.
+  const [hasLoaded, setHasLoaded] = useState(restored.load);
+  const [isFetching, setIsFetching] = useState(restored.load);
+  const [search, setSearch] = useState(restored.search);
+  const [debouncedSearch, setDebouncedSearch] = useState(restored.search.trim().toLowerCase());
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The list request returns every matching id (signed, in display order) plus
   // one page; later pages are fetched by id, so paging reads only that page's
   // documents. Rows already fetched are kept, so revisiting a page is free.
   const orderedIds = useRef<string[]>([]);
   const rowCache = useRef(new Map<string, StudentRow>());
-  const pageSizeRef = useRef(DEFAULT_PAGE_SIZE);
+  const pageSizeRef = useRef(restored.pageSize);
+  // The page the first load of a restored list opens on; every later load
+  // starts from page 1 again. Cleared once a load has succeeded (not when it
+  // starts), so a repeated effect run still asks for the same page.
+  const restorePageRef = useRef(restored.load ? restored.page : 1);
   const requestSeq = useRef(0);
   // Department names this HOD's students can be filed under, and the Freshman's
   // Departments currently holding students pre-registered to them - both from
@@ -112,13 +128,13 @@ export default function HodStudentsPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [deptFilter, setDeptFilter] = useState("all");
-  const [coreDeptFilter, setCoreDeptFilter] = useState("all");
+  const [deptFilter, setDeptFilter] = useState(restored.deptFilter);
+  const [coreDeptFilter, setCoreDeptFilter] = useState(restored.coreDeptFilter);
   // Matches the College Office Students page's own filter row (Course/
   // Department/Year) - this table previously only offered Department, with no
   // way to narrow a large mixed roster down to one course or year at a glance.
-  const [courseFilter, setCourseFilter] = useState("all");
-  const [yearFilter, setYearFilter] = useState("all");
+  const [courseFilter, setCourseFilter] = useState(restored.courseFilter);
+  const [yearFilter, setYearFilter] = useState(restored.yearFilter);
   // "none" = the normal, manageable roster below (this HOD's own students -
   // accessLevel "primary"). Any other value is one of the Freshman's
   // Departments currently holding students pre-registered toward one of this
@@ -128,7 +144,7 @@ export default function HodStudentsPage() {
   // route, and still deliberately view-only (no Assign/Edit) - these aren't
   // this HOD's students to manage until they're actually distributed/
   // promoted into one of their own real sections.
-  const [freshmanView, setFreshmanView] = useState("none");
+  const [freshmanView, setFreshmanView] = useState(restored.freshmanView);
 
   const [distributeOpen, setDistributeOpen] = useState(false);
   const [distDept, setDistDept] = useState("");
@@ -224,7 +240,12 @@ export default function HodStudentsPage() {
   useEffect(() => {
     // Wrapped so the loader's setState calls aren't synchronously reachable
     // from the effect body (react-hooks/set-state-in-effect).
-    void (async () => { await loadMetadata(); })();
+    // A restored list is already loading itself; its sections (for the Assign /
+    // Move / Distribute dialogs) are read the same way Load would have.
+    void (async () => {
+      await Promise.all([loadMetadata(), restored.load ? loadSections() : Promise.resolve()]);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // The Department/Course/Year filters (or, in the Freshman's Department view,
@@ -264,6 +285,7 @@ export default function HodStudentsPage() {
       setTotal(json.total ?? 0);
       setUnassignedTotal(json.unassignedTotal ?? 0);
       setPage(json.page ?? targetPage);
+      restorePageRef.current = 1;
     } catch {
       if (seq === requestSeq.current) toast({ variant: "destructive", title: "Failed to load students" });
     } finally {
@@ -273,10 +295,28 @@ export default function HodStudentsPage() {
 
   // Once loaded, a changed filter, Freshman's Department or search fetches the
   // first page again (the page SIZE is read from a ref so changing it doesn't).
+  // The very first load of a list restored from the URL opens on its saved page.
   useEffect(() => {
     if (!hasLoaded) return;
-    void (async () => { await executeLoad(1, pageSizeRef.current); })();
+    void (async () => { await executeLoad(restorePageRef.current, pageSizeRef.current); })();
   }, [hasLoaded, executeLoad]);
+
+  // The list's own URL: what is loaded, with its filters, search, page and page
+  // size. Kept in the address bar (no navigation, no reload) so a refresh or the
+  // browser's Back button restores the same view, and carried to a student's
+  // profile in `?back=` so that page's Back button returns to it.
+  const listUrl = useMemo(
+    () => buildHodStudentsListUrl({
+      load: hasLoaded, freshmanView, deptFilter, coreDeptFilter, courseFilter, yearFilter,
+      search: debouncedSearch, page, pageSize,
+    }),
+    [hasLoaded, freshmanView, deptFilter, coreDeptFilter, courseFilter, yearFilter, debouncedSearch, page, pageSize]
+  );
+  useEffect(() => {
+    if (typeof window === "undefined" || window.location.pathname !== HOD_STUDENTS_LIST_PATH) return;
+    const current = window.location.pathname + window.location.search;
+    if (current !== listUrl) window.history.replaceState(window.history.state, "", listUrl);
+  }, [listUrl]);
 
   // A later page (or a new page size) of the list already loaded: only the ids
   // not already fetched are read.
@@ -1167,7 +1207,7 @@ export default function HodStudentsPage() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => router.push(`/hod/students/${r.id}/attendance?name=${encodeURIComponent(r.name)}`)}
+            onClick={() => router.push(withHodStudentsBack(`/hod/students/${r.id}/attendance?name=${encodeURIComponent(r.name)}`, listUrl))}
             title="View attendance history"
           >
             <CalendarCheck className="h-3.5 w-3.5" />
@@ -1552,11 +1592,11 @@ export default function HodStudentsPage() {
                   {students.map((row) => (
                     <tr
                       key={row.id}
-                      onClick={() => router.push(`/hod/students/${row.id}`)}
+                      onClick={() => router.push(withHodStudentsBack(`/hod/students/${row.id}`, listUrl))}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
-                          router.push(`/hod/students/${row.id}`);
+                          router.push(withHodStudentsBack(`/hod/students/${row.id}`, listUrl));
                         }
                       }}
                       tabIndex={0}
@@ -1697,5 +1737,13 @@ export default function HodStudentsPage() {
         handleAssign={handleAssign} handleUnassign={handleUnassign}
       />
     </div>
+  );
+}
+
+export default function HodStudentsPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground animate-pulse">Loading students...</div>}>
+      <HodStudentsContent />
+    </Suspense>
   );
 }

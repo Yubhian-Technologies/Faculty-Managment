@@ -1,17 +1,22 @@
 "use client";
 
+import { Suspense } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
 import { UsersRound } from "lucide-react";
 import { FacultyTimelineView } from "@/components/faculty/FacultyTimelineView";
 import type { Department } from "@/types";
+import { useReturnTo } from "@/hooks/useReturnTo";
+import { withReturnTo } from "@/lib/faculty/returnTo";
 
 // Same Faculty Timeline tab as the HOD's Faculty Register (see
 // FacultyTimelineView), scoped to this one department - reached from the
 // department's own faculty list (principal/faculty/[deptId]/page.tsx) via its
 // filterComponent, same placement (right after the search bar) as hod/faculty.
-export default function PrincipalDepartmentFacultyTimelinePage() {
+function PrincipalDepartmentFacultyTimelineContent() {
   const { deptId } = useParams<{ deptId: string }>();
+  // The department list (status tab) this page was opened from, when it was.
+  const returnTo = useReturnTo();
 
   const { data: departments = [] } = useQuery({
     queryKey: ["principal-faculty-departments"],
@@ -36,9 +41,17 @@ export default function PrincipalDepartmentFacultyTimelinePage() {
   return (
     <FacultyTimelineView
       fetchUrl={`/api/college/faculty?department=${encodeURIComponent(department.name)}`}
-      backHref={`/principal/faculty/${deptId}`}
+      backHref={returnTo ?? `/principal/faculty/${deptId}`}
       backLabel="Back to Department Faculty"
-      rowHref={(row) => `/principal/faculty/${deptId}/${row.id}`}
+      rowHref={(row) => withReturnTo(`/principal/faculty/${deptId}/${row.id}`, returnTo)}
     />
+  );
+}
+
+export default function PrincipalDepartmentFacultyTimelinePage() {
+  return (
+    <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
+      <PrincipalDepartmentFacultyTimelineContent />
+    </Suspense>
   );
 }

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { resolveListBack, withListBack } from "@/lib/listReturn";
 import Link from "next/link";
 import { ArrowLeft, Users, UserCog, BookOpen, Search, Pencil, UserCheck } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -38,6 +39,8 @@ function sortSubjects(subjects: Subject[]) {
 export default function SectionRosterPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  // The Sections list as this page was opened from (filters, page).
+  const listHref = resolveListBack(useSearchParams(), "/hod/sections");
   const [section, setSection] = useState<SectionRow | null>(null);
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
@@ -219,7 +222,7 @@ export default function SectionRosterPage() {
         <PageHeader
           title="Section not found"
           description=""
-          actions={<Button variant="outline" asChild><Link href="/hod/sections"><ArrowLeft className="h-4 w-4 mr-1" />Back to Sections</Link></Button>}
+          actions={<Button variant="outline" asChild><Link href={listHref}><ArrowLeft className="h-4 w-4 mr-1" />Back to Sections</Link></Button>}
         />
       </div>
     );
@@ -233,13 +236,13 @@ export default function SectionRosterPage() {
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" asChild>
-              <Link href="/hod/sections">
+              <Link href={listHref}>
                 <ArrowLeft className="h-4 w-4 mr-1" />Back to Sections
               </Link>
             </Button>
             {section.accessLevel !== "secondary" && (
               <Button asChild>
-                <Link href={`/hod/sections/${id}/edit`}>
+                <Link href={withListBack(`/hod/sections/${id}/edit`, listHref, "/hod/sections")}>
                   <Pencil className="h-4 w-4 mr-1.5" />Edit Section & CR
                 </Link>
               </Button>

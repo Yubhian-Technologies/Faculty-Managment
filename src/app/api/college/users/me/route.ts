@@ -10,6 +10,7 @@ import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { degreeTypeError } from "@/lib/faculty/degreeType";
 import { withLegacyPersonalKeysDeleted } from "@/lib/faculty/legacyKeyDeletes";
 import { FieldValue } from "firebase-admin/firestore";
+import { changesFacultyLoginEmail, COLLEGE_EMAIL_CHANGE_REDIRECT_MESSAGE } from "@/lib/faculty/changeCollegeEmail";
 import { setLinkedFacultyPhoto } from "@/lib/faculty/syncFacultyPhoto";
 import { hasLinkedFacultyRecord, isSingleSourceCollege, singleSourceBlockFor } from "@/lib/faculty/singleSource";
 
@@ -55,6 +56,11 @@ export async function PATCH(request: Request) {
     const userSnap = await userRef.get();
     if (!userSnap.exists) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    // A faculty member's login email is changed by the College Office only (lib/faculty/changeCollegeEmail.ts).
+    if ((userSnap.data() as { role?: string } | undefined)?.role === "PANEL_MEMBER" && changesFacultyLoginEmail(userSnap.data() ?? {}, { email: body.email })) {
+      return NextResponse.json({ error: COLLEGE_EMAIL_CHANGE_REDIRECT_MESSAGE, code: "COLLEGE_EMAIL_MANAGED_BY_OFFICE" }, { status: 409 });
     }
 
     // Single source of truth (switch-gated, no-op elsewhere): a person who has a Faculty record keeps their
