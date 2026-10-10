@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -10,6 +10,7 @@ import { SupportingStaffModuleContent } from "@/components/supportingStaff/Suppo
 import { SUPPORTING_STAFF_MODULES, type SupportingStaffModuleKey } from "@/lib/supportingStaff/profileModules";
 import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
 import { toast } from "@/hooks/useToast";
+import { resolveListBack, withListBack } from "@/lib/listReturn";
 import type { SupportingStaffMember } from "@/types";
 
 // Read-only counterpart of hod/supporting-staff/[id]/[module]: same module
@@ -18,6 +19,8 @@ export default function PrincipalSupportingStaffModulePage() {
   const router = useRouter();
   const params = useParams<{ id: string; module: string }>();
   const staffId = params.id;
+  // The Supporting Staff list as this page was reached from (category tab).
+  const listHref = resolveListBack(useSearchParams(), "/principal/faculty/supporting-staff");
   const moduleKey = params.module as SupportingStaffModuleKey;
   const moduleDef = SUPPORTING_STAFF_MODULES[moduleKey];
 
@@ -31,14 +34,14 @@ export default function PrincipalSupportingStaffModulePage() {
       .then((d) => {
         if (!d.staff) {
           toast({ variant: "destructive", title: "Staff record not found" });
-          router.push("/principal/faculty/supporting-staff");
+          router.push(listHref);
           return;
         }
         setStaff(d.staff);
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load staff record" }))
       .finally(() => setIsLoading(false));
-  }, [staffId, moduleDef, router]);
+  }, [staffId, moduleDef, router, listHref]);
 
   if (!moduleDef) {
     return <p className="text-sm text-muted-foreground">Unknown section.</p>;
@@ -51,7 +54,7 @@ export default function PrincipalSupportingStaffModulePage() {
         description={supportingStaffDisplayName(staff)}
         actions={
           <Button variant="outline" asChild>
-            <Link href={`/principal/faculty/supporting-staff/${staffId}`}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
+            <Link href={withListBack(`/principal/faculty/supporting-staff/${staffId}`, listHref, "/principal/faculty/supporting-staff")}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
           </Button>
         }
       />

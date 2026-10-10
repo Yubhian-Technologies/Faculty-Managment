@@ -20,7 +20,9 @@ const TTL_MS = 20_000;
 //   "UNKNOWN" - the status lookup failed and there is no recent answer to reuse,
 //               so WRITES are denied (fail closed) while reads carry on as before.
 // It is absent for everyone else, so every other login/college is untouched.
-interface CacheEntry { at: number; held: string[]; realRole: string; readOnly?: "YES" | "UNKNOWN" }
+// `validAfter` (unix seconds) is users/{uid}.sessionsValidAfter: set when the login must be signed out everywhere (e.g. the
+// College Office changed the faculty member's college email) - every session cookie issued before it is refused.
+interface CacheEntry { at: number; held: string[]; realRole: string; readOnly?: "YES" | "UNKNOWN"; validAfter?: number }
 const cache = new Map<string, CacheEntry>();
 
 interface SessionLike {
@@ -30,6 +32,8 @@ interface SessionLike {
   roles?: string[];
   collegeId?: string;
   locationId?: string;
+  // When the session cookie's Firebase token was issued (unix seconds) - see api/auth/session. Absent on older cookies.
+  iat?: number;
 }
 
 // When the live lookup itself fails (Firestore error/outage) we no longer trust
@@ -64,7 +68,7 @@ async function resolveLiveRoleInfo(session: SessionLike): Promise<CacheEntry> {
     try {
       const snap = await getAdminDb().collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
       if (!snap.exists) return fallback;
-      const u = snap.data() as { role?: string; seatRoles?: string[]; isActive?: boolean };
+      const u = snap.data() as { role?: string; seatRoles?: string[]; isActive?: boolean; sessionsValidAfter?: number };
       // A deactivated account (e.g. a retired role login) loses access at once,
       // not when its cookie eventually expires.
       const rawRole = u.role ?? session.role;
@@ -77,7 +81,7 @@ async function resolveLiveRoleInfo(session: SessionLike): Promise<CacheEntry> {
       // the College Admin seat overrides even that - see SessionPayload.realRole.
       let realRole = rawRole === "COLLEGE_ADMIN" || rawRole === "DEPARTMENT_OFFICE" ? rawRole : session.role;
       if ((u.seatRoles ?? []).includes("COLLEGE_ADMIN")) realRole = "COLLEGE_ADMIN";
-      const entry: CacheEntry = { at: Date.now(), held, realRole };
+      const entry: CacheEntry = { at: Date.now(), held, realRole, ...(typeof u.sessionsValidAfter === "number" ? { validAfter: u.sessionsValidAfter } : {}) };
       // Read-only faculty (every college): the account is active and can be a faculty login. Any
       // other login skips this entirely - no extra read.
       if (held.length > 0 && isFacultyCapableRole(rawRole)) {
@@ -160,8 +164,23 @@ async function applyReadOnly(entry: CacheEntry): Promise<CacheEntry> {
   return req && isReadMethod(req.method) ? entry : { ...entry, held: [] };
 }
 
+// A login that was signed out everywhere (sessionsValidAfter) holds no roles for any session cookie issued before that
+// moment - a cookie with no `iat` is treated as older. Everyone without the field is untouched (no extra read: it comes
+// from the document this lookup already reads).
+function applySessionRevocation(entry: CacheEntry, session: SessionLike): CacheEntry {
+  if (entry.validAfter === undefined) return entry;
+  if (typeof session.iat === "number" && session.iat >= entry.validAfter) return entry;
+  return { ...entry, held: [] };
+}
+
+/** True when this session cookie was issued before the login was signed out everywhere. */
+export async function isSessionRevoked(session: SessionLike): Promise<boolean> {
+  const entry = await resolveLiveRoleInfo(session);
+  return entry.validAfter !== undefined && applySessionRevocation(entry, session).held.length === 0 && entry.held.length > 0;
+}
+
 export async function resolveHeldRoles(session: SessionLike): Promise<string[]> {
-  return (await applyReadOnly(await resolveLiveRoleInfo(session))).held;
+  return (await applyReadOnly(applySessionRevocation(await resolveLiveRoleInfo(session), session))).held;
 }
 
 // Live counterpart to SessionPayload.realRole (see verifySession.ts's
@@ -169,7 +188,7 @@ export async function resolveHeldRoles(session: SessionLike): Promise<string[]> 
 // short TTL as resolveHeldRoles, so a role change takes effect within the
 // cache window instead of only once the session cookie naturally expires.
 export async function resolveRealRole(session: SessionLike): Promise<string> {
-  return (await applyReadOnly(await resolveLiveRoleInfo(session))).realRole;
+  return (await applyReadOnly(applySessionRevocation(await resolveLiveRoleInfo(session), session))).realRole;
 }
 
 // Called right after a seat changes so the affected people don't wait out the

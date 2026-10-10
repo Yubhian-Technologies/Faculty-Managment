@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { firebaseAuthErrorResponse } from "@/lib/http/firebaseErrors";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { changesFacultyLoginEmail, COLLEGE_EMAIL_CHANGE_REDIRECT_MESSAGE } from "@/lib/faculty/changeCollegeEmail";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireSuperAdmin } from "@/lib/auth/verifySession";
@@ -119,6 +120,15 @@ export async function PATCH(
     }
     if (!collegeId) {
       return NextResponse.json({ error: "collegeId required" }, { status: 400 });
+    }
+
+    // A faculty member's login email is changed by the College Office only (lib/faculty/changeCollegeEmail.ts) - this
+    // editor wrote users.collegeEmail without touching Firebase Auth or the Faculty record.
+    if (email !== undefined || collegeEmail !== undefined) {
+      const stored = (await db.collection("colleges").doc(collegeId).collection("users").doc(uid).get()).data() as { role?: string; email?: string; collegeEmail?: string } | undefined;
+      if (stored?.role === "PANEL_MEMBER" && changesFacultyLoginEmail(stored, { email, collegeEmail })) {
+        return NextResponse.json({ error: COLLEGE_EMAIL_CHANGE_REDIRECT_MESSAGE, code: "COLLEGE_EMAIL_MANAGED_BY_OFFICE" }, { status: 409 });
+      }
     }
 
     // Reset Password only ever sends { collegeId, newPassword } - this was

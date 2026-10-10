@@ -187,10 +187,6 @@ export default function EditMyProfileIdentityPage() {
         <Card className="mt-6">
           <CardHeader><CardTitle className="text-base">Identity & Employment</CardTitle></CardHeader>
           <CardContent className="space-y-5">
-            <p className="text-xs text-muted-foreground -mt-2">
-              Employee ID, College Email, Department, Designation, Employee Category, and Date of Joining are set by your HOD/Principal and can&apos;t be changed here.
-            </p>
-
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Employee ID</Label>

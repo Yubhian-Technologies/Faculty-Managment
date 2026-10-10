@@ -12,6 +12,7 @@ import { readOnlyHiddenHrefs } from "@/components/layout/readOnlyNav";
 import { isPathHidden } from "@/components/layout/navConfig";
 import { useAuthStore } from "@/store/authStore";
 import { useNavVisibility } from "@/hooks/useNavVisibility";
+import { useSessionRevocationWatch } from "@/hooks/useSessionRevocationWatch";
 import { DashboardSkeleton } from "@/components/shared/SkeletonLoader";
 
 // Pages reached only from a button on another page have no nav item, so Nav
@@ -27,6 +28,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const pathname = usePathname();
   const { hiddenModules, hiddenItems, loading: navLoading } = useNavVisibility();
+  // A login signed out everywhere (e.g. its college email was changed) is signed out here too, within about a minute.
+  useSessionRevocationWatch(!!user);
 
   useEffect(() => {
     if (!isLoading && !user) {

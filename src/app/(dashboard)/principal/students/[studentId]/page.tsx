@@ -1,9 +1,12 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { StudentDetailsPage } from "@/components/students/StudentDetailsPage";
+import { resolveListBack } from "@/lib/listReturn";
 
 export default function PrincipalStudentDetailsPage() {
   const { studentId } = useParams<{ studentId: string }>();
-  return <StudentDetailsPage studentId={studentId} backHref="/principal/students" lifecycle canReinstate />;
+  // Back returns to the list exactly as it was opened from (tab, filters, search, page).
+  const backHref = resolveListBack(useSearchParams(), "/principal/students");
+  return <StudentDetailsPage studentId={studentId} backHref={backHref} lifecycle canReinstate />;
 }

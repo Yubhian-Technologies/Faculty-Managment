@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { Suspense, useEffect, useState, useMemo } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   FileBadge2,
@@ -24,20 +25,35 @@ import {
 } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import type { LocationStaffMember, LocationDepartment, LocationShift } from "@/types/locationStaff";
+import { useListUrlSync } from "@/hooks/useListUrlSync";
+import { buildListUrl, readListString, withListBack } from "@/lib/listReturn";
 
-export default function CampusStaffDirectoryPage() {
+const LIST_PATH = "/location-staff-admin/staff";
+
+function CampusStaffDirectoryContent() {
+  // The search and filters this directory was showing when a profile was opened
+  // from it, or when the page was refreshed - read once, on arrival; the page then
+  // mirrors them back into the URL (listUrl below) and carries it to the profile
+  // in `?back=` so its Back button returns to the same view.
+  const searchParams = useSearchParams();
   const [staffList, setStaffList] = useState<LocationStaffMember[]>([]);
   const [departments, setDepartments] = useState<LocationDepartment[]>([]);
   const [shifts, setShifts] = useState<LocationShift[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Filters
-  const [search, setSearch] = useState("");
-  const [selectedDeptId, setSelectedDeptId] = useState("ALL");
-  const [selectedRole, setSelectedRole] = useState("ALL");
-  const [selectedShiftId, setSelectedShiftId] = useState("ALL");
-  const [selectedPayee, setSelectedPayee] = useState("ALL");
-  const [selectedStatus, setSelectedStatus] = useState("ACTIVE");
+  const [search, setSearch] = useState(() => readListString(searchParams, "q", ""));
+  const [selectedDeptId, setSelectedDeptId] = useState(() => readListString(searchParams, "department", "ALL"));
+  const [selectedRole, setSelectedRole] = useState(() => readListString(searchParams, "role", "ALL"));
+  const [selectedShiftId, setSelectedShiftId] = useState(() => readListString(searchParams, "shift", "ALL"));
+  const [selectedPayee, setSelectedPayee] = useState(() => readListString(searchParams, "payee", "ALL"));
+  const [selectedStatus, setSelectedStatus] = useState(() => readListString(searchParams, "status", "ACTIVE"));
+  const listUrl = buildListUrl(
+    LIST_PATH,
+    { q: search, department: selectedDeptId, role: selectedRole, shift: selectedShiftId, payee: selectedPayee, status: selectedStatus },
+    { department: "ALL", role: "ALL", shift: "ALL", payee: "ALL", status: "ACTIVE" }
+  );
+  useListUrlSync(listUrl, LIST_PATH);
 
   useEffect(() => {
     let isCancelled = false;
@@ -263,7 +279,7 @@ export default function CampusStaffDirectoryPage() {
               staff.isDeptHead ||
               departments.some((d) => d.headStaffId === staff.id || d.headUid === staff.id);
             return (
-              <Link key={staff.id} href={`/location-staff-admin/staff/${staff.id}`} className="block">
+              <Link key={staff.id} href={withListBack(`/location-staff-admin/staff/${staff.id}`, listUrl, LIST_PATH)} className="block">
               <Card
                 className="border-border/80 shadow-xs hover:border-primary/40 transition-colors cursor-pointer flex flex-col justify-between"
               >
@@ -339,5 +355,13 @@ export default function CampusStaffDirectoryPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function CampusStaffDirectoryPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground animate-pulse">Loading directory...</div>}>
+      <CampusStaffDirectoryContent />
+    </Suspense>
   );
 }

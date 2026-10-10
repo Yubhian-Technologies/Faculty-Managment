@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { resolveListBack } from "@/lib/listReturn";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -60,6 +61,8 @@ export default function EditSectionPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const sectionId = params.id;
+  // The Sections list as this page was reached from (filters, page).
+  const listHref = resolveListBack(useSearchParams(), "/hod/sections");
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -135,7 +138,7 @@ export default function EditSectionPage() {
         const s = (d.sections ?? []).find((x) => x.id === sectionId);
         if (!s) {
           toast({ variant: "destructive", title: "Section not found" });
-          router.push("/hod/sections");
+          router.push(listHref);
           return;
         }
         setSectionName(s.name);
@@ -163,7 +166,7 @@ export default function EditSectionPage() {
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load section" }))
       .finally(() => setLoading(false));
-  }, [sectionId, router]);
+  }, [sectionId, router, listHref]);
 
   // Fetch section students for CR selection dropdown
   useEffect(() => {
@@ -406,7 +409,7 @@ export default function EditSectionPage() {
       }
 
       toast({ variant: "success", title: "Section updated" });
-      router.push("/hod/sections");
+      router.push(listHref);
     } catch {
       toast({ variant: "destructive", title: "Network error, please try again" });
     } finally {

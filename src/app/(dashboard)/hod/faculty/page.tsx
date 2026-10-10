@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { UserPlus, Eye, Upload, Trash2, LogIn, FileDown, UserCog, History, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
@@ -23,6 +23,8 @@ import type { ResumeSectionKey } from "@/lib/pdf/resumeSections";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { FacultyMember, CollegeType, Department } from "@/types";
+import { useListUrlSync } from "@/hooks/useListUrlSync";
+import { buildListUrl, readListChoice, readListString, withListBack } from "@/lib/listReturn";
 
 type FacultyRow = Record<string, unknown> & FacultyMember;
 
@@ -36,14 +38,34 @@ const SELECT_CHECKBOX_CLASS =
   "data-[state=checked]:border-primary data-[state=indeterminate]:border-primary " +
   "data-[state=indeterminate]:bg-primary data-[state=indeterminate]:text-primary-foreground";
 
-export default function HODFacultyPage() {
+const LIST_PATH = "/hod/faculty";
+
+const STATUS_TABS = [
+  { key: "", label: "All" },
+  { key: "INTERVIEW_DONE", label: "Interview Done" },
+  { key: "ACTIVE", label: "Active" },
+  { key: "RETAINERSHIP", label: "Retainership" },
+  { key: "ON_LEAVE", label: "On Leave" },
+  { key: "RESIGNED", label: "Resigned" },
+  { key: "RETIRED", label: "Retired" },
+];
+
+function HODFacultyContent() {
   const router = useRouter();
   const pathname = usePathname();
+  // The status tab and department chip this register was showing when a profile
+  // was opened from it, or when the page was refreshed - read once, on arrival;
+  // the page then mirrors them back into the URL (listUrl below).
+  const searchParams = useSearchParams();
+  const [restored] = useState(() => ({
+    status: readListChoice(searchParams, "status", STATUS_TABS.map((t) => t.key).filter(Boolean), ""),
+    department: readListString(searchParams, "department", ""),
+  }));
   const [faculty, setFaculty] = useState<FacultyRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<string>(restored.status);
   // "" = every department in the roster; otherwise one department's faculty.
-  const [deptFilter, setDeptFilter] = useState<string>("");
+  const [deptFilter, setDeptFilter] = useState<string>(restored.department);
   // Export-only selection - when empty, ExportFacultyDialog exports everyone
   // in the register (unchanged default behavior); picking specific rows here
   // narrows it to just those faculty members.
@@ -228,15 +250,11 @@ export default function HODFacultyPage() {
     }
   }
 
-  const STATUS_TABS = [
-    { key: "", label: "All" },
-    { key: "INTERVIEW_DONE", label: "Interview Done" },
-    { key: "ACTIVE", label: "Active" },
-    { key: "RETAINERSHIP", label: "Retainership" },
-    { key: "ON_LEAVE", label: "On Leave" },
-    { key: "RESIGNED", label: "Resigned" },
-    { key: "RETIRED", label: "Retired" },
-  ];
+  // The register's own URL (status tab + department chip). Kept in the address
+  // bar so a refresh or the browser's Back button restores them, and carried to
+  // a profile in `?back=` so its Back button returns to the same view.
+  const listUrl = buildListUrl(LIST_PATH, { status: statusFilter, department: deptFilter });
+  useListUrlSync(listUrl, LIST_PATH);
 
   // Departments present in the roster - shown as filter chips once the register
   // spans more than one (an HOD of several departments, or one with
@@ -345,7 +363,7 @@ export default function HODFacultyPage() {
               size="sm"
               className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
               title="Create login account"
-              onClick={(e) => { e.stopPropagation(); router.push(`/hod/faculty/${row.id}/credentials`); }}
+              onClick={(e) => { e.stopPropagation(); router.push(withListBack(`/hod/faculty/${row.id}/credentials`, listUrl, LIST_PATH)); }}
             >
               <LogIn className="h-4 w-4" /><span className="sr-only">Set Login</span>
             </Button>
@@ -355,7 +373,7 @@ export default function HODFacultyPage() {
             size="sm"
             className="h-8 w-8 p-0"
             title="View profile"
-            onClick={(e) => { e.stopPropagation(); router.push(`/hod/faculty/${row.id}`); }}
+            onClick={(e) => { e.stopPropagation(); router.push(withListBack(`/hod/faculty/${row.id}`, listUrl, LIST_PATH)); }}
           >
             <Eye className="h-4 w-4" /><span className="sr-only">View</span>
           </Button>
@@ -374,7 +392,7 @@ export default function HODFacultyPage() {
             size="sm"
             className="h-8 w-8 p-0"
             title="Edit faculty details"
-            onClick={(e) => { e.stopPropagation(); router.push(`/hod/faculty/${row.id}/edit`); }}
+            onClick={(e) => { e.stopPropagation(); router.push(withListBack(`/hod/faculty/${row.id}/edit`, listUrl, LIST_PATH)); }}
           >
             <Pencil className="h-4 w-4" /><span className="sr-only">Edit</span>
           </Button>
@@ -465,7 +483,7 @@ export default function HODFacultyPage() {
                 const href = !d.hodUid
                   ? null
                   : facultyId
-                    ? `/hod/faculty/${facultyId}`
+                    ? withListBack(`/hod/faculty/${facultyId}`, listUrl, LIST_PATH)
                     : `/hod/faculty/new?linkUid=${encodeURIComponent(d.hodUid)}&department=${encodeURIComponent(d.name)}&name=${encodeURIComponent(d.hodName ?? "")}`;
                 const body = (
                   <>
@@ -518,7 +536,7 @@ export default function HODFacultyPage() {
         columns={columns}
         isLoading={isLoading}
         keyExtractor={(r) => r.id as string}
-        onRowClick={(row) => router.push(`/hod/faculty/${row.id}`)}
+        onRowClick={(row) => router.push(withListBack(`/hod/faculty/${row.id}`, listUrl, LIST_PATH))}
         searchPlaceholder="Search by name, email, employee ID..."
         searchKeys={["legalName", "nameAsPerPan", "email", "employeeId", "specialization"] as (keyof FacultyRow)[]}
         // A separate historical view (date-range filters over Date of
@@ -528,7 +546,7 @@ export default function HODFacultyPage() {
         // Faculty/Supporting Staff above, so it doesn't read as a third
         // staff category.
         filterComponent={
-          <Button variant="outline" size="sm" onClick={() => router.push("/hod/faculty/timeline")}>
+          <Button variant="outline" size="sm" onClick={() => router.push(withListBack("/hod/faculty/timeline", listUrl, LIST_PATH))}>
             <History className="h-4 w-4 mr-1" />Faculty Timeline
           </Button>
         }
@@ -580,5 +598,13 @@ export default function HODFacultyPage() {
         />
       )}
     </div>
+  );
+}
+
+export default function HODFacultyPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground animate-pulse">Loading faculty...</div>}>
+      <HODFacultyContent />
+    </Suspense>
   );
 }
