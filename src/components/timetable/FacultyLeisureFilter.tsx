@@ -133,13 +133,13 @@ export function FacultyLeisureFilter({ scopeLabel = "in the college" }: { scopeL
           </label>
 
           <label className="space-y-1">
-            <span className="text-xs text-muted-foreground">Time from</span>
-            <input type="time" aria-label="Time from" className={fieldClass} value={from} onChange={(e) => change(setFrom)(e.target.value)} />
+            <span className="text-xs text-muted-foreground">Time to</span>
+            <input type="time" aria-label="Time to" className={fieldClass} value={to} onChange={(e) => change(setTo)(e.target.value)} />
           </label>
 
           <label className="space-y-1">
-            <span className="text-xs text-muted-foreground">Time to</span>
-            <input type="time" aria-label="Time to" className={fieldClass} value={to} onChange={(e) => change(setTo)(e.target.value)} />
+            <span className="text-xs text-muted-foreground">Time from</span>
+            <input type="time" aria-label="Time from" className={fieldClass} value={from} onChange={(e) => change(setFrom)(e.target.value)} />
           </label>
         </div>
 

@@ -2970,6 +2970,39 @@ export interface StudentRecord {
   bankName?: string;
   ifscCode?: string;
   lastAttendedInstitution?: string;
+  // Admission-sheet details kept as typed (see rosterFields.ts's
+  // ADMISSION_SHEET_TEXT_KEYS): seat type, parents' occupation / income, and
+  // one block per previous qualification (SSC, Inter, Diploma, Degree).
+  seatType?: string;
+  fatherOccupation?: string;
+  motherOccupation?: string;
+  annualIncome?: string;
+  sscHallTicketNo?: string;
+  sscBoard?: string;
+  sscYearOfPass?: string;
+  sscMarks?: string;
+  sscPercentage?: string;
+  sscInstitution?: string;
+  sscGradePoints?: string;
+  interHallTicketNo?: string;
+  interBoard?: string;
+  interYearOfPass?: string;
+  interMarks?: string;
+  interPercentage?: string;
+  interInstitution?: string;
+  interGradePoints?: string;
+  diplomaHallTicketNo?: string;
+  diplomaBoard?: string;
+  diplomaYearOfPass?: string;
+  diplomaMarks?: string;
+  diplomaPercentage?: string;
+  diplomaInstitution?: string;
+  degreeHallTicketNo?: string;
+  degreeBoard?: string;
+  degreeYearOfPass?: string;
+  degreeMarks?: string;
+  degreePercentage?: string;
+  degreeInstitution?: string;
   distanceFromResidenceKm?: number;
   hosteller?: boolean;
   physicallyHandicapped?: boolean;

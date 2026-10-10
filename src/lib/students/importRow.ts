@@ -4,9 +4,10 @@
 // document shape stay in exactly one place.
 
 import { lateralEntryBatch } from "@/lib/college/academicSession";
+import { ADMISSION_SHEET_TEXT_KEYS } from "@/lib/students/rosterFields";
 import type { Section, StudentStatus } from "@/types";
 
-export interface StudentImportRow {
+export interface StudentImportRow extends Partial<Record<(typeof ADMISSION_SHEET_TEXT_KEYS)[number], string>> {
   // Optional: the Office often enrols students before roll numbers exist (stored as "" until one is set).
   rollNumber?: string;
   name: string;
@@ -201,6 +202,13 @@ export function buildStudentDoc(
     ...(parseYesNo(row.parentsWorkingOutside) !== undefined ? { parentsWorkingOutside: parseYesNo(row.parentsWorkingOutside) } : {}),
     ...(row.parentsWorkingOutsideDetails?.trim() ? { parentsWorkingOutsideDetails: row.parentsWorkingOutsideDetails.trim() } : {}),
     ...(row.remarks?.trim() ? { remarks: row.remarks.trim() } : {}),
+    // Seat type, parents' occupation / income and previous education - text, as typed.
+    ...Object.fromEntries(
+      ADMISSION_SHEET_TEXT_KEYS.flatMap((k) => {
+        const v = row[k] == null ? "" : String(row[k]).trim();
+        return v ? [[k, v]] : [];
+      })
+    ),
     createdAt: now,
     updatedAt: now,
   };
