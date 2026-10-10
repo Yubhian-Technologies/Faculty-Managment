@@ -12,7 +12,8 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle, Pencil } from "lucide-react";
-import { parseCSV, matchHeaders, getUnmatchedHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
+import { parseCSV, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
+import { resolveStudentImportHeaders, normalizeStudentImportRow } from "@/lib/students/importHeaders";
 import { ROSTER_FIELDS, ROSTER_SAMPLE_ROWS, EDITABLE_ROSTER_FIELDS, rosterFormToPayload } from "@/lib/students/rosterFields";
 import { RosterFormFields, FieldInput, secondaryDepartmentOptions, isSecondaryDepartmentRequired } from "@/components/students/RosterFieldInputs";
 import { resolveDepartmentByNameOrCode, resolveCourseByNameOrCode } from "@/lib/departments/codeOrNameResolver";
@@ -33,8 +34,13 @@ import { selectableYears } from "@/lib/college/courseYears";
 // The Office only knows a fresh student's basic details and which branch
 // (department) they're admitted into - section is still assigned later by the
 // department (the sub-HOD divides students into sections), so it's
-// deliberately NOT a column here. Roll Number is an OPTIONAL column (unique across
-// all colleges when given); Student Mobile No is REQUIRED and unique across all colleges.
+// deliberately NOT a column here. Roll Number is REQUIRED in this import and
+// unique across all colleges (it stays optional on the single Add Student
+// form); Student Mobile No is REQUIRED and unique across all colleges.
+//
+// The file may be the downloaded template OR the college's own admission
+// sheet (Sl.No, Roll.No, Admission.No, Student Name ...) - see
+// lib/students/importHeaders.ts for how that sheet's wording is read.
 //
 // "Branch" is still accepted as an alternate header for Department. "Course"
 // is NOT: the admission sheet carries both columns (programme in one, branch
@@ -51,11 +57,12 @@ import { selectableYears } from "@/lib/college/courseYears";
 // Derived from the shared roster field spec (src/lib/students/rosterFields.ts)
 // so the template, the Office students page's detail view, and its Add/Edit
 // forms can never drift apart - adding a column there adds it here.
+const ROLL_SAMPLE = "Required; the student's unique roll / registration number - must not be used by any other student";
 const COLUMNS = ROSTER_FIELDS.map((f) => ({
   key: f.key,
   label: f.label,
-  required: !!f.required,
-  sample: f.sample ?? "",
+  required: !!f.required || f.key === "rollNumber",
+  sample: f.key === "rollNumber" ? ROLL_SAMPLE : f.sample ?? "",
   ...(f.aliases ? { aliases: f.aliases } : {}),
 }));
 
@@ -108,9 +115,10 @@ const LOCKED_KEY_SET = new Set(["department", "year", "secondaryDepartment"]);
 const LOCKED_TEMPLATE_COLUMNS = [...COLUMNS.filter((c) => !LOCKED_KEY_SET.has(c.key)), PASSWORD_COLUMN];
 
 const HINTS = [
-  "Course, Department and Current year of Study are selected once above — they are not columns in the file. Name and Student Mobile No are the required fields in the file.",
-  "Roll No is optional - leave it blank if roll numbers aren't issued yet and set them later. When filled in it is the student's login username and must not be used by any other student in ANY college (or by another row in the same file) - upper/lower case, spaces and dashes don't make a roll different. A row with an already-used Roll No is skipped. A student needs a Roll No before a login can be created.",
-  "Student Mobile No is required: a 10-digit number (starting 6-9) that no other student in ANY college has - \"+91\", spaces and dashes are ignored. It is how roll numbers are matched to students later. A row with a missing, invalid or already-used Student Mobile No is skipped.",
+  "Course, Department and Current year of Study are selected once above — they are not columns in the file. Roll No, Name and Student Mobile No are the required fields in the file.",
+  "You can upload the downloaded template or your college's own admission sheet (Sl.No, Roll.No, Admission.No, Student Name ... Mother Mobile.No) as it is - its columns are recognised, Sl.No is ignored, Category is read as Caste and its Caste as Sub Caste, and dates typed as DD-MM-YYYY are accepted.",
+  "Roll No (Reg No) is required and must not be used by any other student in ANY college (or by another row in the same file) - upper/lower case, spaces and dashes don't make a roll different. It is the student's login username. A row with a missing or already-used Roll No is skipped.",
+  "Student Mobile No is required: a 10-digit number (starting 6-9) that no other student in ANY college has - \"+91\", spaces and dashes are ignored. A row with a missing, invalid or already-used Student Mobile No is skipped.",
   "Login Password (optional): when a row has one, that student's login is created with exactly this password (at least 8 characters, no leading/trailing space) and they sign in with their Roll No and it. It is never saved anywhere readable; students can change it, and you can reset it later. Leave it blank to create logins afterwards from the Students list.",
   "Name (as per SSC): enter the name exactly as it appears on the student's SSC (10th) certificate - this is the name used on statutory/academic paperwork.",
   "Section is NOT collected here - the department assigns it later (the sub-HOD divides students into sections). Every student is imported as \"unassigned\" until then.",
@@ -275,6 +283,7 @@ export function AddStudentsImport() {
   async function handleFixSave() {
     if (!fixTarget) return;
     const form = fixTarget.form;
+    if (!form.rollNumber?.trim()) { setFixError("Roll No is required"); return; }
     if (!form.name?.trim()) { setFixError("Name is required"); return; }
     if (!form.mobileNo?.trim()) { setFixError("Student Mobile No is required"); return; }
     if (!form.course) { setFixError("Course is required"); return; }
@@ -383,7 +392,8 @@ export function AddStudentsImport() {
 
       const headers = parsed[0].map((h) => h.trim());
       // Tolerant of case, punctuation, spacing, and alternate wording (e.g. "DOB" for Date of Birth).
-      const keyMap = matchHeaders(headers, columns);
+      // Also reads the college's own admission sheet - see importHeaders.ts.
+      const { keyMap, unmatched } = resolveStudentImportHeaders(headers, columns);
 
       // Check header matching BEFORE counting data rows - if nothing in the
       // header row matched, every row maps to an empty object and would
@@ -394,7 +404,6 @@ export function AddStudentsImport() {
         setParseError(`Only ${mappedCount} column(s) matched. Make sure the header row is the first row, and its wording is close to the template.`);
         return;
       }
-      const unmatched = getUnmatchedHeaders(headers, keyMap);
       if (unmatched.length > 0) {
         setParseError(`These column(s) don't match any template column, so nothing was imported: ${unmatched.map((h) => `"${h}"`).join(", ")}. Rename them to match the template or remove them, then re-upload.`);
         return;
@@ -405,7 +414,7 @@ export function AddStudentsImport() {
         cells.forEach((val, i) => {
           if (keyMap[i]) row[keyMap[i]] = val;
         });
-        return row;
+        return normalizeStudentImportRow(row);
       }).filter((r) => Object.values(r).some((v) => v.trim())); // skip fully-blank rows
 
       if (dataRows.length === 0) { setParseError("No data rows found after the header - check that your data starts on the row right after the header, with no blank rows in between."); return; }

@@ -65,7 +65,7 @@ export const ROSTER_FIELDS: RosterField[] = [
   // organised by. OPTIONAL: the Office often enrols students before roll numbers exist and sets them later (matched
   // by Student Mobile No). When given it is unique across the whole college (like a faculty member's employee id)
   // - see lib/students/rollNumberUniqueness.ts. A login needs one.
-  { key: "rollNumber", label: "Roll No", kind: "text", sample: "Optional; the student's unique roll / registration number - must not be used by any other student. Leave blank if not issued yet (needed before a login can be created)", primary: true, aliases: ["Roll Number"], placeholder: "24A91A0501" },
+  { key: "rollNumber", label: "Roll No", kind: "text", sample: "Optional; the student's unique roll / registration number - must not be used by any other student. Leave blank if not issued yet (needed before a login can be created)", primary: true, aliases: ["Roll Number", "Reg No", "Regd No", "Regno", "Register No", "Register Number", "Registration No", "Registration Number"], placeholder: "24A91A0501" },
   { key: "name", label: "Name (as per SSC)", kind: "text", sample: "Required; full name exactly as on SSC (10th) certificate", required: true, primary: true, aliases: ["Name", "Student Name", "Full Name"], placeholder: "P. Sai Kumar" },
   { key: "studentType", label: "Student Type", kind: "select", sample: "Optional: Regular / Lateral - defaults to Regular when left blank", primary: true, options: ["Regular", "Lateral"] },
   // Course/Department/Academic Year are always primary identity fields (the
@@ -83,21 +83,22 @@ export const ROSTER_FIELDS: RosterField[] = [
     aliases: ["Secondary Department", "Secondary Dept", "Core Branch"] },
   { key: "year", label: "Current year of Study", kind: "select", sample: "Required; the current year of study (1-4)", required: true, primary: true, aliases: ["Year", "Academic Year"] },
 
-  { key: "admissionNo", label: "Admission No", kind: "text", sample: "Optional; text" },
-  { key: "hallTicketNo", label: "Hall Ticket No", kind: "text", sample: "Optional; text" },
-  { key: "mobileNo", label: "Student Mobile No", kind: "text", sample: "Required; 10-digit mobile starting 6-9 - must be different for every student in every college (it is how roll numbers are matched to students later)", required: true, showInList: true, placeholder: "9876543210" },
+  { key: "admissionNo", label: "Admission No", kind: "text", sample: "Optional; text", aliases: ["Admission Number"] },
+  { key: "hallTicketNo", label: "Hall Ticket No", kind: "text", sample: "Optional; text", aliases: ["Hallticket Number", "Hall Ticket Number", "Hallticket No"] },
+  { key: "mobileNo", label: "Student Mobile No", kind: "text", sample: "Required; 10-digit mobile starting 6-9 - must be different for every student in every college (it is how roll numbers are matched to students later)", required: true, showInList: true, aliases: ["Mobile No", "Mobile Number", "Student Mobile"], placeholder: "9876543210" },
   { key: "dateOfAdmission", label: "Date of Admission (YYYY-MM-DD)", kind: "date", sample: "Optional; YYYY-MM-DD" },
   { key: "dateOfJoining", label: "Date of Joining (YYYY-MM-DD)", kind: "date", sample: "Optional; YYYY-MM-DD - the day the student joined classes; attendance is counted from this date (falls back to Date of Admission when blank)", aliases: ["Joining Date", "DOJ"] },
   { key: "admissionType", label: "Admission Type", kind: "text", sample: "Optional; e.g. Direct, Management, Convenor", placeholder: "Direct" },
+  { key: "seatType", label: "Seat Type", kind: "text", sample: "Optional; text" },
   { key: "entranceType", label: "Entrance Type", kind: "text", sample: "Optional; e.g. EAMCET, ECET, JEE", placeholder: "EAMCET" },
-  { key: "entranceRank", label: "Entrance Rank", kind: "text", sample: "Optional; text/number" },
+  { key: "entranceRank", label: "Entrance Rank", kind: "text", sample: "Optional; text/number", aliases: ["Rank"] },
   { key: "jeeRank", label: "JEE Rank", kind: "text", sample: "Optional; text/number" },
   { key: "jeePercentage", label: "JEE %", kind: "text", sample: "Optional; number, e.g. 95.5" },
   { key: "scholarship", label: "Scholarship (Yes/No)", kind: "yesno", sample: "Optional: Yes / No" },
   { key: "gender", label: "Gender", kind: "select", sample: "Optional: Male / Female / Other", options: ["Male", "Female", "Other"] },
   { key: "dateOfBirth", label: "Date of Birth (YYYY-MM-DD)", kind: "date", sample: "Optional; YYYY-MM-DD", aliases: ["DOB", "Date of Birth"] },
   { key: "bloodGroup", label: "Blood Group", kind: "text", sample: "Optional: A+ / A- / B+ / B- / AB+ / AB- / O+ / O-", placeholder: "O+" },
-  { key: "caste", label: "Caste", kind: "select", sample: `Optional: ${CASTE_OPTIONS.join(" / ")}`, options: [...CASTE_OPTIONS] },
+  { key: "caste", label: "Caste", kind: "select", sample: `Optional: ${CASTE_OPTIONS.join(" / ")}`, options: [...CASTE_OPTIONS], aliases: ["Category"] },
   { key: "subCaste", label: "Sub Caste", kind: "text", sample: "Optional; text" },
   { key: "religion", label: "Religion", kind: "text", sample: "Optional; e.g. Hindu, Muslim, Christian, Sikh, Jain, Parsi, Buddhist, Other" },
   { key: "nationality", label: "Nationality", kind: "text", sample: "Optional; text", placeholder: "Indian" },
@@ -106,25 +107,29 @@ export const ROSTER_FIELDS: RosterField[] = [
   // only for the (less common) case where someone else altogether holds
   // that role - "if any", left blank otherwise.
   { key: "fatherName", label: "Father Name", kind: "text", sample: "Optional; text", aliases: ["Father's Name"] },
-  { key: "fatherContactNo", label: "Father Contact Number", kind: "text", sample: "Optional; phone/text", aliases: ["Father Phone", "Father Mobile", "Father Contact"], placeholder: "9876543210" },
+  { key: "fatherContactNo", label: "Father Contact Number", kind: "text", sample: "Optional; phone/text", aliases: ["Father Phone", "Father Mobile", "Father Mobile No", "Father Contact"], placeholder: "9876543210" },
+  { key: "fatherOccupation", label: "Father Occupation", kind: "text", sample: "Optional; text" },
   { key: "motherName", label: "Mother Name", kind: "text", sample: "Optional; text", aliases: ["Mother's Name"] },
-  { key: "motherContactNo", label: "Mother Contact Number", kind: "text", sample: "Optional; phone/text", aliases: ["Mother Phone", "Mother Mobile", "Mother Contact"], placeholder: "9876543211" },
+  { key: "motherContactNo", label: "Mother Contact Number", kind: "text", sample: "Optional; phone/text", aliases: ["Mother Phone", "Mother Mobile", "Mother Mobile No", "Mother Contact"], placeholder: "9876543211" },
+  { key: "motherOccupation", label: "Mother Occupation", kind: "text", sample: "Optional; text" },
+  // "Annucal Income" is the spelling on the college's own admission sheet.
+  { key: "annualIncome", label: "Annual Income", kind: "text", sample: "Optional; text/number", aliases: ["Annucal Income", "Family Annual Income", "Parent Annual Income"] },
   { key: "guardianName", label: "Guardian Name (if any)", kind: "text", sample: "Optional; only when someone other than a parent is this student's guardian", aliases: ["Guardian"] },
   { key: "guardianContact", label: "Guardian Contact Number", kind: "text", sample: "Optional; phone/text", aliases: ["Guardian Contact", "Parent Contact", "Guardian Phone", "Parent Phone"], placeholder: "9876543212" },
   { key: "landLineNo", label: "Land Line No", kind: "text", sample: "Optional; text" },
   { key: "email", label: "Email", kind: "text", sample: "Optional; must contain @", aliases: ["Email ID"], placeholder: "student@example.com" },
-  { key: "aadharNo", label: "Aadhar Card No.", kind: "text", sample: "Optional; text", aliases: ["Aadhar No"] },
+  { key: "aadharNo", label: "Aadhar Card No.", kind: "text", sample: "Optional; text", aliases: ["Aadhar No", "Adhar Card No", "Adhar No", "Aadhaar Card No", "Aadhaar No"] },
   { key: "rationCardNo", label: "Ration Card No", kind: "text", sample: "Optional; text" },
-  { key: "bankAccountNo", label: "Student Bank A/C No.", kind: "text", sample: "Optional; text" },
+  { key: "bankAccountNo", label: "Student Bank A/C No.", kind: "text", sample: "Optional; text", aliases: ["Bank A/C No", "Bank Account No"] },
   { key: "bankName", label: "Bank Name", kind: "text", sample: "Optional; text" },
   { key: "ifscCode", label: "IFSC Code", kind: "text", sample: "Optional; text", placeholder: "SBIN0001234" },
   { key: "lastAttendedInstitution", label: "Last Attended Institution", kind: "text", sample: "Optional; text" },
-  { key: "distanceFromResidenceKm", label: "Distance From Res. To College (km)", kind: "number", sample: "Optional; number" },
+  { key: "distanceFromResidenceKm", label: "Distance From Res. To College (km)", kind: "number", sample: "Optional; number", aliases: ["Distance From Residence"] },
   { key: "hosteller", label: "Hosteller (Yes/No)", kind: "yesno", sample: "Optional: Yes / No" },
-  { key: "physicallyHandicapped", label: "Physically Handicapped (Yes/No)", kind: "yesno", sample: "Optional: Yes / No" },
+  { key: "physicallyHandicapped", label: "Physically Handicapped (Yes/No)", kind: "yesno", sample: "Optional: Yes / No", aliases: ["PHC", "PH"] },
   { key: "handicappedType", label: "If Yes (Handicapped) - H/V/O", kind: "select", sample: "Optional (only if Physically Handicapped is Yes): H (Hearing) / V (Visual) / O (Other)", options: ["H", "V", "O"] },
   { key: "identificationMarks", label: "Identification Marks", kind: "text", sample: "Optional; text" },
-  { key: "temporaryAddress", label: "Temporary Address", kind: "text", sample: "Optional; full postal address" },
+  { key: "temporaryAddress", label: "Temporary Address", kind: "text", sample: "Optional; full postal address", aliases: ["Correspondence Address", "Present Address"] },
   { key: "permanentAddressSameAsTemporary", label: "Permanent Address Same as Temporary (Yes/No)", kind: "yesno", sample: "Optional: Yes / No" },
   { key: "permanentAddress", label: "Permanent Address", kind: "text", sample: "Optional (only if Permanent Address Same as Temporary is No): full postal address" },
   { key: "state", label: "State", kind: "text", sample: "Optional; text", placeholder: "Andhra Pradesh" },
@@ -133,8 +138,45 @@ export const ROSTER_FIELDS: RosterField[] = [
   { key: "studiedOutsideAPDetails", label: "If Yes - Studied Outside AP, Details", kind: "text", sample: "Optional (only if Studied Outside Andhra Pradesh is Yes): where/which years" },
   { key: "familyIdLinkedOtherState", label: "Any Family ID Linked to Another State? (Yes/No)", kind: "yesno", sample: "Optional: Yes / No" },
   { key: "familyIdLinkedOtherStateDetails", label: "If Yes - Family ID Linked to Another State, Details", kind: "text", sample: "Optional (only if Family ID Linked to Another State is Yes): which state/ID" },
+  // Previous education, as the college's admission sheet records it - one
+  // block per qualification, every field free text exactly as typed there.
+  { key: "sscHallTicketNo", label: "SSC Hall Ticket No", kind: "text", sample: "Optional; text" },
+  { key: "sscBoard", label: "SSC Board", kind: "text", sample: "Optional; text" },
+  { key: "sscYearOfPass", label: "SSC Year Of Pass", kind: "text", sample: "Optional; text", aliases: ["SSC Year Of Passing"] },
+  { key: "sscMarks", label: "SSC Marks", kind: "text", sample: "Optional; text" },
+  { key: "sscPercentage", label: "SSC %", kind: "text", sample: "Optional; text", aliases: ["SSC Percentage"] },
+  { key: "sscInstitution", label: "SSC Institution", kind: "text", sample: "Optional; text", aliases: ["SSC College", "SSC School"] },
+  { key: "sscGradePoints", label: "SSC Grade Points", kind: "text", sample: "Optional; text", aliases: ["SSC GPA", "SSC CGPA"] },
+  { key: "interHallTicketNo", label: "Inter Hall Ticket No", kind: "text", sample: "Optional; text" },
+  { key: "interBoard", label: "Inter Board", kind: "text", sample: "Optional; text" },
+  { key: "interYearOfPass", label: "Inter Year Of Pass", kind: "text", sample: "Optional; text", aliases: ["Inter Year Of Passing"] },
+  { key: "interMarks", label: "Inter Marks", kind: "text", sample: "Optional; text" },
+  { key: "interPercentage", label: "Inter %", kind: "text", sample: "Optional; text", aliases: ["Inter Percentage"] },
+  { key: "interInstitution", label: "Inter Institution", kind: "text", sample: "Optional; text", aliases: ["Inter College", "Inter School"] },
+  { key: "interGradePoints", label: "Inter Grade Points", kind: "text", sample: "Optional; text", aliases: ["Inter GPA", "Inter CGPA"] },
+  { key: "diplomaHallTicketNo", label: "Diploma Hall Ticket No", kind: "text", sample: "Optional; text" },
+  { key: "diplomaBoard", label: "Diploma Board", kind: "text", sample: "Optional; text" },
+  { key: "diplomaYearOfPass", label: "Diploma Year Of Pass", kind: "text", sample: "Optional; text", aliases: ["Diploma Year Of Passing"] },
+  { key: "diplomaMarks", label: "Diploma Marks", kind: "text", sample: "Optional; text" },
+  { key: "diplomaPercentage", label: "Diploma %", kind: "text", sample: "Optional; text", aliases: ["Diploma Percentage"] },
+  { key: "diplomaInstitution", label: "Diploma Institution", kind: "text", sample: "Optional; text", aliases: ["Diploma College", "Diploma School"] },
+  { key: "degreeHallTicketNo", label: "Degree Hall Ticket No", kind: "text", sample: "Optional; text" },
+  { key: "degreeBoard", label: "Degree Board", kind: "text", sample: "Optional; text" },
+  { key: "degreeYearOfPass", label: "Degree Year Of Pass", kind: "text", sample: "Optional; text", aliases: ["Degree Year Of Passing"] },
+  { key: "degreeMarks", label: "Degree Marks", kind: "text", sample: "Optional; text" },
+  { key: "degreePercentage", label: "Degree %", kind: "text", sample: "Optional; text", aliases: ["Degree Percentage"] },
+  { key: "degreeInstitution", label: "Degree Institution", kind: "text", sample: "Optional; text", aliases: ["Degree College", "Degree School"] },
   { key: "remarks", label: "Remarks", kind: "text", sample: "Optional; text" },
 ];
+
+/** The previous-education fields above - plain text, stored as typed. */
+export const PREVIOUS_EDUCATION_KEYS = [
+  "sscHallTicketNo", "sscBoard", "sscYearOfPass", "sscMarks", "sscPercentage", "sscInstitution", "sscGradePoints", "interHallTicketNo", "interBoard", "interYearOfPass", "interMarks", "interPercentage", "interInstitution", "interGradePoints", "diplomaHallTicketNo", "diplomaBoard", "diplomaYearOfPass", "diplomaMarks", "diplomaPercentage", "diplomaInstitution", "degreeHallTicketNo", "degreeBoard", "degreeYearOfPass", "degreeMarks", "degreePercentage", "degreeInstitution",
+] as const;
+
+/** Every roster field added for the college's admission sheet that is plain
+ *  text with no rule of its own - see importRow.ts's buildStudentDoc. */
+export const ADMISSION_SHEET_TEXT_KEYS = ["seatType", "fatherOccupation", "motherOccupation", "annualIncome", ...PREVIOUS_EDUCATION_KEYS] as const;
 
 // Five filled-in rows for the template workbook's second ("Sample Data")
 // sheet - what a correctly-completed row looks like for every column, which
@@ -267,7 +309,7 @@ export const DETAIL_ROSTER_FIELDS = ROSTER_FIELDS.filter((f) => !f.primary);
 export const ROSTER_DETAIL_GROUPS: { title: string; keys: string[] }[] = [
   {
     title: "Academic Details",
-    keys: ["admissionNo", "hallTicketNo", "dateOfAdmission", "dateOfJoining", "admissionType", "entranceType", "entranceRank", "jeeRank", "jeePercentage", "scholarship", "lastAttendedInstitution"],
+    keys: ["admissionNo", "hallTicketNo", "dateOfAdmission", "dateOfJoining", "admissionType", "seatType", "entranceType", "entranceRank", "jeeRank", "jeePercentage", "scholarship", "lastAttendedInstitution"],
   },
   {
     title: "Personal Details",
@@ -279,11 +321,15 @@ export const ROSTER_DETAIL_GROUPS: { title: string; keys: string[] }[] = [
   },
   {
     title: "Family & Guardian",
-    keys: ["fatherName", "fatherContactNo", "motherName", "motherContactNo", "guardianName", "guardianContact"],
+    keys: ["fatherName", "fatherContactNo", "fatherOccupation", "motherName", "motherContactNo", "motherOccupation", "annualIncome", "guardianName", "guardianContact"],
   },
   {
     title: "Bank & Documents",
     keys: ["aadharNo", "rationCardNo", "bankAccountNo", "bankName", "ifscCode"],
+  },
+  {
+    title: "Previous Education",
+    keys: [...PREVIOUS_EDUCATION_KEYS],
   },
   {
     title: "Additional Information",
