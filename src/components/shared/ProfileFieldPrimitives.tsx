@@ -195,6 +195,21 @@ function withCourse(v: DegreeDetail, course: string): DegreeDetail {
   return { ...rest, course, ...(isValidDegreeType(course, degreeType) ? { degreeType } : {}) };
 }
 
+// A soft tint per qualification level, so the stacked education blocks (each
+// the same grid of the same fields) can be told apart at a glance while
+// scrolling. Kept pale - the fields inside stay on the plain background
+// (inputs already are; the Select triggers are made so by BLOCK_FIELDS) - and
+// each has a dark-mode pair.
+const LEVEL_TINT: Record<DegreeLevel, { block: string; label: string }> = {
+  HIGH_SCHOOL: { block: "border-sky-200 bg-sky-50/70 dark:border-sky-900 dark:bg-sky-950/30", label: "text-sky-800 dark:text-sky-300" },
+  INTERMEDIATE: { block: "border-emerald-200 bg-emerald-50/70 dark:border-emerald-900 dark:bg-emerald-950/30", label: "text-emerald-800 dark:text-emerald-300" },
+  UG: { block: "border-amber-200 bg-amber-50/70 dark:border-amber-900 dark:bg-amber-950/30", label: "text-amber-800 dark:text-amber-300" },
+  PG: { block: "border-violet-200 bg-violet-50/70 dark:border-violet-900 dark:bg-violet-950/30", label: "text-violet-800 dark:text-violet-300" },
+  DOCTORAL: { block: "border-rose-200 bg-rose-50/70 dark:border-rose-900 dark:bg-rose-950/30", label: "text-rose-800 dark:text-rose-300" },
+  POST_DOCTORAL: { block: "border-teal-200 bg-teal-50/70 dark:border-teal-900 dark:bg-teal-950/30", label: "text-teal-800 dark:text-teal-300" },
+};
+const BLOCK_FIELDS = "[&_button[role=combobox]]:bg-background";
+
 export function DegreeFields({
   label, level, value, onChange,
 }: {
@@ -235,8 +250,8 @@ export function DegreeFields({
   const schoolQualificationIsOther = v.course === OTHER_QUALIFICATION || (!!v.course && !schoolQualificationOptions.includes(v.course));
 
   return (
-    <div className="space-y-3 rounded-lg border p-3">
-      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
+    <div className={`space-y-3 rounded-lg border p-3 ${LEVEL_TINT[level].block} ${BLOCK_FIELDS}`}>
+      <p className={`text-xs font-semibold uppercase tracking-wide ${LEVEL_TINT[level].label}`}>{label}</p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {isDoctoralOrPostDoc && (
           <>
