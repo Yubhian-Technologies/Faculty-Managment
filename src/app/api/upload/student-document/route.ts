@@ -3,7 +3,9 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
-import { getAdminStorage } from "@/lib/firebase/admin";
+import { getAdminDb, getAdminStorage } from "@/lib/firebase/admin";
+import { passwordChangeRequired, passwordChangeRequiredResponse } from "@/lib/students/passwordGate";
+import type { StudentRecord } from "@/types";
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
 
@@ -16,17 +18,25 @@ const MIME_TO_EXT: Record<string, string> = {
 const EXT_TO_EXT: Record<string, string> = { pdf: "pdf", png: "png", jpg: "jpg", jpeg: "jpg" };
 
 // Mirrors upload/faculty-document/route.ts exactly - same guard/size/mime
-// pattern, storage path scoped per-student instead of per-faculty.
+// pattern, storage path scoped per-student instead of per-faculty. A STUDENT may
+// also upload (My Profile > Additional Information), but only into their OWN
+// folder: the studentId is resolved from their session, never read from the form.
 export async function POST(request: Request) {
   try {
-    await requireCollegeMember("COLLEGE_OFFICE", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("COLLEGE_OFFICE", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "STUDENT");
 
     const formData = await request.formData();
     const file = formData.get("file");
-    const studentId = formData.get("studentId");
+    let studentId = formData.get("studentId");
 
     if (!file || typeof file === "string") {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
+    }
+    if (session.role === "STUDENT") {
+      const snap = await getAdminDb().collection("colleges").doc(session.collegeId).collection("students").where("uid", "==", session.uid).limit(1).get();
+      if (snap.empty) return NextResponse.json({ error: "Student record not found" }, { status: 404 });
+      if (passwordChangeRequired(snap.docs[0].data() as Pick<StudentRecord, "mustChangePassword">)) return passwordChangeRequiredResponse();
+      studentId = snap.docs[0].id;
     }
     if (!studentId || typeof studentId !== "string") {
       return NextResponse.json({ error: "studentId is required" }, { status: 400 });

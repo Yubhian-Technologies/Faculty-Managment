@@ -3022,6 +3022,9 @@ export interface StudentRecord {
   studiedOutsideAPDetails?: string;
   familyIdLinkedOtherState?: boolean;
   familyIdLinkedOtherStateDetails?: string;
+  // Parents working in another state / country, and where (place of work, state/country).
+  parentsWorkingOutside?: boolean;
+  parentsWorkingOutsideDetails?: string;
   remarks?: string;
   // ─── Graduation snapshot ────────────────────────────────────────────────
   // Set once, when `status` flips to GRADUATED (students/promote route). The

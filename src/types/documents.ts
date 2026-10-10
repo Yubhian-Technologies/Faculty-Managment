@@ -67,6 +67,10 @@ export interface StudentDocument {
   fileSize?: number;
   uploadedByUid: string;
   uploadedByName: string;
+  // True when the student uploaded this themselves (My Profile > Additional Information); absent for Office uploads.
+  selfUploaded?: boolean;
+  // Which Additional Information answer a self-uploaded document supports (see lib/students/ownDocuments.ts).
+  selfUploadKind?: "STUDIED_OUTSIDE_AP" | "FAMILY_ID_OTHER_STATE";
   createdAt: Timestamp;
 }
 

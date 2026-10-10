@@ -666,6 +666,7 @@ function FieldInput({ field, values, onChange, departments, courseNames, courses
 
   if (field.key === "studiedOutsideAPDetails" && values.studiedOutsideAP !== "Yes") return null;
   if (field.key === "familyIdLinkedOtherStateDetails" && values.familyIdLinkedOtherState !== "Yes") return null;
+  if (field.key === "parentsWorkingOutsideDetails" && values.parentsWorkingOutside !== "Yes") return null;
 
   if (field.kind === "select" || field.kind === "yesno") {
     const options = field.kind === "yesno" ? ["Yes", "No"] : field.options ?? [];
@@ -682,6 +683,7 @@ function FieldInput({ field, values, onChange, departments, courseNames, courses
             {options.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
           </SelectContent>
         </Select>
+        {field.help && <p className="text-xs text-muted-foreground">{field.help}</p>}
       </div>
     );
   }

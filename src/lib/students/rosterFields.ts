@@ -44,6 +44,8 @@ export interface RosterField {
   primary?: boolean;
   /** Placeholder for the Add/Edit form input. */
   placeholder?: string;
+  /** Short explanation shown under the field's label in the Add/Edit forms (and student self-edit). */
+  help?: string;
   /**
    * Kept out of the students list's columns while still belonging to the
    * identity block of the form and detail view - for a field that's only
@@ -88,7 +90,7 @@ export const ROSTER_FIELDS: RosterField[] = [
   { key: "mobileNo", label: "Student Mobile No", kind: "text", sample: "Required; 10-digit mobile starting 6-9 - must be different for every student in every college (it is how roll numbers are matched to students later)", required: true, showInList: true, aliases: ["Mobile No", "Mobile Number", "Student Mobile"], placeholder: "9876543210" },
   { key: "dateOfAdmission", label: "Date of Admission (YYYY-MM-DD)", kind: "date", sample: "Optional; YYYY-MM-DD" },
   { key: "dateOfJoining", label: "Date of Joining (YYYY-MM-DD)", kind: "date", sample: "Optional; YYYY-MM-DD - the day the student joined classes; attendance is counted from this date (falls back to Date of Admission when blank)", aliases: ["Joining Date", "DOJ"] },
-  { key: "admissionType", label: "Admission Type", kind: "text", sample: "Optional; e.g. Direct, Management, Convenor", placeholder: "Direct" },
+  { key: "admissionType", label: "Admission Type", kind: "text", sample: "Optional; e.g. Spot Admission, Management, Convenor", placeholder: "Spot Admission" },
   { key: "seatType", label: "Seat Type", kind: "text", sample: "Optional; text" },
   { key: "entranceType", label: "Entrance Type", kind: "text", sample: "Optional; e.g. EAMCET, ECET, JEE", placeholder: "EAMCET" },
   { key: "entranceRank", label: "Entrance Rank", kind: "text", sample: "Optional; text/number", aliases: ["Rank"] },
@@ -134,10 +136,14 @@ export const ROSTER_FIELDS: RosterField[] = [
   { key: "permanentAddress", label: "Permanent Address", kind: "text", sample: "Optional (only if Permanent Address Same as Temporary is No): full postal address" },
   { key: "state", label: "State", kind: "text", sample: "Optional; text", placeholder: "Andhra Pradesh" },
   { key: "district", label: "District", kind: "text", sample: "Optional; text" },
-  { key: "studiedOutsideAP", label: "Studied Outside Andhra Pradesh? (Yes/No)", kind: "yesno", sample: "Optional: Yes / No" },
+  { key: "studiedOutsideAP", label: "Studied Outside Andhra Pradesh? (Yes/No)", kind: "yesno", sample: "Optional: Yes / No - Yes when any part of the student's education (e.g. schooling, Intermediate or Diploma) lasted at least one year outside Andhra Pradesh",
+    help: "Select Yes if any part of the student's education lasted at least one year outside Andhra Pradesh (for example schooling, Intermediate or Diploma)." },
   { key: "studiedOutsideAPDetails", label: "If Yes - Studied Outside AP, Details", kind: "text", sample: "Optional (only if Studied Outside Andhra Pradesh is Yes): where/which years" },
-  { key: "familyIdLinkedOtherState", label: "Any Family ID Linked to Another State? (Yes/No)", kind: "yesno", sample: "Optional: Yes / No" },
+  { key: "familyIdLinkedOtherState", label: "Any Family ID Linked to Another State? (Yes/No)", kind: "yesno", sample: "Optional: Yes / No - Yes when any family ID (e.g. Aadhaar, PAN, ration card or another identity document) is linked to another state",
+    help: "Select Yes if any family ID is linked to another state - for example Aadhaar, PAN, ration card or another identity document." },
   { key: "familyIdLinkedOtherStateDetails", label: "If Yes - Family ID Linked to Another State, Details", kind: "text", sample: "Optional (only if Family ID Linked to Another State is Yes): which state/ID" },
+  { key: "parentsWorkingOutside", label: "Parents Working in Other States/Country? (Yes/No)", kind: "yesno", sample: "Optional: Yes / No" },
+  { key: "parentsWorkingOutsideDetails", label: "If Yes - Enter Details (Place of Work, State/Country)", kind: "text", sample: "Optional (only if Parents Working in Other States/Country is Yes): place of work, state/country" },
   // Previous education, as the college's admission sheet records it - one
   // block per qualification, every field free text exactly as typed there.
   { key: "sscHallTicketNo", label: "SSC Hall Ticket No", kind: "text", sample: "Optional; text" },
@@ -202,7 +208,7 @@ export const ROSTER_SAMPLE_ROWS: Record<string, string>[] = [
     hosteller: "No", physicallyHandicapped: "No", handicappedType: "", identificationMarks: "Mole on left cheek",
     temporaryAddress: "12-3-45, Gandhi Nagar, Vijayawada, Andhra Pradesh", permanentAddressSameAsTemporary: "Yes", permanentAddress: "",
     state: "Andhra Pradesh", district: "Krishna",
-    studiedOutsideAP: "No", studiedOutsideAPDetails: "", familyIdLinkedOtherState: "No", familyIdLinkedOtherStateDetails: "",
+    studiedOutsideAP: "No", studiedOutsideAPDetails: "", familyIdLinkedOtherState: "No", familyIdLinkedOtherStateDetails: "", parentsWorkingOutside: "No", parentsWorkingOutsideDetails: "",
     remarks: "",
   },
   {
@@ -221,14 +227,14 @@ export const ROSTER_SAMPLE_ROWS: Record<string, string>[] = [
     hosteller: "Yes", physicallyHandicapped: "No", handicappedType: "", identificationMarks: "",
     temporaryAddress: "Room 214, Ladies Hostel, College Campus", permanentAddressSameAsTemporary: "No", permanentAddress: "8-1-23, Ashok Nagar, Hyderabad, Telangana",
     state: "Telangana", district: "Hyderabad",
-    studiedOutsideAP: "Yes", studiedOutsideAPDetails: "Intermediate (11th-12th) in Hyderabad, Telangana", familyIdLinkedOtherState: "Yes", familyIdLinkedOtherStateDetails: "Family Ration Card registered in Telangana",
+    studiedOutsideAP: "Yes", studiedOutsideAPDetails: "Intermediate (11th-12th) in Hyderabad, Telangana", familyIdLinkedOtherState: "Yes", familyIdLinkedOtherStateDetails: "Family Ration Card registered in Telangana", parentsWorkingOutside: "Yes", parentsWorkingOutsideDetails: "Father - Dubai, UAE",
     remarks: "Hostel room 214",
   },
   {
     rollNumber: "26A91A0417", name: "M. Rahul Varma", studentType: "Regular", course: "Bachelor of Technology", department: "Basic Science",
     secondaryDepartment: "Electronics and Communication Engineering", year: "1",
     admissionNo: "ADM2026028", hallTicketNo: "3456789012", dateOfAdmission: "2026-06-01",
-    admissionType: "Direct", entranceType: "ECET", entranceRank: "902", jeeRank: "", jeePercentage: "",
+    admissionType: "Spot Admission", entranceType: "ECET", entranceRank: "902", jeeRank: "", jeePercentage: "",
     scholarship: "No", gender: "Male", dateOfBirth: "2008-03-19", bloodGroup: "A+",
     caste: "EBC", subCaste: "", religion: "Muslim", nationality: "Indian", motherTongue: "Urdu",
     fatherName: "M. Abdul Varma", fatherContactNo: "9876543214", motherName: "", motherContactNo: "",
@@ -240,7 +246,7 @@ export const ROSTER_SAMPLE_ROWS: Record<string, string>[] = [
     hosteller: "No", physicallyHandicapped: "No", handicappedType: "", identificationMarks: "",
     temporaryAddress: "", permanentAddressSameAsTemporary: "", permanentAddress: "",
     state: "", district: "",
-    studiedOutsideAP: "", studiedOutsideAPDetails: "", familyIdLinkedOtherState: "", familyIdLinkedOtherStateDetails: "",
+    studiedOutsideAP: "", studiedOutsideAPDetails: "", familyIdLinkedOtherState: "", familyIdLinkedOtherStateDetails: "", parentsWorkingOutside: "", parentsWorkingOutsideDetails: "",
     remarks: "",
   },
   {
@@ -259,7 +265,7 @@ export const ROSTER_SAMPLE_ROWS: Record<string, string>[] = [
     hosteller: "Yes", physicallyHandicapped: "Yes", handicappedType: "H", identificationMarks: "",
     temporaryAddress: "", permanentAddressSameAsTemporary: "", permanentAddress: "",
     state: "", district: "",
-    studiedOutsideAP: "", studiedOutsideAPDetails: "", familyIdLinkedOtherState: "", familyIdLinkedOtherStateDetails: "",
+    studiedOutsideAP: "", studiedOutsideAPDetails: "", familyIdLinkedOtherState: "", familyIdLinkedOtherStateDetails: "", parentsWorkingOutside: "", parentsWorkingOutsideDetails: "",
     remarks: "Needs front-row seating",
   },
   {
@@ -278,7 +284,7 @@ export const ROSTER_SAMPLE_ROWS: Record<string, string>[] = [
     hosteller: "No", physicallyHandicapped: "No", handicappedType: "", identificationMarks: "",
     temporaryAddress: "", permanentAddressSameAsTemporary: "", permanentAddress: "",
     state: "", district: "",
-    studiedOutsideAP: "", studiedOutsideAPDetails: "", familyIdLinkedOtherState: "", familyIdLinkedOtherStateDetails: "",
+    studiedOutsideAP: "", studiedOutsideAPDetails: "", familyIdLinkedOtherState: "", familyIdLinkedOtherStateDetails: "", parentsWorkingOutside: "", parentsWorkingOutsideDetails: "",
     remarks: "",
   },
 ];
@@ -333,7 +339,7 @@ export const ROSTER_DETAIL_GROUPS: { title: string; keys: string[] }[] = [
   },
   {
     title: "Additional Information",
-    keys: ["studiedOutsideAP", "studiedOutsideAPDetails", "familyIdLinkedOtherState", "familyIdLinkedOtherStateDetails", "remarks"],
+    keys: ["studiedOutsideAP", "studiedOutsideAPDetails", "familyIdLinkedOtherState", "familyIdLinkedOtherStateDetails", "parentsWorkingOutside", "parentsWorkingOutsideDetails", "remarks"],
   },
 ];
 
