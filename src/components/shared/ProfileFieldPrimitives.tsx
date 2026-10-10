@@ -55,25 +55,29 @@ export const EDUCATION_DOMAIN_LABELS: Record<EducationDomain, string> = {
   LAW: "Law",
   OTHERS: "Others",
 };
-const COURSES_BY_DOMAIN: Record<EducationDomain, string[]> = {
+// Split per level (UG / PG) rather than one shared list - a Masters course
+// has no business showing up under UG and vice versa. "CS" was a stray dup
+// of the Code/Department-code abbreviation, not a real qualification -
+// dropped outright. "CA" (Chartered Accountancy) is a PG-only entry.
+const COURSES_BY_DOMAIN_UG: Record<EducationDomain, string[]> = {
   ENGINEERING: [
-    "B.Tech/BE", "M.Tech/ME", "B.Tech - M.Tech Integrated/Dual Degree", "BCA",
-    "MCA (2-Year)", "MCA (3-Year)", "MCM", "Diploma in Engineering",
+    "B.Tech/BE", "B.Tech - M.Tech Integrated/Dual Degree", "BCA", "Diploma in Engineering",
   ],
-  MANAGEMENT: [
-    "BBA", "B.Com", "M.Com", "BHM", "CA", "CS", "PGDM", "1-Year MBA", "2-Year MBA",
-    "Executive MBA", "IPM",
-  ],
+  MANAGEMENT: ["BBA", "B.Com", "BHM", "IPM"],
   ARTS_SCIENCE: [
-    "B.Sc.", "M.Sc.", "B.A.", "M.A.", "BS", "MS", "B.Ed", "M.Ed", "B.El.Ed", "B.P.Ed",
-    "B.Des.", "M.Des.", "B.Arch.", "M.Arch.", "B.F.Tech.", "M.F.Tech.", "B.Plan", "M.Plan",
-    "BFA", "MFA",
+    "B.Sc.", "B.A.", "BS", "B.Ed", "B.El.Ed", "B.P.Ed", "B.Des.", "B.Arch.", "B.F.Tech.",
+    "B.Plan", "BFA",
   ],
-  MEDICINE: [
-    "B.Pharma", "M.Pharma", "Pharma. D", "BUMS", "BAMS", "BDS", "BHMS", "MBBS",
-    "BVSC", "MVSC", "MS/MD", "MDS", "DM",
-  ],
-  LAW: ["LLB", "LLM"],
+  MEDICINE: ["B.Pharma", "Pharma. D", "BUMS", "BAMS", "BDS", "BHMS", "MBBS", "BVSC"],
+  LAW: ["LLB"],
+  OTHERS: [],
+};
+const COURSES_BY_DOMAIN_PG: Record<EducationDomain, string[]> = {
+  ENGINEERING: ["M.Tech/ME", "MCA (2-Year)", "MCA (3-Year)", "MCM"],
+  MANAGEMENT: ["M.Com", "CA", "PGDM", "1-Year MBA", "2-Year MBA", "Executive MBA"],
+  ARTS_SCIENCE: ["M.Sc.", "M.A.", "MS", "M.Ed", "M.Des.", "M.Arch.", "M.F.Tech.", "M.Plan", "MFA"],
+  MEDICINE: ["M.Pharma", "MVSC", "MS/MD", "MDS", "DM"],
+  LAW: ["LLM"],
   OTHERS: [],
 };
 
@@ -209,7 +213,9 @@ export function DegreeFields({
   // surfaces for correction rather than silently hiding behind an unselected
   // dropdown.
   const domainIsOther = !!domain && !(domain in EDUCATION_DOMAIN_LABELS);
-  const courseOptions = hasDomain ? (domain ? (COURSES_BY_DOMAIN[domain] ?? []) : []) : (FLAT_OPTIONS_BY_LEVEL[level] ?? []);
+  const courseOptions = hasDomain
+    ? (domain ? ((level === "PG" ? COURSES_BY_DOMAIN_PG : COURSES_BY_DOMAIN_UG)[domain] ?? []) : [])
+    : (FLAT_OPTIONS_BY_LEVEL[level] ?? []);
   const courseIsOther = !!v.course && !courseOptions.includes(v.course);
   // Intermediate (12th) and High School (10th) have no fixed course
   // catalogue to offer - just let the qualification name be typed directly.
