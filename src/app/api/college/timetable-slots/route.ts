@@ -206,13 +206,10 @@ export async function POST(request: Request) {
       sectionId: assignmentData.sectionId,
     };
 
-    // Resolve subject type to gate split - only PRACTICAL or NON_TEACHING may use allowSplit/labBatch
-    const subjectSnapForType = await collegeRef.collection("subjects").doc(assignment.subjectId).get();
-    const subjectType = (subjectSnapForType.data() as { type?: string } | undefined)?.type;
-    const isSplittableSubject = subjectType === "PRACTICAL" || subjectType === "NON_TEACHING";
-    if (!isSplittableSubject && (body.allowSplit || body.labBatch)) {
-      return NextResponse.json({ error: "Only lab (PRACTICAL) or non-teaching subjects can be split into batches" }, { status: 400 });
-    }
+    // No incoming-type-only gate here any more: whether a split is actually
+    // allowed depends on what's ALREADY in the cell too (two labs, or
+    // anything once a non-teaching subject is on either side) -
+    // pinSlotWithChecks below checks both sides together.
 
     // This pins a slot straight into a section's published timetable - an
     // HOD may only do that for their own department (or one they own/manage),

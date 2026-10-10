@@ -10,6 +10,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TimetableInchargePanel } from "@/components/timetable/TimetableInchargePanel";
 import { TimetableGridEditor } from "@/components/timetable/TimetableGridEditor";
+import { FacultyLeisureFilter } from "@/components/timetable/FacultyLeisureFilter";
+import { TeachingNowFilter } from "@/components/timetable/TeachingNowFilter";
 import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import {
@@ -287,11 +289,6 @@ function SectionTimetable() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Timetable"
-        description="Pick a course, year, semester and section, then load that section's timetable to build or publish it"
-      />
-
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Find a section</CardTitle>
@@ -431,5 +428,39 @@ function SectionTimetable() {
 }
 
 export default function HODTimetablePage() {
-  return <SectionTimetable />;
+  const [panel, setPanel] = useState<"" | "leisure" | "teaching">("");
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Timetable"
+        description="Pick a course, year, semester and section, then load that section's timetable to build or publish it"
+      />
+
+      <div className="flex flex-wrap gap-2" role="tablist">
+        {([
+          ["", "Section timetable"],
+          ["leisure", "Show leisure faculty"],
+          ["teaching", "Teaching at this time"],
+        ] as [typeof panel, string][]).map(([key, label]) => (
+          <button
+            key={key || "timetable"}
+            type="button"
+            role="tab"
+            aria-selected={panel === key}
+            className={`h-9 rounded-md border px-3 text-sm font-medium ${
+              panel === key ? "border-primary bg-primary text-primary-foreground" : "border-input bg-background hover:bg-muted"
+            }`}
+            onClick={() => setPanel(key)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {panel === "leisure" && <FacultyLeisureFilter scopeLabel="in your department" />}
+      {panel === "teaching" && <TeachingNowFilter scopeLabel="in your department" />}
+      {panel === "" && <SectionTimetable />}
+    </div>
+  );
 }

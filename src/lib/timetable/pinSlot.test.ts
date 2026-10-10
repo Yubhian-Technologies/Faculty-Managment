@@ -82,6 +82,35 @@ describe("pinSlotWithChecks", () => {
       .toMatchObject({ ok: false, error: expect.stringMatching(/theory class scheduled/) });
   });
 
+  it("lets a non-teaching subject split with anything - a theory class, a lab, or another non-teaching one", async () => {
+    const fake = new FakeFirestore();
+    fake.seed(`${C}/subjects/coun1`, { type: "NON_TEACHING" });
+    fake.seed(`${C}/subjects/th1`, { type: "THEORY" });
+    await pinSlotWithChecks(base(fake, { assignmentId: "a1", subjectId: "coun1" }));
+    const split = await pinSlotWithChecks(base(fake, { assignmentId: "a2", subjectId: "th1", facultyId: "f2", allowSplit: true }));
+    expect(split.ok).toBe(true);
+
+    // A theory-occupied cell also accepts a non-teaching subject joining it (same rule, the other way round).
+    const reversed = new FakeFirestore();
+    reversed.seed(`${C}/subjects/th1`, { type: "THEORY" });
+    reversed.seed(`${C}/subjects/coun1`, { type: "NON_TEACHING" });
+    await pinSlotWithChecks(base(reversed, { assignmentId: "a1", subjectId: "th1" }));
+    expect((await pinSlotWithChecks(base(reversed, { assignmentId: "a2", subjectId: "coun1", facultyId: "f2", allowSplit: true }))).ok).toBe(true);
+  });
+
+  it("has no cap once non-teaching is involved - a third, fourth, ... subject can all share the same period", async () => {
+    const fake = new FakeFirestore();
+    fake.seed(`${C}/subjects/coun1`, { type: "NON_TEACHING" });
+    fake.seed(`${C}/subjects/sports1`, { type: "NON_TEACHING" });
+    fake.seed(`${C}/subjects/seminar1`, { type: "NON_TEACHING" });
+    fake.seed(`${C}/subjects/crt1`, { type: "NON_TEACHING" });
+    await pinSlotWithChecks(base(fake, { assignmentId: "a1", subjectId: "coun1" }));
+    await pinSlotWithChecks(base(fake, { assignmentId: "a2", subjectId: "sports1", facultyId: "f2", allowSplit: true }));
+    expect((await pinSlotWithChecks(base(fake, { assignmentId: "a3", subjectId: "seminar1", facultyId: "f3", allowSplit: true }))).ok).toBe(true);
+    expect((await pinSlotWithChecks(base(fake, { assignmentId: "a4", subjectId: "crt1", facultyId: "f4", allowSplit: true }))).ok).toBe(true);
+    expect(slots(fake)).toHaveLength(4);
+  });
+
   it("does not compare a faculty member's other sections (same period number or overlapping clock time is allowed, as before)", async () => {
     const fake = new FakeFirestore();
     // f1 is already in Y2 P2 (10:20-11:10) on MON; Y1 P3 (10:40-11:30) overlaps it on the clock.

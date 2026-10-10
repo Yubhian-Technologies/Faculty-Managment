@@ -346,13 +346,10 @@ export async function PATCH(request: Request) {
         // Principal set custom continuous slots for it in Settings.
         const blockSize = Math.max(1, override ?? 1);
 
-        // Same gate as timetable-slots/route.ts's manual pin path - a split
-        // period (two+ subjects/faculty sharing one cell) only makes sense for
-        // parallel lab batches or two non-teaching subjects, not two theory
-        // classes at once.
-        if (body.allowSplit && !body.coTeach && subjectType !== "PRACTICAL" && subjectType !== "NON_TEACHING") {
-          return { ok: false, status: 400, error: "Only lab (PRACTICAL) or non-teaching subjects can be split into batches" };
-        }
+        // No incoming-type-only gate here any more: whether a split is
+        // actually allowed depends on what's ALREADY in the cell too (two
+        // labs, or anything once a non-teaching subject is on either side)
+        // - validatePlacement below checks both sides together.
 
         const placeAt = Number(toPeriod);
         const placementOpts = {
