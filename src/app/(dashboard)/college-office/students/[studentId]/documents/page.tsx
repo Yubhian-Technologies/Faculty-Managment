@@ -157,6 +157,7 @@ export default function StudentDocumentsPage() {
                   {resolveStudentDocumentTypeLabel(d)}
                 </Badge>
                 {d.description && <p className="text-xs text-muted-foreground line-clamp-2">{d.description}</p>}
+                {d.selfUploaded && <p className="text-xs text-muted-foreground">Uploaded by the student</p>}
                 <div className="flex items-center justify-between pt-2 border-t border-border/60">
                   <a href={d.fileUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary font-medium flex items-center gap-1 hover:underline">
                     <Download className="h-3.5 w-3.5" /> Download

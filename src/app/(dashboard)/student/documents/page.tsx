@@ -31,7 +31,7 @@ export default function StudentDocumentsPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <PageHeader title="My Documents" description="Certificates and documents your College Office has on file for you" />
+        <PageHeader title="My Documents" description="Certificates and documents on file for you - from your College Office and the ones you uploaded in My Profile" />
         <Button asChild variant="outline" size="sm">
           <Link href="/student">
             <ArrowLeft className="h-4 w-4 mr-1.5" /> Back to Dashboard
@@ -57,6 +57,7 @@ export default function StudentDocumentsPage() {
                     {resolveStudentDocumentTypeLabel(d)}
                   </Badge>
                   {d.description && <p className="break-words text-xs text-muted-foreground line-clamp-3">{d.description}</p>}
+                  {d.selfUploaded && <p className="text-xs text-muted-foreground">Uploaded by you</p>}
                   <div className="flex items-center gap-1.5 pt-2 border-t border-border/60 text-xs text-primary font-medium">
                     <Download className="h-3.5 w-3.5" /> Download
                   </div>

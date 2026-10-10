@@ -40,6 +40,8 @@ export const REDACTED_FOR_DEPARTMENT_ROLES = [
   "studiedOutsideAPDetails",
   "familyIdLinkedOtherState",
   "familyIdLinkedOtherStateDetails",
+  "parentsWorkingOutside",
+  "parentsWorkingOutsideDetails",
 ] as const;
 
 /** The only fields a Library list row keeps. */
