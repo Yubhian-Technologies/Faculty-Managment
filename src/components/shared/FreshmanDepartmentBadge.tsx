@@ -21,7 +21,7 @@ export function FreshmanDepartmentBadge({ departmentId, allDepartments, classNam
   const freshmanIds = getFreshmanDepartmentIds(allDepartments);
   if (!freshmanIds.has(departmentId)) return null;
   return (
-    <Badge variant="outline" className={`text-xs border-violet-300 bg-violet-50 text-violet-700 ${className ?? ""}`}>
+    <Badge variant="outline" className={`whitespace-nowrap text-xs border-violet-300 bg-violet-50 text-violet-700 ${className ?? ""}`}>
       Freshman&apos;s Department
     </Badge>
   );
