@@ -202,7 +202,7 @@ export function FacultyTimetableLookup({ ownOnly = false, embedded = false }: { 
                   times stay off: they differ per year. */}
               <thead>
                 <tr className="border-b bg-muted/40">
-                  <th className="p-2 w-14 sticky left-0 z-[5] bg-muted/95" aria-label="Day" />
+                  <th className="p-2 w-[88px] min-w-[88px] sticky left-0 z-[5] bg-muted/95" aria-label="Day" />
                   {periodTimes.map((p) => (
                     <th key={p.period} className="p-2 text-center text-[11px] font-bold text-foreground">
                       P{p.period}
@@ -213,7 +213,7 @@ export function FacultyTimetableLookup({ ownOnly = false, embedded = false }: { 
               <tbody>
                 {WORKING_DAYS.map((d) => (
                   <tr key={d} className="border-b last:border-b-0">
-                    <td className="p-2.5 font-medium text-muted-foreground sticky left-0 z-[5] bg-background">
+                    <td className="px-2 py-2.5 font-medium text-muted-foreground whitespace-nowrap sticky left-0 z-[5] bg-background">
                       {DAY_LABELS[d]}
                     </td>
                     {periodTimes.map((p) => {

@@ -22,7 +22,7 @@ interface SegmentedTabsProps {
 
 export function SegmentedTabs({ options, value, onChange, className }: SegmentedTabsProps) {
   return (
-    <div className={cn("inline-flex items-center gap-1 rounded-full bg-muted p-1", className)}>
+    <div className={cn("inline-flex max-w-full flex-wrap items-center gap-1 rounded-3xl bg-muted p-1", className)}>
       {options.map((option) => {
         const isActive = option.key === value;
         const itemClassName = cn(

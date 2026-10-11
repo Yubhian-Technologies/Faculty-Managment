@@ -20,6 +20,7 @@ import type {
   HackathonEvaluatorItem, HackathonEventType, HackathonFacultyCoordinatorItem, HackathonLevel,
   HackathonRequest, YuktiReferenceItem, YuktiReferenceStatus,
 } from "@/types";
+import { FACT_GRID_COLS_4 } from "@/components/shared/factGrid";
 
 const PREVIEW_COUNT = 3;
 const EMPTY_EVALUATOR: HackathonEvaluatorItem = { name: "", affiliation: "" };
@@ -74,15 +75,17 @@ function HackathonRow({
       {record.status === "SENT_BACK" && record.sentBackReason && (
         <p className="text-xs text-destructive">Sent back: {record.sentBackReason}</p>
       )}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Field label="Event Title" value={record.eventTitle} />
-        <Field label="Type" value={EVENT_TYPE_LABELS[record.eventType]} />
-        <Field label="Level" value={LEVEL_LABELS[record.levelOfEvent]} />
-        <Field label="A.Y." value={record.academicYear} />
-        <Field label="Dates" value={record.startDate && record.endDate ? `${record.startDate} – ${record.endDate}` : record.startDate} />
-        <Field label="Venue" value={record.venue} />
-        <Field label="Theme/Domain" value={record.themeDomain} />
-        <Field label="Teams (Int/Ext)" value={`${record.teamsRegisteredInternal ?? 0} / ${record.teamsRegisteredExternal ?? 0}`} />
+      <div className="@container">
+        <div className={`grid gap-2 ${FACT_GRID_COLS_4}`}>
+          <Field label="Event Title" value={record.eventTitle} />
+          <Field label="Type" value={EVENT_TYPE_LABELS[record.eventType]} />
+          <Field label="Level" value={LEVEL_LABELS[record.levelOfEvent]} />
+          <Field label="A.Y." value={record.academicYear} />
+          <Field label="Dates" value={record.startDate && record.endDate ? `${record.startDate} – ${record.endDate}` : record.startDate} />
+          <Field label="Venue" value={record.venue} />
+          <Field label="Theme/Domain" value={record.themeDomain} />
+          <Field label="Teams (Int/Ext)" value={`${record.teamsRegisteredInternal ?? 0} / ${record.teamsRegisteredExternal ?? 0}`} />
+        </div>
       </div>
       <div className="flex flex-wrap gap-3">
         {record.sanctionedLetterUrl && (

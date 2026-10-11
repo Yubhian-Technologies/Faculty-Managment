@@ -20,6 +20,7 @@ import type {
   AuthorCategory, AuthorRoleType, DiscoveryInnovationRequest, IprApplicant, IprApplicantType,
   IprCommercializationStatus, IprCommercializationType, IprInventor, IprStatus, IprType,
 } from "@/types";
+import { FACT_GRID_COLS_4 } from "@/components/shared/factGrid";
 
 const PREVIEW_COUNT = 3;
 // Guards against a typo like 1000 spawning a thousand form rows.
@@ -308,22 +309,24 @@ function DiscoveryInnovationRow({
       {record.status === "SENT_BACK" && record.sentBackReason && (
         <p className="text-xs text-destructive">Sent back: {record.sentBackReason}</p>
       )}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Field label="Title" value={record.title} />
-        <Field label="Type of IPR" value={IPR_TYPE_LABELS[record.iprType]} />
-        <Field label="Status" value={record.iprStatus === "GRANTED" ? "Granted" : "Published"} />
-        <Field label="Application Number" value={record.applicationNumber} />
-        <Field label="Date of Filing" value={record.dateOfFiling} />
-        <Field label="Student Patent" value={record.isStudentPatent} />
-        {record.isStudentPatent === "YES" && (
-          <>
-            <Field label="Student Name" value={record.studentName} />
-            <Field label="Regd. No." value={record.studentRegistrationNumber} />
-            <Field label="Student Department" value={record.studentDepartment} />
-          </>
-        )}
-        <Field label="Commercialized" value={record.isCommercialized} />
-        <Field label="SDGs Mapped" value={record.sdgGoals.length > 0 ? record.sdgGoals.join(", ") : undefined} />
+      <div className="@container">
+        <div className={`grid gap-2 ${FACT_GRID_COLS_4}`}>
+          <Field label="Title" value={record.title} />
+          <Field label="Type of IPR" value={IPR_TYPE_LABELS[record.iprType]} />
+          <Field label="Status" value={record.iprStatus === "GRANTED" ? "Granted" : "Published"} />
+          <Field label="Application Number" value={record.applicationNumber} />
+          <Field label="Date of Filing" value={record.dateOfFiling} />
+          <Field label="Student Patent" value={record.isStudentPatent} />
+          {record.isStudentPatent === "YES" && (
+            <>
+              <Field label="Student Name" value={record.studentName} />
+              <Field label="Regd. No." value={record.studentRegistrationNumber} />
+              <Field label="Student Department" value={record.studentDepartment} />
+            </>
+          )}
+          <Field label="Commercialized" value={record.isCommercialized} />
+          <Field label="SDGs Mapped" value={record.sdgGoals.length > 0 ? record.sdgGoals.join(", ") : undefined} />
+        </div>
       </div>
       <div className="flex flex-wrap gap-3">
         {record.publishedProofUrl && (

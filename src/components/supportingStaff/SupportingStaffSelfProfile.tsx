@@ -11,6 +11,7 @@ import { totalYearsOfExperience, formatDuration } from "@/lib/faculty/experience
 import { formatDate } from "@/lib/utils";
 import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS, FACULTY_STATUS_LABELS } from "@/types";
 import type { FacultyStatus, SupportingStaffMember } from "@/types";
+import { FACT_GRID_COLS_4 } from "@/components/shared/factGrid";
 
 // A Supporting Staff member's own "My Profile" building blocks - the counterparts of FacultyIdentityFacts /
 // FacultyStatusBadge / MyProfileModuleTiles (components/faculty/FacultyProfileHub), laid out the same way, but for the
@@ -29,9 +30,9 @@ const STATUS_VARIANTS: Record<FacultyStatus, "default" | "secondary" | "outline"
 function Fact({ label, value }: { label: string; value: React.ReactNode }) {
   if (value === undefined || value === null || value === "") return null;
   return (
-    <div>
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-sm font-medium">{value}</p>
+    <div className="min-w-0">
+      <p className="text-xs text-muted-foreground break-words">{label}</p>
+      <p className="text-sm font-medium break-words">{value}</p>
     </div>
   );
 }
@@ -52,32 +53,34 @@ export function SupportingStaffIdentityFacts({ staff }: { staff: Partial<Support
   const joining = staff.joiningDate;
   const category = staff.staffCategory ? supportingStaffCategoryLabel(staff.staffCategory) : undefined;
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-      <Fact label="Employee ID" value={staff.employeeId} />
-      <Fact label="Full Name (as per SSC)" value={supportingStaffDisplayName(staff) || staff.legalName} />
-      <Fact label="APAAR Faculty ID" value={staff.apaarFacultyId} />
-      <Fact label="Department" value={staff.department || "Centrally managed"} />
-      <Fact label="College Email" value={staff.collegeEmail} />
-      <Fact label="Designation" value={staffDesignationLabel(staff)} />
-      <Fact label="Staff Category" value={category} />
-      <Fact label="Highest Qualification" value={staff.highestQualification} />
-      {/* Ticks up day by day from the Date of Joining - same live tenure the faculty summary shows. */}
-      <Fact label="Total Years of Experience" value={joining ? formatDuration(totalYearsOfExperience(undefined, joining)) : undefined} />
-      <Fact label="Date of Joining" value={joining ? formatDate(joining) : undefined} />
-      <Fact label="Mobile No" value={staff.mobileNo} />
-      <Fact label="Personal Email" value={staff.email} />
-      {(staff.additionalPhoneNumbers ?? []).length > 0 && (
-        <Fact
-          label="Additional Mobile Numbers"
-          value={
-            <span className="flex flex-col gap-0.5">
-              {staff.additionalPhoneNumbers?.map((p, i) => (
-                <span key={i}>{p.number}{p.label ? ` (${p.label})` : ""}</span>
-              ))}
-            </span>
-          }
-        />
-      )}
+    <div className="@container">
+      <div className={`grid gap-4 ${FACT_GRID_COLS_4}`}>
+        <Fact label="Employee ID" value={staff.employeeId} />
+        <Fact label="Full Name (as per SSC)" value={supportingStaffDisplayName(staff) || staff.legalName} />
+        <Fact label="APAAR Faculty ID" value={staff.apaarFacultyId} />
+        <Fact label="Department" value={staff.department || "Centrally managed"} />
+        <Fact label="College Email" value={staff.collegeEmail} />
+        <Fact label="Designation" value={staffDesignationLabel(staff)} />
+        <Fact label="Staff Category" value={category} />
+        <Fact label="Highest Qualification" value={staff.highestQualification} />
+        {/* Ticks up day by day from the Date of Joining - same live tenure the faculty summary shows. */}
+        <Fact label="Total Years of Experience" value={joining ? formatDuration(totalYearsOfExperience(undefined, joining)) : undefined} />
+        <Fact label="Date of Joining" value={joining ? formatDate(joining) : undefined} />
+        <Fact label="Mobile No" value={staff.mobileNo} />
+        <Fact label="Personal Email" value={staff.email} />
+        {(staff.additionalPhoneNumbers ?? []).length > 0 && (
+          <Fact
+            label="Additional Mobile Numbers"
+            value={
+              <span className="flex flex-col gap-0.5">
+                {staff.additionalPhoneNumbers?.map((p, i) => (
+                  <span key={i}>{p.number}{p.label ? ` (${p.label})` : ""}</span>
+                ))}
+              </span>
+            }
+          />
+        )}
+      </div>
     </div>
   );
 }
