@@ -346,11 +346,6 @@ export async function PATCH(request: Request) {
         // Principal set custom continuous slots for it in Settings.
         const blockSize = Math.max(1, override ?? 1);
 
-        // No incoming-type-only gate here any more: whether a split is
-        // actually allowed depends on what's ALREADY in the cell too (two
-        // labs, or anything once a non-teaching subject is on either side)
-        // - validatePlacement below checks both sides together.
-
         const placeAt = Number(toPeriod);
         const placementOpts = {
           facultyId: assignment.facultyId,

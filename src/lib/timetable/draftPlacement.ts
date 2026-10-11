@@ -97,20 +97,15 @@ export function validatePlacement(
     if (occupied.has(key) && opts.coTeach) {
       const existing = draft.slots.filter((s) => s.day === day && s.periodNumber === p);
       const sameSubject = existing.filter((s) => s.subjectId === opts.subjectId);
-      // Besides this subject, the cell may only hold ONE other - either
-      // another lab (two labs sharing a period, each with its own faculty),
-      // or anything at all once a non-teaching subject (Counselling,
-      // Mentoring, NSS, ...) is on either side - non-teaching sessions split
-      // freely with any other subject, teaching or not.
+      // Besides this subject, the cell may hold at most ONE other subject, of
+      // any type - unless a non-teaching subject (Counselling, Mentoring, NSS,
+      // ...) is on either side, which splits freely with anything, uncapped.
       const others = existing.filter((s) => s.subjectId !== opts.subjectId);
       if (others.length > 0) {
         const typeOf = (id: string) => ctx.subjectsById.get(id)?.type;
-        const incomingType = typeOf(opts.subjectId);
-        const involvesNonTeaching = incomingType === "NON_TEACHING" || others.some((s) => typeOf(s.subjectId) === "NON_TEACHING");
-        const labsOnly = incomingType === "PRACTICAL" && others.every((s) => typeOf(s.subjectId) === "PRACTICAL");
-        if (!involvesNonTeaching && !labsOnly) return `Period ${p} on ${day} holds a different subject - faculty can only share a period for the same subject.`;
-        if (new Set([...existing.map((s) => s.subjectId), opts.subjectId]).size > 2) {
-          return `Period ${p} on ${day} already has 2 subjects sharing it - a period can only be split between two.`;
+        const involvesNonTeaching = typeOf(opts.subjectId) === "NON_TEACHING" || others.some((s) => typeOf(s.subjectId) === "NON_TEACHING");
+        if (!involvesNonTeaching && new Set([...existing.map((s) => s.subjectId), opts.subjectId]).size > 2) {
+          return `Period ${p} on ${day} already has 2 subjects sharing it - a period can only be split between two subjects.`;
         }
       }
       if (opts.assignmentId && existing.some((s) => s.assignmentId === opts.assignmentId)) {
@@ -118,25 +113,18 @@ export function validatePlacement(
       }
       if (sameSubject.length >= MAX_FACULTY_PER_SUBJECT) return `Period ${p} on ${day} already has ${sameSubject.length} faculty for this subject.`;
     } else if (occupied.has(key) && opts.allowSplit) {
-      // Two labs (parallel batches) may share a period - capped at exactly
-      // two. Once a non-teaching subject (Counselling, Mentoring, NSS, ...)
-      // is on either side, any NUMBER of subjects may share it instead - a
-      // non-teaching session splits freely with anything, uncapped. Two
-      // theory classes (or a theory and a lab) with neither side
-      // non-teaching still never share a period.
+      // A period may be split between at most two subjects of ANY type
+      // (theory, lab, ...), each with several faculty if need be. Once a
+      // non-teaching subject (Counselling, Mentoring, NSS, ...) is on either
+      // side the cap is lifted: it splits freely with anything.
       const existing = draft.slots.filter((s) => s.day === day && s.periodNumber === p);
       const existingTypes = existing.map((s) => ctx.subjectsById.get(s.subjectId)?.type);
       const incomingType = ctx.subjectsById.get(opts.subjectId)?.type;
       const involvesNonTeaching = incomingType === "NON_TEACHING" || existingTypes.includes("NON_TEACHING");
       if (!involvesNonTeaching) {
-        // Two subjects may share a period; each may have several faculty, so count subjects, not entries.
         const existingSubjectIds = new Set(existing.map((s) => s.subjectId));
         if (existingSubjectIds.size >= 2 && !existingSubjectIds.has(opts.subjectId)) {
-          return `Period ${p} on ${day} already has 2 labs sharing it - a period can only be split between two labs.`;
-        }
-        const allLabs = existingTypes.every((t) => t === "PRACTICAL");
-        if (!allLabs || incomingType !== "PRACTICAL") {
-          return `Period ${p} on ${day} holds a non-lab subject - a period can only be split between lab subjects.`;
+          return `Period ${p} on ${day} already has 2 subjects sharing it - a period can only be split between two subjects.`;
         }
       }
     }

@@ -82,15 +82,15 @@ export default function CollegeOfficeDashboard() {
           </Card>
         </Link>
         )}
-        {!isHidden("/college-office/faculty") && (
-        <Link href="/college-office/faculty" className="block">
+        {!isHidden("/college-office/staff") && (
+        <Link href="/college-office/staff" className="block">
           <Card className="hover:shadow-md transition-shadow cursor-pointer">
             <CardContent className="p-4 flex items-center gap-3">
               <div className="h-10 w-10 rounded-lg flex items-center justify-center shrink-0 text-violet-600 bg-violet-50">
                 <Users className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Faculty</p>
+                <p className="text-xs text-muted-foreground">Pay &amp; Promotions</p>
                 <p className="text-sm font-semibold">Promotion &amp; salary</p>
               </div>
             </CardContent>

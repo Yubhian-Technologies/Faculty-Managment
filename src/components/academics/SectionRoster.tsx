@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Search, Users } from "lucide-react";
+import { ArrowLeft, Download, Search, Users } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { SectionTimetable } from "@/components/academics/SectionTimetable";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
+import { toCSV, downloadCSV } from "@/lib/utils/csv";
 import type { Section, StudentRecord } from "@/types";
 
 function ordinalYear(year: number) {
@@ -95,7 +96,18 @@ export function SectionRoster({ sectionId: id, onBack, backLabel = "Back to Sect
     ? students.filter((s) =>
         [s.rollNumber, s.name, s.email].some((v) => (v ?? "").toLowerCase().includes(q)))
     : students;
-  const showBranchColumn = students.some((s) => s.secondaryDepartment);
+
+  function handleExportCsv() {
+    const headers = ["Regd Number", "Name of the Student", "Status", "Gender", "Email"];
+    const rows = students.map((s) => [
+      s.rollNumber ?? "",
+      s.name ?? "",
+      s.status === "REGULAR" ? "Regular" : s.status === "DETAINED" ? "Detained" : "Graduated",
+      s.gender ?? "",
+      s.email ?? "",
+    ]);
+    downloadCSV(toCSV([headers, ...rows]), `${section?.name ?? "section"}_students.csv`);
+  }
 
   return (
     <div className="space-y-6">
@@ -140,14 +152,19 @@ export function SectionRoster({ sectionId: id, onBack, backLabel = "Back to Sect
 
       {tab === "students" && (
       <>
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by roll no., name or email"
-          className="pl-9"
-        />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="relative max-w-sm flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by regd. number, name or email"
+            className="pl-9"
+          />
+        </div>
+        <Button variant="outline" size="sm" onClick={handleExportCsv} disabled={students.length === 0}>
+          <Download className="h-4 w-4 mr-1.5" />Export CSV
+        </Button>
       </div>
 
       <Card>
@@ -161,11 +178,8 @@ export function SectionRoster({ sectionId: id, onBack, backLabel = "Back to Sect
               <table className="w-full text-sm">
                 <thead className="bg-muted/50">
                   <tr>
-                    <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Roll No.</th>
-                    <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Name</th>
-                    {showBranchColumn && (
-                      <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Registered Branch</th>
-                    )}
+                    <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Regd Number</th>
+                    <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Name of the Student</th>
                     <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Status</th>
                     <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Gender</th>
                     <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Email</th>
@@ -180,13 +194,6 @@ export function SectionRoster({ sectionId: id, onBack, backLabel = "Back to Sect
                     >
                       <td className="px-4 py-2.5 font-mono">{s.rollNumber}</td>
                       <td className="px-4 py-2.5 font-medium">{s.name}</td>
-                      {showBranchColumn && (
-                        <td className="px-4 py-2.5">
-                          {s.secondaryDepartment
-                            ? <Badge variant="outline" className="text-xs">{s.secondaryDepartment}</Badge>
-                            : <span className="text-muted-foreground">-</span>}
-                        </td>
-                      )}
                       <td className="px-4 py-2.5">
                         <Badge variant={s.status === "REGULAR" ? "default" : "secondary"} className="text-xs">
                           {s.status === "REGULAR" ? "Regular" : s.status === "DETAINED" ? "Detained" : "Graduated"}

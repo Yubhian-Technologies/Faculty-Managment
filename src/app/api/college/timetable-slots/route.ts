@@ -206,11 +206,6 @@ export async function POST(request: Request) {
       sectionId: assignmentData.sectionId,
     };
 
-    // No incoming-type-only gate here any more: whether a split is actually
-    // allowed depends on what's ALREADY in the cell too (two labs, or
-    // anything once a non-teaching subject is on either side) -
-    // pinSlotWithChecks below checks both sides together.
-
     // This pins a slot straight into a section's published timetable - an
     // HOD may only do that for their own department (or one they own/manage),
     // same restriction as publish/route.ts and timetable/draft above. Was
