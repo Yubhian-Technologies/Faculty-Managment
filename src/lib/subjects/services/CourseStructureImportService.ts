@@ -70,6 +70,7 @@ export interface CourseStructureAssignedSubject {
   tutorialHours: number;
   practicalHours: number;
   credits: number;
+  serialNumber?: number;
 }
 
 export interface CourseStructurePlanRow {
@@ -128,6 +129,8 @@ interface Plan {
   masterIdByCode: Map<string, string>;
   newMasterCodes: Set<string>;
   existingInstanceIds: Set<string>;
+  // Already-assigned subjects whose place in the order differs from this file's (instance id -> new S.No.).
+  serialUpdates: Map<string, number>;
   legacyToDelete: Map<string, { createdAt: unknown }>;
   writes: number;
 }
@@ -290,6 +293,7 @@ export class CourseStructureImportService {
         tutorialHours: a.tutorialHours ?? 0,
         practicalHours: a.practicalHours ?? 0,
         credits: a.credits ?? 0,
+        ...(a.serialNumber != null ? { serialNumber: a.serialNumber } : {}),
       });
       slots.set(key, slot);
     }
@@ -305,7 +309,8 @@ export class CourseStructureImportService {
             semester: s.semester,
             count: s.subjects.length,
             regulations: Array.from(s.regulations).sort(),
-            subjects: s.subjects.sort((x, y) => x.code.localeCompare(y.code)),
+            // Uploaded order; by code only for subjects saved before it was kept.
+            subjects: s.subjects.sort((x, y) => (x.serialNumber ?? Infinity) - (y.serialNumber ?? Infinity) || x.code.localeCompare(y.code)),
           }))
           .sort((a, b) => a.year - b.year || a.semester - b.semester),
       },
@@ -354,7 +359,7 @@ export class CourseStructureImportService {
     const warnings = [...validation.warnings];
     const plan: Plan = {
       errors, warnings, rows: validation.rows, planRows: [],
-      masterIdByCode: new Map(), newMasterCodes: new Set(), existingInstanceIds: new Set(),
+      masterIdByCode: new Map(), newMasterCodes: new Set(), existingInstanceIds: new Set(), serialUpdates: new Map(),
       legacyToDelete: new Map(), writes: 0,
     };
     if (validation.rows.length === 0) return plan;
@@ -394,6 +399,7 @@ export class CourseStructureImportService {
         }
         instanceAction = "unchanged";
         plan.existingInstanceIds.add(instanceId);
+        if (current.serialNumber !== row.rowNumber - 1) plan.serialUpdates.set(instanceId, row.rowNumber - 1);
       }
       plan.planRows.push({ row: row.rowNumber, code: row.code, key, name: row.name, year: row.year, semester: row.semester, master: masterAction, instance: instanceAction });
     }
@@ -579,7 +585,16 @@ export class CourseStructureImportService {
           semester: p.semester,
           createdAt: legacy?.createdAt ?? now,
           now,
+          // The file's row order, kept per assignment: a subject reused from
+          // another department or an earlier upload keeps its own master S.No.,
+          // which says nothing about where it sits in THIS file.
+          serialNumber: p.row - 1,
         }));
+      }
+      // Subjects already assigned are otherwise left alone - only their place
+      // in the order is taken from this file, so uploading it again restores it.
+      for (const [instanceId, serialNumber] of plan.serialUpdates) {
+        tx.update(instances.doc(instanceId), { serialNumber, updatedAt: now });
       }
       for (const ref of legacyRefs) tx.delete(ref);
     });

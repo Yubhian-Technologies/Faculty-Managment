@@ -139,6 +139,10 @@ export interface SubjectSemesterAssignment {
   masterSubjectId?: string; // Explicit provenance pointer
   subjectName: string;
   subjectCode: string;
+  // Position in the curriculum as the Dean Academics uploaded it (Course
+  // Structure import: the file's row order) or last edited it - lists show a
+  // semester's subjects in this order, by code only when it is absent.
+  serialNumber?: number;
   shortCode?: string; // Snapshot of Subject.shortCode - see its own doc-comment
   // Snapshot attributes copied from Master Subject
   type?: SubjectType;

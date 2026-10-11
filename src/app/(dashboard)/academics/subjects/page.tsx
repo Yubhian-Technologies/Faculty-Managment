@@ -241,7 +241,8 @@ export default function SubjectsPage() {
         for (const a of body.assignments ?? []) merged.set(a.id, a);
       }
       setAssignments(Array.from(merged.values())
-        .sort((a, b) => String(a.subjectCode).localeCompare(String(b.subjectCode)))
+        // The order the Dean Academics uploaded (S.No.); by code only for subjects saved before it was kept.
+        .sort((a, b) => (a.serialNumber ?? Infinity) - (b.serialNumber ?? Infinity) || String(a.subjectCode).localeCompare(String(b.subjectCode)))
         .map((a) => ({
           assignment: a,
           master: { id: a.subjectId, code: a.subjectCode, name: a.subjectName, shortCode: a.shortCode, category: a.category } as Subject,

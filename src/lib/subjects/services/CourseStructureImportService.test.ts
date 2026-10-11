@@ -34,9 +34,11 @@ class FakeDb {
     const out = await fn(tx); // a throw here discards every staged write
     for (const w of tx.writes) {
       if (w.kind === "create" && this.store.has(w.ref.path)) throw new Error("ALREADY_EXISTS");
+      if (w.kind === "update" && !this.store.has(w.ref.path)) throw new Error("NOT_FOUND");
     }
     for (const w of tx.writes) {
       if (w.kind === "delete") this.store.delete(w.ref.path);
+      else if (w.kind === "update") this.store.set(w.ref.path, { ...this.store.get(w.ref.path), ...structuredClone(w.data!) });
       else this.store.set(w.ref.path, structuredClone(w.data!));
     }
     return out;
@@ -76,12 +78,13 @@ class CollRef extends QueryRef {
 }
 
 class FakeTx {
-  writes: { kind: "create" | "set" | "delete"; ref: DocRef; data?: Data }[] = [];
+  writes: { kind: "create" | "set" | "update" | "delete"; ref: DocRef; data?: Data }[] = [];
   constructor(private db: FakeDb) {}
   async get(ref: DocRef | QueryRef) { return ref instanceof DocRef ? ref.snap() : ref.run(); }
   async getAll(...refs: DocRef[]) { return refs.map((r) => r.snap()); }
   create(ref: DocRef, data: Data) { this.writes.push({ kind: "create", ref, data }); }
   set(ref: DocRef, data: Data) { this.writes.push({ kind: "set", ref, data }); }
+  update(ref: DocRef, data: Data) { this.writes.push({ kind: "update", ref, data }); }
   delete(ref: DocRef) { this.writes.push({ kind: "delete", ref }); }
 }
 
@@ -192,6 +195,17 @@ describe("Course Structure import - end to end", () => {
     expect(again.ok).toBe(true);
     expect(again.counts).toMatchObject({ mastersCreated: 0, instancesWritten: 0, unchanged: 2 });
     expect(JSON.stringify([...db.store])).toBe(snapshot);
+  });
+
+  it("keeps the file's row order on each assignment, and a re-upload in a new order updates only that", async () => {
+    await service.run(request([row({ code: "CS203" }), row({ code: "CS201", name: "Maths" }), row({ code: "CS202", name: "Physics" })]), "commit");
+    const order = () => docs("subjectSemesterAssignments").sort((a, b) => (a.serialNumber as number) - (b.serialNumber as number)).map((a) => a.subjectCode);
+    expect(order()).toEqual(["CS203", "CS201", "CS202"]);
+    const again = await service.run(request([row({ code: "CS202", name: "Physics" }), row({ code: "CS203" }), row({ code: "CS201", name: "Maths" })]), "commit");
+    expect(again.counts).toMatchObject({ instancesWritten: 0, unchanged: 3 });
+    expect(order()).toEqual(["CS202", "CS203", "CS201"]);
+    const scope = await service.getScope("col1", "c-cse", "cse", "R23");
+    expect(scope.existing[0].subjects.map((x) => x.code)).toEqual(["CS202", "CS203", "CS201"]);
   });
 
   it("one subject in two semesters becomes one master with two assignments", async () => {
