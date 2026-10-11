@@ -14,14 +14,17 @@ import type { PromotionRecord } from "@/types";
 // equivalent. Same policy here: College Office only, and only these five
 // keys - never routed through the generic PATCH /api/college/users/[uid],
 // which allows far more than Office should be able to touch on these roles.
-const EDITABLE_ROLES = ["HOD", "PRINCIPAL"];
+// HOD / Principal / Vice Principal are seats: the holder's own `role` is often
+// something else (PANEL_MEMBER...) with the position carried on `seatRoles`.
+const EDITABLE_ROLES = ["HOD", "PRINCIPAL", "VICE_PRINCIPAL"];
 
 async function loadTarget(db: FirebaseFirestore.Firestore, collegeId: string, uid: string) {
   const ref = db.collection("colleges").doc(collegeId).collection("users").doc(uid);
   const snap = await ref.get();
   if (!snap.exists) return { ref: null, data: null };
-  const data = snap.data() as { role?: string; name?: string; academicProfile?: Record<string, unknown> };
-  if (!data.role || !EDITABLE_ROLES.includes(data.role)) return { ref: null, data: null };
+  const data = snap.data() as { role?: string; seatRoles?: string[]; name?: string; academicProfile?: Record<string, unknown> };
+  const holdsEditableRole = EDITABLE_ROLES.includes(data.role ?? "") || (data.seatRoles ?? []).some((r) => EDITABLE_ROLES.includes(r));
+  if (!holdsEditableRole) return { ref: null, data: null };
   return { ref, data };
 }
 

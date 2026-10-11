@@ -804,11 +804,13 @@ const effectiveSemester = semesterOptions.length === 0
   );
   const availableFacultyForAssign = faculty.filter((f) => !alreadyOnSubject.has(f.id));
 
-  // Every department and sub-department in the college is askable, none hidden -
-  // including this HOD's own and the section's own department.
+  // Every department and sub-department in the college is askable except the
+  // section's own (you don't request a lend from yourself) - same rule as
+  // components/timetable/TeachingAssignmentsEditor.tsx.
+  const requestSectionDepartment = sections.find((s) => s.id === assignForm.sectionId)?.department;
   const requestableDepartments = useMemo(
-    () => departments,
-    [departments]
+    () => departments.filter((d) => d.name !== requestSectionDepartment),
+    [departments, requestSectionDepartment]
   );
 
   async function handleAssign(e: React.FormEvent) {
