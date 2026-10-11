@@ -47,7 +47,7 @@ export default function CollegeOfficeFacultyPromotionSalaryPage() {
       .then((data) => {
         if (!data.faculty) {
           toast({ variant: "destructive", title: "Faculty record not found" });
-          router.push("/college-office/faculty");
+          router.push("/college-office/staff");
           return;
         }
         setName(facultyDisplayName(data.faculty));
@@ -91,7 +91,7 @@ export default function CollegeOfficeFacultyPromotionSalaryPage() {
         return;
       }
       toast({ variant: "success", title: "Saved" });
-      router.push("/college-office/faculty");
+      router.push("/college-office/staff");
     } catch {
       toast({ variant: "destructive", title: "Failed to save" });
     } finally {
@@ -106,7 +106,7 @@ export default function CollegeOfficeFacultyPromotionSalaryPage() {
         description={name}
         actions={
           <Button variant="outline" asChild>
-            <Link href="/college-office/faculty"><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
+            <Link href="/college-office/staff"><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
           </Button>
         }
       />
@@ -130,7 +130,7 @@ export default function CollegeOfficeFacultyPromotionSalaryPage() {
             )}
             <FinancialFields value={value} onChange={(next) => setValue((v) => ({ ...v, ...next }))} />
             <div className="flex justify-end gap-3 pt-4 border-t">
-              <Button variant="outline" onClick={() => router.push("/college-office/faculty")}>Cancel</Button>
+              <Button variant="outline" onClick={() => router.push("/college-office/staff")}>Cancel</Button>
               <Button onClick={handleSave} loading={saving} disabled={blocked}>Save Changes</Button>
             </div>
           </CardContent>
