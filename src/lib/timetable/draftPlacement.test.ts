@@ -88,7 +88,7 @@ describe("validatePlacement - labs sharing a period", () => {
 
   it("still refuses a THIRD lab", () => {
     const two = { slots: [...draft.slots, slot("labB", "f3", "a3")] };
-    expect(validatePlacement(ctx, two, { ...placementOpts, subjectId: "labC", facultyId: "f4", assignmentId: "a4", allowSplit: true })).toMatch(/already has 2 labs/);
+    expect(validatePlacement(ctx, two, { ...placementOpts, subjectId: "labC", facultyId: "f4", assignmentId: "a4", allowSplit: true })).toMatch(/already has 2 subjects/);
   });
 
   it("lets another faculty join a lab already in a two-lab period (co-teaching)", () => {
@@ -110,11 +110,11 @@ describe("validatePlacement - non-teaching subjects sharing a period", () => {
 
   it("still refuses a THIRD non-teaching subject in the same period", () => {
     const two = { slots: [...draft.slots, slot("skillB", "f2", "a2")] };
-    expect(validatePlacement(ctx, two, { ...placementOpts, subjectId: "nssC", facultyId: "f3", assignmentId: "a3", allowSplit: true })).toMatch(/already has 2 non-teaching subjects/);
+    expect(validatePlacement(ctx, two, { ...placementOpts, subjectId: "nssC", facultyId: "f3", assignmentId: "a3", allowSplit: true })).toMatch(/already has 2 subjects/);
   });
 
-  it("refuses splitting a non-teaching subject against a lab", () => {
-    const lab = makeContext({ subjectsById: new Map([["counA", nonTeaching("counA")], ["labX", { id: "labX", type: "PRACTICAL" } as unknown as import("@/types").Subject]]) });
-    expect(validatePlacement(lab, draft, { ...placementOpts, subjectId: "labX", facultyId: "f2", assignmentId: "a2", allowSplit: true })).toMatch(/can only be split between lab subjects/);
+  it("lets a theory subject share a period with a non-teaching or lab subject", () => {
+    const mixed = makeContext({ subjectsById: new Map([["counA", nonTeaching("counA")], ["thX", { id: "thX", type: "THEORY" } as unknown as import("@/types").Subject]]) });
+    expect(validatePlacement(mixed, draft, { ...placementOpts, subjectId: "thX", facultyId: "f2", assignmentId: "a2", allowSplit: true })).toBeNull();
   });
 });
