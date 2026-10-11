@@ -17,8 +17,11 @@ export async function downloadFacultyResume(
 ): Promise<void> {
   let teachingAssignments: unknown[] = [];
   try {
-    const res = await fetch(`/api/college/teaching-assignments?facultyId=${encodeURIComponent(row.id as string)}`);
-    teachingAssignments = ((await res.json()) as { assignments?: unknown[] }).assignments ?? [];
+    // Without the record's id the API would answer with the VIEWER's own load.
+    if (row.id) {
+      const res = await fetch(`/api/college/teaching-assignments?facultyId=${encodeURIComponent(row.id)}`);
+      teachingAssignments = ((await res.json()) as { assignments?: unknown[] }).assignments ?? [];
+    }
   } catch { /* resume still generates without the live teaching-load table */ }
 
   let researchPublications: unknown[] = [];
