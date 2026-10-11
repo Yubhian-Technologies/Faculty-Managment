@@ -20,6 +20,7 @@ export async function PATCH(
       code?: string;
       shortCode?: string;
       altShortCode?: string;
+      universityCode?: string;
       hoursPerWeek?: number;
       totalHoursPerSemester?: number | null;
       credits?: number;
@@ -76,6 +77,10 @@ export async function PATCH(
     if (body.shortCode != null) updates.shortCode = body.shortCode.trim().toUpperCase();
     // Second short code: display-only, picked per placed period in the timetable editor, so no cascade.
     if (body.altShortCode != null) updates.altShortCode = body.altShortCode.trim().toUpperCase();
+    // The university's code (results imports match on it) - mirrored onto the
+    // subject's semester assignments below, which the Subjects page reads.
+    const universityCodeChanged = body.universityCode != null;
+    if (universityCodeChanged) updates.universityCode = String(body.universityCode).replace(/\s+/g, "").toUpperCase();
     if (body.hoursPerWeek != null) updates.hoursPerWeek = Number(body.hoursPerWeek);
     if ("totalHoursPerSemester" in body) updates.totalHoursPerSemester = body.totalHoursPerSemester ?? null;
     if (body.credits != null) updates.credits = Number(body.credits);
@@ -127,6 +132,15 @@ export async function PATCH(
     // name/code forever. Historical Tier-2 snapshots (internal marks,
     // attendance sessions, etc.) are deliberately NOT touched - those are
     // point-in-time records, not live state.
+    if (universityCodeChanged) {
+      const instancesSnap = await db.collection("colleges").doc(session.collegeId)
+        .collection("subjectSemesterAssignments").where("subjectId", "==", id).get();
+      for (let i = 0; i < instancesSnap.docs.length; i += 400) {
+        const batch = db.batch();
+        for (const d of instancesSnap.docs.slice(i, i + 400)) batch.update(d.ref, { universityCode: updates.universityCode, updatedAt: new Date() });
+        await batch.commit();
+      }
+    }
     const nameChanged = body.name != null;
     const codeChanged = body.code != null;
     const shortCodeChanged = body.shortCode != null;

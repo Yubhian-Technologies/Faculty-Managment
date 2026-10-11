@@ -62,6 +62,8 @@ export function buildSubjectInstancePayload(
     customOverrides?: SubjectInstanceAssignOptions["customOverrides"];
     createdAt: unknown;
     now: Date;
+    /** This assignment's own position (see SubjectSemesterAssignment.serialNumber). */
+    serialNumber?: number;
   }
 ): SubjectSemesterAssignment {
   const { collegeId, subjectId, courseId, departmentId, departmentName, year, semester, customOverrides } = options;
@@ -79,7 +81,9 @@ export function buildSubjectInstancePayload(
     masterSubjectId: subjectId,
     subjectName: master.name ?? "",
     subjectCode: master.code ?? "",
+    ...(options.serialNumber != null ? { serialNumber: options.serialNumber } : {}),
     ...(master.shortCode ? { shortCode: master.shortCode } : {}),
+    ...(master.universityCode ? { universityCode: master.universityCode } : {}),
     courseId,
     courseName: master.courseName ?? "",
     academicYear: master.academicYear ?? "",

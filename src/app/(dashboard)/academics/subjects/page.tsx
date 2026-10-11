@@ -37,6 +37,7 @@ type EditForm = {
   code: string;
   shortCode: string;
   altShortCode: string;
+  universityCode: string;
   serialNumber: string;
   category: string;
   customCategory: string;
@@ -241,7 +242,8 @@ export default function SubjectsPage() {
         for (const a of body.assignments ?? []) merged.set(a.id, a);
       }
       setAssignments(Array.from(merged.values())
-        .sort((a, b) => String(a.subjectCode).localeCompare(String(b.subjectCode)))
+        // The order the Dean Academics uploaded (S.No.); by code only for subjects saved before it was kept.
+        .sort((a, b) => (a.serialNumber ?? Infinity) - (b.serialNumber ?? Infinity) || String(a.subjectCode).localeCompare(String(b.subjectCode)))
         .map((a) => ({
           assignment: a,
           master: { id: a.subjectId, code: a.subjectCode, name: a.subjectName, shortCode: a.shortCode, category: a.category } as Subject,
@@ -368,6 +370,7 @@ export default function SubjectsPage() {
       code: a.subjectCode ?? item.master.code ?? "",
       shortCode: a.shortCode ?? item.master.shortCode ?? "",
       altShortCode: a.altShortCode ?? item.master.altShortCode ?? "",
+      universityCode: a.universityCode ?? "",
       serialNumber: a.serialNumber != null ? String(a.serialNumber) : "",
       category: a.category ?? item.master.category ?? "",
       customCategory: a.customCategory ?? "",
@@ -396,6 +399,7 @@ export default function SubjectsPage() {
         code: editForm.code.trim(),
         shortCode: editForm.shortCode.trim(),
         altShortCode: editForm.altShortCode.trim(),
+        universityCode: editForm.universityCode.trim(),
         type: editForm.type,
         totalHoursPerSemester: totalSem,
         excludeFromTeachingLoad: editForm.excludeFromTeachingLoad,
@@ -970,6 +974,14 @@ export default function SubjectsPage() {
                     value={editForm.altShortCode}
                     placeholder="Asked when placing in the timetable"
                     onChange={(e) => setEditForm({ ...editForm, altShortCode: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>University Code (optional)</Label>
+                  <Input
+                    value={editForm.universityCode}
+                    placeholder="e.g. R232101 - as on university results"
+                    onChange={(e) => setEditForm({ ...editForm, universityCode: e.target.value })}
                   />
                 </div>
                 <div className="space-y-1.5">

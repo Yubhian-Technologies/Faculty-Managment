@@ -37,7 +37,8 @@ export async function POST(request: Request) {
     // route.ts requires it) - was missing here, so an Academics user's
     // .xlsx upload 401'd on this shared parsing step while .csv (parsed
     // client-side, no round trip here) silently kept working.
-    await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_OFFICE", "ACADEMICS", "LIBRARY");
+    // EXAM_CELL - its semester results import (exam-cell/semester-results).
+    await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_OFFICE", "ACADEMICS", "LIBRARY", "EXAM_CELL");
 
     const formData = await request.formData();
     const file = formData.get("file");
