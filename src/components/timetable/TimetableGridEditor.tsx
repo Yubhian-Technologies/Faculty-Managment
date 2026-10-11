@@ -1340,7 +1340,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
         <div className="overflow-x-auto md:overflow-x-visible rounded-lg border">
           <table className="w-full text-xs md:table-fixed border-collapse">
             <colgroup>
-              <col style={{ width: "60px" }} />
+              <col style={{ width: "88px" }} />
               {rows.map((row, idx) => (
                 <col
                   key={row.kind === "period" ? `p_${row.period}` : `b_${idx}`}
@@ -1350,7 +1350,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
             </colgroup>
             <thead>
               <tr className="bg-muted/50">
-                <th className="p-2 text-center font-bold text-foreground border-b w-[60px] sticky left-0 z-[5] bg-muted/95 backdrop-blur">
+                <th className="p-2 text-center font-bold text-foreground border-b w-[88px] min-w-[88px] sticky left-0 z-[5] bg-muted/95 backdrop-blur">
                   Day
                 </th>
                 {rows.map((row, idx) => {
@@ -1381,7 +1381,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
             <tbody>
               {days.map((d) => (
                 <tr key={d} className="border-b last:border-b-0">
-                  <td className="p-2.5 font-medium text-muted-foreground sticky left-0 z-[5] bg-background">
+                  <td className="px-2 py-2.5 font-medium text-muted-foreground whitespace-nowrap sticky left-0 z-[5] bg-background">
                     {DAY_LABELS[d]}
                   </td>
                   {rows.map((row, idx) => {

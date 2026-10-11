@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import type { InnovationFacultyItem, InnovationRequest, InnovationType, InnovatorType } from "@/types";
+import { FACT_GRID_COLS_4 } from "@/components/shared/factGrid";
 
 const PREVIEW_COUNT = 3;
 const EMPTY_FACULTY: InnovationFacultyItem = { name: "", department: "", contribution: "" };
@@ -61,15 +62,17 @@ function InnovationRow({
       {record.status === "SENT_BACK" && record.sentBackReason && (
         <p className="text-xs text-destructive">Sent back: {record.sentBackReason}</p>
       )}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Field label="Title" value={record.innovationTitle} />
-        <Field label="Type" value={INNOVATION_TYPE_LABELS[record.innovationType]} />
-        <Field label="Innovator" value={record.innovatorType === "STUDENT" ? record.studentName : "Faculty"} />
-        <Field label="A.Y." value={record.academicYear} />
-        <Field label="TRL Level" value={record.trlLevel} />
-        <Field label="Prototype Developed" value={record.prototypeDeveloped} />
-        <Field label="Start-up Formed" value={record.startupFormed} />
-        <Field label="Presented in Competition" value={record.presentedInCompetition} />
+      <div className="@container">
+        <div className={`grid gap-2 ${FACT_GRID_COLS_4}`}>
+          <Field label="Title" value={record.innovationTitle} />
+          <Field label="Type" value={INNOVATION_TYPE_LABELS[record.innovationType]} />
+          <Field label="Innovator" value={record.innovatorType === "STUDENT" ? record.studentName : "Faculty"} />
+          <Field label="A.Y." value={record.academicYear} />
+          <Field label="TRL Level" value={record.trlLevel} />
+          <Field label="Prototype Developed" value={record.prototypeDeveloped} />
+          <Field label="Start-up Formed" value={record.startupFormed} />
+          <Field label="Presented in Competition" value={record.presentedInCompetition} />
+        </div>
       </div>
       {record.briefDescription && (
         <div>

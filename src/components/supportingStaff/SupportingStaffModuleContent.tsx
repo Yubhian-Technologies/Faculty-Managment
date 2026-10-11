@@ -9,6 +9,7 @@ import { TRAINING_ENTRY_TYPE_LABELS, AWARD_CATEGORY_LABELS, NON_TECHNICAL_RESPON
 import type { PersonalDetailsSource } from "@/components/shared/PersonalDetailsView";
 import type { SupportingStaffModuleKey } from "@/lib/supportingStaff/profileModules";
 import type { SupportingStaffProfileFields } from "@/types";
+import { FACT_GRID_COLS_4 } from "@/components/shared/factGrid";
 
 export interface SupportingStaffProfileSource extends PersonalDetailsSource {
   supportingStaffProfile?: Partial<SupportingStaffProfileFields>;
@@ -76,13 +77,15 @@ export function SupportingStaffModuleContent({ moduleKey, staff }: Props) {
             {(nonTechnical?.training ?? []).length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
               <div className="space-y-2">
                 {nonTechnical?.training.map((t, i) => (
-                  <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    <Field label="Type" value={TRAINING_ENTRY_TYPE_LABELS[t.type]} />
-                    <Field label="Title of the Program" value={t.titleOfTheProgram} />
-                    <Field label="Name of the Faculty / Coordinator" value={t.nameOfTheFacultyCoordinator} />
-                    <Field label="Year" value={t.year} />
-                    <Field label="Duration" value={t.duration ? `${t.duration} day${t.duration === 1 ? "" : "s"}` : undefined} />
-                    <DocField label="Certificate" url={t.certificateUrl} />
+                  <div key={i} className="@container">
+                    <div className={`rounded-md border bg-muted/20 shadow-sm p-2 grid gap-2 ${FACT_GRID_COLS_4}`}>
+                      <Field label="Type" value={TRAINING_ENTRY_TYPE_LABELS[t.type]} />
+                      <Field label="Title of the Program" value={t.titleOfTheProgram} />
+                      <Field label="Name of the Faculty / Coordinator" value={t.nameOfTheFacultyCoordinator} />
+                      <Field label="Year" value={t.year} />
+                      <Field label="Duration" value={t.duration ? `${t.duration} day${t.duration === 1 ? "" : "s"}` : undefined} />
+                      <DocField label="Certificate" url={t.certificateUrl} />
+                    </div>
                   </div>
                 ))}
               </div>
@@ -95,12 +98,14 @@ export function SupportingStaffModuleContent({ moduleKey, staff }: Props) {
             {(nonTechnical?.achievements ?? []).length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
               <div className="space-y-2">
                 {nonTechnical?.achievements.map((a, i) => (
-                  <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    <Field label="Category" value={AWARD_CATEGORY_LABELS[a.category]} />
-                    <Field label="Title of Award" value={a.titleOfAward} />
-                    <Field label="Awarding Agency/Body" value={a.awardingAgencyBody} />
-                    <Field label="Date of Award" value={a.dateOfAward ?? awardYear(a)} />
-                    <DocField label="Certificate" url={a.certificateUrl} />
+                  <div key={i} className="@container">
+                    <div className={`rounded-md border bg-muted/20 shadow-sm p-2 grid gap-2 ${FACT_GRID_COLS_4}`}>
+                      <Field label="Category" value={AWARD_CATEGORY_LABELS[a.category]} />
+                      <Field label="Title of Award" value={a.titleOfAward} />
+                      <Field label="Awarding Agency/Body" value={a.awardingAgencyBody} />
+                      <Field label="Date of Award" value={a.dateOfAward ?? awardYear(a)} />
+                      <DocField label="Certificate" url={a.certificateUrl} />
+                    </div>
                   </div>
                 ))}
               </div>

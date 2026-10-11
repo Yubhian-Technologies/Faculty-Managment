@@ -22,6 +22,7 @@ import type {
   SponsoredProjectCoPI, SponsoredProjectRequest, SponsoredProjectSanctionedStatus,
   SponsoredProjectStatus, SponsoredProjectType, SponsoredProjectYearData,
 } from "@/types";
+import { FACT_GRID_COLS_4 } from "@/components/shared/factGrid";
 
 const PREVIEW_COUNT = 3;
 // Guards against a typo like 1000 spawning a thousand Co-PI rows.
@@ -130,15 +131,17 @@ function SponsoredProjectRow({
       {project.status === "SENT_BACK" && project.sentBackReason && (
         <p className="text-xs text-destructive">Sent back: {project.sentBackReason}</p>
       )}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Field label="Title" value={project.title} />
-        <Field label="Agency" value={project.agencyName} />
-        <Field label="Scheme" value={project.schemeName} />
-        <Field label="Application No." value={project.applicationNumber} />
-        <Field label="Type" value={PROJECT_TYPE_LABELS[project.projectType]} />
-        <Field label="PI" value={project.piName} />
-        <Field label="Status" value={project.projectStatus === "APPLIED" ? "Applied" : `Sanctioned - ${project.sanctionedStatus === "COMPLETED" ? "Completed" : "Ongoing"}`} />
-        <Field label={project.totalAmountSanctioned !== undefined ? "Total Amount Sanctioned (Rs.)" : "Amount Applied (Rs.)"} value={project.totalAmountSanctioned ?? project.amountApplied} />
+      <div className="@container">
+        <div className={`grid gap-2 ${FACT_GRID_COLS_4}`}>
+          <Field label="Title" value={project.title} />
+          <Field label="Agency" value={project.agencyName} />
+          <Field label="Scheme" value={project.schemeName} />
+          <Field label="Application No." value={project.applicationNumber} />
+          <Field label="Type" value={PROJECT_TYPE_LABELS[project.projectType]} />
+          <Field label="PI" value={project.piName} />
+          <Field label="Status" value={project.projectStatus === "APPLIED" ? "Applied" : `Sanctioned - ${project.sanctionedStatus === "COMPLETED" ? "Completed" : "Ongoing"}`} />
+          <Field label={project.totalAmountSanctioned !== undefined ? "Total Amount Sanctioned (Rs.)" : "Amount Applied (Rs.)"} value={project.totalAmountSanctioned ?? project.amountApplied} />
+        </div>
       </div>
       {project.objectives && (
         <div>

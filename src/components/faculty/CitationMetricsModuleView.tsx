@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import type { FacultyProfileFields, CitationMetricsRequest } from "@/types";
+import { FACT_GRID_COLS_3 } from "@/components/shared/factGrid";
 
 interface RequestFormState {
   totalCitations: string;
@@ -162,11 +163,13 @@ export function CitationMetricsSection({
       {isRejected && request?.rejectionReason && (
         <p className="text-xs text-destructive">Reason: {request.rejectionReason}</p>
       )}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Field label="Total No. of Citations" value={p.citationsTotal} />
-        <Field label="H-Index" value={p.citationsHIndex} />
-        <Field label="Citations Excluding Self Citations" value={p.citationsExcludingSelf} />
-        <Field label="H-Index (Excl. Self Citations)" value={p.citationsHIndexExcludingSelf} />
+      <div className="@container">
+        <div className={`grid gap-3 ${FACT_GRID_COLS_3}`}>
+          <Field label="Total No. of Citations" value={p.citationsTotal} />
+          <Field label="H-Index" value={p.citationsHIndex} />
+          <Field label="Citations Excluding Self Citations" value={p.citationsExcludingSelf} />
+          <Field label="H-Index (Excl. Self Citations)" value={p.citationsHIndexExcludingSelf} />
+        </div>
       </div>
 
       {isOwnProfile && (
