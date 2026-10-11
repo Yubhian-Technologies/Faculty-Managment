@@ -118,10 +118,10 @@ describe("publishSectionDraft - section cells are re-validated (F-23)", () => {
     expect(slotsIn(fake, "s1").map((s) => s.id)).toEqual(["pin"]);
   });
 
-  it("refuses two theory subjects in one cell, allows exactly two labs", async () => {
+  it("allows exactly two subjects of any type in one cell, refuses a third", async () => {
     const theory = new FakeFirestore();
     section(theory, "s1", 1, [ds("a1", "f1", "MON", 1), ds("a2", "f2", "MON", 1)]);
-    expect(await publishSectionDraft(input(theory, "s1", 1))).toMatchObject({ ok: false, status: 409 });
+    expect(await publishSectionDraft(input(theory, "s1", 1))).toMatchObject({ ok: true, published: 2 });
 
     const labs = new FakeFirestore();
     section(labs, "s1", 1, [ds("a1", "f1", "MON", 1, "PRACTICAL"), ds("a2", "f2", "MON", 1, "PRACTICAL")]);
@@ -133,7 +133,7 @@ describe("publishSectionDraft - section cells are re-validated (F-23)", () => {
 
     const mixed = new FakeFirestore();
     section(mixed, "s1", 1, [ds("a1", "f1", "MON", 1, "PRACTICAL"), ds("a2", "f2", "MON", 1, "THEORY")]);
-    expect(await publishSectionDraft(input(mixed, "s1", 1))).toMatchObject({ ok: false, status: 409 });
+    expect(await publishSectionDraft(input(mixed, "s1", 1))).toMatchObject({ ok: true, published: 2 });
   });
 
   it("allows a non-teaching subject to share a cell with anything - another non-teaching one, a lab, or a theory class", async () => {
