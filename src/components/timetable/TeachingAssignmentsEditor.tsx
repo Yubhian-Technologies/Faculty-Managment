@@ -766,21 +766,39 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
                       <Trash2 className="h-3.5 w-3.5 mr-1" />Delete all
                     </Button>
                   </div>
-                  <div className="divide-y rounded-md border">
-                    {g.items.map((a) => (
-                      <div key={a.id} className="flex items-center justify-between py-2.5 px-3">
-                        <div>
-                          <p className="text-sm font-medium flex items-center gap-1.5">
-                            {a.subjectName} <span className="text-muted-foreground">({a.shortCode || a.subjectCode})</span>
-                            {a.timetableSemester != null && <Badge variant="outline" className="text-xs">Sem {a.timetableSemester}</Badge>}
-                          </p>
-                          <p className="text-xs text-muted-foreground">{a.facultyName} · {a.hoursPerWeek} hrs/wk</p>
-                        </div>
-                        <Button size="sm" variant="ghost" title="Remove assignment" onClick={() => setRemoveTarget(a)}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    ))}
+                  <div className="overflow-x-auto rounded-md border">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium text-muted-foreground">Subject</th>
+                          <th className="px-3 py-2 text-left font-medium text-muted-foreground">Code</th>
+                          <th className="px-3 py-2 text-left font-medium text-muted-foreground">Semester</th>
+                          <th className="px-3 py-2 text-left font-medium text-muted-foreground">Faculty</th>
+                          <th className="px-3 py-2 text-left font-medium text-muted-foreground">Weekly Hours</th>
+                          <th className="px-3 py-2"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {g.items.map((a) => (
+                          <tr key={a.id}>
+                            <td className="px-3 py-2.5 font-medium">{a.subjectName}</td>
+                            <td className="px-3 py-2.5 text-muted-foreground">{a.shortCode || a.subjectCode}</td>
+                            <td className="px-3 py-2.5">
+                              {a.timetableSemester != null
+                                ? <Badge variant="outline" className="text-xs">Sem {a.timetableSemester}</Badge>
+                                : <span className="text-muted-foreground">-</span>}
+                            </td>
+                            <td className="px-3 py-2.5">{a.facultyName}</td>
+                            <td className="px-3 py-2.5">{a.hoursPerWeek} hrs/wk</td>
+                            <td className="px-3 py-2.5 text-right">
+                              <Button size="sm" variant="ghost" title="Remove assignment" onClick={() => setRemoveTarget(a)}>
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               ))}
