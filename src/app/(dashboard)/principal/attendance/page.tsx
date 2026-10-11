@@ -15,6 +15,7 @@ import { isLateCheckIn } from "@/lib/attendance/lateStatus";
 import { SUNDAY_HOLIDAY_MESSAGE } from "@/lib/attendance/attendanceWindow";
 import type { AttendanceSummary, AttendanceRecord, AttendanceStatus } from "@/types";
 import { ATTENDANCE_STATUS_LABELS } from "@/types";
+import { FACT_GRID_COLS_4 } from "@/components/shared/factGrid";
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -207,27 +208,31 @@ export default function PrincipalAttendancePage() {
       )}
 
       {!isLoading && summary && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {summaryCards.map((c) => (
-            <Card key={c.label}>
-              <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">{c.label}</p>
-                <p className={`text-3xl font-bold mt-1 ${c.colorClass}`}>{c.value}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  of {summary.totalWorkingDays} working days
-                </p>
-              </CardContent>
-            </Card>
-          ))}
+        <div className="@container">
+          <div className={`grid gap-3 ${FACT_GRID_COLS_4}`}>
+            {summaryCards.map((c) => (
+              <Card key={c.label}>
+                <CardContent className="p-4">
+                  <p className="text-xs text-muted-foreground">{c.label}</p>
+                  <p className={`text-3xl font-bold mt-1 ${c.colorClass}`}>{c.value}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    of {summary.totalWorkingDays} working days
+                  </p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
       )}
 
       {isLoading && (
         <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="h-24 rounded-lg border bg-muted/30 animate-pulse" />
-            ))}
+          <div className="@container">
+            <div className={`grid gap-3 ${FACT_GRID_COLS_4}`}>
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="h-24 rounded-lg border bg-muted/30 animate-pulse" />
+              ))}
+            </div>
           </div>
           <div className="h-64 rounded-lg border bg-muted/30 animate-pulse" />
         </div>

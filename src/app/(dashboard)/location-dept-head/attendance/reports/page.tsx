@@ -18,6 +18,7 @@ import { DataTable } from "@/components/shared/DataTable";
 import { toast } from "@/hooks/useToast";
 import { istDateKey } from "@/lib/attendance/istTime";
 import type { LocationDepartment, LocationShift } from "@/types/locationStaff";
+import { FACT_GRID_COLS_5 } from "@/components/shared/factGrid";
 
 interface MergedRow extends Record<string, unknown> {
   staffId: string;
@@ -207,26 +208,28 @@ export default function DeptHeadReportsPage() {
       </div>
 
       {/* Summary */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <div className="bg-card p-4 rounded-2xl border border-border/60 shadow-xs">
-          <span className="text-[11px] text-muted-foreground">Staff</span>
-          <p className="text-2xl font-bold">{summary.totalStaff}</p>
-        </div>
-        <div className="bg-emerald-500/10 p-4 rounded-2xl border border-emerald-500/20">
-          <span className="text-[11px] text-emerald-700">Present</span>
-          <p className="text-2xl font-bold text-emerald-600">{summary.totalPresent}</p>
-        </div>
-        <div className="bg-red-500/10 p-4 rounded-2xl border border-red-500/20">
-          <span className="text-[11px] text-red-700">Absent</span>
-          <p className="text-2xl font-bold text-red-600">{summary.totalAbsent}</p>
-        </div>
-        <div className="bg-purple-500/10 p-4 rounded-2xl border border-purple-500/20">
-          <span className="text-[11px] text-purple-700">Leave Taken</span>
-          <p className="text-2xl font-bold text-purple-600">{summary.totalLeave}</p>
-        </div>
-        <div className="bg-amber-500/10 p-4 rounded-2xl border border-amber-500/20">
-          <span className="text-[11px] text-amber-700">Avg Attendance</span>
-          <p className="text-2xl font-bold text-amber-600">{summary.avgPercent}%</p>
+      <div className="@container">
+        <div className={`grid gap-3 ${FACT_GRID_COLS_5}`}>
+          <div className="bg-card p-4 rounded-2xl border border-border/60 shadow-xs">
+            <span className="text-[11px] text-muted-foreground">Staff</span>
+            <p className="text-2xl font-bold">{summary.totalStaff}</p>
+          </div>
+          <div className="bg-emerald-500/10 p-4 rounded-2xl border border-emerald-500/20">
+            <span className="text-[11px] text-emerald-700">Present</span>
+            <p className="text-2xl font-bold text-emerald-600">{summary.totalPresent}</p>
+          </div>
+          <div className="bg-red-500/10 p-4 rounded-2xl border border-red-500/20">
+            <span className="text-[11px] text-red-700">Absent</span>
+            <p className="text-2xl font-bold text-red-600">{summary.totalAbsent}</p>
+          </div>
+          <div className="bg-purple-500/10 p-4 rounded-2xl border border-purple-500/20">
+            <span className="text-[11px] text-purple-700">Leave Taken</span>
+            <p className="text-2xl font-bold text-purple-600">{summary.totalLeave}</p>
+          </div>
+          <div className="bg-amber-500/10 p-4 rounded-2xl border border-amber-500/20">
+            <span className="text-[11px] text-amber-700">Avg Attendance</span>
+            <p className="text-2xl font-bold text-amber-600">{summary.avgPercent}%</p>
+          </div>
         </div>
       </div>
 

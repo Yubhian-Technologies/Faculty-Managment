@@ -21,6 +21,7 @@ import {
   CONSULTANCY_DELIVERABLES, CONSULTANCY_DELIVERABLE_LABELS,
 } from "@/lib/research/consultancyProjectOptions";
 import type { ConsultancyCategory, ConsultancyClientType, ConsultancyDeliverable, ConsultancyProjectRequest } from "@/types";
+import { FACT_GRID_COLS_4 } from "@/components/shared/factGrid";
 
 const PREVIEW_COUNT = 3;
 
@@ -55,23 +56,27 @@ function ConsultancyProjectRow({
       {project.status === "SENT_BACK" && project.sentBackReason && (
         <p className="text-xs text-destructive">Sent back: {project.sentBackReason}</p>
       )}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Field label="Title" value={project.title} />
-        <Field label="Client / Organization" value={project.clientName} />
-        <Field label="Client Type" value={CONSULTANCY_CLIENT_TYPE_LABELS[project.clientType]} />
-        <Field label="Category" value={CONSULTANCY_CATEGORY_LABELS[project.consultancyCategory]} />
+      <div className="@container">
+        <div className={`grid gap-2 ${FACT_GRID_COLS_4}`}>
+          <Field label="Title" value={project.title} />
+          <Field label="Client / Organization" value={project.clientName} />
+          <Field label="Client Type" value={CONSULTANCY_CLIENT_TYPE_LABELS[project.clientType]} />
+          <Field label="Category" value={CONSULTANCY_CATEGORY_LABELS[project.consultancyCategory]} />
+        </div>
       </div>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Field label="Faculty Consultant(s)" value={project.facultyConsultantsNames} />
-        <Field label="Department" value={project.department} />
-        <Field label="Start Date" value={project.startDate} />
-        <Field label="Status" value={project.projectStatus === "ONGOING" ? "Ongoing" : project.projectStatus === "COMPLETED" ? "Completed" : undefined} />
-        <Field label={project.projectStatus === "ONGOING" ? "Tentative End Date" : "End Date"} value={project.endDate} />
-        <Field label="Duration (Months)" value={project.durationMonths} />
-        <Field label="Approved Consultancy Amount (Rs.)" value={project.consultancyAmount} />
-        <Field label="Amount Received (Rs.)" value={project.amountReceived} />
-        <Field label="Institutional Share (Rs.)" value={project.institutionalShare} />
-        <Field label="Faculty Share (Rs.)" value={project.facultyShare} />
+      <div className="@container">
+        <div className={`grid gap-2 ${FACT_GRID_COLS_4}`}>
+          <Field label="Faculty Consultant(s)" value={project.facultyConsultantsNames} />
+          <Field label="Department" value={project.department} />
+          <Field label="Start Date" value={project.startDate} />
+          <Field label="Status" value={project.projectStatus === "ONGOING" ? "Ongoing" : project.projectStatus === "COMPLETED" ? "Completed" : undefined} />
+          <Field label={project.projectStatus === "ONGOING" ? "Tentative End Date" : "End Date"} value={project.endDate} />
+          <Field label="Duration (Months)" value={project.durationMonths} />
+          <Field label="Approved Consultancy Amount (Rs.)" value={project.consultancyAmount} />
+          <Field label="Amount Received (Rs.)" value={project.amountReceived} />
+          <Field label="Institutional Share (Rs.)" value={project.institutionalShare} />
+          <Field label="Faculty Share (Rs.)" value={project.facultyShare} />
+        </div>
       </div>
       {project.problemStatement && (
         <div>

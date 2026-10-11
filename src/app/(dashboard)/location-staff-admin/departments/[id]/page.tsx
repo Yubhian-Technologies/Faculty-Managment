@@ -60,6 +60,7 @@ import type {
   LocationShift,
   LocationStaffAttendanceRecord,
 } from "@/types/locationStaff";
+import { FACT_GRID_COLS_4 } from "@/components/shared/factGrid";
 
 type TabKey = "staff" | "shifts" | "attendance" | "reports";
 
@@ -568,26 +569,28 @@ export default function DepartmentDetailPage() {
           </div>
 
           {/* Quick Stats Strip */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-5 mt-5 border-t border-border/60">
-            <div className="bg-muted/40 p-3.5 rounded-2xl text-center border border-border/40">
-              <p className="text-xs text-muted-foreground font-medium">Department Staff</p>
-              <p className="text-xl font-bold text-foreground mt-0.5">{staffList.length}</p>
-            </div>
-            <div className="bg-muted/40 p-3.5 rounded-2xl text-center border border-border/40">
-              <p className="text-xs text-muted-foreground font-medium">Active Shifts</p>
-              <p className="text-xl font-bold text-foreground mt-0.5">{shifts.length}</p>
-            </div>
-            <div className="bg-emerald-500/10 p-3.5 rounded-2xl text-center border border-emerald-500/20">
-              <p className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">Today Present</p>
-              <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
-                {attendanceSummary?.present ?? 0}
-              </p>
-            </div>
-            <div className="bg-amber-500/10 p-3.5 rounded-2xl text-center border border-amber-500/20">
-              <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">Late / Emergency</p>
-              <p className="text-xl font-bold text-amber-600 dark:text-amber-400 mt-0.5">
-                {(attendanceSummary?.late ?? 0)}
-              </p>
+          <div className="@container">
+            <div className={`grid gap-3 pt-5 mt-5 border-t border-border/60 ${FACT_GRID_COLS_4}`}>
+              <div className="bg-muted/40 p-3.5 rounded-2xl text-center border border-border/40">
+                <p className="text-xs text-muted-foreground font-medium">Department Staff</p>
+                <p className="text-xl font-bold text-foreground mt-0.5">{staffList.length}</p>
+              </div>
+              <div className="bg-muted/40 p-3.5 rounded-2xl text-center border border-border/40">
+                <p className="text-xs text-muted-foreground font-medium">Active Shifts</p>
+                <p className="text-xl font-bold text-foreground mt-0.5">{shifts.length}</p>
+              </div>
+              <div className="bg-emerald-500/10 p-3.5 rounded-2xl text-center border border-emerald-500/20">
+                <p className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">Today Present</p>
+                <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
+                  {attendanceSummary?.present ?? 0}
+                </p>
+              </div>
+              <div className="bg-amber-500/10 p-3.5 rounded-2xl text-center border border-amber-500/20">
+                <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">Late / Emergency</p>
+                <p className="text-xl font-bold text-amber-600 dark:text-amber-400 mt-0.5">
+                  {(attendanceSummary?.late ?? 0)}
+                </p>
+              </div>
             </div>
           </div>
         </CardContent>
@@ -1152,42 +1155,44 @@ export default function DepartmentDetailPage() {
           </div>
 
           {/* Attendance KPI Summary Chips */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
-            <div className="bg-card p-3 rounded-2xl border border-border/60 text-center shadow-xs">
-              <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Total Staff</span>
-              <p className="text-lg font-bold text-foreground mt-0.5">{attendanceSummary?.total ?? 0}</p>
-            </div>
-            <div className="bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-2xl text-center shadow-xs">
-              <span className="text-[10px] text-emerald-700 dark:text-emerald-400 uppercase font-bold tracking-wider">Present</span>
-              <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
-                {attendanceSummary?.present ?? 0}
-              </p>
-            </div>
-            <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-2xl text-center shadow-xs">
-              <span className="text-[10px] text-amber-700 dark:text-amber-400 uppercase font-bold tracking-wider">Late</span>
-              <p className="text-lg font-bold text-amber-600 dark:text-amber-400 mt-0.5">
-                {attendanceSummary?.late ?? 0}
-              </p>
-            </div>
-            <div className="bg-red-500/10 border border-red-500/20 p-3 rounded-2xl text-center shadow-xs">
-              <span className="text-[10px] text-red-700 dark:text-red-400 uppercase font-bold tracking-wider">Absent</span>
-              <p className="text-lg font-bold text-red-600 dark:text-red-400 mt-0.5">
-                {attendanceSummary?.absent ?? 0}
-              </p>
-            </div>
-            <div className="bg-blue-500/10 border border-blue-500/20 p-3 rounded-2xl text-center shadow-xs">
-              <span className="text-[10px] text-blue-700 dark:text-blue-400 uppercase font-bold tracking-wider">On Leave</span>
-              <p className="text-lg font-bold text-blue-600 dark:text-blue-400 mt-0.5">
-                {attendanceSummary?.onLeave ?? 0}
-              </p>
-            </div>
-            <div className="bg-muted/60 border border-border/50 p-3 rounded-2xl text-center shadow-xs">
-              <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Half Day</span>
-              <p className="text-lg font-bold text-foreground mt-0.5">{attendanceSummary?.halfDay ?? 0}</p>
-            </div>
-            <div className="bg-muted/60 border border-border/50 p-3 rounded-2xl text-center shadow-xs">
-              <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Pending</span>
-              <p className="text-lg font-bold text-foreground mt-0.5">{attendanceSummary?.pending ?? 0}</p>
+          <div className="@container">
+            <div className="grid gap-2.5 grid-cols-2 @xl:grid-cols-4 @5xl:grid-cols-7">
+              <div className="bg-card p-3 rounded-2xl border border-border/60 text-center shadow-xs">
+                <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Total Staff</span>
+                <p className="text-lg font-bold text-foreground mt-0.5">{attendanceSummary?.total ?? 0}</p>
+              </div>
+              <div className="bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-2xl text-center shadow-xs">
+                <span className="text-[10px] text-emerald-700 dark:text-emerald-400 uppercase font-bold tracking-wider">Present</span>
+                <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
+                  {attendanceSummary?.present ?? 0}
+                </p>
+              </div>
+              <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-2xl text-center shadow-xs">
+                <span className="text-[10px] text-amber-700 dark:text-amber-400 uppercase font-bold tracking-wider">Late</span>
+                <p className="text-lg font-bold text-amber-600 dark:text-amber-400 mt-0.5">
+                  {attendanceSummary?.late ?? 0}
+                </p>
+              </div>
+              <div className="bg-red-500/10 border border-red-500/20 p-3 rounded-2xl text-center shadow-xs">
+                <span className="text-[10px] text-red-700 dark:text-red-400 uppercase font-bold tracking-wider">Absent</span>
+                <p className="text-lg font-bold text-red-600 dark:text-red-400 mt-0.5">
+                  {attendanceSummary?.absent ?? 0}
+                </p>
+              </div>
+              <div className="bg-blue-500/10 border border-blue-500/20 p-3 rounded-2xl text-center shadow-xs">
+                <span className="text-[10px] text-blue-700 dark:text-blue-400 uppercase font-bold tracking-wider">On Leave</span>
+                <p className="text-lg font-bold text-blue-600 dark:text-blue-400 mt-0.5">
+                  {attendanceSummary?.onLeave ?? 0}
+                </p>
+              </div>
+              <div className="bg-muted/60 border border-border/50 p-3 rounded-2xl text-center shadow-xs">
+                <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Half Day</span>
+                <p className="text-lg font-bold text-foreground mt-0.5">{attendanceSummary?.halfDay ?? 0}</p>
+              </div>
+              <div className="bg-muted/60 border border-border/50 p-3 rounded-2xl text-center shadow-xs">
+                <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Pending</span>
+                <p className="text-lg font-bold text-foreground mt-0.5">{attendanceSummary?.pending ?? 0}</p>
+              </div>
             </div>
           </div>
 
@@ -1532,33 +1537,35 @@ export default function DepartmentDetailPage() {
           </div>
 
           {/* Report Summary Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="bg-card p-4 rounded-2xl border border-border/60 shadow-xs">
-              <span className="text-[11px] text-muted-foreground font-medium">Staff Members</span>
-              <p className="text-2xl font-bold text-foreground mt-0.5">{reportRows.length}</p>
-            </div>
-            <div className="bg-card p-4 rounded-2xl border border-border/60 shadow-xs">
-              <span className="text-[11px] text-muted-foreground font-medium">Avg Attendance %</span>
-              <p className="text-2xl font-bold text-primary mt-0.5">
-                {reportRows.length > 0
-                  ? Math.round(
-                      reportRows.reduce((acc, r) => acc + r.attendancePercent, 0) / reportRows.length
-                    )
-                  : 0}
-                %
-              </p>
-            </div>
-            <div className="bg-emerald-500/10 p-4 rounded-2xl border border-emerald-500/20 shadow-xs">
-              <span className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">Total Present</span>
-              <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
-                {reportRows.reduce((acc, r) => acc + r.present, 0)}
-              </p>
-            </div>
-            <div className="bg-amber-500/10 p-4 rounded-2xl border border-amber-500/20 shadow-xs">
-              <span className="text-[11px] text-amber-700 dark:text-amber-400 font-medium">Total Late</span>
-              <p className="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-0.5">
-                {reportRows.reduce((acc, r) => acc + r.late, 0)}
-              </p>
+          <div className="@container">
+            <div className={`grid gap-3 ${FACT_GRID_COLS_4}`}>
+              <div className="bg-card p-4 rounded-2xl border border-border/60 shadow-xs">
+                <span className="text-[11px] text-muted-foreground font-medium">Staff Members</span>
+                <p className="text-2xl font-bold text-foreground mt-0.5">{reportRows.length}</p>
+              </div>
+              <div className="bg-card p-4 rounded-2xl border border-border/60 shadow-xs">
+                <span className="text-[11px] text-muted-foreground font-medium">Avg Attendance %</span>
+                <p className="text-2xl font-bold text-primary mt-0.5">
+                  {reportRows.length > 0
+                    ? Math.round(
+                        reportRows.reduce((acc, r) => acc + r.attendancePercent, 0) / reportRows.length
+                      )
+                    : 0}
+                  %
+                </p>
+              </div>
+              <div className="bg-emerald-500/10 p-4 rounded-2xl border border-emerald-500/20 shadow-xs">
+                <span className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">Total Present</span>
+                <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
+                  {reportRows.reduce((acc, r) => acc + r.present, 0)}
+                </p>
+              </div>
+              <div className="bg-amber-500/10 p-4 rounded-2xl border border-amber-500/20 shadow-xs">
+                <span className="text-[11px] text-amber-700 dark:text-amber-400 font-medium">Total Late</span>
+                <p className="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-0.5">
+                  {reportRows.reduce((acc, r) => acc + r.late, 0)}
+                </p>
+              </div>
             </div>
           </div>
 
