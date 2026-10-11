@@ -413,8 +413,7 @@ export async function POST(request: Request) {
         if (passwordProblem) { failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: passwordProblem }); continue; }
       }
 
-      // Roll Number is required only for section-based (placed) rows - the
-      // Office's unassigned import doesn't collect it (checked in that path).
+      // Roll Number is required on every imported row (checked per path below).
       if (!row.name?.trim()) { failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: "Name is required" }); continue; }
       // Section may be blank for an "unassigned" import (a whole branch cohort
       // loaded before its sections exist); such rows must instead name a
@@ -583,10 +582,14 @@ export async function POST(request: Request) {
         const yearDurationError = validateYearForCourseDuration(Number(row.year), resolvedCourseDoc?.durationYears, resolvedCourse);
         if (yearDurationError) { failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: yearDurationError }); continue; }
 
-        // De-dupe by roll (unique college-wide - see below). Roll Number is OPTIONAL: the Office often enrols students
-        // before roll numbers exist and sets them later (matched by Student Mobile No). A roll-less row is de-duped by
-        // its mobile number above, and by the name + corroborating-detail check below.
-        const roll = row.rollNumber?.trim() ?? "";
+        // De-dupe by roll (unique across all colleges - see below). Roll Number is REQUIRED in the bulk import: the
+        // file is the college's own admission sheet, which always carries it. (It stays optional on the single Add
+        // Student form, so the roll-less handling further down is still what that path's records look like.)
+        const roll = row.rollNumber == null ? "" : String(row.rollNumber).trim();
+        if (!roll) {
+          failed.push({ row: rowNum, rollNumber: "-", error: "Roll No is required" });
+          continue;
+        }
         const nameLower = row.name.trim().toLowerCase();
         const year = Number(row.year);
         const nameKey = `${nameLower}::${departmentName!.toLowerCase()}::${year}`;
@@ -760,7 +763,11 @@ export async function POST(request: Request) {
         continue;
       }
 
-      const roll = (row.rollNumber ?? "").trim();
+      const roll = row.rollNumber == null ? "" : String(row.rollNumber).trim();
+      if (!roll) {
+        failed.push({ row: rowNum, rollNumber: "-", error: "Roll No is required" });
+        continue;
+      }
       // Unique across the whole college, not just this section - held by any
       // saved student or an earlier row of this same file.
       const placedRollHolder = roll ? rollRegistry.holder(roll) : undefined;

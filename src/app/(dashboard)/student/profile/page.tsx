@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { ChangePasswordDialog } from "@/components/shared/ChangePasswordDialog";
 import { ProfilePhotoUpload } from "@/components/shared/ProfilePhotoUpload";
 import { FieldInput } from "@/components/students/RosterFieldInputs";
+import { StudentOwnDocuments } from "@/components/students/StudentOwnDocuments";
 import { ROSTER_FIELDS } from "@/lib/students/rosterFields";
 import { STUDENT_SELF_EDIT_GROUPS } from "@/lib/students/selfEdit";
 import { useAuth } from "@/hooks/useAuth";
@@ -30,6 +31,10 @@ interface ProfileResponse {
 }
 
 const FIELD_BY_KEY = new Map(ROSTER_FIELDS.map((f) => [f.key, f]));
+
+// The supporting-document uploads (shown only when "Studied Outside AP" / "Family ID Linked to Another State" is Yes)
+// sit at the bottom of this group, in view and in edit mode.
+const DOCUMENTS_GROUP_TITLE = "Additional Information";
 
 function Fields({ rows }: { rows: Row[] }) {
   return (
@@ -205,6 +210,7 @@ export default function StudentProfilePage() {
                         );
                       })}
                     </div>
+                    {g.title === DOCUMENTS_GROUP_TITLE && <StudentOwnDocuments answers={values} />}
                   </CardContent>
                 </Card>
               ))}
@@ -219,6 +225,7 @@ export default function StudentProfilePage() {
                 <CardContent className="space-y-3 p-4 sm:p-5">
                   <h3 className="text-sm font-semibold">{g.title}</h3>
                   <Fields rows={g.rows} />
+                  {g.title === DOCUMENTS_GROUP_TITLE && <StudentOwnDocuments answers={data.editable?.values ?? {}} />}
                 </CardContent>
               </Card>
             ))

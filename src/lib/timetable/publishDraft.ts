@@ -122,16 +122,18 @@ export async function publishSectionDraft(input: PublishInput): Promise<PublishO
         issues.push(`${day} period ${period} now holds a pinned slot, so the draft's placement there can't be published. Regenerate this timetable.`);
       } else if (inCell.length > 1) {
         // Several faculty of ONE subject may share the cell (co-teaching, any subject type); two
-        // different subjects may share it only if both are labs, or both are non-teaching
-        // (Counselling, Mentoring, NSS, ...) - each with any number of faculty.
+        // different subjects may share it only if both are labs (capped at exactly two), or ANY
+        // NUMBER of subjects once one of them is non-teaching (Counselling, Mentoring, NSS, ...) -
+        // a non-teaching session splits freely with anything, uncapped.
         const bySubject = new Map<string, DraftSlot[]>();
         for (const s of inCell) bySubject.set(s.subjectId, [...(bySubject.get(s.subjectId) ?? []), s]);
         const subjects = Array.from(bySubject.values());
         const allLabs = inCell.every((s) => s.subjectType === "PRACTICAL");
-        const allNonTeaching = inCell.every((s) => s.subjectType === "NON_TEACHING");
+        const involvesNonTeaching = inCell.some((s) => s.subjectType === "NON_TEACHING");
         const tooManyFaculty = subjects.some((g) => g.length > MAX_FACULTY_PER_SUBJECT);
-        if (tooManyFaculty || subjects.length > 2 || (subjects.length === 2 && !allLabs && !allNonTeaching)) {
-          issues.push(`${day} period ${period} has ${subjects.length} subjects in it - only two labs, or two non-teaching subjects, may share a period (each with its faculty), or several faculty of the same subject. Regenerate this timetable.`);
+        const overLabCap = !involvesNonTeaching && (subjects.length > 2 || (subjects.length === 2 && !allLabs));
+        if (tooManyFaculty || overLabCap) {
+          issues.push(`${day} period ${period} has ${subjects.length} subjects in it - only two labs may share a period, unless one is non-teaching (each with its faculty), or several faculty of the same subject. Regenerate this timetable.`);
         }
       }
     }

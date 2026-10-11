@@ -55,25 +55,29 @@ export const EDUCATION_DOMAIN_LABELS: Record<EducationDomain, string> = {
   LAW: "Law",
   OTHERS: "Others",
 };
-const COURSES_BY_DOMAIN: Record<EducationDomain, string[]> = {
+// Split per level (UG / PG) rather than one shared list - a Masters course
+// has no business showing up under UG and vice versa. "CS" was a stray dup
+// of the Code/Department-code abbreviation, not a real qualification -
+// dropped outright. "CA" (Chartered Accountancy) is a PG-only entry.
+const COURSES_BY_DOMAIN_UG: Record<EducationDomain, string[]> = {
   ENGINEERING: [
-    "B.Tech/BE", "M.Tech/ME", "B.Tech - M.Tech Integrated/Dual Degree", "BCA",
-    "MCA (2-Year)", "MCA (3-Year)", "MCM", "Diploma in Engineering",
+    "B.Tech/BE", "B.Tech - M.Tech Integrated/Dual Degree", "BCA", "Diploma in Engineering",
   ],
-  MANAGEMENT: [
-    "BBA", "B.Com", "M.Com", "BHM", "CA", "CS", "PGDM", "1-Year MBA", "2-Year MBA",
-    "Executive MBA", "IPM",
-  ],
+  MANAGEMENT: ["BBA", "B.Com", "BHM", "IPM"],
   ARTS_SCIENCE: [
-    "B.Sc.", "M.Sc.", "B.A.", "M.A.", "BS", "MS", "B.Ed", "M.Ed", "B.El.Ed", "B.P.Ed",
-    "B.Des.", "M.Des.", "B.Arch.", "M.Arch.", "B.F.Tech.", "M.F.Tech.", "B.Plan", "M.Plan",
-    "BFA", "MFA",
+    "B.Sc.", "B.A.", "BS", "B.Ed", "B.El.Ed", "B.P.Ed", "B.Des.", "B.Arch.", "B.F.Tech.",
+    "B.Plan", "BFA",
   ],
-  MEDICINE: [
-    "B.Pharma", "M.Pharma", "Pharma. D", "BUMS", "BAMS", "BDS", "BHMS", "MBBS",
-    "BVSC", "MVSC", "MS/MD", "MDS", "DM",
-  ],
-  LAW: ["LLB", "LLM"],
+  MEDICINE: ["B.Pharma", "Pharma. D", "BUMS", "BAMS", "BDS", "BHMS", "MBBS", "BVSC"],
+  LAW: ["LLB"],
+  OTHERS: [],
+};
+const COURSES_BY_DOMAIN_PG: Record<EducationDomain, string[]> = {
+  ENGINEERING: ["M.Tech/ME", "MCA (2-Year)", "MCA (3-Year)", "MCM"],
+  MANAGEMENT: ["M.Com", "CA", "PGDM", "1-Year MBA", "2-Year MBA", "Executive MBA"],
+  ARTS_SCIENCE: ["M.Sc.", "M.A.", "MS", "M.Ed", "M.Des.", "M.Arch.", "M.F.Tech.", "M.Plan", "MFA"],
+  MEDICINE: ["M.Pharma", "MVSC", "MS/MD", "MDS", "DM"],
+  LAW: ["LLM"],
   OTHERS: [],
 };
 
@@ -195,6 +199,21 @@ function withCourse(v: DegreeDetail, course: string): DegreeDetail {
   return { ...rest, course, ...(isValidDegreeType(course, degreeType) ? { degreeType } : {}) };
 }
 
+// A soft tint per qualification level, so the stacked education blocks (each
+// the same grid of the same fields) can be told apart at a glance while
+// scrolling. Kept pale - the fields inside stay on the plain background
+// (inputs already are; the Select triggers are made so by BLOCK_FIELDS) - and
+// each has a dark-mode pair.
+const LEVEL_TINT: Record<DegreeLevel, { block: string; label: string }> = {
+  HIGH_SCHOOL: { block: "border-sky-200 bg-sky-50/70 dark:border-sky-900 dark:bg-sky-950/30", label: "text-sky-800 dark:text-sky-300" },
+  INTERMEDIATE: { block: "border-emerald-200 bg-emerald-50/70 dark:border-emerald-900 dark:bg-emerald-950/30", label: "text-emerald-800 dark:text-emerald-300" },
+  UG: { block: "border-amber-200 bg-amber-50/70 dark:border-amber-900 dark:bg-amber-950/30", label: "text-amber-800 dark:text-amber-300" },
+  PG: { block: "border-violet-200 bg-violet-50/70 dark:border-violet-900 dark:bg-violet-950/30", label: "text-violet-800 dark:text-violet-300" },
+  DOCTORAL: { block: "border-rose-200 bg-rose-50/70 dark:border-rose-900 dark:bg-rose-950/30", label: "text-rose-800 dark:text-rose-300" },
+  POST_DOCTORAL: { block: "border-teal-200 bg-teal-50/70 dark:border-teal-900 dark:bg-teal-950/30", label: "text-teal-800 dark:text-teal-300" },
+};
+const BLOCK_FIELDS = "[&_button[role=combobox]]:bg-background";
+
 export function DegreeFields({
   label, level, value, onChange,
 }: {
@@ -209,7 +228,9 @@ export function DegreeFields({
   // surfaces for correction rather than silently hiding behind an unselected
   // dropdown.
   const domainIsOther = !!domain && !(domain in EDUCATION_DOMAIN_LABELS);
-  const courseOptions = hasDomain ? (domain ? (COURSES_BY_DOMAIN[domain] ?? []) : []) : (FLAT_OPTIONS_BY_LEVEL[level] ?? []);
+  const courseOptions = hasDomain
+    ? (domain ? ((level === "PG" ? COURSES_BY_DOMAIN_PG : COURSES_BY_DOMAIN_UG)[domain] ?? []) : [])
+    : (FLAT_OPTIONS_BY_LEVEL[level] ?? []);
   const courseIsOther = !!v.course && !courseOptions.includes(v.course);
   // Intermediate (12th) and High School (10th) have no fixed course
   // catalogue to offer - just let the qualification name be typed directly.
@@ -235,8 +256,8 @@ export function DegreeFields({
   const schoolQualificationIsOther = v.course === OTHER_QUALIFICATION || (!!v.course && !schoolQualificationOptions.includes(v.course));
 
   return (
-    <div className="space-y-3 rounded-lg border p-3">
-      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
+    <div className={`space-y-3 rounded-lg border p-3 ${LEVEL_TINT[level].block} ${BLOCK_FIELDS}`}>
+      <p className={`text-xs font-semibold uppercase tracking-wide ${LEVEL_TINT[level].label}`}>{label}</p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {isDoctoralOrPostDoc && (
           <>

@@ -80,11 +80,20 @@ export async function pinSlotWithChecks(input: PinSlotInput): Promise<PinSlotOut
         return { ok: false, error: `Conflict: this section already has a subject scheduled on ${day} period ${periodNumber}` };
       }
     } else if (cellSlotsNow.length > 0) {
-      // A period may be split between at most two subjects of ANY type
-      // (theory, lab, tutorial, non-teaching, ...), each with any number of
-      // faculty - count subjects, not slots.
+      // At most two subjects of ANY type (theory, lab, ...) may share a period,
+      // each with any number of faculty. Once a non-teaching subject
+      // (Counselling, Mentoring, NSS, ...) is on either side the cap is lifted:
+      // it splits freely with anything.
       const existingSubjectIdSet = new Set(cellSlotsNow.map((s) => s.subjectId));
-      if (existingSubjectIdSet.size >= 2 && !existingSubjectIdSet.has(input.subjectId)) {
+      const existingSubjectIds = Array.from(existingSubjectIdSet);
+      const [incomingSubjectDoc, ...existingSubjectDocs] = await tx.getAll(
+        collegeRef.collection("subjects").doc(input.subjectId),
+        ...existingSubjectIds.map((id) => collegeRef.collection("subjects").doc(id))
+      );
+      const incomingType = (incomingSubjectDoc.data() as { type?: string } | undefined)?.type;
+      const existingTypes = existingSubjectDocs.map((d) => (d.data() as { type?: string } | undefined)?.type);
+      const involvesNonTeaching = incomingType === "NON_TEACHING" || existingTypes.includes("NON_TEACHING");
+      if (!involvesNonTeaching && existingSubjectIdSet.size >= 2 && !existingSubjectIdSet.has(input.subjectId)) {
         return {
           ok: false,
           error: `Period ${periodNumber} on ${day} already has 2 subjects sharing it - a period can only be split between two subjects.`,

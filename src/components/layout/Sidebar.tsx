@@ -22,6 +22,7 @@ import { useWorkContext } from "@/hooks/useWorkContext";
 import { OrgScopeTree } from "./OrgScopeTree";
 import { ROLE_LABELS } from "@/types";
 import { getInitials } from "@/lib/utils";
+import { UserCardSubtitle } from "./UserCardSubtitle";
 import { Button } from "@/components/ui/button";
 
 const INTERVIEW_NAV_ITEM: NavItem = {
@@ -178,7 +179,7 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate">{user.name}</p>
-            <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+            <UserCardSubtitle user={user} />
           </div>
           <Button
             variant="ghost"

@@ -23,7 +23,6 @@ import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { buildRows, defaultPeriodTimings } from "@/lib/timetable/buildGrid";
 import { continuousSpans, ordinalYear, readableCode, resolveTimetableDays } from "@/lib/timetable/gridModel";
 import { InstitutionalTimetableTable } from "@/components/timetable/InstitutionalTimetableTable";
-import { FacultyLeisureFilter } from "@/components/timetable/FacultyLeisureFilter";
 import { currentWeekDates } from "@/lib/utils";
 import { isoDateKey } from "@/lib/leave/dayCounter";
 import { requestAssignmentIds } from "@/lib/teaching/requestAllocations";
@@ -137,7 +136,6 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
   const [thisWeekKey] = useState(() => isoDateKey(currentWeekDates()[0]));
   const [weekStart, setWeekStart] = useState<Date>(() => currentWeekDates()[0]);
   const [otherWeek, setOtherWeek] = useState<{ key: string; slots: TimetableSlot[] } | null>(null);
-  const [showLeisure, setShowLeisure] = useState(false);
 
   const [modeState, setModeState] = useState<Mode>("published");
   // View filter, independent of edit mode - "ALL" shows everything as before.
@@ -509,10 +507,20 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
   // subjects (validatePlacement enforces the same).
   const isSplitTarget = addingAt ? rawCellEntriesFor(addingAt.day, addingAt.period).length > 0 : false;
   const occupantSubjectIds = new Set(addingAt ? rawCellEntriesFor(addingAt.day, addingAt.period).map((e) => e.slot.subjectId) : []);
-  const pickableAssignments = assignments.filter(
-    (a) => myAssignmentIds.includes(a.id) && !occupyingAtTarget.has(a.id)
-      && (!isSplitTarget || occupantSubjectIds.has(a.subjectId) || occupantSubjectIds.size < 2)
-  );
+  // A non-teaching subject (Counselling, Mentoring, NSS, ...) splits freely
+  // with anything, uncapped. Otherwise any two subjects of any type may share
+  // a period, capped at exactly two - matching validatePlacement.
+  const occupantsIncludeNonTeaching = addingAt
+    ? rawCellEntriesFor(addingAt.day, addingAt.period).some((e) => assignments.find((a) => a.id === e.slot.assignmentId)?.subjectType === "NON_TEACHING")
+    : false;
+  const atCapacity = !occupantsIncludeNonTeaching && occupantSubjectIds.size >= 2;
+  const pickableAssignments = assignments.filter((a) => {
+    if (!myAssignmentIds.includes(a.id) || occupyingAtTarget.has(a.id)) return false;
+    if (!isSplitTarget) return true;
+    if (occupantSubjectIds.has(a.subjectId)) return true; // co-teaching: always fine, no cap
+    if (a.subjectType === "NON_TEACHING" || occupantsIncludeNonTeaching) return true; // either side non-teaching: uncapped
+    return !atCapacity;
+  });
   // Lent-in subjects not offered yet (their lender has not closed the request and nothing is placed).
   const heldBackList = assignments.filter((a) => heldBack(a.id) && !a.isPast);
   const draftHasSlots = Boolean(draft?.slots?.length);
@@ -1294,15 +1302,6 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
           and stays here in Draft, where it is used while placing subjects. */}
       {!lookupBelowGrid && <FacultyTimetableLookup embedded />}
 
-      {publishedWeekTools && mode === "published" && (
-        <div className="space-y-3">
-          <Button type="button" variant="outline" size="sm" onClick={() => setShowLeisure((v) => !v)}>
-            {showLeisure ? "Hide leisure faculty" : "Show leisure faculty"}
-          </Button>
-          {showLeisure && <FacultyLeisureFilter scopeLabel="in your department" />}
-        </div>
-      )}
-
       {/* ── Grid ──────────────────────────────────────────────────────────── */}
       {isLoading || (mode === "published" && isLoadingWeek) ? (
         <div className="h-96 rounded-lg border bg-muted/30 animate-pulse" />
@@ -1391,11 +1390,14 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
                     // the existing entries, never replacing the "empty cell"
                     // Add button below, and never available in move-mode
                     // (a slot is selected) to avoid ambiguity with "Place here".
-                    // A cell holding fewer than two subjects (of any type) can take another.
+                    // A cell can still be split further - uncapped once a
+                    // non-teaching subject is already in it, otherwise capped
+                    // at two subjects; see pickableAssignments above.
                     const rawEntries = rawCellEntriesFor(d, row.period);
                     // ...or another faculty of the same subject that is not in the cell yet (co-teaching).
-                    // (counted by subject: a lab with two faculty is still one lab, so a second lab may join it)
-                    const labCanSplit = new Set(rawEntries.map((e) => e.slot.subjectId)).size < 2;
+                    // (counted by subject: a subject with two faculty is still one subject)
+                    const labCanSplit = rawEntries.some((e) => assignments.find((a) => a.id === e.slot.assignmentId)?.subjectType === "NON_TEACHING")
+                      || new Set(rawEntries.map((e) => e.slot.subjectId)).size < 2;
                     const sameSubjectFacultyLeft = assignments.some((a) =>
                       myAssignmentIds.includes(a.id) && !a.isPast
                       && !rawEntries.some((e) => e.slot.assignmentId === a.id)
@@ -1605,7 +1607,11 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
             </DialogTitle>
             <DialogDescription>
               {isSplitTarget
-                ? `This period already has a subject - another faculty of the same subject, or one more subject of any type alongside it, can be added to it.`
+                ? atCapacity
+                  ? "This period already has two subjects sharing it - only more faculty of one already here can be added, not a third subject."
+                  : occupantsIncludeNonTeaching
+                    ? `This period already has a subject - another faculty of the same subject, or any other subject alongside it (non-teaching splits freely, with no limit on how many), can be added to it.`
+                    : `This period already has a subject - another faculty of the same subject, or one more subject of any type alongside it, can be added to it.`
                 : `Pick a subject assigned to this section. Its faculty comes along automatically; a subject with custom continuous slots (set in Settings) takes that many periods.`}
             </DialogDescription>
           </DialogHeader>
@@ -1613,7 +1619,9 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
           {pickableAssignments.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               {isSplitTarget
-                ? "None of your remaining subjects can be added here - a period can be shared by at most two subjects."
+                ? atCapacity
+                  ? "Both subjects already here have every faculty assigned - nothing more can be added."
+                  : "None of your remaining subjects can be added here."
                 : isCrossDepartment
                   ? "None of your faculty are assigned to this section yet. Add that under Teaching Assignments first."
                   : heldBackList.length > 0
