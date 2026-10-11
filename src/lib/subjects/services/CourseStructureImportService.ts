@@ -460,6 +460,7 @@ export class CourseStructureImportService {
       name: row.name,
       code: row.code,
       ...(row.shortCode ? { shortCode: row.shortCode } : {}),
+      ...(row.universityCode ? { universityCode: row.universityCode } : {}),
       hoursPerWeek: row.hoursPerWeek,
       lectureHours: row.lectureHours,
       tutorialHours: row.tutorialHours,
@@ -497,7 +498,7 @@ export class CourseStructureImportService {
     return { ok: true, ...base, verification };
   }
 
-  private async commit(req: CourseStructureRequest, ctx: LoadedContext, plan: Plan): Promise<void> {
+  private async commit(req: CourseStructureRequest, ctx: LoadedContext & { existingInstances?: SubjectSemesterAssignment[] }, plan: Plan): Promise<void> {
     const college = this.collegeRef(req.collegeId);
     const instances = college.collection("subjectSemesterAssignments");
     const subjects = college.collection("subjects");
@@ -565,6 +566,18 @@ export class CourseStructureImportService {
 
       // 3. Writes - all or nothing.
       const now = new Date();
+      // A University Code in the file is recorded on an existing subject too
+      // (and its assignments, below) - only when it is new or different.
+      const universityCodeFor = new Map<string, string>();
+      for (const [code, r] of rowByCode) if (r.universityCode) universityCodeFor.set(plan.masterIdByCode.get(code)!, r.universityCode);
+      for (const id of reusedMasterIds) {
+        const next = universityCodeFor.get(id);
+        const master = masters.get(id);
+        if (next && master && master.universityCode !== next) {
+          tx.update(subjects.doc(id), { universityCode: next, updatedAt: now });
+          masters.set(id, { ...master, universityCode: next });
+        }
+      }
       for (const code of plan.newMasterCodes) {
         const id = plan.masterIdByCode.get(code)!;
         const payload = this.masterPayload(req, ctx, rowByCode.get(code)!, now);
@@ -593,8 +606,15 @@ export class CourseStructureImportService {
       }
       // Subjects already assigned are otherwise left alone - only their place
       // in the order is taken from this file, so uploading it again restores it.
-      for (const [instanceId, serialNumber] of plan.serialUpdates) {
-        tx.update(instances.doc(instanceId), { serialNumber, updatedAt: now });
+      for (const p of plan.planRows.filter((r) => r.instance === "unchanged")) {
+        const instanceId = `${plan.masterIdByCode.get(p.key)}_${ctx.department.id}_${p.semester}`;
+        const serialNumber = plan.serialUpdates.get(instanceId);
+        const universityCode = universityCodeFor.get(plan.masterIdByCode.get(p.key)!);
+        const current = ctx.existingInstances?.find((x) => x.id === instanceId);
+        const patch: Record<string, unknown> = {};
+        if (serialNumber != null) patch.serialNumber = serialNumber;
+        if (universityCode && current?.universityCode !== universityCode) patch.universityCode = universityCode;
+        if (Object.keys(patch).length > 0) tx.update(instances.doc(instanceId), { ...patch, updatedAt: now });
       }
       for (const ref of legacyRefs) tx.delete(ref);
     });

@@ -148,6 +148,8 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/exam-cell", iconName: "LayoutDashboard", roles: ["EXAM_CELL"] },
   { label: "Exam Configuration", href: "/exam-cell/configure", iconName: "ClipboardList", roles: ["EXAM_CELL"] },
   { label: "Exam Seating", href: "/exam-cell/seating", iconName: "Armchair", roles: ["EXAM_CELL"] },
+  { label: "Semester Results", href: "/exam-cell/semester-results", iconName: "GraduationCap", roles: ["EXAM_CELL"] },
+  { label: "Result Rules", href: "/exam-cell/result-rules", iconName: "Settings2", roles: ["EXAM_CELL"] },
   { label: "Exam Cell Guidelines", href: "/exam-cell/guidelines", iconName: "BookOpen", roles: ["EXAM_CELL"] },
   { label: "Mid Timings & Dates", href: "/exam-cell/mid-timings", iconName: "CalendarRange", roles: ["EXAM_CELL"] },
   { label: "Timetable View", href: "/exam-cell/timetable-view", iconName: "CalendarDays", roles: ["EXAM_CELL"] },

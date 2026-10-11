@@ -37,6 +37,7 @@ type EditForm = {
   code: string;
   shortCode: string;
   altShortCode: string;
+  universityCode: string;
   serialNumber: string;
   category: string;
   customCategory: string;
@@ -369,6 +370,7 @@ export default function SubjectsPage() {
       code: a.subjectCode ?? item.master.code ?? "",
       shortCode: a.shortCode ?? item.master.shortCode ?? "",
       altShortCode: a.altShortCode ?? item.master.altShortCode ?? "",
+      universityCode: a.universityCode ?? "",
       serialNumber: a.serialNumber != null ? String(a.serialNumber) : "",
       category: a.category ?? item.master.category ?? "",
       customCategory: a.customCategory ?? "",
@@ -397,6 +399,7 @@ export default function SubjectsPage() {
         code: editForm.code.trim(),
         shortCode: editForm.shortCode.trim(),
         altShortCode: editForm.altShortCode.trim(),
+        universityCode: editForm.universityCode.trim(),
         type: editForm.type,
         totalHoursPerSemester: totalSem,
         excludeFromTeachingLoad: editForm.excludeFromTeachingLoad,
@@ -971,6 +974,14 @@ export default function SubjectsPage() {
                     value={editForm.altShortCode}
                     placeholder="Asked when placing in the timetable"
                     onChange={(e) => setEditForm({ ...editForm, altShortCode: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>University Code (optional)</Label>
+                  <Input
+                    value={editForm.universityCode}
+                    placeholder="e.g. R232101 - as on university results"
+                    onChange={(e) => setEditForm({ ...editForm, universityCode: e.target.value })}
                   />
                 </div>
                 <div className="space-y-1.5">

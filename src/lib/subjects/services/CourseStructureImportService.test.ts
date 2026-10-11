@@ -208,6 +208,16 @@ describe("Course Structure import - end to end", () => {
     expect(scope.existing[0].subjects.map((x) => x.code)).toEqual(["CS202", "CS203", "CS201"]);
   });
 
+  it("saves the University Code, and a later upload adds it to subjects already imported", async () => {
+    await service.run(request([row(), row({ code: "CS202", name: "Physics", universityCode: "r232102" })]), "commit");
+    const byCode = () => Object.fromEntries(docs("subjects").map((m) => [m.code, m.universityCode]));
+    expect(byCode()).toEqual({ CS201: undefined, CS202: "R232102" });
+    const again = await service.run(request([row({ universityCode: "R232101" }), row({ code: "CS202", name: "Physics", universityCode: "R232102" })]), "commit");
+    expect(again.counts).toMatchObject({ mastersCreated: 0, instancesWritten: 0, unchanged: 2 });
+    expect(byCode()).toEqual({ CS201: "R232101", CS202: "R232102" });
+    expect(Object.fromEntries(docs("subjectSemesterAssignments").map((a) => [a.subjectCode, a.universityCode]))).toEqual({ CS201: "R232101", CS202: "R232102" });
+  });
+
   it("one subject in two semesters becomes one master with two assignments", async () => {
     const res = await service.run(request([row({ code: "YL1" }), row({ code: "YL1", semester: "4" })]), "commit");
     expect(res.ok).toBe(true);

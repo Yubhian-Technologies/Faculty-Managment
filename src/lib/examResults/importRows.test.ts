@@ -1,0 +1,213 @@
+import { describe, expect, it } from "vitest";
+import { applyPriorResults, pickSubject, validateResultRows, type RawResultRow, type ResultImportContext, type ResultStudent, type ResultSubjectOption } from "./importRows";
+import { normalizeResultRules, gradeTableFor, rulesOrStarter, STARTER_GRADE_TABLE, STARTER_RULES } from "./rules";
+
+const anil: ResultStudent = { id: "s1", rollNumber: "24A91A0501", name: "Anil", department: "CSE", courseId: "c-cse", regulation: "R23" };
+const bina: ResultStudent = { id: "s2", rollNumber: "24A91A0502", name: "Bina", department: "CSE", courseId: "c-cse", regulation: "R23" };
+const mba: ResultStudent = { id: "s3", rollNumber: "24MBA001", name: "Chitra", department: "MBA", courseId: "c-mba" };
+
+const math: ResultSubjectOption = { id: "sub-math", code: "MA101", name: "Mathematics", credits: 4, courseId: "c-cse", regulation: "R23" };
+const prog: ResultSubjectOption = { id: "sub-prog", code: "CS101", name: "Programming", credits: 3, courseId: "c-cse", regulation: "R23" };
+const audit: ResultSubjectOption = { id: "sub-audit", code: "MC101", name: "Constitution", credits: 0, courseId: "c-cse", regulation: "R23" };
+
+const ctx = (over: Partial<ResultImportContext> = {}): ResultImportContext => ({
+  students: new Map([anil, bina, mba].map((s) => [s.rollNumber.toUpperCase(), s])),
+  subjects: new Map([math, prog, audit].map((s) => [s.code.toUpperCase(), [s]])),
+  gradeTable: STARTER_GRADE_TABLE,
+  courseIds: ["c-cse", "c-ece"],
+  courseName: "Bachelor of Technology",
+  department: "CSE",
+  regulation: "R23",
+  academicYear: "2026-27",
+  ...over,
+});
+const row = (n: number, rollNumber: string, subjectCode: string, grade: string, extra: Partial<RawResultRow> = {}): RawResultRow => ({ row: n, rollNumber, subjectCode, grade, ...extra });
+
+describe("validateResultRows", () => {
+  it("groups a student's rows into one record, with credits, points and pass/fail from the tables", () => {
+    const { accepted, failed } = validateResultRows(
+      [row(2, "24a91a0501", "ma101", "s"), row(3, "24A91A0501", "CS101", "F"), row(4, "24A91A0502", "MA101", " b ")],
+      ctx()
+    );
+    expect(failed).toEqual([]);
+    expect(accepted).toHaveLength(2);
+    expect(accepted[0].student.id).toBe("s1");
+    expect(accepted[0].subjects).toEqual([
+      { subjectId: "sub-math", subjectCode: "MA101", subjectName: "Mathematics", credits: 4, grade: "S", points: 10, isPass: true },
+      { subjectId: "sub-prog", subjectCode: "CS101", subjectName: "Programming", credits: 3, grade: "F", points: 0, isPass: false },
+    ]);
+    expect(accepted[1].subjects[0]).toMatchObject({ grade: "B", points: 8, isPass: true });
+  });
+
+  it("keeps a zero-credit subject, with 0 credits", () => {
+    const { accepted } = validateResultRows([row(2, "24A91A0501", "MC101", "A")], ctx());
+    expect(accepted[0].subjects[0]).toMatchObject({ credits: 0, isPass: true });
+  });
+
+  it("rejects a row with a blank roll, subject or grade", () => {
+    const { accepted, failed } = validateResultRows([row(2, "", "MA101", "S"), row(3, "24A91A0501", " ", "S"), row(4, "24A91A0501", "MA101", "")], ctx());
+    expect(accepted).toEqual([]);
+    expect(failed.map((f) => [f.row, f.error])).toEqual([[2, "Roll No is required"], [3, "Subject Code is required"], [4, "Grade is required"]]);
+  });
+
+  it("rejects an unknown roll, a student of another course, an unknown subject and an unknown grade", () => {
+    const { accepted, failed } = validateResultRows(
+      [row(2, "99X", "MA101", "S"), row(3, "24MBA001", "MA101", "S"), row(4, "24A91A0501", "ZZ999", "S"), row(5, "24A91A0501", "MA101", "Z")],
+      ctx()
+    );
+    expect(accepted).toEqual([]);
+    expect(failed[0].error).toBe('No student with Roll No "99X" in this college');
+    expect(failed[1].error).toBe("24MBA001 is not a Bachelor of Technology student");
+    expect(failed[2].error).toBe('Subject Code "ZZ999" is not a subject of this college');
+    expect(failed[3].error).toContain('Grade "Z" is not in the grade table');
+  });
+
+  it("rejects the second row for the same student and subject, keeping the first", () => {
+    const { accepted, failed } = validateResultRows([row(2, "24A91A0501", "MA101", "S"), row(3, "24a91a0501", "ma101", "A")], ctx());
+    expect(accepted[0].subjects).toHaveLength(1);
+    expect(accepted[0].subjects[0].grade).toBe("S");
+    expect(failed).toEqual([{ row: 3, rollNumber: "24a91a0501", subjectCode: "ma101", error: "24a91a0501 already has a row for ma101 in this file" }]);
+  });
+
+  it("refuses a student of another branch, and accepts a 1st-year by core department", () => {
+    const ece = { ...bina, id: "s4", rollNumber: "24A91A0401", department: "ECE" };
+    const bsc = { ...bina, id: "s5", rollNumber: "26A91A0001", department: "Basic Science", secondaryDepartment: "CSE" };
+    const students = new Map([ece, bsc].map((s) => [s.rollNumber, s]));
+    const r = validateResultRows([row(2, "24A91A0401", "MA101", "A"), row(3, "26A91A0001", "MA101", "A")], ctx({ students }));
+    expect(r.failed.map((f) => f.error)).toEqual(["24A91A0401 is not a CSE student (ECE)"]);
+    expect(r.accepted.map((a) => a.student.id)).toEqual(["s5"]);
+  });
+
+  it("does not check the course when the batch names none, or the student has none on record", () => {
+    expect(validateResultRows([row(2, "24MBA001", "MA101", "S")], ctx({ courseIds: [], department: "" })).failed).toEqual([]);
+    const noCourse = { ...anil, courseId: undefined };
+    expect(validateResultRows([row(2, "24A91A0501", "MA101", "S")], ctx({ students: new Map([["24A91A0501", noCourse]]) })).failed).toEqual([]);
+  });
+});
+
+describe("university codes", () => {
+  const withUniv = (over: Partial<ResultImportContext> = {}) => {
+    const beee = { id: "sub-beee", code: "UGBS1T1323", name: "Basic Electrical & Electronics Engineering", credits: 3, courseId: "c-cse", regulation: "R23", universityCode: "R232101" };
+    const chem = { id: "sub-chem", code: "UGBS1T0523", name: "Engineering Chemistry", credits: 3, courseId: "c-cse", regulation: "R23", universityCode: "R232104" };
+    const subjects = new Map<string, ResultSubjectOption[]>();
+    for (const s of [beee, chem]) for (const k of [s.code, s.universityCode]) subjects.set(k, [...(subjects.get(k) ?? []), s]);
+    return ctx({ subjects, ...over });
+  };
+
+  it("matches a row by the university code and stores it under the college code", () => {
+    const { accepted, failed } = validateResultRows([row(2, "24A91A0501", "R232101", "D"), row(3, "24A91A0501", "r232104", "A")], withUniv());
+    expect(failed).toEqual([]);
+    expect(accepted[0].subjects.map((s) => [s.subjectCode, s.grade])).toEqual([["UGBS1T1323", "D"], ["UGBS1T0523", "A"]]);
+  });
+
+  it("treats the college code and the university code of one subject as the same subject", () => {
+    const { failed } = validateResultRows([row(2, "24A91A0501", "R232101", "D"), row(3, "24A91A0501", "UGBS1T1323", "A")], withUniv());
+    expect(failed.map((f) => f.error)).toEqual(["24A91A0501 already has a row for UGBS1T1323 in this file"]);
+  });
+
+  it("refuses a university code given to two different subjects", () => {
+    const twin = { id: "sub-twin", code: "UGME1T0123", name: "Engineering Graphics", credits: 3, courseId: "c-cse", regulation: "R23", universityCode: "R232101" };
+    const c = withUniv();
+    c.subjects.set("R232101", [...(c.subjects.get("R232101") ?? []), twin]);
+    const { accepted, failed } = validateResultRows([row(2, "24A91A0501", "R232101", "D")], c);
+    expect(accepted).toEqual([]);
+    expect(failed[0].error).toContain('Subject Code "R232101" matches more than one subject');
+  });
+});
+
+describe("pickSubject", () => {
+  it("prefers the student's own course, then the regulation, then the academic year", () => {
+    const other = { ...math, id: "other-course", courseId: "c-ece" };
+    const oldReg = { ...math, id: "old-reg", regulation: "R20" };
+    const thisYear = { ...math, id: "this-year", academicYear: "2026-27" };
+    expect(pickSubject([other, math], anil, ctx()).id).toBe("sub-math");
+    expect(pickSubject([oldReg, math], anil, ctx()).id).toBe("sub-math");
+    expect(pickSubject([math, thisYear], anil, ctx()).id).toBe("this-year");
+  });
+});
+
+describe("result rules", () => {
+  it("accepts the starter rules as they are", () => {
+    expect(normalizeResultRules(STARTER_RULES)).toEqual({ rules: STARTER_RULES });
+  });
+
+  it("tidies grades and regulation names, and drops an empty regulation table", () => {
+    const out = normalizeResultRules({
+      showSgpa: "ALWAYS", showCgpa: "ALL_PASSED", decimals: 2,
+      gradeTables: { DEFAULT: [{ grade: " o ", points: "10", isPass: true }, { grade: "f", points: 0, isPass: false }], " r23 ": [{ grade: "a+", points: 10, isPass: true }], R20: [] },
+    });
+    expect(out).toEqual({
+      rules: {
+        showSgpa: "ALWAYS", showCgpa: "ALL_PASSED", decimals: 2,
+        gradeTables: { DEFAULT: [{ grade: "O", points: 10, isPass: true }, { grade: "F", points: 0, isPass: false }], R23: [{ grade: "A+", points: 10, isPass: true }] },
+      },
+    });
+  });
+
+  it("refuses rules that cannot work", () => {
+    const base = { showSgpa: "ALWAYS", showCgpa: "ALWAYS", decimals: 2 };
+    const pass = { grade: "A", points: 9, isPass: true };
+    const fail = { grade: "F", points: 0, isPass: false };
+    const err = (o: unknown) => (normalizeResultRules(o) as { error: string }).error;
+    expect(err({ ...base, showSgpa: "SOMETIMES", gradeTables: { DEFAULT: [pass, fail] } })).toBe("Choose when SGPA is shown");
+    expect(err({ ...base, decimals: 9, gradeTables: { DEFAULT: [pass, fail] } })).toBe("Decimals must be a whole number from 0 to 4");
+    expect(err({ ...base, gradeTables: { DEFAULT: [pass] } })).toBe("The default grade table needs at least one failing grade");
+    expect(err({ ...base, gradeTables: { DEFAULT: [fail] } })).toBe("The default grade table needs at least one passing grade");
+    expect(err({ ...base, gradeTables: { DEFAULT: [pass, fail, { grade: "a", points: 8, isPass: true }] } })).toBe('Default grade table: grade "A" is listed twice');
+    expect(err({ ...base, gradeTables: { DEFAULT: [pass, fail, { grade: "B", points: "", isPass: true }] } })).toBe('Default grade table: grade "B" needs points between 0 and 100');
+    expect(err({ ...base, gradeTables: { DEFAULT: [pass, fail], R23: [fail] } })).toBe("R23 grade table needs at least one passing grade");
+  });
+
+  it("uses a regulation's own table, else the default", () => {
+    const rules = { gradeTables: { DEFAULT: STARTER_GRADE_TABLE, R23: [{ grade: "A+", points: 10, isPass: true }] } };
+    expect(gradeTableFor(rules, "r23")).toEqual([{ grade: "A+", points: 10, isPass: true }]);
+    expect(gradeTableFor(rules, "R20")).toBe(STARTER_GRADE_TABLE);
+    expect(gradeTableFor(rules, "")).toBe(STARTER_GRADE_TABLE);
+  });
+
+  it("falls back to the starter rules for a college that has saved none", () => {
+    expect(rulesOrStarter(undefined)).toEqual(STARTER_RULES);
+    expect(rulesOrStarter({ decimals: 2 })).toEqual(STARTER_RULES);
+  });
+});
+
+describe("applyPriorResults", () => {
+  const sheet = () => validateResultRows([row(2, "24A91A0501", "MA101", "B"), row(3, "24A91A0501", "CS101", "A"), row(4, "24A91A0502", "MA101", "S")], ctx()).accepted;
+
+  it("Regular: refuses a student who already has Regular results for the semester, and keeps the rest", () => {
+    const r = applyPriorResults(sheet(), [{ studentId: "s1", batchId: "b0", examType: "REGULAR", subjects: [] }], "REGULAR", 1);
+    expect(r.accepted.map((a) => a.student.id)).toEqual(["s2"]);
+    expect(r.failed.map((f) => [f.row, f.error])).toEqual([
+      [2, "24A91A0501 already has Regular results for Semester 1 in another sheet"],
+      [3, "24A91A0501 already has Regular results for Semester 1 in another sheet"],
+    ]);
+  });
+
+  it("Regular: a student with only a Supplementary result elsewhere is not refused", () => {
+    expect(applyPriorResults(sheet(), [{ studentId: "s1", batchId: "b0", examType: "SUPPLEMENTARY", subjects: [] }], "REGULAR", 1).failed).toEqual([]);
+  });
+
+  it("Supplementary: only for a subject with an earlier result that is not passed yet", () => {
+    const prior = [
+      { studentId: "s1", batchId: "b0", examType: "REGULAR" as const, subjects: [{ subjectCode: "MA101", isPass: false }, { subjectCode: "CS101", isPass: true }] },
+      { studentId: "s2", batchId: "b0", examType: "REGULAR" as const, subjects: [{ subjectCode: "ma101", isPass: false }] },
+    ];
+    const r = applyPriorResults(sheet(), prior, "SUPPLEMENTARY", 1);
+    expect(r.accepted.map((a) => [a.student.id, a.subjects.map((s) => s.subjectCode), a.rows])).toEqual([["s1", ["MA101"], [2]], ["s2", ["MA101"], [4]]]);
+    expect(r.failed).toEqual([{ row: 3, rollNumber: "24A91A0501", subjectCode: "CS101", error: "24A91A0501 has already passed CS101" }]);
+  });
+
+  it("Supplementary: refuses a subject passed in an earlier supplementary sitting, or never sat", () => {
+    const prior = [
+      { studentId: "s1", batchId: "b0", examType: "REGULAR" as const, subjects: [{ subjectCode: "MA101", isPass: false }] },
+      { studentId: "s1", batchId: "b1", examType: "SUPPLEMENTARY" as const, subjects: [{ subjectCode: "MA101", isPass: true }] },
+    ];
+    const r = applyPriorResults(sheet(), prior, "SUPPLEMENTARY", 1);
+    expect(r.accepted).toEqual([]);
+    expect(r.failed.map((f) => f.error)).toEqual([
+      "24A91A0501 has already passed MA101",
+      "24A91A0501 has no earlier result for CS101 in Semester 1",
+      "24A91A0502 has no earlier result for MA101 in Semester 1",
+    ]);
+  });
+});

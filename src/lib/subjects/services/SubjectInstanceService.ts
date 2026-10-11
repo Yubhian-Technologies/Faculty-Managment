@@ -83,6 +83,7 @@ export function buildSubjectInstancePayload(
     subjectCode: master.code ?? "",
     ...(options.serialNumber != null ? { serialNumber: options.serialNumber } : {}),
     ...(master.shortCode ? { shortCode: master.shortCode } : {}),
+    ...(master.universityCode ? { universityCode: master.universityCode } : {}),
     courseId,
     courseName: master.courseName ?? "",
     academicYear: master.academicYear ?? "",
