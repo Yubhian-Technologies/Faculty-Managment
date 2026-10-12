@@ -83,7 +83,12 @@ export function CourseStructureStep({ picker }: { picker: ReturnType<typeof useR
     resetUploadState();
     setScopeData(null);
     setScopeError("");
-    if (!picker.isLoaded || !picker.selectedCourse) return;
+    // The scope fetch (which years/semesters a DEPARTMENT may receive) only
+    // matters for the disabled bundled-upload flow below - skip it entirely
+    // without a department, so Structure's primary Import Subjects action
+    // (course + regulation only) never surfaces a stray "departmentId is
+    // required" error that has nothing to do with it.
+    if (!picker.isLoaded || !picker.selectedCourse || !picker.selectedDepartmentId) return;
     void fetchScope(picker.selectedCourse.id, picker.selectedDepartmentId, picker.selectedRegulation, requestId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [picker.isLoaded, picker.selectedCourse, picker.selectedDepartmentId, picker.selectedRegulation]);
@@ -341,7 +346,7 @@ export function CourseStructureStep({ picker }: { picker: ReturnType<typeof useR
     <div className="max-w-5xl space-y-6">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
-          Import a course&apos;s subjects from one file and assign them to a department&apos;s semesters. Nothing is saved unless every row is valid.
+          Import a course&apos;s subjects in bulk, scoped to the Regulation and Course above - assign them to a department&apos;s semesters afterwards on the Subjects tab.
         </p>
         <Button variant="outline" size="sm" asChild>
           <Link href="/academics/categories"><Tags className="h-4 w-4 mr-1.5" />Categories</Link>
@@ -459,7 +464,7 @@ export function CourseStructureStep({ picker }: { picker: ReturnType<typeof useR
         courseId={picker.selectedCourse?.id ?? ""}
         courseName={picker.selectedCourse?.name ?? ""}
         regulation={regulation}
-        onImported={() => void fetchScope(picker.selectedCourse!.id, picker.selectedDepartmentId, picker.selectedRegulation, ++scopeRequestRef.current)}
+        onImported={() => { if (picker.selectedDepartmentId) void fetchScope(picker.selectedCourse!.id, picker.selectedDepartmentId, picker.selectedRegulation, ++scopeRequestRef.current); }}
       />
 
       {/* Bulk subject creation used to also live here - regulation + course
