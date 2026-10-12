@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Download, Upload, FileSpreadsheet, XCircle, CheckCircle2 } from "lucide-react";
 import { toast } from "@/hooks/useToast";
 import { parseCSV, parseExcelFile, readFileAsText, matchHeaders } from "@/lib/utils/csv";
@@ -90,16 +90,17 @@ export function MasterSubjectImportDialog({ open, onOpenChange, courseId, course
     }
   }
 
-  return (
-    <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) { setResult(null); setFileName(""); } }}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Import Subjects</DialogTitle>
-          <DialogDescription>
-            Into the master collection for {courseName}{regulation ? ` · ${regulation}` : ""} - no department, year or semester needed here.
-          </DialogDescription>
-        </DialogHeader>
+  if (!open) return null;
 
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Import Subjects</CardTitle>
+        <p className="text-sm text-muted-foreground">
+          Into the master collection for {courseName}{regulation ? ` · ${regulation}` : ""} - no department, year or semester needed here.
+        </p>
+      </CardHeader>
+      <CardContent>
         <div className="space-y-3">
           <Button variant="outline" size="sm" onClick={downloadTemplate}>
             <Download className="h-4 w-4 mr-1" />Download Template
@@ -147,10 +148,10 @@ export function MasterSubjectImportDialog({ open, onOpenChange, courseId, course
           )}
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>{result ? "Done" : "Cancel"}</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        <div className="flex justify-end pt-3">
+          <Button variant="outline" onClick={() => { onOpenChange(false); setResult(null); setFileName(""); }}>{result ? "Done" : "Cancel"}</Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
