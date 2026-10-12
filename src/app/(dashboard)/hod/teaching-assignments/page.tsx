@@ -645,6 +645,34 @@ const effectiveSemester = semesterOptions.length === 0
       .catch(() => setDebugAllSections(null));
   }, [applied]);
 
+  // TEMP DEBUG - fetches every deptOptions department's own courses DIRECTLY
+  // (same endpoint extraCourseDeptIds already calls) and shows each one's raw
+  // id/name/catalogId side by side, to settle with certainty whether CSE's
+  // own course doc is even being returned by that call at all, and if so
+  // whether its catalogId actually matches the own-department's course.
+  const [debugCoursesByDept, setDebugCoursesByDept] = useState<{ deptName: string; courses: { id: string; name: string; catalogId?: string }[] }[] | null>(null);
+  useEffect(() => {
+    if (!applied || deptOptions.length === 0) return;
+    const targets = [
+      ...(scope.ownDept ? [{ id: scope.ownDept.id, name: scope.ownDept.name }] : []),
+      ...deptOptions.map((d) => ({ id: d.id, name: d.name })),
+    ];
+    void (async () => {
+      const results = await Promise.all(
+        targets.map(async (t) => {
+          try {
+            const res = await fetch(`/api/college/courses?departmentId=${encodeURIComponent(t.id)}`);
+            const json = (await res.json()) as { courses?: { id: string; name: string; catalogId?: string }[]; error?: string };
+            return { deptName: t.name, courses: res.ok ? (json.courses ?? []) : [{ id: "ERROR", name: json.error ?? `HTTP ${res.status}`, catalogId: undefined }] };
+          } catch {
+            return { deptName: t.name, courses: [{ id: "ERROR", name: "network error", catalogId: undefined }] };
+          }
+        })
+      );
+      setDebugCoursesByDept(results);
+    })();
+  }, [applied, deptOptions, scope.ownDept]);
+
   function handleDepartmentChange(v: string) {
     // ALL is a sentinel: Radix Select can't hold "" as an item value.
     setApplied(null);
@@ -1213,6 +1241,10 @@ const effectiveSemester = semesterOptions.length === 0
                 if (matches.length === 0) return "no sections at all for these department names, in the whole college-wide unfiltered fetch";
                 return matches.map((s) => `${s.name ?? "?"} (dept: ${s.department}, year: ${s.year}, courseId: ${s.courseId ?? "MISSING"})`).join(" | ");
               })()}
+              <br />
+              DEBUG (courses per department, direct) — {debugCoursesByDept == null ? "loading…" : debugCoursesByDept.map((d) =>
+                `${d.deptName}: ${d.courses.length === 0 ? "(no courses returned)" : d.courses.map((c) => `${c.name} [id=${c.id}, catalogId=${c.catalogId ?? "NONE"}]`).join(", ")}`
+              ).join(" || ")}
             </p>
           )}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-4 sm:max-w-4xl">
