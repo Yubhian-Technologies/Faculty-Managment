@@ -155,6 +155,23 @@ export async function PATCH(
         await batch.commit();
       }
 
+      // SubjectSemesterAssignment ("Assign to Semester") rows carry the exact
+      // same snapshot fields, copied from the master Subject at
+      // instantiation (see SubjectInstanceService) - without this cascade
+      // they'd keep showing the old name/code/shortCode/hours forever, same
+      // staleness bug the teachingAssignments cascade above exists to avoid.
+      const semesterAssignmentsSnap = await db
+        .collection("colleges").doc(session.collegeId)
+        .collection("subjectSemesterAssignments")
+        .where("subjectId", "==", id)
+        .get();
+      for (let i = 0; i < semesterAssignmentsSnap.docs.length; i += 400) {
+        const chunk = semesterAssignmentsSnap.docs.slice(i, i + 400);
+        const batch = db.batch();
+        for (const doc of chunk) batch.update(doc.ref, assignmentFields);
+        await batch.commit();
+      }
+
       if (newName != null) {
         // TimetableSlot carries subjectName only (no subjectCode field on
         // this collection - see types/teaching.ts's TimetableSlot).

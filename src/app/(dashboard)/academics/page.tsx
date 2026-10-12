@@ -7,38 +7,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
 import { ROLE_LABELS } from "@/types";
-import { Library, BookOpen, FileText, Tags, ArrowRight, ListChecks } from "lucide-react";
+import { Library, ArrowRight, BookOpen } from "lucide-react";
 
 const QUICK_ACTIONS = [
   {
-    href: "/academics/regulation",
-    icon: FileText,
-    title: "Regulation",
-    description: "Manage curriculum regulations for each course and upload their reference documents.",
-  },
-  {
     href: "/academics/course-structure",
     icon: Library,
-    title: "Course Structure",
-    description: "Import a course's subjects from a spreadsheet and assign them to a department's semesters.",
-  },
-  {
-    href: "/academics/subjects",
-    icon: ListChecks,
-    title: "Subjects",
-    description: "View, add, edit and delete the subjects for each course and regulation.",
-  },
-  {
-    href: "/academics/categories",
-    icon: Tags,
-    title: "Categories",
-    description: "Define subject categories as a short code and its full form, for use in Course Structure files.",
-  },
-  {
-    href: "/academics/syllabus",
-    icon: BookOpen,
-    title: "Syllabus",
-    description: "Upload a department's syllabus document for a course under a regulation.",
+    title: "Curriculum",
+    description: "Set up a course's regulation document, subjects and syllabus for one department - one guided flow.",
   },
 ] as const;
 
