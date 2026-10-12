@@ -98,6 +98,7 @@ export function SectionRoster({ sectionId: id, onBack, backLabel = "Back to Sect
     : students;
 
   function handleExportCsv() {
+    if (!section) return;
     const headers = ["Regd Number", "Name of the Student", "Status", "Gender", "Email"];
     const rows = students.map((s) => [
       s.rollNumber ?? "",
