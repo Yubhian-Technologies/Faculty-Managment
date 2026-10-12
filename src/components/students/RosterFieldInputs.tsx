@@ -10,7 +10,7 @@ import {
   EDITABLE_ROSTER_FIELDS, PRIMARY_ROSTER_FIELDS, DETAIL_ROSTER_FIELDS, ROSTER_DETAIL_GROUPS,
   type RosterField,
 } from "@/lib/students/rosterFields";
-import { resolveDepartmentCourseScope, resolveCatalogId, freshmanPickerDepartmentNames, getFreshmanDepartmentIds } from "@/lib/college/academicStructure";
+import { resolveDepartmentCourseScope, resolveCatalogId, freshmanPickerDepartmentNames, getFreshmanDepartmentIds, isValidYear1LandingDepartment, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { managerEffectiveYears } from "@/lib/departments/hodScope";
 import { CASTE_LABELS, SUB_CASTES_BY_CASTE } from "@/types";
 import type { Department, Course, Caste } from "@/types";
@@ -434,7 +434,7 @@ function FieldInput({ field, values, onChange, departments, courseNames, courses
     // verbatim (RosterFormFields).
     const freshmanNames = freshmanPickerDepartmentNames(departments);
     if (values.year === "1" && freshmanNames.size > 0) {
-      options = options.filter((d) => freshmanNames.has(d.name));
+      options = options.filter((d) => isValidYear1LandingDepartment(departments as DepartmentWithId[], freshmanNames, d.name));
     }
     // A value already on the form (e.g. the Fix Row dialog's best-effort
     // pre-resolve of a failed row's raw Department text, done before Course
@@ -474,7 +474,7 @@ function FieldInput({ field, values, onChange, departments, courseNames, courses
             // Nor Year 1 specifically, if `v` is a real branch at a college
             // that runs a shared first year - even if this department's own
             // (possibly stale) assignedYears still lists it.
-            if (freshmanNames.size > 0 && !freshmanNames.has(v)) allowedYears = allowedYears.filter((y) => y !== 1);
+            if (!isValidYear1LandingDepartment(departments as DepartmentWithId[], freshmanNames, v)) allowedYears = allowedYears.filter((y) => y !== 1);
             if (values.year && !allowedYears.includes(Number(values.year))) onChange("year", "");
           }}
         >
@@ -531,7 +531,7 @@ function FieldInput({ field, values, onChange, departments, courseNames, courses
     // first year - even if that branch's own (possibly stale) assignedYears
     // still lists it - see freshmanLandingDepartmentNames's own doc-comment.
     const freshmanNames = freshmanPickerDepartmentNames(departments);
-    if (values.department && freshmanNames.size > 0 && !freshmanNames.has(values.department)) {
+    if (values.department && !isValidYear1LandingDepartment(departments as DepartmentWithId[], freshmanNames, values.department)) {
       options = options.filter((y) => y !== 1);
     }
     // Keep a value already on the form visible even if it falls outside the
@@ -554,7 +554,7 @@ function FieldInput({ field, values, onChange, departments, courseNames, courses
             // real branch, invalid now that Year 1 is selected - clear it
             // (and whatever Core Department went with it) rather than leave
             // an invalid pairing the submit will just reject.
-            if (v === "1" && values.department && freshmanNames.size > 0 && !freshmanNames.has(values.department)) {
+            if (v === "1" && values.department && !isValidYear1LandingDepartment(departments as DepartmentWithId[], freshmanNames, values.department)) {
               onChange("department", "");
               onChange("secondaryDepartment", "");
             }

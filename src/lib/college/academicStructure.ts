@@ -357,6 +357,41 @@ export function freshmanLandingDepartmentNames(allDepartments: DepartmentWithId[
 }
 
 /**
+ * Whether `departmentName` itself claims `year` - flat assignedYears or any
+ * per-course courseScopes override. Lets a real branch that has opened its
+ * OWN Years Taught for a year a shared-first-year structure used to own
+ * exclusively (see managedBranches.ts - a manager's delegated edit/view
+ * access to that branch is resolved independently of this, from the
+ * MANAGER's own years, never the branch's) be used directly as that year's
+ * landing department - the freshmanLandingDepartmentNames indirection
+ * (Department = the Freshman dept, Core Department = the real branch) is
+ * only still required for a branch that has NOT done this.
+ */
+export function departmentClaimsYearItself(allDepartments: DepartmentWithId[], departmentName: string, year: number): boolean {
+  const dept = allDepartments.find((d) => d.name === departmentName);
+  return !!dept && allClaimedYears(dept).includes(year);
+}
+
+/**
+ * Combines the two things every Year-1 landing-department check needs: the
+ * college has no shared-first-year restriction at all (`freshmanNames`
+ * empty), `departmentName` IS one of the Freshman names, or - the escape
+ * hatch - it claims year 1 itself (departmentClaimsYearItself). False only
+ * for a real branch that's none of those. Takes the already-computed
+ * `freshmanNames` set (callers vary between freshmanLandingDepartmentNames
+ * and the broader freshmanPickerDepartmentNames) rather than recomputing it.
+ */
+export function isValidYear1LandingDepartment(
+  allDepartments: DepartmentWithId[],
+  freshmanNames: ReadonlySet<string>,
+  departmentName: string
+): boolean {
+  if (freshmanNames.size === 0) return true;
+  if (freshmanNames.has(departmentName)) return true;
+  return departmentClaimsYearItself(allDepartments, departmentName, 1);
+}
+
+/**
  * The PICKER's own broader version of freshmanLandingDepartmentNames - adds
  * back every qualifying "no own sections" parent itself (e.g. "BASIC
  * SCIENCE"), which freshmanLandingDepartmentNames deliberately excludes for

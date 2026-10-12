@@ -15,7 +15,7 @@ import { notConfiguredMessage } from "@/lib/college/taughtYears";
 import { resolveBranchYearOwner, resolveFreshmanLandingDepartment, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { isConfiguredSecondaryDepartmentOrChild, resolveDepartmentByNameOrCode } from "@/lib/departments/codeOrNameResolver";
 import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
-import { resolveDepartmentCourseScope, resolveCatalogId, freshmanLandingDepartmentNames, type DepartmentWithId } from "@/lib/college/academicStructure";
+import { resolveDepartmentCourseScope, resolveCatalogId, freshmanLandingDepartmentNames, departmentClaimsYearItself, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { resolveRollupDepartmentNames } from "@/lib/students/departmentRollup";
 import { fetchStudentsPage, fetchMatchingStudentIds, fetchStudentsForExport, fetchGraduatesPage, fetchGraduatesByIds } from "@/lib/students/paginatedList";
 import { fetchPanelStudentsPage } from "@/lib/students/panelPagedList";
@@ -540,7 +540,13 @@ export async function POST(request: Request) {
       // never mask this more specific rule.
       if (Number(body.year) === 1) {
         const freshmanNames = freshmanLandingDepartmentNames(allDepts);
-        if (freshmanNames.size > 0 && !freshmanNames.has(dept)) {
+        const isFreshmanLanding = freshmanNames.size > 0 && freshmanNames.has(dept);
+        // A real branch that has opened its OWN Years Taught for year 1 (see
+        // departmentClaimsYearItself's own doc-comment) no longer needs the
+        // Freshman-department indirection - it's a normal landing department
+        // now, same as any other year, with no Core Department to name.
+        const ownsYear1Directly = !isFreshmanLanding && departmentClaimsYearItself(allDepts, dept, 1);
+        if (freshmanNames.size > 0 && !isFreshmanLanding && !ownsYear1Directly) {
           return NextResponse.json(
             { error: `"${dept}" is a real branch - 1st Year students must be added under one of this college's Basic Science (Freshman) departments instead. Set "${dept}" as the Core Department.` },
             { status: 400 }
@@ -550,7 +556,7 @@ export async function POST(request: Request) {
         // say which real branch they're headed for - without Core Department,
         // they're stuck unpromotable and invisible to any branch's own HOD.
         const secondaryDeptForYear1 = typeof body.secondaryDepartment === "string" ? body.secondaryDepartment.trim() : "";
-        if (freshmanNames.size > 0 && !secondaryDeptForYear1) {
+        if (isFreshmanLanding && !secondaryDeptForYear1) {
           return NextResponse.json(
             { error: "Core Department is required for 1st Year students - name the branch this student will be promoted into." },
             { status: 400 }

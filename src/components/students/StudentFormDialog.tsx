@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { STUDENT_PASSWORD_MIN_LENGTH, studentPasswordError } from "@/lib/students/passwordPolicy";
 import { RosterFormFields } from "@/components/students/RosterFieldInputs";
 import { fetchRosterFormMetadata } from "@/lib/students/rosterFormMetadata";
-import { freshmanPickerDepartmentNames, type DepartmentWithId } from "@/lib/college/academicStructure";
+import { freshmanPickerDepartmentNames, isValidYear1LandingDepartment, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { EDITABLE_ROSTER_FIELDS, rosterFieldFormValue, rosterFormToPayload } from "@/lib/students/rosterFields";
 import { toast } from "@/hooks/useToast";
 import type { Department, Course, StudentListItem, StudentRecord } from "@/types";
@@ -128,11 +128,11 @@ export function StudentFormDialog({ open, onOpenChange, student, onSaved, rollEd
     // pickers toward and the server enforces on submit.
     if (!editTarget && form.year === "1") {
       const freshmanNames = freshmanPickerDepartmentNames(departments as DepartmentWithId[]);
-      if (freshmanNames.size > 0 && !freshmanNames.has(form.department)) {
+      if (!isValidYear1LandingDepartment(departments as DepartmentWithId[], freshmanNames, form.department)) {
         toast({ variant: "destructive", title: `"${form.department}" is a real branch - set it as Core Department instead of Department for a 1st Year student` });
         return;
       }
-      if (freshmanNames.size > 0 && !form.secondaryDepartment) {
+      if (freshmanNames.has(form.department) && !form.secondaryDepartment) {
         toast({ variant: "destructive", title: "Core Department is required for 1st Year students" });
         return;
       }
