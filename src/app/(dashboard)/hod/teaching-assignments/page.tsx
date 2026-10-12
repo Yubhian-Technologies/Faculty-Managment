@@ -1223,22 +1223,27 @@ const effectiveSemester = semesterOptions.length === 0
                 </Select>
               </div>
             )}
-            {/* Only for an HOD who actually has sub-departments. A sub-HOD has
-                none beneath them and works solely within their own, so the
-                field is omitted rather than shown with a single option. */}
+            {/* Only for an HOD who actually has something to narrow by: real
+                sub-departments and/or core/managed branches (subDepartmentOptions
+                covers both - see its own doc-comment). A sub-HOD has neither and
+                works solely within their own, so the field is omitted rather than
+                shown with a single option. Labeled "Department" (not
+                "Sub-department") since the list is routinely all core/managed
+                branches and no real sub-departments at all - same label
+                hod/sections/page.tsx already uses for this identical concept. */}
             {subDepartmentOptions.length > 0 && (
               <div className="space-y-2">
-                <Label>Sub-department</Label>
+                <Label>Department</Label>
                 <Select
                   value={departmentFilter || ALL_DEPARTMENTS}
                   onValueChange={handleDepartmentChange}
                   disabled={!year}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder={year ? "All sub-departments" : "Select a year first"} />
+                    <SelectValue placeholder={year ? "All departments" : "Select a year first"} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={ALL_DEPARTMENTS}>All sub-departments</SelectItem>
+                    <SelectItem value={ALL_DEPARTMENTS}>All departments</SelectItem>
                     {subDepartmentOptions.map((d) => (
                       <SelectItem key={d.id} value={d.name}>
                         {departmentCode(d.name, departments)} · {d.name}
