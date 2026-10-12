@@ -10,6 +10,7 @@ import { getHodDepartmentScope, canHodEditDepartmentId, canHodEditDepartment } f
 import { sectionAssignmentScope } from "@/lib/departments/sectionAssignmentScope";
 import { resolveSectionCurrentSemester } from "@/lib/college/semester";
 import { SubjectInstanceService, teachingAssignmentUsesInstance } from "@/lib/subjects/services/SubjectInstanceService";
+import { resolveSubjectIdsByCode } from "@/lib/subjects/resolveByCode";
 import { cachedCollectionDocs } from "@/lib/firestore/sharedReads";
 import { getInChunks } from "@/lib/firestore/inQuery";
 import type { Course, Department, TeachingAssignment } from "@/types";
@@ -186,6 +187,16 @@ export async function POST(request: Request) {
     const body = (await readJsonBody(request)) as {
       subjectId?: string;
       subjectIds?: string[];
+      // Assign-by-code: the Subjects tab's text box, comma/newline-separated
+      // subject codes typed by the Office instead of picking from a
+      // preloaded list - see resolveByCode.ts for why this is the
+      // read-cheap path (only the typed codes are read, not the whole
+      // regulation's pool).
+      codes?: string[];
+      regulation?: string;
+      // The catalog group's course ids (already in the caller's memory from
+      // /api/college/courses - no extra read) codes are matched against.
+      courseIds?: string[];
       departmentId?: string;
       semester?: number;
       departmentName?: string;
@@ -199,7 +210,7 @@ export async function POST(request: Request) {
       };
     };
 
-    const { subjectId, subjectIds, departmentId, semester, departmentName, year, courseId, customOverrides } = body;
+    const { subjectId, subjectIds, codes, regulation, courseIds, departmentId, semester, departmentName, year, courseId, customOverrides } = body;
     if (!departmentId || semester == null) {
       return NextResponse.json(
         { error: "departmentId and semester are required" },
@@ -208,6 +219,30 @@ export async function POST(request: Request) {
     }
 
     const service = new SubjectInstanceService();
+
+    // Assign-by-code: resolve codes -> subject ids (cheap, targeted reads),
+    // then bulk-assign exactly like the subjectIds branch below.
+    if (Array.isArray(codes) && codes.length > 0) {
+      if (!regulation?.trim() || !Array.isArray(courseIds) || courseIds.length === 0) {
+        return NextResponse.json({ error: "regulation and courseIds are required to assign by code" }, { status: 400 });
+      }
+      const { resolved, notFound } = await resolveSubjectIdsByCode(getAdminDb(), session.collegeId, regulation.trim(), courseIds, codes);
+      if (resolved.size === 0) {
+        return NextResponse.json({ assignedCount: 0, failed: [], notFound }, { status: 200 });
+      }
+      const result = await service.bulkAssignSubjectInstances({
+        collegeId: session.collegeId,
+        subjectIds: Array.from(resolved.values()),
+        departmentId,
+        semester: Number(semester),
+        departmentName,
+        year: year ? Number(year) : undefined,
+        courseId,
+      });
+      const subjectIdToCode = new Map(Array.from(resolved.entries()).map(([code, id]) => [id, code]));
+      const failed = result.failed.map((f) => ({ code: subjectIdToCode.get(f.subjectId) ?? f.subjectId, error: f.error }));
+      return NextResponse.json({ assignedCount: result.assignedCount, failed, notFound }, { status: 201 });
+    }
 
     // Bulk instantiation support
     if (Array.isArray(subjectIds) && subjectIds.length > 0) {
