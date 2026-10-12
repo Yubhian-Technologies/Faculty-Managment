@@ -70,7 +70,7 @@ function CurriculumPageInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill, picker.catalogItems]);
 
-  const canLoad = !!picker.selectedRegulation && !!picker.selectedCatalogId && !!picker.selectedDepartmentId;
+  const canLoad = !!picker.selectedRegulation && !!picker.selectedCatalogId;
 
   return (
     <div className="space-y-6">
@@ -109,20 +109,6 @@ function CurriculumPageInner() {
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-1.5">
-          <Label className="text-xs">Department</Label>
-          <Select value={picker.selectedDepartmentId} onValueChange={picker.selectDepartment} disabled={!picker.selectedCatalogId}>
-            <SelectTrigger className="w-56"><SelectValue placeholder={!picker.selectedCatalogId ? "Select a course first" : "Department"} /></SelectTrigger>
-            <SelectContent>
-              {picker.departments.flatMap((d) => [
-                <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>,
-                ...(picker.childrenOf.get(d.id) ?? []).map((child) => (
-                  <SelectItem key={child.id} value={child.id} className="pl-6">{child.name}</SelectItem>
-                )),
-              ])}
-            </SelectContent>
-          </Select>
-        </div>
         <Button onClick={() => void picker.load()} disabled={!canLoad || picker.isLoadingData} loading={picker.isLoadingData}>
           Load
         </Button>
@@ -130,15 +116,12 @@ function CurriculumPageInner() {
           <span className="text-sm text-muted-foreground">Click Load, then switch between the steps above without re-picking this.</span>
         )}
       </div>
-      {picker.isLoaded && picker.selectedDepartmentId && !picker.isLoadingCourses && !picker.selectedCourse && (
-        <p className="text-sm text-amber-600 flex items-center gap-1.5"><AlertTriangle className="h-3.5 w-3.5" />{picker.selectedDepartment?.name} doesn&apos;t teach this course yet.</p>
-      )}
 
       {step === "structure" && <CourseStructureStep picker={picker} />}
       {step === "subjects" && (
         picker.isLoaded
           ? <SubjectsStep initialCatalogId={picker.selectedCatalogId} initialDepartmentId={picker.selectedDepartmentId} />
-          : <p className="text-sm text-muted-foreground">Load a department above first.</p>
+          : <p className="text-sm text-muted-foreground">Click Load above first - pick the Department on this tab.</p>
       )}
       {step === "syllabus" && <SyllabusStep picker={picker} />}
       {step === "regulation" && <RegulationDocStep picker={picker} />}
