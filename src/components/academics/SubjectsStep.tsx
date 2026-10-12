@@ -17,6 +17,7 @@ import { offeredYears } from "@/lib/college/departmentYears";
 import { courseYearNumbers, semesterLabel } from "@/lib/college/courseYears";
 import { useCourseSemesterPlan } from "@/hooks/useCourseSemesterPlan";
 import { managedCoreCandidates } from "@/lib/departments/departmentTree";
+import { MasterSubjectImportDialog } from "@/components/academics/MasterSubjectImportDialog";
 
 // Curriculum > Subjects step. View and manage subjects assigned to
 // departments by year and semester in a horizontal table with CRUD & bulk
@@ -107,6 +108,7 @@ export function SubjectsStep({ initialCatalogId, initialDepartmentId }: Subjects
 
   const [regulations, setRegulations] = useState<Record<string, string[]>>({});
   const [addForm, setAddForm] = useState<AddForm | null>(null);
+  const [showImport, setShowImport] = useState(false);
   const [addError, setAddError] = useState("");
   const [isAdding, setIsAdding] = useState(false);
 
@@ -607,10 +609,28 @@ export function SubjectsStep({ initialCatalogId, initialDepartmentId }: Subjects
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">Subjects by department, year and semester</p>
-        <Button onClick={openAdd} disabled={!courseKey || !deptId || !yearValue || !semesterValue}>
-          <Plus className="h-4 w-4 mr-1" />Add Subject
-        </Button>
+        <div className="flex gap-2">
+          {planCourse && (
+            <Button variant="outline" onClick={() => setShowImport(true)}>
+              Import Subjects
+            </Button>
+          )}
+          <Button onClick={openAdd} disabled={!courseKey || !deptId || !yearValue || !semesterValue}>
+            <Plus className="h-4 w-4 mr-1" />Add Subject
+          </Button>
+        </div>
       </div>
+
+      {planCourse && (
+        <MasterSubjectImportDialog
+          open={showImport}
+          onOpenChange={setShowImport}
+          courseId={planCourse.id}
+          courseName={planCourse.name}
+          regulation={(regulations[courseKey] ?? [])[0] ?? ""}
+          onImported={() => void handleLoad()}
+        />
+      )}
 
       {/* Filters */}
       <Card>
