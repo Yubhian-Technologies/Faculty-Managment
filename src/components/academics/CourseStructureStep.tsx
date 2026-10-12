@@ -21,6 +21,7 @@ import { Download, Upload, XCircle, FileSpreadsheet, AlertTriangle, Loader2, Tag
 import { yearSemesterLabelIn } from "@/lib/academic/format";
 import { MasterSubjectImportDialog } from "@/components/academics/MasterSubjectImportDialog";
 import { CurriculumOverviewCard } from "@/components/academics/CurriculumOverviewCard";
+import { SubjectsMasterTable } from "@/components/academics/SubjectsMasterTable";
 
 // Curriculum > Structure step. One file = every subject of the shared scope
 // bar's Regulation + Course + Department, created and assigned to that
@@ -102,6 +103,7 @@ export function CourseStructureStep({ picker }: { picker: ReturnType<typeof useR
   const teachableYears = scope?.scope.teachableYears ?? [];
   const canUpload = !!scope && teachableYears.length > 0;
   const [showMasterImport, setShowMasterImport] = useState(false);
+  const [subjectsRefreshKey, setSubjectsRefreshKey] = useState(0);
 
   // ── Upload / validate / commit ─────────────────────────────────────────
   const fileRef = useRef<HTMLInputElement>(null);
@@ -385,8 +387,22 @@ export function CourseStructureStep({ picker }: { picker: ReturnType<typeof useR
         courseId={picker.selectedCourse?.id ?? ""}
         courseName={picker.selectedCourse?.name ?? ""}
         regulation={regulation}
-        onImported={() => { if (picker.selectedDepartmentId) void fetchScope(picker.selectedCourse!.id, picker.selectedDepartmentId, picker.selectedRegulation, ++scopeRequestRef.current); }}
+        onImported={() => {
+          if (picker.selectedDepartmentId) void fetchScope(picker.selectedCourse!.id, picker.selectedDepartmentId, picker.selectedRegulation, ++scopeRequestRef.current);
+          setSubjectsRefreshKey((k) => k + 1);
+        }}
       />
+
+      {/* The master subject list for this Course + Regulation, paginated,
+          with inline edit/delete - what "Load" actually opens into. */}
+      {picker.isLoaded && picker.selectedCourse && (
+        <SubjectsMasterTable
+          key={`${picker.selectedCourse.id}|${regulation}|${subjectsRefreshKey}`}
+          courseId={picker.selectedCourse.id}
+          courseName={picker.selectedCourse.name}
+          regulation={regulation}
+        />
+      )}
 
       {/* Bulk subject creation used to also live here - regulation + course
           only now, no department/year/semester entanglement. This old
