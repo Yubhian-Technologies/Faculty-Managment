@@ -20,6 +20,11 @@ import { ROLE_LABELS } from "@/types";
 // parallel off the shared RESEARCH_MODULES registry - so a module added there
 // appears here automatically, and nothing has to be kept in step by hand.
 // Every module uses `status === "PENDING"` for this, checked across all eleven.
+//
+// `?scope=all` is what asks for the college's whole queue. Those endpoints
+// also serve each person's own My Work module pages, so without it this page
+// counts only the viewer's own submissions - which read "Nothing awaiting
+// verification" while fifteen were waiting. See lib/research/listScope.ts.
 
 const MODULES = Object.values(RESEARCH_MODULES);
 
@@ -32,7 +37,7 @@ export default function RAndDDashboard() {
     queries: MODULES.map((m) => ({
       queryKey: ["r-and-d-pending", m.slug],
       queryFn: async () => {
-        const res = await fetch(`/api/college/${m.apiPath}`);
+        const res = await fetch(`/api/college/${m.apiPath}?scope=all`);
         const data = await res.json() as Record<string, unknown>;
         if (!res.ok) throw new Error("failed");
         const list = (data[m.responseKey] ?? []) as { status?: string }[];

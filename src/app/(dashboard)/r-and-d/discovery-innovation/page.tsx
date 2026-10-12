@@ -37,7 +37,7 @@ export default function RAndDDiscoveryInnovationPage() {
   async function load() {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/college/discovery-innovation");
+      const res = await fetch("/api/college/discovery-innovation?scope=all");
       const data = await res.json() as { records: DiscoveryInnovationRow[] };
       setRecords(data.records ?? []);
     } catch {

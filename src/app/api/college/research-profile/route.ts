@@ -5,8 +5,9 @@ import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { holdsRole } from "@/lib/roles/seatRoles";
+import { wantsWholeCollege } from "@/lib/research/listScope";
 import { notifyRole } from "@/lib/notify";
-import { applyResearchProfileFields } from "@/lib/research/applyResearchProfileFields";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import { resolveOwnerDesignation } from "@/lib/publications/resolveOwnerDesignation";
 import type { PublicationStatus, UserRole } from "@/types";
@@ -16,15 +17,18 @@ import type { PublicationStatus, UserRole } from "@/types";
 // who can also have publications recorded against them.
 const COLLEGE_STAFF_ROLES = PUBLICATION_ELIGIBLE_ROLES;
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await requireCollegeMember(...COLLEGE_STAFF_ROLES);
     const db = getAdminDb();
     const coll = db.collection("colleges").doc(session.collegeId).collection("researchProfileRequests");
 
-    // R&D manages the review queue and sees every submission; everyone else
-    // only ever sees their own (there's exactly one doc, keyed by their uid).
-    const query = session.role === "R_AND_D" ? coll : coll.where("uid", "==", session.uid);
+    // R&D sees every submission on its review page, which asks for it; the
+    // same endpoint answers the caller's own My Work module page, and there
+    // they get only their own (see wantsWholeCollege). (there's exactly one doc, keyed by their uid).
+    const query = wantsWholeCollege(request, holdsRole(session, "R_AND_D"))
+      ? coll
+      : coll.where("uid", "==", session.uid);
     const snap = await query.get();
     const requests = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
@@ -43,7 +47,6 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember(...COLLEGE_STAFF_ROLES);
-    const isRnD = session.role === "R_AND_D";
 
     const body = (await readJsonBody(request)) as {
       orcidId?: string;
@@ -75,9 +78,9 @@ export async function POST(request: Request) {
     };
 
     const now = new Date();
-    // R&D is the verifying authority itself - its own submission is already
-    // official, same as R&D's own publication adds.
-    const status: PublicationStatus = isRnD ? "APPROVED" : "PENDING";
+    // Every submission is verified, R&D's own included - they approve it for
+    // themselves from the review page. See resolveSubmissionRoute.
+    const status: PublicationStatus = "PENDING";
 
     await ref.set({
       collegeId: session.collegeId,
@@ -87,24 +90,21 @@ export async function POST(request: Request) {
       ...(ownerDesignation ? { ownerDesignation } : {}),
       ...fields,
       status,
-      ...(isRnD ? { reviewedBy: session.uid, reviewedByName: owner?.name ?? "R&D", reviewedAt: now } : {}),
       createdAt: existing.exists ? (existing.data() as { createdAt?: unknown }).createdAt ?? now : now,
       updatedAt: now,
     });
 
     await writeAuditLogSafe(db, session.collegeId, { action: existing.exists ? "RD_RESEARCH_PROFILE_UPDATED" : "RD_RESEARCH_PROFILE_CREATED", performedBy: session.uid, performedByName: owner?.name ?? "Unknown", targetId: session.uid, details: { uid: session.uid, orcidId: fields.orcidId } });
 
-    if (isRnD) {
-      await applyResearchProfileFields(db, session.collegeId, session.uid, fields);
-    } else {
-      await notifyRole(
-        db, session.collegeId, "R_AND_D",
-        "RESEARCH_PROFILE_PENDING_VERIFICATION",
-        "Research profile submitted for verification",
-        `${owner?.name ?? "A staff member"} submitted their researcher IDs for verification`,
-        "/r-and-d/research-profiles"
-      );
-    }
+    // The values reach the faculty profile only once R&D approves (the
+    // approval route calls applyResearchProfileFields) - never on submission.
+    await notifyRole(
+      db, session.collegeId, "R_AND_D",
+      "RESEARCH_PROFILE_PENDING_VERIFICATION",
+      "Research profile submitted for verification",
+      `${owner?.name ?? "A staff member"} submitted their researcher IDs for verification`,
+      "/r-and-d/research-profiles"
+    );
 
     return NextResponse.json({ ok: true, status });
   } catch (err) {

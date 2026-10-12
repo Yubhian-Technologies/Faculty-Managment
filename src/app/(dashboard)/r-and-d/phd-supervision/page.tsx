@@ -31,7 +31,7 @@ export default function RAndDPhdSupervisionPage() {
   async function load() {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/college/phd-supervision");
+      const res = await fetch("/api/college/phd-supervision?scope=all");
       const data = await res.json() as { records: PhdSupervisionRow[] };
       setRecords(data.records ?? []);
     } catch {

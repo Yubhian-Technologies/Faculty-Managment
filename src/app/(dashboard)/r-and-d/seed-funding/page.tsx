@@ -31,7 +31,7 @@ export default function RAndDSeedFundingPage() {
   async function load() {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/college/seed-funding");
+      const res = await fetch("/api/college/seed-funding?scope=all");
       const data = await res.json() as { projects: SeedFundingRow[] };
       setProjects(data.projects ?? []);
     } catch {
