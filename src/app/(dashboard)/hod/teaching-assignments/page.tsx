@@ -257,17 +257,27 @@ export default function TeachingAssignmentsPage() {
       ? subDepartmentOptions
       : scope.ownDept ? [scope.ownDept] : [];
     const assigned = new Set<number>();
-    // A year some OTHER department already claims as a feeder FOR one of
-    // `relevant` (e.g. Basic Science owning year 1 of a shared-first-year
-    // B.Tech) is never this HOD's own to staff - see fedYears. Nothing
-    // assigned means no years (never "every year": lib/college/taughtYears.ts).
-    const excluded = new Set<number>();
+    // A year some OTHER department already claims as a feeder FOR a given
+    // department in `relevant` (e.g. Basic Science owning year 1 of a
+    // shared-first-year B.Tech) is never THAT department's own to staff - see
+    // fedYears. Checked PER department, not merged into one global exclusion
+    // set across all of `relevant`: now that `relevant` can hold both the
+    // shared-year manager (Basic Science, via subDepartmentOptions including
+    // managed branches) and the branch itself (CSE), CSE's own exclusion of
+    // year 1 (correctly - it doesn't own that year directly) must not cancel
+    // out Basic Science's own legitimate claim to it. A global set did
+    // exactly that: year 1 ended up in both `assigned` (from Basic Science)
+    // and `excluded` (from CSE), and the shared exclusion check hid it from
+    // everyone. Nothing assigned means no years (never "every year":
+    // lib/college/taughtYears.ts).
     for (const d of relevant) {
-      for (const y of managerEffectiveYears(d, departments, course.catalogId)) assigned.add(y);
-      for (const y of fedYears(d, departments, course.catalogId)) excluded.add(y);
+      const excludedForD = new Set(fedYears(d, departments, course.catalogId));
+      for (const y of managerEffectiveYears(d, departments, course.catalogId)) {
+        if (!excludedForD.has(y)) assigned.add(y);
+      }
     }
     const courseYears = Array.from({ length: course.durationYears }, (_, i) => i + 1);
-    return courseYears.filter((y) => assigned.has(y) && !excluded.has(y));
+    return courseYears.filter((y) => assigned.has(y));
   }, [course, subDepartmentOptions, scope.ownDept, departments]);
 
   // Keyed on the course ids, not just the group: if the scope-wide course fetch
