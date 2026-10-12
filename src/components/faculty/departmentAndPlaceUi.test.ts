@@ -31,11 +31,13 @@ describe("Ph.D. form: Name of the Department", () => {
     expect(view.indexOf("Name of the Department")).toBeLessThan(view.indexOf("Place"));
   });
 
-  it("is NOT shown for UG, PG or Postdoctoral entries", () => {
-    for (const level of ["UG", "PG", "POST_DOCTORAL"] as const) {
+  it("is NOT shown for UG or PG entries (Postdoctoral now has it too, like Ph.D.)", () => {
+    for (const level of ["UG", "PG"] as const) {
       expect(html(createElement(DegreeFields, { label: "x", level, value: { ...phd, departmentName: "should not show" }, onChange: noop }))).not.toContain("Name of the Department");
       expect(html(createElement(DegreeView, { label: "x", level, degree: { ...phd, departmentName: "should not show" } }))).not.toContain("should not show");
     }
+    expect(html(createElement(DegreeFields, { label: "x", level: "POST_DOCTORAL", value: { ...phd, departmentName: "Chemistry" }, onChange: noop }))).toContain("Name of the Department");
+    expect(html(createElement(DegreeView, { label: "x", level: "POST_DOCTORAL", degree: { ...phd, departmentName: "Chemistry" } }))).toContain("Chemistry");
   });
 
   it("an older Ph.D. record (no department) shows an empty field in the form and nothing in the view", () => {

@@ -1,5 +1,5 @@
-// UG/PG "Degree" field: when Course is "B.Tech/BE" or "M.Tech/ME" the qualification must
-// also say which of the two it is. Stored as DegreeDetail.degreeType on every UG/PG entry
+// UG/PG "Select type of degree" field (stored as `degreeType`; the stored `course` is shown as "Degree"): when the
+// Degree is "B.Tech/BE" or "M.Tech/ME" the qualification must also say which of the two it is. Stored as DegreeDetail.degreeType on every UG/PG entry
 // (ugDetails, additionalUgDetails, pgDetails, additionalPgDetails); absent for any
 // other course.
 
@@ -52,10 +52,10 @@ export function degreeTypeError(profile: unknown): string | null {
       const options = degreeTypeOptions(d.course);
       if (options.length > 0) {
         if (!isValidDegreeType(d.course, d.degreeType)) {
-          return `${name}: Degree (${options.join(" or ")}) is required when Course is ${d.course}`;
+          return `${name}: Select type of degree (${options.join(" or ")}) is required when Degree is ${d.course}`;
         }
       } else if (d.degreeType !== undefined && d.degreeType !== null && (d.degreeType as string) !== "") {
-        return `${name}: Degree is only applicable when Course is ${BTECH_BE_COURSE} or ${MTECH_ME_COURSE}`;
+        return `${name}: Type of degree is only applicable when Degree is ${BTECH_BE_COURSE} or ${MTECH_ME_COURSE}`;
       }
     }
   }

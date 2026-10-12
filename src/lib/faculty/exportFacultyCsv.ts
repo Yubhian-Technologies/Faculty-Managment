@@ -25,6 +25,7 @@ import { ratificationRecordsFromDoc } from "@/lib/faculty/ratificationHistory";
 import { allPreviousExperienceEntries, experienceBreakdown } from "@/lib/faculty/experienceCalc";
 import { normalizeResourcePersonsDetails } from "@/components/faculty/TrainingEntryFields";
 import { awardYear } from "@/lib/faculty/awardYear";
+import { isDiplomaCourse } from "@/lib/faculty/schoolCourses";
 
 function s(v: unknown): string {
   return v === null || v === undefined ? "" : String(v);
@@ -48,7 +49,7 @@ function yearCell(d: DegreeDetail, doctoral: boolean): string {
 
 function degreeCells(d: DegreeDetail): string[] {
   return [
-    d.course ?? "", d.degreeType ?? "", d.branch ?? "", d.institutionName ?? "", d.affiliatedUniversity ?? "",
+    d.course ?? "", d.degreeType ?? "", d.branch ?? "", d.specialization ?? "", d.institutionName ?? "", d.affiliatedUniversity ?? "",
     d.percentageCgpa ?? "", yearCell(d, false),
     d.place ?? "", d.hallTicketNumber ?? "",
   ];
@@ -62,16 +63,17 @@ function degreeCells(d: DegreeDetail): string[] {
 // `withDepartment` is true for Ph.D. entries only - they alone carry the Name of
 // the Department and the Title of the Ph.D Thesis (placed just before Place,
 // matching DOCTORAL_SUBFIELDS vs POSTDOCTORAL_SUBFIELDS in csvColumns.ts).
-function doctoralDegreeCells(d: DegreeDetail, withDepartment: boolean): string[] {
+function doctoralDegreeCells(d: DegreeDetail, postdoctoral = false): string[] {
   return [
-    d.specialization || d.branch || "", d.institutionName ?? "",
+    // A Post-Doctoral entry's old Branch is its department now (see DegreeFields), so it is not repeated as the Specialization.
+    (postdoctoral ? d.specialization : d.specialization || d.branch) || "", d.institutionName ?? "",
     d.status ? (PHD_STATUS_LABELS[d.status] ?? d.status) : "",
     d.mode ? (PHD_MODE_LABELS[d.mode] ?? d.mode) : "",
     d.yearOfRegistration ? String(d.yearOfRegistration) : "",
     d.nameOfTheGuideSupervisor ?? "",
     yearCell(d, true),
-    ...(withDepartment ? [d.departmentName ?? "", d.thesisTitle ?? ""] : []),
-    d.place ?? "", d.hallTicketNumber ?? "",
+    (postdoctoral ? d.departmentName || d.branch : d.departmentName) ?? "", d.thesisTitle ?? "",
+    d.place ?? "", d.percentageCgpa ?? "", d.hallTicketNumber ?? "",
   ];
 }
 
@@ -82,6 +84,19 @@ function schoolDegreeCells(d: DegreeDetail): string[] {
   return [
     d.course ?? "", d.board ?? "", d.institutionName ?? "", d.percentageCgpa ?? "",
     yearCell(d, false), d.place ?? "", d.hallTicketNumber ?? "",
+  ];
+}
+
+// Intermediate / Diploma / ITI: Subject, Branch and Trade follow Course. Each is blank unless that is the entry's own
+// course, so a value left over from an earlier choice is not exported under the wrong course.
+function intermediateDegreeCells(d: DegreeDetail): string[] {
+  const [course, ...rest] = schoolDegreeCells(d);
+  return [
+    course,
+    d.course === "Intermediate" ? d.subject ?? "" : "",
+    isDiplomaCourse(d.course) ? d.branch ?? "" : "",
+    d.course === "ITI" ? d.trade ?? "" : "",
+    ...rest,
   ];
 }
 
@@ -333,11 +348,11 @@ function buildRow(rawFaculty: FacultyMember, teachingSummary: string): Record<st
         : []
     ),
     secondaryEducation: combineGroup("secondaryEducation", p.secondaryEducation ? [schoolDegreeCells(p.secondaryEducation)] : []),
-    intermediateDiplomaIti: combineGroup("intermediateDiplomaIti", p.intermediateDiplomaIti ? [schoolDegreeCells(p.intermediateDiplomaIti)] : []),
+    intermediateDiplomaIti: combineGroup("intermediateDiplomaIti", p.intermediateDiplomaIti ? [intermediateDegreeCells(p.intermediateDiplomaIti)] : []),
     ugDetailsGroup: combineGroup("ugDetailsGroup", degreeList(p.ugDetails, p.additionalUgDetails).map(degreeCells)),
     pgDetailsGroup: combineGroup("pgDetailsGroup", degreeList(p.pgDetails, p.additionalPgDetails).map(degreeCells)),
-    phdDetailsGroup: combineGroup("phdDetailsGroup", degreeList(p.phdDetails, p.additionalPhdDetails).map((d) => doctoralDegreeCells(d, true))),
-    postdoctoralFellowshipDetailsGroup: combineGroup("postdoctoralFellowshipDetailsGroup", p.postdoctoralFellowshipDetails ? [doctoralDegreeCells(p.postdoctoralFellowshipDetails, false)] : []),
+    phdDetailsGroup: combineGroup("phdDetailsGroup", degreeList(p.phdDetails, p.additionalPhdDetails).map((d) => doctoralDegreeCells(d))),
+    postdoctoralFellowshipDetailsGroup: combineGroup("postdoctoralFellowshipDetailsGroup", p.postdoctoralFellowshipDetails ? [doctoralDegreeCells(p.postdoctoralFellowshipDetails, true)] : []),
     educationalQualifications: combineGroup("educationalQualifications", (p.educationalQualifications ?? []).map(staffQualificationCells)),
 
     // ─── Professional Experience ────────────────────────────────────────────
