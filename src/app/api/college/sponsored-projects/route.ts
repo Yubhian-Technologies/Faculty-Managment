@@ -5,6 +5,8 @@ import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { holdsRole } from "@/lib/roles/seatRoles";
+import { wantsWholeCollege } from "@/lib/research/listScope";
 import { isVisibleToRnD, notifyReviewer, resolveSubmissionRoute, routeFields } from "@/lib/research/coordinatorReview";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import { resolveOwnerDesignation } from "@/lib/publications/resolveOwnerDesignation";
@@ -24,18 +26,22 @@ export async function GET(request: Request) {
     const db = getAdminDb();
     const coll = db.collection("colleges").doc(session.collegeId).collection("sponsoredProjects");
 
+    // Three different reads share this endpoint: R&D's review queue (the page
+    // asks with ?scope=all), R&D looking at one person's module page (?uid=),
+    // and anyone - R&D included - looking at their OWN My Work module page,
+    // which is the default and must never widen. See wantsWholeCollege.
+    const isRnD = holdsRole(session, "R_AND_D");
+    const uidFilter = isRnD ? searchParams.get("uid") : null;
+    const wholeCollege = !uidFilter && wantsWholeCollege(request, isRnD);
+    const viewingOthers = wholeCollege || !!uidFilter;
     let query: FirebaseFirestore.Query = coll;
-    if (session.role === "R_AND_D") {
-      const uidFilter = searchParams.get("uid");
-      if (uidFilter) query = query.where("uid", "==", uidFilter);
-    } else {
-      query = query.where("uid", "==", session.uid);
-    }
+    if (uidFilter) query = query.where("uid", "==", uidFilter);
+    else if (!wholeCollege) query = query.where("uid", "==", session.uid);
 
     const snap = await query.get();
     const projects = snap.docs
       .map((d) => ({ id: d.id, ...d.data() }))
-      .filter((r) => session.role !== "R_AND_D" || isVisibleToRnD((r as { status?: string }).status))
+      .filter((r) => !viewingOthers || isVisibleToRnD((r as { status?: string }).status))
       .sort((a, b) => {
         const aTime = (a as { createdAt?: { toMillis?: () => number } }).createdAt?.toMillis?.() ?? 0;
         const bTime = (b as { createdAt?: { toMillis?: () => number } }).createdAt?.toMillis?.() ?? 0;
@@ -99,10 +105,21 @@ interface SponsoredProjectBody {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember(...COLLEGE_STAFF_ROLES);
-    const isRnD = session.role === "R_AND_D";
+    const isRnD = holdsRole(session, "R_AND_D");
 
     const body = (await readJsonBody(request)) as SponsoredProjectBody;
-    const uid = isRnD ? body.uid : session.uid;
+    // Whose record this is. A `uid` in the body is honoured only for R&D,
+    // who can record one on someone else's behalf; everyone else's submission
+    // can only ever credit themselves.
+    //
+    // R&D falls back to their OWN uid when the body names nobody. Their My Work
+    // module page posts the fields with no uid by design ("the server infers
+    // the submitter from their own session"), which is right for every other
+    // role - but left an R&D member recording their own record with
+    // `uid === undefined`, turned away as "uid, ... are required". Their own
+    // Add page still names the staff member explicitly, so recording on
+    // someone else's behalf is unaffected. Same fix as api/college/publications.
+    const uid = (isRnD ? body.uid : undefined) ?? session.uid;
     const { agencyName, schemeName, applicationNumber, title, projectType, objectives, piName, projectStatus } = body;
 
     if (!uid || !agencyName || !schemeName || !applicationNumber || !title || !projectType || !objectives || !piName || !projectStatus) {

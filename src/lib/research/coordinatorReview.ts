@@ -11,7 +11,8 @@ import type { RoleSeat } from "@/types/roleSeats";
 // The coordinator can edit the record, forward it to R&D, send it back to the
 // submitter for changes (SENT_BACK) or reject it. A department with no
 // coordinator seat filled - or a coordinator submitting their own record -
-// skips the coordinator step so nothing gets stuck.
+// skips the coordinator step so nothing gets stuck. Nothing skips R&D: every
+// record, whoever entered it, is verified before it counts as official.
 
 export interface ReviewableModule {
   /** Firestore collection under colleges/{collegeId}. */
@@ -87,11 +88,22 @@ export interface SubmissionRoute {
   coordinatorUid?: string;
 }
 
-/** Where a fresh (or resubmitted) record goes first. R&D's own entries are already official. */
+/**
+ * Where a fresh (or resubmitted) record goes first.
+ *
+ * EVERY record is verified - no one's submission is born official, R&D's own
+ * included. R&D's used to skip straight to APPROVED; it now lands in the same
+ * Pending Verification queue, which R&D then approves for themselves.
+ *
+ * What `isRnD` still decides is the COORDINATOR step: a record entered by R&D
+ * (their own, or one they recorded for someone else) goes directly to R&D's
+ * queue rather than waiting for a department coordinator to forward it to the
+ * person who would have reviewed it anyway.
+ */
 export async function resolveSubmissionRoute(
   db: Firestore, collegeId: string, submitterUid: string, isRnD: boolean
 ): Promise<SubmissionRoute> {
-  if (isRnD) return { status: "APPROVED" };
+  if (isRnD) return { status: "PENDING" };
   const department = await resolveSubmitterDepartment(db, collegeId, submitterUid);
   if (!department) return { status: "PENDING" };
   const coordinator = await findDepartmentCoordinator(db, collegeId, department);

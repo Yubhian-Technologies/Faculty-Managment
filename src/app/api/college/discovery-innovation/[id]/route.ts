@@ -6,8 +6,9 @@ import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { holdsRole } from "@/lib/roles/seatRoles";
 import { notify } from "@/lib/notify";
-import { isResubmittable, notifyReviewer, resolveSubmissionRoute, routeFields } from "@/lib/research/coordinatorReview";
+import { notifyReviewer, resolveSubmissionRoute, routeFields } from "@/lib/research/coordinatorReview";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import { finalizeIprInventors } from "@/lib/research/finalizeIprInventors";
 import { validateDiscoveryInnovationBody } from "@/lib/research/validateDiscoveryInnovation";
@@ -107,7 +108,7 @@ export async function PATCH(
       return NextResponse.json({ error: "IPR record not found" }, { status: 404 });
     }
     const record = snap.data() as { uid: string; title: string; status?: PublicationStatus; iprStatus: IprStatus };
-    const isRnD = session.role === "R_AND_D";
+    const isRnD = holdsRole(session, "R_AND_D");
     const isOwner = record.uid === session.uid;
     if (!isRnD && !isOwner) {
       return NextResponse.json({ error: "Not authorized to edit this IPR record" }, { status: 403 });
@@ -147,10 +148,13 @@ export async function PATCH(
       return NextResponse.json({ ok: true });
     }
 
-    if (isOwner && !isRnD) {
-      if (!isResubmittable(record.status)) {
-        return NextResponse.json({ error: "Only a rejected or sent-back submission can be edited" }, { status: 403 });
-      }
+    // An owner editing their OWN record always sends it back for verification -
+    // at any status, not just a rejected or sent-back one, and including an
+    // owner who is also the R&D head. Editing is a separate act from
+    // reviewing: the decision branch above is still the only way to approve,
+    // and R&D can still approve their own record there.
+    if (isOwner) {
+      const wasApproved = record.status === "APPROVED";
 
       const iprStatus = body.iprStatus ?? record.iprStatus;
       const inventors = body.inventors !== undefined
@@ -161,7 +165,7 @@ export async function PATCH(
         return NextResponse.json({ error: validationError }, { status: 400 });
       }
 
-      const route = await resolveSubmissionRoute(db, session.collegeId, session.uid, false);
+      const route = await resolveSubmissionRoute(db, session.collegeId, session.uid, isRnD);
       const now = new Date();
       const updates: Record<string, unknown> = {
         ...routeFields(route),
@@ -185,8 +189,10 @@ export async function PATCH(
       await ref.update(updates);
       await writeAuditLogSafe(db, session.collegeId, { action: "RD_DISCOVERY_INNOVATION_UPDATED", performedBy: session.uid, performedByName: editorName, targetId: id, details: { title: body.title ?? record.title } });
       await notifyReviewer(db, session.collegeId, route, {
-        type: "DISCOVERY_INNOVATION_PENDING_VERIFICATION", title: "IPR record resubmitted for verification",
-        message: `A previously rejected IPR record ("${body.title ?? record.title}") was corrected and resubmitted`,
+        type: "DISCOVERY_INNOVATION_PENDING_VERIFICATION", title: wasApproved ? "IPR record edited after approval - re-verification needed" : "IPR record resubmitted for verification",
+        message: wasApproved
+          ? `IPR record ("${body.title ?? record.title}") was edited after approval and needs re-verification`
+          : `A previously rejected IPR record ("${body.title ?? record.title}") was corrected and resubmitted`,
         rndLink: "/r-and-d/discovery-innovation",
       });
       return NextResponse.json({ ok: true });

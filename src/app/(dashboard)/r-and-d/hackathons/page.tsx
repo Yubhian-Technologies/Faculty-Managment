@@ -39,7 +39,7 @@ export default function RAndDHackathonsPage() {
   async function load() {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/college/hackathons");
+      const res = await fetch("/api/college/hackathons?scope=all");
       const data = await res.json() as { records: HackathonRow[] };
       setRecords(data.records ?? []);
     } catch {

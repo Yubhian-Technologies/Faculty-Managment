@@ -55,19 +55,21 @@ function SeedFundingRow({
 }) {
   return (
     <div className="rounded-md border bg-muted/20 shadow-sm p-2 space-y-2">
-      {isOwnProfile && project.status !== "APPROVED" && (
+      {isOwnProfile && (
         <div className="flex items-center gap-2">
-          {project.status === "PENDING" || project.status === "COORDINATOR_REVIEW" ? (
-            <Badge variant="pending" className="text-xs">{project.status === "COORDINATOR_REVIEW" ? "With R&D Coordinator" : "Pending Verification"}</Badge>
-          ) : (
-            <>
-              <Badge variant="rejected" className="text-xs">{project.status === "SENT_BACK" ? "Sent Back" : "Rejected"}</Badge>
-              {onEdit && (
-                <button type="button" onClick={() => onEdit(project)} className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1">
-                  <Pencil className="h-3 w-3" />Edit &amp; Resubmit
-                </button>
-              )}
-            </>
+          {project.status === "PENDING" && <Badge variant="pending" className="text-xs">Pending Verification</Badge>}
+          {project.status === "COORDINATOR_REVIEW" && <Badge variant="pending" className="text-xs">With R&amp;D Coordinator</Badge>}
+          {project.status === "REJECTED" && <Badge variant="rejected" className="text-xs">Rejected</Badge>}
+          {project.status === "SENT_BACK" && <Badge variant="rejected" className="text-xs">Sent Back</Badge>}
+          {onEdit && (
+            <button type="button" onClick={() => onEdit(project)} className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1">
+              <Pencil className="h-3 w-3" />
+              {project.status === "REJECTED" || project.status === "SENT_BACK"
+                ? "Edit & Resubmit"
+                : project.status === "PENDING" || project.status === "COORDINATOR_REVIEW"
+                  ? "Edit"
+                  : "Edit (sends for re-verification)"}
+            </button>
           )}
         </div>
       )}

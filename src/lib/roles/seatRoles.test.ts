@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canAssignSeat, canHoldSeat, isSingletonSeatRole, orderHeldRoles, pickEffectiveRole, roleMatchesSeat, SEAT_ROLES } from "./seatRoles";
+import { canAssignSeat, canHoldSeat, holdsRole, isSingletonSeatRole, orderHeldRoles, pickEffectiveRole, roleMatchesSeat, SEAT_ROLES } from "./seatRoles";
 import { getNavItemsForContext, getNavItemsForRoles, getWorkContexts, isPersonalNavItem, resolveWorkContext } from "@/components/layout/navConfig";
 
 describe("pickEffectiveRole", () => {
@@ -154,5 +154,39 @@ describe("working-as contexts", () => {
     const hrefs = getNavItemsForContext("PANEL_MEMBER", ["HOD", "PANEL_MEMBER"] as never, "HOD:ECE").map((i) => i.href);
     expect(hrefs).toContain("/hod/leave-approvals");
     expect(resolveWorkContext("PANEL_MEMBER", ["HOD", "PANEL_MEMBER"] as never, "HOD:ECE", "/hod/students", ["CSE", "ECE"])).toBe("HOD:ECE");
+  });
+});
+
+describe("holdsRole", () => {
+  // The reported bug: the college's R&D head also held an HOD seat. Both are
+  // ROLE_LEVEL 4, so on every route accepting both, requireRole resolved them
+  // to whichever seat came first - "HOD" - and `session.role === "R_AND_D"`
+  // was false for the person whose job it is to verify submissions. Approving
+  // one answered 403 "Only R&D can verify a publication".
+  const rajesh = { role: "HOD", roles: orderHeldRoles("PANEL_MEMBER", ["HOD", "R_AND_D"]) };
+
+  it("sees the seat the resolved role hid", () => {
+    expect(pickEffectiveRole(rajesh.roles, ["PANEL_MEMBER", "HOD", "R_AND_D"])).toBe("HOD");
+    expect(rajesh.role === "R_AND_D").toBe(false);
+    expect(holdsRole(rajesh, "R_AND_D")).toBe(true);
+  });
+
+  it("still sees a role held as the primary one", () => {
+    expect(holdsRole({ role: "R_AND_D", roles: ["R_AND_D"] }, "R_AND_D")).toBe(true);
+    // A cookie issued before seats existed carries no `roles`.
+    expect(holdsRole({ role: "R_AND_D" }, "R_AND_D")).toBe(true);
+  });
+
+  it("grants nothing to someone who does not hold the role", () => {
+    expect(holdsRole({ role: "HOD", roles: ["HOD", "PANEL_MEMBER"] }, "R_AND_D")).toBe(false);
+    expect(holdsRole({ role: "PANEL_MEMBER", roles: ["PANEL_MEMBER"] }, "R_AND_D")).toBe(false);
+    expect(holdsRole({ role: "PRINCIPAL", roles: ["PRINCIPAL", "PANEL_MEMBER"] }, "R_AND_D")).toBe(false);
+    // The R&D Coordinator is a different seat and must not pass as R&D.
+    expect(holdsRole({ role: "PRINCIPAL", roles: orderHeldRoles("PANEL_MEMBER", ["PRINCIPAL", "RND_COORDINATOR"]) }, "R_AND_D")).toBe(false);
+  });
+
+  it("answers for any of several roles, and normalizes a stored form", () => {
+    expect(holdsRole({ role: "HOD", roles: ["HOD", "R_AND_D", "PANEL_MEMBER"] }, "EXAM_CELL", "R_AND_D")).toBe(true);
+    expect(holdsRole({ role: "PANEL_MEMBER", roles: ["DEPARTMENT_OFFICE", "PANEL_MEMBER"] }, "HOD")).toBe(true);
   });
 });

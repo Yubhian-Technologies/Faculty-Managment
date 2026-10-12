@@ -35,7 +35,7 @@ export default function RAndDResearchServicesPage() {
   async function load() {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/college/research-services");
+      const res = await fetch("/api/college/research-services?scope=all");
       const data = await res.json() as { records: ResearchServiceRow[] };
       setRecords(data.records ?? []);
     } catch {

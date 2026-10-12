@@ -34,7 +34,7 @@ export default function RAndDConsultancyProjectsPage() {
   async function load() {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/college/consultancy-projects");
+      const res = await fetch("/api/college/consultancy-projects?scope=all");
       const data = await res.json() as { projects: ConsultancyProjectRow[] };
       setProjects(data.projects ?? []);
     } catch {

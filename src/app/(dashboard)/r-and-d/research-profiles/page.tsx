@@ -29,7 +29,7 @@ export default function RAndDResearchProfilesPage() {
   async function load() {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/college/research-profile");
+      const res = await fetch("/api/college/research-profile?scope=all");
       const data = await res.json() as { requests: ResearchProfileRow[] };
       setRequests(data.requests ?? []);
     } catch {

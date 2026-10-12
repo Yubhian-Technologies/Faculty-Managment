@@ -6,8 +6,9 @@ import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { holdsRole } from "@/lib/roles/seatRoles";
 import { notify } from "@/lib/notify";
-import { isResubmittable, notifyReviewer, resolveSubmissionRoute, routeFields } from "@/lib/research/coordinatorReview";
+import { notifyReviewer, resolveSubmissionRoute, routeFields } from "@/lib/research/coordinatorReview";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import { validateSponsoredProjectBody } from "@/lib/research/validateSponsoredProject";
 import type {
@@ -121,7 +122,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Sponsored project not found" }, { status: 404 });
     }
     const project = snap.data() as SponsoredProjectRequest;
-    const isRnD = session.role === "R_AND_D";
+    const isRnD = holdsRole(session, "R_AND_D");
     const isOwner = project.uid === session.uid;
     if (!isRnD && !isOwner) {
       return NextResponse.json({ error: "Not authorized to edit this sponsored project" }, { status: 403 });
@@ -161,17 +162,20 @@ export async function PATCH(
       return NextResponse.json({ ok: true });
     }
 
-    if (isOwner && !isRnD) {
-      if (!isResubmittable(project.status)) {
-        return NextResponse.json({ error: "Only a rejected or sent-back submission can be edited" }, { status: 403 });
-      }
+    // An owner editing their OWN record always sends it back for verification -
+    // at any status, not just a rejected or sent-back one, and including an
+    // owner who is also the R&D head. Editing is a separate act from
+    // reviewing: the decision branch above is still the only way to approve,
+    // and R&D can still approve their own record there.
+    if (isOwner) {
+      const wasApproved = project.status === "APPROVED";
 
       const validationError = validateSponsoredProjectBody({ ...project, ...body });
       if (validationError) {
         return NextResponse.json({ error: validationError }, { status: 400 });
       }
 
-      const route = await resolveSubmissionRoute(db, session.collegeId, session.uid, false);
+      const route = await resolveSubmissionRoute(db, session.collegeId, session.uid, isRnD);
       const now = new Date();
       const updates: Record<string, unknown> = {
         ...routeFields(route),
@@ -194,8 +198,10 @@ export async function PATCH(
       await ref.update(updates);
       await writeAuditLogSafe(db, session.collegeId, { action: "RD_SPONSORED_PROJECT_UPDATED", performedBy: session.uid, performedByName: editorName, targetId: id, details: { title: body.title ?? project.title } });
       await notifyReviewer(db, session.collegeId, route, {
-        type: "SPONSORED_PROJECT_PENDING_VERIFICATION", title: "Sponsored project resubmitted for verification",
-        message: `A previously rejected sponsored project ("${body.title ?? project.title}") was corrected and resubmitted`,
+        type: "SPONSORED_PROJECT_PENDING_VERIFICATION", title: wasApproved ? "Sponsored project edited after approval - re-verification needed" : "Sponsored project resubmitted for verification",
+        message: wasApproved
+          ? `Sponsored project ("${body.title ?? project.title}") was edited after approval and needs re-verification`
+          : `A previously rejected sponsored project ("${body.title ?? project.title}") was corrected and resubmitted`,
         rndLink: "/r-and-d/sponsored-projects",
       });
       return NextResponse.json({ ok: true });

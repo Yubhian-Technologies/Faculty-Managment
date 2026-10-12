@@ -31,7 +31,7 @@ export default function RAndDSponsoredProjectsPage() {
   async function load() {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/college/sponsored-projects");
+      const res = await fetch("/api/college/sponsored-projects?scope=all");
       const data = await res.json() as { projects: SponsoredProjectRow[] };
       setProjects(data.projects ?? []);
     } catch {
