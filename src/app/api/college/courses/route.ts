@@ -112,7 +112,18 @@ export async function GET(request: Request) {
         // within this HOD's own scope - own department, parent (sub-HOD),
         // real sub-departments, or managed branches - never an arbitrary
         // department elsewhere in the college. Was previously unchecked.
-        const inScope = ownDeptNames.some((name) => deriveHodScope(allDepartments, name).deptOptions.some((d) => d.id === explicitDepartmentId));
+        //
+        // Checked against ownDept.id too, not just deptOptions: deptOptions
+        // deliberately EXCLUDES a department's own id once it's a pure
+        // grouping container (managedDepartments.length > 0, no sections of
+        // its own - see resolveScopeDepartments/hodScope.ts), so an HOD whose
+        // department only manages branches could never query their own id
+        // explicitly without this - a 403 for a request no caller happens to
+        // make today, but a real gap.
+        const inScope = ownDeptNames.some((name) => {
+          const deptScope = deriveHodScope(allDepartments, name);
+          return deptScope.ownDept?.id === explicitDepartmentId || deptScope.deptOptions.some((d) => d.id === explicitDepartmentId);
+        });
         if (!inScope) {
           return NextResponse.json({ error: "That department is outside your scope" }, { status: 403 });
         }

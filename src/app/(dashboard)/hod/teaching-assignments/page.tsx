@@ -641,62 +641,6 @@ const effectiveSemester = semesterOptions.length === 0
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [applied, key, year, effectiveSemester, activeCourseIds, course]);
 
-  // TEMP DEBUG - unfiltered sections (no courseId narrowing at all), to check
-  // whether a managed branch's (CSE) sections actually carry the SAME
-  // courseId the filtered fetch above is querying by, or a different/stale
-  // one invisible to any courseId-scoped query. Remove alongside the debug
-  // line below once diagnosed.
-  const [debugAllSections, setDebugAllSections] = useState<{ department?: string; courseId?: string; year?: number; name?: string }[] | null>(null);
-  useEffect(() => {
-    if (!applied) return;
-    fetch("/api/college/sections")
-      .then((r) => r.json() as Promise<{ sections?: { department?: string; courseId?: string; year?: number; name?: string }[] }>)
-      .then((d) => setDebugAllSections(d.sections ?? []))
-      .catch(() => setDebugAllSections(null));
-  }, [applied]);
-
-  // TEMP DEBUG - fetches every deptOptions department's own courses DIRECTLY
-  // (same endpoint extraCourseDeptIds already calls) and shows each one's raw
-  // id/name/catalogId side by side, to settle with certainty whether CSE's
-  // own course doc is even being returned by that call at all, and if so
-  // whether its catalogId actually matches the own-department's course.
-  const [debugCoursesByDept, setDebugCoursesByDept] = useState<{ deptName: string; courses: { id: string; name: string; catalogId?: string }[] }[] | null>(null);
-  useEffect(() => {
-    if (!applied || deptOptions.length === 0) return;
-    const targets = [
-      ...(scope.ownDept ? [{ id: scope.ownDept.id, name: scope.ownDept.name }] : []),
-      ...deptOptions.map((d) => ({ id: d.id, name: d.name })),
-    ];
-    void (async () => {
-      const results = await Promise.all(
-        targets.map(async (t) => {
-          try {
-            const res = await fetch(`/api/college/courses?departmentId=${encodeURIComponent(t.id)}`);
-            const json = (await res.json()) as { courses?: { id: string; name: string; catalogId?: string }[]; error?: string };
-            return { deptName: t.name, courses: res.ok ? (json.courses ?? []) : [{ id: "ERROR", name: json.error ?? `HTTP ${res.status}`, catalogId: undefined }] };
-          } catch {
-            return { deptName: t.name, courses: [{ id: "ERROR", name: "network error", catalogId: undefined }] };
-          }
-        })
-      );
-      setDebugCoursesByDept(results);
-    })();
-  }, [applied, deptOptions, scope.ownDept]);
-
-  // TEMP DEBUG - the broadly-readable, fully UNSCOPED lookup (bypasses every
-  // HOD-scope check entirely) for the two specific course ids already seen in
-  // the other debug lines, to see their raw departmentId/department directly -
-  // the single most decisive check left, since both scoped queries tried so
-  // far came back empty for CSE's own course.
-  const [debugLookup, setDebugLookup] = useState<{ id: string; name: string; departmentId: string; department: string }[] | null>(null);
-  useEffect(() => {
-    if (!applied) return;
-    fetch("/api/college/courses/lookup")
-      .then((r) => r.json() as Promise<{ courses?: { id: string; name: string; departmentId: string; department: string }[] }>)
-      .then((d) => setDebugLookup(d.courses ?? []))
-      .catch(() => setDebugLookup(null));
-  }, [applied]);
-
   function handleDepartmentChange(v: string) {
     // ALL is a sentinel: Radix Select can't hold "" as an item value.
     setApplied(null);
@@ -1251,27 +1195,6 @@ const effectiveSemester = semesterOptions.length === 0
                 </SelectContent>
               </Select>
             </div>
-          )}
-          {/* TEMP DEBUG - remove once the "CSE sections never show up here"
-              issue is diagnosed. Shows exactly which course doc(s) this page
-              resolved for the picked programme, so a screenshot answers the
-              question directly instead of more guessing from code alone. */}
-          {courseKey && (
-            <p className="mb-3 rounded-md border border-dashed border-amber-400 bg-amber-50 dark:bg-amber-950/30 p-2 text-xs text-amber-800 dark:text-amber-300">
-              DEBUG — course: {course?.name ?? "none"} · group courseIds ({activeCourseIds.length}): {activeCourseIds.join(", ") || "(none)"} · deptOptions: {deptOptions.map((d) => `${d.name} (${d.id})`).join(", ") || "(none)"}
-              <br />
-              DEBUG (unfiltered sections) — {debugAllSections == null ? "loading…" : (() => {
-                const matches = debugAllSections.filter((s) => deptOptions.some((d) => d.name === s.department) || s.department === scope.ownDept?.name);
-                if (matches.length === 0) return "no sections at all for these department names, in the whole college-wide unfiltered fetch";
-                return matches.map((s) => `${s.name ?? "?"} (dept: ${s.department}, year: ${s.year}, courseId: ${s.courseId ?? "MISSING"})`).join(" | ");
-              })()}
-              <br />
-              DEBUG (courses per department, direct) — {debugCoursesByDept == null ? "loading…" : debugCoursesByDept.map((d) =>
-                `${d.deptName}: ${d.courses.length === 0 ? "(no courses returned)" : d.courses.map((c) => `${c.name} [id=${c.id}, catalogId=${c.catalogId ?? "NONE"}]`).join(", ")}`
-              ).join(" || ")}
-              <br />
-              DEBUG (unscoped lookup, all courses) — {debugLookup == null ? "loading…" : debugLookup.length === 0 ? "(empty - lookup returned nothing at all)" : debugLookup.map((c) => `${c.name} [id=${c.id}, departmentId=${c.departmentId}, department="${c.department}"]`).join(" | ")}
-            </p>
           )}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-4 sm:max-w-4xl">
             <div className="space-y-2">
