@@ -11,10 +11,18 @@ import type { SubjectRowInput } from "@/lib/subjects/validation/SubjectValidator
 // separate step: Assign to Semester, or the single Add Subject dialog's own
 // semester half). MasterSubjectImportService already supported exactly
 // this; nothing in the app called it until now.
+//
+// `mode: "validate"` dry-runs the file (same checks, nothing written) so the
+// dialog can show every row's status before enabling Import All - mirrors
+// the validate/commit split import-and-assign/route.ts already uses.
+// `mode` omitted (or "commit") keeps this route's original behavior: commit
+// straight away, skipping and reporting bad rows rather than refusing the
+// whole file.
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACADEMICS");
     const body = (await readJsonBody(request)) as {
+      mode?: "validate" | "commit";
       courseId?: string;
       regulation?: string;
       academicYear?: string;
@@ -37,9 +45,12 @@ export async function POST(request: Request) {
       academicYear: body.academicYear?.trim() || undefined,
       regulation: body.regulation?.trim() || undefined,
       records: body.records,
+      dryRun: body.mode === "validate",
     });
+    const ok = result.failed.length === 0;
+    const status = body.mode === "validate" ? (ok ? 200 : 422) : 201;
 
-    return NextResponse.json(result, { status: 201 });
+    return NextResponse.json({ ...result, ok, mode: body.mode ?? "commit" }, { status });
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;

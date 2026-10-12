@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
-import { Edit2, Trash2, BookOpen, Plus, X } from "lucide-react";
+import { Edit2, Trash2, BookOpen, Plus, X, Search, ArrowRight, Loader2 } from "lucide-react";
 import type { Department, Subject, SubjectCategory } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
 import { CategoryField } from "@/components/academics/CategoryField";
@@ -17,6 +17,8 @@ import { offeredYears } from "@/lib/college/departmentYears";
 import { courseYearNumbers, semesterLabel } from "@/lib/college/courseYears";
 import { useCourseSemesterPlan } from "@/hooks/useCourseSemesterPlan";
 import { managedCoreCandidates } from "@/lib/departments/departmentTree";
+import { CurriculumOverviewCard } from "@/components/academics/CurriculumOverviewCard";
+import type { CourseStructureScopeSummary } from "@/lib/subjects/services/CourseStructureImportService";
 
 // Curriculum > Subjects step. View and manage subjects assigned to
 // departments by year and semester in a horizontal table with CRUD & bulk
@@ -80,6 +82,11 @@ export function SubjectsStep({ initialCatalogId, initialDepartmentId }: Subjects
   const [courseKey, setCourseKey] = useState("");
   const [deptId, setDeptId] = useState("");
   const [subDeptId, setSubDeptId] = useState("");
+  // The regulation the left panel's master pool is scoped to - master
+  // subjects are course+regulation scoped (see /api/college/subjects GET's
+  // own doc-comment), so assigning from the pool needs one picked, same as
+  // the Add dialog already defaults addForm.regulation.
+  const [regulation, setRegulation] = useState("");
 
   // Seed Course/Department from the shared scope bar whenever it changes -
   // this step's own Year/Semester/sub-department picks stay local (a finer
@@ -120,6 +127,18 @@ export function SubjectsStep({ initialCatalogId, initialDepartmentId }: Subjects
   const [targetDeptIds, setTargetDeptIds] = useState<Set<string>>(new Set());
   const [isTargeting, setIsTargeting] = useState(false);
 
+  // ── Left panel: this regulation's master pool ───────────────────────────
+  const [masterSubjects, setMasterSubjects] = useState<Subject[]>([]);
+  const [isLoadingMaster, setIsLoadingMaster] = useState(false);
+  const [masterError, setMasterError] = useState("");
+  const [search, setSearch] = useState("");
+  const [selectedMasterIds, setSelectedMasterIds] = useState<Set<string>>(new Set());
+  const [isBulkAssigning, setIsBulkAssigning] = useState(false);
+
+  // ── Curriculum overview: this department's whole course structure ──────
+  const [scopeSummary, setScopeSummary] = useState<CourseStructureScopeSummary | null>(null);
+  const [scopeError, setScopeError] = useState("");
+
   useEffect(() => {
     void (async () => {
       try {
@@ -145,6 +164,15 @@ export function SubjectsStep({ initialCatalogId, initialDepartmentId }: Subjects
       .then((d) => setRegulations(Object.fromEntries((d.items ?? []).map((c) => [c.id, c.regulations ?? []]))))
       .catch(() => { /* regulation list just stays empty */ });
   }, []);
+
+  // Defaults to the course's first regulation whenever the course changes or
+  // its regulation list arrives - cleared for a course with none, never left
+  // pointing at a regulation that belonged to a previously-selected course.
+  useEffect(() => {
+    const opts = regulations[courseKey] ?? [];
+    setRegulation((prev) => (opts.includes(prev) ? prev : opts[0] ?? ""));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courseKey, regulations]);
 
   const courseGroups = useMemo(() => {
     const groups = new Map<string, { key: string; name: string; ids: string[] }>();
@@ -272,8 +300,136 @@ export function SubjectsStep({ initialCatalogId, initialDepartmentId }: Subjects
     }
   }
 
+  // Left panel: every subject in this regulation's master pool (Import
+  // Subjects' target collection), sharing catalogId's cross-department
+  // grouping with /api/college/subjects GET itself. A legacy course with no
+  // catalogId has no such grouping server-side, so its sibling course ids
+  // are merged client-side instead, same as fetchAssignments above.
+  async function fetchMasterPool(cKey: string, reg: string, courseList = courses) {
+    if (!reg) { setMasterSubjects([]); return; }
+    const cid = cKey.startsWith("name:") ? undefined : cKey || undefined;
+    setIsLoadingMaster(true);
+    setMasterError("");
+    try {
+      if (cid) {
+        const res = await fetch(`/api/college/subjects?catalogId=${encodeURIComponent(cid)}&regulation=${encodeURIComponent(reg)}`);
+        const json = (await res.json()) as { subjects?: Subject[]; error?: string };
+        if (!res.ok) throw new Error(json.error ?? "Failed to load subjects");
+        setMasterSubjects(json.subjects ?? []);
+      } else {
+        const groups = new Map<string, string[]>();
+        for (const c of courseList) {
+          const key = c.catalogId ?? `name:${c.name}`;
+          groups.set(key, [...(groups.get(key) ?? []), c.id]);
+        }
+        const ids = groups.get(cKey) ?? [];
+        const responses = await Promise.all(ids.map((id) =>
+          fetch(`/api/college/subjects?courseId=${encodeURIComponent(id)}&regulation=${encodeURIComponent(reg)}`)
+        ));
+        const merged = new Map<string, Subject>();
+        for (const res of responses) {
+          const body = (await res.json()) as { subjects?: Subject[]; error?: string };
+          if (!res.ok) throw new Error(body.error ?? "Failed to load subjects");
+          for (const s of body.subjects ?? []) merged.set(s.id, s);
+        }
+        setMasterSubjects(Array.from(merged.values()));
+      }
+    } catch (err) {
+      setMasterError(err instanceof Error ? err.message : "Failed to load subjects.");
+    } finally {
+      setIsLoadingMaster(false);
+    }
+  }
+
   function handleLoad() {
     void fetchAssignments(courseKey, deptId, subDeptId, yearValue, semesterValue);
+    void fetchMasterPool(courseKey, regulation);
+    setSelectedMasterIds(new Set());
+  }
+
+  // Curriculum overview: this department's whole structure for this course,
+  // every year and semester, regardless of regulation - reuses Course
+  // Structure's own scope summary (getScope) rather than re-deriving it.
+  const overviewRequestRef = useRef(0);
+  useEffect(() => {
+    const requestId = ++overviewRequestRef.current;
+    setScopeSummary(null);
+    setScopeError("");
+    if (!planCourse || !activeDeptId || !regulation) return;
+    void (async () => {
+      try {
+        const qs = new URLSearchParams({ courseId: planCourse.id, departmentId: activeDeptId, regulation });
+        const res = await fetch(`/api/college/subjects/import-and-assign?${qs}`);
+        const json = (await res.json()) as CourseStructureScopeSummary & { error?: string };
+        if (requestId !== overviewRequestRef.current) return;
+        if (!res.ok) setScopeError(json.error ?? "Couldn't load the curriculum overview.");
+        else setScopeSummary(json);
+      } catch {
+        if (requestId === overviewRequestRef.current) setScopeError("Couldn't load the curriculum overview.");
+      }
+    })();
+  }, [planCourse, activeDeptId, regulation]);
+
+  // Master pool minus whatever's already assigned to this exact department +
+  // year + semester, filtered by the search box.
+  const assignedSubjectIds = useMemo(() => new Set(assignments.map((a) => a.assignment.subjectId)), [assignments]);
+  const poolSubjects = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return masterSubjects
+      .filter((s) => !assignedSubjectIds.has(s.id))
+      .filter((s) => !q || s.name?.toLowerCase().includes(q) || s.code?.toLowerCase().includes(q))
+      .sort((a, b) => (a.code ?? "").localeCompare(b.code ?? ""));
+  }, [masterSubjects, assignedSubjectIds, search]);
+
+  function toggleSelectMaster(id: string) {
+    const next = new Set(selectedMasterIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedMasterIds(next);
+  }
+
+  // Bulk-assigns every checked master subject to this department + year +
+  // semester in one call - the server already supports subjectIds (see
+  // SubjectInstanceService.bulkAssignSubjectInstances), used here for the
+  // first time by a client.
+  async function handleBulkAssign() {
+    if (selectedMasterIds.size === 0 || !yearValue || !semesterValue) return;
+    const owner = departments.find((d) => d.id === activeDeptId);
+    const ownerIds = [activeDeptId, owner?.parentDepartmentId];
+    const group = courseGroups.find((g) => g.key === courseKey);
+    const course = courses.find((c) => group?.ids.includes(c.id) && ownerIds.includes(c.departmentId));
+    if (!course) { toast({ variant: "destructive", title: "No course found for this department." }); return; }
+    setIsBulkAssigning(true);
+    try {
+      const res = await fetch("/api/college/subject-semester-assignments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subjectIds: Array.from(selectedMasterIds),
+          departmentId: activeDeptId,
+          courseId: course.id,
+          year: Number(yearValue),
+          semester: Number(semesterValue),
+        }),
+      });
+      const json = (await res.json()) as { assignedCount?: number; failed?: { subjectId: string; error: string }[]; error?: string };
+      if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Couldn't assign the selected subjects." }); return; }
+      const assignedCount = json.assignedCount ?? 0;
+      const failCount = json.failed?.length ?? 0;
+      toast({
+        variant: failCount > 0 ? "default" : "success",
+        title: assignedCount > 0
+          ? `${assignedCount} subject${assignedCount !== 1 ? "s" : ""} assigned${failCount > 0 ? `, ${failCount} failed` : ""}`
+          : "Couldn't assign the selected subjects",
+        description: failCount > 0 ? json.failed?.[0]?.error : undefined,
+      });
+      setSelectedMasterIds(new Set());
+      await handleLoad();
+    } catch {
+      toast({ variant: "destructive", title: "Network error." });
+    } finally {
+      setIsBulkAssigning(false);
+    }
   }
 
   const allSelected = assignments.length > 0 && selectedIds.size === assignments.length;
@@ -296,7 +452,7 @@ export function SubjectsStep({ initialCatalogId, initialDepartmentId }: Subjects
 
   function openAdd() {
     setAddError("");
-    setAddForm({ ...EMPTY_ADD, regulation: (regulations[courseKey] ?? [])[0] ?? "" });
+    setAddForm({ ...EMPTY_ADD, regulation: regulation || ((regulations[courseKey] ?? [])[0] ?? "") });
   }
 
   async function handleAdd() {
@@ -614,12 +770,19 @@ export function SubjectsStep({ initialCatalogId, initialDepartmentId }: Subjects
 
       {/* Filters */}
       <Card>
-        <CardContent className={`grid gap-3 pt-6 ${subDepartments.length > 0 ? "sm:grid-cols-6" : "sm:grid-cols-5"}`}>
+        <CardContent className={`grid gap-3 pt-6 ${subDepartments.length > 0 ? "sm:grid-cols-7" : "sm:grid-cols-6"}`}>
           <div className="space-y-1.5">
             <Label htmlFor="course">Course</Label>
             <select id="course" className={SELECT_CLASS} value={courseKey} onChange={(e) => setCourseKey(e.target.value)}>
               <option value="">Select course</option>
               {courseGroups.map((g) => <option key={g.key} value={g.key}>{g.name}</option>)}
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="regulation">Regulation</Label>
+            <select id="regulation" className={SELECT_CLASS} value={regulation} onChange={(e) => setRegulation(e.target.value)} disabled={!courseKey}>
+              <option value="">{(regulations[courseKey] ?? []).length === 0 ? "No regulations configured" : "Select regulation"}</option>
+              {(regulations[courseKey] ?? []).map((r) => <option key={r} value={r}>{r}</option>)}
             </select>
           </div>
           <div className="space-y-1.5">
@@ -669,6 +832,57 @@ export function SubjectsStep({ initialCatalogId, initialDepartmentId }: Subjects
 
       {/* Error display */}
       {loadError && <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">{loadError}</div>}
+
+      {hasLoaded && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {/* Left panel: the regulation's master pool, minus what's already assigned here */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-medium">Master pool{regulation ? ` · ${regulation}` : ""}</p>
+              <Button size="sm" onClick={() => void handleBulkAssign()} loading={isBulkAssigning} disabled={selectedMasterIds.size === 0 || isBulkAssigning}>
+                Assign selected ({selectedMasterIds.size})<ArrowRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by name or code" className="pl-8" />
+            </div>
+            {masterError && <p className="text-sm text-red-600">{masterError}</p>}
+            <div className="rounded-lg border bg-card max-h-112 overflow-y-auto">
+              {isLoadingMaster ? (
+                <div className="p-6 text-center text-sm text-muted-foreground flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />Loading…</div>
+              ) : !regulation ? (
+                <p className="p-6 text-center text-sm text-muted-foreground">Select a regulation to see its master pool.</p>
+              ) : poolSubjects.length === 0 ? (
+                <p className="p-6 text-center text-sm text-muted-foreground">
+                  {masterSubjects.length === 0 ? "No subjects yet - import them on the Structure tab." : "Nothing left to assign - everything in the pool is already assigned here."}
+                </p>
+              ) : (
+                <ul className="divide-y divide-border">
+                  {poolSubjects.map((s) => (
+                    <li key={s.id} className="flex items-start gap-2 p-2.5 hover:bg-muted/40">
+                      <Checkbox
+                        checked={selectedMasterIds.has(s.id)}
+                        onCheckedChange={() => toggleSelectMaster(s.id)}
+                        aria-label={`Select ${s.name}`}
+                        className="mt-0.5"
+                      />
+                      <button type="button" className="min-w-0 flex-1 text-left" onClick={() => toggleSelectMaster(s.id)}>
+                        <p className="text-sm font-medium truncate">{s.name}</p>
+                        <p className="text-xs text-muted-foreground font-mono">{s.code}{s.category ? ` · ${s.category}` : ""}</p>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+
+          {/* Right panel: what's already assigned to this exact department + year + semester */}
+          <div className="space-y-3">
+            <p className="text-sm font-medium">
+              Assigned here{assignments.length > 0 ? ` (${assignments.length})` : ""}
+            </p>
 
       {/* Bulk Action Toolbar */}
       {assignments.length > 0 && (
@@ -848,6 +1062,12 @@ export function SubjectsStep({ initialCatalogId, initialDepartmentId }: Subjects
           </table>
         </div>
       )}
+          </div>
+        </div>
+      )}
+
+      {scopeError && <p className="text-sm text-red-600">{scopeError}</p>}
+      {scopeSummary && <CurriculumOverviewCard scope={scopeSummary} />}
 
       {/* Add Dialog */}
       <Dialog open={!!addForm} onOpenChange={(open) => !open && setAddForm(null)}>

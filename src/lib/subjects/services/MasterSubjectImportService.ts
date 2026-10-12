@@ -1,5 +1,7 @@
 import { getAdminDb } from "@/lib/firebase/admin";
 import { SubjectCatalogValidator, type SubjectRowInput } from "../validation/SubjectValidator";
+import { resolveImportCategory } from "../courseStructureValidation";
+import { customCategoriesFrom } from "./CourseStructureImportService";
 import type { Subject } from "@/types";
 
 export interface MasterImportPayload {
@@ -13,11 +15,25 @@ export interface MasterImportPayload {
   // doc-comment. Left unset (falsy) preserves this service's original
   // course+regulation-only behavior for every other caller.
   requireYearSemester?: boolean;
+  // Checked, everything else computed, but nothing written - backs the
+  // Import Subjects dialog's row-by-row preview (see import/route.ts).
+  dryRun?: boolean;
 }
 
 export interface MasterImportResult {
   created: number;
-  failed: { row: number; code: string; error: string }[];
+  failed: {
+    row: number;
+    code: string;
+    error: string;
+    // Set when `error` is specifically "this category isn't defined" - lets
+    // the dialog offer a one-click "Add category" fix instead of just
+    // failing the row (same rule Course Structure's own import already
+    // enforces - see courseStructureValidation.ts's resolveImportCategory).
+    kind?: "unknown-category";
+    value?: string;
+    suggestion?: string;
+  }[];
   warnings: { row: number; code: string; warning: string }[];
   // Row -> created subject id, for a caller (CourseStructureImportService)
   // that needs to do something with each specific row's new subject
@@ -67,6 +83,12 @@ export class MasterSubjectImportService {
     for (const d of catalogSnap.docs) {
       catalogById.set(d.id, d.data() as { regulations?: string[]; regulationBatches?: Record<string, string> });
     }
+
+    // 2b. Categories a row's Category column may use: the standard set plus
+    // whatever the college defined under Academics > Categories - same rule
+    // Course Structure's own import already enforces (courseStructureValidation.ts).
+    const categoriesSnap = await collegeRef.collection("subjectCategories").get();
+    const customCategories = customCategoriesFrom(categoriesSnap.docs.map((d) => d.data()));
 
     // 3. Track existing subject codes across every department sharing this
     // catalog course, to prevent duplicate insertions from any of them.
@@ -150,6 +172,27 @@ export class MasterSubjectImportService {
       }
 
       const validData = validation.data;
+
+      // ── Strict category check ─────────────────────────────────────────────
+      // SubjectCatalogValidator accepts any non-empty category text as a new
+      // custom category. Course Structure's bulk import is stricter - a
+      // category must already be defined (standard set or Academics >
+      // Categories) - so an import here can offer the same "Add category"
+      // fix instead of silently storing whatever text was typed.
+      const categoryRaw = row.category?.toString().trim() ?? "";
+      const catResolution = resolveImportCategory(categoryRaw, customCategories);
+      if (catResolution.kind === "unknown") {
+        failed.push({
+          row: rowNum,
+          code: validData.code,
+          error: `Category "${categoryRaw}" isn't defined.${catResolution.suggestion ? ` Did you mean ${catResolution.suggestion}?` : ""} Add it in Category settings.`,
+          kind: "unknown-category",
+          value: categoryRaw,
+          suggestion: catResolution.suggestion,
+        });
+        continue;
+      }
+      validData.category = catResolution.category;
 
       // ── Resolve & Validate Regulation ─────────────────────────────────────
       const catalogData = course.catalogId ? catalogById.get(course.catalogId) : undefined;
@@ -242,6 +285,8 @@ export class MasterSubjectImportService {
     }
 
     // ── Batch Persist to colleges/{id}/subjects ───────────────────────────
+    // dryRun: every row still gets a (locally-allocated, free) doc id for
+    // the caller's preview, but nothing is sent to Firestore.
     const createdRows: MasterImportResult["createdRows"] = [];
     if (subjectsToCreate.length > 0) {
       const BATCH_SIZE = 400;
@@ -250,10 +295,10 @@ export class MasterSubjectImportService {
         const batch = this.db.batch();
         for (const item of chunk) {
           const docRef = collegeRef.collection("subjects").doc();
-          batch.set(docRef, item.data);
+          if (!payload.dryRun) batch.set(docRef, item.data);
           createdRows.push({ row: item.row, subjectId: docRef.id, code: item.data.code, year: item.year, semester: item.semester });
         }
-        await batch.commit();
+        if (!payload.dryRun) await batch.commit();
       }
     }
 
