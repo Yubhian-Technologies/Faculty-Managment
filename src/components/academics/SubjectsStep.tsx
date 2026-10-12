@@ -298,7 +298,7 @@ export function SubjectsStep({ initialCatalogId, initialDepartmentId, initialReg
         .sort((a, b) => String(a.subjectCode).localeCompare(String(b.subjectCode)))
         .map((a) => ({
           assignment: a,
-          master: { id: a.subjectId, code: a.subjectCode, name: a.subjectName, shortCode: a.shortCode, category: a.category } as Subject,
+          master: { id: a.subjectId, code: a.subjectCode, name: a.subjectName, shortCode: a.shortCode, category: a.category, regulation: a.regulation } as Subject,
         })));
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Failed to load subjects.");
@@ -921,6 +921,7 @@ export function SubjectsStep({ initialCatalogId, initialDepartmentId, initialReg
                 <th className="p-3 w-28">Code</th>
                 <th className="p-3 min-w-[180px]">Subject Name</th>
                 <th className="p-3 w-28">Category</th>
+                <th className="p-3 w-24">Regulation</th>
                 <th className="p-3 w-16 text-center">L</th>
                 <th className="p-3 w-16 text-center">T</th>
                 <th className="p-3 w-16 text-center">P</th>
@@ -991,6 +992,9 @@ export function SubjectsStep({ initialCatalogId, initialDepartmentId, initialReg
                     </td>
                     <td className="p-3 text-xs text-muted-foreground">
                       {item.master.category || "—"}
+                    </td>
+                    <td className={`p-3 text-xs ${item.master.regulation && item.master.regulation !== regulation ? "text-amber-700 dark:text-amber-400 font-medium" : "text-muted-foreground"}`}>
+                      {item.master.regulation || "—"}
                     </td>
                     <td className="p-3 text-center font-medium">{lec}</td>
                     <td className="p-3 text-center font-medium">{tut}</td>
