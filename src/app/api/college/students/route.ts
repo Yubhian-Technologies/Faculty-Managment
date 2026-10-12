@@ -12,7 +12,7 @@ import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { normalizeRosterDetails } from "@/lib/students/rosterFields";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { notConfiguredMessage } from "@/lib/college/taughtYears";
-import { resolveBranchYearOwner, resolveFreshmanLandingDepartment, type DepartmentYearRow } from "@/lib/departments/managedBranches";
+import { resolveBranchYearOwner, resolveFreshmanLandingDepartment, departmentOwnsYearDirectly, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { isConfiguredSecondaryDepartmentOrChild, resolveDepartmentByNameOrCode } from "@/lib/departments/codeOrNameResolver";
 import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
 import { resolveDepartmentCourseScope, resolveCatalogId, freshmanLandingDepartmentNames, departmentClaimsYearItself, type DepartmentWithId } from "@/lib/college/academicStructure";
@@ -331,8 +331,12 @@ export async function GET(request: Request) {
       // by whoever manages this branch elsewhere (e.g. a shared first year
       // routed through a common department's sub-department instead).
       if (hodScope && hodDepartments.length > 0) {
-        const owner = resolveBranchYearOwner(hodDepartments, data.department as string, data.year as number, studentCatalogId(data));
-        if (!hodScope.ownDepartmentNames.includes(owner)) continue;
+        const dept = data.department as string;
+        const ownsDirectly = hodScope.ownDepartmentNames.includes(dept) && departmentOwnsYearDirectly(hodDepartments, dept, data.year as number);
+        if (!ownsDirectly) {
+          const owner = resolveBranchYearOwner(hodDepartments, dept, data.year as number, studentCatalogId(data));
+          if (!hodScope.ownDepartmentNames.includes(owner)) continue;
+        }
       }
       seenIds.add(d.id);
       students.push({ id: d.id, ...data, accessLevel: "primary" });

@@ -276,7 +276,7 @@ export function resolveFreshmanLandingDepartment(
  * classifySectionForHod, which all special-case this before falling back to
  * resolveBranchYearOwner's single-owner resolution.
  */
-function departmentOwnsYearDirectly<T extends DepartmentYearRow & { name?: string }>(
+export function departmentOwnsYearDirectly<T extends DepartmentYearRow & { name?: string }>(
   departments: T[],
   departmentName: string,
   year: number
