@@ -110,9 +110,17 @@ describe("a department whose years resolve to nothing", () => {
     expect(opts(strayDepts, strayCourses, "Basic Science - English", "")).toEqual([1]);
   });
 
-  it("a branch whose every configured year is fed away is capped to the course's own length (2-year M.Tech)", () => {
-    expect(managerEffectiveYears(strayDepts.find((d) => d.id === "cse")!, strayDepts, MT)).toEqual([]);
-    expect(legacy(strayDepts, strayCourses, "CSE", "M.Tech")).toEqual([1, 2, 3, 4]);
+  it("a branch's own direct claim wins outright over a stray feeder, even when the feeder covers every one of those years (2-year M.Tech)", () => {
+    // managerEffectiveYears now trusts CSE's own configured M.Tech years
+    // directly rather than zeroing them out because an unrelated stray
+    // department also happens to list CSE as a Core Department - a direct
+    // claim always wins over a feeder (see managerEffectiveYears's own
+    // doc-comment). The end-user-facing result is unchanged either way.
+    expect(managerEffectiveYears(strayDepts.find((d) => d.id === "cse")!, strayDepts, MT)).toEqual([1, 2]);
+    // legacyYearOptionsForDepartment only freezes its OWN logic, not
+    // managerEffectiveYears (still the live import) - so it now sees the
+    // same [1, 2] directly instead of falling back to the course's full span.
+    expect(legacy(strayDepts, strayCourses, "CSE", "M.Tech")).toEqual([1, 2]);
     expect(opts(strayDepts, strayCourses, "CSE", "M.Tech")).toEqual([1, 2]);
   });
 
