@@ -157,7 +157,7 @@ export default function BulkCollegeEmailImportPage() {
       <PageHeader
         title="Bulk Update College Emails"
         description="Change many faculty members' college email (their login) from one Excel/CSV file"
-        actions={<Button variant="outline" asChild><Link href="/college-office/faculty"><ArrowLeft className="mr-2 h-4 w-4" />Back to Faculty</Link></Button>}
+        actions={<Button variant="outline" asChild><Link href="/college-office/staff"><ArrowLeft className="mr-2 h-4 w-4" />Back to Pay & Promotions</Link></Button>}
       />
 
       <Card>

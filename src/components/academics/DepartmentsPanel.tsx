@@ -656,7 +656,7 @@ export function DepartmentsPanel() {
                 <CardContent className="flex flex-col flex-1 p-4">
                   {/* Header: code + actions */}
                   <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                       <span className="inline-flex items-center justify-center h-7 min-w-[1.75rem] px-1.5 rounded bg-muted text-xs font-mono font-semibold text-muted-foreground">
                         {dept.code}
                       </span>
@@ -731,19 +731,19 @@ export function DepartmentsPanel() {
                   </div>
 
                   {/* Actions */}
-                  <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-border/50" onClick={(e) => e.stopPropagation()}>
+                  <div className="grid grid-cols-[repeat(auto-fit,minmax(7.5rem,1fr))] gap-2 mt-3 pt-3 border-t border-border/50" onClick={(e) => e.stopPropagation()}>
                     <Button
                       asChild
                       variant="outline"
                       size="sm"
-                      className="h-8 text-xs"
+                      className="h-auto min-h-8 min-w-0 px-2 py-1.5 text-xs"
                     >
                       <Link href={`/principal/departments/${dept.id}`}>Manage courses &amp; timings</Link>
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-8 text-xs"
+                      className="h-auto min-h-8 min-w-0 px-2 py-1.5 text-xs"
                       onClick={() => setShowRoles(true)}
                     >
                       Role Assignments

@@ -21,6 +21,7 @@ import type {
   SeedFundingEquipmentItem, SeedFundingPaperItem, SeedFundingPatentItem,
   SeedFundingProjectRequest, SeedFundingProjectStatus, SeedFundingStudentItem,
 } from "@/types";
+import { FACT_GRID_COLS_4 } from "@/components/shared/factGrid";
 
 const PREVIEW_COUNT = 3;
 // Guards against a typo like 1000 spawning a thousand student rows.
@@ -76,15 +77,17 @@ function SeedFundingRow({
       {project.status === "SENT_BACK" && project.sentBackReason && (
         <p className="text-xs text-destructive">Sent back: {project.sentBackReason}</p>
       )}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Field label="Title" value={project.title} />
-        <Field label="PI" value={project.piName} />
-        <Field label="Dept. of PI" value={project.piDepartment} />
-        <Field label="Status" value={project.projectStatus === "SANCTIONED" ? "Sanctioned" : "Completed"} />
-        <Field label="Duration (Months)" value={project.durationMonths} />
-        <Field label="Total Amount Sanctioned (Rs.)" value={project.totalAmountSanctioned} />
-        <Field label="Recurring (Rs.)" value={project.recurringAmount} />
-        <Field label="Non-Recurring (Rs.)" value={project.nonRecurringAmount} />
+      <div className="@container">
+        <div className={`grid gap-2 ${FACT_GRID_COLS_4}`}>
+          <Field label="Title" value={project.title} />
+          <Field label="PI" value={project.piName} />
+          <Field label="Dept. of PI" value={project.piDepartment} />
+          <Field label="Status" value={project.projectStatus === "SANCTIONED" ? "Sanctioned" : "Completed"} />
+          <Field label="Duration (Months)" value={project.durationMonths} />
+          <Field label="Total Amount Sanctioned (Rs.)" value={project.totalAmountSanctioned} />
+          <Field label="Recurring (Rs.)" value={project.recurringAmount} />
+          <Field label="Non-Recurring (Rs.)" value={project.nonRecurringAmount} />
+        </div>
       </div>
       {project.objectives && (
         <div>
@@ -92,11 +95,13 @@ function SeedFundingRow({
           <p className="text-sm">{project.objectives}</p>
         </div>
       )}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Field label="Equipment Procured" value={project.equipmentProcured.length} />
-        <Field label="Papers Published" value={project.papersPublished.length} />
-        <Field label="Patents Filed/Published/Granted" value={project.patents.length} />
-        <Field label="Students Trained" value={project.studentsTrainedCount} />
+      <div className="@container">
+        <div className={`grid gap-2 ${FACT_GRID_COLS_4}`}>
+          <Field label="Equipment Procured" value={project.equipmentProcured.length} />
+          <Field label="Papers Published" value={project.papersPublished.length} />
+          <Field label="Patents Filed/Published/Granted" value={project.patents.length} />
+          <Field label="Students Trained" value={project.studentsTrainedCount} />
+        </div>
       </div>
       <div className="flex flex-wrap gap-3">
         {project.progressReportUrl && (

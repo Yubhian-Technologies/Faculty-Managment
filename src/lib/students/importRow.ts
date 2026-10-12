@@ -75,6 +75,8 @@ export interface StudentImportRow extends Partial<Record<(typeof ADMISSION_SHEET
   studiedOutsideAPDetails?: string;
   familyIdLinkedOtherState?: string;
   familyIdLinkedOtherStateDetails?: string;
+  parentsWorkingOutside?: string;
+  parentsWorkingOutsideDetails?: string;
   remarks?: string;
 }
 
@@ -197,6 +199,8 @@ export function buildStudentDoc(
     ...(row.studiedOutsideAPDetails?.trim() ? { studiedOutsideAPDetails: row.studiedOutsideAPDetails.trim() } : {}),
     ...(parseYesNo(row.familyIdLinkedOtherState) !== undefined ? { familyIdLinkedOtherState: parseYesNo(row.familyIdLinkedOtherState) } : {}),
     ...(row.familyIdLinkedOtherStateDetails?.trim() ? { familyIdLinkedOtherStateDetails: row.familyIdLinkedOtherStateDetails.trim() } : {}),
+    ...(parseYesNo(row.parentsWorkingOutside) !== undefined ? { parentsWorkingOutside: parseYesNo(row.parentsWorkingOutside) } : {}),
+    ...(row.parentsWorkingOutsideDetails?.trim() ? { parentsWorkingOutsideDetails: row.parentsWorkingOutsideDetails.trim() } : {}),
     ...(row.remarks?.trim() ? { remarks: row.remarks.trim() } : {}),
     // Seat type, parents' occupation / income and previous education - text, as typed.
     ...Object.fromEntries(

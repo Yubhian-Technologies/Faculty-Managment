@@ -17,6 +17,7 @@ import type {
   PhdAwardNature, PhdAwardType, PhdFellowshipType, PhdGuideStatus, PhdRecognizedSupervisor,
   PhdSupervisionRequest, SeedFundingPaperItem, SeedFundingPatentItem,
 } from "@/types";
+import { FACT_GRID_COLS_4 } from "@/components/shared/factGrid";
 
 const PREVIEW_COUNT = 3;
 const EMPTY_PAPER: SeedFundingPaperItem = { title: "", journalOrConference: "" };
@@ -59,15 +60,17 @@ function PhdSupervisionRow({
       {record.status === "SENT_BACK" && record.sentBackReason && (
         <p className="text-xs text-destructive">Sent back: {record.sentBackReason}</p>
       )}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Field label="Name of the Scholar" value={record.scholarName} />
-        <Field label="Status of Guide" value={record.guideStatus === "SUPERVISOR" ? "Supervisor" : "Co-Supervisor"} />
-        <Field label="Recognized Supervisor" value={record.recognizedSupervisor === "JNTUK" ? "JNTUK" : record.otherUniversityName || "Other"} />
-        <Field label="Department" value={record.scholarDepartment} />
-        <Field label="Year of Allocation" value={record.yearOfAllocation} />
-        <Field label="Years Completed" value={record.yearsCompleted} />
-        <Field label="Degree Awarded" value={record.degreeAwarded} />
-        <Field label="Date of Award" value={record.dateOfAward} />
+      <div className="@container">
+        <div className={`grid gap-2 ${FACT_GRID_COLS_4}`}>
+          <Field label="Name of the Scholar" value={record.scholarName} />
+          <Field label="Status of Guide" value={record.guideStatus === "SUPERVISOR" ? "Supervisor" : "Co-Supervisor"} />
+          <Field label="Recognized Supervisor" value={record.recognizedSupervisor === "JNTUK" ? "JNTUK" : record.otherUniversityName || "Other"} />
+          <Field label="Department" value={record.scholarDepartment} />
+          <Field label="Year of Allocation" value={record.yearOfAllocation} />
+          <Field label="Years Completed" value={record.yearsCompleted} />
+          <Field label="Degree Awarded" value={record.degreeAwarded} />
+          <Field label="Date of Award" value={record.dateOfAward} />
+        </div>
       </div>
       <div className="flex flex-wrap gap-3">
         {record.allotmentOrderUrl && (

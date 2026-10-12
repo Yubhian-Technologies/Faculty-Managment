@@ -12,7 +12,7 @@ import { ROLE_DASHBOARD_PATHS, ROLE_LABELS, type UserRole } from "@/types/core";
 
 interface LeaveBalance { code: string; label: string; unlimited: boolean; remaining?: number }
 
-// One line on what each seat gives you, shown on the "Your seats" cards.
+// One line on what each seat gives you, shown on the "Your roles" cards.
 const SEAT_BLURB: Partial<Record<UserRole, string>> = {
   PRINCIPAL: "College-wide approvals, hiring, budget, staff and reports",
   VICE_PRINCIPAL: "College-wide approvals, hiring, budget, staff and reports",
@@ -113,7 +113,7 @@ export function MyDashboardOverview() {
       {seatRoles.length > 0 && (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Your seats</CardTitle>
+            <CardTitle className="text-base">Your roles</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-2">
             {seatRoles.map((role) => (
@@ -126,7 +126,7 @@ export function MyDashboardOverview() {
                   <p className="text-sm font-semibold">{ROLE_LABELS[role]}</p>
                   <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary" />
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">{SEAT_BLURB[role] ?? "Open this seat's dashboard"}</p>
+                <p className="text-xs text-muted-foreground mt-1">{SEAT_BLURB[role] ?? "Open this role's dashboard"}</p>
               </Link>
             ))}
           </CardContent>

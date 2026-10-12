@@ -23,6 +23,7 @@ export const STUDENT_SELF_EDITABLE_KEYS: readonly string[] = [
   "bankAccountNo", "bankName", "ifscCode",
   // Additional
   "studiedOutsideAP", "studiedOutsideAPDetails", "familyIdLinkedOtherState", "familyIdLinkedOtherStateDetails",
+  "parentsWorkingOutside", "parentsWorkingOutsideDetails",
 ];
 const EDITABLE = new Set(STUDENT_SELF_EDITABLE_KEYS);
 
@@ -42,7 +43,7 @@ export function studentMobileSelfEditable(student: Partial<Pick<StudentRecord, "
 const PHONE_KEYS = ["fatherContactNo", "motherContactNo", "guardianContact"] as const;
 const SHORT_TEXT_MAX = 200;
 const ADDRESS_MAX = 500;
-const ADDRESS_KEYS = new Set(["temporaryAddress", "permanentAddress", "studiedOutsideAPDetails", "familyIdLinkedOtherStateDetails", "identificationMarks"]);
+const ADDRESS_KEYS = new Set(["temporaryAddress", "permanentAddress", "studiedOutsideAPDetails", "familyIdLinkedOtherStateDetails", "parentsWorkingOutsideDetails", "identificationMarks"]);
 
 export type SelfEditResult =
   | { ok: true; updates: Record<string, unknown>; mobile?: string }
@@ -147,6 +148,7 @@ export function buildStudentSelfUpdate(student: Partial<StudentRecord>, details:
   if (merged.physicallyHandicapped === false) clear("handicappedType");
   if (merged.studiedOutsideAP === false) clear("studiedOutsideAPDetails");
   if (merged.familyIdLinkedOtherState === false) clear("familyIdLinkedOtherStateDetails");
+  if (merged.parentsWorkingOutside === false) clear("parentsWorkingOutsideDetails");
   // "Permanent address same as temporary" means exactly that - keep the two copies identical.
   if (merged.permanentAddressSameAsTemporary === true) {
     const temp = (merged.temporaryAddress as string | null | undefined) ?? null;

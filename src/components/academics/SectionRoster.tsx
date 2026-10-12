@@ -107,7 +107,7 @@ export function SectionRoster({ sectionId: id, onBack, backLabel = "Back to Sect
       s.gender ?? "",
       s.email ?? "",
     ]);
-    downloadCSV(toCSV([headers, ...rows]), `${section.name}_students.csv`);
+    downloadCSV(toCSV([headers, ...rows]), `${section?.name ?? "section"}_students.csv`);
   }
 
   return (

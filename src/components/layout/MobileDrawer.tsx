@@ -20,6 +20,7 @@ import { readOnlyNavItems } from "./readOnlyNav";
 import { LocationDeptSwitcher } from "./LocationDeptSwitcher";
 import { useWorkContext } from "@/hooks/useWorkContext";
 import { ROLE_LABELS } from "@/types";
+import { UserCardSubtitle } from "./UserCardSubtitle";
 
 const INTERVIEW_NAV_ITEM: NavItem = {
   label: "My Interviews",
@@ -185,7 +186,7 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{user.name}</p>
-              <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+              <UserCardSubtitle user={user} />
             </div>
           </div>
           <button

@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, ownDepartmentNames } from "@/lib/departments/scope";
+import { managedCoreCandidates } from "@/lib/departments/departmentTree";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
 import { makeLiveSlotPredicate } from "@/lib/timetable/liveSlots";
@@ -99,9 +100,34 @@ export async function GET(request: Request) {
       return pt.startTime < to && pt.endTime > from;
     };
 
-    const departmentNames = deptsSnap.docs
-      .map((d) => ((d.data() as { name?: string }).name ?? "").trim())
+    const allDepts = deptsSnap.docs.map((d) => {
+      const data = d.data() as { name?: string; parentDepartmentId?: string | null; managedDepartments?: string[]; hasSubDepartments?: boolean };
+      return { id: d.id, ...data, name: data.name ?? "", parentDepartmentId: data.parentDepartmentId ?? undefined };
+    });
+
+    // HOD: own department tree (ownDepartmentNames - own + true sub-departments)
+    // PLUS every core department those sub-departments manage (e.g. Basic
+    // Science - Chemistry -> Computer Science and Engineering, Computer
+    // Science and Business System). Leisure Faculty is a read-only
+    // availability check, not roster management, so this is deliberately
+    // wider than canHodManageFacultyDepartment elsewhere: an HOD coordinating
+    // a shared first year needs to see whether the branches it feeds are
+    // free too, not just their own department's own faculty.
+    let hodDepartments: Set<string> | null = null;
+    if (session.role === "HOD") {
+      const own = ownDepartmentNames(await getHodDepartmentScope(db, session.collegeId, session.uid));
+      const managed = new Set<string>();
+      for (const n of own) {
+        const dept = allDepts.find((d) => (d.name ?? "").trim() === n);
+        for (const m of managedCoreCandidates(allDepts, dept, false)) managed.add(m);
+      }
+      hodDepartments = new Set([...own, ...managed]);
+    }
+
+    const departmentNames = allDepts
+      .map((d) => (d.name ?? "").trim())
       .filter(Boolean)
+      .filter((n) => !hodDepartments || hodDepartments.has(n))
       .sort((a, b) => a.localeCompare(b));
 
     const semesters = Array.from(semesterNumbers).sort((a, b) => a - b);
@@ -241,10 +267,7 @@ export async function GET(request: Request) {
       return out.filter(([a, b]) => a < b);
     };
 
-    // HOD: own department tree only (ownDepartmentNames, the narrowest scope).
-    const hodDepartments = session.role === "HOD"
-      ? new Set(ownDepartmentNames(await getHodDepartmentScope(db, session.collegeId, session.uid)))
-      : null;
+    // hodDepartments is already resolved above (own tree + managed core departments).
 
     // A parent department also covers its sub-departments (BASIC SCIENCE
     // includes BASIC SCIENCE ENGLISH / MATHS), matching how an HOD's own scope

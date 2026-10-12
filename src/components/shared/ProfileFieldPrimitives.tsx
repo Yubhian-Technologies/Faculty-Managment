@@ -199,6 +199,21 @@ function withCourse(v: DegreeDetail, course: string): DegreeDetail {
   return { ...rest, course, ...(isValidDegreeType(course, degreeType) ? { degreeType } : {}) };
 }
 
+// A soft tint per qualification level, so the stacked education blocks (each
+// the same grid of the same fields) can be told apart at a glance while
+// scrolling. Kept pale - the fields inside stay on the plain background
+// (inputs already are; the Select triggers are made so by BLOCK_FIELDS) - and
+// each has a dark-mode pair.
+const LEVEL_TINT: Record<DegreeLevel, { block: string; label: string }> = {
+  HIGH_SCHOOL: { block: "border-sky-200 bg-sky-50/70 dark:border-sky-900 dark:bg-sky-950/30", label: "text-sky-800 dark:text-sky-300" },
+  INTERMEDIATE: { block: "border-emerald-200 bg-emerald-50/70 dark:border-emerald-900 dark:bg-emerald-950/30", label: "text-emerald-800 dark:text-emerald-300" },
+  UG: { block: "border-amber-200 bg-amber-50/70 dark:border-amber-900 dark:bg-amber-950/30", label: "text-amber-800 dark:text-amber-300" },
+  PG: { block: "border-violet-200 bg-violet-50/70 dark:border-violet-900 dark:bg-violet-950/30", label: "text-violet-800 dark:text-violet-300" },
+  DOCTORAL: { block: "border-rose-200 bg-rose-50/70 dark:border-rose-900 dark:bg-rose-950/30", label: "text-rose-800 dark:text-rose-300" },
+  POST_DOCTORAL: { block: "border-teal-200 bg-teal-50/70 dark:border-teal-900 dark:bg-teal-950/30", label: "text-teal-800 dark:text-teal-300" },
+};
+const BLOCK_FIELDS = "[&_button[role=combobox]]:bg-background";
+
 export function DegreeFields({
   label, level, value, onChange,
 }: {
@@ -241,8 +256,8 @@ export function DegreeFields({
   const schoolQualificationIsOther = v.course === OTHER_QUALIFICATION || (!!v.course && !schoolQualificationOptions.includes(v.course));
 
   return (
-    <div className="space-y-3 rounded-lg border p-3">
-      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
+    <div className={`space-y-3 rounded-lg border p-3 ${LEVEL_TINT[level].block} ${BLOCK_FIELDS}`}>
+      <p className={`text-xs font-semibold uppercase tracking-wide ${LEVEL_TINT[level].label}`}>{label}</p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {isDoctoralOrPostDoc && (
           <>
@@ -774,9 +789,11 @@ export function SubLabel({ children }: { children: React.ReactNode }) {
 
 export function Field({ label, value }: { label: string; value: string | number | undefined | null }) {
   return (
-    <div>
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-sm font-medium">{value === undefined || value === null || value === "" ? "-" : value}</p>
+    // min-w-0 + break-words: a grid cell may shrink below its longest word and long values (emails, "Engineering",
+    // certificate numbers) wrap inside the cell instead of spilling over the next column.
+    <div className="min-w-0">
+      <p className="text-xs text-muted-foreground break-words">{label}</p>
+      <p className="text-sm font-medium break-words">{value === undefined || value === null || value === "" ? "-" : value}</p>
     </div>
   );
 }
@@ -833,8 +850,12 @@ export function DegreeView({
   // same legacy fallback as DegreeFields, so it doesn't just disappear.
   const doctoralSpecialization = degree?.specialization || (isDoctoral ? degree?.branch : "");
   return (
-    <div className="rounded-lg border bg-muted/20 shadow-sm p-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
-      <p className="col-span-2 sm:col-span-4 text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
+    // The wrapper is the size container: 1 column when the card is narrow, 2 at a comfortable width, 4 only when each
+    // column can hold ~180px - the columns used to follow the browser window, so a card squeezed beside the sidebar or
+    // next to its sibling was still cut into 4 slivers and its text ran together.
+    <div className="@container min-w-0">
+      <div className="h-full rounded-lg border bg-muted/20 shadow-sm p-3 grid grid-cols-1 @xs:grid-cols-2 @3xl:grid-cols-4 gap-3">
+      <p className="col-span-full text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
       {isDoctoralOrPostDoc && (
         <>
           <OptionalField label="Status" value={degree?.status ? PHD_STATUS_VIEW_LABELS[degree.status] : undefined} />
@@ -877,7 +898,7 @@ export function DegreeView({
       )}
       <OptionalField label="Hall Ticket Number" value={degree?.hallTicketNumber} />
       {degree?.certificateUrl && (
-        <div className="col-span-2 sm:col-span-4">
+        <div className="col-span-full">
           <a
             href={degree.certificateUrl}
             target="_blank"
@@ -888,6 +909,7 @@ export function DegreeView({
           </a>
         </div>
       )}
+      </div>
     </div>
   );
 }
@@ -911,8 +933,8 @@ export function DocLink({ url, label = "View Document" }: { url: string | undefi
 export function DocField({ label, url }: { label: string; url: string | undefined }) {
   if (!url) return null;
   return (
-    <div>
-      <p className="text-xs text-muted-foreground">{label}</p>
+    <div className="min-w-0">
+      <p className="text-xs text-muted-foreground break-words">{label}</p>
       <DocLink url={url} label="View" />
     </div>
   );

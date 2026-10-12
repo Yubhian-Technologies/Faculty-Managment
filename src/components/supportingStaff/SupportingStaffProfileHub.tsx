@@ -12,6 +12,7 @@ import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaf
 import { formatDate } from "@/lib/utils";
 import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS, FACULTY_STATUS_LABELS } from "@/types";
 import type { SupportingStaffMember, FacultyStatus } from "@/types";
+import { FACT_GRID_COLS_4 } from "@/components/shared/factGrid";
 
 const STATUS_VARIANTS: Record<FacultyStatus, "default" | "secondary" | "outline" | "destructive"> = {
   INTERVIEW_DONE: "outline",
@@ -25,9 +26,9 @@ const STATUS_VARIANTS: Record<FacultyStatus, "default" | "secondary" | "outline"
 function Fact({ label, value }: { label: string; value: React.ReactNode }) {
   if (value === undefined || value === null || value === "") return null;
   return (
-    <div>
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-sm font-medium">{value}</p>
+    <div className="min-w-0">
+      <p className="text-xs text-muted-foreground break-words">{label}</p>
+      <p className="text-sm font-medium break-words">{value}</p>
     </div>
   );
 }
@@ -79,28 +80,30 @@ export function SupportingStaffProfileHub({ staff, basePath, backHref, editHref,
             <Avatar name={supportingStaffDisplayName(staff) || "?"} photoUrl={staff.profilePhotoUrl} size="lg" />
             {staff.status && <Badge variant={STATUS_VARIANTS[staff.status] ?? "secondary"}>{FACULTY_STATUS_LABELS[staff.status] ?? staff.status}</Badge>}
           </div>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <Fact label="Employee ID" value={staff.employeeId} />
-            <Fact label="APAAR Faculty ID" value={staff.apaarFacultyId} />
-            <Fact label="College Email" value={staff.collegeEmail} />
-            <Fact label="Personal Email" value={staff.email} />
-            <Fact label="Mobile No" value={staff.mobileNo} />
-            <Fact label="Department" value={staff.department || "Centrally managed"} />
-            <Fact label="Designation" value={designationLabel} />
-            <Fact label="Date of Joining" value={staff.joiningDate ? formatDate(staff.joiningDate) : undefined} />
-            <Fact label="Total Years of Experience" value={staff.totalYearsOfExperience} />
-            {(staff.additionalPhoneNumbers ?? []).length > 0 && (
-              <Fact
-                label="Additional Mobile Numbers"
-                value={
-                  <span className="flex flex-col gap-0.5">
-                    {staff.additionalPhoneNumbers?.map((p, i) => (
-                      <span key={i}>{p.number}{p.label ? ` (${p.label})` : ""}</span>
-                    ))}
-                  </span>
-                }
-              />
-            )}
+          <div className="@container">
+            <div className={`grid gap-4 ${FACT_GRID_COLS_4}`}>
+              <Fact label="Employee ID" value={staff.employeeId} />
+              <Fact label="APAAR Faculty ID" value={staff.apaarFacultyId} />
+              <Fact label="College Email" value={staff.collegeEmail} />
+              <Fact label="Personal Email" value={staff.email} />
+              <Fact label="Mobile No" value={staff.mobileNo} />
+              <Fact label="Department" value={staff.department || "Centrally managed"} />
+              <Fact label="Designation" value={designationLabel} />
+              <Fact label="Date of Joining" value={staff.joiningDate ? formatDate(staff.joiningDate) : undefined} />
+              <Fact label="Total Years of Experience" value={staff.totalYearsOfExperience} />
+              {(staff.additionalPhoneNumbers ?? []).length > 0 && (
+                <Fact
+                  label="Additional Mobile Numbers"
+                  value={
+                    <span className="flex flex-col gap-0.5">
+                      {staff.additionalPhoneNumbers?.map((p, i) => (
+                        <span key={i}>{p.number}{p.label ? ` (${p.label})` : ""}</span>
+                      ))}
+                    </span>
+                  }
+                />
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>

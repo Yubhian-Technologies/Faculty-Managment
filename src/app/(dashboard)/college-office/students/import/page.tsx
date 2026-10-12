@@ -5,21 +5,25 @@ import { useSearchParams } from "next/navigation";
 import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
 import { AddStudentsImport } from "@/components/students/AddStudentsImport";
 import { RollNumberMappingImport } from "@/components/students/RollNumberMappingImport";
+import { StudentDataUpdateImport } from "@/components/students/StudentDataUpdateImport";
 
-// Two import modes on one page:
+// Three import modes on one page:
 //
 //   Add students      - the original flow, creating students from a file.
 //   Map roll numbers  - fills Roll No in on students who already exist,
 //                       matched on Student Mobile No.
+//   Update student data - changes the detail fields the Office picks on students
+//                       who already exist, matched on Student Mobile No.
 //
 // They share nothing but this tab strip. Each owns its own file, its own
 // parsed rows and its own results, and switching tabs unmounts the other -
 // so a preview produced by one can never be applied by the other.
-type Mode = "add" | "map";
+type Mode = "add" | "map" | "update";
 
 const TABS = [
   { key: "add", label: "Add students" },
   { key: "map", label: "Map roll numbers" },
+  { key: "update", label: "Update student data" },
 ];
 
 function ImportTabs() {
@@ -44,7 +48,7 @@ function ImportTabs() {
       {!isSectionLocked && (
         <SegmentedTabs options={TABS} value={active} onChange={(k) => setMode(k as Mode)} />
       )}
-      {active === "add" ? <AddStudentsImport /> : <RollNumberMappingImport />}
+      {active === "add" ? <AddStudentsImport /> : active === "map" ? <RollNumberMappingImport /> : <StudentDataUpdateImport />}
     </div>
   );
 }

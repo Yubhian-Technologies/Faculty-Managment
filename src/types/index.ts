@@ -9,6 +9,7 @@ export * from "./attendance";
 export * from "./payroll";
 export * from "./teaching";
 export * from "./exams";
+export * from "./examResults";
 export * from "./examConfig";
 export * from "./examGuidelines";
 export * from "./examCirculars";

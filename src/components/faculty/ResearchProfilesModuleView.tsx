@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import type { FacultyProfileFields, ResearchProfileRequest } from "@/types";
+import { FACT_GRID_COLS_3 } from "@/components/shared/factGrid";
 
 interface RequestFormState {
   orcidId: string;
@@ -167,12 +168,14 @@ export function ResearchProfilesSection({
       {isRejected && request?.rejectionReason && (
         <p className="text-xs text-destructive">Reason: {request.rejectionReason}</p>
       )}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Field label="ORCID iD" value={p.orcidId} />
-        <Field label="Scopus Author ID" value={p.scopusAuthorId} />
-        <Field label="Researcher ID" value={p.researcherId} />
-        <Field label="Google Scholar ID" value={p.googleScholarId} />
-        <Field label="IRINS Profile" value={p.irinsProfile} />
+      <div className="@container">
+        <div className={`grid gap-3 ${FACT_GRID_COLS_3}`}>
+          <Field label="ORCID iD" value={p.orcidId} />
+          <Field label="Scopus Author ID" value={p.scopusAuthorId} />
+          <Field label="Researcher ID" value={p.researcherId} />
+          <Field label="Google Scholar ID" value={p.googleScholarId} />
+          <Field label="IRINS Profile" value={p.irinsProfile} />
+        </div>
       </div>
 
       {isOwnProfile && (

@@ -19,6 +19,7 @@ import type {
   OrganizingCommitteeMemberItem, PublicationScope, ResearchServiceFundNature, ResearchServiceRequest,
   ResearchServiceType, ResourcePersonItem, ReviewerType,
 } from "@/types";
+import { FACT_GRID_COLS_4 } from "@/components/shared/factGrid";
 
 const PREVIEW_COUNT = 3;
 const EMPTY_CONVENER: ConvenerCoordinatorItem = { name: "", department: "", type: "" };
@@ -76,27 +77,29 @@ function ResearchServiceRow({
       {record.status === "SENT_BACK" && record.sentBackReason && (
         <p className="text-xs text-destructive">Sent back: {record.sentBackReason}</p>
       )}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Field label="Type" value={SERVICE_TYPE_LABELS[record.serviceType]} />
-        <Field label="Title" value={label} />
-        {(record.serviceType === "CONFERENCE" || record.serviceType === "WORKSHOP") && (
-          <>
-            <Field label="Event Type" value={record.eventType} />
-            <Field label="Dates" value={record.startDate && record.endDate ? `${record.startDate} – ${record.endDate}` : record.startDate} />
-          </>
-        )}
-        {record.serviceType === "REVIEWER" && (
-          <>
-            <Field label="Journal/Conference" value={record.reviewerPublicationName} />
-            <Field label="Review Date" value={record.reviewerReviewDate} />
-          </>
-        )}
-        {record.serviceType === "EDITOR" && (
-          <>
-            <Field label="Editorial Role" value={record.editorialRole ? EDITORIAL_ROLE_LABELS[record.editorialRole] : undefined} />
-            <Field label="Publisher" value={record.editorPublisher} />
-          </>
-        )}
+      <div className="@container">
+        <div className={`grid gap-2 ${FACT_GRID_COLS_4}`}>
+          <Field label="Type" value={SERVICE_TYPE_LABELS[record.serviceType]} />
+          <Field label="Title" value={label} />
+          {(record.serviceType === "CONFERENCE" || record.serviceType === "WORKSHOP") && (
+            <>
+              <Field label="Event Type" value={record.eventType} />
+              <Field label="Dates" value={record.startDate && record.endDate ? `${record.startDate} – ${record.endDate}` : record.startDate} />
+            </>
+          )}
+          {record.serviceType === "REVIEWER" && (
+            <>
+              <Field label="Journal/Conference" value={record.reviewerPublicationName} />
+              <Field label="Review Date" value={record.reviewerReviewDate} />
+            </>
+          )}
+          {record.serviceType === "EDITOR" && (
+            <>
+              <Field label="Editorial Role" value={record.editorialRole ? EDITORIAL_ROLE_LABELS[record.editorialRole] : undefined} />
+              <Field label="Publisher" value={record.editorPublisher} />
+            </>
+          )}
+        </div>
       </div>
       <div className="flex flex-wrap gap-3">
         {[
