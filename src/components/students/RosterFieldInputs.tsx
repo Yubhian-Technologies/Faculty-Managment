@@ -10,7 +10,7 @@ import {
   EDITABLE_ROSTER_FIELDS, PRIMARY_ROSTER_FIELDS, DETAIL_ROSTER_FIELDS, ROSTER_DETAIL_GROUPS,
   type RosterField,
 } from "@/lib/students/rosterFields";
-import { resolveDepartmentCourseScope, resolveCatalogId, freshmanPickerDepartmentNames, getFreshmanDepartmentIds, isValidYear1LandingDepartment, type DepartmentWithId } from "@/lib/college/academicStructure";
+import { resolveDepartmentCourseScope, resolveCatalogId, freshmanPickerDepartmentNames, getFreshmanDepartmentIds, isValidYear1LandingDepartment, isValidYear1LandingDepartmentForPicker, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { managerEffectiveYears } from "@/lib/departments/hodScope";
 import { CASTE_LABELS, SUB_CASTES_BY_CASTE } from "@/types";
 import type { Department, Course, Caste } from "@/types";
@@ -434,7 +434,11 @@ function FieldInput({ field, values, onChange, departments, courseNames, courses
     // verbatim (RosterFormFields).
     const freshmanNames = freshmanPickerDepartmentNames(departments);
     if (values.year === "1" && freshmanNames.size > 0) {
-      options = options.filter((d) => isValidYear1LandingDepartment(departments as DepartmentWithId[], freshmanNames, d.name));
+      // Stricter than the validation rule: a sub-department whose every
+      // managed/fed branch already owns this year itself is left out of the
+      // picker entirely (freshmanLandingStillNeeded) - a now-pointless choice,
+      // not something still accepted if submitted another way.
+      options = options.filter((d) => isValidYear1LandingDepartmentForPicker(departments as DepartmentWithId[], freshmanNames, d.name));
     }
     // A value already on the form (e.g. the Fix Row dialog's best-effort
     // pre-resolve of a failed row's raw Department text, done before Course

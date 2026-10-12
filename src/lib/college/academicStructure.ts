@@ -392,6 +392,59 @@ export function isValidYear1LandingDepartment(
 }
 
 /**
+ * Whether `subDeptName` (a Freshman-landing department) still has at least
+ * one branch genuinely depending on it for `year` - a branch it manages
+ * (managedDepartments) or feeds (secondaryDepartments, flat or any
+ * courseScopes override) that does NOT directly claim `year` itself
+ * (departmentClaimsYearItself). Once every branch it would otherwise serve
+ * has opened its own Years Taught for that year, the old landing route is
+ * redundant for it - every student can go straight to the branch instead.
+ * A sub-department with no known branches at all (nothing to prove
+ * redundant) is kept, not hidden - this only ever REMOVES a now-pointless
+ * choice, never adds a restriction beyond what isValidYear1LandingDepartment
+ * already allows.
+ */
+export function freshmanLandingStillNeeded(
+  allDepartments: DepartmentWithId[],
+  subDeptName: string,
+  year: number
+): boolean {
+  const dept = allDepartments.find((d) => d.name === subDeptName);
+  if (!dept) return false;
+  const branches = new Set<string>([
+    ...(dept.managedDepartments ?? []),
+    ...(dept.secondaryDepartments ?? []),
+    ...Object.values(dept.courseScopes ?? {}).flatMap((s) => s.secondaryDepartments ?? []),
+  ]);
+  if (branches.size === 0) return true;
+  for (const branchName of branches) {
+    if (!departmentClaimsYearItself(allDepartments, branchName, year)) return true;
+  }
+  return false;
+}
+
+/**
+ * The PICKER's own stricter version of isValidYear1LandingDepartment - drops
+ * a Freshman-landing name once freshmanLandingStillNeeded says every branch
+ * it serves already owns the year directly, so the Department dropdown stops
+ * offering a choice that's become pointless. Deliberately NOT used for
+ * validation (students/route.ts, import-excel/route.ts) - an existing record
+ * already filed under a now-redundant sub-department, or a deliberate
+ * submission naming one directly, is still accepted; only the picker's list
+ * of what to SHOW gets narrower over time as colleges finish migrating
+ * branches to their own direct ownership.
+ */
+export function isValidYear1LandingDepartmentForPicker(
+  allDepartments: DepartmentWithId[],
+  freshmanNames: ReadonlySet<string>,
+  departmentName: string
+): boolean {
+  if (freshmanNames.size === 0) return true;
+  if (freshmanNames.has(departmentName)) return freshmanLandingStillNeeded(allDepartments, departmentName, 1);
+  return departmentClaimsYearItself(allDepartments, departmentName, 1);
+}
+
+/**
  * The PICKER's own broader version of freshmanLandingDepartmentNames - adds
  * back every qualifying "no own sections" parent itself (e.g. "BASIC
  * SCIENCE"), which freshmanLandingDepartmentNames deliberately excludes for
