@@ -26,6 +26,7 @@
 // already filed under the branch (same name+year) is skipped, reported, and
 // left untouched rather than merged or overwritten.
 
+import { FieldValue } from "firebase-admin/firestore";
 import type { SubjectSemesterAssignment, TeachingAssignment, Section } from "@/types";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 
@@ -56,6 +57,18 @@ export interface MigrateManagedBranchSubjectsResult {
   timetableSlotsRepointed: number;
   /** Existing rows under the branch whose courseId still pointed at the manager's (or any other department's) Course doc - repaired in place, idempotent. */
   courseIdsRepaired: number;
+  /**
+   * Rows whose courseId could NOT be repointed because the branch has no
+   * Course doc yet for that catalog entry - e.g. its own Years Taught/Course
+   * wasn't set up before this ran. These rows stay invisible everywhere that
+   * filters by courseId (Course-Year Timings subject counts, etc.) until this
+   * migration is run again after the branch's own Course doc exists. A
+   * non-zero count here means: create/open that department's own Course for
+   * this programme, then re-run this same migration to finish the job.
+   */
+  courseIdsUnresolved: number;
+  /** Existing rows under the branch that still carried a secondaryDepartmentNames narrowing from before they moved here - cleared, since once a row is directly owned by this department the narrowing is both meaningless and actively wrong (it can make the row reappear in a SIBLING branch's own Subjects list). */
+  secondaryDepartmentNamesCleared: number;
   /** Per-section breakdown - which section, how many students, moving to which department. */
   sections: SectionMoveDetail[];
   /** Sections NOT moved because a section with the same name/year already exists under the core department. */
@@ -158,12 +171,22 @@ async function run(
     courseCatalogCache.set(cId, catalogId);
     return catalogId;
   }
-  /** The branch's own Course doc id for the same programme as `sourceCourseId`, or the source id unchanged if no match is found (never worse than before this fix). */
-  async function resolveBranchCourseId(sourceCourseId: string | undefined): Promise<string | undefined> {
-    if (!sourceCourseId) return sourceCourseId;
+  /**
+   * The branch's own Course doc id for the same programme as `sourceCourseId`.
+   * `unresolved: true` means the branch has no Course doc yet for that catalog
+   * entry (e.g. its own Years Taught/Course wasn't set up before this ran) -
+   * `courseId` then falls back to the source id unchanged (never worse than
+   * before this fix), but the row is left pointing at the WRONG department's
+   * Course doc and will stay invisible to every courseId-scoped view (Course-
+   * Year Timings subject counts, etc.) until this function is called again
+   * after the branch's own Course doc exists - see courseIdsUnresolved below.
+   */
+  async function resolveBranchCourseId(sourceCourseId: string | undefined): Promise<{ courseId: string | undefined; unresolved: boolean }> {
+    if (!sourceCourseId) return { courseId: sourceCourseId, unresolved: false };
     const catalogId = await catalogIdForCourse(sourceCourseId);
-    if (!catalogId) return sourceCourseId;
-    return catalogIdToOwnCourseId.get(catalogId) ?? sourceCourseId;
+    if (!catalogId) return { courseId: sourceCourseId, unresolved: false };
+    const ownId = catalogIdToOwnCourseId.get(catalogId);
+    return { courseId: ownId ?? sourceCourseId, unresolved: ownId === undefined };
   }
 
   // Either linkage mechanism counts - VISHNU INSTITUTE OF TECHNOLOGY's
@@ -316,15 +339,24 @@ async function run(
 
   const { toCreate, toDiscard } = planSubjectAssignmentMoves(rows, branchDepartmentId, existingBranchInstanceIds, yearsSet);
 
+  let courseIdsUnresolved = 0;
   if (!dryRun && (toCreate.length > 0 || toDiscard.length > 0)) {
     const now = new Date();
     const createOps = await Promise.all(toCreate.map(async (row) => {
-      const { id: _oldId, ...originalRest } = byId.get(row.id) as SubjectSemesterAssignment;
-      const courseId = await resolveBranchCourseId(originalRest.courseId);
+      // secondaryDepartmentNames is dropped, never carried over: it narrows a
+      // MANAGER's broad row down to specific core departments (see this
+      // field's own doc-comment, types/teaching.ts) - meaningless, and
+      // actively wrong, once the row is filed directly under the branch's own
+      // departmentId. Carrying it over verbatim is exactly what let a row
+      // narrowed to "CSE, CSBS" reappear in BOTH branches' own Subjects lists
+      // after each got its own direct copy - a real bug this is fixing.
+      const { id: _oldId, secondaryDepartmentNames: _dropped, ...originalRest } = byId.get(row.id) as SubjectSemesterAssignment;
+      const resolved = await resolveBranchCourseId(originalRest.courseId);
+      if (resolved.unresolved) courseIdsUnresolved++;
       return {
         ref: collegeRef.collection("subjectSemesterAssignments").doc(`${row.subjectId}_${branchDepartmentId}_${row.semester}`),
         action: "set" as const,
-        data: { ...originalRest, id: `${row.subjectId}_${branchDepartmentId}_${row.semester}`, departmentId: branchDepartmentId, departmentName: branchName, courseId, updatedAt: now },
+        data: { ...originalRest, id: `${row.subjectId}_${branchDepartmentId}_${row.semester}`, departmentId: branchDepartmentId, departmentName: branchName, courseId: resolved.courseId, updatedAt: now },
       };
     }));
     await commitInChunks(db, createOps);
@@ -334,24 +366,38 @@ async function run(
     })));
   }
 
-  // ── C2. Repair courseId on rows already filed under the branch - from an
-  // earlier run of this same migration before this fix existed, or any
-  // other stale cause. Idempotent: an already-correct row is a no-op. ──
+  // ── C2. Repair courseId AND drop a stale secondaryDepartmentNames on rows
+  // already filed under the branch - from an earlier run of this same
+  // migration before this fix existed, or any other stale cause. Idempotent:
+  // an already-correct row is a no-op. The narrowing field is cleared
+  // unconditionally here (not just on a courseId mismatch) - a row already
+  // correctly filed under the branch's own departmentId can still carry a
+  // leftover narrowing from before it moved, which is exactly what made it
+  // reappear in a SIBLING branch's own Subjects list. ──
   const branchAssignSnap = await collegeRef.collection("subjectSemesterAssignments").where("departmentId", "==", branchDepartmentId).get();
-  const courseIdFixes: { ref: FirebaseFirestore.DocumentReference; newCourseId: string }[] = [];
+  const branchRowFixes: { ref: FirebaseFirestore.DocumentReference; newCourseId?: string; clearSecondary: boolean }[] = [];
   for (const d of branchAssignSnap.docs) {
     const data = d.data() as SubjectSemesterAssignment;
-    if (!data.courseId) continue;
-    const correctCourseId = await resolveBranchCourseId(data.courseId);
-    if (correctCourseId && correctCourseId !== data.courseId) {
-      courseIdFixes.push({ ref: d.ref, newCourseId: correctCourseId });
+    let newCourseId: string | undefined;
+    if (data.courseId) {
+      const resolved = await resolveBranchCourseId(data.courseId);
+      if (resolved.unresolved) courseIdsUnresolved++;
+      else if (resolved.courseId && resolved.courseId !== data.courseId) newCourseId = resolved.courseId;
     }
+    const clearSecondary = Array.isArray(data.secondaryDepartmentNames) && data.secondaryDepartmentNames.length > 0;
+    if (newCourseId || clearSecondary) branchRowFixes.push({ ref: d.ref, newCourseId, clearSecondary });
   }
-  if (!dryRun && courseIdFixes.length > 0) {
-    await commitInChunks(db, courseIdFixes.map((f) => ({
+  const courseIdsRepaired = branchRowFixes.filter((f) => !!f.newCourseId).length;
+  const secondaryDepartmentNamesCleared = branchRowFixes.filter((f) => f.clearSecondary).length;
+  if (!dryRun && branchRowFixes.length > 0) {
+    await commitInChunks(db, branchRowFixes.map((f) => ({
       ref: f.ref,
       action: "update" as const,
-      data: { courseId: f.newCourseId, updatedAt: new Date() },
+      data: {
+        ...(f.newCourseId ? { courseId: f.newCourseId } : {}),
+        ...(f.clearSecondary ? { secondaryDepartmentNames: FieldValue.delete() } : {}),
+        updatedAt: new Date(),
+      },
     })));
   }
 
@@ -399,7 +445,9 @@ async function run(
     subjectAssignmentsDeduped: toDiscard.length,
     teachingAssignmentsRepointed: taToRepoint.length,
     timetableSlotsRepointed: slotsToRepoint.length,
-    courseIdsRepaired: courseIdFixes.length,
+    courseIdsRepaired,
+    courseIdsUnresolved,
+    secondaryDepartmentNamesCleared,
     sections,
     skippedSections,
   };

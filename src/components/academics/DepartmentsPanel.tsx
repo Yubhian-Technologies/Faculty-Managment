@@ -47,6 +47,8 @@ interface MigrationCounts {
   teachingAssignmentsRepointed: number;
   timetableSlotsRepointed: number;
   courseIdsRepaired: number;
+  courseIdsUnresolved: number;
+  secondaryDepartmentNamesCleared: number;
   sections: SectionMoveDetail[];
   skippedSections: SkippedSectionDetail[];
 }
@@ -249,7 +251,14 @@ function MigrationReviewPage({ subDepartment, branchIds, allBranches, onBack, on
                     {p.subjectAssignmentsDeduped > 0 ? `, ${p.subjectAssignmentsDeduped} already duplicated here and discarded` : ""};
                     {" "}{p.teachingAssignmentsRepointed} teaching assignment{p.teachingAssignmentsRepointed !== 1 ? "s" : ""} and {p.timetableSlotsRepointed} timetable row{p.timetableSlotsRepointed !== 1 ? "s" : ""} repointed.
                     {p.courseIdsRepaired > 0 && ` ${p.courseIdsRepaired} subject${p.courseIdsRepaired !== 1 ? "s" : ""} here had a stale course link from an earlier run - fixed.`}
+                    {p.secondaryDepartmentNamesCleared > 0 && ` ${p.secondaryDepartmentNamesCleared} subject${p.secondaryDepartmentNamesCleared !== 1 ? "s" : ""} had a leftover narrowing to another department - cleared.`}
                   </p>
+                  {p.courseIdsUnresolved > 0 && (
+                    <p className="text-xs text-amber-600">
+                      {p.courseIdsUnresolved} subject{p.courseIdsUnresolved !== 1 ? "s" : ""} couldn&apos;t be linked to {branch?.name}&apos;s own Course yet -
+                      it has no Course document for this programme. Create/open it under {branch?.name}&apos;s own Years Taught, then re-run this move to finish linking them.
+                    </p>
+                  )}
                 </CardContent>
               </Card>
             );
