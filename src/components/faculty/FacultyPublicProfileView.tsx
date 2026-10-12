@@ -94,9 +94,14 @@ export interface FacultyPublicProfile {
 }
 
 // Bold "what": course/degree + field. Secondary "where/when": institution + year.
-function degreeTitle(d?: DegreeSummary) {
+function degreeTitle(d?: DegreeSummary, ugOrPg = false, postdoc = false) {
   if (!d) return null;
+  // Post-Doctoral: its Branch is now the department (shown in the meta line), so the title is the specialization, else
+  // the stored fellowship name.
+  if (postdoc) return d.specialization || d.course || "";
   const course = d.course && d.degreeType ? `${d.course} (${d.degreeType})` : d.course;
+  // UG/PG keep Course/Branch and add Specialization after it; Ph.D./Post-Doc keep "specialization, else branch".
+  if (ugOrPg) return [course, d.branch, d.specialization].filter(Boolean).join(", ");
   return [course, d.specialization || d.branch].filter(Boolean).join(", ");
 }
 function degreeMeta(d?: DegreeSummary) {
@@ -202,10 +207,10 @@ export function FacultyPublicProfileView({ profile }: { profile: FacultyPublicPr
   const degreeEntries = [
     ...(p.education?.phdDetails ? [{ label: "Ph.D.", d: p.education.phdDetails }] : []),
     ...(p.education?.additionalPhdDetails ?? []).filter((d): d is DegreeSummary => !!d).map((d) => ({ label: "Ph.D.", d })),
-    ...(p.education?.pgDetails ? [{ label: "Post-Graduate", d: p.education.pgDetails }] : []),
-    ...(p.education?.additionalPgDetails ?? []).filter((d): d is DegreeSummary => !!d).map((d) => ({ label: "Post-Graduate", d })),
-    ...(p.education?.ugDetails ? [{ label: "Under-Graduate", d: p.education.ugDetails }] : []),
-    ...(p.education?.additionalUgDetails ?? []).filter((d): d is DegreeSummary => !!d).map((d) => ({ label: "Under-Graduate", d })),
+    ...(p.education?.pgDetails ? [{ label: "Post-Graduate", d: p.education.pgDetails, ugOrPg: true }] : []),
+    ...(p.education?.additionalPgDetails ?? []).filter((d): d is DegreeSummary => !!d).map((d) => ({ label: "Post-Graduate", d, ugOrPg: true })),
+    ...(p.education?.ugDetails ? [{ label: "Under-Graduate", d: p.education.ugDetails, ugOrPg: true }] : []),
+    ...(p.education?.additionalUgDetails ?? []).filter((d): d is DegreeSummary => !!d).map((d) => ({ label: "Under-Graduate", d, ugOrPg: true })),
   ];
 
   const designationLabel = DESIGNATION_LABELS[p.designation] ?? p.designation;
@@ -376,7 +381,7 @@ export function FacultyPublicProfileView({ profile }: { profile: FacultyPublicPr
           <Card title="Educational Details" icon={GraduationCap}>
             <EntryList>
               {degreeEntries.map((e, i) => (
-                <EntryCard key={i} title={`${e.label}: ${degreeTitle(e.d)}`} meta={degreeMeta(e.d)} />
+                <EntryCard key={i} title={`${e.label}: ${degreeTitle(e.d, "ugOrPg" in e && e.ugOrPg)}`} meta={degreeMeta(e.d)} />
               ))}
             </EntryList>
           </Card>
@@ -384,7 +389,7 @@ export function FacultyPublicProfileView({ profile }: { profile: FacultyPublicPr
 
         {showPostdoc && p.education?.postdoctoralFellowshipDetails && (
           <Card title="Post-Doctoral Experience" icon={Microscope}>
-            <EntryCard title={degreeTitle(p.education.postdoctoralFellowshipDetails)} meta={degreeMeta(p.education.postdoctoralFellowshipDetails)} />
+            <EntryCard title={degreeTitle(p.education.postdoctoralFellowshipDetails, false, true)} meta={degreeMeta(p.education.postdoctoralFellowshipDetails)} />
           </Card>
         )}
 

@@ -8,7 +8,7 @@ export type DegreeSlot = "UG" | "PG" | "DOCTORAL" | "POST_DOCTORAL" | "INTERMEDI
 const TEXT_KEYS = [
   "course", "branch", "specialization", "institutionName", "place", "percentageCgpa",
   "hallTicketNumber", "certificateUrl", "domain", "board", "institutionType",
-  "affiliatedUniversity", "status", "mode", "degreeType",
+  "affiliatedUniversity", "status", "mode", "degreeType", "subject", "trade",
 ] as const;
 
 function hasText(v: unknown): boolean {
@@ -36,9 +36,10 @@ export function degreeHasData(degree: DegreeDetail | undefined | null, slot?: De
   const doctoralSlot = slot === "DOCTORAL" || slot === "POST_DOCTORAL";
   // Lift legacy key names first, so data still under an old key isn't missed.
   const d = migrateDegree(degree as unknown as Record<string, unknown>, doctoralSlot) as Record<string, unknown>;
-  if (TEXT_KEYS.some((k) => hasText(d[k]))) return true;
+  // Post-Doctoral no longer displays Course, so a stored Course alone is not "data" for it.
+  if (TEXT_KEYS.some((k) => !(slot === "POST_DOCTORAL" && k === "course") && hasText(d[k]))) return true;
 
-  if (slot === undefined || slot === "DOCTORAL") {
+  if (slot === undefined || slot === "DOCTORAL" || slot === "POST_DOCTORAL") {
     if (hasText(d.departmentName) || hasText(d.thesisTitle)) return true;
   }
   if (slot === undefined) {

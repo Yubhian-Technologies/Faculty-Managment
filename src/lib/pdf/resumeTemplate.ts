@@ -19,7 +19,7 @@ interface DegreeDetail {
   course?: string;
   degreeType?: string; // B.Tech / BE / M.Tech / ME - only when course is "B.Tech/BE" or "M.Tech/ME"
   branch?: string;
-  specialization?: string; // Doctoral only - shown instead of Branch
+  specialization?: string; // Doctoral: shown instead of Branch. UG/PG: shown after Course/Branch
   degreeAndBranch?: string; // legacy - pre-split records that haven't been re-saved yet
   institutionName?: string;
   departmentName?: string; // Doctoral (Ph.D.) only - "Name of the Department"
@@ -39,7 +39,8 @@ function degreeAndBranchLabel(d: DegreeDetail, useSpecialization = false): strin
   // fallback below, for the pre-split legacy shape).
   const secondary = useSpecialization ? (d.specialization || d.branch) : d.branch;
   const course = d.course && d.degreeType ? `${d.course} (${d.degreeType})` : d.course;
-  const combined = [course, secondary].filter(Boolean).join(" ");
+  // UG/PG entries (useSpecialization false) now also carry a Specialization after Course/Branch.
+  const combined = [course, secondary, !useSpecialization ? d.specialization : ""].filter(Boolean).join(" ");
   return combined || d.degreeAndBranch || "";
 }
 

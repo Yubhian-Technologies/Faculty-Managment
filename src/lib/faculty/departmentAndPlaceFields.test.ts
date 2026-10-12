@@ -54,16 +54,22 @@ function cellOf(header: string): string {
 }
 
 describe("export column definitions", () => {
-  it("Ph.D. Details has Name of the Department then Title of the Ph.D Thesis directly BEFORE Place; Postdoctoral has neither", () => {
+  it("Ph.D. and Postdoctoral both have Name of the Department then their thesis title directly BEFORE Place", () => {
     const labels = group("phdDetailsGroup").subFieldLabels;
     const i = labels.indexOf("Name of the Department");
     expect(i).toBeGreaterThan(-1);
     expect(labels[i + 1]).toBe("Title of the Ph.D Thesis");
     expect(labels[i + 2]).toBe("Place");
-    expect(group("postdoctoralFellowshipDetailsGroup").subFieldLabels).not.toContain("Name of the Department");
-    expect(group("postdoctoralFellowshipDetailsGroup").subFieldLabels).not.toContain("Title of the Ph.D Thesis");
-    // The two lists otherwise match, entry for entry.
-    expect(labels.filter((l) => l !== "Name of the Department" && l !== "Title of the Ph.D Thesis")).toEqual(group("postdoctoralFellowshipDetailsGroup").subFieldLabels);
+    const post = group("postdoctoralFellowshipDetailsGroup").subFieldLabels;
+    const j = post.indexOf("Name of the Department");
+    expect(j).toBeGreaterThan(-1);
+    expect(post[j + 1]).toBe("Title of the Postdoc Thesis");
+    expect(post[j + 2]).toBe("Place");
+    expect(post).not.toContain("Title of the Ph.D Thesis");
+    // Percentage / CGPA follows Place on both, and the two lists are otherwise identical.
+    expect(labels[i + 3]).toBe("Percentage / CGPA");
+    expect(post[j + 3]).toBe("Percentage / CGPA");
+    expect(labels.map((l) => (l === "Title of the Ph.D Thesis" ? "Title of the Postdoc Thesis" : l))).toEqual(post);
   });
 
   it("all three experience groups carry Place of the University/College right after Institution Name", () => {
@@ -85,11 +91,11 @@ describe("faculty full export (CSV) carries the new values in the right slot", (
     expect(cell).toContain("Name of the Department: Department of Physics | Title of the Ph.D Thesis:  | Place: Bengaluru");
   });
 
-  it("Postdoctoral keeps its own layout (no department column), Place still exported", () => {
+  it("Postdoctoral exports the same columns as Ph.D. (department, Postdoc thesis title, percentage), Place still exported", () => {
     run();
     const cell = cellOf("Postdoctoral Fellowship Details");
-    expect(cell).not.toContain("Name of the Department");
-    expect(cell).toContain("Place: Singapore");
+    expect(cell).toContain("Name of the Department:");
+    expect(cell).toContain("Title of the Postdoc Thesis:  | Place: Singapore | Percentage / CGPA:  | Hall Ticket Number:");
   });
 
   it("Academic, Industry and Research experience each export their place", () => {

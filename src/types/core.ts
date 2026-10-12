@@ -1306,13 +1306,18 @@ export type DegreeType = "B.Tech" | "BE" | "M.Tech" | "ME";
 
 export interface DegreeDetail {
   domain?: string; // Management / Engineering / Arts & Science / Medicine / Law / Others - not applicable to School/Intermediate
-  course: string; // UI label "Course" at every level (blank for Doctoral, which uses specialization instead)
+  course: string; // UI label "Course" (school levels / Postdoc); "Degree" on UG/PG. Blank for Doctoral, which uses specialization instead
   // UG/PG only, and only when course is "B.Tech/BE" (B.Tech | BE) or "M.Tech/ME" (M.Tech | ME) -
   // which of the two the qualification actually is. Required then (see lib/faculty/degreeType.ts); absent for every other course.
   degreeType?: DegreeType;
   branch: string;
-  specialization?: string; // Doctoral only - replaces the Course/Branch fields for PhD entries
+  specialization?: string; // Doctoral / Post-Doctoral: replaces the Course/Branch fields. UG/PG: free text after Course/Branch
   board?: string; // School/Intermediate only - the examining board (e.g. "State Board", "CBSE")
+  // Intermediate / Diploma / ITI entry only, one per course (all optional free text, only one is asked at a time):
+  // Intermediate -> `subject` (M.P.C, Bi.P.C ...), Diploma -> `branch` (CIV, EEE, MEC ...; the existing key), ITI -> `trade`
+  // (Fitter, Electrician ...). A value typed under one course stays stored if the course is changed later.
+  subject?: string;
+  trade?: string;
   // UG/PG only - whether institutionName below names a University or an
   // Institute; an Institute is typically affiliated to a University, which
   // affiliatedUniversity records separately.
