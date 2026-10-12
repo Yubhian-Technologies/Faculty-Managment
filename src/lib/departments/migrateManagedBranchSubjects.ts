@@ -54,6 +54,8 @@ export interface MigrateManagedBranchSubjectsResult {
   subjectAssignmentsDeduped: number;
   teachingAssignmentsRepointed: number;
   timetableSlotsRepointed: number;
+  /** Existing rows under the branch whose courseId still pointed at the manager's (or any other department's) Course doc - repaired in place, idempotent. */
+  courseIdsRepaired: number;
   /** Per-section breakdown - which section, how many students, moving to which department. */
   sections: SectionMoveDetail[];
   /** Sections NOT moved because a section with the same name/year already exists under the core department. */
@@ -130,7 +132,39 @@ async function run(
     courseScopes?: Record<string, { secondaryDepartments?: string[] }>;
   };
   const subDeptName = subDeptData.name ?? "";
-  const branchName = (branchSnap.data() as { name?: string }).name ?? "";
+  const branchData = branchSnap.data() as { name?: string; code?: string };
+  const branchName = branchData.name ?? "";
+  const branchCode = branchData.code ?? "";
+
+  // ── Course-doc resolution, shared by sections renaming, the subject move
+  // and the courseId repair pass below. A moved subjectSemesterAssignment
+  // must point at the BRANCH's own Course doc (the one its own HOD/Years
+  // Taught actually resolve against) - carrying over the manager's Course
+  // doc id left the row invisible everywhere that also filters by courseId
+  // (e.g. the Course-Year Timings "N Subjects" counts), even though
+  // departmentId was already correct. ──
+  const branchCoursesSnap = await collegeRef.collection("courses").where("departmentId", "==", branchDepartmentId).get();
+  const catalogIdToOwnCourseId = new Map<string, string>();
+  for (const d of branchCoursesSnap.docs) {
+    const catalogId = (d.data() as { catalogId?: string }).catalogId;
+    if (catalogId) catalogIdToOwnCourseId.set(catalogId, d.id);
+  }
+  const courseCatalogCache = new Map<string, string | undefined>();
+  async function catalogIdForCourse(cId: string): Promise<string | undefined> {
+    if (!cId) return undefined;
+    if (courseCatalogCache.has(cId)) return courseCatalogCache.get(cId);
+    const snap = await collegeRef.collection("courses").doc(cId).get();
+    const catalogId = (snap.data() as { catalogId?: string } | undefined)?.catalogId;
+    courseCatalogCache.set(cId, catalogId);
+    return catalogId;
+  }
+  /** The branch's own Course doc id for the same programme as `sourceCourseId`, or the source id unchanged if no match is found (never worse than before this fix). */
+  async function resolveBranchCourseId(sourceCourseId: string | undefined): Promise<string | undefined> {
+    if (!sourceCourseId) return sourceCourseId;
+    const catalogId = await catalogIdForCourse(sourceCourseId);
+    if (!catalogId) return sourceCourseId;
+    return catalogIdToOwnCourseId.get(catalogId) ?? sourceCourseId;
+  }
 
   // Either linkage mechanism counts - VISHNU INSTITUTE OF TECHNOLOGY's
   // sub-departments use `managedDepartments`, "VISHNU WOMEN'S UNIVERSITY"
@@ -174,11 +208,37 @@ async function run(
   const renamedSectionIds = new Set(sectionsToRename.map((s) => s.id));
   const renamedSectionNames = new Set(sectionsToRename.map((s) => s.name));
 
+  // Drop a leading "<manager code>-" style prefix once the branch's own code
+  // appears as its own hyphen-separated segment (e.g. "BSC-CSE-A", branch
+  // code "CSE" -> "CSE-A") - matches this manager's own naming convention
+  // without guessing at one nobody configured. No match (or no branch code
+  // at all) leaves the name untouched - never a worse outcome than before
+  // this existed. A proposed name that would itself collide with an
+  // existing branch section falls back to the original name too - the
+  // section still moves, it just keeps its old name rather than erroring.
+  function proposedSectionName(oldName: string, year: number): string {
+    if (!branchCode) return oldName;
+    const segments = oldName.split("-");
+    const idx = segments.findIndex((s) => s.toUpperCase() === branchCode.toUpperCase());
+    if (idx === -1) return oldName;
+    const candidate = segments.slice(idx).join("-");
+    if (candidate === oldName) return oldName;
+    if (branchSectionKeys.has(`${candidate}|${year}`)) return oldName;
+    return candidate;
+  }
+  const finalNameBySectionId = new Map<string, string>();
+  const finalNameByOldName = new Map<string, string>();
+  for (const s of sectionsToRename) {
+    const finalName = proposedSectionName(s.name, s.year);
+    finalNameBySectionId.set(s.id, finalName);
+    finalNameByOldName.set(s.name, finalName);
+  }
+
   if (!dryRun && sectionsToRename.length > 0) {
     await commitInChunks(db, sectionsToRename.map((s) => ({
       ref: collegeRef.collection("sections").doc(s.id),
       action: "update" as const,
-      data: { department: branchName, secondaryDepartments: [], updatedAt: new Date() },
+      data: { department: branchName, secondaryDepartments: [], name: finalNameBySectionId.get(s.id), updatedAt: new Date() },
     })));
   }
 
@@ -208,7 +268,7 @@ async function run(
   }
   const sections: SectionMoveDetail[] = sectionsToRename.map((s) => ({
     sectionId: s.id,
-    sectionName: s.name,
+    sectionName: finalNameBySectionId.get(s.id) ?? s.name,
     year: s.year,
     studentCount: studentCountBySection.get(s.name) ?? 0,
     fromDepartmentName: subDeptName,
@@ -217,11 +277,15 @@ async function run(
 
   if (!dryRun && studentsToMove.length > 0) {
     const now = new Date();
-    const updates = studentsToMove.map((d) => ({
-      ref: d.ref,
-      action: "update" as const,
-      data: { department: branchName, secondaryDepartment: null, updatedAt: now },
-    }));
+    const updates = studentsToMove.map((d) => {
+      const s = d.data() as { section?: string };
+      const finalSection = (s.section && finalNameByOldName.get(s.section)) ?? s.section;
+      return {
+        ref: d.ref,
+        action: "update" as const,
+        data: { department: branchName, secondaryDepartment: null, section: finalSection, updatedAt: now },
+      };
+    });
     await commitInChunks(db, updates);
     const historyWrites = studentsToMove.map((d) => {
       const s = d.data() as { section?: string; year?: number };
@@ -254,17 +318,40 @@ async function run(
 
   if (!dryRun && (toCreate.length > 0 || toDiscard.length > 0)) {
     const now = new Date();
-    await commitInChunks(db, toCreate.map((row) => {
+    const createOps = await Promise.all(toCreate.map(async (row) => {
       const { id: _oldId, ...originalRest } = byId.get(row.id) as SubjectSemesterAssignment;
+      const courseId = await resolveBranchCourseId(originalRest.courseId);
       return {
         ref: collegeRef.collection("subjectSemesterAssignments").doc(`${row.subjectId}_${branchDepartmentId}_${row.semester}`),
         action: "set" as const,
-        data: { ...originalRest, id: `${row.subjectId}_${branchDepartmentId}_${row.semester}`, departmentId: branchDepartmentId, departmentName: branchName, updatedAt: now },
+        data: { ...originalRest, id: `${row.subjectId}_${branchDepartmentId}_${row.semester}`, departmentId: branchDepartmentId, departmentName: branchName, courseId, updatedAt: now },
       };
     }));
+    await commitInChunks(db, createOps);
     await commitInChunks(db, [...toCreate, ...toDiscard].map((row) => ({
       ref: collegeRef.collection("subjectSemesterAssignments").doc(row.id),
       action: "delete" as const,
+    })));
+  }
+
+  // ── C2. Repair courseId on rows already filed under the branch - from an
+  // earlier run of this same migration before this fix existed, or any
+  // other stale cause. Idempotent: an already-correct row is a no-op. ──
+  const branchAssignSnap = await collegeRef.collection("subjectSemesterAssignments").where("departmentId", "==", branchDepartmentId).get();
+  const courseIdFixes: { ref: FirebaseFirestore.DocumentReference; newCourseId: string }[] = [];
+  for (const d of branchAssignSnap.docs) {
+    const data = d.data() as SubjectSemesterAssignment;
+    if (!data.courseId) continue;
+    const correctCourseId = await resolveBranchCourseId(data.courseId);
+    if (correctCourseId && correctCourseId !== data.courseId) {
+      courseIdFixes.push({ ref: d.ref, newCourseId: correctCourseId });
+    }
+  }
+  if (!dryRun && courseIdFixes.length > 0) {
+    await commitInChunks(db, courseIdFixes.map((f) => ({
+      ref: f.ref,
+      action: "update" as const,
+      data: { courseId: f.newCourseId, updatedAt: new Date() },
     })));
   }
 
@@ -312,6 +399,7 @@ async function run(
     subjectAssignmentsDeduped: toDiscard.length,
     teachingAssignmentsRepointed: taToRepoint.length,
     timetableSlotsRepointed: slotsToRepoint.length,
+    courseIdsRepaired: courseIdFixes.length,
     sections,
     skippedSections,
   };

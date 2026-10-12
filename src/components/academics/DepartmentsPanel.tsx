@@ -46,6 +46,7 @@ interface MigrationCounts {
   subjectAssignmentsDeduped: number;
   teachingAssignmentsRepointed: number;
   timetableSlotsRepointed: number;
+  courseIdsRepaired: number;
   sections: SectionMoveDetail[];
   skippedSections: SkippedSectionDetail[];
 }
@@ -247,6 +248,7 @@ function MigrationReviewPage({ subDepartment, branchIds, allBranches, onBack, on
                     {p.subjectAssignmentsMoved} subject assignment{p.subjectAssignmentsMoved !== 1 ? "s" : ""} moved
                     {p.subjectAssignmentsDeduped > 0 ? `, ${p.subjectAssignmentsDeduped} already duplicated here and discarded` : ""};
                     {" "}{p.teachingAssignmentsRepointed} teaching assignment{p.teachingAssignmentsRepointed !== 1 ? "s" : ""} and {p.timetableSlotsRepointed} timetable row{p.timetableSlotsRepointed !== 1 ? "s" : ""} repointed.
+                    {p.courseIdsRepaired > 0 && ` ${p.courseIdsRepaired} subject${p.courseIdsRepaired !== 1 ? "s" : ""} here had a stale course link from an earlier run - fixed.`}
                   </p>
                 </CardContent>
               </Card>
