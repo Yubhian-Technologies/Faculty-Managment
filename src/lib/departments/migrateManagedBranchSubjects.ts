@@ -31,6 +31,21 @@ import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 
 type Db = FirebaseFirestore.Firestore;
 
+export interface SectionMoveDetail {
+  sectionId: string;
+  sectionName: string;
+  year: number;
+  studentCount: number;
+  fromDepartmentName: string;
+  toDepartmentName: string;
+}
+
+export interface SkippedSectionDetail {
+  sectionName: string;
+  year: number;
+  reason: string;
+}
+
 export interface MigrateManagedBranchSubjectsResult {
   sectionsRenamed: number;
   sectionsSkippedConflict: number;
@@ -39,6 +54,10 @@ export interface MigrateManagedBranchSubjectsResult {
   subjectAssignmentsDeduped: number;
   teachingAssignmentsRepointed: number;
   timetableSlotsRepointed: number;
+  /** Per-section breakdown - which section, how many students, moving to which department. */
+  sections: SectionMoveDetail[];
+  /** Sections NOT moved because a section with the same name/year already exists under the core department. */
+  skippedSections: SkippedSectionDetail[];
 }
 
 interface AssignmentRow {
@@ -148,7 +167,10 @@ async function run(
     return `${s.name}|${s.year}`;
   }));
   const sectionsToRename = candidateSections.filter((s) => !branchSectionKeys.has(`${s.name}|${s.year}`));
-  const sectionsSkipped = candidateSections.length - sectionsToRename.length;
+  const skippedSections: SkippedSectionDetail[] = candidateSections
+    .filter((s) => branchSectionKeys.has(`${s.name}|${s.year}`))
+    .map((s) => ({ sectionName: s.name, year: s.year, reason: `A section named "${s.name}" already exists under "${branchName}" for this year` }));
+  const sectionsSkipped = skippedSections.length;
   const renamedSectionIds = new Set(sectionsToRename.map((s) => s.id));
   const renamedSectionNames = new Set(sectionsToRename.map((s) => s.name));
 
@@ -173,6 +195,26 @@ async function run(
     // than moved to a department its own section doc doesn't yet match.
     return !!s.section && renamedSectionNames.has(s.section);
   });
+
+  // Per-section breakdown for the review UI - which section, how many of
+  // its students, moving to which department. Built from the same
+  // sectionsToRename/studentsToMove sets the actual writes above use, so the
+  // preview can never show a different plan than what Confirm executes.
+  const studentCountBySection = new Map<string, number>();
+  for (const d of studentsToMove) {
+    const s = d.data() as { section?: string };
+    if (!s.section) continue;
+    studentCountBySection.set(s.section, (studentCountBySection.get(s.section) ?? 0) + 1);
+  }
+  const sections: SectionMoveDetail[] = sectionsToRename.map((s) => ({
+    sectionId: s.id,
+    sectionName: s.name,
+    year: s.year,
+    studentCount: studentCountBySection.get(s.name) ?? 0,
+    fromDepartmentName: subDeptName,
+    toDepartmentName: branchName,
+  }));
+
   if (!dryRun && studentsToMove.length > 0) {
     const now = new Date();
     const updates = studentsToMove.map((d) => ({
@@ -270,6 +312,8 @@ async function run(
     subjectAssignmentsDeduped: toDiscard.length,
     teachingAssignmentsRepointed: taToRepoint.length,
     timetableSlotsRepointed: slotsToRepoint.length,
+    sections,
+    skippedSections,
   };
 }
 

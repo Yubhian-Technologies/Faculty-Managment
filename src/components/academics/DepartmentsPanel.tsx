@@ -23,6 +23,21 @@ import type { Course, Department, Section } from "@/types";
 
 type DeptWithMaybeId = Department & { id: string };
 
+interface SectionMoveDetail {
+  sectionId: string;
+  sectionName: string;
+  year: number;
+  studentCount: number;
+  fromDepartmentName: string;
+  toDepartmentName: string;
+}
+
+interface SkippedSectionDetail {
+  sectionName: string;
+  year: number;
+  reason: string;
+}
+
 interface MigrationCounts {
   sectionsRenamed: number;
   sectionsSkippedConflict: number;
@@ -31,6 +46,8 @@ interface MigrationCounts {
   subjectAssignmentsDeduped: number;
   teachingAssignmentsRepointed: number;
   timetableSlotsRepointed: number;
+  sections: SectionMoveDetail[];
+  skippedSections: SkippedSectionDetail[];
 }
 
 type PreviewEntry = ({ ok: true } & MigrationCounts) | { ok: false; error: string };
@@ -46,78 +63,21 @@ async function callMigrateRoute(subDepartmentId: string, branchDepartmentId: str
   return json;
 }
 
-// Dry-run preview, then confirm, moving a sub-department's shared-year
-// subjects/teaching-assignments/timetable rows over to each of its managed
-// core departments directly (see src/lib/departments/migrateManagedBranchSubjects.ts).
-function MoveSubjectsDialog({ open, onOpenChange, subDepartment, branches }: {
+// Step 1: pick which of the sub-department's managed core departments to
+// move - a small modal, selection only. "Review" hands off to the full-page
+// breakdown below rather than previewing inline.
+function MigrationBranchPicker({ open, onOpenChange, subDepartment, branches, onReview }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   subDepartment: DeptWithMaybeId;
   branches: { id: string; name: string }[];
+  onReview: (branchIds: string[]) => void;
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [preview, setPreview] = useState<Record<string, PreviewEntry> | null>(null);
-  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
-  const [isConfirming, setIsConfirming] = useState(false);
 
   useEffect(() => {
-    if (!open) return;
-    setSelected(new Set(branches.map((b) => b.id)));
-    setPreview(null);
+    if (open) setSelected(new Set(branches.map((b) => b.id)));
   }, [open, branches]);
-
-  async function runPreview() {
-    setIsLoadingPreview(true);
-    try {
-      const picked = branches.filter((b) => selected.has(b.id));
-      const entries = await Promise.all(picked.map(async (b): Promise<[string, PreviewEntry]> => {
-        try {
-          const counts = await callMigrateRoute(subDepartment.id, b.id, true);
-          return [b.id, { ok: true, ...counts }];
-        } catch (err) {
-          return [b.id, { ok: false, error: err instanceof Error ? err.message : "Failed" }];
-        }
-      }));
-      setPreview(Object.fromEntries(entries));
-    } finally {
-      setIsLoadingPreview(false);
-    }
-  }
-
-  async function confirmMove() {
-    setIsConfirming(true);
-    try {
-      const picked = branches.filter((b) => selected.has(b.id));
-      const results = await Promise.allSettled(picked.map((b) => callMigrateRoute(subDepartment.id, b.id, false).then(() => b.name)));
-      const succeeded = results.filter((r) => r.status === "fulfilled").length;
-      const failed = results.length - succeeded;
-      toast({
-        variant: failed === 0 ? "success" : "destructive",
-        title: failed === 0 ? `Moved subjects for ${succeeded} department${succeeded !== 1 ? "s" : ""}` : `${succeeded} moved, ${failed} failed`,
-        description: failed > 0
-          ? results.filter((r) => r.status === "rejected").map((r) => (r as PromiseRejectedResult).reason?.message ?? "Failed").join("; ")
-          : undefined,
-      });
-      if (succeeded > 0) onOpenChange(false);
-    } finally {
-      setIsConfirming(false);
-    }
-  }
-
-  const totals = preview
-    ? Object.values(preview).reduce((acc, p) => {
-        if (!p.ok) return acc;
-        return {
-          sectionsRenamed: acc.sectionsRenamed + p.sectionsRenamed,
-          sectionsSkippedConflict: acc.sectionsSkippedConflict + p.sectionsSkippedConflict,
-          studentsMoved: acc.studentsMoved + p.studentsMoved,
-          subjectAssignmentsMoved: acc.subjectAssignmentsMoved + p.subjectAssignmentsMoved,
-          subjectAssignmentsDeduped: acc.subjectAssignmentsDeduped + p.subjectAssignmentsDeduped,
-          teachingAssignmentsRepointed: acc.teachingAssignmentsRepointed + p.teachingAssignmentsRepointed,
-          timetableSlotsRepointed: acc.timetableSlotsRepointed + p.timetableSlotsRepointed,
-        };
-      }, { sectionsRenamed: 0, sectionsSkippedConflict: 0, studentsMoved: 0, subjectAssignmentsMoved: 0, subjectAssignmentsDeduped: 0, teachingAssignmentsRepointed: 0, timetableSlotsRepointed: 0 })
-    : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -127,61 +87,196 @@ function MoveSubjectsDialog({ open, onOpenChange, subDepartment, branches }: {
           <DialogDescription>
             Renames the shared-year sections (and the students in them) currently filed under &quot;{subDepartment.name}&quot;
             to each selected core department directly, and moves their subjects, teaching assignments and timetable rows
-            along with them. This changes live student records - nothing is written until you confirm.
+            along with them. Pick the departments to review, then see the full breakdown before anything is written.
           </DialogDescription>
         </DialogHeader>
-
         <div className="space-y-2">
           {branches.map((b) => (
             <label key={b.id} className="flex items-center gap-2 text-sm">
               <Checkbox
                 checked={selected.has(b.id)}
-                onCheckedChange={(checked) => {
-                  setPreview(null);
-                  setSelected((prev) => {
-                    const next = new Set(prev);
-                    if (checked) next.add(b.id); else next.delete(b.id);
-                    return next;
-                  });
-                }}
+                onCheckedChange={(checked) => setSelected((prev) => {
+                  const next = new Set(prev);
+                  if (checked) next.add(b.id); else next.delete(b.id);
+                  return next;
+                })}
               />
-              <span className="flex-1">{b.name}</span>
-              {preview?.[b.id] && (
-                !preview[b.id].ok
-                  ? <span className="text-xs text-destructive">{(preview[b.id] as { ok: false; error: string }).error}</span>
-                  : <span className="text-xs text-muted-foreground">
-                      {(preview[b.id] as MigrationCounts).sectionsRenamed} sections, {(preview[b.id] as MigrationCounts).studentsMoved} students, {(preview[b.id] as MigrationCounts).subjectAssignmentsMoved} subjects
-                      {(preview[b.id] as MigrationCounts).sectionsSkippedConflict > 0 && <span className="text-amber-600"> ({(preview[b.id] as MigrationCounts).sectionsSkippedConflict} skipped - name conflict)</span>}
-                    </span>
-              )}
+              <span>{b.name}</span>
             </label>
           ))}
         </div>
-
-        {totals && (
-          <p className="text-xs text-muted-foreground border-t pt-3">
-            This will rename {totals.sectionsRenamed} section{totals.sectionsRenamed !== 1 ? "s" : ""} and move {totals.studentsMoved} student{totals.studentsMoved !== 1 ? "s" : ""}
-            {totals.sectionsSkippedConflict > 0 ? ` (${totals.sectionsSkippedConflict} section${totals.sectionsSkippedConflict !== 1 ? "s" : ""} skipped - a section with the same name/year already exists under the core department)` : ""},
-            move {totals.subjectAssignmentsMoved} subject{totals.subjectAssignmentsMoved !== 1 ? "s" : ""}
-            {totals.subjectAssignmentsDeduped > 0 ? ` (discarding ${totals.subjectAssignmentsDeduped} already duplicated under the core department)` : ""},
-            and repoint {totals.teachingAssignmentsRepointed} teaching assignment{totals.teachingAssignmentsRepointed !== 1 ? "s" : ""} and {totals.timetableSlotsRepointed} timetable row{totals.timetableSlotsRepointed !== 1 ? "s" : ""} across {Object.keys(preview ?? {}).length} department{Object.keys(preview ?? {}).length !== 1 ? "s" : ""} - review before confirming.
-          </p>
-        )}
-
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          {!preview ? (
-            <Button onClick={() => void runPreview()} disabled={selected.size === 0 || isLoadingPreview}>
-              {isLoadingPreview ? "Checking..." : "Preview"}
-            </Button>
-          ) : (
-            <Button onClick={() => void confirmMove()} disabled={isConfirming || (totals?.subjectAssignmentsMoved ?? 0) + (totals?.subjectAssignmentsDeduped ?? 0) === 0}>
-              {isConfirming ? "Moving..." : "Confirm & Move"}
-            </Button>
-          )}
+          <Button disabled={selected.size === 0} onClick={() => onReview(branches.filter((b) => selected.has(b.id)).map((b) => b.id))}>
+            Review
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// Step 2: the detailed review page - section-by-section, which students move
+// where, and a plain explanation of what happens to subjects (they're never
+// duplicated - see the note below). Full-page, not a modal, so a Principal
+// reviewing hundreds of students across several branches has room to read it.
+function MigrationReviewPage({ subDepartment, branchIds, allBranches, onBack, onDone }: {
+  subDepartment: DeptWithMaybeId;
+  branchIds: string[];
+  allBranches: { id: string; name: string }[];
+  onBack: () => void;
+  onDone: () => void;
+}) {
+  const branches = useMemo(() => allBranches.filter((b) => branchIds.includes(b.id)), [allBranches, branchIds]);
+  const [preview, setPreview] = useState<Record<string, PreviewEntry> | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isConfirming, setIsConfirming] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoading(true);
+    void (async () => {
+      const entries = await Promise.all(branches.map(async (b): Promise<[string, PreviewEntry]> => {
+        try {
+          const counts = await callMigrateRoute(subDepartment.id, b.id, true);
+          return [b.id, { ok: true, ...counts }];
+        } catch (err) {
+          return [b.id, { ok: false, error: err instanceof Error ? err.message : "Failed" }];
+        }
+      }));
+      if (!cancelled) {
+        setPreview(Object.fromEntries(entries));
+        setIsLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [subDepartment.id, branches]);
+
+  async function confirmMove() {
+    setIsConfirming(true);
+    try {
+      const results = await Promise.allSettled(branches.map((b) => callMigrateRoute(subDepartment.id, b.id, false).then(() => b.name)));
+      const succeeded = results.filter((r) => r.status === "fulfilled").length;
+      const failed = results.length - succeeded;
+      toast({
+        variant: failed === 0 ? "success" : "destructive",
+        title: failed === 0 ? `Moved subjects & students for ${succeeded} department${succeeded !== 1 ? "s" : ""}` : `${succeeded} moved, ${failed} failed`,
+        description: failed > 0
+          ? results.filter((r) => r.status === "rejected").map((r) => (r as PromiseRejectedResult).reason?.message ?? "Failed").join("; ")
+          : undefined,
+      });
+      if (succeeded > 0) onDone();
+    } finally {
+      setIsConfirming(false);
+    }
+  }
+
+  const allSections = Object.values(preview ?? {}).filter((p): p is { ok: true } & MigrationCounts => p.ok).flatMap((p) => p.sections);
+  const allSkipped = Object.values(preview ?? {}).filter((p): p is { ok: true } & MigrationCounts => p.ok).flatMap((p) => p.skippedSections);
+  const totalStudents = allSections.reduce((n, s) => n + s.studentCount, 0);
+  const totalSubjects = Object.values(preview ?? {}).filter((p): p is { ok: true } & MigrationCounts => p.ok).reduce((n, p) => n + p.subjectAssignmentsMoved, 0);
+  const hasAnyError = preview ? Object.values(preview).some((p) => !p.ok) : false;
+  const nothingToMove = !isLoading && allSections.length === 0;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <PageHeader
+          title={`Review: move "${subDepartment.name}" into core departments`}
+          description="Nothing is written to the database until you confirm below."
+        />
+        <Button variant="outline" size="sm" onClick={onBack}><ArrowLeft className="h-4 w-4 mr-1" />Back</Button>
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-2">
+          {[1, 2, 3].map((i) => <div key={i} className="h-16 rounded-lg border bg-muted/30 animate-pulse" />)}
+        </div>
+      ) : (
+        <>
+          {Object.entries(preview ?? {}).map(([branchId, p]) => {
+            const branch = branches.find((b) => b.id === branchId);
+            if (!p.ok) {
+              return (
+                <Card key={branchId}><CardContent className="p-4 text-sm text-destructive">{branch?.name}: {p.error}</CardContent></Card>
+              );
+            }
+            return (
+              <Card key={branchId}>
+                <CardContent className="p-4 space-y-3">
+                  <h3 className="font-semibold text-sm">{branch?.name}</h3>
+                  {p.sections.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No sections to move for this department.</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          <tr>
+                            <th className="py-1.5 pr-4">Section</th>
+                            <th className="py-1.5 pr-4">Year</th>
+                            <th className="py-1.5 pr-4">Students</th>
+                            <th className="py-1.5 pr-4">From</th>
+                            <th className="py-1.5">To</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {p.sections.map((s) => (
+                            <tr key={s.sectionId}>
+                              <td className="py-1.5 pr-4 font-medium">{s.sectionName}</td>
+                              <td className="py-1.5 pr-4">{yearOrdinalLabel(s.year)}</td>
+                              <td className="py-1.5 pr-4">{s.studentCount}</td>
+                              <td className="py-1.5 pr-4 text-muted-foreground">{s.fromDepartmentName}</td>
+                              <td className="py-1.5 font-medium">{s.toDepartmentName}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  {p.skippedSections.length > 0 && (
+                    <p className="text-xs text-amber-600">
+                      Skipped: {p.skippedSections.map((s) => `"${s.sectionName}" (${yearOrdinalLabel(s.year)}) - ${s.reason}`).join("; ")}
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    {p.subjectAssignmentsMoved} subject assignment{p.subjectAssignmentsMoved !== 1 ? "s" : ""} moved
+                    {p.subjectAssignmentsDeduped > 0 ? `, ${p.subjectAssignmentsDeduped} already duplicated here and discarded` : ""};
+                    {" "}{p.teachingAssignmentsRepointed} teaching assignment{p.teachingAssignmentsRepointed !== 1 ? "s" : ""} and {p.timetableSlotsRepointed} timetable row{p.timetableSlotsRepointed !== 1 ? "s" : ""} repointed.
+                  </p>
+                </CardContent>
+              </Card>
+            );
+          })}
+
+          <Card className="bg-muted/30">
+            <CardContent className="p-4 text-xs text-muted-foreground space-y-1">
+              <p className="font-medium text-foreground">About the subjects</p>
+              <p>
+                Subjects themselves are never duplicated - every subject lives once in the college&apos;s shared Subjects
+                collection, pooled by course/regulation and already visible to every department teaching that course.
+                What moves here is only the per-department assignment ({totalSubjects} row{totalSubjects !== 1 ? "s" : ""}
+                {" "}this run) that links a subject to a specific department/year/semester - re-pointed from &quot;{subDepartment.name}&quot;
+                to the core department, so Teaching Assignments and Timetable pick it up from the right place.
+              </p>
+            </CardContent>
+          </Card>
+
+          {!nothingToMove && (
+            <p className="text-sm font-medium">
+              Total: {allSections.length} section{allSections.length !== 1 ? "s" : ""}, {totalStudents} student{totalStudents !== 1 ? "s" : ""}
+              {allSkipped.length > 0 ? `, ${allSkipped.length} section${allSkipped.length !== 1 ? "s" : ""} skipped` : ""} across {branches.length} department{branches.length !== 1 ? "s" : ""}.
+            </p>
+          )}
+        </>
+      )}
+
+      <div className="flex justify-end gap-2 pt-2 border-t">
+        <Button variant="outline" onClick={onBack}>Cancel</Button>
+        <Button onClick={() => void confirmMove()} disabled={isLoading || isConfirming || nothingToMove || hasAnyError}>
+          {isConfirming ? "Moving..." : "Confirm & Move"}
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -212,7 +307,8 @@ function DepartmentDrillDown({ departments, courses, rootId, onExit }: {
   const [openSectionId, setOpenSectionId] = useState<string | null>(null);
   const [sections, setSections] = useState<Section[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [movingSubDept, setMovingSubDept] = useState<DeptWithMaybeId | null>(null);
+  const [pickerFor, setPickerFor] = useState<DeptWithMaybeId | null>(null);
+  const [reviewRequest, setReviewRequest] = useState<{ subDept: DeptWithMaybeId; branchIds: string[] } | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -274,6 +370,20 @@ function DepartmentDrillDown({ departments, courses, rootId, onExit }: {
   if (!current) return null;
   if (openSectionId) {
     return <SectionRoster sectionId={openSectionId} onBack={() => setOpenSectionId(null)} backLabel={`Back to ${current.name}`} />;
+  }
+  if (reviewRequest) {
+    return (
+      <MigrationReviewPage
+        subDepartment={reviewRequest.subDept}
+        branchIds={reviewRequest.branchIds}
+        allBranches={(reviewRequest.subDept.managedDepartments ?? [])
+          .map((name) => departments.find((d) => d.name === name) as DeptWithMaybeId | undefined)
+          .filter((d): d is DeptWithMaybeId => !!d)
+          .map((d) => ({ id: d.id, name: d.name }))}
+        onBack={() => setReviewRequest(null)}
+        onDone={() => setReviewRequest(null)}
+      />
+    );
   }
 
   const goBack = () => (path.length > 1 ? setPath(path.slice(0, -1)) : onExit());
@@ -338,7 +448,7 @@ function DepartmentDrillDown({ departments, courses, rootId, onExit }: {
                       variant="outline"
                       size="sm"
                       className="h-7 text-xs mt-2 w-full"
-                      onClick={(e) => { e.stopPropagation(); setMovingSubDept(c as DeptWithMaybeId); }}
+                      onClick={(e) => { e.stopPropagation(); setPickerFor(c as DeptWithMaybeId); }}
                     >
                       <MoveRight className="h-3.5 w-3.5 mr-1" />Move subjects to core depts
                     </Button>
@@ -387,15 +497,16 @@ function DepartmentDrillDown({ departments, courses, rootId, onExit }: {
         </div>
       ))}
 
-      {movingSubDept && (
-        <MoveSubjectsDialog
-          open={!!movingSubDept}
-          onOpenChange={(open) => !open && setMovingSubDept(null)}
-          subDepartment={movingSubDept}
-          branches={(movingSubDept.managedDepartments ?? [])
+      {pickerFor && (
+        <MigrationBranchPicker
+          open={!!pickerFor}
+          onOpenChange={(open) => !open && setPickerFor(null)}
+          subDepartment={pickerFor}
+          branches={(pickerFor.managedDepartments ?? [])
             .map((name) => departments.find((d) => d.name === name) as DeptWithMaybeId | undefined)
             .filter((d): d is DeptWithMaybeId => !!d)
             .map((d) => ({ id: d.id, name: d.name }))}
+          onReview={(branchIds) => { setReviewRequest({ subDept: pickerFor, branchIds }); setPickerFor(null); }}
         />
       )}
     </div>
