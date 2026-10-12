@@ -2,7 +2,6 @@ import { SUBJECT_CATEGORY_LABELS, type SubjectCategory, type SubjectType } from 
 import { resolveSubjectCategory, resolveSubjectType } from "@/lib/subjects/normalize";
 
 export interface SubjectRowInput {
-  serialNumber?: string | number;
   category?: string;
   customCategory?: string;
   name?: string;
@@ -38,7 +37,6 @@ export interface ValidatedSubjectRow {
   name: string;
   code: string;
   shortCode?: string;
-  serialNumber: number;
   category: SubjectCategory;
   customCategory?: string;
   type: SubjectType;
@@ -89,14 +87,7 @@ export class SubjectCatalogValidator {
     // gate (colleges vary: "CHE", "CH", "CHM" are all legitimate mnemonics).
     const shortCode = row.shortCode?.toString().trim().toUpperCase() || undefined;
 
-    // 3. Serial Number
-    const rawSNo = row.serialNumber?.toString().trim();
-    const serialNumber = Number(rawSNo);
-    if (!rawSNo || !Number.isFinite(serialNumber) || serialNumber <= 0) {
-      errors.push("S.No. is required and must be a positive number");
-    }
-
-    // 4. Category
+    // 3. Category
     const categoryText = row.category?.toString().trim();
     let category: SubjectCategory | undefined;
     if (!categoryText) {
@@ -115,7 +106,7 @@ export class SubjectCatalogValidator {
       errors.push("Custom Category is required when Category is Other");
     }
 
-    // 5. L, T, P contact hours
+    // 4. L, T, P contact hours
     const rawL = row.lectureHours?.toString().trim();
     const rawT = row.tutorialHours?.toString().trim();
     const rawP = row.practicalHours?.toString().trim();
@@ -138,7 +129,7 @@ export class SubjectCatalogValidator {
       errors.push("Practical hours (P) must be a non-negative number");
     }
 
-    // 6. Type
+    // 5. Type
     let type: SubjectType = "THEORY";
     const typeText = row.type?.toString().trim();
     if (typeText) {
@@ -155,7 +146,7 @@ export class SubjectCatalogValidator {
       type = "PRACTICAL";
     }
 
-    // 7. Hours Per Week, Total Hours, Credits
+    // 6. Hours Per Week, Total Hours, Credits
     const computedHoursPerWeek = lectureHours + tutorialHours + practicalHours;
     const hoursPerWeek = row.hoursPerWeek != null && row.hoursPerWeek !== ""
       ? Number(row.hoursPerWeek)
@@ -172,7 +163,7 @@ export class SubjectCatalogValidator {
     const regulation = row.regulation?.toString().trim() || contextDefaults?.regulation;
     const academicYear = row.academicYear?.toString().trim() || contextDefaults?.academicYear;
 
-    // 8. Year / Semester - required only for the Course Structure flow
+    // 7. Year / Semester - required only for the Course Structure flow
     // (contextDefaults.requireYearSemester), which auto-assigns each row
     // into a department's semester on top of creating the master subject.
     // Every other caller leaves this as a separate manual step, so these
@@ -192,7 +183,7 @@ export class SubjectCatalogValidator {
       }
     }
 
-    // 9. Marks - reference-only, no validation beyond "is it a number".
+    // 8. Marks - reference-only, no validation beyond "is it a number".
     const internalMarks = row.internalMarks != null && row.internalMarks !== "" ? Number(row.internalMarks) : undefined;
     const externalMarks = row.externalMarks != null && row.externalMarks !== "" ? Number(row.externalMarks) : undefined;
     const totalMarks = row.totalMarks != null && row.totalMarks !== "" ? Number(row.totalMarks) : undefined;
@@ -207,7 +198,6 @@ export class SubjectCatalogValidator {
         name: name!,
         code,
         shortCode,
-        serialNumber,
         category: category!,
         customCategory: category === "OTHER" ? customCategory : undefined,
         type,

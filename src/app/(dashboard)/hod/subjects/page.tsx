@@ -13,7 +13,7 @@ import { useMyDepartments } from "@/hooks/useMyDepartments";
 import type { Course, CourseCatalogItem, CourseYearTiming, Department, Subject, SubjectSemesterAssignment } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
 import { fedYears, regulationsForCourseYearByBatch } from "@/lib/college/academicStructure";
-import { deriveHodScope, managerEffectiveYears } from "@/lib/departments/hodScope";
+import { managerEffectiveYears, mergeOwnDepartmentOptions } from "@/lib/departments/hodScope";
 import { parseAcademicYearStart } from "@/lib/college/academicSession";
 import { resolveCurrentSemester } from "@/lib/college/semester";
 import { yearSemesterLabelIn, semesterInYearLabel } from "@/lib/academic/format";
@@ -148,20 +148,19 @@ export default function HODSubjectsPage() {
   // scope union). So the years to offer can't come from that course's own
   // owning department (IT's own assignedYears is [2,3,4] - IT's own HOD's
   // years, not what Basic Science was assigned) - they must come from THIS
-  // HOD's own department(s), the same way Teaching Assignments/Sections
-  // resolve it (deriveHodScope + managerEffectiveYears): own department plus
-  // its real sub-departments (never a managed branch's own later years).
-  const ownScopeDepartments = useMemo(() => {
-    const seen = new Map<string, Department>();
-    for (const name of myDepartments) {
-      const scope = deriveHodScope(departments, name);
-      if (scope.ownDept) seen.set(scope.ownDept.id, scope.ownDept);
-      for (const d of [...scope.groupingChildren, ...scope.plainChildren]) seen.set(d.id, d);
-    }
-    return Array.from(seen.values());
-  }, [departments, myDepartments]);
-  // Departments whose subjects this HOD may view: own department plus its
-  // sub-departments; falls back to the owners of the listed courses.
+  // HOD's own department(s), the same way Sections/Timetable resolve it
+  // (mergeOwnDepartmentOptions): own department, its real sub-departments,
+  // AND the core/managed branches it manages (e.g. CSE under Basic Science) -
+  // a hand-rolled own+children union used to sit here instead, which silently
+  // dropped managed branches from both this Department picker and (via
+  // yearOptions below) the years offered for them.
+  const ownScopeDepartments = useMemo(
+    () => mergeOwnDepartmentOptions(departments, myDepartments),
+    [departments, myDepartments]
+  );
+  // Departments whose subjects this HOD may view: own department, its
+  // sub-departments, and managed core branches; falls back to the owners of
+  // the listed courses.
   const deptOptions = useMemo(() => {
     if (ownScopeDepartments.length > 0) return ownScopeDepartments;
     const seen = new Map<string, Department>();
@@ -264,21 +263,12 @@ export default function HODSubjectsPage() {
     const filtered = pickedRegulation
       ? assignmentsForSemester.filter((a) => !a.regulation || a.regulation === pickedRegulation)
       : assignmentsForSemester;
-    // Curriculum-table order: by the master subject's own S.No. when set
-    // (SubjectSemesterAssignment doesn't carry its own), falling back to name.
-    return [...filtered].sort((a, b) => {
-      const sa = subjectById.get(a.subjectId)?.serialNumber;
-      const sb = subjectById.get(b.subjectId)?.serialNumber;
-      if (sa != null && sb != null) return sa - sb;
-      if (sa != null) return -1;
-      if (sb != null) return 1;
-      return a.subjectName.localeCompare(b.subjectName);
-    });
-  }, [assignmentsForSemester, pickedRegulation, subjectById]);
+    return [...filtered].sort((a, b) => a.subjectName.localeCompare(b.subjectName));
+  }, [assignmentsForSemester, pickedRegulation]);
 
   // Subjects (catalogId-scoped, department-independent) alongside Course-Year
   // Timings and this department's own semester assignments - same three-way
-  // load Assign to Semester itself does, so S.No./category/etc join
+  // load Assign to Semester itself does, so category/etc join
   // correctly and Semester options resolve from real timing data instead of
   // a param the API silently ignored (the bug this page used to have).
   const loadAssignments = useCallback(async (course: Course, siblings: Course[], year: string, deptId: string) => {
@@ -497,7 +487,6 @@ export default function HODSubjectsPage() {
                       <table className="w-full text-sm">
                         <thead className="bg-muted/50 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
                           <tr>
-                            <th className="px-4 py-3">S.No.</th>
                             <th className="px-4 py-3">Category</th>
                             <th className="px-4 py-3">Name of the Subject</th>
                             <th className="px-4 py-3 text-center">L</th>
@@ -511,7 +500,6 @@ export default function HODSubjectsPage() {
                             const subject = subjectById.get(a.subjectId);
                             return (
                               <tr key={a.id}>
-                                <td className="px-4 py-2.5">{subject?.serialNumber ?? "—"}</td>
                                 <td className="px-4 py-2.5">
                                   {(a.category ?? subject?.category) ? (
                                     <Badge variant="outline" className="text-xs">

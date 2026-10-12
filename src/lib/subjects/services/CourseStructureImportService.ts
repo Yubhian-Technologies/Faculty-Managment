@@ -451,7 +451,6 @@ export class CourseStructureImportService {
       courseId: ctx.course.id,
       courseName: ctx.course.name,
       regulation: req.regulation,
-      serialNumber: row.rowNumber - 1,
       category: row.category,
       ...(row.customCategory ? { customCategory: row.customCategory } : {}),
       name: row.name,

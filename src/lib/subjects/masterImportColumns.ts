@@ -13,7 +13,6 @@ export type MasterSubjectCsvColumn = {
 };
 
 export const MASTER_IMPORT_COLUMNS: MasterSubjectCsvColumn[] = [
-  { key: "serialNumber", label: "S.No.", required: true, sample: "1", aliases: ["SNo", "Sl No", "Serial Number"] },
   { key: "category", label: "Category", required: true, sample: "PCC", aliases: ["Subject Category"] },
   { key: "name", label: "Subject Name", required: true, sample: "Data Structures", aliases: ["Name of the Subject", "Subject", "Course Title"] },
   { key: "code", label: "Subject Code", required: true, sample: "CS201", aliases: ["Code", "Course Code", "Paper Code"] },
@@ -31,7 +30,7 @@ export const MASTER_IMPORT_COLUMNS: MasterSubjectCsvColumn[] = [
 
 export const MASTER_IMPORT_HINTS = [
   "Each row is one subject, saved under the Course and Regulation selected above - no department, year or semester here. Assign it to a department's semester afterwards from this same page.",
-  "S.No., Category, Subject Name, Subject Code, L, T and P are required. Enter 0 for an hours column with none.",
+  "Category, Subject Name, Subject Code, L, T and P are required. Enter 0 for an hours column with none.",
   "Category must be a standard category (HSMC, BSC, ESC, PCC, PEC, OEC, MC, PROJ) or one defined under Academics > Categories.",
   "If a subject with the same code already exists for this course and regulation (under any department teaching it), that row is skipped and reported - it's not duplicated.",
   "Rows with a problem are skipped and reported; every other valid row still imports.",

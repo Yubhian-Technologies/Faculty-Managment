@@ -269,7 +269,6 @@ export function MasterSubjectImportDialog({ open, onOpenChange, courseId, course
                 <thead>
                   <tr className="border-b bg-muted/40 text-left text-muted-foreground">
                     <th className="p-2 font-medium">Row</th>
-                    <th className="p-2 font-medium">S.No.</th>
                     <th className="p-2 font-medium">Code</th>
                     <th className="p-2 font-medium">Subject</th>
                     <th className="p-2 font-medium">Category</th>
@@ -283,7 +282,6 @@ export function MasterSubjectImportDialog({ open, onOpenChange, courseId, course
                     return (
                       <tr key={rowNumber} className={`border-b align-top ${rowErrors ? "bg-red-50 dark:bg-destructive/15" : ""}`}>
                         <td className="p-2 text-muted-foreground tabular-nums">{rowNumber}</td>
-                        <td className="p-2">{data.serialNumber || "-"}</td>
                         <td className="p-2 font-mono">{data.code || "-"}</td>
                         <td className="p-2 min-w-40">{data.name || "-"}</td>
                         <td className="p-2">{data.category || "-"}</td>

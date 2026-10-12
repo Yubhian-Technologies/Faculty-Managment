@@ -319,7 +319,6 @@ export async function PATCH(request: Request) {
         category?: string;
         customCategory?: string | null;
         type?: string;
-        serialNumber?: number;
         totalHoursPerSemester?: number | null;
       };
     };
@@ -426,7 +425,6 @@ export async function PATCH(request: Request) {
       if (snap2.category != null) fields.category = snap2.category;
       if ("customCategory" in snap2) fields.customCategory = snap2.customCategory ?? null;
       if (snap2.type != null) fields.type = snap2.type;
-      if (snap2.serialNumber != null) fields.serialNumber = Number(snap2.serialNumber);
       if ("totalHoursPerSemester" in snap2) fields.totalHoursPerSemester = snap2.totalHoursPerSemester ?? null;
       if (Object.keys(fields).length > 0) {
         const rows = await collegeRef.collection("subjectSemesterAssignments").where("subjectId", "==", cur.subjectId).get();

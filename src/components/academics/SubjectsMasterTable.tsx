@@ -16,7 +16,7 @@ const PAGE_SIZE = 20;
 interface EditForm {
   id: string;
   name: string; code: string; shortCode: string;
-  serialNumber: string; category: string; customCategory: string;
+  category: string; customCategory: string;
   lectureHours: string; tutorialHours: string; practicalHours: string; credits: string;
   type: SubjectType;
 }
@@ -24,7 +24,6 @@ interface EditForm {
 function toEditForm(s: Subject): EditForm {
   return {
     id: s.id, name: s.name ?? "", code: s.code ?? "", shortCode: s.shortCode ?? "",
-    serialNumber: s.serialNumber != null ? String(s.serialNumber) : "",
     category: s.category ?? "", customCategory: s.customCategory ?? "",
     lectureHours: String(s.lectureHours ?? 0), tutorialHours: String(s.tutorialHours ?? 0), practicalHours: String(s.practicalHours ?? 0),
     credits: String(s.credits ?? 0), type: s.type ?? "THEORY",
@@ -77,7 +76,6 @@ export function SubjectsMasterTable({ courseId, courseName, regulation }: {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: editForm.name.trim(), code: editForm.code.trim().toUpperCase(), shortCode: editForm.shortCode.trim() || undefined,
-          serialNumber: editForm.serialNumber ? Number(editForm.serialNumber) : undefined,
           category: editForm.category || undefined, customCategory: editForm.category === "OTHER" ? editForm.customCategory.trim() : undefined,
           lectureHours: Number(editForm.lectureHours) || 0, tutorialHours: Number(editForm.tutorialHours) || 0, practicalHours: Number(editForm.practicalHours) || 0,
           credits: Number(editForm.credits) || 0, type: editForm.type,
@@ -121,7 +119,6 @@ export function SubjectsMasterTable({ courseId, courseName, regulation }: {
               <table className="w-full text-sm">
                 <thead className="text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   <tr>
-                    <th className="py-1.5 pr-3">S.No.</th>
                     <th className="py-1.5 pr-3">Category</th>
                     <th className="py-1.5 pr-3">Name</th>
                     <th className="py-1.5 pr-3">Code</th>
@@ -134,7 +131,6 @@ export function SubjectsMasterTable({ courseId, courseName, regulation }: {
                 <tbody className="divide-y">
                   {pageRows.map((s) => (
                     <tr key={s.id}>
-                      <td className="py-1.5 pr-3">{s.serialNumber ?? "-"}</td>
                       <td className="py-1.5 pr-3">{s.category === "OTHER" ? (s.customCategory || "Other") : (s.category ?? "-")}</td>
                       <td className="py-1.5 pr-3 font-medium">{s.name}</td>
                       <td className="py-1.5 pr-3 font-mono">{s.code}</td>
@@ -168,10 +164,7 @@ export function SubjectsMasterTable({ courseId, courseName, regulation }: {
           <DialogHeader><DialogTitle>Edit Subject</DialogTitle></DialogHeader>
           {editForm && (
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1"><Label>S.No.</Label><Input value={editForm.serialNumber} onChange={(e) => setEditForm({ ...editForm, serialNumber: e.target.value })} /></div>
-                <div className="space-y-1"><Label>Category</Label><Input value={editForm.category} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })} /></div>
-              </div>
+              <div className="space-y-1"><Label>Category</Label><Input value={editForm.category} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })} /></div>
               <div className="space-y-1"><Label>Name</Label><Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} /></div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1"><Label>Code</Label><Input value={editForm.code} onChange={(e) => setEditForm({ ...editForm, code: e.target.value })} /></div>

@@ -119,16 +119,8 @@ export class MasterSubjectImportService {
       // page.tsx), rather than relaxing SubjectCatalogValidator's required-ness
       // for its other callers (single Add Subject, plain bulk import) where a
       // manually-chosen code is still expected.
-      if (payload.requireYearSemester) {
-        const needsCode = !row.code?.toString().trim();
-        const needsSerial = !row.serialNumber?.toString().trim();
-        if (needsCode || needsSerial) {
-          row = {
-            ...row,
-            ...(needsCode ? { code: (row.name ?? "").toString().trim().toUpperCase().replace(/[^A-Z0-9]+/g, "").slice(0, 10) } : {}),
-            ...(needsSerial ? { serialNumber: rowNum } : {}),
-          };
-        }
+      if (payload.requireYearSemester && !row.code?.toString().trim()) {
+        row = { ...row, code: (row.name ?? "").toString().trim().toUpperCase().replace(/[^A-Z0-9]+/g, "").slice(0, 10) };
       }
 
       const codeLabel = row.code?.toString().trim() || "-";
@@ -261,7 +253,6 @@ export class MasterSubjectImportService {
           courseName: course.name,
           ...(academicYear ? { academicYear } : {}),
           ...(regulation ? { regulation } : {}),
-          serialNumber: validData.serialNumber,
           category: validData.category,
           ...(validData.customCategory ? { customCategory: validData.customCategory } : {}),
           name: validData.name,

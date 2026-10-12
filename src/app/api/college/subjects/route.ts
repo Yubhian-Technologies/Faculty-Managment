@@ -147,7 +147,6 @@ export async function POST(request: Request) {
       department?: string;
       academicYear?: string;
       regulation?: string;
-      serialNumber?: number;
       category?: SubjectCategory;
       customCategory?: string;
       lectureHours?: number;
@@ -200,9 +199,6 @@ export async function POST(request: Request) {
         }
       }
 
-      if (body.serialNumber == null || Number.isNaN(Number(body.serialNumber))) {
-        return NextResponse.json({ error: "S.No. is required" }, { status: 400 });
-      }
       if (!body.category || !body.category.trim()) {
         return NextResponse.json({ error: "A valid category is required" }, { status: 400 });
       }
@@ -279,7 +275,6 @@ export async function POST(request: Request) {
         regulation: regulation,
         year: body.year != null ? Number(body.year) : undefined,
         semester: body.semester != null ? Number(body.semester) : undefined,
-        serialNumber: Number(body.serialNumber),
         category,
         ...(customCategory ? { customCategory } : {}),
         name: body.name.trim(),

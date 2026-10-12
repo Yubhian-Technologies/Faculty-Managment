@@ -41,7 +41,6 @@ type EditForm = {
   code: string;
   shortCode: string;
   altShortCode: string;
-  serialNumber: string;
   category: string;
   customCategory: string;
   type: string;
@@ -55,7 +54,7 @@ type EditForm = {
 };
 
 type AddForm = {
-  regulation: string; serialNumber: string; category: string; customCategory: string;
+  regulation: string; category: string; customCategory: string;
   name: string; code: string; shortCode: string; type: string;
   lectureHours: string; tutorialHours: string; practicalHours: string; credits: string;
   excludeFromTeachingLoad: boolean;
@@ -63,7 +62,7 @@ type AddForm = {
   alsoDeptIds: string[];
 };
 const EMPTY_ADD: AddForm = {
-  regulation: "", serialNumber: "", category: "", customCategory: "", name: "", code: "", shortCode: "",
+  regulation: "", category: "", customCategory: "", name: "", code: "", shortCode: "",
   type: "THEORY", lectureHours: "0", tutorialHours: "0", practicalHours: "0", credits: "0",
   excludeFromTeachingLoad: false, alsoDeptIds: [],
 };
@@ -415,7 +414,6 @@ export function SubjectsStep({ initialCatalogId, initialDepartmentId }: Subjects
     const course = courses.find((c) => group?.ids.includes(c.id) && ownerIds.includes(c.departmentId));
     if (!course) { setAddError("No course found for this department."); return; }
     if (!addForm.name.trim() || !addForm.code.trim()) { setAddError("Name and code are required."); return; }
-    if (addForm.serialNumber.trim() === "") { setAddError("S.No. is required."); return; }
     if (!addForm.category) { setAddError("Category is required."); return; }
     if (addForm.category === "OTHER" && !addForm.customCategory.trim()) { setAddError("Enter a name for the custom category."); return; }
     setIsAdding(true);
@@ -426,7 +424,6 @@ export function SubjectsStep({ initialCatalogId, initialDepartmentId }: Subjects
         body: JSON.stringify({
           courseId: course.id,
           regulation: addForm.regulation,
-          serialNumber: Number(addForm.serialNumber),
           category: addForm.category,
           customCategory: addForm.customCategory.trim(),
           name: addForm.name.trim(),
@@ -492,7 +489,6 @@ export function SubjectsStep({ initialCatalogId, initialDepartmentId }: Subjects
       code: a.subjectCode ?? item.master.code ?? "",
       shortCode: a.shortCode ?? item.master.shortCode ?? "",
       altShortCode: a.altShortCode ?? item.master.altShortCode ?? "",
-      serialNumber: a.serialNumber != null ? String(a.serialNumber) : "",
       category: a.category ?? item.master.category ?? "",
       customCategory: a.customCategory ?? "",
       type: a.type ?? "THEORY",
@@ -523,7 +519,6 @@ export function SubjectsStep({ initialCatalogId, initialDepartmentId }: Subjects
         type: editForm.type,
         totalHoursPerSemester: totalSem,
         excludeFromTeachingLoad: editForm.excludeFromTeachingLoad,
-        ...(editForm.serialNumber.trim() !== "" ? { serialNumber: Number(editForm.serialNumber) } : {}),
         ...(editForm.category ? { category: editForm.category, customCategory: editForm.customCategory.trim() } : {}),
       };
       const mres = await fetch(`/api/college/subjects/${encodeURIComponent(editForm.subjectId)}`, {
@@ -550,7 +545,6 @@ export function SubjectsStep({ initialCatalogId, initialDepartmentId }: Subjects
             altShortCode: master.altShortCode,
             type: master.type,
             totalHoursPerSemester: master.totalHoursPerSemester,
-            ...(master.serialNumber != null ? { serialNumber: master.serialNumber } : {}),
             ...(master.category ? { category: master.category, customCategory: master.customCategory || null } : {}),
           },
         }),
@@ -1019,17 +1013,11 @@ export function SubjectsStep({ initialCatalogId, initialDepartmentId }: Subjects
                 Adds the subject to <strong>{departments.find((d) => d.id === activeDeptId)?.name}</strong>
                 {subDeptId ? " (sub-department)" : ""}, Year {yearValue}, Sem {semesterLabel(plan, Number(semesterValue))}.
               </p>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Regulation</Label>
-                  <select className={SELECT_CLASS} value={addForm.regulation} onChange={(e) => setAddForm({ ...addForm, regulation: e.target.value })}>
-                    {(regulations[courseKey] ?? []).map((r) => <option key={r} value={r}>{r}</option>)}
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>S.No.</Label>
-                  <Input type="number" min={0} value={addForm.serialNumber} onChange={(e) => setAddForm({ ...addForm, serialNumber: e.target.value })} />
-                </div>
+              <div className="space-y-1.5">
+                <Label>Regulation</Label>
+                <select className={SELECT_CLASS} value={addForm.regulation} onChange={(e) => setAddForm({ ...addForm, regulation: e.target.value })}>
+                  {(regulations[courseKey] ?? []).map((r) => <option key={r} value={r}>{r}</option>)}
+                </select>
               </div>
               <div className="space-y-1.5">
                 <Label>Subject Name</Label>
@@ -1118,7 +1106,7 @@ export function SubjectsStep({ initialCatalogId, initialDepartmentId }: Subjects
           {editForm && (
             <div className="grid gap-3">
               <p className="text-xs text-muted-foreground rounded-md border bg-muted/40 p-2">
-                Name, code, short code, S.No, category, type and total hours change this subject in <strong>every</strong> department.
+                Name, code, short code, category, type and total hours change this subject in <strong>every</strong> department.
                 Lecture / tutorial / practical hours and credits apply to <strong>this department</strong> only.
               </p>
               <div className="space-y-1.5">
@@ -1141,10 +1129,6 @@ export function SubjectsStep({ initialCatalogId, initialDepartmentId }: Subjects
                     placeholder="Asked when placing in the timetable"
                     onChange={(e) => setEditForm({ ...editForm, altShortCode: e.target.value })}
                   />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>S.No.</Label>
-                  <Input type="number" min={0} value={editForm.serialNumber} onChange={(e) => setEditForm({ ...editForm, serialNumber: e.target.value })} />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Type</Label>
