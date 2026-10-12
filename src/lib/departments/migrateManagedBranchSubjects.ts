@@ -216,13 +216,17 @@ async function run(
 
   // Collision check: a section already filed under the branch with the same
   // name+year is never merged or overwritten - skip it and report instead.
-  const branchSectionsSnap = candidateSections.length > 0
-    ? await collegeRef.collection("sections").where("department", "==", branchName).get()
-    : null;
-  const branchSectionKeys = new Set((branchSectionsSnap?.docs ?? []).map((d) => {
+  // Always fetched (not just when there are candidates) - Step B below also
+  // needs the branch's current section names, to catch a student whose own
+  // section is ALREADY filed under the branch for any reason (a prior
+  // partial run, or any other means) even when this invocation renames
+  // nothing new itself.
+  const branchSectionsSnap = await collegeRef.collection("sections").where("department", "==", branchName).get();
+  const branchSectionKeys = new Set(branchSectionsSnap.docs.map((d) => {
     const s = d.data() as Section;
     return `${s.name}|${s.year}`;
   }));
+  const branchSectionNames = new Set(branchSectionsSnap.docs.map((d) => (d.data() as Section).name));
   const sectionsToRename = candidateSections.filter((s) => !branchSectionKeys.has(`${s.name}|${s.year}`));
   const skippedSections: SkippedSectionDetail[] = candidateSections
     .filter((s) => branchSectionKeys.has(`${s.name}|${s.year}`))
@@ -273,10 +277,14 @@ async function run(
   const studentsToMove = studentsSnap.docs.filter((d) => {
     const s = d.data() as { section?: string; year?: number };
     if (yearsSet != null && s.year != null && !yearsSet.has(s.year)) return false;
-    // Only students whose own section was actually renamed above - a student
-    // in a section that collided (skipped) is left exactly as is, rather
-    // than moved to a department its own section doc doesn't yet match.
-    return !!s.section && renamedSectionNames.has(s.section);
+    // A student moves when their own section was either renamed above in
+    // THIS run, or already sits directly under the branch for any other
+    // reason (a prior partial run, a manual fix, any other means) - matched
+    // by branchSectionNames, queried fresh at the top of this function, so
+    // it reflects the branch's current state regardless of how it got there.
+    // A student in a section that collided (skipped) is left exactly as is,
+    // rather than moved to a department its own section doc doesn't match.
+    return !!s.section && (renamedSectionNames.has(s.section) || branchSectionNames.has(s.section));
   });
 
   // Per-section breakdown for the review UI - which section, how many of
