@@ -84,11 +84,17 @@ describe("form and read-only view", () => {
     expect(view.indexOf("Title of the Ph.D Thesis")).toBeLessThan(view.indexOf("Place"));
   });
 
-  it("is NOT offered for UG, PG or Postdoctoral entries", () => {
-    for (const level of ["UG", "PG", "POST_DOCTORAL"] as const) {
+  it("is NOT offered for UG or PG entries; Postdoctoral has it under its own label (Title of the Postdoc Thesis)", () => {
+    for (const level of ["UG", "PG"] as const) {
       expect(html(createElement(DegreeFields, { label: "x", level, value: phdDegree, onChange: noop }))).not.toContain("Title of the Ph.D Thesis");
       expect(html(createElement(DegreeView, { label: "x", level, degree: phdDegree }))).not.toContain(THESIS);
     }
+    const postForm = html(createElement(DegreeFields, { label: "x", level: "POST_DOCTORAL", value: phdDegree, onChange: noop }));
+    expect(postForm).toContain("Title of the Postdoc Thesis");
+    expect(postForm).not.toContain("Title of the Ph.D Thesis");
+    const postView = html(createElement(DegreeView, { label: "x", level: "POST_DOCTORAL", degree: phdDegree }));
+    expect(postView).toContain("Title of the Postdoc Thesis");
+    expect(postView).toContain(THESIS);
   });
 
   it("an older Ph.D. record (no title) shows an empty input in the form and no row in the view", () => {
@@ -133,7 +139,7 @@ describe("faculty full export (CSV)", () => {
   it("an OLD record without a title exports it blank with every other value still in its own slot", () => {
     const old = { phdDetails: { ...phd, thesisTitle: undefined } };
     exportFacultyCsv([faculty(old)], {}, ["phdDetailsGroup"]);
-    expect(cellOf("Ph.D. Details")).toContain("Title of the Ph.D Thesis:  | Place: Chennai | Hall Ticket Number:");
+    expect(cellOf("Ph.D. Details")).toContain("Title of the Ph.D Thesis:  | Place: Chennai | Percentage / CGPA:  | Hall Ticket Number:");
   });
 });
 
