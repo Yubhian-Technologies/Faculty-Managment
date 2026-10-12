@@ -119,7 +119,7 @@ function CurriculumPageInner() {
       {step === "structure" && <CourseStructureStep picker={picker} />}
       {step === "subjects" && (
         picker.isLoaded
-          ? <SubjectsStep initialCatalogId={picker.selectedCatalogId} initialDepartmentId={picker.selectedDepartmentId} />
+          ? <SubjectsStep initialCatalogId={picker.selectedCatalogId} initialDepartmentId={picker.selectedDepartmentId} initialRegulation={picker.selectedRegulation} />
           : <p className="text-sm text-muted-foreground">Click Load above first - pick the Department on this tab.</p>
       )}
     </div>

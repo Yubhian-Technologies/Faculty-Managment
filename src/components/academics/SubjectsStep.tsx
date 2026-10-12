@@ -19,6 +19,7 @@ import { courseYearNumbers, semesterLabel } from "@/lib/college/courseYears";
 import { useCourseSemesterPlan } from "@/hooks/useCourseSemesterPlan";
 import { managedCoreCandidates } from "@/lib/departments/departmentTree";
 import { CurriculumOverviewCard } from "@/components/academics/CurriculumOverviewCard";
+import { SubjectsMasterTable } from "@/components/academics/SubjectsMasterTable";
 import type { CourseStructureScopeSummary } from "@/lib/subjects/services/CourseStructureImportService";
 
 // Curriculum > Subjects step. View and manage subjects assigned to
@@ -74,9 +75,13 @@ interface SubjectsStepProps {
    *  for catalog-backed courses, so it seeds straight in. */
   initialCatalogId?: string;
   initialDepartmentId?: string;
+  /** The shared scope bar's selected regulation - this step no longer asks
+   *  for Course/Regulation itself (see its own filter row below), only
+   *  Department/Year/Semester, which the scope bar doesn't model. */
+  initialRegulation?: string;
 }
 
-export function SubjectsStep({ initialCatalogId, initialDepartmentId }: SubjectsStepProps) {
+export function SubjectsStep({ initialCatalogId, initialDepartmentId, initialRegulation }: SubjectsStepProps) {
   const [courses, setCourses] = useState<CourseOption[]>([]);
   const [departments, setDepartments] = useState<DepartmentOption[]>([]);
   const [courseKey, setCourseKey] = useState("");
@@ -105,6 +110,11 @@ export function SubjectsStep({ initialCatalogId, initialDepartmentId }: Subjects
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [hasLoaded, setHasLoaded] = useState(false);
+  // Browse every subject already imported for this Course + Regulation
+  // (the master pool, same table Structure shows) instead of narrowing to
+  // one department's exact year + semester - Department/Year/Semester are
+  // skipped entirely when this is on.
+  const [showAllInRegulation, setShowAllInRegulation] = useState(false);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -165,14 +175,12 @@ export function SubjectsStep({ initialCatalogId, initialDepartmentId }: Subjects
       .catch(() => { /* regulation list just stays empty */ });
   }, []);
 
-  // Defaults to the course's first regulation whenever the course changes or
-  // its regulation list arrives - cleared for a course with none, never left
-  // pointing at a regulation that belonged to a previously-selected course.
+  // Follows the shared scope bar above - this step no longer picks its own
+  // Regulation (see openAdd/the Add dialog for the one legitimate exception:
+  // adding a subject under a different regulation than the one being browsed).
   useEffect(() => {
-    const opts = regulations[courseKey] ?? [];
-    setRegulation((prev) => (opts.includes(prev) ? prev : opts[0] ?? ""));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [courseKey, regulations]);
+    if (initialRegulation) setRegulation(initialRegulation);
+  }, [initialRegulation]);
 
   const courseGroups = useMemo(() => {
     const groups = new Map<string, { key: string; name: string; ids: string[] }>();
@@ -301,8 +309,18 @@ export function SubjectsStep({ initialCatalogId, initialDepartmentId }: Subjects
   }
 
   function handleLoad() {
+    if (showAllInRegulation) { setHasLoaded(true); return; }
     void fetchAssignments(courseKey, deptId, subDeptId, yearValue, semesterValue);
   }
+
+  // Master subjects are shared/deduped across every department's own Course
+  // doc for the same catalog entry (see CourseStructureImportService's own
+  // doc-comment), so any one of them names the same pool - no department
+  // needs picking just to browse it.
+  const groupCourse = useMemo(
+    () => courses.find((c) => courseIdsOfGroup.has(c.id)) ?? null,
+    [courses, courseIdsOfGroup]
+  );
 
   // Curriculum overview: this department's whole structure for this course,
   // every year and semester, regardless of regulation - reuses Course
@@ -712,64 +730,70 @@ export function SubjectsStep({ initialCatalogId, initialDepartmentId }: Subjects
         </Button>
       </div>
 
-      {/* Filters */}
+      {/* Filters - Course and Regulation come from the shared scope bar
+          above (picker.selectedCatalogId/selectedRegulation, seeded as
+          initialCatalogId/initialRegulation) and aren't repeated here;
+          Department/Year/Semester are this step's own, finer scope. */}
       <Card>
-        <CardContent className={`grid gap-3 pt-6 ${subDepartments.length > 0 ? "sm:grid-cols-7" : "sm:grid-cols-6"}`}>
-          <div className="space-y-1.5">
-            <Label htmlFor="course">Course</Label>
-            <select id="course" className={SELECT_CLASS} value={courseKey} onChange={(e) => setCourseKey(e.target.value)}>
-              <option value="">Select course</option>
-              {courseGroups.map((g) => <option key={g.key} value={g.key}>{g.name}</option>)}
-            </select>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="regulation">Regulation</Label>
-            <select id="regulation" className={SELECT_CLASS} value={regulation} onChange={(e) => setRegulation(e.target.value)} disabled={!courseKey}>
-              <option value="">{(regulations[courseKey] ?? []).length === 0 ? "No regulations configured" : "Select regulation"}</option>
-              {(regulations[courseKey] ?? []).map((r) => <option key={r} value={r}>{r}</option>)}
-            </select>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="dept">Department</Label>
-            <select id="dept" className={SELECT_CLASS} value={deptId} onChange={(e) => { setDeptId(e.target.value); setSubDeptId(""); }}>
-              <option value="">Select department</option>
-              {topDepartments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
-          </div>
-          {subDepartments.length > 0 && (
-            <div className="space-y-1.5">
-              <Label htmlFor="subdept">Sub-department</Label>
-              <select id="subdept" className={SELECT_CLASS} value={subDeptId} onChange={(e) => setSubDeptId(e.target.value)}>
-                <option value="">Department itself</option>
-                {subDepartments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
-            </div>
-          )}
-          <div className="space-y-1.5">
-            <Label htmlFor="yr">Year</Label>
-            <select id="yr" className={SELECT_CLASS} value={yearValue} onChange={(e) => setYear(e.target.value)}>
-              <option value="">Select year</option>
-              {yearOptions.map((y) => <option key={y} value={String(y)}>Year {y}</option>)}
-            </select>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="sem">Semester</Label>
-            <select id="sem" className={SELECT_CLASS} value={semesterValue} onChange={(e) => setSemester(e.target.value)}>
-              <option value="">Select semester</option>
-              {/* The label is the course's own year-semester position - "1-1",
-                  "1-2", "1-3" where a year has three - and nothing else. */}
-              {semesterOptions.map((s) => <option key={s} value={String(s)}>{semesterLabel(plan, s)}</option>)}
-            </select>
-            {semestersNotConfigured && (
-              <p className="text-xs text-muted-foreground">
-                No semesters set for this year — ask the Office to add them under Semester Timings.
-              </p>
+        <CardContent className="space-y-3 pt-6">
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox
+              checked={showAllInRegulation}
+              onCheckedChange={(v) => setShowAllInRegulation(v === true)}
+            />
+            Browse every subject in this regulation instead (skip Department/Year/Semester)
+          </label>
+          <div className={`grid gap-3 ${showAllInRegulation ? "sm:grid-cols-1" : subDepartments.length > 0 ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}>
+            {!showAllInRegulation && (
+              <>
+                <div className="space-y-1.5">
+                  <Label htmlFor="dept">Department</Label>
+                  <select id="dept" className={SELECT_CLASS} value={deptId} onChange={(e) => { setDeptId(e.target.value); setSubDeptId(""); }}>
+                    <option value="">Select department</option>
+                    {topDepartments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  </select>
+                </div>
+                {subDepartments.length > 0 && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="subdept">Sub-department</Label>
+                    <select id="subdept" className={SELECT_CLASS} value={subDeptId} onChange={(e) => setSubDeptId(e.target.value)}>
+                      <option value="">Department itself</option>
+                      {subDepartments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    </select>
+                  </div>
+                )}
+                <div className="space-y-1.5">
+                  <Label htmlFor="yr">Year</Label>
+                  <select id="yr" className={SELECT_CLASS} value={yearValue} onChange={(e) => setYear(e.target.value)}>
+                    <option value="">Select year</option>
+                    {yearOptions.map((y) => <option key={y} value={String(y)}>Year {y}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="sem">Semester</Label>
+                  <select id="sem" className={SELECT_CLASS} value={semesterValue} onChange={(e) => setSemester(e.target.value)}>
+                    <option value="">Select semester</option>
+                    {/* The label is the course's own year-semester position - "1-1",
+                        "1-2", "1-3" where a year has three - and nothing else. */}
+                    {semesterOptions.map((s) => <option key={s} value={String(s)}>{semesterLabel(plan, s)}</option>)}
+                  </select>
+                  {semestersNotConfigured && (
+                    <p className="text-xs text-muted-foreground">
+                      No semesters set for this year — ask the Office to add them under Semester Timings.
+                    </p>
+                  )}
+                </div>
+              </>
             )}
-          </div>
-          <div className="flex items-end">
-            <Button onClick={() => void handleLoad()} className="w-full" disabled={!courseKey || !deptId || !yearValue || !semesterValue}>
-              Load
-            </Button>
+            <div className="flex items-end">
+              <Button
+                onClick={() => void handleLoad()}
+                className="w-full"
+                disabled={showAllInRegulation ? !courseKey : (!courseKey || !deptId || !yearValue || !semesterValue)}
+              >
+                Load
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -777,8 +801,14 @@ export function SubjectsStep({ initialCatalogId, initialDepartmentId }: Subjects
       {/* Error display */}
       {loadError && <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">{loadError}</div>}
 
-      {hasLoaded && (
-        <div className="grid gap-4 lg:grid-cols-2">
+      {hasLoaded && showAllInRegulation && (
+        groupCourse
+          ? <SubjectsMasterTable key={`${groupCourse.id}|${regulation}`} courseId={groupCourse.id} courseName={groupCourse.name} regulation={regulation} />
+          : <p className="text-sm text-muted-foreground">No course found for this regulation.</p>
+      )}
+
+      {hasLoaded && !showAllInRegulation && (
+        <div className="grid gap-4 lg:grid-cols-2 items-start">
           {/* Left panel: assign by code - type the subject codes imported
               under this regulation, comma or newline separated. No pool is
               preloaded; only the typed codes are read from Firestore. */}
