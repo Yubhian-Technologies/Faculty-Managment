@@ -673,6 +673,20 @@ const effectiveSemester = semesterOptions.length === 0
     })();
   }, [applied, deptOptions, scope.ownDept]);
 
+  // TEMP DEBUG - the broadly-readable, fully UNSCOPED lookup (bypasses every
+  // HOD-scope check entirely) for the two specific course ids already seen in
+  // the other debug lines, to see their raw departmentId/department directly -
+  // the single most decisive check left, since both scoped queries tried so
+  // far came back empty for CSE's own course.
+  const [debugLookup, setDebugLookup] = useState<{ id: string; name: string; departmentId: string; department: string }[] | null>(null);
+  useEffect(() => {
+    if (!applied) return;
+    fetch("/api/college/courses/lookup")
+      .then((r) => r.json() as Promise<{ courses?: { id: string; name: string; departmentId: string; department: string }[] }>)
+      .then((d) => setDebugLookup(d.courses ?? []))
+      .catch(() => setDebugLookup(null));
+  }, [applied]);
+
   function handleDepartmentChange(v: string) {
     // ALL is a sentinel: Radix Select can't hold "" as an item value.
     setApplied(null);
@@ -1245,6 +1259,8 @@ const effectiveSemester = semesterOptions.length === 0
               DEBUG (courses per department, direct) — {debugCoursesByDept == null ? "loading…" : debugCoursesByDept.map((d) =>
                 `${d.deptName}: ${d.courses.length === 0 ? "(no courses returned)" : d.courses.map((c) => `${c.name} [id=${c.id}, catalogId=${c.catalogId ?? "NONE"}]`).join(", ")}`
               ).join(" || ")}
+              <br />
+              DEBUG (unscoped lookup, all courses) — {debugLookup == null ? "loading…" : debugLookup.length === 0 ? "(empty - lookup returned nothing at all)" : debugLookup.map((c) => `${c.name} [id=${c.id}, departmentId=${c.departmentId}, department="${c.department}"]`).join(" | ")}
             </p>
           )}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-4 sm:max-w-4xl">
