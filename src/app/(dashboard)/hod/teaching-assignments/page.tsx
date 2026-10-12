@@ -1186,6 +1186,15 @@ const effectiveSemester = semesterOptions.length === 0
               </Select>
             </div>
           )}
+          {/* TEMP DEBUG - remove once the "CSE sections never show up here"
+              issue is diagnosed. Shows exactly which course doc(s) this page
+              resolved for the picked programme, so a screenshot answers the
+              question directly instead of more guessing from code alone. */}
+          {courseKey && (
+            <p className="mb-3 rounded-md border border-dashed border-amber-400 bg-amber-50 dark:bg-amber-950/30 p-2 text-xs text-amber-800 dark:text-amber-300">
+              DEBUG — course: {course?.name ?? "none"} · group courseIds ({activeCourseIds.length}): {activeCourseIds.join(", ") || "(none)"} · deptOptions: {deptOptions.map((d) => `${d.name} (${d.id})`).join(", ") || "(none)"}
+            </p>
+          )}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-4 sm:max-w-4xl">
             <div className="space-y-2">
               <Label>Course</Label>
