@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
-// Merged into the Curriculum journey's Regulation Doc step. Kept as a
-// redirect for any bookmarked links.
+// Merged into the Curriculum journey's Structure step, under its Documents
+// switcher. Kept as a redirect for any bookmarked links.
 export default function AcademicsRegulationRedirect() {
-  redirect("/academics/course-structure?step=regulation");
+  redirect("/academics/course-structure?step=structure");
 }

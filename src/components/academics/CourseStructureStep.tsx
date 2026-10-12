@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
@@ -17,11 +16,15 @@ import {
 } from "@/lib/subjects/courseStructureValidation";
 import type { CourseStructureResult, CourseStructureScopeSummary } from "@/lib/subjects/services/CourseStructureImportService";
 import { SUBJECT_CATEGORY_LABELS } from "@/types";
-import { Download, Upload, XCircle, FileSpreadsheet, AlertTriangle, Loader2, Tags } from "lucide-react";
+import { Download, Upload, XCircle, FileSpreadsheet, AlertTriangle, Loader2, Tags, FileText } from "lucide-react";
 import { yearSemesterLabelIn } from "@/lib/academic/format";
 import { MasterSubjectImportDialog } from "@/components/academics/MasterSubjectImportDialog";
 import { CurriculumOverviewCard } from "@/components/academics/CurriculumOverviewCard";
 import { SubjectsMasterTable } from "@/components/academics/SubjectsMasterTable";
+import { SyllabusStep } from "@/components/academics/SyllabusStep";
+import { RegulationDocStep } from "@/components/academics/RegulationDocStep";
+import { CategoriesDialog } from "@/components/academics/CategoriesDialog";
+import { categoryPrefillText } from "@/components/academics/CategoriesManager";
 
 // Curriculum > Structure step. One file = every subject of the shared scope
 // bar's Regulation + Course + Department, created and assigned to that
@@ -104,6 +107,23 @@ export function CourseStructureStep({ picker }: { picker: ReturnType<typeof useR
   const canUpload = !!scope && teachableYears.length > 0;
   const [showMasterImport, setShowMasterImport] = useState(false);
   const [subjectsRefreshKey, setSubjectsRefreshKey] = useState(0);
+
+  // ── Documents: Regulation Document + Syllabus, one switcher ────────────
+  // Regulation Document needs only Regulation + Course (catalog-wide);
+  // Syllabus also needs a Department, which SyllabusStep prompts for itself
+  // when one isn't picked yet. Both read/write through the same shared
+  // scope bar `picker` - no separate scope of their own.
+  const [docView, setDocView] = useState<"regulation" | "syllabus">("regulation");
+
+  // ── Categories: opened inline, never navigates away from this import ────
+  const [showCategories, setShowCategories] = useState(false);
+  const [categoriesPrefill, setCategoriesPrefill] = useState("");
+  const [categoriesKey, setCategoriesKey] = useState(0);
+  function openCategories(prefill = "") {
+    setCategoriesPrefill(prefill);
+    setCategoriesKey((k) => k + 1);
+    setShowCategories(true);
+  }
 
   // ── Upload / validate / commit ─────────────────────────────────────────
   const fileRef = useRef<HTMLInputElement>(null);
@@ -351,10 +371,17 @@ export function CourseStructureStep({ picker }: { picker: ReturnType<typeof useR
         <p className="text-sm text-muted-foreground">
           Import a course&apos;s subjects in bulk, scoped to the Regulation and Course above - assign them to a department&apos;s semesters afterwards on the Subjects tab.
         </p>
-        <Button variant="outline" size="sm" asChild>
-          <Link href="/academics/categories"><Tags className="h-4 w-4 mr-1.5" />Categories</Link>
+        <Button variant="outline" size="sm" onClick={() => openCategories()}>
+          <Tags className="h-4 w-4 mr-1.5" />Categories
         </Button>
       </div>
+      <CategoriesDialog
+        key={categoriesKey}
+        open={showCategories}
+        onOpenChange={setShowCategories}
+        initialText={categoriesPrefill}
+        onChanged={refreshScope}
+      />
 
       {isLoadingScope && (
         <p className="text-sm text-muted-foreground flex items-center gap-1.5"><Loader2 className="h-3.5 w-3.5 animate-spin" />Loading this department&apos;s years and semesters…</p>
@@ -488,10 +515,8 @@ export function CourseStructureStep({ picker }: { picker: ReturnType<typeof useR
                       ))}
                     </ul>
                     <div className="flex flex-wrap gap-2">
-                      <Button size="sm" asChild>
-                        <Link href={`/academics/categories?add=${encodeURIComponent(unknownCategories.map((c) => c.value).join("|"))}`} target="_blank" rel="noopener">
-                          Define these categories
-                        </Link>
+                      <Button size="sm" onClick={() => openCategories(categoryPrefillText(unknownCategories.map((c) => c.value)))}>
+                        Define these categories
                       </Button>
                       <Button size="sm" variant="outline" onClick={refreshScope} disabled={isLoadingScope}>I&apos;ve defined them, check again</Button>
                     </div>
@@ -617,6 +642,50 @@ export function CourseStructureStep({ picker }: { picker: ReturnType<typeof useR
             </Card>
           )}
         </>
+      )}
+
+      {/* Documents: the Regulation Document applies to the whole course +
+          regulation; the Syllabus is specific to this department. Shown
+          once Regulation + Course are loaded - the same condition the
+          Import Subjects card above already uses. */}
+      {picker.isLoaded && picker.selectedCourse && picker.selectedRegulation && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2"><FileText className="h-4 w-4" />Documents</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              The Regulation Document covers {picker.selectedCourse.name} · {regulation} as a whole. The Syllabus is specific to {picker.selectedDepartment?.name ?? "this department"}.
+            </p>
+            <div role="tablist" className="inline-flex gap-1 rounded-lg bg-muted p-1">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={docView === "regulation"}
+                onClick={() => setDocView("regulation")}
+                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  docView === "regulation" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Regulation Document
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={docView === "syllabus"}
+                onClick={() => setDocView("syllabus")}
+                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  docView === "syllabus" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Syllabus
+              </button>
+            </div>
+            <div className="pt-1">
+              {docView === "regulation" ? <RegulationDocStep picker={picker} /> : <SyllabusStep picker={picker} />}
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );

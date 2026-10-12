@@ -10,8 +10,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useRegulationCourseDepartmentPicker } from "@/lib/subjects/hooks/useRegulationCourseDepartmentPicker";
 import { CourseStructureStep } from "@/components/academics/CourseStructureStep";
 import { SubjectsStep } from "@/components/academics/SubjectsStep";
-import { SyllabusStep } from "@/components/academics/SyllabusStep";
-import { RegulationDocStep } from "@/components/academics/RegulationDocStep";
 import { AlertTriangle } from "lucide-react";
 
 // Curriculum: one scope (Regulation -> Course -> Department), picked once in
@@ -19,12 +17,13 @@ import { AlertTriangle } from "lucide-react";
 // (Regulation, Course Structure, Subjects, Syllabus) each asking for it from
 // scratch. The URL/route stays /academics/course-structure because
 // principal/departments/[id]/page.tsx deep-links here with
-// ?catalogId=&departmentId=&regulation=.
+// ?catalogId=&departmentId=&regulation=. Syllabus and Regulation Doc are no
+// longer their own steps - they're a Documents switcher inside Structure
+// (CourseStructureStep.tsx), since each was a single upload card on its own
+// page with nothing else on it.
 const STEPS = [
   { key: "structure", label: "Structure" },
   { key: "subjects", label: "Subjects" },
-  { key: "syllabus", label: "Syllabus" },
-  { key: "regulation", label: "Regulation Doc" },
 ] as const;
 type StepKey = (typeof STEPS)[number]["key"];
 
@@ -123,8 +122,6 @@ function CurriculumPageInner() {
           ? <SubjectsStep initialCatalogId={picker.selectedCatalogId} initialDepartmentId={picker.selectedDepartmentId} />
           : <p className="text-sm text-muted-foreground">Click Load above first - pick the Department on this tab.</p>
       )}
-      {step === "syllabus" && <SyllabusStep picker={picker} />}
-      {step === "regulation" && <RegulationDocStep picker={picker} />}
     </div>
   );
 }

@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,6 +9,8 @@ import { toast } from "@/hooks/useToast";
 import { parseCSV, parseExcelFile, readFileAsText, matchHeaders, getUnmatchedHeaders } from "@/lib/utils/csv";
 import { MASTER_IMPORT_COLUMNS, MASTER_IMPORT_HINTS } from "@/lib/subjects/masterImportColumns";
 import type { SubjectRowInput } from "@/lib/subjects/validation/SubjectValidator";
+import { CategoriesDialog } from "@/components/academics/CategoriesDialog";
+import { categoryPrefillText } from "@/components/academics/CategoriesManager";
 
 interface RowFailure { row: number; code: string; error: string; kind?: "unknown-category"; value?: string; suggestion?: string }
 interface ImportResult {
@@ -49,6 +50,16 @@ export function MasterSubjectImportDialog({ open, onOpenChange, courseId, course
   const [isImporting, setIsImporting] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [showProblemsOnly, setShowProblemsOnly] = useState(false);
+
+  // ── Categories: opened inline, never navigates away from this dialog ────
+  const [showCategories, setShowCategories] = useState(false);
+  const [categoriesPrefill, setCategoriesPrefill] = useState("");
+  const [categoriesKey, setCategoriesKey] = useState(0);
+  function openCategories(prefill = "") {
+    setCategoriesPrefill(prefill);
+    setCategoriesKey((k) => k + 1);
+    setShowCategories(true);
+  }
   const validateRequestRef = useRef(0);
 
   function reset() {
@@ -254,10 +265,8 @@ export function MasterSubjectImportDialog({ open, onOpenChange, courseId, course
                   ))}
                 </ul>
                 <div className="flex flex-wrap gap-2">
-                  <Button size="sm" asChild>
-                    <Link href={`/academics/categories?add=${encodeURIComponent(unknownCategories.map((c) => c.value).join("|"))}`} target="_blank" rel="noopener">
-                      Add these categories
-                    </Link>
+                  <Button size="sm" onClick={() => openCategories(categoryPrefillText(unknownCategories.map((c) => c.value)))}>
+                    Add these categories
                   </Button>
                   <Button size="sm" variant="outline" onClick={refreshValidate} disabled={isValidating}>I&apos;ve added them, check again</Button>
                 </div>
@@ -347,6 +356,13 @@ export function MasterSubjectImportDialog({ open, onOpenChange, courseId, course
           <Button variant="outline" onClick={() => { onOpenChange(false); reset(); }}>{result ? "Done" : "Cancel"}</Button>
         </div>
       </CardContent>
+      <CategoriesDialog
+        key={categoriesKey}
+        open={showCategories}
+        onOpenChange={setShowCategories}
+        initialText={categoriesPrefill}
+        onChanged={refreshValidate}
+      />
     </Card>
   );
 }
