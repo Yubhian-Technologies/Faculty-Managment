@@ -175,8 +175,13 @@ function MigrationReviewPage({ subDepartment, branchIds, allBranches, onBack, on
   const allSkipped = Object.values(preview ?? {}).filter((p): p is { ok: true } & MigrationCounts => p.ok).flatMap((p) => p.skippedSections);
   const totalStudents = allSections.reduce((n, s) => n + s.studentCount, 0);
   const totalSubjects = Object.values(preview ?? {}).filter((p): p is { ok: true } & MigrationCounts => p.ok).reduce((n, p) => n + p.subjectAssignmentsMoved, 0);
+  const totalSubjectsDeduped = Object.values(preview ?? {}).filter((p): p is { ok: true } & MigrationCounts => p.ok).reduce((n, p) => n + p.subjectAssignmentsDeduped, 0);
   const hasAnyError = preview ? Object.values(preview).some((p) => !p.ok) : false;
-  const nothingToMove = !isLoading && allSections.length === 0;
+  // Zero sections doesn't mean zero work - sections can already sit directly
+  // under the core departments (nothing to rename) while their subject
+  // assignments still need moving over. Only disable once every category is
+  // actually empty.
+  const nothingToMove = !isLoading && allSections.length === 0 && totalSubjects === 0 && totalSubjectsDeduped === 0;
 
   return (
     <div className="space-y-6">
