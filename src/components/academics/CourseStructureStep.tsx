@@ -19,6 +19,7 @@ import type { CourseStructureResult, CourseStructureScopeSummary } from "@/lib/s
 import { SUBJECT_CATEGORY_LABELS } from "@/types";
 import { Download, Upload, XCircle, FileSpreadsheet, AlertTriangle, Loader2, Tags } from "lucide-react";
 import { yearSemesterLabelIn, semesterInYearLabel } from "@/lib/academic/format";
+import { MasterSubjectImportDialog } from "@/components/academics/MasterSubjectImportDialog";
 
 // Curriculum > Structure step. One file = every subject of the shared scope
 // bar's Regulation + Course + Department, created and assigned to that
@@ -36,6 +37,13 @@ type ParsedRow = Record<string, string>;
 type Uploaded = { fileName: string; inputs: CourseStructureRowInput[] };
 
 const PREVIEW_LIMIT = 100;
+// The old bundled "create subjects AND auto-assign to one department's
+// semesters in one file" flow, superseded by Import Subjects above (plain
+// regulation+course import) - kept, disabled, rather than deleted, so its
+// dry-run/verification logic is still here if a bundled import is wanted
+// again. A module-level const (not an inline literal) so TS's narrowing of
+// `uploaded`/`result`/`serverCheck` inside the JSX below is unaffected.
+const SHOW_BUNDLED_IMPORT = false;
 
 function issueText(i: CourseStructureIssue) {
   return i.row > 0 ? `Row ${i.row}: ${i.message}` : i.message;
@@ -87,6 +95,7 @@ export function CourseStructureStep({ picker }: { picker: ReturnType<typeof useR
 
   const teachableYears = scope?.scope.teachableYears ?? [];
   const canUpload = !!scope && teachableYears.length > 0;
+  const [showMasterImport, setShowMasterImport] = useState(false);
 
   // ── Upload / validate / commit ─────────────────────────────────────────
   const fileRef = useRef<HTMLInputElement>(null);
@@ -428,7 +437,39 @@ export function CourseStructureStep({ picker }: { picker: ReturnType<typeof useR
         </Card>
       )}
 
-      {canUpload && (
+      {/* Import Subjects - regulation + course only, no department/year/
+          semester. Needs just a loaded Course, not the full department scope
+          canUpload below requires. */}
+      {picker.isLoaded && picker.selectedCourse && (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Import Subjects</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Bulk-create subjects into the master collection for {picker.selectedCourse.name}
+              {regulation ? ` · ${regulation}` : ""} - no department, year or semester here.
+              Assign them to a department&apos;s semester afterwards on the Subjects tab.
+            </p>
+            <Button onClick={() => setShowMasterImport(true)}>Import Subjects</Button>
+          </CardContent>
+        </Card>
+      )}
+      <MasterSubjectImportDialog
+        open={showMasterImport}
+        onOpenChange={setShowMasterImport}
+        courseId={picker.selectedCourse?.id ?? ""}
+        courseName={picker.selectedCourse?.name ?? ""}
+        regulation={regulation}
+        onImported={() => void fetchScope(picker.selectedCourse!.id, picker.selectedDepartmentId, picker.selectedRegulation, ++scopeRequestRef.current)}
+      />
+
+      {/* Bulk subject creation used to also live here - regulation + course
+          only now, no department/year/semester entanglement. This old
+          flow (creates subjects AND auto-assigns them to one department's
+          semesters in the same step) is kept, disabled, rather than deleted -
+          its dry-run/verification logic stays available to restore if a
+          bundled "whole curriculum table in one file" import is wanted again
+          later. */}
+      {SHOW_BUNDLED_IMPORT && canUpload && (
         <>
           <Card>
             <CardHeader><CardTitle className="text-base">1. Download the template</CardTitle></CardHeader>
