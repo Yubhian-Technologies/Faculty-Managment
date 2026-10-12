@@ -207,7 +207,17 @@ export default function TeachingAssignmentsPage() {
   const activeCourseIds = useMemo(() => course?.courseIds ?? [], [course]);
 
   // The HOD's own department plus its ACTUAL sub-departments (Department
-  // .parentDepartmentId children - BS-CHEMISTRY, BS-MATHS, …).
+  // .parentDepartmentId children - BS-CHEMISTRY, BS-MATHS, …) AND whatever
+  // core/managed branches it manages (e.g. CSE under a shared-first-year
+  // department with no real children of its own at all) - everything
+  // `deptOptions` (scope.deptOptions, from deriveHodScope) already resolves,
+  // not just the real-children subset this used to be limited to. A
+  // grouping-container department that manages branches but has no
+  // parentDepartmentId children of its own used to compute an EMPTY list
+  // here (children.length === 0), hiding this filter entirely and silently
+  // narrowing `yearOptions` below to only its own flat years - a managed
+  // branch's own course/year, even though reachable and loadable, had no way
+  // to be explicitly selected.
   //
   // Deliberately not derived from the loaded sections' own `department`, which
   // is what this used to do: a shared first-year section belongs to the real
@@ -215,17 +225,15 @@ export default function TeachingAssignmentsPage() {
   // "secondary departments" - where sub-departments belong. Those branches are
   // reachable through whichever sub-department manages them, below.
   //
-  // Empty for a sub-HOD: a sub-department has no children of its own, so the
-  // filter doesn't render for them at all - they only ever work within their
-  // own sub-department, and a one-option dropdown is just noise.
+  // Empty for a sub-HOD with nothing beyond their own department: a plain
+  // sub-department with no children and no managed branches, where a
+  // one-option dropdown would just be noise.
   const subDepartmentOptions = useMemo(() => {
     const own = scope.ownDept;
     if (!own) return [];
-    const children = departments
-      .filter((d) => d.parentDepartmentId === own.id)
-      .sort((a, b) => a.name.localeCompare(b.name));
-    return children.length > 0 ? [own, ...children] : [];
-  }, [departments, scope.ownDept]);
+    const rest = deptOptions.filter((d) => d.id !== own.id);
+    return rest.length > 0 ? [own, ...rest] : [];
+  }, [deptOptions, scope.ownDept]);
 
   // The Principal's "Years Taught", not the raw course span - offering 1..4 for
   // a department that teaches only the first year is what let this page ask for

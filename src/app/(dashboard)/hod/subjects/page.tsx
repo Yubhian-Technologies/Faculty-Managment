@@ -203,7 +203,19 @@ export default function HODSubjectsPage() {
     [catalogItems, selectedCourse]
   );
 
-  const timingsReady = timingsFor === `${selectedCourseId}|${selectedYear}`;
+  // Every course-doc id for this programme (siblings), not just the selected
+  // department's own - Course-Year Timings for a shared first year are
+  // commonly configured under the MANAGING department's own doc (e.g. Basic
+  // Science), not each branch's own (e.g. CSE), same reason loadAssignments
+  // below already unions its own siblings list for subject-semester
+  // assignments. Selecting CSE used to query only CSE's own doc, which may
+  // have no Course-Year Timings of its own at all, reading as "not
+  // configured for this year" even when the shared year genuinely is.
+  const selectedGroupCourseIds = useMemo(
+    () => (selectedGroup ? Array.from(new Set(selectedGroup.rows.map((c) => c.id))) : selectedCourseId ? [selectedCourseId] : []),
+    [selectedGroup, selectedCourseId]
+  );
+  const timingsReady = timingsFor === `${selectedGroupCourseIds.join("|")}|${selectedYear}`;
   const semesterOptions = useMemo(() => {
     const nums = new Set<number>();
     for (const t of timings) for (const s of t.semesters ?? []) nums.add(s.semester);
@@ -300,22 +312,29 @@ export default function HODSubjectsPage() {
   // Runs on selection (it only fills a dropdown); the subject list itself waits
   // for Load.
   useEffect(() => {
-    if (!selectedCourseId || !selectedYear) return;
+    if (selectedGroupCourseIds.length === 0 || !selectedYear) return;
     let cancelled = false;
+    const ids = selectedGroupCourseIds;
+    const y = selectedYear;
     void (async () => {
       try {
-        const res = await fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(selectedCourseId)}`);
-        const json = (await res.json()) as { timings?: CourseYearTiming[] };
+        const lists = await Promise.all(
+          ids.map((cId) =>
+            fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(cId)}`)
+              .then((r) => r.json() as Promise<{ timings?: CourseYearTiming[] }>)
+              .then((d) => (d.timings ?? []).filter((t) => t.year === Number(y)))
+          )
+        );
         if (!cancelled) {
-          setTimings((json.timings ?? []).filter((t) => t.year === Number(selectedYear)));
-          setTimingsFor(`${selectedCourseId}|${selectedYear}`);
+          setTimings(lists.flat());
+          setTimingsFor(`${ids.join("|")}|${y}`);
         }
       } catch {
         if (!cancelled) toast({ variant: "destructive", title: "Failed to load semesters" });
       }
     })();
     return () => { cancelled = true; };
-  }, [selectedCourseId, selectedYear]);
+  }, [selectedGroupCourseIds, selectedYear]);
 
   useEffect(() => {
     if (!applied) return;
