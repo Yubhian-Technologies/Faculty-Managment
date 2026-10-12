@@ -631,6 +631,20 @@ const effectiveSemester = semesterOptions.length === 0
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [applied, key, year, effectiveSemester, activeCourseIds, course]);
 
+  // TEMP DEBUG - unfiltered sections (no courseId narrowing at all), to check
+  // whether a managed branch's (CSE) sections actually carry the SAME
+  // courseId the filtered fetch above is querying by, or a different/stale
+  // one invisible to any courseId-scoped query. Remove alongside the debug
+  // line below once diagnosed.
+  const [debugAllSections, setDebugAllSections] = useState<{ department?: string; courseId?: string; year?: number; name?: string }[] | null>(null);
+  useEffect(() => {
+    if (!applied) return;
+    fetch("/api/college/sections")
+      .then((r) => r.json() as Promise<{ sections?: { department?: string; courseId?: string; year?: number; name?: string }[] }>)
+      .then((d) => setDebugAllSections(d.sections ?? []))
+      .catch(() => setDebugAllSections(null));
+  }, [applied]);
+
   function handleDepartmentChange(v: string) {
     // ALL is a sentinel: Radix Select can't hold "" as an item value.
     setApplied(null);
@@ -1193,6 +1207,12 @@ const effectiveSemester = semesterOptions.length === 0
           {courseKey && (
             <p className="mb-3 rounded-md border border-dashed border-amber-400 bg-amber-50 dark:bg-amber-950/30 p-2 text-xs text-amber-800 dark:text-amber-300">
               DEBUG — course: {course?.name ?? "none"} · group courseIds ({activeCourseIds.length}): {activeCourseIds.join(", ") || "(none)"} · deptOptions: {deptOptions.map((d) => `${d.name} (${d.id})`).join(", ") || "(none)"}
+              <br />
+              DEBUG (unfiltered sections) — {debugAllSections == null ? "loading…" : (() => {
+                const matches = debugAllSections.filter((s) => deptOptions.some((d) => d.name === s.department) || s.department === scope.ownDept?.name);
+                if (matches.length === 0) return "no sections at all for these department names, in the whole college-wide unfiltered fetch";
+                return matches.map((s) => `${s.name ?? "?"} (dept: ${s.department}, year: ${s.year}, courseId: ${s.courseId ?? "MISSING"})`).join(" | ");
+              })()}
             </p>
           )}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-4 sm:max-w-4xl">
