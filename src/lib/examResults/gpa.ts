@@ -104,10 +104,18 @@ export function computeCgpa(semesters: GpaSubject[][], showRule: GpaShowRule, de
   };
 }
 
-/** One sitting of one semester for a student (a Regular sheet or a Supplementary one). */
+/** One sitting of one semester for a student (a Regular, Supplementary or Revaluation sheet). */
 export interface StudentSitting {
   semester: number;
-  examType: "REGULAR" | "SUPPLEMENTARY";
+  /** "2026-27" - orders attempts that carry no exam date. */
+  academicYear?: string;
+  /** "2026-11" - the month the exam was held; attempts are ordered by it first. */
+  examHeld?: string;
+  examType: "REGULAR" | "SUPPLEMENTARY" | "REVALUATION";
+  /** The sheet the sitting came from - what a revaluation points at. */
+  batchId?: string;
+  /** REVALUATION only: the batch of the sitting it re-grades. */
+  revaluesBatchId?: string;
   /** When the sitting was imported (ms) - orders supplementaries after the regular and each other. */
   at: number;
   subjects: GpaSubject[];
@@ -134,15 +142,14 @@ export function studentStanding(
   semester: number,
   rules: { showSgpa: GpaShowRule; showCgpa: GpaShowRule; decimals: number }
 ): StudentStanding {
-  const order = (s: StudentSitting) => (s.examType === "REGULAR" ? 0 : 1);
   const bySemester = new Map<number, StudentSitting[]>();
-  for (const s of sittings) {
+  for (const s of applyRevaluations(sittings)) {
     if (s.semester > semester) continue;
     bySemester.set(s.semester, [...(bySemester.get(s.semester) ?? []), s]);
   }
   const semesters = [...bySemester.entries()]
     .sort((a, b) => a[0] - b[0])
-    .map(([n, list]) => ({ n, subjects: latestPerSubject([...list].sort((a, b) => order(a) - order(b) || a.at - b.at).map((s) => s.subjects)) }));
+    .map(([n, list]) => ({ n, subjects: finalPerSubject(orderSittings(list).map((s) => s.subjects)) }));
   const own = semesters.find((s) => s.n === semester)?.subjects ?? [];
   const sgpa = computeSgpa(own, rules.showSgpa, rules.decimals);
   const cgpa = computeCgpa(semesters.map((s) => s.subjects), rules.showCgpa, rules.decimals);
@@ -151,4 +158,67 @@ export function studentStanding(
     cgpa: cgpa.cgpa, cgpaWithheld: cgpa.withheld,
     semesterBacklogs: sgpa.backlogs, backlogs: cgpa.backlogs,
   };
+}
+
+/**
+ * Sittings oldest first: by the month the exam was held (else the start of its
+ * academic year), then Regular, Supplementary, Revaluation, then import time.
+ */
+export function orderSittings<T extends Pick<StudentSitting, "academicYear" | "examHeld" | "examType" | "at">>(list: T[]): T[] {
+  const when = (s: T) => {
+    const m = /^(\d{4})-(\d{2})$/.exec(String(s.examHeld ?? ""));
+    if (m) return Number(m[1]) * 12 + Number(m[2]);
+    const ay = Number(String(s.academicYear ?? "").slice(0, 4));
+    return ay ? ay * 12 : 0;
+  };
+  const order = (s: T) => (s.examType === "REGULAR" ? 0 : s.examType === "SUPPLEMENTARY" ? 1 : 2);
+  return [...list].sort((a, b) => when(a) - when(b) || order(a) - order(b) || a.at - b.at);
+}
+
+/** The better of two results of one subject: a pass beats a fail, else more points win; a tie keeps `current`. */
+export function betterResult<T extends Pick<GpaSubject, "isPass" | "points">>(current: T, candidate: T): T {
+  if (candidate.isPass !== current.isPass) return candidate.isPass ? candidate : current;
+  return candidate.points > current.points ? candidate : current;
+}
+
+/**
+ * Folds each revaluation into the sitting it re-grades - best of the two per
+ * subject - and drops the revaluation sittings themselves. A revaluation whose
+ * sitting is not in the list (not published) changes nothing.
+ */
+export function applyRevaluations<T extends StudentSitting>(sittings: T[]): T[] {
+  const revals = sittings.filter((s) => s.examType === "REVALUATION");
+  return sittings
+    .filter((s) => s.examType !== "REVALUATION")
+    .map((s) => {
+      const mine = orderSittings(revals.filter((r) => r.revaluesBatchId && r.revaluesBatchId === s.batchId));
+      if (mine.length === 0) return s;
+      const subjects = s.subjects.map((sub) => {
+        let best = sub;
+        for (const r of mine) {
+          const re = r.subjects.find((x) => x.subjectCode.trim().toUpperCase() === sub.subjectCode.trim().toUpperCase());
+          if (re) best = betterResult(best, re);
+        }
+        return best;
+      });
+      return { ...s, subjects };
+    });
+}
+
+/**
+ * Each subject's final result over its sittings (oldest first): the latest
+ * PASSING one, else the latest. A pass is never undone by a later fail - a
+ * revaluation can turn a fail into a pass after a supplementary was sat.
+ */
+export function finalPerSubject<T extends GpaSubject>(attempts: T[][]): T[] {
+  const latest = new Map<string, T>();
+  const latestPass = new Map<string, T>();
+  for (const sitting of attempts) {
+    for (const s of sitting) {
+      const k = s.subjectCode.trim().toUpperCase();
+      latest.set(k, s);
+      if (s.isPass) latestPass.set(k, s);
+    }
+  }
+  return [...latest.entries()].map(([k, s]) => latestPass.get(k) ?? s);
 }

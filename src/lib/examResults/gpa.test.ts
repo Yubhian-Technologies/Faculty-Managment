@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeCgpa, computeSgpa, latestPerSubject, studentStanding, type GpaSubject, type StudentSitting } from "./gpa";
+import { applyRevaluations, computeCgpa, computeSgpa, finalPerSubject, latestPerSubject, studentStanding, type GpaSubject, type StudentSitting } from "./gpa";
 
 const sub = (subjectCode: string, credits: number, points: number, isPass = true): GpaSubject => ({ subjectCode, credits, points, isPass });
 
@@ -138,7 +138,56 @@ describe("studentStanding", () => {
     expect(studentStanding([sem1Regular, sem2Regular], 2, always)).toMatchObject({ sgpa: 8.5, cgpa: 6.36, backlogs: ["S1B"] });
   });
 
+  it("orders attempts by academic year, so a later re-sit always wins", () => {
+    const fail: StudentSitting = { semester: 1, academicYear: "2026-27", examType: "SUPPLEMENTARY", at: 1, subjects: [sub("S1B", 10, 0, false)] };
+    const pass: StudentSitting = { semester: 1, academicYear: "2027-28", examType: "SUPPLEMENTARY", at: 0, subjects: [sub("S1B", 10, 6)] };
+    expect(studentStanding([sem1Regular, pass, fail], 1, strict)).toMatchObject({ sgpa: 7, backlogs: [] });
+  });
+
   it("ignores semesters after the one asked for", () => {
     expect(studentStanding([sem1Regular, sem2Regular, sem1Supply], 1, always).cgpa).toBe(7);
+  });
+});
+
+describe("revaluation - best of two", () => {
+  const strict = { showSgpa: "ALL_PASSED" as const, showCgpa: "ALL_PASSED" as const, decimals: 2 };
+  const regular: StudentSitting = { semester: 1, academicYear: "2026-27", examType: "REGULAR", batchId: "reg", at: 1, subjects: [sub("MA", 4, 7), sub("PH", 3, 0, false)] };
+  const reval = (subjects: GpaSubject[], at = 5): StudentSitting => ({ semester: 1, academicYear: "2026-27", examType: "REVALUATION", batchId: "rv", revaluesBatchId: "reg", at, subjects });
+
+  it("a better revaluation grade replaces the original", () => {
+    const [s] = applyRevaluations([regular, reval([sub("MA", 4, 9)])]);
+    expect(s.subjects.map((x) => [x.subjectCode, x.points])).toEqual([["MA", 9], ["PH", 0]]);
+  });
+
+  it("a lower revaluation grade is ignored - the original stays", () => {
+    const [s] = applyRevaluations([regular, reval([sub("MA", 4, 6)])]);
+    expect(s.subjects[0].points).toBe(7);
+  });
+
+  it("a revaluation turning a fail into a pass clears the backlog and brings SGPA back", () => {
+    expect(studentStanding([regular], 1, strict).sgpa).toBeNull();
+    const r = studentStanding([regular, reval([sub("PH", 3, 6)])], 1, strict);
+    expect(r).toMatchObject({ sgpa: 6.57, backlogs: [] }); // (28 + 18) / 7
+  });
+
+  it("a revaluation of a sitting that is not in the list changes nothing", () => {
+    const orphan: StudentSitting = { ...reval([sub("MA", 4, 10)]), revaluesBatchId: "other" };
+    expect(applyRevaluations([regular, orphan])).toEqual([regular]);
+  });
+
+  it("revaluing a supplementary applies to that sitting only", () => {
+    const supply: StudentSitting = { semester: 1, academicYear: "2026-27", examType: "SUPPLEMENTARY", batchId: "sup", at: 3, subjects: [sub("PH", 3, 5)] };
+    const rv: StudentSitting = { ...reval([sub("PH", 3, 8)]), revaluesBatchId: "sup" };
+    expect(studentStanding([regular, supply, rv], 1, strict)).toMatchObject({ sgpa: 7.43, backlogs: [] }); // (28 + 24) / 7
+  });
+
+  it("a pass from revaluation stands even when a later supplementary was failed", () => {
+    const supplyFail: StudentSitting = { semester: 1, academicYear: "2026-27", examType: "SUPPLEMENTARY", batchId: "sup", at: 3, subjects: [sub("PH", 3, 0, false)] };
+    expect(studentStanding([regular, supplyFail, reval([sub("PH", 3, 6)], 9)], 1, strict)).toMatchObject({ sgpa: 6.57, backlogs: [] });
+  });
+
+  it("finalPerSubject keeps the latest pass over a later fail", () => {
+    expect(finalPerSubject([[sub("X", 3, 6)], [sub("X", 3, 0, false)]])[0].points).toBe(6);
+    expect(finalPerSubject([[sub("X", 3, 0, false)], [sub("X", 3, 8)]])[0].points).toBe(8);
   });
 });

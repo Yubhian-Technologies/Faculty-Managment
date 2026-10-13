@@ -8,6 +8,7 @@ import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { actorName, batchesCol, loadResultRules, recordsCol } from "@/lib/examResults/store";
 import { studentStanding, type StudentStanding } from "@/lib/examResults/gpa";
+import { batchMatches } from "@/lib/examResults/importRows";
 import type { ExamResultBatch, ExamResultRecord } from "@/types/examResults";
 
 // One results sheet: GET (with every student's record and their SGPA / CGPA
@@ -56,13 +57,38 @@ export async function GET(_request: Request, { params }: Params) {
       const r = d.data() as ExamResultRecord & { createdAt?: { toMillis?: () => number } };
       if (r.batchId !== id && r.status !== "PUBLISHED") continue;
       sittings.set(r.studentId, [...(sittings.get(r.studentId) ?? []), {
-        semester: r.semester, examType: r.examType, at: r.createdAt?.toMillis?.() ?? 0, subjects: r.subjects ?? [],
+        semester: r.semester, academicYear: r.academicYear, examHeld: r.examHeld, examType: r.examType, batchId: r.batchId,
+        ...(r.revaluesBatchId ? { revaluesBatchId: r.revaluesBatchId } : {}),
+        at: r.createdAt?.toMillis?.() ?? 0, subjects: r.subjects ?? [],
       }]);
     }
     const standings: Record<string, StudentStanding> = {};
     for (const r of list) standings[r.id] = studentStanding(sittings.get(r.studentId) ?? [], batch.semester, rules);
 
-    return NextResponse.json({ batch: { ...batch, id: snap.id }, records: list, standings, rules });
+    // Regular sheets: students of this batch + branch with no result in it (absent
+    // from the file, or a row refused) - a warning before Publish, never a block.
+    let missing: { rollNumber: string; name: string }[] = [];
+    if (batch.examType === "REGULAR" && batch.batch && batch.department) {
+      const inSheet = new Set(list.map((r) => r.studentId));
+      const studentsCol = db.collection("colleges").doc(session.collegeId).collection("students");
+      const [own, core] = await Promise.all([
+        studentsCol.where("department", "==", batch.department).get(),
+        studentsCol.where("secondaryDepartment", "==", batch.department).get(),
+      ]);
+      const seen = new Set<string>();
+      for (const d of [...own.docs, ...core.docs]) {
+        if (seen.has(d.id) || inSheet.has(d.id)) continue;
+        seen.add(d.id);
+        const st = d.data() as { rollNumber?: string; name?: string; batch?: string; status?: string; courseId?: string };
+        if (st.status === "DISCONTINUED") continue;
+        if (st.courseId && !batch.courseIds.includes(st.courseId)) continue;
+        if (!batchMatches(st.batch, batch.batch)) continue;
+        missing.push({ rollNumber: st.rollNumber ?? "", name: st.name ?? "" });
+      }
+      missing = missing.sort((a, b) => a.rollNumber.localeCompare(b.rollNumber)).slice(0, 500);
+    }
+
+    return NextResponse.json({ batch: { ...batch, id: snap.id }, records: list, standings, rules, missing });
   } catch (err) {
     return guardError(err, "[exam-results/batches/[id] GET]");
   }
