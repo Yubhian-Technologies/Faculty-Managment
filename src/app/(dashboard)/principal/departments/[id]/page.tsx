@@ -4,9 +4,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Plus, Pencil, Trash2, Clock, GraduationCap, CheckCircle2, CalendarClock, Layers, GitBranch, RotateCcw, ChevronRight, AlertCircle } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,6 +20,7 @@ import { DepartmentCourseCard } from "@/components/academics/DepartmentCourseCar
 import { SemesterSubjectsDialog } from "@/components/academics/SemesterSubjectsDialog";
 import { CourseYearTimingForm } from "@/components/academics/CourseYearTimingForm";
 import { YearsTaughtAndSecondaryFields } from "@/components/college/YearsTaughtAndSecondaryFields";
+import { yearOrdinalLabel } from "@/lib/college/academicYears";
 import { toast } from "@/hooks/useToast";
 import type { Department, Course, CourseCatalogItem, CourseYearTiming, SubjectSemesterAssignment } from "@/types";
 import { courseYearBatch } from "@/lib/college/courseYearBatch";
@@ -49,6 +51,17 @@ export default function DepartmentDetailPage() {
   const [catalogItems, setCatalogItems] = useState<CourseCatalogItem[]>([]);
   const [subjectAssignments, setSubjectAssignments] = useState<SubjectSemesterAssignment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // "Managed By" - the id of the sub-department (e.g. "BS-E") that manages
+  // THIS department (e.g. "CSE") via the sub-department's own
+  // Department.managedDepartments, and the years it manages it for (the
+  // sub-department's own assignedYears - see managerTeachingYears,
+  // lib/departments/managedBranches.ts). "" means unmanaged. Hydrated from the
+  // current manager (if any) in load() below, same pattern as every other
+  // field on this page.
+  const [managerDeptId, setManagerDeptId] = useState("");
+  const [managerYears, setManagerYears] = useState<number[]>([]);
+  const [isSavingManager, setIsSavingManager] = useState(false);
 
   const [deletingCourse, setDeletingCourse] = useState<Course | null>(null);
   const [activeSemesterModal, setActiveSemesterModal] = useState<{
@@ -129,6 +142,11 @@ export default function DepartmentDetailPage() {
           ? allDepts.find((d) => d.id === dept.parentDepartmentId) ?? null
           : null
       );
+      // Whichever OTHER department's managedDepartments already names this
+      // one, if any - see the Managed By card below.
+      const manager = dept ? allDepts.find((d) => (d.managedDepartments ?? []).includes(dept.name)) ?? null : null;
+      setManagerDeptId(manager?.id ?? "");
+      setManagerYears(manager?.assignedYears ?? []);
       // The courses API also merges in a *feeder's* courses (a department that
       // cross-lists this one via secondaryDepartments, e.g. Basic Science
       // feeding AIDS for the shared first year) - useful for an HOD picker
@@ -374,6 +392,76 @@ export default function DepartmentDetailPage() {
     }
   }
 
+  // Every real sub-department in the college (Department.parentDepartmentId
+  // set) other than this one - the pool "Managed By" picks from. Deliberately
+  // college-wide, not limited to a pre-configured pool on either side: the
+  // whole point of this card is to replace the old two-screen, pool-gated
+  // checkbox flow with one direct connection made here.
+  const subDepartmentOptions = useMemo(
+    () =>
+      allDepartments
+        .filter((d) => d.parentDepartmentId && d.id !== id)
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [allDepartments, id]
+  );
+
+  // Years offered below - this department's own longest course, same bound
+  // YearsTaughtAndSecondaryFields uses, so a 5-year course isn't capped at 4.
+  const managerYearOptions = useMemo(() => {
+    const maxYear = Math.max(4, ...courses.map((c) => c.durationYears || 0));
+    return Array.from({ length: maxYear }, (_, i) => i + 1);
+  }, [courses]);
+
+  function toggleManagerYear(year: number, checked: boolean) {
+    setManagerYears((prev) => (checked ? [...prev, year].sort((a, b) => a - b) : prev.filter((y) => y !== year)));
+  }
+
+  async function handleSaveManager() {
+    if (!department) return;
+    setIsSavingManager(true);
+    try {
+      const oldManager = allDepartments.find((d) => (d.managedDepartments ?? []).includes(department.name)) ?? null;
+      const newManager = managerDeptId ? allDepartments.find((d) => d.id === managerDeptId) ?? null : null;
+
+      // Unclaim from the previous manager FIRST when it's changing - the
+      // server's branch-claim check (findBranchClaimConflicts) would otherwise
+      // reject the new manager's claim while the old one still lists it.
+      if (oldManager && oldManager.id !== newManager?.id) {
+        const res = await fetch("/api/college/departments", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            deptId: oldManager.id,
+            managedDepartments: (oldManager.managedDepartments ?? []).filter((n) => n !== department.name),
+          }),
+        });
+        if (!res.ok) throw new Error(((await res.json()) as { error?: string }).error ?? "Failed to unlink previous manager");
+      }
+
+      if (newManager) {
+        const names = Array.from(new Set([...(newManager.managedDepartments ?? []), department.name]));
+        const res = await fetch("/api/college/departments", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ deptId: newManager.id, managedDepartments: names, assignedYears: managerYears }),
+        });
+        if (!res.ok) throw new Error(((await res.json()) as { error?: string }).error ?? "Failed to connect managing department");
+      }
+
+      toast({
+        variant: "success",
+        title: newManager
+          ? `${department.name} is now managed by ${newManager.name}`
+          : `${department.name} is no longer managed by another department`,
+      });
+      await load();
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save" });
+    } finally {
+      setIsSavingManager(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -426,12 +514,11 @@ export default function DepartmentDetailPage() {
       {/* Read-only visibility into the two separately-owned linkage fields
           that both get called "Core Departments" in different places:
           secondaryDepartments (Principal-set, the allow-list) and
-          managedDepartments (HOD-set on /hod/settings/sub-departments,
-          constrained to that allow-list). No new write access here - "Edit"
-          goes to this department's own edit form, "Change in HOD settings"
-          deep-links to the HOD screen that actually owns the other field.
-          Hidden when there's nothing relevant to show, to avoid clutter on
-          an ordinary department that never touches either field. */}
+          managedDepartments (now set from the OTHER side's own department
+          page - see the "Managed By" card below). "Edit" goes to this
+          department's own edit form. Hidden when there's nothing relevant to
+          show, to avoid clutter on an ordinary department that never touches
+          either field. */}
       {department && (
         (department.secondaryDepartments?.length || department.managedDepartments?.length || department.hasSubDepartments || department.isFreshman)
           ? (
@@ -451,22 +538,75 @@ export default function DepartmentDetailPage() {
                   )}
                 </div>
                 <div className="space-y-1.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Core Departments this HOD manages</p>
-                    <Button variant="ghost" size="sm" className="h-6 text-xs shrink-0" onClick={() => router.push(`/hod/settings/sub-departments/${department.id}/edit`)}>
-                      Change in HOD settings
-                    </Button>
-                  </div>
+                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Branches this sub-department manages</p>
                   {department.managedDepartments && department.managedDepartments.length > 0 ? (
                     <DepartmentChipList names={department.managedDepartments} />
                   ) : (
-                    <p className="text-xs text-muted-foreground">None set. The HOD can only pick from the list on the left.</p>
+                    <p className="text-xs text-muted-foreground">None set. Connect one from that branch&apos;s own department page below.</p>
                   )}
                 </div>
               </CardContent>
             </Card>
           )
           : null
+      )}
+
+      {/* Lets the Principal connect THIS branch (e.g. CSE) to a sub-department
+          (e.g. BS-E) that will manage it for the years picked - replaces the
+          old two-screen, checkbox-based flow (Principal cross-lists a pool on
+          the parent, then the sub-department HOD ticks boxes from that pool).
+          Only meaningful for a plain branch, not a sub-department itself. */}
+      {department && !department.parentDepartmentId && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Managed By</CardTitle>
+            <CardDescription>
+              Connect {department.name} to a sub-department (e.g. a shared first-year Basic Science branch) that
+              will create and manage its sections, students, subjects, teaching assignments and timetable for the
+              years picked below. {department.name}&apos;s own HOD keeps every other year.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>Managing sub-department</Label>
+              <Select value={managerDeptId || "none"} onValueChange={(v) => setManagerDeptId(v === "none" ? "" : v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="— None —" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— None —</SelectItem>
+                  {subDepartmentOptions.map((d) => {
+                    const parent = d.parentDepartmentId ? allDepartments.find((p) => p.id === d.parentDepartmentId) : undefined;
+                    return (
+                      <SelectItem key={d.id} value={d.id}>
+                        {d.name}{parent ? ` (${parent.name})` : ""}
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+            {managerDeptId && (
+              <div className="space-y-2">
+                <Label>Years it manages</Label>
+                <div className="flex flex-wrap gap-3 border rounded-md px-3 py-2">
+                  {managerYearOptions.map((year) => (
+                    <label key={year} className="flex items-center gap-1.5 text-sm">
+                      <Checkbox checked={managerYears.includes(year)} onCheckedChange={(checked) => toggleManagerYear(year, !!checked)} />
+                      {yearOrdinalLabel(year)}
+                    </label>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {department.name}&apos;s own HOD keeps every year not picked here.
+                </p>
+              </div>
+            )}
+            <div className="flex justify-end">
+              <Button onClick={handleSaveManager} loading={isSavingManager} size="sm">Save</Button>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {isLoading ? (

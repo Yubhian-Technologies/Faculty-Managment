@@ -100,9 +100,17 @@ export interface YearTiming {
 /**
  * Every semester a student can have attendance in: those configured on years
  * 1..studentYear whose start date has already passed. Semester numbers are
- * global (Year 1 = 1-2, Year 2 = 3-4, ...), so they are de-duplicated by
- * number. A year with no timing (e.g. a lateral entrant's missing Year 1) just
- * contributes nothing.
+ * SUPPOSED to be global (Year 1 = 1-2, Year 2 = 3-4, ...) so they can be
+ * de-duplicated by number - but course-year-timings/route.ts only enforces
+ * uniqueness WITHIN one year's own doc, never across sibling years of the
+ * same course, so nothing stops a year being set up with its own 1/2 instead
+ * of continuing the sequence. On a collision the LATER year wins (timings are
+ * walked 1..studentYear, so this overwrites whatever an earlier year stored):
+ * the student's current, most-relevant year must never be shadowed by a
+ * long-past one, which previously produced a 3rd-year student's report
+ * reading "I/IV" instead of "III/IV" the moment Year 1 and Year 3 happened to
+ * reuse the same semester numbers. A year with no timing (e.g. a lateral
+ * entrant's missing Year 1) just contributes nothing.
  */
 export function semesterOptionsForStudent(timings: YearTiming[], studentYear: number, today: string): SemesterRange[] {
   const byNumber = new Map<number, SemesterRange>();
@@ -111,7 +119,7 @@ export function semesterOptionsForStudent(timings: YearTiming[], studentYear: nu
     const ordered = [...t.semesters].sort((a, b) => a.semester - b.semester);
     ordered.forEach((s, i) => {
       if (s.startDate > today) return;
-      if (!byNumber.has(s.semester)) byNumber.set(s.semester, { ...s, year: t.year, inYear: i + 1 });
+      byNumber.set(s.semester, { ...s, year: t.year, inYear: i + 1 });
     });
   }
   return Array.from(byNumber.values()).sort((a, b) => a.semester - b.semester);

@@ -60,4 +60,37 @@ describe("student attendance counting", () => {
     const without = indexSessions([session("M1", { a: "PRESENT" })]);
     expect(tallyStudent(withOd, "a")).toEqual(tallyStudent(without, "a"));
   });
+
+  // Edge case: a subject is reassigned mid-semester from one faculty to
+  // another (old teachingAssignments doc deleted, new assignmentId created -
+  // see syncTeachingAssignments.ts). CountableSession never carries
+  // assignmentId, only subjectId - so the two faculty's sessions, despite
+  // coming from two different assignment docs, roll up as ONE continuous
+  // subject percentage with no gap and no manual merge step.
+  it("a mid-semester faculty handover on the same subject stays one continuous tally", () => {
+    const beforeMid = [session("MATHS", { a: "PRESENT" }), session("MATHS", { a: "ABSENT" })]; // faculty 1, assignment a1
+    const afterMid = [session("MATHS", { a: "PRESENT" }), session("MATHS", { a: "PRESENT" })]; // faculty 2, assignment a2
+    const s = indexSessions([...beforeMid, ...afterMid]);
+    expect(tallyStudentBySubject(s, "a").get("MATHS")).toEqual({ held: 4, attended: 3 });
+  });
+
+  // Edge case (documents a KNOWN, currently-unenforced gap - see
+  // student-attendance/route.ts's "duplicate-period" warn-only check): if two
+  // different assignments both end up with a SUBMITTED session for the same
+  // subject/section/calendar period (e.g. two faculty both assigned the same
+  // subject in the same period, no batch split between them), each session is
+  // still counted independently here because nothing upstream de-duplicates
+  // by (date, periodNumber) - a single class period is double-counted as 2
+  // held periods instead of 1. This test exists to make that behavior
+  // explicit and fail loudly the day someone adds de-duplication without
+  // updating this expectation.
+  it("[KNOWN GAP] two faculty submitting the SAME subject/period both count - held is doubled", () => {
+    const period = { date: "2026-10-07" };
+    const facultyOneSession = { ...period, ...session("PHYSICS", { a: "PRESENT" }) }; // assignment a1
+    const facultyTwoSession = { ...period, ...session("PHYSICS", { a: "ABSENT" }) }; // assignment a2, same calendar period
+    const s = indexSessions([facultyOneSession, facultyTwoSession]);
+    const tally = tallyStudentBySubject(s, "a").get("PHYSICS");
+    // One calendar period actually happened; the tally currently reports two.
+    expect(tally).toEqual({ held: 2, attended: 1 });
+  });
 });

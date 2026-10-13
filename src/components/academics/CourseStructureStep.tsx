@@ -54,7 +54,17 @@ function issueText(i: CourseStructureIssue) {
   return i.row > 0 ? `Row ${i.row}: ${i.message}` : i.message;
 }
 
-export function CourseStructureStep({ picker }: { picker: ReturnType<typeof useRegulationCourseDepartmentPicker> }) {
+export function CourseStructureStep({
+  picker, docView, setDocView,
+}: {
+  picker: ReturnType<typeof useRegulationCourseDepartmentPicker>;
+  // Lifted to the page: the shared scope bar hides Department/Sub-department
+  // while viewing Regulation Document (catalog-wide, no department needed)
+  // and shows it again the moment this switches to Syllabus (department-
+  // specific) - see course-structure/page.tsx.
+  docView: "regulation" | "syllabus";
+  setDocView: (v: "regulation" | "syllabus") => void;
+}) {
   // ── Scope: what this department may receive for this course ────────────
   // Re-fetched whenever the shared scope bar's selection changes (not on
   // every dropdown keystroke - only once it has actually loaded a course).
@@ -113,8 +123,6 @@ export function CourseStructureStep({ picker }: { picker: ReturnType<typeof useR
   // Syllabus also needs a Department, which SyllabusStep prompts for itself
   // when one isn't picked yet. Both read/write through the same shared
   // scope bar `picker` - no separate scope of their own.
-  const [docView, setDocView] = useState<"regulation" | "syllabus">("regulation");
-
   // ── Categories: opened inline, never navigates away from this import ────
   const [showCategories, setShowCategories] = useState(false);
   const [categoriesPrefill, setCategoriesPrefill] = useState("");

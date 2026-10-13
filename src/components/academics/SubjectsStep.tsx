@@ -14,8 +14,7 @@ import { Edit2, Trash2, BookOpen, Plus, X, ArrowRight } from "lucide-react";
 import type { Department, Subject, SubjectCategory } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
 import { CategoryField } from "@/components/academics/CategoryField";
-import { offeredYears } from "@/lib/college/departmentYears";
-import { courseYearNumbers, semesterLabel } from "@/lib/college/courseYears";
+import { semesterLabel } from "@/lib/college/courseYears";
 import { useCourseSemesterPlan } from "@/hooks/useCourseSemesterPlan";
 import { managedCoreCandidates } from "@/lib/departments/departmentTree";
 import { CurriculumOverviewCard } from "@/components/academics/CurriculumOverviewCard";
@@ -75,46 +74,45 @@ interface SubjectsStepProps {
    *  for catalog-backed courses, so it seeds straight in. */
   initialCatalogId?: string;
   initialDepartmentId?: string;
-  /** The shared scope bar's selected regulation - this step no longer asks
-   *  for Course/Regulation itself (see its own filter row below), only
-   *  Department/Year/Semester, which the scope bar doesn't model. */
+  /** The shared scope bar's selected regulation. */
   initialRegulation?: string;
+  /** Year/Semester are now also picked in the shared scope bar above (it
+   *  computes its own options the same way this step used to) - passed down
+   *  already resolved/validated, not re-picked here. */
+  year: string;
+  semester: string;
+  /** Bumped by the shared bar's one Load button; this step reacts by
+   *  (re)loading for whatever courseKey/deptId/year/semester it currently
+   *  has. Never fires on mount - only on a genuine increment after. */
+  loadToken: number;
 }
 
-export function SubjectsStep({ initialCatalogId, initialDepartmentId, initialRegulation }: SubjectsStepProps) {
+export function SubjectsStep({ initialCatalogId, initialDepartmentId, initialRegulation, year, semester, loadToken }: SubjectsStepProps) {
   const [courses, setCourses] = useState<CourseOption[]>([]);
   const [departments, setDepartments] = useState<DepartmentOption[]>([]);
   const [courseKey, setCourseKey] = useState("");
+  // Department (including any sub-department) is now picked once, in the
+  // shared Regulation/Course/Department bar above this step - initialDepartmentId
+  // already names the exact department to use (top-level OR sub-department),
+  // so this step no longer needs its own Department/Sub-department pickers.
   const [deptId, setDeptId] = useState("");
-  const [subDeptId, setSubDeptId] = useState("");
   // The regulation the left panel's master pool is scoped to - master
   // subjects are course+regulation scoped (see /api/college/subjects GET's
   // own doc-comment), so assigning from the pool needs one picked, same as
   // the Add dialog already defaults addForm.regulation.
   const [regulation, setRegulation] = useState("");
 
-  // Seed Course/Department from the shared scope bar whenever it changes -
-  // this step's own Year/Semester/sub-department picks stay local (a finer
-  // scope the scope bar doesn't model) and are never overwritten here.
+  // Seed Course/Department from the shared scope bar whenever it changes.
   useEffect(() => {
     if (initialCatalogId) setCourseKey(initialCatalogId);
   }, [initialCatalogId]);
   useEffect(() => {
-    if (initialDepartmentId) { setDeptId(initialDepartmentId); setSubDeptId(""); }
+    if (initialDepartmentId) setDeptId(initialDepartmentId);
   }, [initialDepartmentId]);
-  // Nothing is pre-picked: the page opens asking for a course, a department,
-  // a year and a semester rather than silently loading somebody else's.
-  const [year, setYear] = useState("");
-  const [semester, setSemester] = useState("");
   const [assignments, setAssignments] = useState<AssignmentWithMaster[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [hasLoaded, setHasLoaded] = useState(false);
-  // Browse every subject already imported for this Course + Regulation
-  // (the master pool, same table Structure shows) instead of narrowing to
-  // one department's exact year + semester - Department/Year/Semester are
-  // skipped entirely when this is on.
-  const [showAllInRegulation, setShowAllInRegulation] = useState(false);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -192,9 +190,10 @@ export function SubjectsStep({ initialCatalogId, initialDepartmentId, initialReg
     }
     return Array.from(groups.values());
   }, [courses]);
-  const topDepartments = useMemo(() => departments.filter((d) => !d.parentDepartmentId), [departments]);
-  const subDepartments = useMemo(() => departments.filter((d) => d.parentDepartmentId === deptId), [departments, deptId]);
-  const activeDeptId = subDeptId || deptId;
+  // Alias kept (rather than renaming every call site below) from when this
+  // was subDeptId || deptId - now deptId alone already names the exact
+  // (possibly sub-) department, seeded from initialDepartmentId above.
+  const activeDeptId = deptId;
 
   // Years and semesters come from the configuration, never from a fixed 1-4 /
   // 1-8. A department teaches the years the Principal assigned it (Basic
@@ -216,17 +215,11 @@ export function SubjectsStep({ initialCatalogId, initialDepartmentId, initialReg
   );
   const plan = useCourseSemesterPlan(planCourse);
   const activeDept = useMemo(() => departments.find((d) => d.id === activeDeptId), [departments, activeDeptId]);
-  // Falls back to the course's own span, never an invented 1-4, for a
-  // department whose Years Taught has not been set yet.
-  const yearOptions = useMemo(
-    () => offeredYears(activeDept, departments, catalogId, courseYearNumbers(planCourse?.durationYears)),
-    [activeDept, departments, catalogId, planCourse]
-  );
-  // Derived rather than corrected in an effect, so what is shown and what Load
-  // sends can never disagree. A pick that falls outside the options - after
-  // changing department, say - clears rather than silently becoming another
-  // year, so the choice goes back to whoever is looking at it.
-  const yearValue = yearOptions.includes(Number(year)) ? year : "";
+  // Year/Semester are now picked in the shared scope bar above (it computes
+  // its own options the same way this step used to, via the same
+  // offeredYears/courseYearNumbers helpers) - trusted directly here rather
+  // than re-clamped against a second, locally-computed option list.
+  const yearValue = year;
   // Strictly what this course has configured for this year - read off the
   // plan's own timings, never semestersInYear, whose two-per-year default is a
   // LABEL fallback for pages that must still show something, not configuration.
@@ -238,7 +231,13 @@ export function SubjectsStep({ initialCatalogId, initialDepartmentId, initialReg
     [plan, yearValue]
   );
   const semestersNotConfigured = !!courseKey && !!activeDeptId && !!yearValue && semesterOptions.length === 0;
-  const semesterValue = semesterOptions.includes(Number(semester)) ? semester : "";
+  const semesterValue = semester;
+  // Load auto-decides what to show, no manual toggle: Department (from the
+  // shared bar above) + Year + Semester all picked narrows to that exact
+  // scope; anything less (e.g. Regulation + Course only) browses every
+  // subject already imported for this Course + Regulation instead - same
+  // master pool Structure's own table shows.
+  const isFullyScoped = !!deptId && !!yearValue && !!semesterValue;
   // Sibling sub-departments (or the children of a parent picked "itself") that can share one added subject.
   const siblingDepts = useMemo(() => {
     const active = departments.find((d) => d.id === activeDeptId);
@@ -309,9 +308,22 @@ export function SubjectsStep({ initialCatalogId, initialDepartmentId, initialReg
   }
 
   function handleLoad() {
-    if (showAllInRegulation) { setHasLoaded(true); return; }
-    void fetchAssignments(courseKey, deptId, subDeptId, yearValue, semesterValue);
+    if (!isFullyScoped) { setHasLoaded(true); return; }
+    void fetchAssignments(courseKey, deptId, "", yearValue, semesterValue);
   }
+
+  // The shared bar's one Load button bumps loadToken - react to it here
+  // instead of owning a second Load button. Guarded against firing on mount
+  // (a token > 0 inherited from a Load click made while Structure was the
+  // active tab must not auto-fire the moment this step mounts) by comparing
+  // against the value already seen, not against a fixed literal.
+  const seenLoadTokenRef = useRef(loadToken);
+  useEffect(() => {
+    if (loadToken === seenLoadTokenRef.current) return;
+    seenLoadTokenRef.current = loadToken;
+    handleLoad();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadToken]);
 
   // Master subjects are shared/deduped across every department's own Course
   // doc for the same catalog entry (see CourseStructureImportService's own
@@ -730,84 +742,36 @@ export function SubjectsStep({ initialCatalogId, initialDepartmentId, initialReg
         </Button>
       </div>
 
-      {/* Filters - Course and Regulation come from the shared scope bar
-          above (picker.selectedCatalogId/selectedRegulation, seeded as
-          initialCatalogId/initialRegulation) and aren't repeated here;
-          Department/Year/Semester are this step's own, finer scope. */}
-      <Card>
-        <CardContent className="space-y-3 pt-6">
-          <label className="flex items-center gap-2 text-sm">
-            <Checkbox
-              checked={showAllInRegulation}
-              onCheckedChange={(v) => setShowAllInRegulation(v === true)}
-            />
-            Browse every subject in this regulation instead (skip Department/Year/Semester)
-          </label>
-          <div className={`grid gap-3 ${showAllInRegulation ? "sm:grid-cols-1" : subDepartments.length > 0 ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}>
-            {!showAllInRegulation && (
-              <>
-                <div className="space-y-1.5">
-                  <Label htmlFor="dept">Department</Label>
-                  <select id="dept" className={SELECT_CLASS} value={deptId} onChange={(e) => { setDeptId(e.target.value); setSubDeptId(""); }}>
-                    <option value="">Select department</option>
-                    {topDepartments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                  </select>
-                </div>
-                {subDepartments.length > 0 && (
-                  <div className="space-y-1.5">
-                    <Label htmlFor="subdept">Sub-department</Label>
-                    <select id="subdept" className={SELECT_CLASS} value={subDeptId} onChange={(e) => setSubDeptId(e.target.value)}>
-                      <option value="">Department itself</option>
-                      {subDepartments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                    </select>
-                  </div>
-                )}
-                <div className="space-y-1.5">
-                  <Label htmlFor="yr">Year</Label>
-                  <select id="yr" className={SELECT_CLASS} value={yearValue} onChange={(e) => setYear(e.target.value)}>
-                    <option value="">Select year</option>
-                    {yearOptions.map((y) => <option key={y} value={String(y)}>Year {y}</option>)}
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="sem">Semester</Label>
-                  <select id="sem" className={SELECT_CLASS} value={semesterValue} onChange={(e) => setSemester(e.target.value)}>
-                    <option value="">Select semester</option>
-                    {/* The label is the course's own year-semester position - "1-1",
-                        "1-2", "1-3" where a year has three - and nothing else. */}
-                    {semesterOptions.map((s) => <option key={s} value={String(s)}>{semesterLabel(plan, s)}</option>)}
-                  </select>
-                  {semestersNotConfigured && (
-                    <p className="text-xs text-muted-foreground">
-                      No semesters set for this year — ask the Office to add them under Semester Timings.
-                    </p>
-                  )}
-                </div>
-              </>
-            )}
-            <div className="flex items-end">
-              <Button
-                onClick={() => void handleLoad()}
-                className="w-full"
-                disabled={showAllInRegulation ? !courseKey : (!courseKey || !deptId || !yearValue || !semesterValue)}
-              >
-                Load
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Course, Regulation, Department, Year and Semester are all picked
+          once in the shared scope bar above (seeded as initialCatalogId/
+          initialRegulation/initialDepartmentId + the year/semester props) -
+          this step only reacts to its one Load button via loadToken, no
+          filters of its own left to show. */}
+      {isFullyScoped ? (
+        <p className="text-sm text-muted-foreground">
+          Showing what&apos;s assigned to <span className="font-medium text-foreground">{departments.find((d) => d.id === deptId)?.name}</span>, Year {yearValue}, Sem {semesterLabel(plan, Number(semesterValue))}.
+        </p>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Pick Department, Year and Semester in the bar above to narrow Load to one exact scope - otherwise Load browses every subject already imported for this Course + Regulation.
+        </p>
+      )}
+      {semestersNotConfigured && (
+        <p className="text-xs text-muted-foreground">
+          No semesters set for this year — ask the Office to add them under Semester Timings.
+        </p>
+      )}
 
       {/* Error display */}
       {loadError && <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">{loadError}</div>}
 
-      {hasLoaded && showAllInRegulation && (
+      {hasLoaded && !isFullyScoped && (
         groupCourse
           ? <SubjectsMasterTable key={`${groupCourse.id}|${regulation}`} courseId={groupCourse.id} courseName={groupCourse.name} regulation={regulation} />
           : <p className="text-sm text-muted-foreground">No course found for this regulation.</p>
       )}
 
-      {hasLoaded && !showAllInRegulation && (
+      {hasLoaded && isFullyScoped && (
         <div className="grid gap-4 lg:grid-cols-2 items-start">
           {/* Left panel: assign by code - type the subject codes imported
               under this regulation, comma or newline separated. No pool is
@@ -1045,7 +1009,7 @@ export function SubjectsStep({ initialCatalogId, initialDepartmentId, initialReg
             <div className="grid gap-3">
               <p className="text-xs text-muted-foreground rounded-md border bg-muted/40 p-2">
                 Adds the subject to <strong>{departments.find((d) => d.id === activeDeptId)?.name}</strong>
-                {subDeptId ? " (sub-department)" : ""}, Year {yearValue}, Sem {semesterLabel(plan, Number(semesterValue))}.
+                {activeDept?.parentDepartmentId ? " (sub-department)" : ""}, Year {yearValue}, Sem {semesterLabel(plan, Number(semesterValue))}.
               </p>
               <div className="space-y-1.5">
                 <Label>Regulation</Label>

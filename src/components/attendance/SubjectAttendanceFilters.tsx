@@ -6,6 +6,9 @@ import { hasSubjectFilters, NO_SUBJECT_FILTERS, type SubjectFilters } from "@/li
 
 // Narrows an already-loaded per-subject attendance table (one student) - by
 // subject, shortage, or a percentage band. Purely client-side: nothing refetches.
+// HOD/Panel staff views of a student's attendance (StudentAttendanceHistoryReport.tsx)
+// are the only caller - the student's own self-service report
+// (StudentAttendanceReport.tsx) shows its subject table unfiltered.
 export function SubjectAttendanceFilters({
   subjects,
   value,

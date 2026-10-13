@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planSubjectAssignmentMoves } from "@/lib/departments/migrateManagedBranchSubjects";
+import { planSubjectAssignmentMoves, planStragglerSectionRenames } from "@/lib/departments/migrateManagedBranchSubjects";
 
 // The one behavior most likely to regress silently: a row already present
 // under the branch's own deterministic id must be kept, not overwritten -
@@ -42,5 +42,59 @@ describe("planSubjectAssignmentMoves", () => {
     );
     expect(plan.toCreate.map((r) => r.id)).toEqual(["s4_bs_1"]);
     expect(plan.toSkip).toEqual([]);
+  });
+});
+
+describe("planStragglerSectionRenames", () => {
+  const sections = [
+    { id: "sec1", name: "BSE-CE-A", year: 1 },
+    { id: "sec2", name: "BSE-CE-B", year: 1 },
+    { id: "sec3", name: "CE-A", year: 2 }, // already the branch's own convention - no manager prefix
+    { id: "sec4", name: "OTHER-DEPT-A", year: 1 }, // doesn't start with the manager's code at all
+  ];
+
+  it("trims a manager-prefixed section to the branch's own convention", () => {
+    const plan = planStragglerSectionRenames(sections, "BSE", "CE", new Set(), null);
+    expect(plan).toEqual([
+      { sectionId: "sec1", oldName: "BSE-CE-A", newName: "CE-A", year: 1 },
+      { sectionId: "sec2", oldName: "BSE-CE-B", newName: "CE-B", year: 1 },
+    ]);
+  });
+
+  it("never touches a section already in the branch's own convention or outside the manager's prefix", () => {
+    const plan = planStragglerSectionRenames(
+      [{ id: "sec3", name: "CE-A", year: 2 }, { id: "sec4", name: "OTHER-DEPT-A", year: 1 }],
+      "BSE", "CE", new Set(), null
+    );
+    expect(plan).toEqual([]);
+  });
+
+  it("leaves a candidate untouched when it collides with a section the branch already owns", () => {
+    const plan = planStragglerSectionRenames(
+      [{ id: "sec1", name: "BSE-CE-A", year: 1 }],
+      "BSE", "CE", new Set(["CE-A|1"]), null
+    );
+    expect(plan).toEqual([]);
+  });
+
+  it("never claims the same new name twice when two stragglers would collide with each other", () => {
+    const plan = planStragglerSectionRenames(
+      [
+        { id: "sec1", name: "BSE-CE-A", year: 1 },
+        { id: "sec2", name: "BSE-CE-A", year: 1 }, // duplicate name, shouldn't happen but must not double-claim
+      ],
+      "BSE", "CE", new Set(), null
+    );
+    expect(plan).toEqual([{ sectionId: "sec1", oldName: "BSE-CE-A", newName: "CE-A", year: 1 }]);
+  });
+
+  it("skips a section outside the requested years", () => {
+    const plan = planStragglerSectionRenames(sections, "BSE", "CE", new Set(), new Set([2]));
+    expect(plan).toEqual([]);
+  });
+
+  it("is a no-op without both a manager code and a branch code", () => {
+    expect(planStragglerSectionRenames(sections, "", "CE", new Set(), null)).toEqual([]);
+    expect(planStragglerSectionRenames(sections, "BSE", "", new Set(), null)).toEqual([]);
   });
 });

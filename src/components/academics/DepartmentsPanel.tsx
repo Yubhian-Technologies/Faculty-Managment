@@ -72,6 +72,7 @@ interface MigrationCounts {
   courseIdsRepaired: number;
   courseIdsUnresolved: number;
   secondaryDepartmentNamesCleared: number;
+  sectionsRenamedInPlace: number;
   sections: SectionMoveDetail[];
   skippedSections: SkippedSectionDetail[];
   currentSubjects: CurrentSubjectDetail[];
@@ -233,12 +234,22 @@ function MigrationReviewPage({ subDepartment, branchIds, allBranches, collegeSec
   const totalStudents = allMovingSections.reduce((n, s) => n + s.studentCount, 0);
   const totalSubjects = okPreviews.reduce((n, p) => n + p.subjectAssignmentsMoved, 0);
   const totalSubjectsDeduped = okPreviews.reduce((n, p) => n + p.subjectAssignmentsDeduped, 0);
+  const totalNamesCleared = okPreviews.reduce((n, p) => n + p.secondaryDepartmentNamesCleared, 0);
+  const totalCourseIdsRepaired = okPreviews.reduce((n, p) => n + p.courseIdsRepaired, 0);
+  const totalSectionsRenamedInPlace = okPreviews.reduce((n, p) => n + p.sectionsRenamedInPlace, 0);
   const hasAnyError = preview ? Object.values(preview).some((p) => !p.ok) : false;
-  // Zero sections doesn't mean zero work - sections can already sit directly
-  // under the core departments (nothing to rename) while their subject
-  // assignments still need moving over. Only disable once every category is
-  // actually empty.
-  const nothingToMove = !isLoading && allMovingSections.length === 0 && totalSubjects === 0 && totalSubjectsDeduped === 0;
+  // Zero sections/moved/deduped doesn't mean zero work - a row already filed
+  // directly under a core department can still carry a stale
+  // secondaryDepartmentNames narrowing (leaking it into a sibling branch's
+  // own Subjects view), a stale courseId from before that branch had its own
+  // Course doc, or a section whose name never got trimmed to the branch's
+  // own convention (both from before this tool's cleanup/rename logic
+  // existed); confirming is what fixes those repair-only counts, so they
+  // count as real pending work too. Only disable once every category - moves
+  // AND in-place repairs - is actually empty.
+  const nothingToMove = !isLoading && allMovingSections.length === 0 && totalSubjects === 0
+    && totalSubjectsDeduped === 0 && totalNamesCleared === 0 && totalCourseIdsRepaired === 0
+    && totalSectionsRenamedInPlace === 0;
 
   // LEFT panel: today's state. Two sources, combined:
   //  1. Sections still genuinely filed under the manager (live data from the
@@ -409,6 +420,7 @@ function MigrationReviewPage({ subDepartment, branchIds, allBranches, collegeSec
                         {p.teachingAssignmentsRepointed} teaching assignment{p.teachingAssignmentsRepointed !== 1 ? "s" : ""} and {p.timetableSlotsRepointed} timetable row{p.timetableSlotsRepointed !== 1 ? "s" : ""} repointed.
                         {p.courseIdsRepaired > 0 && ` ${p.courseIdsRepaired} subject${p.courseIdsRepaired !== 1 ? "s" : ""} here had a stale course link from an earlier run - fixed.`}
                         {p.secondaryDepartmentNamesCleared > 0 && ` ${p.secondaryDepartmentNamesCleared} subject${p.secondaryDepartmentNamesCleared !== 1 ? "s" : ""} had a leftover narrowing to another department - cleared.`}
+                        {p.sectionsRenamedInPlace > 0 && ` ${p.sectionsRenamedInPlace} section${p.sectionsRenamedInPlace !== 1 ? "s" : ""} here still had the old naming from an earlier run - renamed to ${branch?.name}'s own convention.`}
                       </p>
                       {p.courseIdsUnresolved > 0 && (
                         <p className="text-xs text-amber-600">
