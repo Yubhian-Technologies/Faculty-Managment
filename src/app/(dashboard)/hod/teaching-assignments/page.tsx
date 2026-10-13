@@ -822,13 +822,26 @@ const effectiveSemester = semesterOptions.length === 0
   );
   const availableFacultyForAssign = faculty.filter((f) => !alreadyOnSubject.has(f.id));
 
-  // Every department and sub-department in the college is askable except the
-  // section's own (you don't request a lend from yourself) - same rule as
-  // components/timetable/TeachingAssignmentsEditor.tsx.
-  const requestSectionDepartment = sections.find((s) => s.id === assignForm.sectionId)?.department;
+  // A department whose faculty this HOD can staff directly - their own
+  // department or a TRUE sub-department (Department.parentDepartmentId) - is
+  // skipped here, since the Assign form above already offers its faculty
+  // (see facultyManageableDepartmentNames, lib/departments/scope.ts, which
+  // this mirrors client-side). A MANAGED/"core" branch (e.g. a
+  // shared-first-year HOD's own CE/CSE, linked via
+  // Department.managedDepartments) is never directly staffable even when
+  // it's also the section's own department - per that same rule, staffing it
+  // always goes through this lend flow, so excluding it here would leave no
+  // way to staff it at all. It stays requestable, including to itself.
+  const directlyStaffableNames = useMemo(() => {
+    const names = new Set<string>();
+    if (scope.ownDept) names.add(scope.ownDept.name);
+    for (const d of scope.groupingChildren) names.add(d.name);
+    for (const d of scope.plainChildren) names.add(d.name);
+    return names;
+  }, [scope]);
   const requestableDepartments = useMemo(
-    () => departments.filter((d) => d.name !== requestSectionDepartment),
-    [departments, requestSectionDepartment]
+    () => departments.filter((d) => !directlyStaffableNames.has(d.name)),
+    [departments, directlyStaffableNames]
   );
 
   async function handleAssign(e: React.FormEvent) {
