@@ -240,15 +240,25 @@ function MigrationReviewPage({ subDepartment, branchIds, allBranches, collegeSec
   // actually empty.
   const nothingToMove = !isLoading && allMovingSections.length === 0 && totalSubjects === 0 && totalSubjectsDeduped === 0;
 
-  // LEFT panel: today's state. Sections still filed under the manager (live
-  // data, always accurate - a section already moved in an earlier run no
-  // longer matches and correctly drops off this list). Subjects come from
-  // the preview itself (currentSubjects is identical across every branch
-  // this manager feeds, since nothing here is filtered per branch).
-  const currentSections = useMemo(
-    () => collegeSections.filter((s) => s.department === subDepartment.name).sort((a, b) => (a.year - b.year) || a.name.localeCompare(b.name)),
-    [collegeSections, subDepartment.name]
-  );
+  // LEFT panel: today's state. Two sources, combined:
+  //  1. Sections still genuinely filed under the manager (live data from the
+  //     caller's own section list).
+  //  2. Sections the preview reports as "already moved, but students still
+  //     waiting to catch up" (fromSectionName === sectionName - no rename
+  //     happened because it already left the manager some other way). Without
+  //     this second source, those students would look like they have no
+  //     section at all, when they actually do - it just isn't filed under
+  //     this department any more.
+  const currentSections = useMemo(() => {
+    const fromCollege = collegeSections.filter((s) => s.department === subDepartment.name);
+    const seenIds = new Set(fromCollege.map((s) => s.id));
+    const strayMap = new Map<string, { id: string; name: string; year: number; studentCount: number }>();
+    for (const s of allMovingSections) {
+      if (s.fromSectionName !== s.sectionName || seenIds.has(s.sectionId) || !s.sectionId) continue;
+      strayMap.set(s.sectionId, { id: s.sectionId, name: s.sectionName, year: s.year, studentCount: s.studentCount });
+    }
+    return [...fromCollege, ...strayMap.values()].sort((a, b) => (a.year - b.year) || a.name.localeCompare(b.name));
+  }, [collegeSections, subDepartment.name, allMovingSections]);
   const currentSubjects = okPreviews[0]?.currentSubjects ?? [];
   const currentSectionsPageRows = currentSections.slice(currentSectionsPage * REVIEW_PAGE_SIZE, (currentSectionsPage + 1) * REVIEW_PAGE_SIZE);
   const currentSubjectsPageRows = currentSubjects.slice(currentSubjectsPage * REVIEW_PAGE_SIZE, (currentSubjectsPage + 1) * REVIEW_PAGE_SIZE);

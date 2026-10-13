@@ -240,6 +240,13 @@ async function run(
     return `${s.name}|${s.year}`;
   }));
   const branchSectionNames = new Set(branchSectionsSnap.docs.map((d) => (d.data() as Section).name));
+  // Full detail per branch section name - used in Step B to describe an
+  // ALREADY-moved section (year, current studentCount) when it still has
+  // orphaned students pointing at it, for the review UI's "current state".
+  const branchSectionByName = new Map(branchSectionsSnap.docs.map((d) => {
+    const s = d.data() as Section;
+    return [s.name, { id: d.id, year: s.year, studentCount: s.studentCount ?? 0 }] as const;
+  }));
   const sectionsToRename = candidateSections.filter((s) => !branchSectionKeys.has(`${s.name}|${s.year}`));
   const skippedSections: SkippedSectionDetail[] = candidateSections
     .filter((s) => branchSectionKeys.has(`${s.name}|${s.year}`))
@@ -310,7 +317,32 @@ async function run(
     if (!s.section) continue;
     studentCountBySection.set(s.section, (studentCountBySection.get(s.section) ?? 0) + 1);
   }
-  const sections: SectionMoveDetail[] = sectionsToRename.map((s) => ({
+
+  // Sections that moved to the branch by some EARLIER means (a prior partial
+  // run, a manual fix, any other process) but still have orphaned students
+  // pointing at them - matched via branchSectionNames in studentsToMove's own
+  // filter above. Listed here too (not just the rename-in-this-run list
+  // below) so the review UI's "current state" shows these students really do
+  // have a real section, it just isn't filed under the manager any more.
+  const alreadyMovedSectionNames = new Set(
+    studentsToMove
+      .map((d) => (d.data() as { section?: string }).section)
+      .filter((name): name is string => !!name && branchSectionNames.has(name) && !renamedSectionNames.has(name))
+  );
+  const alreadyMovedSections: SectionMoveDetail[] = Array.from(alreadyMovedSectionNames).map((name) => {
+    const info = branchSectionByName.get(name);
+    return {
+      sectionId: info?.id ?? "",
+      sectionName: name,
+      fromSectionName: name,
+      year: info?.year ?? 0,
+      studentCount: studentCountBySection.get(name) ?? 0,
+      fromDepartmentName: subDeptName,
+      toDepartmentName: branchName,
+    };
+  });
+
+  const sections: SectionMoveDetail[] = [...sectionsToRename.map((s) => ({
     sectionId: s.id,
     sectionName: finalNameBySectionId.get(s.id) ?? s.name,
     fromSectionName: s.name,
@@ -318,7 +350,7 @@ async function run(
     studentCount: studentCountBySection.get(s.name) ?? 0,
     fromDepartmentName: subDeptName,
     toDepartmentName: branchName,
-  }));
+  })), ...alreadyMovedSections];
 
   if (!dryRun && studentsToMove.length > 0) {
     const now = new Date();
