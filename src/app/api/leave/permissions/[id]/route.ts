@@ -41,7 +41,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (req.uid !== session.uid) {
         return NextResponse.json({ error: "You can only cancel your own request" }, { status: 403 });
       }
-      await ref.update({ status: "CANCELLED", updatedAt: new Date() });
+      await ref.update({ status: "CANCELLED", pendingKey: null, updatedAt: new Date() });
       return NextResponse.json({ ok: true });
     }
 
@@ -55,9 +55,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     // The tier it was routed to is what decides it - checked against the
-    // stored status rather than re-deriving the routing, which may have been
-    // changed in Settings since this was raised.
-    if (req.status === "PENDING_HOD") {
+    // stored status or current stage.
+    if (req.status === "PENDING_HOD" || req.approverStage === "HOD") {
       if (session.role !== "HOD") {
         return NextResponse.json({ error: "This request is waiting on the department's HOD" }, { status: 403 });
       }
@@ -65,15 +64,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (!mine?.department || mine.department !== req.department) {
         return NextResponse.json({ error: "That request belongs to another department" }, { status: 403 });
       }
-    } else if (req.status === "PENDING_PRINCIPAL") {
+    } else if (req.status === "PENDING_PRINCIPAL" || req.approverStage === "PRINCIPAL") {
       if (session.role !== "PRINCIPAL") {
         return NextResponse.json({ error: "This request is waiting on the Principal" }, { status: 403 });
       }
-    } else if (req.status === "PENDING_VICE_PRINCIPAL") {
+    } else if (req.status === "PENDING_VICE_PRINCIPAL" || req.approverStage === "VICE_PRINCIPAL") {
       if (session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL") {
         return NextResponse.json({ error: "This request is waiting on the Vice Principal" }, { status: 403 });
       }
-    } else if (req.status === "PENDING_MANAGEMENT") {
+    } else if (req.status === "PENDING_MANAGEMENT" || req.approverStage === "MANAGEMENT") {
       if (session.role !== "MANAGEMENT") {
         return NextResponse.json({ error: "This request is waiting on Management" }, { status: 403 });
       }
@@ -86,6 +85,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const deciderName = session.email || "Approver";
     const updates = {
       status: action === "APPROVE" ? "APPROVED" : "REJECTED",
+      pendingKey: null,
       decidedByUid: session.uid,
       decidedByName: deciderName,
       decidedAt: new Date(),

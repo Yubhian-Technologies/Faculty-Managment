@@ -7,7 +7,7 @@ import { getCircularSettings, saveCircularSettings } from "@/lib/circular/settin
 
 export async function GET() {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD", "PANEL_MEMBER", "COLLEGE_OFFICE", "COLLEGE_STAFF", "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "LIBRARY", "EXAM_CELL", "WEBMASTER", "COLLEGE_ACCOUNTS");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD", "PANEL_MEMBER", "COLLEGE_OFFICE", "COLLEGE_STAFF", "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "LIBRARY", "HOSTEL", "PD", "EXAM_CELL", "WEBMASTER", "COLLEGE_ACCOUNTS");
     const db = getAdminDb();
     const settings = await getCircularSettings(db, session.collegeId);
     return NextResponse.json({ settings });

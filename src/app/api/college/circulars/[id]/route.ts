@@ -6,7 +6,7 @@ import { getCircular } from "@/lib/circular/service";
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD", "PANEL_MEMBER", "COLLEGE_OFFICE", "COLLEGE_STAFF", "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "LIBRARY", "EXAM_CELL", "WEBMASTER", "COLLEGE_ACCOUNTS");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD", "PANEL_MEMBER", "COLLEGE_OFFICE", "COLLEGE_STAFF", "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "LIBRARY", "HOSTEL", "PD", "EXAM_CELL", "WEBMASTER", "COLLEGE_ACCOUNTS");
     const { id } = await params;
     const db = getAdminDb();
     const circular = await getCircular(db, session.collegeId, id);

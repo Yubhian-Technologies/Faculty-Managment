@@ -13,6 +13,8 @@ export interface DecisionFacts {
   headsRequestDepartment: boolean;
   /** For the class-incharge stage: the actor is the incharge recorded on the request. */
   isRecordedIncharge: boolean;
+  /** For the delegated-faculty stage: the actor is the designated faculty member or department HOD. */
+  isDelegatedFaculty?: boolean;
 }
 
 export function canDecideStage(f: DecisionFacts): boolean {
@@ -20,6 +22,7 @@ export function canDecideStage(f: DecisionFacts): boolean {
   if (f.actorUid === f.requesterUid) return false;
   switch (f.stage) {
     case "CLASS_INCHARGE": return f.isRecordedIncharge;
+    case "DELEGATED_FACULTY": return !!f.isDelegatedFaculty || (f.actorRoles.includes("HOD") && f.headsRequestDepartment);
     case "HOD": return f.actorRoles.includes("HOD") && f.headsRequestDepartment;
     case "VICE_PRINCIPAL": return f.actorRoles.includes("VICE_PRINCIPAL");
     case "PRINCIPAL": return f.actorRoles.includes("PRINCIPAL");

@@ -30,6 +30,7 @@ function hoursUntil(fromDate: string): number | null {
 export function RequestForm({ mode, onCreated }: { mode: "student" | "faculty"; onCreated: () => void }) {
   const [options, setOptions] = useState<FormOptions | null>(null);
   const [categoryId, setCategoryId] = useState("");
+  const [otherCategory, setOtherCategory] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [venue, setVenue] = useState("");
@@ -49,6 +50,8 @@ export function RequestForm({ mode, onCreated }: { mode: "student" | "faculty"; 
   const hours = hoursUntil(fromDate);
   const short = hours !== null && limits ? hours < limits.advanceNoticeHours : false;
   const needsProof = limits?.proofRequired ?? true;
+  const isOtherCategory = categoryId.startsWith("other");
+
   const days = useMemo(() => {
     if (!fromDate || !toDate || toDate < fromDate) return 0;
     return Math.round((Date.parse(toDate) - Date.parse(fromDate)) / 86_400_000) + 1;
@@ -68,6 +71,7 @@ export function RequestForm({ mode, onCreated }: { mode: "student" | "faculty"; 
 
   const problem = (() => {
     if (!categoryId) return "Choose a permission type";
+    if (isOtherCategory && !otherCategory.trim()) return "Specify the custom permission type";
     if (!title.trim()) return "Add a short title";
     if (!description.trim()) return "Describe the purpose";
     if (!fromDate || !toDate || toDate < fromDate) return "Check the dates";
@@ -83,32 +87,46 @@ export function RequestForm({ mode, onCreated }: { mode: "student" | "faculty"; 
     setSubmitting(true);
     try {
       const created = await createRequest({
-        categoryId, title, description, venue, fromDate, toDate, periods: allPeriods ? "ALL" : periods, proof,
+        categoryId,
+        ...(isOtherCategory && otherCategory.trim() ? { otherCategory: otherCategory.trim() } : {}),
+        title, description, venue, fromDate, toDate, periods: allPeriods ? "ALL" : periods, proof,
         ...(mode === "faculty" ? { studentIds: students.map((s) => s.id) } : {}),
       });
-      toast({ variant: "success", title: created.length > 1 ? `${created.length} requests sent (one per department)` : "Request sent", description: "You'll be notified when it's decided." });
-      setTitle(""); setDescription(""); setVenue(""); setProof([]); setStudents([]); setPeriods([]); setAllPeriods(true);
+      toast({ variant: "success", title: created.length > 1 ? `${created.length} requests sent (one per department)` : "Request sent", description: "You will be notified when a decision is made." });
+      setTitle(""); setOtherCategory(""); setDescription(""); setVenue(""); setProof([]); setStudents([]); setPeriods([]); setAllPeriods(true);
       onCreated();
     } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't send the request" }); }
     finally { setSubmitting(false); }
   }
 
-  if (!options) return <p className="text-sm text-muted-foreground">Loading…</p>;
-  if (!options.enabled) return <p className="text-sm text-muted-foreground">Student permissions aren&apos;t switched on for this college yet.</p>;
+  if (!options) return <p className="text-sm text-muted-foreground">Loading...</p>;
+  if (!options.enabled) return <p className="text-sm text-muted-foreground">Student permissions are not enabled for this college.</p>;
 
   return (
-    <Card>
+    <Card className="border shadow-xs">
       <CardHeader>
-        <CardTitle className="text-base">{mode === "student" ? "Request permission" : "Request permission for students"}</CardTitle>
+        <CardTitle className="text-base">{mode === "student" ? "Request Permission" : "Request Permission for Students"}</CardTitle>
         <CardDescription>
-          Once approved, the covered students are shown <strong>On Duty</strong> for those periods and the periods are left out of their attendance percentage.
+          Once approved, covered students are marked On Duty for selected dates and periods.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-5">
-        <div className="grid gap-4 sm:grid-cols-2">
+      <CardContent className="space-y-4 sm:space-y-5">
+        {mode === "student" && options.studentInfo && (
+          <div className="rounded-md border bg-muted/40 p-3 text-xs sm:text-sm">
+            <span className="font-semibold text-foreground">Applying for Section: </span>
+            <span className="font-medium text-foreground">{options.studentInfo.department}</span>
+            <span className="mx-1 text-muted-foreground">•</span>
+            <span>Year {options.studentInfo.year}</span>
+            <span className="mx-1 text-muted-foreground">•</span>
+            <span className="font-medium">Section {options.studentInfo.section}</span>
+            <span className="ml-2 text-muted-foreground">({options.studentInfo.name} - {options.studentInfo.rollNumber})</span>
+          </div>
+        )}
+
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label>Type of permission</Label>
-            <Select value={categoryId} onValueChange={setCategoryId}>
+            <Select value={categoryId} onValueChange={(val) => { setCategoryId(val); if (!val.startsWith("other")) setOtherCategory(""); }}>
               <SelectTrigger><SelectValue placeholder="Choose a type" /></SelectTrigger>
               <SelectContent className="max-h-80">
                 {options.groups.map((g) => (
@@ -122,16 +140,29 @@ export function RequestForm({ mode, onCreated }: { mode: "student" | "faculty"; 
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="pm-title">Title</Label>
-            <Input id="pm-title" value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Smart India Hackathon - finals" />
+            <Input id="pm-title" value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Smart India Hackathon" />
           </div>
         </div>
 
+        {isOtherCategory && (
+          <div className="space-y-1.5">
+            <Label htmlFor="pm-other-type">Specify Permission Type <span className="text-destructive">*</span></Label>
+            <Input
+              id="pm-other-type"
+              value={otherCategory}
+              maxLength={120}
+              onChange={(e) => setOtherCategory(e.target.value)}
+              placeholder="e.g. Blood Donation Camp, NSS Event, Paper Presentation"
+            />
+          </div>
+        )}
+
         <div className="space-y-1.5">
           <Label htmlFor="pm-desc">Purpose</Label>
-          <Textarea id="pm-desc" rows={3} maxLength={2000} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What is it, who organises it, why attending?" />
+          <Textarea id="pm-desc" rows={3} maxLength={2000} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe the purpose of permission request" />
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
           <div className="space-y-1.5">
             <Label htmlFor="pm-from">From</Label>
             <Input id="pm-from" type="date" value={fromDate} onChange={(e) => { setFromDate(e.target.value); if (toDate < e.target.value) setToDate(e.target.value); }} />
@@ -147,20 +178,20 @@ export function RequestForm({ mode, onCreated }: { mode: "student" | "faculty"; 
         </div>
 
         {short && (
-          <div className="flex gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="status">
+          <div className="flex gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs sm:text-sm text-amber-900" role="status">
             <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
             <p>
-              {hours !== null && hours < 0 ? "This starts today or has already started. " : "Short notice. "}
-              It&apos;s best to request at least {limits?.advanceNoticeHours ?? 24} hours before. You can still send it - it will be marked as late.
+              {hours !== null && hours < 0 ? "This request starts today or has passed. " : "Short notice request. "}
+              Requests are recommended at least {limits?.advanceNoticeHours ?? 24} hours prior. It will be submitted and flagged as short notice.
             </p>
           </div>
         )}
 
         <div className="space-y-2">
           <Label>Periods</Label>
-          <label className="flex items-center gap-2 text-sm"><Checkbox checked={allPeriods} onCheckedChange={(c) => setAllPeriods(!!c)} />All periods on those days</label>
+          <label className="flex items-center gap-2 text-sm"><Checkbox checked={allPeriods} onCheckedChange={(c) => setAllPeriods(!!c)} />All periods on selected days</label>
           {!allPeriods && (
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-3 pt-1">
               {PERIOD_CHOICES.map((p) => (
                 <label key={p} className="flex items-center gap-1.5 text-sm">
                   <Checkbox checked={periods.includes(p)} onCheckedChange={(c) => setPeriods((cur) => (c ? [...cur, p].sort((a, b) => a - b) : cur.filter((x) => x !== p)))} />{p}
@@ -175,9 +206,9 @@ export function RequestForm({ mode, onCreated }: { mode: "student" | "faculty"; 
           <div className="flex flex-wrap items-center gap-2">
             <input ref={fileRef} type="file" accept="application/pdf,image/png,image/jpeg" multiple className="hidden" onChange={(e) => void onFile(e.target.files)} />
             <Button type="button" variant="outline" size="sm" disabled={uploading || proof.length >= 5} onClick={() => fileRef.current?.click()}>
-              {uploading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileUp className="h-4 w-4 mr-2" />}Upload PDF / image
+              {uploading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileUp className="h-4 w-4 mr-2" />}Upload File
             </Button>
-            <span className="text-xs text-muted-foreground">PDF, PNG or JPEG, up to 4 MB each</span>
+            <span className="text-xs text-muted-foreground">PDF, PNG or JPEG (up to 4 MB each)</span>
           </div>
           {proof.map((p, i) => (
             <div key={p.url} className="flex items-center gap-2 text-sm">
@@ -189,9 +220,9 @@ export function RequestForm({ mode, onCreated }: { mode: "student" | "faculty"; 
 
         {mode === "faculty" && <StudentPicker selected={students} onChange={setStudents} max={limits?.maxStudentsPerRequest ?? 100} />}
 
-        <div className="flex items-center justify-end gap-3">
-          {problem && <p className="text-xs text-muted-foreground">{problem}</p>}
-          <Button onClick={() => void submit()} loading={submitting} disabled={!!problem}>Send request</Button>
+        <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3 pt-2">
+          {problem && <p className="text-xs text-muted-foreground text-center sm:text-right">{problem}</p>}
+          <Button onClick={() => void submit()} loading={submitting} disabled={!!problem} className="w-full sm:w-auto">Send Request</Button>
         </div>
       </CardContent>
     </Card>

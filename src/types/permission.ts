@@ -17,6 +17,7 @@ import type { Timestamp } from "firebase/firestore";
 // parallel idea of who approves whom that could drift out of step.
 
 export type PermissionRequestStatus =
+  | "PENDING"
   | "PENDING_HOD"
   | "PENDING_PRINCIPAL"
   // See LeaveRequestStatus's own PENDING_VICE_PRINCIPAL comment (types/leave.ts) -
@@ -28,6 +29,7 @@ export type PermissionRequestStatus =
   | "CANCELLED";
 
 export const PERMISSION_STATUS_LABELS: Record<PermissionRequestStatus, string> = {
+  PENDING: "Pending",
   PENDING_HOD: "Pending HOD",
   PENDING_PRINCIPAL: "Pending Principal",
   PENDING_VICE_PRINCIPAL: "Pending Vice Principal",
@@ -38,11 +40,15 @@ export const PERMISSION_STATUS_LABELS: Record<PermissionRequestStatus, string> =
 };
 
 export const PENDING_PERMISSION_STATUSES: PermissionRequestStatus[] = [
+  "PENDING",
   "PENDING_HOD",
   "PENDING_PRINCIPAL",
   "PENDING_VICE_PRINCIPAL",
   "PENDING_MANAGEMENT",
 ];
+
+export const isPendingPermission = (status: PermissionRequestStatus): boolean =>
+  PENDING_PERMISSION_STATUSES.includes(status);
 
 export interface PermissionRequest {
   id: string;
@@ -73,6 +79,11 @@ export interface PermissionRequest {
    *  doesn't have to re-derive it from a routing map that may have changed
    *  since. */
   approverStage: "HOD" | "PRINCIPAL" | "VICE_PRINCIPAL" | "MANAGEMENT";
+
+  /** Decoupled State Engine fields: dynamic approval chain, stage index, and indexed pending key. */
+  chain?: string[];
+  stageIndex?: number;
+  pendingKey?: string | null;
 
   decidedByUid?: string;
   decidedByName?: string;

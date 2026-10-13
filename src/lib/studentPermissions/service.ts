@@ -138,8 +138,10 @@ async function createRequests(
     try { chain = buildChain(resolveRoute(config, defaultRoute, { department, requesterType: type, typeKeys }), holds); }
     catch (e) { throw invalid(e instanceof Error ? e.message : "No approver available"); }
 
+    const customLabel = input.otherCategory?.trim();
     const payload: PermissionPayload = {
-      categoryId: category.id, groupId: category.groupId, categoryLabel: category.label,
+      categoryId: category.id, groupId: category.groupId, categoryLabel: customLabel || category.label,
+      ...(customLabel ? { otherCategory: customLabel } : {}),
       title: input.title, description: input.description, ...(input.venue ? { venue: input.venue } : {}),
       fromDate: input.fromDate, toDate: input.toDate, periods: input.periods, coverageDates: calendarDays,
       students: g.students, studentUids: g.students.flatMap((s) => (s.uid ? [s.uid] : [])), proof: input.proof,
@@ -242,6 +244,21 @@ export async function listForOversight(db: Firestore, user: ActingUser, opts?: L
     scopes = editableDepartmentNames(await getHodDepartmentScope(db, user.collegeId, user.uid, { activeOnly: false }));
   }
   return store(db).listByScope<PermissionPayload>(user.collegeId, PERMISSION_KIND, scopes, opts);
+}
+
+/** Approved requests covering a specific section (for Class Representatives and Section views). */
+export async function listSectionApproved(
+  db: Firestore,
+  user: ActingUser,
+  department: string,
+  section: string,
+  year: number,
+  opts?: ListOptions
+): Promise<PermissionRequest[]> {
+  const approved = await store(db).listByScope<PermissionPayload>(user.collegeId, PERMISSION_KIND, [department], opts);
+  return approved.filter(
+    (r) => r.status === "APPROVED" && r.payload.students.some((s) => s.section === section && s.year === year)
+  );
 }
 
 /** May this login see this request? Requester, a covered student, the department's HOD, the Vice Principal / Principal, or its class incharge. */

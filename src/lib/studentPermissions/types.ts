@@ -4,17 +4,17 @@ import type { StageId } from "@/lib/approvals";
 export const PERMISSION_KIND = "STUDENT_PERMISSION";
 
 export type PermissionRequesterType = "STUDENT" | "FACULTY";
-export type PermissionStage = "CLASS_INCHARGE" | "HOD" | "VICE_PRINCIPAL" | "PRINCIPAL";
+export type PermissionStage = "CLASS_INCHARGE" | "DELEGATED_FACULTY" | "HOD" | "VICE_PRINCIPAL" | "PRINCIPAL";
 
 export const PERMISSION_STAGE_LABELS: Record<PermissionStage, string> = {
-  CLASS_INCHARGE: "Class Incharge", HOD: "Head of Department", VICE_PRINCIPAL: "Vice Principal", PRINCIPAL: "Principal",
+  CLASS_INCHARGE: "Class Incharge", DELEGATED_FACULTY: "Designated Faculty", HOD: "Head of Department", VICE_PRINCIPAL: "Vice Principal", PRINCIPAL: "Principal",
 };
 
 /** Stages a route may use, per who raised the request. A class incharge only makes sense for one student's own request. */
 export function allowedStages(requesterType: string): PermissionStage[] {
   return requesterType === "STUDENT"
-    ? ["CLASS_INCHARGE", "HOD", "VICE_PRINCIPAL", "PRINCIPAL"]
-    : ["HOD", "VICE_PRINCIPAL", "PRINCIPAL"];
+    ? ["CLASS_INCHARGE", "DELEGATED_FACULTY", "HOD", "VICE_PRINCIPAL", "PRINCIPAL"]
+    : ["DELEGATED_FACULTY", "HOD", "VICE_PRINCIPAL", "PRINCIPAL"];
 }
 
 /** Used until the Principal (or a delegated HOD) configures something else. */
@@ -52,6 +52,7 @@ export interface PermissionPayload {
   categoryId: string;
   groupId: string;
   categoryLabel: string;
+  otherCategory?: string;
   title: string;
   description: string;
   venue?: string;
@@ -70,6 +71,9 @@ export interface PermissionPayload {
   noticeHours: number;
   /** Class incharge (Section.facultyInchargeUid) for a single-student request, when one is assigned. */
   inchargeUid?: string;
+  /** Designated faculty UID for delegated approval stage if configured. */
+  delegatedFacultyUid?: string;
+  delegatedFacultyName?: string;
 }
 
 /** Approvals-engine context: who is acting, with which roles. */

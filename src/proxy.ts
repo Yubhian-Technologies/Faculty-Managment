@@ -59,6 +59,8 @@ const ROLE_PATH_MAP: Record<string, string[]> = {
   LOCATION_STAFF_ADMIN: ["/location-staff-admin", "/location-dept-head"],
   PLACEMENT_DEPT: ["/placement-dept", LEAVE_ADJUSTMENTS_PATH],
   LIBRARY: ["/library", LEAVE_ADJUSTMENTS_PATH],
+  HOSTEL: ["/hostel", LEAVE_ADJUSTMENTS_PATH],
+  PD: ["/pd", LEAVE_ADJUSTMENTS_PATH],
   EXAM_CELL: ["/exam-cell", LEAVE_ADJUSTMENTS_PATH],
   LOCATION_DEPT_HEAD: ["/location-dept-head"],
   PRINCIPAL: ["/principal", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH, LEAVE_ADJUSTMENTS_PATH],

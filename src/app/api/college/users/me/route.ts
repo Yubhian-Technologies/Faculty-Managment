@@ -28,7 +28,7 @@ export async function PATCH(request: Request) {
     const session = await requireCollegeMember(
       "PRINCIPAL", "VICE_PRINCIPAL", "HOD",
       "COLLEGE_OFFICE", "COLLEGE_STAFF", "ACADEMICS", "IQAC_COORDINATOR",
-      "T_AND_P", "R_AND_D", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "WEBMASTER", "COLLEGE_ACCOUNTS"
+      "T_AND_P", "R_AND_D", "PLACEMENT_DEPT", "LIBRARY", "HOSTEL", "PD", "EXAM_CELL", "WEBMASTER", "COLLEGE_ACCOUNTS"
     );
 
     const body = (await readJsonBody(request)) as Partial<{

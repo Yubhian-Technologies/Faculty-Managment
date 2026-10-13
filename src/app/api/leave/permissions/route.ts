@@ -130,6 +130,8 @@ export async function POST(request: Request) {
     const settings = await loadCollegeSettings(db, session.collegeId);
     const stage = resolveApproverStage(settings.leaveApprovalRouting, session.role, !!identity.department);
     const status: PermissionRequestStatus = approverStageToStatus(stage);
+    const scope = stage === "HOD" ? identity.department ?? "" : "*";
+    const pendingKey = `${stage}|${scope}`;
 
     const now = new Date();
     const doc = {
@@ -145,6 +147,9 @@ export async function POST(request: Request) {
       reason,
       status,
       approverStage: stage,
+      chain: [stage],
+      stageIndex: 0,
+      pendingKey,
       createdAt: now,
       updatedAt: now,
     };
