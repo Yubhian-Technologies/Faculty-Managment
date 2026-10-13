@@ -49,6 +49,7 @@ export interface NavItem {
 const SUB_PAGE_PARENT: Record<string, string> = {
   "/hod/supporting-staff": "/hod/faculty", // tab of the Faculty page
   "/hod/assignment-requests": "/hod/teaching-assignments", // button on the Teaching Assignments page
+  "/academics/course-structure": "/principal/courses", // Assign-subjects deep link from a department's semester chip
 };
 
 export function isNavItemActive(item: NavItem, pathname: string, allItems: NavItem[]): boolean {
@@ -205,7 +206,7 @@ export const NAV_ITEMS: NavItem[] = [
   // visible per college via the Nav Visibility settings (filterVisibleNavItems).
   // Grouped by functional domain (see PRINCIPAL_DASHBOARD.md), not by data location.
   { label: "Dashboard", href: "/principal", iconName: "LayoutDashboard", roles: ["PRINCIPAL"] },
-  { label: "Courses", href: "/principal/courses", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Academics", legacyModule: "Academic Management" },
+  { label: "Courses & Departments", href: "/principal/courses", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Academics", legacyModule: "Academic Management" },
   // Promotion and Graduated Students live as sub-tabs (top-right pills) inside
   // the Students page itself now, rather than as separate sidebar entries -
   // see PrincipalStudentsPage. /principal/promotions and /principal/graduates

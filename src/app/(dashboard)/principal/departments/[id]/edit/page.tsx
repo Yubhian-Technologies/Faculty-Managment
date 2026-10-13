@@ -68,7 +68,7 @@ export default function EditDepartmentPage() {
         const dept = (deptRes.departments ?? []).find((d) => d.id === id) ?? null;
         if (!dept) {
           toast({ variant: "destructive", title: "Department not found" });
-          router.push("/principal/departments");
+          router.push("/principal/courses?tab=departments");
           return;
         }
         setDepartment(dept);
@@ -150,7 +150,7 @@ export default function EditDepartmentPage() {
       const saved = await submitPatch(payload);
       if (!saved) return; // warning dialog now showing - wait for the Principal's decision
       toast({ variant: "success", title: "Department updated" });
-      router.push("/principal/departments");
+      router.push("/principal/courses?tab=departments");
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save" });
     } finally {
@@ -165,7 +165,7 @@ export default function EditDepartmentPage() {
       await submitPatch(existingSectionsWarning.payload, { confirmExistingSections: true });
       toast({ variant: "success", title: "Department updated" });
       setExistingSectionsWarning(null);
-      router.push("/principal/departments");
+      router.push("/principal/courses?tab=departments");
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save" });
     } finally {
@@ -238,9 +238,9 @@ export default function EditDepartmentPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Core Departments</CardTitle>
+            <CardTitle className="text-base">Core Departments available to link</CardTitle>
             <CardDescription>
-              Which departments this department&apos;s students move on to.
+              Optional. The head of each department picked gets view-only access to this department&apos;s sections and students.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -279,11 +279,7 @@ export default function EditDepartmentPage() {
                 <div className="space-y-1">
                   <Label htmlFor="dept-is-freshman" className="font-normal">Freshman&apos;s Department</Label>
                   <p className="text-xs text-muted-foreground">
-                    Tick this if the department is the shared first year - where students sit in year 1 before
-                    moving on to their branch. It gets a &quot;Freshman&apos;s Department&quot; badge, and
-                    year-1 students can only be filed under it (or its sub-departments). Unticking it stops
-                    the department being treated as a shared first year, even if it teaches year 1 and has
-                    sub-departments.
+                    Shared first year - year-1 students can only be filed under this department (or its sub-departments).
                   </p>
                 </div>
               </div>
@@ -297,8 +293,7 @@ export default function EditDepartmentPage() {
                 <div className="space-y-1">
                   <Label htmlFor="dept-has-subdepts" className="font-normal">Has sub-departments</Label>
                   <p className="text-xs text-muted-foreground">
-                    Tick this if the department is divided into smaller departments. Its HOD then gets a
-                    &quot;Sub-Departments&quot; page where they can add each one and give it a head.
+                    Splits this department into smaller ones, each with its own head, managed from the HOD&apos;s Sub-Departments page.
                   </p>
                 </div>
               </div>
@@ -315,9 +310,7 @@ export default function EditDepartmentPage() {
                       This department also has its own sections/students, separate from its sub-departments
                     </Label>
                     <p className="text-xs text-muted-foreground">
-                      Leave this ON if the department teaches its own classes as well as having
-                      sub-departments. Turn it OFF if it only organises its sub-departments and never has
-                      students of its own - the students belong to the sub-departments instead.
+                      Turn off only if every student belongs to a sub-department.
                     </p>
                   </div>
                 </div>

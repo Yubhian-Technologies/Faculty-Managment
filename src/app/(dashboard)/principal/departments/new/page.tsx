@@ -106,7 +106,7 @@ export default function NewDepartmentPage() {
         throw new Error(json.error ?? "Failed");
       }
       toast({ variant: "success", title: "Department added" });
-      router.push("/principal/departments");
+      router.push("/principal/courses?tab=departments");
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save" });
     } finally {
@@ -160,9 +160,7 @@ return (
               <div className="space-y-1 rounded-md border p-3">
                 <Label>Head of Department</Label>
                 <p className="text-xs text-muted-foreground">
-                  The department gets its own HOD seat automatically. Appoint someone to it afterwards in Role
-                  Assignments - the HOD is a seat a person holds on top of their own faculty login, not a separate
-                  account.
+                  A HOD seat is created automatically - appoint someone in Role Assignments.
                 </p>
               </div>
             </CardContent>
@@ -188,9 +186,9 @@ return (
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Core Departments</CardTitle>
+            <CardTitle className="text-base">Core Departments available to link</CardTitle>
             <CardDescription>
-              Which departments this department&apos;s students move on to.
+              Optional. The head of each department picked gets view-only access to this department&apos;s sections and students.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -227,9 +225,7 @@ return (
               <div className="space-y-1">
                 <Label htmlFor="dept-is-freshman" className="font-normal">Freshman&apos;s Department</Label>
                 <p className="text-xs text-muted-foreground">
-                  Tick this if the department is the shared first year - where students sit in year 1 before
-                  moving on to their branch. It gets a &quot;Freshman&apos;s Department&quot; badge, and
-                  year-1 students can only be filed under it (or its sub-departments).
+                  Shared first year - year-1 students can only be filed under this department (or its sub-departments).
                 </p>
               </div>
             </div>
@@ -243,8 +239,7 @@ return (
               <div className="space-y-1">
                 <Label htmlFor="dept-has-subdepts" className="font-normal">Has sub-departments</Label>
                 <p className="text-xs text-muted-foreground">
-                  Tick this if the department is divided into smaller departments. Its HOD then gets a
-                  &quot;Sub-Departments&quot; page where they can add each one and give it a head.
+                  Splits this department into smaller ones, each with its own head, managed from the HOD&apos;s Sub-Departments page.
                 </p>
               </div>
             </div>
@@ -261,9 +256,7 @@ return (
                     This department also has its own sections/students, separate from its sub-departments
                   </Label>
                   <p className="text-xs text-muted-foreground">
-                    Leave this ON if the department teaches its own classes as well as having
-                    sub-departments. Turn it OFF if it only organises its sub-departments and never has
-                    students of its own - the students belong to the sub-departments instead.
+                    Turn off only if every student belongs to a sub-department.
                   </p>
                 </div>
               </div>
