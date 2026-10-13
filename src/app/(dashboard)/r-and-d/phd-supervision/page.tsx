@@ -6,6 +6,7 @@ import { Eye, Trash2, Check, X } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { researchRecordHref } from "@/lib/research/modules";
+import { ChangedFieldsButton } from "@/components/research/PendingChangesPanel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -158,6 +159,7 @@ export default function RAndDPhdSupervisionPage() {
       header: "",
       render: (row) => (
         <div className="flex items-center gap-1">
+          <ChangedFieldsButton record={row} />
           <Button
             variant="ghost" size="sm"
             onClick={(e) => { e.stopPropagation(); router.push(researchRecordHref("phd-supervision", row.id)); }}

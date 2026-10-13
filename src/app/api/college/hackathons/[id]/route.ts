@@ -10,6 +10,7 @@ import { holdsRole } from "@/lib/roles/seatRoles";
 import { notify } from "@/lib/notify";
 import { hackathonMissingFields, hackathonMissingMessage } from "@/lib/research/hackathonValidation";
 import { notifyReviewer, resolveSubmissionRoute, routeFields } from "@/lib/research/coordinatorReview";
+import { buildEditTrail, clearEditTrail, summarizeFieldChanges } from "@/lib/research/changeTracking";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import type {
   HackathonEvaluatorItem, HackathonEventType, HackathonFacultyCoordinatorItem, HackathonLevel,
@@ -134,6 +135,7 @@ export async function PATCH(
         reviewedByName,
         reviewedAt: now,
         updatedAt: now,
+        ...(body.decision === "APPROVED" ? clearEditTrail() : {}),
         ...(body.decision === "REJECTED" ? { rejectionReason: body.rejectionReason ?? "" } : { rejectionReason: FieldValue.delete() }),
       });
 
@@ -183,12 +185,18 @@ export async function PATCH(
         const editorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
         editorName = (editorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
       } catch { /* best-effort */ }
+      // After an approved record is edited, say exactly which fields moved (vs the verified version).
+      const trail = buildEditTrail({
+        existing: snap.data() as Record<string, unknown>, incoming: updates, moduleSlug: "hackathons",
+        editorUid: session.uid, editorName, now,
+      });
+      Object.assign(updates, trail.updates);
       await ref.update(updates);
       await writeAuditLogSafe(db, session.collegeId, { action: "RD_HACKATHON_UPDATED", performedBy: session.uid, performedByName: editorName, targetId: id, details: { title: body.eventTitle ?? record.eventTitle } });
       await notifyReviewer(db, session.collegeId, route, {
         type: "HACKATHON_PENDING_VERIFICATION", title: wasApproved ? "Hackathon record edited after approval - re-verification needed" : "Hackathon record resubmitted for verification",
         message: wasApproved
-          ? `Hackathon record ("${body.eventTitle ?? record.eventTitle}") was edited after approval and needs re-verification`
+          ? `Hackathon record ("${body.eventTitle ?? record.eventTitle}") was edited after approval and needs re-verification - changed: ${summarizeFieldChanges(trail.changes)}`
           : `A previously rejected record ("${body.eventTitle ?? record.eventTitle}") was corrected and resubmitted`,
         rndLink: "/r-and-d/hackathons",
       });
