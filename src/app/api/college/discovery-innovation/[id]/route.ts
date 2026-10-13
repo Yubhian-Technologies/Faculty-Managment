@@ -9,6 +9,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { holdsRole } from "@/lib/roles/seatRoles";
 import { notify } from "@/lib/notify";
 import { notifyReviewer, resolveSubmissionRoute, routeFields } from "@/lib/research/coordinatorReview";
+import { buildEditTrail, clearEditTrail, summarizeFieldChanges } from "@/lib/research/changeTracking";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import { finalizeIprInventors } from "@/lib/research/finalizeIprInventors";
 import { validateDiscoveryInnovationBody } from "@/lib/research/validateDiscoveryInnovation";
@@ -131,6 +132,7 @@ export async function PATCH(
         reviewedByName,
         reviewedAt: now,
         updatedAt: now,
+        ...(body.decision === "APPROVED" ? clearEditTrail() : {}),
         ...(body.decision === "REJECTED" ? { rejectionReason: body.rejectionReason ?? "" } : { rejectionReason: FieldValue.delete() }),
       });
 
@@ -186,12 +188,18 @@ export async function PATCH(
         const editorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
         editorName = (editorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
       } catch { /* best-effort */ }
+      // After an approved record is edited, say exactly which fields moved (vs the verified version).
+      const trail = buildEditTrail({
+        existing: snap.data() as Record<string, unknown>, incoming: updates, moduleSlug: "discovery-innovation",
+        editorUid: session.uid, editorName, now,
+      });
+      Object.assign(updates, trail.updates);
       await ref.update(updates);
       await writeAuditLogSafe(db, session.collegeId, { action: "RD_DISCOVERY_INNOVATION_UPDATED", performedBy: session.uid, performedByName: editorName, targetId: id, details: { title: body.title ?? record.title } });
       await notifyReviewer(db, session.collegeId, route, {
         type: "DISCOVERY_INNOVATION_PENDING_VERIFICATION", title: wasApproved ? "IPR record edited after approval - re-verification needed" : "IPR record resubmitted for verification",
         message: wasApproved
-          ? `IPR record ("${body.title ?? record.title}") was edited after approval and needs re-verification`
+          ? `IPR record ("${body.title ?? record.title}") was edited after approval and needs re-verification - changed: ${summarizeFieldChanges(trail.changes)}`
           : `A previously rejected IPR record ("${body.title ?? record.title}") was corrected and resubmitted`,
         rndLink: "/r-and-d/discovery-innovation",
       });

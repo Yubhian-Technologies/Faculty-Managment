@@ -1,5 +1,6 @@
 "use client";
 
+import { InternalFacultyPicker } from "@/components/research/InternalFacultyPicker";
 import { useEffect, useState } from "react";
 import { Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -325,26 +326,8 @@ function AuthorFields({
   colleges: CollegeOption[];
   ownCollegeId: string;
 }) {
-  const [lookup, setLookup] = useState<"idle" | "loading" | "found" | "not-found">(
-    author.isInternal && author.authorType === "FACULTY" && author.name ? "found" : "idle"
-  );
   const otherColleges = colleges.filter((c) => c.id !== ownCollegeId);
   const scope: "PROJECT" | "OTHERS" = author.affiliationCollegeId === OTHERS_COLLEGE_ID ? "OTHERS" : "PROJECT";
-
-  async function lookupFacultyId(facultyId: string) {
-    update({ facultyId, name: "" });
-    if (!facultyId.trim()) { setLookup("idle"); return; }
-    setLookup("loading");
-    try {
-      const res = await fetch(`/api/college/faculty-lookup?employeeId=${encodeURIComponent(facultyId.trim())}`);
-      if (!res.ok) { setLookup("not-found"); return; }
-      const data = await res.json() as { name?: string };
-      update({ facultyId, name: data.name ?? "" });
-      setLookup("found");
-    } catch {
-      setLookup("not-found");
-    }
-  }
 
   function onAffiliationScopeChange(next: "PROJECT" | "OTHERS") {
     if (next === "OTHERS") {
@@ -398,13 +381,11 @@ function AuthorFields({
             </Select>
           </div>
           {author.authorType === "FACULTY" ? (
-            <div className="space-y-1.5">
-              <Label className="text-xs">Faculty ID</Label>
-              <Input value={author.facultyId ?? ""} onChange={(e) => void lookupFacultyId(e.target.value)} placeholder="Employee ID" />
-              {lookup === "loading" && <p className="text-xs text-muted-foreground">Looking up…</p>}
-              {lookup === "found" && author.name && <p className="text-xs text-green-700">{author.name}</p>}
-              {lookup === "not-found" && <p className="text-xs text-destructive">No faculty member found with that ID</p>}
-            </div>
+            <InternalFacultyPicker
+              facultyId={author.facultyId ?? ""}
+              label={<>Faculty</>}
+              onPick={(p) => update({ facultyId: p.facultyId, name: p.name })}
+            />
           ) : (
             <>
               <div className="space-y-1.5">

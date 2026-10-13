@@ -127,6 +127,13 @@ There is **no env switch** (the old `READ_ONLY_FACULTY_COLLEGES` is gone and ign
 - **Read-only progress for the mentor** (`GET /api/college/mentoring/students/[id]?part=profile|attendance|results|internal`, PANEL_MEMBER/HOD; allowed for the student's mentor or the HOD who manages them): profile = the student's own roster detail groups (`buildOwnProfileGroups`); attendance = `computeStudentAttendanceHistory` per semester; results = PUBLISHED `semesterResults` with SGPA/CGPA/backlogs from `studentStanding` (`lib/mentoring/progress.ts`); internal marks = SUBMITTED `internalExamMarks` batches containing the student, resolved through the Exam Cell's `ExamConfiguration`.
 - **Pages:** `/hod/mentoring` (Assign / Mentors / My Mentees) and `/panel/mentoring` (My Mentees), both opening `MenteeProgress`. Exited (RESIGNED/RETIRED) faculty are read-only, so they lose access automatically; the HOD reassigns their mentees.
 
+### R&D records: edit before / after verification, and the change trail
+
+- **Owners can edit at any status** (pending, with the coordinator, rejected, sent back, approved) in all 11 modules; Research Profiles and Citation Metrics are single-record-per-person, so a still-PENDING submission is overwritten in place (POST no longer 409s).
+- **Editing an APPROVED record reopens it and records exactly what moved** (`src/lib/research/changeTracking.ts`): the first edit stores the verified content as `verifiedSnapshot`, and every edit stores `pendingChanges` = `{ changedAt, changedByName, changes: [{ key, label, before, after }] }` against that snapshot (never against the previous edit; putting a value back shows no change). Approval deletes both (`clearEditTrail`). Rejection / send-back keeps them, so a resubmission still shows the diff from the last verified version.
+- **Shown** by `PendingChangesPanel` (record page `/r-and-d/record/[module]/[id]`, coordinator review dialog) and `ChangedFieldsButton` (every R&D pending-tab row); the reviewer notification lists the changed field names. A coordinator's correction recomputes `pendingChanges.changes`.
+- Bookkeeping keys are excluded from the diff by `BOOKKEEPING` in that file; every other key a record holds is tracked, so a new form field needs no change there.
+
 ## Architecture & Directory Map
 
 ```

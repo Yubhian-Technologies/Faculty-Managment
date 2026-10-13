@@ -9,6 +9,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { holdsRole } from "@/lib/roles/seatRoles";
 import { notify } from "@/lib/notify";
 import { notifyReviewer, resolveSubmissionRoute, routeFields } from "@/lib/research/coordinatorReview";
+import { buildEditTrail, clearEditTrail, summarizeFieldChanges } from "@/lib/research/changeTracking";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import { finalizePublicationDetails, deriveFlatFields, summarizeChanges } from "@/lib/publications/deriveFlatFields";
 import { checkIsbnForSave } from "@/lib/publications/isbnGuard";
@@ -106,6 +107,7 @@ export async function PATCH(
         reviewedByName,
         reviewedAt: now,
         updatedAt: now,
+        ...(body.decision === "APPROVED" ? clearEditTrail() : {}),
         ...(body.decision === "REJECTED" ? { rejectionReason: body.rejectionReason ?? "" } : { rejectionReason: FieldValue.delete() }),
       });
 
@@ -160,12 +162,22 @@ export async function PATCH(
       } catch { /* best-effort */ }
 
       let changes: string[] = [];
+      let fieldSummary = "";
       if (body.details) {
         const isbnError = await checkIsbnForSave(db, session.collegeId, body.details.type, body.details.isbnNumber, { publicationId: id, previousIsbn: pub.details?.isbnNumber });
         if (isbnError) return NextResponse.json({ error: isbnError }, { status: 400 });
         const { details, internalAuthorUids } = await finalizePublicationDetails(db, session.collegeId, body.details);
         if (wasApproved && pub.details) changes = summarizeChanges(pub.details, details);
         Object.assign(updates, { details, internalAuthorUids }, deriveFlatFields(details));
+        // Exactly which detail fields moved since R&D verified it (before -> after), for the reviewer.
+        const trail = buildEditTrail({
+          existing: { ...(pub.details ?? {}), status: pub.status, verifiedSnapshot: (snap.data() as { verifiedSnapshot?: unknown }).verifiedSnapshot },
+          incoming: details as unknown as Record<string, unknown>,
+          moduleSlug: "publications", editorUid: session.uid, editorName, now,
+        });
+        Object.assign(updates, trail.updates);
+        if (trail.reopened) changes = trail.changes.map((c) => `${c.label} changed`);
+        fieldSummary = summarizeFieldChanges(trail.changes);
       } else {
         if (body.title !== undefined) updates.title = body.title;
         if (body.coAuthors !== undefined) updates.coAuthors = body.coAuthors;
@@ -188,7 +200,7 @@ export async function PATCH(
         type: "PUBLICATION_PENDING_VERIFICATION",
         title: wasApproved ? "Approved publication edited - re-verification needed" : "Publication resubmitted for verification",
         message: wasApproved
-          ? `${editorName} edited "${body.title ?? pub.title}" after approval: ${(changes.length > 0 ? changes : ["Details updated"]).join(", ")}`
+          ? `${editorName} edited "${body.title ?? pub.title}" after approval - changed: ${fieldSummary || (changes.length > 0 ? changes : ["Details updated"]).join(", ")}`
           : `${editorName} submitted/corrected "${body.title ?? pub.title}" for verification`,
         rndLink: "/r-and-d/publications",
       });

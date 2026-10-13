@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { notify } from "@/lib/notify";
+import { clearEditTrail } from "@/lib/research/changeTracking";
 import { applyCitationMetricsFields } from "@/lib/research/applyCitationMetricsFields";
 import type { CitationMetricsRequest, PublicationStatus } from "@/types";
 
@@ -51,6 +52,8 @@ export async function PATCH(
       updatedAt: now,
     };
     if (status === "REJECTED") updates.rejectionReason = body.rejectionReason ?? "";
+    // Approved: the submitted values are the verified ones now, nothing left to compare.
+    if (status === "APPROVED") Object.assign(updates, clearEditTrail());
     await ref.update(updates);
 
     if (status === "APPROVED") {
