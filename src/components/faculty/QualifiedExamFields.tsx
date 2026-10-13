@@ -4,7 +4,7 @@ import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { NumInput, TextInput } from "@/components/shared/ProfileFieldPrimitives";
+import { NumInput, QualCard, TextInput } from "@/components/shared/ProfileFieldPrimitives";
 import { QUALIFYING_EXAM_LABELS } from "@/types";
 import type { FacultyProfileFields, QualifiedExamEntry, QualifyingExamType } from "@/types";
 
@@ -57,7 +57,7 @@ export function QualifiedExamFields({ value, onChange }: { value: Value; onChang
   };
 
   return (
-    <div className="space-y-3 rounded-lg border p-3">
+    <QualCard level="EXAM" label="Qualifying Exams (NET / SLET / SET / GATE)">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="space-y-2">
           <Label>NET/SLET/SET/GATE/Others</Label>
@@ -107,6 +107,6 @@ export function QualifiedExamFields({ value, onChange }: { value: Value; onChang
           </Button>
         </>
       )}
-    </div>
+    </QualCard>
   );
 }

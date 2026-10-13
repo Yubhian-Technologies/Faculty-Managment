@@ -112,7 +112,10 @@ export default function ResearchRecordPage({
     queryKey: ["research-record", moduleSlug, id],
     enabled: !!config,
     queryFn: async () => {
-      const res = await fetch(`/api/college/${config!.apiPath}`);
+      // ?scope=all: this page is opened from R&D's queue, so the record being
+      // looked at is usually someone else's. Without it the endpoint answers
+      // with the viewer's OWN records and the row reads as not found.
+      const res = await fetch(`/api/college/${config!.apiPath}?scope=all`);
       const data = await res.json() as Record<string, unknown>;
       if (!res.ok) throw new Error("Failed to load this record");
       const list = (data[config!.responseKey] ?? []) as RecordShape[];

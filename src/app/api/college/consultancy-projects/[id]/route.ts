@@ -6,10 +6,11 @@ import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { holdsRole } from "@/lib/roles/seatRoles";
 import { notify } from "@/lib/notify";
 import { finalizeFacultyConsultants } from "@/lib/research/finalizeConsultants";
 import { validateConsultancyBody } from "@/lib/research/validateConsultancyProject";
-import { isResubmittable, notifyReviewer, resolveSubmissionRoute, routeFields } from "@/lib/research/coordinatorReview";
+import { notifyReviewer, resolveSubmissionRoute, routeFields } from "@/lib/research/coordinatorReview";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import { CONSULTANCY_CATEGORIES, CONSULTANCY_CLIENT_TYPES, CONSULTANCY_DELIVERABLES } from "@/lib/research/consultancyProjectOptions";
 import type { ConsultancyCategory, ConsultancyClientType, ConsultancyDeliverable, PublicationStatus } from "@/types";
@@ -110,7 +111,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Consultancy project not found" }, { status: 404 });
     }
     const project = snap.data() as { uid: string; title: string; status?: PublicationStatus };
-    const isRnD = session.role === "R_AND_D";
+    const isRnD = holdsRole(session, "R_AND_D");
     const isOwner = project.uid === session.uid;
     if (!isRnD && !isOwner) {
       return NextResponse.json({ error: "Not authorized to edit this consultancy project" }, { status: 403 });
@@ -162,10 +163,13 @@ export async function PATCH(
     }
 
     // Owner editing+resubmitting their own rejected submission.
-    if (isOwner && !isRnD) {
-      if (!isResubmittable(project.status)) {
-        return NextResponse.json({ error: "Only a rejected or sent-back submission can be edited" }, { status: 403 });
-      }
+    // An owner editing their OWN record always sends it back for verification -
+    // at any status, not just a rejected or sent-back one, and including an
+    // owner who is also the R&D head. Editing is a separate act from
+    // reviewing: the decision branch above is still the only way to approve,
+    // and R&D can still approve their own record there.
+    if (isOwner) {
+      const wasApproved = project.status === "APPROVED";
       // The owner resubmits the whole form, so the same compulsory-sections rule
       // as a fresh submission applies to what they send.
       const consultantCount = (consultantFields.facultyConsultants as unknown[] | undefined)?.length ?? 0;
@@ -175,7 +179,7 @@ export async function PATCH(
       );
       if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
 
-      const route = await resolveSubmissionRoute(db, session.collegeId, session.uid, false);
+      const route = await resolveSubmissionRoute(db, session.collegeId, session.uid, isRnD);
       const now = new Date();
       const updates: Record<string, unknown> = {
         ...routeFields(route),
@@ -199,8 +203,10 @@ export async function PATCH(
       await ref.update(updates);
       await writeAuditLogSafe(db, session.collegeId, { action: "RD_CONSULTANCY_PROJECT_UPDATED", performedBy: session.uid, performedByName: editorName, targetId: id, details: { title: body.title ?? project.title } });
       await notifyReviewer(db, session.collegeId, route, {
-        type: "CONSULTANCY_PROJECT_PENDING_VERIFICATION", title: "Consultancy project resubmitted for verification",
-        message: `A previously rejected consultancy project ("${body.title ?? project.title}") was corrected and resubmitted`,
+        type: "CONSULTANCY_PROJECT_PENDING_VERIFICATION", title: wasApproved ? "Consultancy project edited after approval - re-verification needed" : "Consultancy project resubmitted for verification",
+        message: wasApproved
+          ? `Consultancy project ("${body.title ?? project.title}") was edited after approval and needs re-verification`
+          : `A previously rejected consultancy project ("${body.title ?? project.title}") was corrected and resubmitted`,
         rndLink: "/r-and-d/consultancy-projects",
       });
       return NextResponse.json({ ok: true });

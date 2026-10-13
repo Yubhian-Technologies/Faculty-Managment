@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { holdsRole } from "@/lib/roles/seatRoles";
 import { notify } from "@/lib/notify";
 import { notifyReviewer, resolveSubmissionRoute, routeFields } from "@/lib/research/coordinatorReview";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
@@ -80,7 +81,7 @@ export async function PATCH(
       uid: string; title: string; status?: PublicationStatus;
       internalAuthorUids?: string[]; details?: PublicationDetails;
     };
-    const isRnD = session.role === "R_AND_D";
+    const isRnD = holdsRole(session, "R_AND_D");
     const isOwner = pub.uid === session.uid;
     const isCoAuthor = (pub.internalAuthorUids ?? []).includes(session.uid);
     if (!isRnD && !isOwner && !isCoAuthor) {
@@ -127,9 +128,19 @@ export async function PATCH(
     // submission before R&D even looks at it). Editing an already-APPROVED
     // record reopens it for re-verification and logs exactly what changed,
     // rather than silently re-approving stale info.
-    if ((isOwner || isCoAuthor) && !isRnD) {
+    //
+    // This holds for the R&D head editing a record of their OWN too, which is
+    // what the button on their profile says it does ("Edit (sends for
+    // re-verification)"). They used to fall through to the full-edit branch
+    // below, which leaves the status alone - so their changes to an approved
+    // record went live without anyone, themselves included, verifying them.
+    // Reviewing is a separate act from editing: the decision branch above is
+    // still the only way to approve, and they can still approve their own.
+    if (isOwner || isCoAuthor) {
       const wasApproved = pub.status === "APPROVED";
-      const route = await resolveSubmissionRoute(db, session.collegeId, pub.uid, false);
+      // isRnD here only decides whether the department's R&D Coordinator sees
+      // it first, matching how the same person's NEW records are routed.
+      const route = await resolveSubmissionRoute(db, session.collegeId, pub.uid, isRnD);
       const now = new Date();
       const updates: Record<string, unknown> = {
         updatedAt: now,
@@ -184,7 +195,8 @@ export async function PATCH(
       return NextResponse.json({ ok: true });
     }
 
-    // R&D's own full edit - any field, any status.
+    // R&D editing SOMEONE ELSE's record - any field, any status. An owner's own
+    // edit is handled above, whether or not they are also R&D.
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (body.details) {
       const isbnError = await checkIsbnForSave(db, session.collegeId, body.details.type, body.details.isbnNumber, { publicationId: id, previousIsbn: pub.details?.isbnNumber });

@@ -36,7 +36,7 @@ export default function RAndDInnovationsPage() {
   async function load() {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/college/innovations");
+      const res = await fetch("/api/college/innovations?scope=all");
       const data = await res.json() as { records: InnovationRow[] };
       setRecords(data.records ?? []);
     } catch {

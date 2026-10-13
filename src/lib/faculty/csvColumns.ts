@@ -77,18 +77,23 @@ function group(module: ExportModuleKey, key: string, label: string, subFieldLabe
 // those two boxes gets silently left out of export. Sub-field wording is
 // exactly the Faculty Details UI label (== the stored key: course,
 // institutionName, percentageCgpa, yearOfPassing, ...).
-const DEGREE_SUBFIELDS = ["Course", "Degree", "Branch", "Institution Name", "Affiliated University", "Percentage / CGPA", "Year of Passing", "Place", "Hall Ticket Number"];
-const SCHOOL_DEGREE_SUBFIELDS = ["Course", "Board", "Institution Name", "Percentage / CGPA", "Year of Passing", "Place", "Hall Ticket Number"];
+const DEGREE_SUBFIELDS = ["Degree", "Type of Degree", "Course/Branch", "Specialization", "Institution Name", "Affiliated University", "Percentage / CGPA", "Year of Passing", "Place", "Hall Ticket Number"];
+// Secondary names the place a "School Name"; Intermediate / Diploma / ITI a "College Name" and, right after Course, the
+// per-course Subject (Intermediate), Branch (Diploma) and Trade (ITI) - separate columns, blank when not applicable.
+const SECONDARY_SUBFIELDS = ["Course", "Board", "School Name", "Percentage / CGPA", "Year of Passing", "Place", "Hall Ticket Number"];
+const INTERMEDIATE_SUBFIELDS = ["Course", "Subject", "Branch", "Trade", "Board", "College Name", "Percentage / CGPA", "Year of Passing", "Place", "Hall Ticket Number"];
 // Doctoral/Post-Doctoral entries (Ph.D. Details, Postdoctoral Fellowship
 // Details) - Specialization instead of Course/Branch/Percentage-CGPA, plus this
 // entry's own Status/Mode (live on DegreeDetail.status/.mode, not a separate
 // FacultyProfileFields-level scalar - see DegreeFields in
 // ProfileFieldPrimitives.tsx) and Year of Registration/Name of the
 // Guide-Supervisor (shown while Pursuing, instead of Year of Award).
-const POSTDOCTORAL_SUBFIELDS = ["Specialization", "Institution Name", "Status", "Mode", "Year of Registration", "Name of the Guide / Supervisor", "Year of Award", "Place", "Hall Ticket Number"];
-// Ph.D. entries additionally carry the Name of the Department and the Title of
-// the Ph.D Thesis, just before Place (Postdoctoral entries have neither).
-const DOCTORAL_SUBFIELDS = [...POSTDOCTORAL_SUBFIELDS.slice(0, 7), "Name of the Department", "Title of the Ph.D Thesis", ...POSTDOCTORAL_SUBFIELDS.slice(7)];
+// Post-Doctoral entries carry exactly the Ph.D. fields (Name of the Department and the thesis title just before Place,
+// then Percentage / CGPA) - only the thesis label differs.
+const doctoralSubfields = (thesisLabel: string) =>
+  ["Specialization", "Institution Name", "Status", "Mode", "Year of Registration", "Name of the Guide / Supervisor", "Year of Award", "Name of the Department", thesisLabel, "Place", "Percentage / CGPA", "Hall Ticket Number"];
+const POSTDOCTORAL_SUBFIELDS = doctoralSubfields("Title of the Postdoc Thesis");
+const DOCTORAL_SUBFIELDS = doctoralSubfields("Title of the Ph.D Thesis");
 // Roles/Responsibilities is a per-entry field, labelled per experience type.
 const experienceSubfields = (kind: "Academic" | "Industry" | "Research") =>
   ["Institution Name", "Place of the University/College", "Designation", "From Date", "To Date", "Joining Salary", "Leaving Salary", `${kind} Roles/Responsibilities`, "Reason for Leaving", "NOC Obtained"];
@@ -183,8 +188,8 @@ export const EXPORT_FIELDS: ExportField[] = [
   scalar("qualification", "qualifiedYear", "Qualified Year"),
   // Export only: exams 2, 3, ... (the first exam is the four columns above).
   group("qualification", "additionalQualifiedExams", "Additional Qualified Exams", ["Qualified Exam", "Exam Score", "Qualified Year"]),
-  group("qualification", "secondaryEducation", "Secondary Education", SCHOOL_DEGREE_SUBFIELDS),
-  group("qualification", "intermediateDiplomaIti", "Intermediate / Diploma / ITI", SCHOOL_DEGREE_SUBFIELDS),
+  group("qualification", "secondaryEducation", "Secondary Education", SECONDARY_SUBFIELDS),
+  group("qualification", "intermediateDiplomaIti", "Intermediate / Diploma / ITI", INTERMEDIATE_SUBFIELDS),
   group("qualification", "ugDetailsGroup", "UG Details", DEGREE_SUBFIELDS),
   group("qualification", "pgDetailsGroup", "PG Details", DEGREE_SUBFIELDS),
   group("qualification", "phdDetailsGroup", "Ph.D. Details", DOCTORAL_SUBFIELDS),

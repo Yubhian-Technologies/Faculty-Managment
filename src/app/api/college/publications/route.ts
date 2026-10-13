@@ -5,6 +5,8 @@ import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember, verifySession } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { holdsRole } from "@/lib/roles/seatRoles";
+import { wantsWholeCollege } from "@/lib/research/listScope";
 import { isVisibleToRnD, notifyReviewer, resolveSubmissionRoute, routeFields } from "@/lib/research/coordinatorReview";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import { resolveOwnerDesignation } from "@/lib/publications/resolveOwnerDesignation";
@@ -27,17 +29,23 @@ export async function GET(request: Request) {
     const globalSession = await verifySession();
     let collegeId: string;
     let role: string;
+    // Whether the caller is the college's R&D head, which `role` alone cannot
+    // say: an R&D head who also holds a same-level seat (e.g. HOD) resolves to
+    // that one and would otherwise see only their own records. See holdsRole.
+    let isRnD: boolean;
     let uid: string;
     if (globalSession?.role === "SUPER_ADMIN") {
       const collegeIdParam = searchParams.get("collegeId");
       if (!collegeIdParam) return NextResponse.json({ error: "collegeId required" }, { status: 400 });
       collegeId = collegeIdParam;
       role = globalSession.role;
+      isRnD = false;
       uid = globalSession.uid;
     } else {
       const session = await requireCollegeMember(...COLLEGE_STAFF_ROLES);
       collegeId = session.collegeId;
       role = session.role;
+      isRnD = holdsRole(session, "R_AND_D");
       uid = session.uid;
     }
 
@@ -61,17 +69,20 @@ export async function GET(request: Request) {
     // may look up a specific uid too, since they already have full read access to
     // any faculty member's profile elsewhere (module-tile View pages). SUPER_ADMIN
     // gets the same drill-down access. Every other role can only ever see their
-    // own (+ co-authored) rows, regardless of query params.
-    const canQueryAnyUid = ["R_AND_D", "PRINCIPAL", "VICE_PRINCIPAL", "HOD", "SUPER_ADMIN"].includes(role);
+    // own (+ co-authored) rows, regardless of query params. R&D's whole-college
+    // read happens only when the review page asks for it (?scope=all): this
+    // endpoint also serves the caller's own Research Publications module page,
+    // which must stay their own rows. See wantsWholeCollege.
+    const canQueryAnyUid = isRnD || ["R_AND_D", "PRINCIPAL", "VICE_PRINCIPAL", "HOD", "SUPER_ADMIN"].includes(role);
+    const uidFilter = canQueryAnyUid ? searchParams.get("uid") : null;
+    const wholeCollege = !uidFilter && wantsWholeCollege(request, isRnD);
+    // Anything that is not this person's own rows - the queue, or a drill-down
+    // into someone else - is limited below to what has reached R&D.
+    const viewingOthers = wholeCollege || (!!uidFilter && uidFilter !== uid);
     let rawPublications: unknown[];
-    if (canQueryAnyUid) {
-      const uidFilter = searchParams.get("uid");
-      if (uidFilter) rawPublications = await fetchFor(uidFilter);
-      else if (role === "R_AND_D" || role === "SUPER_ADMIN") rawPublications = (await coll.get()).docs.map((d) => ({ id: d.id, ...d.data() }));
-      else rawPublications = await fetchFor(uid);
-    } else {
-      rawPublications = await fetchFor(uid);
-    }
+    if (uidFilter) rawPublications = await fetchFor(uidFilter);
+    else if (wholeCollege || role === "SUPER_ADMIN") rawPublications = (await coll.get()).docs.map((d) => ({ id: d.id, ...d.data() }));
+    else rawPublications = await fetchFor(uid);
 
     const publications = rawPublications
       .map((p) => p as Record<string, unknown>)
@@ -85,7 +96,7 @@ export async function GET(request: Request) {
         if (!pub.status || pub.status === "APPROVED") return true;
         // Records still with a department's R&D Coordinator (or sent back to
         // their submitter) only reach R&D once forwarded.
-        if (role === "R_AND_D") return isVisibleToRnD(pub.status);
+        if (viewingOthers) return isRnD ? isVisibleToRnD(pub.status) : role === "SUPER_ADMIN";
         return role === "SUPER_ADMIN" || pub.uid === uid || (pub.internalAuthorUids ?? []).includes(uid);
       })
       .sort((a, b) => ((b as { publicationYear?: number }).publicationYear ?? 0) - ((a as { publicationYear?: number }).publicationYear ?? 0));
@@ -105,7 +116,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember(...PUBLICATION_ELIGIBLE_ROLES);
-    const isRnD = session.role === "R_AND_D";
+    const isRnD = holdsRole(session, "R_AND_D");
 
     const body = (await readJsonBody(request)) as {
       uid?: string;

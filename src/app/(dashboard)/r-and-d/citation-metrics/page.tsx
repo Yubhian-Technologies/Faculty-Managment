@@ -29,7 +29,7 @@ export default function RAndDCitationMetricsPage() {
   async function load() {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/college/citation-metrics");
+      const res = await fetch("/api/college/citation-metrics?scope=all");
       const data = await res.json() as { requests: CitationMetricsRow[] };
       setRequests(data.requests ?? []);
     } catch {

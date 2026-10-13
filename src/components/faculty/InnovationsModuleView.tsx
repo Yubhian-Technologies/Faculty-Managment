@@ -41,19 +41,21 @@ function InnovationRow({
 }) {
   return (
     <div className="rounded-md border bg-muted/20 shadow-sm p-2 space-y-2">
-      {isOwnProfile && record.status !== "APPROVED" && (
+      {isOwnProfile && (
         <div className="flex items-center gap-2">
-          {record.status === "PENDING" || record.status === "COORDINATOR_REVIEW" ? (
-            <Badge variant="pending" className="text-xs">{record.status === "COORDINATOR_REVIEW" ? "With R&D Coordinator" : "Pending Verification"}</Badge>
-          ) : (
-            <>
-              <Badge variant="rejected" className="text-xs">{record.status === "SENT_BACK" ? "Sent Back" : "Rejected"}</Badge>
-              {onEdit && (
-                <button type="button" onClick={() => onEdit(record)} className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1">
-                  <Pencil className="h-3 w-3" />Edit &amp; Resubmit
-                </button>
-              )}
-            </>
+          {record.status === "PENDING" && <Badge variant="pending" className="text-xs">Pending Verification</Badge>}
+          {record.status === "COORDINATOR_REVIEW" && <Badge variant="pending" className="text-xs">With R&amp;D Coordinator</Badge>}
+          {record.status === "REJECTED" && <Badge variant="rejected" className="text-xs">Rejected</Badge>}
+          {record.status === "SENT_BACK" && <Badge variant="rejected" className="text-xs">Sent Back</Badge>}
+          {onEdit && (
+            <button type="button" onClick={() => onEdit(record)} className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1">
+              <Pencil className="h-3 w-3" />
+              {record.status === "REJECTED" || record.status === "SENT_BACK"
+                ? "Edit & Resubmit"
+                : record.status === "PENDING" || record.status === "COORDINATOR_REVIEW"
+                  ? "Edit"
+                  : "Edit (sends for re-verification)"}
+            </button>
           )}
         </div>
       )}

@@ -6,9 +6,10 @@ import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { holdsRole } from "@/lib/roles/seatRoles";
 import { notify } from "@/lib/notify";
-import { isResubmittable, notifyReviewer, resolveSubmissionRoute, routeFields } from "@/lib/research/coordinatorReview";
 import { innovationMissingFields, innovationMissingMessage } from "@/lib/research/innovationValidation";
+import { notifyReviewer, resolveSubmissionRoute, routeFields } from "@/lib/research/coordinatorReview";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import type {
   InnovationFacultyItem, InnovationType, InnovatorType, PublicationStatus,
@@ -107,7 +108,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Innovation record not found" }, { status: 404 });
     }
     const record = snap.data() as { uid: string; innovationTitle: string; status?: PublicationStatus };
-    const isRnD = session.role === "R_AND_D";
+    const isRnD = holdsRole(session, "R_AND_D");
     const isOwner = record.uid === session.uid;
     if (!isRnD && !isOwner) {
       return NextResponse.json({ error: "Not authorized to edit this record" }, { status: 403 });
@@ -147,16 +148,19 @@ export async function PATCH(
       return NextResponse.json({ ok: true });
     }
 
-    if (isOwner && !isRnD) {
-      if (!isResubmittable(record.status)) {
-        return NextResponse.json({ error: "Only a rejected or sent-back submission can be edited" }, { status: 403 });
-      }
+    // An owner editing their OWN record always sends it back for verification -
+    // at any status, not just a rejected or sent-back one, and including an
+    // owner who is also the R&D head. Editing is a separate act from
+    // reviewing: the decision branch above is still the only way to approve,
+    // and R&D can still approve their own record there.
+    if (isOwner) {
       // The record as it will be stored after this edit must be complete, same as a first submission.
       const missing = innovationMissingFields({ ...(snap.data() as object), ...pickEditableFields(body) });
       if (missing.length > 0) {
         return NextResponse.json({ error: innovationMissingMessage(missing), missing }, { status: 400 });
       }
-      const route = await resolveSubmissionRoute(db, session.collegeId, session.uid, false);
+      const wasApproved = record.status === "APPROVED";
+      const route = await resolveSubmissionRoute(db, session.collegeId, session.uid, isRnD);
       const now = new Date();
       const updates: Record<string, unknown> = {
         ...routeFields(route),
@@ -179,8 +183,10 @@ export async function PATCH(
       await ref.update(updates);
       await writeAuditLogSafe(db, session.collegeId, { action: "RD_INNOVATION_UPDATED", performedBy: session.uid, performedByName: editorName, targetId: id, details: { title: body.innovationTitle ?? record.innovationTitle } });
       await notifyReviewer(db, session.collegeId, route, {
-        type: "INNOVATION_PENDING_VERIFICATION", title: "Innovation record resubmitted for verification",
-        message: `A previously rejected innovation record ("${body.innovationTitle ?? record.innovationTitle}") was corrected and resubmitted`,
+        type: "INNOVATION_PENDING_VERIFICATION", title: wasApproved ? "Innovation record edited after approval - re-verification needed" : "Innovation record resubmitted for verification",
+        message: wasApproved
+          ? `Innovation record ("${body.innovationTitle ?? record.innovationTitle}") was edited after approval and needs re-verification`
+          : `A previously rejected innovation record ("${body.innovationTitle ?? record.innovationTitle}") was corrected and resubmitted`,
         rndLink: "/r-and-d/innovations",
       });
       return NextResponse.json({ ok: true });
