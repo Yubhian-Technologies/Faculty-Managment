@@ -34,11 +34,22 @@ type Db = FirebaseFirestore.Firestore;
 
 export interface SectionMoveDetail {
   sectionId: string;
+  /** The section's name AFTER this move (post branch-code rename, if any). */
   sectionName: string;
+  /** The section's name as it sits today, before this move - same as sectionName when nothing gets renamed. */
+  fromSectionName: string;
   year: number;
   studentCount: number;
   fromDepartmentName: string;
   toDepartmentName: string;
+}
+
+export interface CurrentSubjectDetail {
+  subjectId: string;
+  code: string;
+  name: string;
+  semester: number;
+  year?: number;
 }
 
 export interface SkippedSectionDetail {
@@ -73,6 +84,8 @@ export interface MigrateManagedBranchSubjectsResult {
   sections: SectionMoveDetail[];
   /** Sections NOT moved because a section with the same name/year already exists under the core department. */
   skippedSections: SkippedSectionDetail[];
+  /** Every subject currently assigned to the manager (subDepartment) today, before this move - the "current state" list for the review UI. Identical across every branch this manager feeds, since subjects aren't filtered per branch. */
+  currentSubjects: CurrentSubjectDetail[];
 }
 
 interface AssignmentRow {
@@ -300,6 +313,7 @@ async function run(
   const sections: SectionMoveDetail[] = sectionsToRename.map((s) => ({
     sectionId: s.id,
     sectionName: finalNameBySectionId.get(s.id) ?? s.name,
+    fromSectionName: s.name,
     year: s.year,
     studentCount: studentCountBySection.get(s.name) ?? 0,
     fromDepartmentName: subDeptName,
@@ -338,6 +352,14 @@ async function run(
       return { id: d.id, subjectId: data.subjectId, semester: data.semester, year: data.year };
     })
     .filter((r) => !!r.subjectId && r.semester != null);
+
+  // The manager's full current subject list, for the review UI's "current
+  // state" panel - every row under subDepartmentId today, regardless of
+  // which branch ends up getting it (subjects aren't filtered per branch).
+  const currentSubjects: CurrentSubjectDetail[] = rows.map((r) => {
+    const data = byId.get(r.id);
+    return { subjectId: r.subjectId, code: data?.subjectCode ?? "", name: data?.subjectName ?? "", semester: r.semester, year: r.year };
+  });
 
   const targetIds = rows.map((r) => `${r.subjectId}_${branchDepartmentId}_${r.semester}`);
   const existingTargets = targetIds.length > 0
@@ -458,6 +480,7 @@ async function run(
     secondaryDepartmentNamesCleared,
     sections,
     skippedSections,
+    currentSubjects,
   };
 }
 

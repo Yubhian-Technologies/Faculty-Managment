@@ -23,9 +23,24 @@ import type { Course, Department, Section } from "@/types";
 
 type DeptWithMaybeId = Department & { id: string };
 
+// Every core department a manager is linked to, by either acceptable
+// mechanism (migrateManagedBranchSubjects.ts's own `declaredElsewhere`
+// check): `managedDepartments` (HOD-set, parent/child shape - VIT) or
+// `secondaryDepartments`/`courseScopes[*].secondaryDepartments`
+// (Principal-set, standalone shape - SVECW). Lets "Move subjects to core
+// depts" surface for either shape instead of only the first.
+function linkedBranchNames(dept: Department): string[] {
+  return Array.from(new Set([
+    ...(dept.managedDepartments ?? []),
+    ...(dept.secondaryDepartments ?? []),
+    ...Object.values(dept.courseScopes ?? {}).flatMap((s) => s.secondaryDepartments ?? []),
+  ]));
+}
+
 interface SectionMoveDetail {
   sectionId: string;
   sectionName: string;
+  fromSectionName: string;
   year: number;
   studentCount: number;
   fromDepartmentName: string;
@@ -36,6 +51,14 @@ interface SkippedSectionDetail {
   sectionName: string;
   year: number;
   reason: string;
+}
+
+interface CurrentSubjectDetail {
+  subjectId: string;
+  code: string;
+  name: string;
+  semester: number;
+  year?: number;
 }
 
 interface MigrationCounts {
@@ -51,6 +74,7 @@ interface MigrationCounts {
   secondaryDepartmentNamesCleared: number;
   sections: SectionMoveDetail[];
   skippedSections: SkippedSectionDetail[];
+  currentSubjects: CurrentSubjectDetail[];
 }
 
 type PreviewEntry = ({ ok: true } & MigrationCounts) | { ok: false; error: string };
@@ -88,9 +112,8 @@ function MigrationBranchPicker({ open, onOpenChange, subDepartment, branches, on
         <DialogHeader>
           <DialogTitle>Move subjects &amp; students to core departments</DialogTitle>
           <DialogDescription>
-            Renames the shared-year sections (and the students in them) currently filed under &quot;{subDepartment.name}&quot;
-            to each selected core department directly, and moves their subjects, teaching assignments and timetable rows
-            along with them. Pick the departments to review, then see the full breakdown before anything is written.
+            Moves &quot;{subDepartment.name}&quot;&apos;s sections, students, subjects, and timetable rows into each
+            selected core department directly. Review before anything is written.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
@@ -119,14 +142,38 @@ function MigrationBranchPicker({ open, onOpenChange, subDepartment, branches, on
   );
 }
 
-// Step 2: the detailed review page - section-by-section, which students move
-// where, and a plain explanation of what happens to subjects (they're never
-// duplicated - see the note below). Full-page, not a modal, so a Principal
-// reviewing hundreds of students across several branches has room to read it.
-function MigrationReviewPage({ subDepartment, branchIds, allBranches, onBack, onDone }: {
+// Small Previous/Next pager, same pattern already used by SubjectsMasterTable -
+// reused here rather than reinvented, for the two "current state" tables below.
+function PageControls({ page, setPage, totalItems, pageSize }: {
+  page: number; setPage: (p: number) => void; totalItems: number; pageSize: number;
+}) {
+  const pageCount = Math.max(1, Math.ceil(totalItems / pageSize));
+  if (pageCount <= 1) return null;
+  return (
+    <div className="flex items-center justify-between pt-1">
+      <span className="text-xs text-muted-foreground">Page {page + 1} of {pageCount}</span>
+      <div className="flex gap-2">
+        <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(page - 1)}>Previous</Button>
+        <Button variant="outline" size="sm" disabled={page >= pageCount - 1} onClick={() => setPage(page + 1)}>Next</Button>
+      </div>
+    </div>
+  );
+}
+
+const REVIEW_PAGE_SIZE = 10;
+
+// Step 2: the detailed review page - a left/right split. LEFT is today's
+// state (the manager's own current sections and subjects, paginated tables -
+// nothing here changes until Confirm). RIGHT is what happens after: renamed
+// sections, which department students land in, and which subjects move.
+// Full-page, not a modal, so a Principal reviewing hundreds of students
+// across several branches has room to read it.
+function MigrationReviewPage({ subDepartment, branchIds, allBranches, collegeSections, onBack, onDone }: {
   subDepartment: DeptWithMaybeId;
   branchIds: string[];
   allBranches: { id: string; name: string }[];
+  /** Every section in the college, already loaded by the caller - filtered here to this manager's own current ones. */
+  collegeSections: Section[];
   onBack: () => void;
   onDone: () => void;
 }) {
@@ -134,6 +181,12 @@ function MigrationReviewPage({ subDepartment, branchIds, allBranches, onBack, on
   const [preview, setPreview] = useState<Record<string, PreviewEntry> | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isConfirming, setIsConfirming] = useState(false);
+  const [currentSectionsPage, setCurrentSectionsPage] = useState(0);
+  const [currentSubjectsPage, setCurrentSubjectsPage] = useState(0);
+  // Per-branch page cursor for the "which subjects land here" table on the
+  // right - keyed by branch id since each department's card paginates on
+  // its own, independent of the others.
+  const [branchSubjectsPage, setBranchSubjectsPage] = useState<Record<string, number>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -174,17 +227,31 @@ function MigrationReviewPage({ subDepartment, branchIds, allBranches, onBack, on
     }
   }
 
-  const allSections = Object.values(preview ?? {}).filter((p): p is { ok: true } & MigrationCounts => p.ok).flatMap((p) => p.sections);
-  const allSkipped = Object.values(preview ?? {}).filter((p): p is { ok: true } & MigrationCounts => p.ok).flatMap((p) => p.skippedSections);
-  const totalStudents = allSections.reduce((n, s) => n + s.studentCount, 0);
-  const totalSubjects = Object.values(preview ?? {}).filter((p): p is { ok: true } & MigrationCounts => p.ok).reduce((n, p) => n + p.subjectAssignmentsMoved, 0);
-  const totalSubjectsDeduped = Object.values(preview ?? {}).filter((p): p is { ok: true } & MigrationCounts => p.ok).reduce((n, p) => n + p.subjectAssignmentsDeduped, 0);
+  const okPreviews = Object.values(preview ?? {}).filter((p): p is { ok: true } & MigrationCounts => p.ok);
+  const allMovingSections = okPreviews.flatMap((p) => p.sections);
+  const allSkipped = okPreviews.flatMap((p) => p.skippedSections);
+  const totalStudents = allMovingSections.reduce((n, s) => n + s.studentCount, 0);
+  const totalSubjects = okPreviews.reduce((n, p) => n + p.subjectAssignmentsMoved, 0);
+  const totalSubjectsDeduped = okPreviews.reduce((n, p) => n + p.subjectAssignmentsDeduped, 0);
   const hasAnyError = preview ? Object.values(preview).some((p) => !p.ok) : false;
   // Zero sections doesn't mean zero work - sections can already sit directly
   // under the core departments (nothing to rename) while their subject
   // assignments still need moving over. Only disable once every category is
   // actually empty.
-  const nothingToMove = !isLoading && allSections.length === 0 && totalSubjects === 0 && totalSubjectsDeduped === 0;
+  const nothingToMove = !isLoading && allMovingSections.length === 0 && totalSubjects === 0 && totalSubjectsDeduped === 0;
+
+  // LEFT panel: today's state. Sections still filed under the manager (live
+  // data, always accurate - a section already moved in an earlier run no
+  // longer matches and correctly drops off this list). Subjects come from
+  // the preview itself (currentSubjects is identical across every branch
+  // this manager feeds, since nothing here is filtered per branch).
+  const currentSections = useMemo(
+    () => collegeSections.filter((s) => s.department === subDepartment.name).sort((a, b) => (a.year - b.year) || a.name.localeCompare(b.name)),
+    [collegeSections, subDepartment.name]
+  );
+  const currentSubjects = okPreviews[0]?.currentSubjects ?? [];
+  const currentSectionsPageRows = currentSections.slice(currentSectionsPage * REVIEW_PAGE_SIZE, (currentSectionsPage + 1) * REVIEW_PAGE_SIZE);
+  const currentSubjectsPageRows = currentSubjects.slice(currentSubjectsPage * REVIEW_PAGE_SIZE, (currentSubjectsPage + 1) * REVIEW_PAGE_SIZE);
 
   return (
     <div className="space-y-6">
@@ -196,95 +263,228 @@ function MigrationReviewPage({ subDepartment, branchIds, allBranches, onBack, on
         <Button variant="outline" size="sm" onClick={onBack}><ArrowLeft className="h-4 w-4 mr-1" />Back</Button>
       </div>
 
-      {isLoading ? (
-        <div className="space-y-2">
-          {[1, 2, 3].map((i) => <div key={i} className="h-16 rounded-lg border bg-muted/30 animate-pulse" />)}
-        </div>
-      ) : (
-        <>
-          {Object.entries(preview ?? {}).map(([branchId, p]) => {
-            const branch = branches.find((b) => b.id === branchId);
-            if (!p.ok) {
-              return (
-                <Card key={branchId}><CardContent className="p-4 text-sm text-destructive">{branch?.name}: {p.error}</CardContent></Card>
-              );
-            }
-            return (
-              <Card key={branchId}>
-                <CardContent className="p-4 space-y-3">
-                  <h3 className="font-semibold text-sm">{branch?.name}</h3>
-                  {p.sections.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No sections to move for this department.</p>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead className="text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                          <tr>
-                            <th className="py-1.5 pr-4">Section</th>
-                            <th className="py-1.5 pr-4">Year</th>
-                            <th className="py-1.5 pr-4">Students</th>
-                            <th className="py-1.5 pr-4">From</th>
-                            <th className="py-1.5">To</th>
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* LEFT: today's state - nothing here changes until Confirm. */}
+        <div className="space-y-4">
+          <h2 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">
+            Current &middot; {subDepartment.name}
+          </h2>
+          <Card>
+            <CardContent className="p-4 space-y-3">
+              <p className="text-sm font-medium">Sections ({currentSections.length})</p>
+              {currentSections.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No sections filed under this department.</p>
+              ) : (
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        <tr>
+                          <th className="py-1.5 pr-4">Section</th>
+                          <th className="py-1.5 pr-4">Year</th>
+                          <th className="py-1.5">Students</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {currentSectionsPageRows.map((s) => (
+                          <tr key={s.id}>
+                            <td className="py-1.5 pr-4 font-medium">{s.name}</td>
+                            <td className="py-1.5 pr-4">{yearOrdinalLabel(s.year)}</td>
+                            <td className="py-1.5">{s.studentCount ?? 0}</td>
                           </tr>
-                        </thead>
-                        <tbody className="divide-y">
-                          {p.sections.map((s) => (
-                            <tr key={s.sectionId}>
-                              <td className="py-1.5 pr-4 font-medium">{s.sectionName}</td>
-                              <td className="py-1.5 pr-4">{yearOrdinalLabel(s.year)}</td>
-                              <td className="py-1.5 pr-4">{s.studentCount}</td>
-                              <td className="py-1.5 pr-4 text-muted-foreground">{s.fromDepartmentName}</td>
-                              <td className="py-1.5 font-medium">{s.toDepartmentName}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                  {p.skippedSections.length > 0 && (
-                    <p className="text-xs text-amber-600">
-                      Skipped: {p.skippedSections.map((s) => `"${s.sectionName}" (${yearOrdinalLabel(s.year)}) - ${s.reason}`).join("; ")}
-                    </p>
-                  )}
-                  <p className="text-xs text-muted-foreground">
-                    {p.subjectAssignmentsMoved} subject assignment{p.subjectAssignmentsMoved !== 1 ? "s" : ""} moved
-                    {p.subjectAssignmentsDeduped > 0 ? `, ${p.subjectAssignmentsDeduped} already duplicated here and discarded` : ""};
-                    {" "}{p.teachingAssignmentsRepointed} teaching assignment{p.teachingAssignmentsRepointed !== 1 ? "s" : ""} and {p.timetableSlotsRepointed} timetable row{p.timetableSlotsRepointed !== 1 ? "s" : ""} repointed.
-                    {p.courseIdsRepaired > 0 && ` ${p.courseIdsRepaired} subject${p.courseIdsRepaired !== 1 ? "s" : ""} here had a stale course link from an earlier run - fixed.`}
-                    {p.secondaryDepartmentNamesCleared > 0 && ` ${p.secondaryDepartmentNamesCleared} subject${p.secondaryDepartmentNamesCleared !== 1 ? "s" : ""} had a leftover narrowing to another department - cleared.`}
-                  </p>
-                  {p.courseIdsUnresolved > 0 && (
-                    <p className="text-xs text-amber-600">
-                      {p.courseIdsUnresolved} subject{p.courseIdsUnresolved !== 1 ? "s" : ""} couldn&apos;t be linked to {branch?.name}&apos;s own Course yet -
-                      it has no Course document for this programme. Create/open it under {branch?.name}&apos;s own Years Taught, then re-run this move to finish linking them.
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
-
-          <Card className="bg-muted/30">
-            <CardContent className="p-4 text-xs text-muted-foreground space-y-1">
-              <p className="font-medium text-foreground">About the subjects</p>
-              <p>
-                Subjects themselves are never duplicated - every subject lives once in the college&apos;s shared Subjects
-                collection, pooled by course/regulation and already visible to every department teaching that course.
-                What moves here is only the per-department assignment ({totalSubjects} row{totalSubjects !== 1 ? "s" : ""}
-                {" "}this run) that links a subject to a specific department/year/semester - re-pointed from &quot;{subDepartment.name}&quot;
-                to the core department, so Teaching Assignments and Timetable pick it up from the right place.
-              </p>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <PageControls page={currentSectionsPage} setPage={setCurrentSectionsPage} totalItems={currentSections.length} pageSize={REVIEW_PAGE_SIZE} />
+                </>
+              )}
             </CardContent>
           </Card>
+          <Card>
+            <CardContent className="p-4 space-y-3">
+              <p className="text-sm font-medium">
+                Subjects ({isLoading ? "…" : currentSubjects.length})
+              </p>
+              {isLoading ? (
+                <div className="h-20 rounded-md bg-muted/30 animate-pulse" />
+              ) : currentSubjects.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No subjects assigned under this department.</p>
+              ) : (
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        <tr>
+                          <th className="py-1.5 pr-4">Code</th>
+                          <th className="py-1.5 pr-4">Name</th>
+                          <th className="py-1.5">Sem</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {currentSubjectsPageRows.map((s) => (
+                          <tr key={`${s.subjectId}-${s.semester}`}>
+                            <td className="py-1.5 pr-4 font-mono text-xs">{s.code}</td>
+                            <td className="py-1.5 pr-4">{s.name}</td>
+                            <td className="py-1.5">{s.semester}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <PageControls page={currentSubjectsPage} setPage={setCurrentSubjectsPage} totalItems={currentSubjects.length} pageSize={REVIEW_PAGE_SIZE} />
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </div>
 
-          {!nothingToMove && (
-            <p className="text-sm font-medium">
-              Total: {allSections.length} section{allSections.length !== 1 ? "s" : ""}, {totalStudents} student{totalStudents !== 1 ? "s" : ""}
-              {allSkipped.length > 0 ? `, ${allSkipped.length} section${allSkipped.length !== 1 ? "s" : ""} skipped` : ""} across {branches.length} department{branches.length !== 1 ? "s" : ""}.
-            </p>
+        {/* RIGHT: what happens after Confirm - renamed sections, where
+            students land, which department each subject moves to. */}
+        <div className="space-y-4">
+          <h2 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">After migration</h2>
+          {isLoading ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => <div key={i} className="h-16 rounded-lg border bg-muted/30 animate-pulse" />)}
+            </div>
+          ) : (
+            <>
+              {Object.entries(preview ?? {}).map(([branchId, p]) => {
+                const branch = branches.find((b) => b.id === branchId);
+                if (!p.ok) {
+                  return (
+                    <Card key={branchId}><CardContent className="p-4 text-sm text-destructive">{branch?.name}: {p.error}</CardContent></Card>
+                  );
+                }
+                return (
+                  <Card key={branchId}>
+                    <CardContent className="p-4 space-y-3">
+                      <h3 className="font-semibold text-sm">{branch?.name}</h3>
+                      {p.sections.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No sections to move for this department.</p>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead className="text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                              <tr>
+                                <th className="py-1.5 pr-4">Section (before &rarr; after)</th>
+                                <th className="py-1.5 pr-4">Year</th>
+                                <th className="py-1.5 pr-4">Students</th>
+                                <th className="py-1.5">Lands in</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                              {p.sections.map((s) => (
+                                <tr key={s.sectionId}>
+                                  <td className="py-1.5 pr-4 font-medium">
+                                    {s.fromSectionName === s.sectionName
+                                      ? s.sectionName
+                                      : <>{s.fromSectionName} <span className="text-muted-foreground">&rarr;</span> {s.sectionName}</>}
+                                  </td>
+                                  <td className="py-1.5 pr-4">{yearOrdinalLabel(s.year)}</td>
+                                  <td className="py-1.5 pr-4">{s.studentCount}</td>
+                                  <td className="py-1.5 font-medium">{s.toDepartmentName}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                      {p.skippedSections.length > 0 && (
+                        <p className="text-xs text-amber-600">
+                          Skipped: {p.skippedSections.map((s) => `"${s.sectionName}" (${yearOrdinalLabel(s.year)}) - ${s.reason}`).join("; ")}
+                        </p>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        {p.teachingAssignmentsRepointed} teaching assignment{p.teachingAssignmentsRepointed !== 1 ? "s" : ""} and {p.timetableSlotsRepointed} timetable row{p.timetableSlotsRepointed !== 1 ? "s" : ""} repointed.
+                        {p.courseIdsRepaired > 0 && ` ${p.courseIdsRepaired} subject${p.courseIdsRepaired !== 1 ? "s" : ""} here had a stale course link from an earlier run - fixed.`}
+                        {p.secondaryDepartmentNamesCleared > 0 && ` ${p.secondaryDepartmentNamesCleared} subject${p.secondaryDepartmentNamesCleared !== 1 ? "s" : ""} had a leftover narrowing to another department - cleared.`}
+                      </p>
+                      {p.courseIdsUnresolved > 0 && (
+                        <p className="text-xs text-amber-600">
+                          {p.courseIdsUnresolved} subject{p.courseIdsUnresolved !== 1 ? "s" : ""} couldn&apos;t be linked to {branch?.name}&apos;s own Course yet -
+                          it has no Course document for this programme. Create/open it under {branch?.name}&apos;s own Years Taught, then re-run this move to finish linking them.
+                        </p>
+                      )}
+
+                      {/* Which subjects land in THIS department - the same
+                          list as the left panel's "Current" subjects (the
+                          tool moves every current subject to every selected
+                          branch, nothing split per department), shown again
+                          here under this branch's own name so it reads as
+                          "X holds these subjects" rather than just a count. */}
+                      <div className="pt-1 border-t">
+                        <p className="text-sm font-medium pt-2">
+                          {branch?.name} will hold ({p.subjectAssignmentsMoved + p.subjectAssignmentsDeduped} subject{(p.subjectAssignmentsMoved + p.subjectAssignmentsDeduped) !== 1 ? "s" : ""})
+                          {p.subjectAssignmentsDeduped > 0 && <span className="text-muted-foreground font-normal"> - {p.subjectAssignmentsDeduped} already there, deduplicated</span>}
+                        </p>
+                        {currentSubjects.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">No subjects to move.</p>
+                        ) : (
+                          (() => {
+                            const branchPage = branchSubjectsPage[branch?.id ?? ""] ?? 0;
+                            const rows = currentSubjects.slice(branchPage * REVIEW_PAGE_SIZE, (branchPage + 1) * REVIEW_PAGE_SIZE);
+                            return (
+                              <>
+                                <div className="overflow-x-auto">
+                                  <table className="w-full text-sm">
+                                    <thead className="text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                      <tr>
+                                        <th className="py-1.5 pr-4">Code</th>
+                                        <th className="py-1.5 pr-4">Name</th>
+                                        <th className="py-1.5">Sem</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y">
+                                      {rows.map((s) => (
+                                        <tr key={`${branch?.id}-${s.subjectId}-${s.semester}`}>
+                                          <td className="py-1.5 pr-4 font-mono text-xs">{s.code}</td>
+                                          <td className="py-1.5 pr-4">{s.name}</td>
+                                          <td className="py-1.5">{s.semester}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                                <PageControls
+                                  page={branchPage}
+                                  setPage={(pg) => setBranchSubjectsPage((prev) => ({ ...prev, [branch?.id ?? ""]: pg }))}
+                                  totalItems={currentSubjects.length}
+                                  pageSize={REVIEW_PAGE_SIZE}
+                                />
+                              </>
+                            );
+                          })()
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+
+              <Card className="bg-muted/30">
+                <CardContent className="p-4 text-xs text-muted-foreground space-y-1">
+                  <p className="font-medium text-foreground">About the subjects</p>
+                  <p>
+                    Subjects aren&apos;t duplicated - they live once in the college&apos;s shared Subjects list (see the
+                    current list on the left, {currentSubjects.length} subject{currentSubjects.length !== 1 ? "s" : ""}).
+                    This moves the per-department link ({totalSubjects} row{totalSubjects !== 1 ? "s" : ""}) from
+                    &quot;{subDepartment.name}&quot; to each selected core department - the same {currentSubjects.length} subjects
+                    move to every department selected above, nothing is split between them.
+                  </p>
+                </CardContent>
+              </Card>
+
+              {!nothingToMove && (
+                <p className="text-sm font-medium">
+                  Total: {allMovingSections.length} section{allMovingSections.length !== 1 ? "s" : ""}, {totalStudents} student{totalStudents !== 1 ? "s" : ""}
+                  {allSkipped.length > 0 ? `, ${allSkipped.length} section${allSkipped.length !== 1 ? "s" : ""} skipped` : ""} across {branches.length} department{branches.length !== 1 ? "s" : ""}.
+                </p>
+              )}
+            </>
           )}
-        </>
-      )}
+        </div>
+      </div>
 
       <div className="flex justify-end gap-2 pt-2 border-t">
         <Button variant="outline" onClick={onBack}>Cancel</Button>
@@ -392,10 +592,11 @@ function DepartmentDrillDown({ departments, courses, rootId, onExit }: {
       <MigrationReviewPage
         subDepartment={reviewRequest.subDept}
         branchIds={reviewRequest.branchIds}
-        allBranches={(reviewRequest.subDept.managedDepartments ?? [])
+        allBranches={linkedBranchNames(reviewRequest.subDept)
           .map((name) => departments.find((d) => d.name === name) as DeptWithMaybeId | undefined)
           .filter((d): d is DeptWithMaybeId => !!d)
           .map((d) => ({ id: d.id, name: d.name }))}
+        collegeSections={sections}
         onBack={() => setReviewRequest(null)}
         onDone={() => setReviewRequest(null)}
       />
@@ -447,6 +648,27 @@ function DepartmentDrillDown({ departments, courses, rootId, onExit }: {
         }
       />
 
+      {/* Standalone managers linked only via secondaryDepartments (SVECW's
+          shape - no parentDepartmentId, so they never show up as anyone's
+          child card below) still need a way to reach the migration -
+          shown here when standing inside the manager itself. */}
+      {linkedBranchNames(current).length > 0 && (
+        <Card>
+          <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              Linked to {linkedBranchNames(current).join(", ")}.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPickerFor(current as DeptWithMaybeId)}
+            >
+              <MoveRight className="h-3.5 w-3.5 mr-1" />Move subjects to core depts
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {children.length > 0 && (
         <div className="space-y-3">
           {deptSections.length > 0 && <h2 className="font-semibold text-base">Sub-departments</h2>}
@@ -459,7 +681,7 @@ function DepartmentDrillDown({ departments, courses, rootId, onExit }: {
                   <p className="text-xs text-muted-foreground mt-1.5">
                     {c.hodName ? `HOD: ${c.hodName}` : "No HOD assigned"}
                   </p>
-                  {(c.managedDepartments ?? []).length > 0 && (
+                  {linkedBranchNames(c).length > 0 && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -518,7 +740,7 @@ function DepartmentDrillDown({ departments, courses, rootId, onExit }: {
           open={!!pickerFor}
           onOpenChange={(open) => !open && setPickerFor(null)}
           subDepartment={pickerFor}
-          branches={(pickerFor.managedDepartments ?? [])
+          branches={linkedBranchNames(pickerFor)
             .map((name) => departments.find((d) => d.name === name) as DeptWithMaybeId | undefined)
             .filter((d): d is DeptWithMaybeId => !!d)
             .map((d) => ({ id: d.id, name: d.name }))}
