@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { RequiredMark } from "@/components/shared/ProfileFieldPrimitives";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -160,23 +161,57 @@ export function formatIssn(raw: string): string {
   return out.length > 4 ? `${out.slice(0, 4)}-${out.slice(4)}` : out;
 }
 
+/**
+ * Labels of every starred field that is still empty (or malformed), in form
+ * order - the form's red asterisks and this list are the same set, so a
+ * starred field can never be submitted blank. Empty = ready to submit.
+ */
+export function publicationMissingFields(details: PublicationDetails): string[] {
+  const missing: string[] = [];
+  const text = (v: string | undefined | null) => !!v && v.trim() !== "";
+  const isBook = details.type === "TEXT_BOOK";
+
+  if (details.title.trim().length < 2) missing.push(isBook ? "Title of the Book" : "Title of the Paper");
+  if (!isBook) {
+    if (!text(details.researchDomain)) missing.push("Research Domain");
+    if (!details.sdgGoals || details.sdgGoals.length === 0) missing.push("SDG Mapped");
+  }
+  if (details.type === "JOURNAL") {
+    if (!text(details.journalName)) missing.push("Name of the Journal");
+    // Present AND well-formed - a half-typed "1234-56" is as unusable to
+    // whoever verifies this record as an empty box.
+    if (!ISSN_REGEX.test(details.issnNumber?.trim() ?? "")) missing.push("ISSN Number");
+  }
+  if (details.type === "CONFERENCE") {
+    if (!text(details.conferenceName)) missing.push("Name of the Conference");
+    if (!text(details.organizedBy)) missing.push("Organized By");
+  }
+  if (details.type === "BOOK_CHAPTER" && !text(details.bookName)) missing.push("Name of the Book");
+  // ISBN: compulsory for Text Book, Conference and Book Chapter, and checked
+  // as a real ISBN rather than accepted as any string of digits.
+  if (checkIsbn(details.type, details.isbnNumber)) missing.push("ISBN Number");
+  if (!isBook) {
+    if (!text(details.publisherName)) missing.push("Name of the Publisher");
+    if (INDEX_OPTIONS_BY_TYPE[details.type].length > 0 && (!details.indexedIn || details.indexedIn.length === 0)) missing.push("Indexed");
+    if (details.type === "JOURNAL" && !details.quartile) missing.push("Quartile");
+    if (details.type !== "BOOK_CHAPTER" && !text(details.monthYearOfPublication)) missing.push("Month & Year of Publication");
+    if ((details.type === "JOURNAL" || details.type === "CONFERENCE") && !text(details.monthYearOfIndex)) missing.push("Month & Year of Index");
+    // Scopus/WoS Link and Published Paper Link are compulsory for every type
+    // except Text Book (which has its own separate "Provide link of the Book"
+    // field instead - see providedBookLink).
+    if (!text(details.scopusOrWosLink)) missing.push("Scopus/WoS Link of the Paper");
+    if (!text(details.publishedPaperLink)) missing.push("Published Paper Link");
+  }
+  if (!text(details.citeAs)) missing.push("Cite the paper as");
+  if (!isBook) {
+    if (details.hasInternationalCollaboration === undefined) missing.push("Any International Collaboration?");
+    if (details.hasIndustryCollaboration === undefined) missing.push("Any Industry Collaboration?");
+  }
+  return missing;
+}
+
 export function isPublicationDetailsValid(details: PublicationDetails): boolean {
-  if (details.title.trim().length < 2) return false;
-  if (!details.citeAs?.trim()) return false;
-  if (details.type === "TEXT_BOOK") return !checkIsbn(details.type, details.isbnNumber);
-  if (!details.sdgGoals || details.sdgGoals.length === 0) return false;
-  if (!details.indexedIn || details.indexedIn.length === 0) return false;
-  if (details.hasInternationalCollaboration === undefined || details.hasIndustryCollaboration === undefined) return false;
-  // Present AND well-formed - a half-typed "1234-56" is as unusable to
-  // whoever verifies this record as an empty box.
-  if (details.type === "JOURNAL" && !ISSN_REGEX.test(details.issnNumber?.trim() ?? "")) return false;
-  // Still compulsory for Conference and Book Chapter, as it always was - and
-  // now checked as a real ISBN rather than accepted as any string of digits.
-  if (checkIsbn(details.type, details.isbnNumber)) return false;
-  // Scopus/WoS Link and Published Paper Link are compulsory for every type
-  // except Text Book (which has its own separate "Provide link of the Book"
-  // field instead - see providedBookLink).
-  return !!details.scopusOrWosLink?.trim() && !!details.publishedPaperLink?.trim();
+  return publicationMissingFields(details).length === 0;
 }
 
 function emptyAuthor(): PublicationAuthor {
@@ -511,7 +546,7 @@ export function PublicationDetailsForm({
   const isbnError = checkIsbn(value.type, value.isbnNumber);
   const isbnField = (
     <div className="space-y-1.5">
-      <Label>ISBN Number {isIsbnRequired(value.type) && <span className="text-destructive">*</span>}</Label>
+      <Label>ISBN Number {isIsbnRequired(value.type) && <RequiredMark required />}</Label>
       <Input
         value={value.isbnNumber ?? ""}
         onChange={(e) => set("isbnNumber", e.target.value)}
@@ -550,7 +585,7 @@ export function PublicationDetailsForm({
     <div className="grid grid-cols-1 gap-x-8 gap-y-5 lg:grid-cols-2">
     <div className="space-y-5">
       <div className="space-y-1.5">
-        <Label>Type of Publication <span className="text-destructive">*</span></Label>
+        <Label>Type of Publication <RequiredMark required /></Label>
         <Select value={value.type} onValueChange={(v) => setType(v as PublicationType)}>
           <SelectTrigger><SelectValue /></SelectTrigger>
           <SelectContent>
@@ -560,18 +595,18 @@ export function PublicationDetailsForm({
       </div>
 
       <div className="space-y-1.5">
-        <Label>{value.type === "TEXT_BOOK" ? "Title of the Book" : "Title of the Paper"} <span className="text-destructive">*</span></Label>
+        <Label>{value.type === "TEXT_BOOK" ? "Title of the Book" : "Title of the Paper"} <RequiredMark required /></Label>
         <Input value={value.title} onChange={(e) => set("title", e.target.value)} placeholder="Title" />
       </div>
 
       {hasResearchDomainAndSdg && (
         <>
           <div className="space-y-1.5">
-            <Label>Research Domain <span className="text-destructive">*</span></Label>
+            <Label>Research Domain <RequiredMark required /></Label>
             <Input value={value.researchDomain ?? ""} onChange={(e) => set("researchDomain", e.target.value)} />
           </div>
           <div className="space-y-1.5">
-            <Label>SDG Mapped <span className="text-destructive">*</span></Label>
+            <Label>SDG Mapped <RequiredMark required /></Label>
             <SdgPicker selected={value.sdgGoals} onChange={(v) => set("sdgGoals", v)} />
           </div>
         </>
@@ -580,11 +615,11 @@ export function PublicationDetailsForm({
       {value.type === "JOURNAL" && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label>Name of the Journal <span className="text-destructive">*</span></Label>
+            <Label>Name of the Journal <RequiredMark required /></Label>
             <Input value={value.journalName ?? ""} onChange={(e) => set("journalName", e.target.value)} />
           </div>
           <div className="space-y-1.5">
-            <Label>ISSN Number <span className="text-destructive">*</span></Label>
+            <Label>ISSN Number <RequiredMark required /></Label>
             {/* Text, not number: an ISSN carries a hyphen, and a number input
                 would also strip the leading zero off one like 0028-0836. */}
             <Input
@@ -605,11 +640,11 @@ export function PublicationDetailsForm({
       {value.type === "CONFERENCE" && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label>Name of the Conference <span className="text-destructive">*</span></Label>
+            <Label>Name of the Conference <RequiredMark required /></Label>
             <Input value={value.conferenceName ?? ""} onChange={(e) => set("conferenceName", e.target.value)} />
           </div>
           <div className="space-y-1.5">
-            <Label>Organized By <span className="text-destructive">*</span></Label>
+            <Label>Organized By <RequiredMark required /></Label>
             <Input value={value.organizedBy ?? ""} onChange={(e) => set("organizedBy", e.target.value)} />
           </div>
           <div className="sm:col-span-2">{isbnField}</div>
@@ -619,7 +654,7 @@ export function PublicationDetailsForm({
       {value.type === "BOOK_CHAPTER" && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label>Name of the Book <span className="text-destructive">*</span></Label>
+            <Label>Name of the Book <RequiredMark required /></Label>
             <Input value={value.bookName ?? ""} onChange={(e) => set("bookName", e.target.value)} />
           </div>
           {isbnField}
@@ -633,7 +668,7 @@ export function PublicationDetailsForm({
       {value.type === "TEXT_BOOK" && isbnField}
 
       <div className="space-y-1.5">
-        <Label>Name of the Publisher {value.type !== "TEXT_BOOK" && <span className="text-destructive">*</span>}</Label>
+        <Label>Name of the Publisher {value.type !== "TEXT_BOOK" && <RequiredMark required />}</Label>
         <Input value={value.publisherName ?? ""} onChange={(e) => set("publisherName", e.target.value)} />
       </div>
 
@@ -646,7 +681,7 @@ export function PublicationDetailsForm({
 
       {indexOptions.length > 0 && (
         <div className="space-y-1.5">
-          <Label>Indexed <span className="text-destructive">*</span></Label>
+          <Label>Indexed <RequiredMark required /></Label>
           <MultiCheckboxGroup options={indexOptions} labels={INDEX_LABELS} urls={INDEX_REFERENCE_URLS} selected={value.indexedIn} onChange={(v) => set("indexedIn", v)} />
         </div>
       )}
@@ -655,7 +690,7 @@ export function PublicationDetailsForm({
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label>
-              Quartile <span className="text-destructive">*</span>{" "}
+              Quartile <RequiredMark required />{" "}
               <a href={QUARTILE_REFERENCE_URL} target="_blank" rel="noopener noreferrer" className="text-xs font-normal text-primary hover:underline">({QUARTILE_REFERENCE_URL})</a>
             </Label>
             <Select value={value.quartile ?? ""} onValueChange={(v) => set("quartile", v as PublicationQuartile)}>
@@ -704,12 +739,12 @@ export function PublicationDetailsForm({
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label>Month &amp; Year of Publication {value.type !== "BOOK_CHAPTER" && value.type !== "TEXT_BOOK" && <span className="text-destructive">*</span>}</Label>
+          <Label>Month &amp; Year of Publication {value.type !== "BOOK_CHAPTER" && value.type !== "TEXT_BOOK" && <RequiredMark required />}</Label>
           <Input type="month" value={value.monthYearOfPublication ?? ""} onChange={(e) => set("monthYearOfPublication", e.target.value)} />
         </div>
         {(value.type === "JOURNAL" || value.type === "CONFERENCE") && (
           <div className="space-y-1.5">
-            <Label>Month &amp; Year of Index <span className="text-destructive">*</span></Label>
+            <Label>Month &amp; Year of Index <RequiredMark required /></Label>
             <Input type="month" value={value.monthYearOfIndex ?? ""} onChange={(e) => set("monthYearOfIndex", e.target.value)} />
           </div>
         )}
@@ -718,11 +753,11 @@ export function PublicationDetailsForm({
       {value.type !== "TEXT_BOOK" && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label>Scopus/WoS Link of the Paper <span className="text-destructive">*</span></Label>
+            <Label>Scopus/WoS Link of the Paper <RequiredMark required /></Label>
             <Input value={value.scopusOrWosLink ?? ""} onChange={(e) => set("scopusOrWosLink", e.target.value)} />
           </div>
           <div className="space-y-1.5">
-            <Label>Published Paper Link <span className="text-destructive">*</span></Label>
+            <Label>Published Paper Link <RequiredMark required /></Label>
             <Input value={value.publishedPaperLink ?? ""} onChange={(e) => set("publishedPaperLink", e.target.value)} />
           </div>
         </div>
@@ -741,7 +776,7 @@ export function PublicationDetailsForm({
       </div>
 
       <div className="space-y-1.5">
-        <Label>Cite the paper as <span className="text-destructive">*</span></Label>
+        <Label>Cite the paper as <RequiredMark required /></Label>
         <Textarea
           value={value.citeAs ?? ""}
           onChange={(e) => set("citeAs", e.target.value)}
@@ -753,11 +788,11 @@ export function PublicationDetailsForm({
       {hasCollaborationFields && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label>Any International Collaboration? <span className="text-destructive">*</span></Label>
+            <Label>Any International Collaboration? <RequiredMark required /></Label>
             <YesNoToggle value={value.hasInternationalCollaboration} onChange={(v) => set("hasInternationalCollaboration", v)} />
           </div>
           <div className="space-y-1.5">
-            <Label>Any Industry Collaboration? <span className="text-destructive">*</span></Label>
+            <Label>Any Industry Collaboration? <RequiredMark required /></Label>
             <YesNoToggle value={value.hasIndustryCollaboration} onChange={(v) => set("hasIndustryCollaboration", v)} />
           </div>
         </div>

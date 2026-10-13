@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ExternalLink, Plus, Pencil } from "lucide-react";
-import { Section, SubLabel, Field, TextInput, NumInput, DateInput, TableRepeatingGroup } from "@/components/shared/ProfileFieldPrimitives";
+import { Section, SubLabel, Field, TextInput, NumField, DateInput, TableRepeatingGroup, RequiredMark } from "@/components/shared/ProfileFieldPrimitives";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -256,7 +256,7 @@ function RecordFormFields({
           <SubLabel>Supervision</SubLabel>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label>Recognized Supervisor</Label>
+              <Label>Recognized Supervisor<RequiredMark required /></Label>
               <Select value={form.recognizedSupervisor} onValueChange={(v) => set("recognizedSupervisor", v as PhdRecognizedSupervisor)}>
                 <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                 <SelectContent>
@@ -270,7 +270,7 @@ function RecordFormFields({
             )}
           </div>
           <div className="space-y-2">
-            <Label>Status of Guide</Label>
+            <Label>Status of Guide<RequiredMark required /></Label>
             <Select value={form.guideStatus} onValueChange={(v) => set("guideStatus", v as PhdGuideStatus)}>
               <SelectTrigger className="max-w-[220px]"><SelectValue placeholder="Select" /></SelectTrigger>
               <SelectContent>
@@ -284,7 +284,7 @@ function RecordFormFields({
         <div className="space-y-4">
           <SubLabel>Scholar Details</SubLabel>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <TextInput label="Name of the Scholar" value={form.scholarName} onChange={(v) => set("scholarName", v)} />
+            <TextInput label="Name of the Scholar" value={form.scholarName} onChange={(v) => set("scholarName", v)} required />
             <TextInput label="Department of Scholar" value={form.scholarDepartment} onChange={(v) => set("scholarDepartment", v)} />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -404,7 +404,7 @@ function RecordFormFields({
                 </Select>
               </div>
               <TextInput label="Name of Fellowship" value={form.fellowshipName} onChange={(v) => set("fellowshipName", v)} />
-              <NumInput label="Amount Received (Rs.)" value={toNumberOrUndefined(form.fellowshipAmount)} onChange={(v) => set("fellowshipAmount", String(v))} />
+              <NumField label="Amount Received (Rs.)" value={form.fellowshipAmount} onChange={(v) => set("fellowshipAmount", v)} />
             </div>
           )}
         </div>

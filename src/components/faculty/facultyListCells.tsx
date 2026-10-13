@@ -52,6 +52,19 @@ export function JoiningLine({ row, className = "text-xs text-muted-foreground" }
   return <p className={className}>{joiningLabel(row.status)}: {fmtDate(row.joiningDate)}</p>;
 }
 
+/** The positions this person holds ("HOD of CSE", "Principal"), when the list asked for them (`?withSeats=1`). */
+export function SeatBadges({ row }: { row: FacultyListRow }) {
+  const labels = Array.isArray(row.seatLabels) ? (row.seatLabels as string[]) : [];
+  if (labels.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1 pt-0.5">
+      {labels.map((l) => (
+        <span key={l} className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">{l}</span>
+      ))}
+    </div>
+  );
+}
+
 /** Designation, highest qualification, specialization and the Ph.D (awarded) badge. */
 export function FacultyDesignationCell({ row }: { row: FacultyListRow }) {
   return (
@@ -61,6 +74,7 @@ export function FacultyDesignationCell({ row }: { row: FacultyListRow }) {
       {(row.specialization as string) && (
         <p className="text-xs text-muted-foreground italic">{row.specialization as string}</p>
       )}
+      <SeatBadges row={row} />
       {row.academicProfile?.phdDetails?.status === "AWARDED" && (
         <span className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-700">Ph.D</span>
       )}

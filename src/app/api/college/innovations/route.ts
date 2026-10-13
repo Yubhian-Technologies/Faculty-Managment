@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { isVisibleToRnD, notifyReviewer, resolveSubmissionRoute, routeFields } from "@/lib/research/coordinatorReview";
+import { innovationMissingFields, innovationMissingMessage } from "@/lib/research/innovationValidation";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import { resolveOwnerDesignation } from "@/lib/publications/resolveOwnerDesignation";
 import type {
@@ -98,6 +99,12 @@ export async function POST(request: Request) {
         { error: "uid, academicYear, innovatorType, innovationTitle and innovationType are required" },
         { status: 400 }
       );
+    }
+
+    // Everything the form marks required (not just the five above), so a request that skips the form is refused too.
+    const missing = innovationMissingFields(body);
+    if (missing.length > 0) {
+      return NextResponse.json({ error: innovationMissingMessage(missing), missing }, { status: 400 });
     }
 
     const db = getAdminDb();

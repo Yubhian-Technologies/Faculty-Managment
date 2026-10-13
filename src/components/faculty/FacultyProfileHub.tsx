@@ -211,7 +211,8 @@ export function FacultyProfileHub({
   faculty, basePath, hideFinancialModule, excludeModules, linkQuery, backHref, editHref, parentDeptName, onReRegisterFace, viewAttendanceHref,
 }: FacultyProfileHubProps) {
   const designationLabel = faculty.designation ? (DESIGNATION_LABELS[faculty.designation] ?? faculty.designation) : undefined;
-  const headerDescription = [designationLabel, faculty.department].filter(Boolean).join(" • ") || undefined;
+  const seatLabels = (faculty as { seatLabels?: string[] }).seatLabels ?? [];
+  const headerDescription = [designationLabel, faculty.department, ...seatLabels].filter(Boolean).join(" • ") || undefined;
   const [photoUrl, setPhotoUrl] = useState(faculty.profilePhotoUrl);
 
   function copyPublicProfileLink() {

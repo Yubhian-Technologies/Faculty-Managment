@@ -127,7 +127,7 @@ export function SectionTitle({ children }: { children: React.ReactNode }) {
  * a caller that passes nothing renders exactly as before, so adding this
  * changed no existing form.
  */
-function RequiredMark({ required }: { required?: boolean }) {
+export function RequiredMark({ required }: { required?: boolean }) {
   if (!required) return null;
   return <span className="text-destructive"> *</span>;
 }
@@ -140,6 +140,23 @@ export function NumInput({ label, value, onChange, required }: { label: string; 
           as blank instead of asserting a value of zero. The leading-zero
           cleanup when typing over an actual 0 lives in Input itself. */}
       <Input type="number" value={value ?? ""} onFocus={(e) => e.target.select()} onChange={(e) => onChange(Number(e.target.value))} />
+    </div>
+  );
+}
+
+/**
+ * A number field whose value is kept as TEXT. NumInput above reports an emptied
+ * box as 0, so a required count could never be "not filled in"; this one hands
+ * back the raw string ("" when blank), which callers parse with their own
+ * toNumberOrUndefined. Use it wherever blank and 0 must differ.
+ */
+export function NumField({
+  label, value, onChange, required, min = 0,
+}: { label: string; value: string | undefined; onChange: (v: string) => void; required?: boolean; min?: number }) {
+  return (
+    <div className="space-y-2">
+      <Label>{label}<RequiredMark required={required} /></Label>
+      <Input type="number" min={min} value={value ?? ""} onFocus={(e) => e.target.select()} onChange={(e) => onChange(e.target.value)} />
     </div>
   );
 }
@@ -483,9 +500,11 @@ export function DegreeFieldsList({ label, level, items, onChange }: {
 }
 
 export function RepeatingGroup<T>({
-  title, items, empty, onChange, renderRow, addLabel = "Add More",
+  title, items, empty, onChange, renderRow, addLabel = "Add More", required,
 }: {
   title: string;
+  /** At least one row is required - marks the title like a required field. */
+  required?: boolean;
   items: T[] | undefined;
   // A plain object is reused as-is for every new row (existing behavior).
   // Pass a function instead when each new row needs its own unique value
@@ -501,7 +520,7 @@ export function RepeatingGroup<T>({
   return (
     <div className="space-y-3 rounded-lg border p-3">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{title}</p>
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{title}<RequiredMark required={required} /></p>
         <Button type="button" variant="outline" size="sm" onClick={() => onChange([...list, typeof empty === "function" ? (empty as () => T)() : empty])}>
           {addLabel}
         </Button>
@@ -531,9 +550,11 @@ export function RepeatingGroup<T>({
 // Published / Patents under Research & Innovation's Seed Funding and
 // Sponsored Research Projects tabs).
 export function TableRepeatingGroup<T>({
-  title, items, empty, onChange, addLabel = "Add Row", columns,
+  title, items, empty, onChange, addLabel = "Add Row", columns, required,
 }: {
   title: string;
+  /** At least one row is required - marks the title like a required field. */
+  required?: boolean;
   items: T[];
   empty: T;
   onChange: (next: T[]) => void;
@@ -543,7 +564,7 @@ export function TableRepeatingGroup<T>({
   return (
     <div className="space-y-2 rounded-lg border p-3">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{title}</p>
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{title}<RequiredMark required={required} /></p>
         <Button type="button" variant="outline" size="sm" onClick={() => onChange([...items, empty])}>
           {addLabel}
         </Button>
@@ -701,9 +722,10 @@ export function QualificationsView({
 
 // Checkbox group for a fixed enum of options (e.g. responsibilities, professional bodies).
 export function CheckboxGroup<T extends string>({
-  title, options, selected, onChange,
+  title, options, selected, onChange, required,
 }: {
   title: string;
+  required?: boolean;
   options: { value: T; label: string }[];
   selected: T[] | undefined;
   onChange: (next: T[]) => void;
@@ -714,7 +736,7 @@ export function CheckboxGroup<T extends string>({
   }
   return (
     <div className="space-y-2 rounded-lg border p-3">
-      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{title}</p>
+      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{title}<RequiredMark required={required} /></p>
       <div className="flex flex-wrap gap-x-4 gap-y-2">
         {options.map((opt) => (
           <label key={opt.value} className="flex items-center gap-1.5 text-sm">

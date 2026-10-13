@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import { ExternalLink, Plus, Pencil } from "lucide-react";
 import {
-  Section, SubLabel, Field, TextInput, NumInput, DateInput, RepeatingGroup, TableRepeatingGroup,
+  Section, SubLabel, Field, TextInput, NumField, DateInput, RequiredMark, RepeatingGroup, TableRepeatingGroup,
 } from "@/components/shared/ProfileFieldPrimitives";
+import { hackathonMissingFields } from "@/lib/research/hackathonValidation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -194,9 +195,26 @@ function RecordFormFields({
     setForm((f) => ({ ...f, [key]: value }));
   }
 
-  const isValid =
-    form.academicYear.trim().length > 1 && form.eventTitle.trim().length > 1 &&
-    !!form.eventType && !!form.levelOfEvent;
+  const missing = hackathonMissingFields({
+    academicYear: form.academicYear, eventTitle: form.eventTitle, eventType: form.eventType,
+    organizingDeptCell: form.organizingDeptCell, startDate: form.startDate, endDate: form.endDate,
+    durationHours: toNumberOrUndefined(form.durationHours), venue: form.venue, levelOfEvent: form.levelOfEvent,
+    themeDomain: form.themeDomain, remarks: form.remarks,
+    noOfProblemStatements: toNumberOrUndefined(form.noOfProblemStatements),
+    teamsRegisteredInternal: toNumberOrUndefined(form.teamsRegisteredInternal),
+    teamsRegisteredExternal: toNumberOrUndefined(form.teamsRegisteredExternal),
+    participantsInternal: toNumberOrUndefined(form.participantsInternal),
+    participantsExternal: toNumberOrUndefined(form.participantsExternal),
+    ideasPresentedCount: toNumberOrUndefined(form.ideasPresentedCount),
+    pocsPresentedCount: toNumberOrUndefined(form.pocsPresentedCount),
+    productsPresentedCount: toNumberOrUndefined(form.productsPresentedCount),
+    ideasUploadedYukti: toNumberOrUndefined(form.ideasUploadedYukti),
+    ideasVerifiedRecommendedYukti: toNumberOrUndefined(form.ideasVerifiedRecommendedYukti),
+    prototypesUploadedYukti: toNumberOrUndefined(form.prototypesUploadedYukti),
+    prototypesVerifiedRecommendedYukti: toNumberOrUndefined(form.prototypesVerifiedRecommendedYukti),
+    evaluators: form.evaluators, facultyCoordinators: form.facultyCoordinators,
+  });
+  const isValid = missing.length === 0;
 
   async function handleSubmit() {
     if (!isValid) return;
@@ -276,7 +294,7 @@ function RecordFormFields({
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label>Event Type <span className="text-destructive">*</span></Label>
+              <Label>Event Type<RequiredMark required /></Label>
               <Select value={form.eventType} onValueChange={(v) => set("eventType", v as HackathonEventType)}>
                 <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                 <SelectContent>
@@ -285,7 +303,7 @@ function RecordFormFields({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Level of Event <span className="text-destructive">*</span></Label>
+              <Label>Level of Event<RequiredMark required /></Label>
               <Select value={form.levelOfEvent} onValueChange={(v) => set("levelOfEvent", v as HackathonLevel)}>
                 <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                 <SelectContent>
@@ -300,7 +318,7 @@ function RecordFormFields({
             <DateInput label="End Date" value={form.endDate} onChange={(v) => set("endDate", v)} required />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <NumInput label="Duration (Hrs)" value={toNumberOrUndefined(form.durationHours)} onChange={(v) => set("durationHours", String(v))} required />
+            <NumField label="Duration (Hrs)" value={form.durationHours} onChange={(v) => set("durationHours", v)} required />
             <TextInput label="Venue" value={form.venue} onChange={(v) => set("venue", v)} required />
           </div>
           <TextInput label="Theme / Domain" value={form.themeDomain} onChange={(v) => set("themeDomain", v)} placeholder="AI, Healthcare, Agriculture, Women Safety, Sustainability, etc." required />
@@ -308,19 +326,19 @@ function RecordFormFields({
 
         <div className="space-y-4">
           <SubLabel>Participation</SubLabel>
-          <NumInput label="No. of Problem Statements" value={toNumberOrUndefined(form.noOfProblemStatements)} onChange={(v) => set("noOfProblemStatements", String(v))} required />
+          <NumField label="No. of Problem Statements" value={form.noOfProblemStatements} onChange={(v) => set("noOfProblemStatements", v)} required />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <NumInput label="Teams Registered - Internal" value={toNumberOrUndefined(form.teamsRegisteredInternal)} onChange={(v) => set("teamsRegisteredInternal", String(v))} required />
-            <NumInput label="Teams Registered - External" value={toNumberOrUndefined(form.teamsRegisteredExternal)} onChange={(v) => set("teamsRegisteredExternal", String(v))} required />
+            <NumField label="Teams Registered - Internal" value={form.teamsRegisteredInternal} onChange={(v) => set("teamsRegisteredInternal", v)} required />
+            <NumField label="Teams Registered - External" value={form.teamsRegisteredExternal} onChange={(v) => set("teamsRegisteredExternal", v)} required />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <NumInput label="Participants - Internal" value={toNumberOrUndefined(form.participantsInternal)} onChange={(v) => set("participantsInternal", String(v))} required />
-            <NumInput label="Participants - External" value={toNumberOrUndefined(form.participantsExternal)} onChange={(v) => set("participantsExternal", String(v))} required />
+            <NumField label="Participants - Internal" value={form.participantsInternal} onChange={(v) => set("participantsInternal", v)} required />
+            <NumField label="Participants - External" value={form.participantsExternal} onChange={(v) => set("participantsExternal", v)} required />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <NumInput label="Ideas Presented" value={toNumberOrUndefined(form.ideasPresentedCount)} onChange={(v) => set("ideasPresentedCount", String(v))} required />
-            <NumInput label="PoC's Presented" value={toNumberOrUndefined(form.pocsPresentedCount)} onChange={(v) => set("pocsPresentedCount", String(v))} required />
-            <NumInput label="Products/Prototypes Presented" value={toNumberOrUndefined(form.productsPresentedCount)} onChange={(v) => set("productsPresentedCount", String(v))} required />
+            <NumField label="Ideas Presented" value={form.ideasPresentedCount} onChange={(v) => set("ideasPresentedCount", v)} required />
+            <NumField label="PoC's Presented" value={form.pocsPresentedCount} onChange={(v) => set("pocsPresentedCount", v)} required />
+            <NumField label="Products/Prototypes Presented" value={form.productsPresentedCount} onChange={(v) => set("productsPresentedCount", v)} required />
           </div>
         </div>
 
@@ -358,10 +376,10 @@ function RecordFormFields({
         <div className="space-y-4">
           <SubLabel>YUKTI</SubLabel>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <NumInput label="Ideas Uploaded in YUKTI" value={toNumberOrUndefined(form.ideasUploadedYukti)} onChange={(v) => set("ideasUploadedYukti", String(v))} required />
-            <NumInput label="Ideas Verified & Recommended" value={toNumberOrUndefined(form.ideasVerifiedRecommendedYukti)} onChange={(v) => set("ideasVerifiedRecommendedYukti", String(v))} required />
-            <NumInput label="Prototypes Uploaded in YUKTI" value={toNumberOrUndefined(form.prototypesUploadedYukti)} onChange={(v) => set("prototypesUploadedYukti", String(v))} required />
-            <NumInput label="Prototypes Verified & Recommended" value={toNumberOrUndefined(form.prototypesVerifiedRecommendedYukti)} onChange={(v) => set("prototypesVerifiedRecommendedYukti", String(v))} required />
+            <NumField label="Ideas Uploaded in YUKTI" value={form.ideasUploadedYukti} onChange={(v) => set("ideasUploadedYukti", v)} required />
+            <NumField label="Ideas Verified & Recommended" value={form.ideasVerifiedRecommendedYukti} onChange={(v) => set("ideasVerifiedRecommendedYukti", v)} required />
+            <NumField label="Prototypes Uploaded in YUKTI" value={form.prototypesUploadedYukti} onChange={(v) => set("prototypesUploadedYukti", v)} required />
+            <NumField label="Prototypes Verified & Recommended" value={form.prototypesVerifiedRecommendedYukti} onChange={(v) => set("prototypesVerifiedRecommendedYukti", v)} required />
           </div>
           <TableRepeatingGroup
             title="YUKTI Reference / Proof"
@@ -423,14 +441,19 @@ function RecordFormFields({
             onRemoved={() => set("eventReportUrl", "")}
           />
           <div className="space-y-2">
-            <Label>Remarks <span className="text-destructive">*</span></Label>
+            <Label>Remarks<RequiredMark required /></Label>
             <Textarea value={form.remarks} onChange={(e) => set("remarks", e.target.value)} rows={2} placeholder="Any additional information" />
           </div>
         </div>
       </div>
       </div>
       </div>
-      <DialogFooter>
+      <DialogFooter className="sm:items-center">
+        {!isValid && (
+          <p className="text-xs text-destructive sm:mr-auto sm:max-w-[60%]" role="status">
+            Required: {missing.slice(0, 6).join(", ")}{missing.length > 6 ? ` and ${missing.length - 6} more` : ""}
+          </p>
+        )}
         <Button variant="outline" onClick={onCancel} disabled={saving}>Cancel</Button>
         <Button onClick={() => void handleSubmit()} loading={saving} disabled={!isValid}>
           {editingId ? "Resubmit" : "Submit"}

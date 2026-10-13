@@ -4,6 +4,7 @@ import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { isEmployeeIdReserved, reserveEmployeeId } from "@/lib/firestore/employeeIdKeys";
 import { NextResponse } from "next/server";
+import { loadSeatPhrasesByHolder } from "@/lib/roles/seatLabels";
 import { COLLEGE_EMAIL_CHANGE_REDIRECT_MESSAGE, normalizeCollegeEmail } from "@/lib/faculty/changeCollegeEmail";
 import { resolvePreviousTeachingUpdate } from "@/lib/faculty/previousTeaching";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -70,7 +71,18 @@ export async function GET(
       }
     }
 
-    return NextResponse.json({ faculty: { id: snap.id, ...migrateFacultyDoc(snap.data() ?? {}) } });
+    const record = { id: snap.id, ...migrateFacultyDoc(snap.data() ?? {}) } as { userUid?: unknown; seatLabels?: string[] };
+    // The positions this person holds ("HOD of CSE"), shown beside their name; display only.
+    try {
+      const uid = typeof record.userUid === "string" ? record.userUid : "";
+      if (uid) {
+        const held = (await loadSeatPhrasesByHolder(db, session.collegeId)).get(uid);
+        if (held?.length) record.seatLabels = held;
+      }
+    } catch (err) {
+      console.error("[college/faculty/[id] GET] seat labels", err);
+    }
+    return NextResponse.json({ faculty: record });
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;

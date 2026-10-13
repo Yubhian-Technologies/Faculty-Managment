@@ -5,6 +5,7 @@ import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { hackathonMissingFields, hackathonMissingMessage } from "@/lib/research/hackathonValidation";
 import { isVisibleToRnD, notifyReviewer, resolveSubmissionRoute, routeFields } from "@/lib/research/coordinatorReview";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import { resolveOwnerDesignation } from "@/lib/publications/resolveOwnerDesignation";
@@ -101,6 +102,12 @@ export async function POST(request: Request) {
         { error: "uid, academicYear, eventTitle, eventType and levelOfEvent are required" },
         { status: 400 }
       );
+    }
+
+    // Everything the form marks required, not just the four above - a request that skips the form is refused too.
+    const missing = hackathonMissingFields(body);
+    if (missing.length > 0) {
+      return NextResponse.json({ error: hackathonMissingMessage(missing), missing }, { status: 400 });
     }
 
     const db = getAdminDb();

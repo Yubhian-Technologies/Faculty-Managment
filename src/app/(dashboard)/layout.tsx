@@ -11,6 +11,7 @@ import { ReadOnlyAccessGate } from "@/components/layout/ReadOnlyAccessGate";
 import { readOnlyHiddenHrefs } from "@/components/layout/readOnlyNav";
 import { isPathHidden } from "@/components/layout/navConfig";
 import { useAuthStore } from "@/store/authStore";
+import { useUIStore } from "@/store/uiStore";
 import { useNavVisibility } from "@/hooks/useNavVisibility";
 import { useSessionRevocationWatch } from "@/hooks/useSessionRevocationWatch";
 import { DashboardSkeleton } from "@/components/shared/SkeletonLoader";
@@ -27,6 +28,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { user, isLoading } = useAuthStore();
   const router = useRouter();
   const pathname = usePathname();
+  const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed);
   const { hiddenModules, hiddenItems, loading: navLoading } = useNavVisibility();
   // A login signed out everywhere (e.g. its college email was changed) is signed out here too, within about a minute.
   useSessionRevocationWatch(!!user);
@@ -62,7 +64,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="min-h-screen bg-muted/30">
       <Sidebar hiddenModules={hiddenModules} hiddenItems={navHiddenItems} />
       <MobileDrawer hiddenModules={hiddenModules} hiddenItems={navHiddenItems} />
-      <div className="md:ml-64 flex flex-col min-h-screen">
+      <div className={`${sidebarCollapsed ? "md:ml-[4.5rem]" : "md:ml-64"} flex flex-col min-h-screen transition-[margin] duration-300 ease-in-out`}>
         <TopBar hiddenItems={navHiddenItems} />
         <SummerHolidayBanner />
         <main className={`flex-1 p-4 md:p-6 md:pb-6 max-w-7xl mx-auto w-full ${hasBottomNav(user.role, pathname) ? "pb-24" : "pb-6"}`}>

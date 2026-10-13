@@ -8,6 +8,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { notify } from "@/lib/notify";
 import { isResubmittable, notifyReviewer, resolveSubmissionRoute, routeFields } from "@/lib/research/coordinatorReview";
+import { innovationMissingFields, innovationMissingMessage } from "@/lib/research/innovationValidation";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import type {
   InnovationFacultyItem, InnovationType, InnovatorType, PublicationStatus,
@@ -149,6 +150,11 @@ export async function PATCH(
     if (isOwner && !isRnD) {
       if (!isResubmittable(record.status)) {
         return NextResponse.json({ error: "Only a rejected or sent-back submission can be edited" }, { status: 403 });
+      }
+      // The record as it will be stored after this edit must be complete, same as a first submission.
+      const missing = innovationMissingFields({ ...(snap.data() as object), ...pickEditableFields(body) });
+      if (missing.length > 0) {
+        return NextResponse.json({ error: innovationMissingMessage(missing), missing }, { status: 400 });
       }
       const route = await resolveSubmissionRoute(db, session.collegeId, session.uid, false);
       const now = new Date();

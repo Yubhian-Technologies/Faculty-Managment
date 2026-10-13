@@ -59,7 +59,12 @@ function RequestFormFields({
     setForm((f) => ({ ...f, [key]: value }));
   }
 
+  // No single ID is compulsory (not everyone has all five), but at least one must be given.
+  const isValid = [form.orcidId, form.scopusAuthorId, form.researcherId, form.googleScholarId, form.irinsProfile]
+    .some((v) => v.trim() !== "");
+
   async function handleSubmit() {
+    if (!isValid) return;
     setSaving(true);
     try {
       const res = await fetch("/api/college/research-profile", {
@@ -86,6 +91,7 @@ function RequestFormFields({
         <DialogDescription>This goes to R&amp;D for verification before it shows on your profile.</DialogDescription>
       </DialogHeader>
       <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-4">
+        <p className="text-xs text-muted-foreground">Fill in at least one ID.</p>
         <div className="space-y-2">
           <Label>ORCID iD</Label>
           <Input value={form.orcidId} onChange={(e) => set("orcidId", e.target.value)} placeholder="0000-0000-0000-0000" />
@@ -109,7 +115,7 @@ function RequestFormFields({
       </div>
       <DialogFooter>
         <Button variant="outline" onClick={onCancel} disabled={saving}>Cancel</Button>
-        <Button onClick={() => void handleSubmit()} loading={saving}>Submit</Button>
+        <Button onClick={() => void handleSubmit()} loading={saving} disabled={!isValid}>Submit</Button>
       </DialogFooter>
     </>
   );
