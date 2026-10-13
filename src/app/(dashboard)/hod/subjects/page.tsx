@@ -189,12 +189,18 @@ export default function HODSubjectsPage() {
     if (!selectedCourse) return [];
     const courseYears = Array.from({ length: selectedCourse.durationYears }, (_, i) => i + 1);
     const assigned = new Set<number>();
-    const excluded = new Set<number>();
+    // Checked PER department, not merged into one global exclusion set: a
+    // managed branch's own self-exclusion from a shared year (e.g. CSE's
+    // fedYears correctly dropping year 1) must never cancel out the shared
+    // year's actual manager (e.g. Basic Science) claiming that same year -
+    // see hod/teaching-assignments/page.tsx's yearOptions for the same fix.
     for (const d of ownScopeDepartments) {
-      for (const y of managerEffectiveYears(d, departments, selectedCourse.catalogId)) assigned.add(y);
-      for (const y of fedYears(d, departments, selectedCourse.catalogId)) excluded.add(y);
+      const excludedForD = new Set(fedYears(d, departments, selectedCourse.catalogId));
+      for (const y of managerEffectiveYears(d, departments, selectedCourse.catalogId)) {
+        if (!excludedForD.has(y)) assigned.add(y);
+      }
     }
-    return courseYears.filter((y) => assigned.has(y) && !excluded.has(y));
+    return courseYears.filter((y) => assigned.has(y));
   }, [selectedCourse, ownScopeDepartments, departments]);
   const selectedYear = pickedYear || (yearOptions.length > 0 ? String(yearOptions[0]) : "");
 
