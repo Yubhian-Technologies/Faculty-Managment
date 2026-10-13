@@ -14,6 +14,8 @@ import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { DESIGNATION_LABELS } from "@/types";
 import type { FacultyMember, Designation } from "@/types";
 
+import { SeatBadges } from "@/components/faculty/facultyListCells";
+
 type FacultyRow = Record<string, unknown> & FacultyMember;
 
 // College Office's own faculty list - unlike HOD's Faculty Register, this
@@ -27,7 +29,7 @@ export default function CollegeOfficeFacultyPage() {
   const [emailTarget, setEmailTarget] = useState<{ id: string; employeeId: string; name: string } | null>(null);
 
   useEffect(() => {
-    fetch("/api/college/faculty")
+    fetch("/api/college/faculty?withSeats=1")
       .then((r) => r.json() as Promise<{ faculty: FacultyRow[] }>)
       .then((d) => setFaculty(d.faculty ?? []))
       .catch(() => toast({ variant: "destructive", title: "Failed to load faculty" }))
@@ -57,7 +59,12 @@ export default function CollegeOfficeFacultyPage() {
     {
       key: "designation",
       header: "Designation",
-      render: (row) => <p className="text-sm">{DESIGNATION_LABELS[row.designation as Designation] ?? (row.designation as string)}</p>,
+      render: (row) => (
+        <div className="space-y-0.5">
+          <p className="text-sm">{DESIGNATION_LABELS[row.designation as Designation] ?? (row.designation as string)}</p>
+          <SeatBadges row={row} />
+        </div>
+      ),
     },
     {
       key: "department",
@@ -105,8 +112,8 @@ export default function CollegeOfficeFacultyPage() {
         isLoading={isLoading}
         keyExtractor={(r) => r.id as string}
         onRowClick={(row) => router.push(`/college-office/faculty/${row.id}/promotion-salary`)}
-        searchPlaceholder="Search by name, employee ID..."
-        searchKeys={["legalName", "nameAsPerPan", "employeeId"] as (keyof FacultyRow)[]}
+        searchPlaceholder="Search by name, employee ID, role..."
+        searchKeys={["legalName", "nameAsPerPan", "employeeId", "seatLabels"] as (keyof FacultyRow)[]}
         paginate={false}
         groupBy={(row) => (row.department as string) || "Unassigned"}
         emptyTitle="No faculty records yet"

@@ -3,8 +3,7 @@
 import { useEffect, useState } from "react";
 import { ExternalLink, Plus, Pencil } from "lucide-react";
 import {
-  Section, SubLabel, Field, TextInput, NumInput, DateInput, TableRepeatingGroup,
-} from "@/components/shared/ProfileFieldPrimitives";
+  Section, SubLabel, Field, TextInput, NumField, DateInput, TableRepeatingGroup, RequiredMark } from "@/components/shared/ProfileFieldPrimitives";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -303,10 +302,10 @@ function ProjectFormFields({
       <div className="space-y-5">
         <div className="space-y-4">
           <SubLabel>Overview</SubLabel>
-          <TextInput label="Title of the Project" value={form.title} onChange={(v) => set("title", v)} />
-          <NumInput label="Duration (Months)" value={toNumberOrUndefined(form.durationMonths)} onChange={(v) => set("durationMonths", String(v))} />
+          <TextInput label="Title of the Project" value={form.title} onChange={(v) => set("title", v)} required />
+          <NumField label="Duration (Months)" value={form.durationMonths} onChange={(v) => set("durationMonths", v)} />
           <div className="space-y-2">
-            <Label>Objectives of the Project</Label>
+            <Label>Objectives of the Project<RequiredMark required /></Label>
             <Textarea value={form.objectives} onChange={(e) => set("objectives", e.target.value)} rows={3} />
           </div>
           <div className="space-y-2">
@@ -314,7 +313,7 @@ function ProjectFormFields({
             <Textarea value={form.tentativeOutcomes} onChange={(e) => set("tentativeOutcomes", e.target.value)} rows={2} />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <TextInput label="Name of the PI" value={form.piName} onChange={(v) => set("piName", v)} />
+            <TextInput label="Name of the PI" value={form.piName} onChange={(v) => set("piName", v)} required />
             <TextInput label="Dept. of PI" value={form.piDepartment} onChange={(v) => set("piDepartment", v)} />
           </div>
         </div>
@@ -322,7 +321,7 @@ function ProjectFormFields({
         <div className="space-y-4">
           <SubLabel>Status &amp; Funding</SubLabel>
           <div className="space-y-2">
-            <Label>Status</Label>
+            <Label>Status<RequiredMark required /></Label>
             <Select value={form.projectStatus} onValueChange={(v) => set("projectStatus", v as SeedFundingProjectStatus)}>
               <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
               <SelectContent>
@@ -339,9 +338,9 @@ function ProjectFormFields({
             </div>
           )}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <NumInput label="Total Amount Sanctioned (Rs.)" value={toNumberOrUndefined(form.totalAmountSanctioned)} onChange={(v) => set("totalAmountSanctioned", String(v))} />
-            <NumInput label="Recurring (Rs.)" value={toNumberOrUndefined(form.recurringAmount)} onChange={(v) => set("recurringAmount", String(v))} />
-            <NumInput label="Non-Recurring (Rs.)" value={toNumberOrUndefined(form.nonRecurringAmount)} onChange={(v) => set("nonRecurringAmount", String(v))} />
+            <NumField label="Total Amount Sanctioned (Rs.)" value={form.totalAmountSanctioned} onChange={(v) => set("totalAmountSanctioned", v)} />
+            <NumField label="Recurring (Rs.)" value={form.recurringAmount} onChange={(v) => set("recurringAmount", v)} />
+            <NumField label="Non-Recurring (Rs.)" value={form.nonRecurringAmount} onChange={(v) => set("nonRecurringAmount", v)} />
           </div>
         </div>
 
@@ -461,13 +460,13 @@ function ProjectFormFields({
           <div className="space-y-2">
             <SubLabel>Students Projects Executed</SubLabel>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <NumInput label="UG" value={toNumberOrUndefined(form.studentsProjectsUG)} onChange={(v) => set("studentsProjectsUG", String(v))} />
-              <NumInput label="PG" value={toNumberOrUndefined(form.studentsProjectsPG)} onChange={(v) => set("studentsProjectsPG", String(v))} />
-              <NumInput label="Ph.D." value={toNumberOrUndefined(form.studentsProjectsPhD)} onChange={(v) => set("studentsProjectsPhD", String(v))} />
+              <NumField label="UG" value={form.studentsProjectsUG} onChange={(v) => set("studentsProjectsUG", v)} />
+              <NumField label="PG" value={form.studentsProjectsPG} onChange={(v) => set("studentsProjectsPG", v)} />
+              <NumField label="Ph.D." value={form.studentsProjectsPhD} onChange={(v) => set("studentsProjectsPhD", v)} />
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <NumInput label="No. of Students Trained" value={toNumberOrUndefined(form.studentsTrainedCount)} onChange={(v) => set("studentsTrainedCount", String(v))} />
-              <NumInput label="No. of External Funded Proposals Applied" value={toNumberOrUndefined(form.externalFundedProposalsApplied)} onChange={(v) => set("externalFundedProposalsApplied", String(v))} />
+              <NumField label="No. of Students Trained" value={form.studentsTrainedCount} onChange={(v) => set("studentsTrainedCount", v)} />
+              <NumField label="No. of External Funded Proposals Applied" value={form.externalFundedProposalsApplied} onChange={(v) => set("externalFundedProposalsApplied", v)} />
             </div>
           </div>
         </div>

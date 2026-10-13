@@ -2908,6 +2908,14 @@ export interface StudentRecord {
   // assigned, so an unassigned student is a gap the HOD needs to notice and
   // fill in, not something the system guesses.
   labBatch?: string;
+  // Mentoring: the faculty member the HOD assigned to follow this student's
+  // progress. One mentor per student. `mentorUid` is the mentor's LOGIN uid (so
+  // "my mentees" is one equality query); the others are display/audit copies.
+  // Written only by POST /api/college/mentoring/assign; absent = no mentor.
+  mentorUid?: string;
+  mentorName?: string;
+  mentorAssignedBy?: string;
+  mentorAssignedAt?: Timestamp;
   // Firebase Storage download URL, same field name as FacultyMember/FMSUser
   // above - set only via the Add/Edit form's photo upload (StudentFormDialog,
   // same AvatarUploadField Faculty uses) and its own small PATCH branch

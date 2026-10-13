@@ -8,6 +8,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { holdsRole } from "@/lib/roles/seatRoles";
 import { notify } from "@/lib/notify";
+import { hackathonMissingFields, hackathonMissingMessage } from "@/lib/research/hackathonValidation";
 import { notifyReviewer, resolveSubmissionRoute, routeFields } from "@/lib/research/coordinatorReview";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import type {
@@ -156,6 +157,11 @@ export async function PATCH(
     // reviewing: the decision branch above is still the only way to approve,
     // and R&D can still approve their own record there.
     if (isOwner) {
+      // The record as it will be stored after this edit must be complete, same as a first submission.
+      const missing = hackathonMissingFields({ ...(snap.data() as object), ...pickEditableFields(body) });
+      if (missing.length > 0) {
+        return NextResponse.json({ error: hackathonMissingMessage(missing), missing }, { status: 400 });
+      }
       const wasApproved = record.status === "APPROVED";
       const route = await resolveSubmissionRoute(db, session.collegeId, session.uid, isRnD);
       const now = new Date();

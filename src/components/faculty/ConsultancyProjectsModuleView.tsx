@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ExternalLink, Plus, Pencil, Trash2 } from "lucide-react";
-import { Section, SubLabel, Field, TextInput, NumInput, DateInput } from "@/components/shared/ProfileFieldPrimitives";
+import { Section, SubLabel, Field, TextInput, NumField, DateInput, RequiredMark } from "@/components/shared/ProfileFieldPrimitives";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -164,7 +164,7 @@ function FacultyConsultantRows({
 
   return (
     <div className="space-y-2">
-      <Label>Faculty Consultant ID(s)</Label>
+      <Label>Faculty Consultant ID(s)<RequiredMark required /></Label>
       {rows.map((r, i) => (
         <div key={i} className="flex items-start gap-2">
           <div className="flex-1 space-y-1">
@@ -369,20 +369,20 @@ function ProjectFormFields({
       <div className="space-y-5">
         <div className="space-y-4">
           <SubLabel>Overview</SubLabel>
-          <TextInput label="Title of the Consultancy Project" value={form.title} onChange={(v) => set("title", v)} />
+          <TextInput label="Title of the Consultancy Project" value={form.title} onChange={(v) => set("title", v)} required />
           <FacultyConsultantRows rows={form.consultants} onChange={(next) => set("consultants", next)} />
           {!editingProject?.facultyConsultants?.length && editingProject?.facultyConsultantsNames && (
             <p className="text-xs text-muted-foreground">Previously entered as text: {editingProject.facultyConsultantsNames}. Add their Faculty IDs above - they are required.</p>
           )}
-          <TextInput label="Department" value={form.department} onChange={(v) => set("department", v)} />
+          <TextInput label="Department" value={form.department} onChange={(v) => set("department", v)} required />
         </div>
 
         <div className="space-y-4">
           <SubLabel>Client &amp; Category</SubLabel>
-          <TextInput label="Client / Organization Name" value={form.clientName} onChange={(v) => set("clientName", v)} />
+          <TextInput label="Client / Organization Name" value={form.clientName} onChange={(v) => set("clientName", v)} required />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label>Client Type</Label>
+              <Label>Client Type<RequiredMark required /></Label>
               <Select value={form.clientType} onValueChange={(v) => set("clientType", v as ConsultancyClientType)}>
                 <SelectTrigger><SelectValue placeholder="Select client type" /></SelectTrigger>
                 <SelectContent>
@@ -391,7 +391,7 @@ function ProjectFormFields({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Consultancy Category</Label>
+              <Label>Consultancy Category<RequiredMark required /></Label>
               <Select value={form.consultancyCategory} onValueChange={(v) => set("consultancyCategory", v as ConsultancyCategory)}>
                 <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
                 <SelectContent>
@@ -401,11 +401,11 @@ function ProjectFormFields({
             </div>
           </div>
           <div className="space-y-2">
-            <Label>Problem Statement</Label>
+            <Label>Problem Statement<RequiredMark required /></Label>
             <Textarea value={form.problemStatement} onChange={(e) => set("problemStatement", e.target.value)} placeholder="Brief description of the work assigned" rows={3} />
           </div>
           <div className="space-y-2 max-w-[240px]">
-            <Label>Status of Consultancy Project</Label>
+            <Label>Status of Consultancy Project<RequiredMark required /></Label>
             <Select value={form.projectStatus} onValueChange={(v) => set("projectStatus", v as "ONGOING" | "COMPLETED")}>
               <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
               <SelectContent>
@@ -419,17 +419,17 @@ function ProjectFormFields({
         <div className="space-y-4">
           <SubLabel>Timeline</SubLabel>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <DateInput label="Start Date" value={form.startDate} onChange={(v) => set("startDate", v)} />
-            <DateInput label={isOngoing ? "Tentative End Date" : "End Date"} value={form.endDate} onChange={(v) => set("endDate", v)} />
-            <NumInput label="Duration (Months)" value={toNumberOrUndefined(form.durationMonths)} onChange={(v) => set("durationMonths", String(v))} />
+            <DateInput label="Start Date" value={form.startDate} onChange={(v) => set("startDate", v)} required />
+            <DateInput label={isOngoing ? "Tentative End Date" : "End Date"} value={form.endDate} onChange={(v) => set("endDate", v)} required />
+            <NumField label="Duration (Months)" value={form.durationMonths} onChange={(v) => set("durationMonths", v)} required />
           </div>
         </div>
 
         <div className="space-y-4">
           <SubLabel>Financials</SubLabel>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <NumInput label="Approved Consultancy Amount (Rs.)" value={toNumberOrUndefined(form.consultancyAmount)} onChange={(v) => set("consultancyAmount", String(v))} />
-            <NumInput label="Amount Received (Rs.)" value={toNumberOrUndefined(form.amountReceived)} onChange={(v) => set("amountReceived", String(v))} />
+            <NumField label="Approved Consultancy Amount (Rs.)" value={form.consultancyAmount} onChange={(v) => set("consultancyAmount", v)} />
+            <NumField label="Amount Received (Rs.)" value={form.amountReceived} onChange={(v) => set("amountReceived", v)} />
           </div>
           <DateInput label="Date of Amount Received" value={form.amountReceivedDate} onChange={(v) => set("amountReceivedDate", v)} />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -443,11 +443,11 @@ function ProjectFormFields({
                 </SelectContent>
               </Select>
             </div>
-            <NumInput label={isOngoing ? "Tentative Total Hours Spent during Academic Hours" : "Total Hours Spent during Academic Hours"} value={toNumberOrUndefined(form.hoursSpentDuringAcademicHours)} onChange={(v) => set("hoursSpentDuringAcademicHours", String(v))} />
+            <NumField label={isOngoing ? "Tentative Total Hours Spent during Academic Hours" : "Total Hours Spent during Academic Hours"} value={form.hoursSpentDuringAcademicHours} onChange={(v) => set("hoursSpentDuringAcademicHours", v)} />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <NumInput label="Institutional Share (Rs.)" value={toNumberOrUndefined(form.institutionalShare)} onChange={(v) => set("institutionalShare", String(v))} />
-            <NumInput label="Faculty Share (Rs.)" value={toNumberOrUndefined(form.facultyShare)} onChange={(v) => set("facultyShare", String(v))} />
+            <NumField label="Institutional Share (Rs.)" value={form.institutionalShare} onChange={(v) => set("institutionalShare", v)} />
+            <NumField label="Faculty Share (Rs.)" value={form.facultyShare} onChange={(v) => set("facultyShare", v)} />
           </div>
         </div>
       </div>
@@ -456,6 +456,7 @@ function ProjectFormFields({
       <div className="space-y-5">
         <div className="space-y-4">
           <SubLabel>Deliverables &amp; Reports</SubLabel>
+          <Label>Deliverables<RequiredMark required /></Label>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {CONSULTANCY_DELIVERABLES.map((d) => (
               <label key={d} className="flex items-center gap-2 text-sm">
@@ -474,6 +475,7 @@ function ProjectFormFields({
           />
           <DocumentUploadField
             label="Completion Report"
+            required
             value={form.completionReportUrl}
             uploadEndpoint="/api/upload/consultancy-doc"
             extraFields={{ kind: "completion-report" }}

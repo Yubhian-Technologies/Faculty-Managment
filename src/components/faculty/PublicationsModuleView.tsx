@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import { useAuthStore } from "@/store/authStore";
-import { PublicationDetailsForm, emptyPublicationDetails, isPublicationDetailsValid } from "@/components/research/PublicationDetailsForm";
+import { PublicationDetailsForm, emptyPublicationDetails, publicationMissingFields } from "@/components/research/PublicationDetailsForm";
 import { externalHref } from "@/lib/publications/externalHref";
 import type { FacultyProfileFields, ResearchPublication, PublicationDetails } from "@/types";
 import { FACT_GRID_COLS_4, FACT_GRID_COLS_5 } from "@/components/shared/factGrid";
@@ -168,7 +168,8 @@ function PublicationFormFields({
   const [saving, setSaving] = useState(false);
   const editingId = editingPub?.id ?? null;
 
-  const isValid = isPublicationDetailsValid(details);
+  const missing = publicationMissingFields(details);
+  const isValid = missing.length === 0;
 
   async function handleSubmit() {
     if (!isValid) return;
@@ -209,7 +210,12 @@ function PublicationFormFields({
       <div className="flex-1 min-h-0 overflow-y-auto pr-1">
         <PublicationDetailsForm value={details} onChange={setDetails} ownCollegeId={ownCollegeId} />
       </div>
-      <DialogFooter>
+      <DialogFooter className="sm:items-center">
+        {!isValid && (
+          <p className="text-xs text-destructive sm:mr-auto sm:max-w-[60%]" role="status">
+            Required: {missing.slice(0, 6).join(", ")}{missing.length > 6 ? ` and ${missing.length - 6} more` : ""}
+          </p>
+        )}
         <Button variant="outline" onClick={onCancel} disabled={saving}>Cancel</Button>
         <Button onClick={() => void handleSubmit()} loading={saving} disabled={!isValid}>
           {editingId ? "Resubmit" : "Submit"}

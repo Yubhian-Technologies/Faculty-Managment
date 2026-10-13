@@ -165,6 +165,7 @@ function PrincipalFacultyContent() {
       const params = new URLSearchParams();
       if (dept && dept !== ALL_DEPTS) params.set("department", dept);
       if (status && status !== ALL_STATUS) params.set("status", status);
+      params.set("withSeats", "1");
 
       const res = await fetch(`/api/college/faculty?${params.toString()}`, { signal: ctrl.signal });
       const data = await res.json() as { faculty?: FacultyRow[]; error?: string };
@@ -634,8 +635,8 @@ function PrincipalFacultyContent() {
             keyExtractor={(r) => r.id as string}
             paginate
             defaultPageSize={20}
-            searchPlaceholder="Search by name, employee ID, email, designation, or department..."
-            searchKeys={["name", "legalName", "email", "collegeEmail", "employeeId", "designation", "department", "mobileNo"] as (keyof FacultyRow)[]}
+            searchPlaceholder="Search by name, employee ID, email, designation, role, or department..."
+            searchKeys={["name", "legalName", "email", "collegeEmail", "employeeId", "designation", "department", "mobileNo", "seatLabels"] as (keyof FacultyRow)[]}
             onRowClick={(row) => router.push(withReturnTo(`/principal/faculty/${getDeptIdForRow(row)}/${row.id}`, listUrl))}
             emptyTitle={statusTab ? `No ${statusTab.toLowerCase().replace(/_/g, " ")} faculty found` : "No faculty found"}
             emptyDescription={

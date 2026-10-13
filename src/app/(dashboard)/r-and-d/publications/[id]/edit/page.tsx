@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
 import { useAuthStore } from "@/store/authStore";
-import { PublicationDetailsForm, emptyPublicationDetails } from "@/components/research/PublicationDetailsForm";
+import { PublicationDetailsForm, emptyPublicationDetails, publicationMissingFields } from "@/components/research/PublicationDetailsForm";
 import type { ResearchPublication, PublicationDetails } from "@/types";
 
 export default function EditPublicationPage() {
@@ -38,8 +38,12 @@ export default function EditPublicationPage() {
       .finally(() => setLoading(false));
   }, [publicationId, router]);
 
+  const missing = publicationMissingFields(details);
+  const isValid = missing.length === 0;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!isValid) return;
     setSaving(true);
     try {
       const res = await fetch(`/api/college/publications/${publicationId}`, {
@@ -73,9 +77,14 @@ export default function EditPublicationPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-5">
             <PublicationDetailsForm value={details} onChange={setDetails} ownCollegeId={ownCollegeId} />
-            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end pt-4 border-t">
+              {!isValid && (
+                <p className="text-xs text-destructive sm:mr-auto" role="status">
+                  Required: {missing.slice(0, 6).join(", ")}{missing.length > 6 ? ` and ${missing.length - 6} more` : ""}
+                </p>
+              )}
               <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
-              <Button type="submit" loading={saving}>Save Changes</Button>
+              <Button type="submit" loading={saving} disabled={!isValid}>Save Changes</Button>
             </div>
           </form>
         </CardContent>

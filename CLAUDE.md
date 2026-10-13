@@ -121,6 +121,12 @@ There is **no env switch** (the old `READ_ONLY_FACULTY_COLLEGES` is gone and ign
 - **University codes:** `Subject.universityCode` (e.g. R232101; set by the Course Structure upload's optional "University Code" column or Academics > Subjects > Edit, mirrored onto `subjectSemesterAssignments`) lets a university results export be imported as it is: a row's code matches the college code OR the university code; a code naming two different subjects is refused. Never map codes by position - that is what produced wrong SGPAs in the first real test.
 - **Import rules** (`importRows.ts`, `import/route.ts`): one Regular result per student per semester; Supplementary only for a subject with an earlier result not yet passed; a student is saved whole or not at all (any refused row refuses all their rows). Published sheets are locked - corrections (revaluation) are Phase 3.
 
+### Student mentoring (HOD assigns, faculty mentors)
+
+- **Model:** one mentor per student, stored on the student record (`mentorUid` = the mentor's LOGIN uid, plus `mentorName` / `mentorAssignedBy` / `mentorAssignedAt`; absent = none). Written ONLY by `POST /api/college/mentoring/assign` (HOD; every student must pass the HOD's department scope, `lib/mentoring/access.ts`; the mentor must be an available faculty member of the HOD's departments). Notes live at `students/{id}/mentoringNotes/{noteId}` (mentor + HOD only, never the student; delete = author only).
+- **Read-only progress for the mentor** (`GET /api/college/mentoring/students/[id]?part=profile|attendance|results|internal`, PANEL_MEMBER/HOD; allowed for the student's mentor or the HOD who manages them): profile = the student's own roster detail groups (`buildOwnProfileGroups`); attendance = `computeStudentAttendanceHistory` per semester; results = PUBLISHED `semesterResults` with SGPA/CGPA/backlogs from `studentStanding` (`lib/mentoring/progress.ts`); internal marks = SUBMITTED `internalExamMarks` batches containing the student, resolved through the Exam Cell's `ExamConfiguration`.
+- **Pages:** `/hod/mentoring` (Assign / Mentors / My Mentees) and `/panel/mentoring` (My Mentees), both opening `MenteeProgress`. Exited (RESIGNED/RETIRED) faculty are read-only, so they lose access automatically; the HOD reassigns their mentees.
+
 ## Architecture & Directory Map
 
 ```
