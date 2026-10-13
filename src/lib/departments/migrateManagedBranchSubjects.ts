@@ -373,6 +373,24 @@ async function run(
       for (const h of historyWrites.slice(i, i + 400)) batch.set(h.ref, h.data);
       await batch.commit();
     }
+
+    // Repair each landing section's own studentCount counter - students
+    // moving in via the update above never touched it, so a section that
+    // only just received its first real students (studentCount still 0 from
+    // creation) would keep showing 0 everywhere that reads this cached
+    // field instead of counting live, same staleness class as courseId/
+    // secondaryDepartmentNames above.
+    const sectionIdByOldName = new Map<string, string>();
+    for (const s of sectionsToRename) sectionIdByOldName.set(s.name, s.id);
+    for (const [name, info] of branchSectionByName) if (!sectionIdByOldName.has(name)) sectionIdByOldName.set(name, info.id);
+    const countOps: { ref: FirebaseFirestore.DocumentReference; action: "update"; data: Record<string, unknown> }[] = [];
+    for (const [oldName, addCount] of studentCountBySection) {
+      const sectionId = sectionIdByOldName.get(oldName);
+      if (!sectionId) continue;
+      const current = branchSectionByName.get(oldName)?.studentCount ?? 0;
+      countOps.push({ ref: collegeRef.collection("sections").doc(sectionId), action: "update", data: { studentCount: current + addCount } });
+    }
+    await commitInChunks(db, countOps);
   }
 
   // ── C. subjectSemesterAssignments filed under the manager ────────────────
