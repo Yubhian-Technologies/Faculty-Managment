@@ -1,5 +1,6 @@
 "use client";
 
+import { InternalFacultyPicker } from "@/components/research/InternalFacultyPicker";
 import { useEffect, useRef, useState } from "react";
 import { ExternalLink, Plus, Pencil, Trash2 } from "lucide-react";
 import { Section, SubLabel, Field, TextInput, NumField, DateInput, RequiredMark } from "@/components/shared/ProfileFieldPrimitives";
@@ -114,9 +115,8 @@ function ConsultancyProjectRow({
   );
 }
 
-// One Faculty Consultant row: the Employee ID is typed and the name is fetched
-// from the faculty record (same lookup Research Publications/IPR use for an
-// internal author), never typed by hand.
+// One Faculty Consultant row: picked by Department, then a searchable faculty
+// list (InternalFacultyPicker); the Employee ID is stored, never typed.
 interface ConsultantRow {
   facultyId: string;
   name: string;
@@ -131,47 +131,19 @@ function FacultyConsultantRows({
   rows: ConsultantRow[];
   onChange: (next: ConsultantRow[]) => void;
 }) {
-  // Keeps the latest rows reachable from an async lookup that resolves later,
-  // so a slow response never overwrites edits made to other rows meanwhile.
-  const rowsRef = useRef(rows);
-  useEffect(() => { rowsRef.current = rows; }, [rows]);
-  const timers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
-
-  function patch(i: number, p: Partial<ConsultantRow>) {
-    const next = [...rowsRef.current];
-    next[i] = { ...next[i], ...p };
-    rowsRef.current = next;
+  function pick(i: number, p: { facultyId: string; name: string }) {
+    const next = [...rows];
+    next[i] = { facultyId: p.facultyId, name: p.name, lookup: p.name ? "found" : "idle" };
     onChange(next);
-  }
-
-  function setId(i: number, raw: string) {
-    const facultyId = raw;
-    clearTimeout(timers.current[i]);
-    if (!facultyId.trim()) { patch(i, { facultyId, name: "", lookup: "idle" }); return; }
-    patch(i, { facultyId, name: "", lookup: "loading" });
-    timers.current[i] = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/college/faculty-lookup?employeeId=${encodeURIComponent(facultyId.trim())}`);
-        const data = res.ok ? await res.json() as { name?: string } : null;
-        // Ignore a result for an ID the user has since changed.
-        if (rowsRef.current[i]?.facultyId !== facultyId) return;
-        patch(i, data?.name ? { name: data.name, lookup: "found" } : { name: "", lookup: "not-found" });
-      } catch {
-        if (rowsRef.current[i]?.facultyId === facultyId) patch(i, { name: "", lookup: "not-found" });
-      }
-    }, 400);
   }
 
   return (
     <div className="space-y-2">
-      <Label>Faculty Consultant ID(s)<RequiredMark required /></Label>
+      <Label>Faculty Consultant(s)<RequiredMark required /></Label>
       {rows.map((r, i) => (
         <div key={i} className="flex items-start gap-2">
-          <div className="flex-1 space-y-1">
-            <Input value={r.facultyId} onChange={(e) => setId(i, e.target.value)} placeholder={`Faculty ID of consultant ${i + 1}`} />
-            {r.lookup === "loading" && <p className="text-xs text-muted-foreground">Looking up…</p>}
-            {r.lookup === "found" && <p className="text-xs text-green-700">{r.name}</p>}
-            {r.lookup === "not-found" && <p className="text-xs text-destructive">No faculty member found with that ID</p>}
+          <div className="flex-1">
+            <InternalFacultyPicker facultyId={r.facultyId} label={`Faculty consultant ${i + 1}`} required onPick={(p) => pick(i, p)} />
           </div>
           {rows.length > 1 && (
             <Button type="button" variant="ghost" size="sm" onClick={() => onChange(rows.filter((_, idx) => idx !== i))}>

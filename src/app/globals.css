@@ -291,6 +291,25 @@ html:has(.landing-page) {
   border-color: var(--q-accent);
   box-shadow: 0 0 0 3px var(--q-ring);
 }
+/* The search box inside a command list lives in its own bordered panel (and dialogs render outside .qual-card):
+   no field border or focus outline of its own - the panel shows focus instead. Outlines get clipped by the
+   panel's overflow-hidden, which is what produced the cut-off blue box. */
+input[cmdk-input],
+input[cmdk-input]:hover:not(:disabled),
+input[cmdk-input]:focus,
+input[cmdk-input]:focus-visible,
+.qual-card input[cmdk-input],
+.qual-card input[cmdk-input]:hover:not(:disabled),
+.qual-card input[cmdk-input]:focus-visible {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  outline: none;
+}
+[cmdk-root]:focus-within {
+  border-color: var(--ring);
+}
 .qual-card input:disabled,
 .qual-card textarea:disabled,
 .qual-card button[role="combobox"]:disabled {
