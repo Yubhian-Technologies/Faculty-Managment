@@ -30,11 +30,11 @@ function sessionTargets(payload: PermissionPayload) {
 export const studentPermissionKind: ApprovalKind<PermissionPayload, PermissionContext, Transaction> = {
   kind: PERMISSION_KIND,
 
-  stageScope: (stage, req) => (stage === "HOD" ? req.scope : stage === "CLASS_INCHARGE" ? req.payload.inchargeUid ?? "none" : "*"),
+  stageScope: (stage, req) => (stage === "HOD" ? req.scope : stage === "CLASS_INCHARGE" ? req.payload.inchargeUid ?? "none" : stage === "DELEGATED_FACULTY" ? req.payload.delegatedFacultyUid ?? req.scope : "*"),
 
   async canDecide(ctx, req, stage, actor) {
     let headsRequestDepartment = false;
-    if (stage === "HOD" && ctx.actorRoles.includes("HOD")) {
+    if ((stage === "HOD" || stage === "DELEGATED_FACULTY") && ctx.actorRoles.includes("HOD")) {
       // activeOnly:false - this is an authorisation question about a SPECIFIC
       // department, not "which department am I working in right now".
       const scope = await getHodDepartmentScope(ctx.db, ctx.collegeId, actor.uid, { activeOnly: false });
@@ -44,14 +44,18 @@ export const studentPermissionKind: ApprovalKind<PermissionPayload, PermissionCo
     if (stage === "CLASS_INCHARGE" && req.payload.inchargeUid) {
       isRecordedIncharge = (await getFacultyIdCandidates(ctx.db, ctx.collegeId, actor.uid)).includes(req.payload.inchargeUid);
     }
+    let isDelegatedFaculty = false;
+    if (stage === "DELEGATED_FACULTY" && req.payload.delegatedFacultyUid) {
+      isDelegatedFaculty = (await getFacultyIdCandidates(ctx.db, ctx.collegeId, actor.uid)).includes(req.payload.delegatedFacultyUid) || actor.uid === req.payload.delegatedFacultyUid;
+    }
     return canDecideStage({
       stage, actorUid: actor.uid, requesterUid: req.requesterUid, actorRoles: ctx.actorRoles,
-      headsRequestDepartment, isRecordedIncharge,
+      headsRequestDepartment, isRecordedIncharge, isDelegatedFaculty,
     });
   },
 
-  // A class with no incharge assigned would strand the request at that stage.
-  isStageActionable: async (_ctx, req, stage) => (stage === "CLASS_INCHARGE" ? !!req.payload.inchargeUid : true),
+  // A class with no incharge or delegated faculty assigned would strand the request at that stage.
+  isStageActionable: async (_ctx, req, stage) => (stage === "CLASS_INCHARGE" ? !!req.payload.inchargeUid : stage === "DELEGATED_FACULTY" ? !!req.payload.delegatedFacultyUid : true),
 
   // Committed atomically with the decision: the day documents attendance reads. If
   // this succeeds, any period opened from now on is pre-marked, even if the heavier

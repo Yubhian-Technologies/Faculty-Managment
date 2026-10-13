@@ -19,7 +19,7 @@ import {
 } from "@/lib/departments/hodScope";
 import { ordinalYear } from "@/lib/timetable/gridModel";
 import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
-import { yearSemesterLabel } from "@/lib/academic/format";
+import { semesterInYearLabel } from "@/lib/academic/format";
 import type { Course, CourseYearTiming, Department, Section } from "@/types";
 
 // Reaching one section's timetable used to be four clicks: a course tile, then
@@ -355,7 +355,7 @@ function SectionTimetable() {
                   </SelectTrigger>
                   <SelectContent>
                     {semesterOptions.map((n) => (
-                      <SelectItem key={n} value={String(n)}>{yearSemesterLabel(n)}</SelectItem>
+                      <SelectItem key={n} value={String(n)}>{semesterInYearLabel(semesterOptions, n, { format: "short" })}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

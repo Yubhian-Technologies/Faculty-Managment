@@ -136,7 +136,7 @@ export default function DepartmentsImportPage() {
         description="Bulk add departments - with department codes and HOD emails - from a CSV file"
         actions={
           <Button variant="outline" asChild>
-            <Link href="/principal/departments"><ArrowLeft className="h-4 w-4 mr-1" />Back to Departments</Link>
+            <Link href="/principal/courses?tab=departments"><ArrowLeft className="h-4 w-4 mr-1" />Back to Departments</Link>
           </Button>
         }
       />
@@ -170,7 +170,7 @@ export default function DepartmentsImportPage() {
             <FileSpreadsheet className="h-10 w-10 text-muted-foreground" />
             <div className="text-center">
               <p className="font-medium text-sm">Click to select a CSV or Excel file</p>
-              <p className="text-xs text-muted-foreground mt-1">.csv or .xlsx supported - headers matched loosely (e.g. &quot;Dept Code&quot; for Short Code)</p>
+              <p className="text-xs text-muted-foreground mt-1">.csv or .xlsx - headers matched loosely.</p>
             </div>
           </button>
           {parseError && (
@@ -319,7 +319,7 @@ export default function DepartmentsImportPage() {
             )}
             {result.created > 0 && (
               <Button asChild variant="outline" size="sm">
-                <Link href="/principal/departments">View Departments</Link>
+                <Link href="/principal/courses?tab=departments">View Departments</Link>
               </Button>
             )}
           </CardContent>

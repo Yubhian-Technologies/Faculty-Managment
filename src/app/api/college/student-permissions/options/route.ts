@@ -23,11 +23,19 @@ export async function GET(request: Request) {
     const config = await loadPermissionConfig(db, session.collegeId);
 
     let department = new URL(request.url).searchParams.get("department") ?? "";
+    let studentInfo: { name: string; rollNumber: string; department: string; year: number; section: string } | undefined;
     if (session.role === "STUDENT") {
       const student = await loadStudentByUid(db, session.collegeId, user.uid);
       if (student) {
         const sec = await findCurrentSectionDoc(db, session.collegeId, student);
         department = (sec?.data() as { department?: string } | undefined)?.department || student.department;
+        studentInfo = {
+          name: student.name,
+          rollNumber: student.rollNumber,
+          department,
+          year: student.year,
+          section: student.section,
+        };
       }
     }
 
@@ -35,7 +43,7 @@ export async function GET(request: Request) {
       id: g.id, label: g.label,
       items: g.items.map((c) => ({ id: c.id, label: c.label, enabled: !isTypeDisabled(config, department, categoryTypeKeys(c)) })),
     })).filter((g) => g.items.some((i) => i.enabled));
-    return NextResponse.json({ enabled: config.enabled, department, groups, limits: resolveLimits(config, DEFAULT_LIMITS, department) });
+    return NextResponse.json({ enabled: config.enabled, department, studentInfo, groups, limits: resolveLimits(config, DEFAULT_LIMITS, department) });
   } catch (err) {
     return failure(err, "college/student-permissions/options GET");
   }

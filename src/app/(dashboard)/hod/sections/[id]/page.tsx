@@ -25,15 +25,8 @@ function ordinalYear(year: number) {
   return `${year}${suffix} Year`;
 }
 
-// Curriculum-table order: by S.No. when set, falling back to name for legacy
-// subjects that predate the field - same sort as academics/subjects/page.tsx.
 function sortSubjects(subjects: Subject[]) {
-  return [...subjects].sort((a, b) => {
-    if (a.serialNumber != null && b.serialNumber != null) return a.serialNumber - b.serialNumber;
-    if (a.serialNumber != null) return -1;
-    if (b.serialNumber != null) return 1;
-    return a.name.localeCompare(b.name);
-  });
+  return [...subjects].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export default function SectionRosterPage() {
@@ -296,7 +289,6 @@ export default function SectionRosterPage() {
                 <table className="w-full text-sm">
                   <thead className="bg-muted/50 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     <tr>
-                      <th className="px-4 py-2.5">S.No.</th>
                       <th className="px-4 py-2.5">Subject</th>
                       <th className="px-4 py-2.5">Faculty</th>
                     </tr>
@@ -306,7 +298,6 @@ export default function SectionRosterPage() {
                       const assignment = assignmentBySubjectId.get(s.id);
                       return (
                         <tr key={s.id}>
-                          <td className="px-4 py-2.5">{s.serialNumber ?? "—"}</td>
                           <td className="px-4 py-2.5">
                             <div className="font-medium text-foreground">{s.name}</div>
                             <div className="flex flex-wrap items-center gap-2 mt-1">

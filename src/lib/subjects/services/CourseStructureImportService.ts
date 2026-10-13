@@ -171,7 +171,10 @@ export function courseOwnershipError(
   return null;
 }
 
-function customCategoriesFrom(docs: FirebaseFirestore.DocumentData[]): CategoryDefinition[] {
+// Shared with MasterSubjectImportService - both read the same
+// colleges/{id}/subjectCategories collection to enforce the same "category
+// must be defined" rule.
+export function customCategoriesFrom(docs: FirebaseFirestore.DocumentData[]): CategoryDefinition[] {
   return docs
     .filter((d): d is CategoryDefinition => typeof d.code === "string" && typeof d.fullForm === "string")
     .map((d) => ({ code: d.code, fullForm: d.fullForm }));
@@ -454,7 +457,6 @@ export class CourseStructureImportService {
       courseId: ctx.course.id,
       courseName: ctx.course.name,
       regulation: req.regulation,
-      serialNumber: row.rowNumber - 1,
       category: row.category,
       ...(row.customCategory ? { customCategory: row.customCategory } : {}),
       name: row.name,

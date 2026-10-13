@@ -49,6 +49,7 @@ export interface NavItem {
 const SUB_PAGE_PARENT: Record<string, string> = {
   "/hod/supporting-staff": "/hod/faculty", // tab of the Faculty page
   "/hod/assignment-requests": "/hod/teaching-assignments", // button on the Teaching Assignments page
+  "/academics/course-structure": "/principal/courses", // Assign-subjects deep link from a department's semester chip
 };
 
 export function isNavItemActive(item: NavItem, pathname: string, allItems: NavItem[]): boolean {
@@ -123,6 +124,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "My Profile", href: "/placement-dept/profile", iconName: "UserCircle", roles: ["PLACEMENT_DEPT"], section: "Personal" },
   { label: "My Leave", href: "/placement-dept/leave", iconName: "CalendarClock", roles: ["PLACEMENT_DEPT"] },
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["PLACEMENT_DEPT"] },
+  { label: "Certificate Requests", href: "/placement-dept/certificate-requests", iconName: "FileCheck", roles: ["PLACEMENT_DEPT"] },
 
   // Library
   { label: "Dashboard", href: "/library", iconName: "LayoutDashboard", roles: ["LIBRARY"] },
@@ -135,7 +137,15 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "My Profile", href: "/library/profile", iconName: "UserCircle", roles: ["LIBRARY"], section: "Personal" },
   { label: "My Leave", href: "/library/leave", iconName: "CalendarClock", roles: ["LIBRARY"] },
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["LIBRARY"] },
+  { label: "Certificate Requests", href: "/library/certificate-requests", iconName: "FileCheck", roles: ["LIBRARY"] },
   { label: "My Attendance", href: "/library/attendance", iconName: "ClipboardCheck", roles: ["LIBRARY"], section: "My Work" },
+
+  // Hostel
+  { label: "Dashboard", href: "/hostel", iconName: "LayoutDashboard", roles: ["HOSTEL"] },
+  { label: "My Profile", href: "/hostel/profile", iconName: "UserCircle", roles: ["HOSTEL"], section: "Personal" },
+  { label: "My Leave", href: "/hostel/leave", iconName: "CalendarClock", roles: ["HOSTEL"] },
+  { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["HOSTEL"] },
+  { label: "Certificate Requests", href: "/hostel/certificate-requests", iconName: "FileCheck", roles: ["HOSTEL"] },
 
   // College Accounts
   { label: "Dashboard", href: "/college-accounts", iconName: "LayoutDashboard", roles: ["COLLEGE_ACCOUNTS"] },
@@ -153,6 +163,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Exam Cell Guidelines", href: "/exam-cell/guidelines", iconName: "BookOpen", roles: ["EXAM_CELL"] },
   { label: "Mid Timings & Dates", href: "/exam-cell/mid-timings", iconName: "CalendarRange", roles: ["EXAM_CELL"] },
   { label: "Timetable View", href: "/exam-cell/timetable-view", iconName: "CalendarDays", roles: ["EXAM_CELL"] },
+  { label: "PC & CMM Requests", href: "/exam-cell/certificate-requests", iconName: "FileCheck", roles: ["EXAM_CELL"] },
   { label: "Settings", href: "/exam-cell/settings", iconName: "Settings2", roles: ["EXAM_CELL"] },
   { label: "Circulars", href: "/exam-cell/circulars", iconName: "ScrollText", roles: ["EXAM_CELL"] },
   { label: "Attendance Reports", href: "/exam-cell/attendance-report", iconName: "BarChart3", roles: ["EXAM_CELL"] },
@@ -195,7 +206,7 @@ export const NAV_ITEMS: NavItem[] = [
   // visible per college via the Nav Visibility settings (filterVisibleNavItems).
   // Grouped by functional domain (see PRINCIPAL_DASHBOARD.md), not by data location.
   { label: "Dashboard", href: "/principal", iconName: "LayoutDashboard", roles: ["PRINCIPAL"] },
-  { label: "Courses", href: "/principal/courses", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Academics", legacyModule: "Academic Management" },
+  { label: "Courses & Departments", href: "/principal/courses", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Academics", legacyModule: "Academic Management" },
   // Promotion and Graduated Students live as sub-tabs (top-right pills) inside
   // the Students page itself now, rather than as separate sidebar entries -
   // see PrincipalStudentsPage. /principal/promotions and /principal/graduates
@@ -290,6 +301,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Leave Approvals", href: "/hod/leave-approvals", iconName: "CalendarClock", roles: ["HOD"], section: "Approvals", module: "leave-approvals" },
   { label: "Leave History", href: "/hod/leave-history", iconName: "History", roles: ["HOD"], module: "leave-approvals" },
   { label: "Student Permissions", href: "/hod/student-permissions", iconName: "ShieldCheck", roles: ["HOD"] },
+  { label: "Certificate Requests", href: "/hod/certificate-requests", iconName: "FileCheck", roles: ["HOD"] },
   // Was 8 separate sidebar items (Attendance Reports, Attendance History,
   // Faculty Attendance, Attendance Completion, Absent Report, Shortage
   // Report, Faculty Not Posted, Import Attendance), all ungrouped and, on
@@ -340,6 +352,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Import Attendance", href: "/college-office/attendance-import", iconName: "Upload", roles: ["COLLEGE_OFFICE"] },
   // Student attendance reports with filters, view-only for the whole college.
   { label: "Attendance Reports", href: "/college-office/attendance-reports", iconName: "CalendarRange", roles: ["COLLEGE_OFFICE"] },
+  { label: "Certificate Issuance", href: "/college-office/certificates", iconName: "FileCheck", roles: ["COLLEGE_OFFICE"], section: "Certificates" },
   // College Admin's login has COLLEGE_OFFICE as its primary role (the seat is
   // layered on top - see api/administration/college-people), so it inherits
   // this whole section too, including these personal items - same reasoning
@@ -370,10 +383,7 @@ export const NAV_ITEMS: NavItem[] = [
 
   // Academics
   { label: "Dashboard", href: "/academics", iconName: "LayoutDashboard", roles: ["ACADEMICS"] },
-  { label: "Regulation", href: "/academics/regulation", iconName: "FileText", roles: ["ACADEMICS"], section: "Academics" },
-  { label: "Course Structure", href: "/academics/course-structure", iconName: "Library", roles: ["ACADEMICS"], section: "Academics" },
-  { label: "Subjects", href: "/academics/subjects", iconName: "ListChecks", roles: ["ACADEMICS"], section: "Academics" },
-  { label: "Syllabus", href: "/academics/syllabus", iconName: "BookOpen", roles: ["ACADEMICS"], section: "Academics" },
+  { label: "Curriculum", href: "/academics/course-structure", iconName: "Library", roles: ["ACADEMICS"], section: "Academics" },
   { label: "Timetable View", href: "/academics/timetable-view", iconName: "CalendarDays", roles: ["ACADEMICS"], section: "Academics" },
   { label: "My Profile", href: "/academics/profile", iconName: "UserCircle", roles: ["ACADEMICS"], section: "Personal" },
   { label: "My Leave", href: "/academics/leave", iconName: "CalendarClock", roles: ["ACADEMICS"] },
@@ -494,6 +504,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Permissions", href: "/student/permissions", iconName: "ShieldCheck", roles: ["STUDENT"] },
   { label: "Library", href: "/student/library", iconName: "BookOpen", roles: ["STUDENT"], section: "Resources" },
   { label: "Documents", href: "/student/documents", iconName: "FileText", roles: ["STUDENT"] },
+  { label: "Certificates", href: "/student/certificates", iconName: "FileCheck", roles: ["STUDENT"] },
   // Reached from the avatar in the top bar (see getProfileHref), not the sidebar.
   { label: "My Profile", href: "/student/profile", iconName: "UserCircle", roles: ["STUDENT"] },
 
@@ -900,6 +911,14 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: "Home", href: "/placement-dept", iconName: "LayoutDashboard", roles: ["PLACEMENT_DEPT"] },
     { label: "Profile", href: "/placement-dept/profile", iconName: "UserCircle", roles: ["PLACEMENT_DEPT"] },
   ],
+  HOSTEL: [
+    { label: "Home", href: "/hostel", iconName: "LayoutDashboard", roles: ["HOSTEL"] },
+    { label: "Profile", href: "/hostel/profile", iconName: "UserCircle", roles: ["HOSTEL"] },
+  ],
+  PD: [
+    { label: "Home", href: "/pd", iconName: "LayoutDashboard", roles: ["PD"] },
+    { label: "Profile", href: "/pd/profile", iconName: "UserCircle", roles: ["PD"] },
+  ],
   LIBRARY: [
     { label: "Home", href: "/library", iconName: "LayoutDashboard", roles: ["LIBRARY"] },
     { label: "Books", href: "/library/books", iconName: "BookOpen", roles: ["LIBRARY"] },
@@ -1001,8 +1020,7 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   ],
   ACADEMICS: [
     { label: "Home", href: "/academics", iconName: "LayoutDashboard", roles: ["ACADEMICS"] },
-    { label: "Course Structure", href: "/academics/course-structure", iconName: "Library", roles: ["ACADEMICS"] },
-    { label: "Subjects", href: "/academics/subjects", iconName: "ListChecks", roles: ["ACADEMICS"] },
+    { label: "Curriculum", href: "/academics/course-structure", iconName: "Library", roles: ["ACADEMICS"] },
     { label: "Profile", href: "/academics/profile", iconName: "UserCircle", roles: ["ACADEMICS"] },
   ],
   IQAC_COORDINATOR: [

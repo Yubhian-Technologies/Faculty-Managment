@@ -264,6 +264,29 @@ export function resolveFreshmanLandingDepartment(
   return manager ? manager.department.name : resolvedDepartmentName;
 }
 
+/**
+ * Whether `departmentName` claims `year` directly, in its own flat
+ * assignedYears or any per-course courseScopes override - never inherited
+ * from a manager. Mirrors departmentClaimsYearItself (academicStructure.ts,
+ * same rule for the Year-1 landing-department check) locally, since the
+ * generic `T` here isn't always a full `DepartmentWithId`. A department that
+ * directly claims a year this way is always fully its own HOD's, regardless
+ * of a manager elsewhere ALSO claiming that same year for it - see
+ * canHodEditDepartmentYear/canHodExclusivelyOwnDepartmentYear/
+ * classifySectionForHod, which all special-case this before falling back to
+ * resolveBranchYearOwner's single-owner resolution.
+ */
+export function departmentOwnsYearDirectly<T extends DepartmentYearRow & { name?: string }>(
+  departments: T[],
+  departmentName: string,
+  year: number
+): boolean {
+  const dept = departments.find((d) => d.name === departmentName);
+  if (!dept) return false;
+  if ((dept.assignedYears ?? []).includes(year)) return true;
+  return Object.values(dept.courseScopes ?? {}).some((s) => (s.assignedYears ?? []).includes(year));
+}
+
 export function canHodEditDepartmentYear<T extends DepartmentYearRow & { name?: string }>(
   scope: { ownDepartmentNames: string[]; childDepartmentNames: string[]; managedDepartmentNames: string[] },
   departments: T[],
@@ -273,6 +296,9 @@ export function canHodEditDepartmentYear<T extends DepartmentYearRow & { name?: 
 ): boolean {
   if (!departmentName || scope.ownDepartmentNames.length === 0) return false;
   if (scope.childDepartmentNames.includes(departmentName)) return true;
+  if (scope.ownDepartmentNames.includes(departmentName) && departmentOwnsYearDirectly(departments, departmentName, year)) {
+    return true;
+  }
   if (!scope.ownDepartmentNames.includes(departmentName) && !scope.managedDepartmentNames.includes(departmentName)) {
     return false;
   }
@@ -315,6 +341,16 @@ export function canHodExclusivelyOwnDepartmentYear<T extends DepartmentYearRow &
   ) {
     return false;
   }
+  // A department that is this HOD's OWN (not reached only via managedDepartments)
+  // and directly claims this year itself is always exclusively theirs - a
+  // manager elsewhere also claiming the same year never downgrades it. Doesn't
+  // touch the childDepartmentNames case this function's own doc-comment
+  // describes (a true child grouped under a DIFFERENT manager) - that's an
+  // orthogonal scenario, reached only via managedDepartmentNames from the
+  // manager's side, never via ownDepartmentNames.
+  if (scope.ownDepartmentNames.includes(departmentName) && departmentOwnsYearDirectly(departments, departmentName, year)) {
+    return true;
+  }
   const owner = resolveBranchYearOwner(departments, departmentName, year, catalogId);
   return scope.ownDepartmentNames.includes(owner) || scope.childDepartmentNames.includes(owner);
 }
@@ -346,6 +382,12 @@ export function classifySectionForHod<T extends DepartmentYearRow & { name?: str
   year: number,
   catalogId?: string
 ): SectionHodVisibility {
+  // A department that is this HOD's own and directly claims this year itself
+  // is always "primary" - a manager elsewhere also claiming the same year
+  // never downgrades the branch's own HOD to read-only on their own roster.
+  if (scope.ownDepartmentNames.includes(departmentName) && departmentOwnsYearDirectly(departments, departmentName, year)) {
+    return "primary";
+  }
   const owner = resolveBranchYearOwner(departments, departmentName, year, catalogId);
   if (scope.ownDepartmentNames.includes(owner) || scope.childDepartmentNames.includes(owner)) return "primary";
   // Only a TRUE child keeps a read-only view of the year its shared-year manager runs. A branch

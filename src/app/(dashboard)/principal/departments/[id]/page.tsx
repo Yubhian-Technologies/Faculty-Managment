@@ -7,12 +7,18 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { FreshmanDepartmentBadge } from "@/components/shared/FreshmanDepartmentBadge";
 import { DepartmentChipList } from "@/components/shared/DepartmentChipList";
 import { resolveDepartmentCourseScope, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { DepartmentCourseCard } from "@/components/academics/DepartmentCourseCard";
 import { SemesterSubjectsDialog } from "@/components/academics/SemesterSubjectsDialog";
+import { CourseYearTimingForm } from "@/components/academics/CourseYearTimingForm";
+import { YearsTaughtAndSecondaryFields } from "@/components/college/YearsTaughtAndSecondaryFields";
 import { toast } from "@/hooks/useToast";
 import type { Department, Course, CourseCatalogItem, CourseYearTiming, SubjectSemesterAssignment } from "@/types";
 import { courseYearBatch } from "@/lib/college/courseYearBatch";
@@ -69,6 +75,16 @@ export default function DepartmentDetailPage() {
   const [customisingCourse, setCustomisingCourse] = useState<Course | null>(null);
   const [isCustomising, setIsCustomising] = useState(false);
   const [removingInherited, setRemovingInherited] = useState<Course | null>(null);
+
+  // "Add Course" and "Edit/Add Timings" used to be their own routes
+  // (departments/[id]/courses/new, .../timing/[year]/edit) - now dialogs on
+  // this same page, so the journey never leaves the department. load() below
+  // refreshes courses/timings on save, same as every other dialog here.
+  const [isAddingCourse, setIsAddingCourse] = useState(false);
+  const [addCourseCatalogId, setAddCourseCatalogId] = useState("");
+  const [addCourseYears, setAddCourseYears] = useState<number[]>([]);
+  const [isSavingCourse, setIsSavingCourse] = useState(false);
+  const [timingTarget, setTimingTarget] = useState<{ course: Course; year: number } | null>(null);
 
   /** True when this row is this department's own Course doc rather than the parent's. */
   const isOwnCourse = useCallback(
@@ -329,6 +345,35 @@ export default function DepartmentDetailPage() {
     }
   }
 
+  const activeCatalog = useMemo(() => catalogItems.filter((c) => c.isActive), [catalogItems]);
+  const addCourseSelected = useMemo(() => activeCatalog.find((c) => c.id === addCourseCatalogId), [activeCatalog, addCourseCatalogId]);
+
+  async function submitAddCourse(e: React.FormEvent) {
+    e.preventDefault();
+    if (!addCourseCatalogId || addCourseYears.length === 0) return;
+    setIsSavingCourse(true);
+    try {
+      const res = await fetch("/api/college/courses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ departmentId: id, catalogId: addCourseCatalogId, courseScope: { assignedYears: addCourseYears } }),
+      });
+      if (!res.ok) {
+        const json = await res.json() as { error?: string };
+        throw new Error(json.error ?? "Failed to save course");
+      }
+      toast({ variant: "success", title: "Course added" });
+      setIsAddingCourse(false);
+      setAddCourseCatalogId("");
+      setAddCourseYears([]);
+      await load();
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save course" });
+    } finally {
+      setIsSavingCourse(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -347,7 +392,7 @@ export default function DepartmentDetailPage() {
                   // From a sub-department, "back" means its parent, not the top list.
                   parentDepartment
                     ? `/principal/departments/${parentDepartment.id}`
-                    : "/principal/departments"
+                    : "/principal/courses?tab=departments"
                 )
               }
             >
@@ -376,6 +421,52 @@ export default function DepartmentDetailPage() {
           allDepartments={allDepartments as DepartmentWithId[]}
           className="-mt-4"
         />
+      )}
+
+      {/* Read-only visibility into the two separately-owned linkage fields
+          that both get called "Core Departments" in different places:
+          secondaryDepartments (Principal-set, the allow-list) and
+          managedDepartments (HOD-set on /hod/settings/sub-departments,
+          constrained to that allow-list). No new write access here - "Edit"
+          goes to this department's own edit form, "Change in HOD settings"
+          deep-links to the HOD screen that actually owns the other field.
+          Hidden when there's nothing relevant to show, to avoid clutter on
+          an ordinary department that never touches either field. */}
+      {department && (
+        (department.secondaryDepartments?.length || department.managedDepartments?.length || department.hasSubDepartments || department.isFreshman)
+          ? (
+            <Card>
+              <CardContent className="p-4 grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Core Departments available to link</p>
+                    <Button variant="ghost" size="sm" className="h-6 text-xs shrink-0" onClick={() => router.push(`/principal/departments/${department.id}/edit`)}>
+                      Edit
+                    </Button>
+                  </div>
+                  {department.secondaryDepartments && department.secondaryDepartments.length > 0 ? (
+                    <DepartmentChipList names={department.secondaryDepartments} />
+                  ) : (
+                    <p className="text-xs text-muted-foreground">None set.</p>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Core Departments this HOD manages</p>
+                    <Button variant="ghost" size="sm" className="h-6 text-xs shrink-0" onClick={() => router.push(`/hod/settings/sub-departments/${department.id}/edit`)}>
+                      Change in HOD settings
+                    </Button>
+                  </div>
+                  {department.managedDepartments && department.managedDepartments.length > 0 ? (
+                    <DepartmentChipList names={department.managedDepartments} />
+                  ) : (
+                    <p className="text-xs text-muted-foreground">None set. The HOD can only pick from the list on the left.</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )
+          : null
       )}
 
       {isLoading ? (
@@ -432,7 +523,7 @@ export default function DepartmentDetailPage() {
                         just to see who's grouped where. */}
                     {sub.managedDepartments && sub.managedDepartments.length > 0 && (
                       <div className="mt-1.5">
-                        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Core Departments</p>
+                        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Core Departments this HOD manages</p>
                         <DepartmentChipList names={sub.managedDepartments} className="mt-1" />
                       </div>
                     )}
@@ -461,7 +552,7 @@ export default function DepartmentDetailPage() {
             {/* On a sub-department this adds a course only IT runs - the same
                 Add flow, filed against this department rather than the parent,
                 so the parent and its other children are unaffected. */}
-            <Button size="sm" onClick={() => router.push(`/principal/departments/${id}/courses/new`)}>
+            <Button size="sm" onClick={() => setIsAddingCourse(true)}>
               <Plus className="h-4 w-4 mr-2" />Add Course
             </Button>
           </CardHeader>
@@ -470,11 +561,8 @@ export default function DepartmentDetailPage() {
               <div className="mb-3 flex items-start gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
                 <Layers className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                 <span>
-                  Courses marked <span className="text-foreground">Shared</span> come from{" "}
-                  <span className="text-foreground">{parentDepartment?.name}</span> and follow it. Customise one to
-                  manage it here independently, or remove it if this sub-department doesn&apos;t run it - either way{" "}
-                  <span className="text-foreground">{parentDepartment?.name}</span> and its other sub-departments are
-                  unaffected.
+                  Shared courses come from <span className="text-foreground">{parentDepartment?.name}</span> -
+                  customise one to manage it independently, or remove it; <span className="text-foreground">{parentDepartment?.name}</span> is unaffected either way.
                 </span>
               </div>
             )}
@@ -518,7 +606,7 @@ export default function DepartmentDetailPage() {
                       onDeleteCourse={() => setDeletingCourse(c)}
                       onCustomiseCourse={() => setCustomisingCourse(c)}
                       onRemoveInherited={() => setRemovingInherited(c)}
-                      onEditTiming={(y) => router.push(`/principal/departments/${id}/courses/${c.id}/timing/${y}/edit`)}
+                      onEditTiming={(y) => setTimingTarget({ course: c, year: y })}
                       onOpenSemesterSubjects={(course, year, semester) =>
                         setActiveSemesterModal({ course, year, semester })
                       }
@@ -637,6 +725,93 @@ export default function DepartmentDetailPage() {
         variant="destructive"
         onConfirm={() => void handleDeleteCourse()}
       />
+
+      <Dialog
+        open={isAddingCourse}
+        onOpenChange={(open) => {
+          setIsAddingCourse(open);
+          if (!open) { setAddCourseCatalogId(""); setAddCourseYears([]); }
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add Course</DialogTitle>
+            <DialogDescription>Add a course offered by this department.</DialogDescription>
+          </DialogHeader>
+          {activeCatalog.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4 text-center">
+              No courses are set up yet. Add your college&apos;s courses in the Courses tab first.
+            </p>
+          ) : (
+            <form onSubmit={submitAddCourse} className="space-y-4">
+              <div className="space-y-2">
+                <Label>Course *</Label>
+                <Select value={addCourseCatalogId} onValueChange={setAddCourseCatalogId}>
+                  <SelectTrigger><SelectValue placeholder="Select a course" /></SelectTrigger>
+                  <SelectContent>
+                    {activeCatalog.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>{c.name} ({c.code})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Short Code</Label>
+                  <Input value={addCourseSelected?.code ?? ""} readOnly disabled placeholder="—" className="uppercase" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Duration (Years)</Label>
+                  <Input value={addCourseSelected ? String(addCourseSelected.durationYears) : ""} readOnly disabled placeholder="—" />
+                </div>
+              </div>
+              {addCourseSelected && (
+                <YearsTaughtAndSecondaryFields
+                  assignedYears={addCourseYears}
+                  onToggleYear={(year, checked) =>
+                    setAddCourseYears((prev) => (checked ? [...prev, year].sort((a, b) => a - b) : prev.filter((y) => y !== year)))
+                  }
+                  maxYear={addCourseSelected.durationYears}
+                  yearsHelperText={`Which years of this ${addCourseSelected.durationYears}-year course this department teaches.`}
+                  secondaryDepartmentOptions={[]}
+                  secondaryDepartments={department?.secondaryDepartments ?? []}
+                  onToggleSecondaryDepartment={() => {}}
+                  showSecondaryDepartments={false}
+                  secondaryDepartmentsNote={
+                    (department?.secondaryDepartments?.length ?? 0) > 0
+                      ? `Cross-listed with ${department!.secondaryDepartments!.join(", ")}.`
+                      : "No Core Departments set - edit the department to cross-list it to others."
+                  }
+                />
+              )}
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setIsAddingCourse(false)}>Cancel</Button>
+                <Button type="submit" loading={isSavingCourse} disabled={!addCourseCatalogId || addCourseYears.length === 0}>Add Course</Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!timingTarget} onOpenChange={(open) => !open && setTimingTarget(null)}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {timingTarget ? `${timingTarget.course.name} - Year ${timingTarget.year} Timings` : "Timings"}
+            </DialogTitle>
+          </DialogHeader>
+          {timingTarget && (
+            <CourseYearTimingForm
+              departmentId={id}
+              courseId={timingTarget.course.id}
+              year={timingTarget.year}
+              courseName={timingTarget.course.name}
+              onSaved={() => { setTimingTarget(null); void load(); }}
+              onCancel={() => setTimingTarget(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
 
     </div>
   );

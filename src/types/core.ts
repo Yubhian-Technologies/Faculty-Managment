@@ -50,6 +50,10 @@ export type UserRole =
   | "RND_COORDINATOR"
   | "PLACEMENT_DEPT"
   | "LIBRARY"
+  | "HOSTEL"
+  // Physical Education Director - clears sports kit/equipment dues, a 4th
+  // No-Due clearance branch alongside Library/Hostel/Placement.
+  | "PD"
   | "EXAM_CELL"
   | "WEBMASTER"
   | "COLLEGE_ACCOUNTS"
@@ -83,6 +87,8 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   RND_COORDINATOR: "R&D Coordinator",
   PLACEMENT_DEPT: "Placement Department",
   LIBRARY: "Library",
+  HOSTEL: "Hostel",
+  PD: "Physical Education Director",
   EXAM_CELL: "Exam Cell",
   WEBMASTER: "Webmaster",
   COLLEGE_ACCOUNTS: "College Accounts",
@@ -105,7 +111,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 // the one Principal-tier role a Principal itself appoints).
 export const MANAGEABLE_STAFF_ROLES: UserRole[] = [
   "HOD", "DEPARTMENT_OFFICE", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_ADMIN", "COLLEGE_STAFF",
-  "ACADEMICS", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "RND_COORDINATOR", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL",
+  "ACADEMICS", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "RND_COORDINATOR", "PLACEMENT_DEPT", "LIBRARY", "HOSTEL", "PD", "EXAM_CELL",
   "PANEL_MEMBER", "WEBMASTER", "COLLEGE_ACCOUNTS",
 ];
 
@@ -132,6 +138,8 @@ export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   RND_COORDINATOR: "/rnd-coordinator",
   PLACEMENT_DEPT: "/placement-dept",
   LIBRARY: "/library",
+  HOSTEL: "/hostel",
+  PD: "/pd",
   EXAM_CELL: "/exam-cell",
   WEBMASTER: "/webmaster",
   COLLEGE_ACCOUNTS: "/college-accounts",
@@ -176,6 +184,8 @@ export const ROLE_LEVEL: Record<UserRole, 0 | 1 | 2 | 3 | 4 | 5 | 6> = {
   RND_COORDINATOR: 4,
   PLACEMENT_DEPT: 4,
   LIBRARY: 4,
+  HOSTEL: 4,
+  PD: 4,
   EXAM_CELL: 4,
   WEBMASTER: 4,
   COLLEGE_ACCOUNTS: 4,
@@ -226,6 +236,8 @@ export const ROLE_SCOPE: Record<UserRole, RoleScope> = {
   RND_COORDINATOR: "COLLEGE",
   PLACEMENT_DEPT: "COLLEGE",
   LIBRARY: "COLLEGE",
+  HOSTEL: "COLLEGE",
+  PD: "COLLEGE",
   EXAM_CELL: "COLLEGE",
   WEBMASTER: "COLLEGE",
   COLLEGE_ACCOUNTS: "COLLEGE",
@@ -3219,6 +3231,15 @@ export type NotificationType =
   | "BOOK_RESERVATION_AVAILABLE"
   // Student Documents
   | "DOCUMENT_UPLOADED"
+  // Certificate Management (No Due Certificate - see src/lib/certifications)
+  | "CERTIFICATE_FORWARDED_TO_HOD"
+  | "CERTIFICATE_HOD_REJECTED"
+  | "CERTIFICATE_CLEARANCE_REQUESTED"
+  | "CERTIFICATE_CLEARANCE_REJECTED"
+  | "CERTIFICATE_READY_FOR_ISSUANCE"
+  | "CERTIFICATE_ISSUED"
+  | "CERTIFICATE_REJECTED"
+  | "CERTIFICATE_EXAM_CELL_ISSUED"
   | "GENERAL";
 
 export interface AppNotification {
@@ -3418,7 +3439,17 @@ export type AuditAction =
   | "RD_CONSULTANCY_PROJECT_UPDATED"
   | "RD_CONSULTANCY_PROJECT_DELETED"
   | "RD_RESEARCH_PROFILE_CREATED"
-  | "RD_RESEARCH_PROFILE_UPDATED";
+  | "RD_RESEARCH_PROFILE_UPDATED"
+  // Certificate Management (No Due Certificate - see src/lib/certifications)
+  | "CERTIFICATE_REQUEST_SUBMITTED"
+  | "CERTIFICATE_HOD_APPROVED"
+  | "CERTIFICATE_HOD_REJECTED"
+  | "CERTIFICATE_CLEARANCE_ACCEPTED"
+  | "CERTIFICATE_CLEARANCE_REJECTED"
+  | "CERTIFICATE_ISSUED"
+  | "CERTIFICATE_REJECTED_AT_ISSUANCE"
+  | "CERTIFICATE_CANCELLED"
+  | "CERTIFICATE_EXAM_CELL_ISSUED";
 
 export interface AuditLog {
   id: string;

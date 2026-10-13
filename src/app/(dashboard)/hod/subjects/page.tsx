@@ -13,7 +13,7 @@ import { useMyDepartments } from "@/hooks/useMyDepartments";
 import type { Course, CourseCatalogItem, CourseYearTiming, Department, Subject, SubjectSemesterAssignment } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
 import { fedYears, regulationsForCourseYearByBatch } from "@/lib/college/academicStructure";
-import { deriveHodScope, managerEffectiveYears } from "@/lib/departments/hodScope";
+import { managerEffectiveYears, mergeOwnDepartmentOptions } from "@/lib/departments/hodScope";
 import { parseAcademicYearStart } from "@/lib/college/academicSession";
 import { resolveCurrentSemester } from "@/lib/college/semester";
 import { yearSemesterLabelIn, semesterInYearLabel } from "@/lib/academic/format";
@@ -148,20 +148,19 @@ export default function HODSubjectsPage() {
   // scope union). So the years to offer can't come from that course's own
   // owning department (IT's own assignedYears is [2,3,4] - IT's own HOD's
   // years, not what Basic Science was assigned) - they must come from THIS
-  // HOD's own department(s), the same way Teaching Assignments/Sections
-  // resolve it (deriveHodScope + managerEffectiveYears): own department plus
-  // its real sub-departments (never a managed branch's own later years).
-  const ownScopeDepartments = useMemo(() => {
-    const seen = new Map<string, Department>();
-    for (const name of myDepartments) {
-      const scope = deriveHodScope(departments, name);
-      if (scope.ownDept) seen.set(scope.ownDept.id, scope.ownDept);
-      for (const d of [...scope.groupingChildren, ...scope.plainChildren]) seen.set(d.id, d);
-    }
-    return Array.from(seen.values());
-  }, [departments, myDepartments]);
-  // Departments whose subjects this HOD may view: own department plus its
-  // sub-departments; falls back to the owners of the listed courses.
+  // HOD's own department(s), the same way Sections/Timetable resolve it
+  // (mergeOwnDepartmentOptions): own department, its real sub-departments,
+  // AND the core/managed branches it manages (e.g. CSE under Basic Science) -
+  // a hand-rolled own+children union used to sit here instead, which silently
+  // dropped managed branches from both this Department picker and (via
+  // yearOptions below) the years offered for them.
+  const ownScopeDepartments = useMemo(
+    () => mergeOwnDepartmentOptions(departments, myDepartments),
+    [departments, myDepartments]
+  );
+  // Departments whose subjects this HOD may view: own department, its
+  // sub-departments, and managed core branches; falls back to the owners of
+  // the listed courses.
   const deptOptions = useMemo(() => {
     if (ownScopeDepartments.length > 0) return ownScopeDepartments;
     const seen = new Map<string, Department>();
@@ -190,12 +189,18 @@ export default function HODSubjectsPage() {
     if (!selectedCourse) return [];
     const courseYears = Array.from({ length: selectedCourse.durationYears }, (_, i) => i + 1);
     const assigned = new Set<number>();
-    const excluded = new Set<number>();
+    // Checked PER department, not merged into one global exclusion set: a
+    // managed branch's own self-exclusion from a shared year (e.g. CSE's
+    // fedYears correctly dropping year 1) must never cancel out the shared
+    // year's actual manager (e.g. Basic Science) claiming that same year -
+    // see hod/teaching-assignments/page.tsx's yearOptions for the same fix.
     for (const d of ownScopeDepartments) {
-      for (const y of managerEffectiveYears(d, departments, selectedCourse.catalogId)) assigned.add(y);
-      for (const y of fedYears(d, departments, selectedCourse.catalogId)) excluded.add(y);
+      const excludedForD = new Set(fedYears(d, departments, selectedCourse.catalogId));
+      for (const y of managerEffectiveYears(d, departments, selectedCourse.catalogId)) {
+        if (!excludedForD.has(y)) assigned.add(y);
+      }
     }
-    return courseYears.filter((y) => assigned.has(y) && !excluded.has(y));
+    return courseYears.filter((y) => assigned.has(y));
   }, [selectedCourse, ownScopeDepartments, departments]);
   const selectedYear = pickedYear || (yearOptions.length > 0 ? String(yearOptions[0]) : "");
 
@@ -204,7 +209,19 @@ export default function HODSubjectsPage() {
     [catalogItems, selectedCourse]
   );
 
-  const timingsReady = timingsFor === `${selectedCourseId}|${selectedYear}`;
+  // Every course-doc id for this programme (siblings), not just the selected
+  // department's own - Course-Year Timings for a shared first year are
+  // commonly configured under the MANAGING department's own doc (e.g. Basic
+  // Science), not each branch's own (e.g. CSE), same reason loadAssignments
+  // below already unions its own siblings list for subject-semester
+  // assignments. Selecting CSE used to query only CSE's own doc, which may
+  // have no Course-Year Timings of its own at all, reading as "not
+  // configured for this year" even when the shared year genuinely is.
+  const selectedGroupCourseIds = useMemo(
+    () => (selectedGroup ? Array.from(new Set(selectedGroup.rows.map((c) => c.id))) : selectedCourseId ? [selectedCourseId] : []),
+    [selectedGroup, selectedCourseId]
+  );
+  const timingsReady = timingsFor === `${selectedGroupCourseIds.join("|")}|${selectedYear}`;
   const semesterOptions = useMemo(() => {
     const nums = new Set<number>();
     for (const t of timings) for (const s of t.semesters ?? []) nums.add(s.semester);
@@ -264,21 +281,12 @@ export default function HODSubjectsPage() {
     const filtered = pickedRegulation
       ? assignmentsForSemester.filter((a) => !a.regulation || a.regulation === pickedRegulation)
       : assignmentsForSemester;
-    // Curriculum-table order: by the master subject's own S.No. when set
-    // (SubjectSemesterAssignment doesn't carry its own), falling back to name.
-    return [...filtered].sort((a, b) => {
-      const sa = subjectById.get(a.subjectId)?.serialNumber;
-      const sb = subjectById.get(b.subjectId)?.serialNumber;
-      if (sa != null && sb != null) return sa - sb;
-      if (sa != null) return -1;
-      if (sb != null) return 1;
-      return a.subjectName.localeCompare(b.subjectName);
-    });
-  }, [assignmentsForSemester, pickedRegulation, subjectById]);
+    return [...filtered].sort((a, b) => a.subjectName.localeCompare(b.subjectName));
+  }, [assignmentsForSemester, pickedRegulation]);
 
   // Subjects (catalogId-scoped, department-independent) alongside Course-Year
   // Timings and this department's own semester assignments - same three-way
-  // load Assign to Semester itself does, so S.No./category/etc join
+  // load Assign to Semester itself does, so category/etc join
   // correctly and Semester options resolve from real timing data instead of
   // a param the API silently ignored (the bug this page used to have).
   const loadAssignments = useCallback(async (course: Course, siblings: Course[], year: string, deptId: string) => {
@@ -310,22 +318,29 @@ export default function HODSubjectsPage() {
   // Runs on selection (it only fills a dropdown); the subject list itself waits
   // for Load.
   useEffect(() => {
-    if (!selectedCourseId || !selectedYear) return;
+    if (selectedGroupCourseIds.length === 0 || !selectedYear) return;
     let cancelled = false;
+    const ids = selectedGroupCourseIds;
+    const y = selectedYear;
     void (async () => {
       try {
-        const res = await fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(selectedCourseId)}`);
-        const json = (await res.json()) as { timings?: CourseYearTiming[] };
+        const lists = await Promise.all(
+          ids.map((cId) =>
+            fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(cId)}`)
+              .then((r) => r.json() as Promise<{ timings?: CourseYearTiming[] }>)
+              .then((d) => (d.timings ?? []).filter((t) => t.year === Number(y)))
+          )
+        );
         if (!cancelled) {
-          setTimings((json.timings ?? []).filter((t) => t.year === Number(selectedYear)));
-          setTimingsFor(`${selectedCourseId}|${selectedYear}`);
+          setTimings(lists.flat());
+          setTimingsFor(`${ids.join("|")}|${y}`);
         }
       } catch {
         if (!cancelled) toast({ variant: "destructive", title: "Failed to load semesters" });
       }
     })();
     return () => { cancelled = true; };
-  }, [selectedCourseId, selectedYear]);
+  }, [selectedGroupCourseIds, selectedYear]);
 
   useEffect(() => {
     if (!applied) return;
@@ -497,7 +512,6 @@ export default function HODSubjectsPage() {
                       <table className="w-full text-sm">
                         <thead className="bg-muted/50 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
                           <tr>
-                            <th className="px-4 py-3">S.No.</th>
                             <th className="px-4 py-3">Category</th>
                             <th className="px-4 py-3">Name of the Subject</th>
                             <th className="px-4 py-3 text-center">L</th>
@@ -511,7 +525,6 @@ export default function HODSubjectsPage() {
                             const subject = subjectById.get(a.subjectId);
                             return (
                               <tr key={a.id}>
-                                <td className="px-4 py-2.5">{subject?.serialNumber ?? "—"}</td>
                                 <td className="px-4 py-2.5">
                                   {(a.category ?? subject?.category) ? (
                                     <Badge variant="outline" className="text-xs">

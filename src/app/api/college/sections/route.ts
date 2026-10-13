@@ -8,7 +8,7 @@ import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartmentId } from "@/lib/departments/scope";
-import { classifySectionForHod, findBranchManager, resolveBranchYearOwner, type DepartmentYearRow } from "@/lib/departments/managedBranches";
+import { classifySectionForHod, findBranchManager, resolveBranchYearOwner, departmentOwnsYearDirectly, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { getFacultyIdCandidates, resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
 import { resolveDepartmentCourseScope, regulationsForCourseYearByBatch, regulationsForBatchStartYear, isDeclaredFeederFor } from "@/lib/college/academicStructure";
 import { parseBatchStartYear, deriveBatch, parseAcademicYearStart, currentAcademicStartYear } from "@/lib/college/academicSession";
@@ -206,9 +206,16 @@ export async function GET(request: Request) {
       // read-only row here cannot be edited even by calling the API directly.
       let accessLevel: "primary" | "secondary" = "primary";
       if (hodScope && hodDepartments.length > 0) {
-        const catalogId = catalogIdByCourseId.get(data.courseId as string);
-        const owner = resolveBranchYearOwner(hodDepartments, data.department as string, data.year as number, catalogId);
-        if (!hodScope.ownDepartmentNames.includes(owner)) accessLevel = "secondary";
+        const dept = data.department as string;
+        // A department that directly claims this year itself is always fully
+        // primary, regardless of a manager elsewhere also claiming the same
+        // year for it - see departmentOwnsYearDirectly's own doc-comment.
+        const ownsDirectly = hodScope.ownDepartmentNames.includes(dept) && departmentOwnsYearDirectly(hodDepartments, dept, data.year as number);
+        if (!ownsDirectly) {
+          const catalogId = catalogIdByCourseId.get(data.courseId as string);
+          const owner = resolveBranchYearOwner(hodDepartments, dept, data.year as number, catalogId);
+          if (!hodScope.ownDepartmentNames.includes(owner)) accessLevel = "secondary";
+        }
       }
       seenIds.add(d.id);
       sections.push({ id: d.id, ...data, accessLevel });

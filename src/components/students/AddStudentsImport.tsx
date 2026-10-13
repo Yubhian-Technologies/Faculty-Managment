@@ -17,7 +17,7 @@ import { resolveStudentImportHeaders, normalizeStudentImportRow } from "@/lib/st
 import { ROSTER_FIELDS, ROSTER_SAMPLE_ROWS, EDITABLE_ROSTER_FIELDS, rosterFormToPayload } from "@/lib/students/rosterFields";
 import { RosterFormFields, FieldInput, secondaryDepartmentOptions, isSecondaryDepartmentRequired } from "@/components/students/RosterFieldInputs";
 import { resolveDepartmentByNameOrCode, resolveCourseByNameOrCode } from "@/lib/departments/codeOrNameResolver";
-import { freshmanPickerDepartmentNames, type DepartmentWithId } from "@/lib/college/academicStructure";
+import { freshmanPickerDepartmentNames, isValidYear1LandingDepartment, type DepartmentWithId } from "@/lib/college/academicStructure";
 import type { Department, Course, AcademicYear } from "@/types";
 import { selectableYears } from "@/lib/college/courseYears";
 
@@ -295,11 +295,11 @@ export function AddStudentsImport() {
     // server enforces on submit.
     if (form.year === "1") {
       const freshmanNames = freshmanPickerDepartmentNames(departments as DepartmentWithId[]);
-      if (freshmanNames.size > 0 && !freshmanNames.has(form.department)) {
+      if (!isValidYear1LandingDepartment(departments as DepartmentWithId[], freshmanNames, form.department)) {
         setFixError(`"${form.department}" is a real branch - set it as Core Department instead of Department for a 1st Year student`);
         return;
       }
-      if (freshmanNames.size > 0 && !form.secondaryDepartment) {
+      if (freshmanNames.has(form.department) && !form.secondaryDepartment) {
         setFixError("Core Department is required for 1st Year students");
         return;
       }

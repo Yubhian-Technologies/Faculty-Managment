@@ -12,7 +12,7 @@ import { StudentLoginError, provisionStudentLogin } from "@/lib/students/provisi
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { resolveDepartmentByNameOrCode, resolveCourseByNameOrCode, isConfiguredSecondaryDepartmentOrChild } from "@/lib/departments/codeOrNameResolver";
 import { resolveBranchYearOwner, resolveFreshmanLandingDepartment, type DepartmentYearRow } from "@/lib/departments/managedBranches";
-import { freshmanLandingDepartmentNames, type DepartmentWithId } from "@/lib/college/academicStructure";
+import { freshmanLandingDepartmentNames, departmentClaimsYearItself, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { isLikelySameUnassignedStudent } from "@/lib/students/duplicateDetection";
 import { loadExistingStudentsForImport } from "@/lib/students/importExisting";
 import { actorOf } from "@/lib/audit/actorOf";
@@ -481,7 +481,12 @@ export async function POST(request: Request) {
         // single "Add Student" endpoint enforces (college/students POST) - see
         // freshmanLandingDepartmentNames's own doc-comment for why this is
         // empty (no restriction) for a college with no shared first year.
-        if (Number(row.year) === 1 && freshmanNames.size > 0 && !freshmanNames.has(departmentName!)) {
+        const isFreshmanLandingRow = freshmanNames.size > 0 && freshmanNames.has(departmentName!);
+        // A real branch that has opened its own Years Taught for year 1 no
+        // longer needs the Freshman-department indirection - see
+        // departmentClaimsYearItself's own doc-comment.
+        const ownsYear1DirectlyRow = !isFreshmanLandingRow && departmentClaimsYearItself(allDepartmentsFull, departmentName!, 1);
+        if (Number(row.year) === 1 && freshmanNames.size > 0 && !isFreshmanLandingRow && !ownsYear1DirectlyRow) {
           failed.push({
             row: rowNum, rollNumber: row.rollNumber ?? "-",
             error: `"${departmentName}" is a real branch - 1st Year students must be imported under one of this college's Basic Science (Freshman) departments instead. Put "${departmentName}" in the Core Department column.`,
@@ -543,7 +548,7 @@ export async function POST(request: Request) {
         // before Download Template/Upload even appear (isSecondaryDepartmentRequired,
         // college-office/students/import/page.tsx) - this is the server-side
         // backstop, same as every other rule that page's picker narrows for.
-        if (Number(row.year) === 1 && freshmanNames.size > 0 && !unassignedSecondary) {
+        if (Number(row.year) === 1 && isFreshmanLandingRow && !unassignedSecondary) {
           failed.push({
             row: rowNum, rollNumber: row.rollNumber ?? "-",
             error: "Core Department is required for 1st Year students - name the branch this student will be promoted into.",

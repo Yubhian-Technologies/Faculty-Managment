@@ -20,6 +20,7 @@ const httpsUrl = z.string().trim().max(2000).refine((u) => { try { return new UR
 
 export const permissionInputSchema = z.object({
   categoryId: short(80),
+  otherCategory: z.string().trim().max(120).optional().transform((v) => v || undefined),
   title: short(120),
   description: short(2000),
   venue: z.string().trim().max(200).optional().transform((v) => v || undefined),
@@ -50,13 +51,16 @@ export const spanDays = (from: string, to: string) => enumerateDates(from, to).l
 
 /** Problems with a request against the effective limits and category switches - empty means acceptable. */
 export function checkLimits(
-  input: Pick<PermissionInput, "categoryId" | "fromDate" | "toDate" | "proof">,
+  input: { categoryId: string; otherCategory?: string; fromDate: string; toDate: string; proof: { url: string; name: string }[] },
   limits: PermissionLimits,
   opts: { studentCount: number; typeDisabled: boolean }
 ): string[] {
   const errors: string[] = [];
   if (!findCategory(input.categoryId)) errors.push("Choose a valid permission type");
   else if (opts.typeDisabled) errors.push("This type of permission isn't enabled for this department");
+  if (input.categoryId.startsWith("other") && !input.otherCategory?.trim()) {
+    errors.push("Specify the custom permission type");
+  }
   const days = spanDays(input.fromDate, input.toDate);
   if (days > limits.maxDays) errors.push(`A request can cover at most ${limits.maxDays} day${limits.maxDays === 1 ? "" : "s"}`);
   if (limits.proofRequired && input.proof.length === 0) errors.push("Attach proof (an invitation, registration or letter)");

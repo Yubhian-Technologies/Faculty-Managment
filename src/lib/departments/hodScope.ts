@@ -162,21 +162,23 @@ export function buildCourseGroups(courses: Course[]): CourseGroup[] {
  * college/departments POST strips assignedYears from anything an HOD
  * creates, and the courseScope override is Principal-only), its parent's.
  * This is what a manager itself teaches - never a managed branch's own later
- * years, which belong to that branch's own dedicated HOD instead. Always
- * excludes any year a feeder elsewhere has already claimed for `manager`
- * (fedYears) - own/inherited assignedYears is supposed to already reflect
- * that, but an unconfigured department (assignedYears never set) would
- * otherwise fall through to the parent, or nothing, without ever ruling out
- * a year that structurally can never be this manager's own.
+ * years, which belong to that branch's own dedicated HOD instead. A direct
+ * own/inherited claim always wins outright over a feeder elsewhere claiming
+ * the same year (fedYears) - see departmentClaimsYearItself's own doc-comment
+ * (academicStructure.ts) for the matching rule on the Year-1 landing-
+ * department check. The exclusion only fills the gap for a department left
+ * UNCONFIGURED (assignedYears never set, own.length === 0 below), which would
+ * otherwise fall through to the parent, or nothing, without ever ruling out a
+ * year that structurally can never be this manager's own.
  */
 export function managerEffectiveYears(
   manager: Department,
   allDepartments: Department[],
   catalogId: string | undefined
 ): number[] {
-  const excluded = fedYears(manager, allDepartments, catalogId);
   const own = resolveDepartmentCourseScope(manager, catalogId).assignedYears;
-  if (own.length > 0) return own.filter((y) => !excluded.includes(y));
+  if (own.length > 0) return own;
+  const excluded = fedYears(manager, allDepartments, catalogId);
   if (manager.parentDepartmentId) {
     const parent = allDepartments.find((p) => p.id === manager.parentDepartmentId);
     if (parent) return resolveDepartmentCourseScope(parent, catalogId).assignedYears.filter((y) => !excluded.includes(y));

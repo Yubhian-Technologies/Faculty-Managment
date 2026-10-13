@@ -207,7 +207,17 @@ export default function TeachingAssignmentsPage() {
   const activeCourseIds = useMemo(() => course?.courseIds ?? [], [course]);
 
   // The HOD's own department plus its ACTUAL sub-departments (Department
-  // .parentDepartmentId children - BS-CHEMISTRY, BS-MATHS, …).
+  // .parentDepartmentId children - BS-CHEMISTRY, BS-MATHS, …) AND whatever
+  // core/managed branches it manages (e.g. CSE under a shared-first-year
+  // department with no real children of its own at all) - everything
+  // `deptOptions` (scope.deptOptions, from deriveHodScope) already resolves,
+  // not just the real-children subset this used to be limited to. A
+  // grouping-container department that manages branches but has no
+  // parentDepartmentId children of its own used to compute an EMPTY list
+  // here (children.length === 0), hiding this filter entirely and silently
+  // narrowing `yearOptions` below to only its own flat years - a managed
+  // branch's own course/year, even though reachable and loadable, had no way
+  // to be explicitly selected.
   //
   // Deliberately not derived from the loaded sections' own `department`, which
   // is what this used to do: a shared first-year section belongs to the real
@@ -215,17 +225,15 @@ export default function TeachingAssignmentsPage() {
   // "secondary departments" - where sub-departments belong. Those branches are
   // reachable through whichever sub-department manages them, below.
   //
-  // Empty for a sub-HOD: a sub-department has no children of its own, so the
-  // filter doesn't render for them at all - they only ever work within their
-  // own sub-department, and a one-option dropdown is just noise.
+  // Empty for a sub-HOD with nothing beyond their own department: a plain
+  // sub-department with no children and no managed branches, where a
+  // one-option dropdown would just be noise.
   const subDepartmentOptions = useMemo(() => {
     const own = scope.ownDept;
     if (!own) return [];
-    const children = departments
-      .filter((d) => d.parentDepartmentId === own.id)
-      .sort((a, b) => a.name.localeCompare(b.name));
-    return children.length > 0 ? [own, ...children] : [];
-  }, [departments, scope.ownDept]);
+    const rest = deptOptions.filter((d) => d.id !== own.id);
+    return rest.length > 0 ? [own, ...rest] : [];
+  }, [deptOptions, scope.ownDept]);
 
   // The Principal's "Years Taught", not the raw course span - offering 1..4 for
   // a department that teaches only the first year is what let this page ask for
@@ -249,17 +257,27 @@ export default function TeachingAssignmentsPage() {
       ? subDepartmentOptions
       : scope.ownDept ? [scope.ownDept] : [];
     const assigned = new Set<number>();
-    // A year some OTHER department already claims as a feeder FOR one of
-    // `relevant` (e.g. Basic Science owning year 1 of a shared-first-year
-    // B.Tech) is never this HOD's own to staff - see fedYears. Nothing
-    // assigned means no years (never "every year": lib/college/taughtYears.ts).
-    const excluded = new Set<number>();
+    // A year some OTHER department already claims as a feeder FOR a given
+    // department in `relevant` (e.g. Basic Science owning year 1 of a
+    // shared-first-year B.Tech) is never THAT department's own to staff - see
+    // fedYears. Checked PER department, not merged into one global exclusion
+    // set across all of `relevant`: now that `relevant` can hold both the
+    // shared-year manager (Basic Science, via subDepartmentOptions including
+    // managed branches) and the branch itself (CSE), CSE's own exclusion of
+    // year 1 (correctly - it doesn't own that year directly) must not cancel
+    // out Basic Science's own legitimate claim to it. A global set did
+    // exactly that: year 1 ended up in both `assigned` (from Basic Science)
+    // and `excluded` (from CSE), and the shared exclusion check hid it from
+    // everyone. Nothing assigned means no years (never "every year":
+    // lib/college/taughtYears.ts).
     for (const d of relevant) {
-      for (const y of managerEffectiveYears(d, departments, course.catalogId)) assigned.add(y);
-      for (const y of fedYears(d, departments, course.catalogId)) excluded.add(y);
+      const excludedForD = new Set(fedYears(d, departments, course.catalogId));
+      for (const y of managerEffectiveYears(d, departments, course.catalogId)) {
+        if (!excludedForD.has(y)) assigned.add(y);
+      }
     }
     const courseYears = Array.from({ length: course.durationYears }, (_, i) => i + 1);
-    return courseYears.filter((y) => assigned.has(y) && !excluded.has(y));
+    return courseYears.filter((y) => assigned.has(y));
   }, [course, subDepartmentOptions, scope.ownDept, departments]);
 
   // Keyed on the course ids, not just the group: if the scope-wide course fetch
@@ -804,13 +822,26 @@ const effectiveSemester = semesterOptions.length === 0
   );
   const availableFacultyForAssign = faculty.filter((f) => !alreadyOnSubject.has(f.id));
 
-  // Every department and sub-department in the college is askable except the
-  // section's own (you don't request a lend from yourself) - same rule as
-  // components/timetable/TeachingAssignmentsEditor.tsx.
-  const requestSectionDepartment = sections.find((s) => s.id === assignForm.sectionId)?.department;
+  // A department whose faculty this HOD can staff directly - their own
+  // department or a TRUE sub-department (Department.parentDepartmentId) - is
+  // skipped here, since the Assign form above already offers its faculty
+  // (see facultyManageableDepartmentNames, lib/departments/scope.ts, which
+  // this mirrors client-side). A MANAGED/"core" branch (e.g. a
+  // shared-first-year HOD's own CE/CSE, linked via
+  // Department.managedDepartments) is never directly staffable even when
+  // it's also the section's own department - per that same rule, staffing it
+  // always goes through this lend flow, so excluding it here would leave no
+  // way to staff it at all. It stays requestable, including to itself.
+  const directlyStaffableNames = useMemo(() => {
+    const names = new Set<string>();
+    if (scope.ownDept) names.add(scope.ownDept.name);
+    for (const d of scope.groupingChildren) names.add(d.name);
+    for (const d of scope.plainChildren) names.add(d.name);
+    return names;
+  }, [scope]);
   const requestableDepartments = useMemo(
-    () => departments.filter((d) => d.name !== requestSectionDepartment),
-    [departments, requestSectionDepartment]
+    () => departments.filter((d) => !directlyStaffableNames.has(d.name)),
+    [departments, directlyStaffableNames]
   );
 
   async function handleAssign(e: React.FormEvent) {
@@ -1217,22 +1248,27 @@ const effectiveSemester = semesterOptions.length === 0
                 </Select>
               </div>
             )}
-            {/* Only for an HOD who actually has sub-departments. A sub-HOD has
-                none beneath them and works solely within their own, so the
-                field is omitted rather than shown with a single option. */}
+            {/* Only for an HOD who actually has something to narrow by: real
+                sub-departments and/or core/managed branches (subDepartmentOptions
+                covers both - see its own doc-comment). A sub-HOD has neither and
+                works solely within their own, so the field is omitted rather than
+                shown with a single option. Labeled "Department" (not
+                "Sub-department") since the list is routinely all core/managed
+                branches and no real sub-departments at all - same label
+                hod/sections/page.tsx already uses for this identical concept. */}
             {subDepartmentOptions.length > 0 && (
               <div className="space-y-2">
-                <Label>Sub-department</Label>
+                <Label>Department</Label>
                 <Select
                   value={departmentFilter || ALL_DEPARTMENTS}
                   onValueChange={handleDepartmentChange}
                   disabled={!year}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder={year ? "All sub-departments" : "Select a year first"} />
+                    <SelectValue placeholder={year ? "All departments" : "Select a year first"} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={ALL_DEPARTMENTS}>All sub-departments</SelectItem>
+                    <SelectItem value={ALL_DEPARTMENTS}>All departments</SelectItem>
                     {subDepartmentOptions.map((d) => (
                       <SelectItem key={d.id} value={d.name}>
                         {departmentCode(d.name, departments)} · {d.name}

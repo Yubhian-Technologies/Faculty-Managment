@@ -60,11 +60,6 @@ export interface Subject {
   // (TeachingAssignmentsEditor). Absent on semester-scoped subjects and
   // on subjects created before this field existed. Immutable once set.
   regulation?: string;
-  // Row position in the Academics' curriculum-table view of a course -
-  // editable, so the Academics can match a printed curriculum sheet's ordering
-  // instead of being stuck with alphabetical-by-name. Master subjects only;
-  // absent on legacy subjects created before this field existed.
-  serialNumber?: number;
   // Curriculum category (e.g. Professional Core, Open Elective) - see
   // SUBJECT_CATEGORY_LABELS. Master subjects only.
   category?: SubjectCategory;

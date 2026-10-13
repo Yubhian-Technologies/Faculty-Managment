@@ -25,6 +25,11 @@ describe("canDecideStage", () => {
     expect(canDecideStage(f({ stage: "PRINCIPAL", actorRoles: ["PRINCIPAL"], actorUid: "r" }))).toBe(false);
     expect(canDecideStage(f({ stage: "HOD", actorRoles: ["HOD"], headsRequestDepartment: true, actorUid: "r" }))).toBe(false);
   });
+  it("DELEGATED_FACULTY stage allows designated faculty or department HOD", () => {
+    expect(canDecideStage(f({ stage: "DELEGATED_FACULTY", isDelegatedFaculty: true }))).toBe(true);
+    expect(canDecideStage(f({ stage: "DELEGATED_FACULTY", actorRoles: ["HOD"], headsRequestDepartment: true }))).toBe(true);
+    expect(canDecideStage(f({ stage: "DELEGATED_FACULTY", isDelegatedFaculty: false, actorRoles: ["PANEL_MEMBER"] }))).toBe(false);
+  });
   it("an unknown stage is never decidable", () => {
     expect(canDecideStage(f({ stage: "SOMETHING", actorRoles: ["PRINCIPAL", "HOD"], headsRequestDepartment: true }))).toBe(false);
   });

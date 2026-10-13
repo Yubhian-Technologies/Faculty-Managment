@@ -48,7 +48,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL",
       "COLLEGE_OFFICE", "ACCOUNTS", "FINANCE", "COLLEGE_STAFF",
       "ACADEMICS", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D",
-      "LIBRARY", "EXAM_CELL", "WEBMASTER", "PLACEMENT_DEPT", "PURCHASE_DEPT"
+      "LIBRARY", "HOSTEL", "PD", "EXAM_CELL", "WEBMASTER", "PLACEMENT_DEPT", "PURCHASE_DEPT"
     );
     const db = getAdminDb();
 
@@ -115,7 +115,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL",
       "COLLEGE_OFFICE", "ACCOUNTS", "FINANCE", "COLLEGE_STAFF",
       "ACADEMICS", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D",
-      "LIBRARY", "EXAM_CELL", "WEBMASTER", "PLACEMENT_DEPT", "PURCHASE_DEPT"
+      "LIBRARY", "HOSTEL", "PD", "EXAM_CELL", "WEBMASTER", "PLACEMENT_DEPT", "PURCHASE_DEPT"
     );
     const body = (await readJsonBody(request)) as {
       action?: "APPROVE" | "REJECT" | "CANCEL" | "EDIT" | "PROPOSE_COVERAGE" | "REVISE_ADJUSTMENT"

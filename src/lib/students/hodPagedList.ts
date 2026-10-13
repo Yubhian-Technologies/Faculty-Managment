@@ -1,6 +1,6 @@
 import type { Course, StudentRecord } from "@/types";
 import { getHodDepartmentScope, type HodDepartmentScope } from "@/lib/departments/scope";
-import { resolveBranchYearOwner, type DepartmentYearRow } from "@/lib/departments/managedBranches";
+import { resolveBranchYearOwner, departmentOwnsYearDirectly, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import {
   resolveCatalogId,
   freshmanLandingDepartmentNames,
@@ -98,6 +98,10 @@ export function classifyHodStudent(data: Omit<StudentRecord, "id">, ctx: HodStud
 
   if (scope.ownDepartmentNames.includes(dept)) {
     if (departments.length === 0) return "primary";
+    // A department that directly claims this year itself is always fully
+    // primary, regardless of a manager elsewhere also claiming the same
+    // year for it - see departmentOwnsYearDirectly's own doc-comment.
+    if (departmentOwnsYearDirectly(departments, dept, data.year as number)) return "primary";
     const owner = resolveBranchYearOwner(departments, dept, data.year as number, catalogId());
     if (scope.ownDepartmentNames.includes(owner)) return "primary";
   }

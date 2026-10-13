@@ -27,3 +27,4 @@ export * from "./midPaper";
 export type { LocationConfig, LocationDepartment, LocationStaffMember, LocationStaffAttendanceRecord, LocationShift } from "./locationStaff";
 export * from "./library";
 export * from "./customNav";
+export * from "./certification";
