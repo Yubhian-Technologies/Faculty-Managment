@@ -129,7 +129,7 @@ function PrincipalDepartmentFacultyContent() {
     queryKey: ["principal-dept-faculty", department?.name, statusFilter],
     queryFn: () =>
       fetch(
-        `/api/college/faculty?department=${encodeURIComponent(department!.name)}${statusFilter ? `&status=${statusFilter}` : ""}`
+        `/api/college/faculty?department=${encodeURIComponent(department!.name)}${statusFilter ? `&status=${statusFilter}` : ""}&withSeats=1`
       )
         .then((r) => r.json() as Promise<{ faculty: FacultyRow[] }>)
         .then((d) => d.faculty ?? []),
@@ -546,8 +546,8 @@ function PrincipalDepartmentFacultyContent() {
             columns={columns}
             isLoading={isLoading}
             keyExtractor={(f) => f.id}
-            searchPlaceholder="Search by name, employee ID, or email..."
-            searchKeys={["legalName", "nameAsPerPan", "employeeId", "email", "specialization"] as (keyof FacultyRow)[]}
+            searchPlaceholder="Search by name, employee ID, email, or role..."
+            searchKeys={["legalName", "nameAsPerPan", "employeeId", "email", "specialization", "seatLabels"] as (keyof FacultyRow)[]}
             // Same historical date-range view as hod/faculty's own Faculty
             // Timeline, scoped to this department - kept beside the search box
             // via DataTable's own filterComponent slot, same placement as hod/faculty.

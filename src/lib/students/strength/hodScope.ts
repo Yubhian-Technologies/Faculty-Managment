@@ -1,5 +1,5 @@
 import { resolveCatalogId } from "@/lib/college/academicStructure";
-import { resolveBranchYearOwner, type DepartmentYearRow } from "@/lib/departments/managedBranches";
+import { resolveBranchYearOwner, departmentOwnsYearDirectly, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import type { HodDepartmentScope } from "@/lib/departments/scope";
 import type { Course } from "@/types";
 import { resolveBranchName } from "./aggregate";
@@ -55,7 +55,9 @@ export function filterRowsForHod(
     const year = Number(row.year) || 0;
 
     if (own.has(dept)) {
-      const owner = departments.length > 0 ? resolveBranchYearOwner(departments, dept, year, catalogIdFor(dept, row.course)) : dept;
+      if (departments.length === 0) return true;
+      if (departmentOwnsYearDirectly(departments, dept, year)) return true;
+      const owner = resolveBranchYearOwner(departments, dept, year, catalogIdFor(dept, row.course));
       if (own.has(owner)) return true;
     }
     if (child.has(dept) || managed.has(dept)) {

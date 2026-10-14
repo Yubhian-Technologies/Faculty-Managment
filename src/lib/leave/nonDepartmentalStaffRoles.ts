@@ -9,6 +9,6 @@ import type { UserRole } from "@/types";
 // import this list directly without pulling the admin SDK into the bundle.
 export const NON_DEPARTMENTAL_STAFF_ROLES: UserRole[] = [
   "VICE_PRINCIPAL", "COLLEGE_OFFICE", "COLLEGE_STAFF", "ACADEMICS",
-  "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "LIBRARY", "EXAM_CELL", "WEBMASTER",
+  "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "LIBRARY", "HOSTEL", "PD", "EXAM_CELL", "WEBMASTER",
   "PLACEMENT_DEPT", "PURCHASE_DEPT",
 ];

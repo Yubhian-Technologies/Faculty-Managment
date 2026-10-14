@@ -159,9 +159,23 @@ export function useRegulationCourseDepartmentPicker() {
         if (!list) return { ok: false, course: null };
         course = resolveDepartmentCourse(list, sel.catalogId, sel.departmentId);
       } else {
-        const res = await fetch("/api/college/course-catalog");
-        const d = await res.json() as { items?: CourseCatalogItem[] };
+        // No department picked (Structure/Syllabus/Regulation Doc don't
+        // require one) - still resolve SOME course doc for this catalog
+        // entry, since subject import/creation needs a courseId even though
+        // the data itself is department-independent. Any department's own
+        // Course doc for this catalogId works identically for that purpose
+        // (resolveDepartmentCourse falls back to the first match when no
+        // specific departmentId matches).
+        const [catalogRes, coursesRes] = await Promise.all([
+          fetch("/api/college/course-catalog"),
+          fetch("/api/college/courses"),
+        ]);
+        const d = await catalogRes.json() as { items?: CourseCatalogItem[] };
         setCatalogItems(d.items ?? []);
+        const c = await coursesRes.json() as { courses?: Course[] };
+        const list = (c.courses ?? []).filter((x) => x.isActive).sort((a, b) => a.name.localeCompare(b.name));
+        setCourses(list);
+        course = resolveDepartmentCourse(list, sel.catalogId, "");
       }
       setLoadedKey(`${sel.regulation}|${sel.catalogId}|${sel.departmentId}`);
       return { ok: true, course };

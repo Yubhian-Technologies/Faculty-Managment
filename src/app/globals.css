@@ -190,3 +190,133 @@ html:has(.landing-page) {
    content doesn't already imply. */
 .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* ─── Qualification cards ───────────────────────────────────────────────────────────────────────────────────────────
+   One look for every education block on the faculty forms and views (Secondary, Intermediate / Diploma / ITI, UG, PG,
+   Ph.D., Post-Doctoral, and the qualifying-exam block): a softly tinted card, a stronger tinted header band with an icon
+   chip and a clear title, and crisp WHITE fields on the tint.
+
+   Why this is plain CSS and not utility classes: the shared Input / Select / Label set their own backgrounds, borders and
+   colours with utilities, and this stylesheet block (unlayered) wins over utilities - so the card can guarantee the
+   contrast of every field instead of hoping each one looks right on a tint.
+   Colours are fixed on purpose and `color-scheme: light` is set: the app has no dark theme, and following the computer's
+   dark setting is what used to turn these cards grey with pale headings.
+
+   Contrast (WCAG AA or better): title 900-shade on the header tint, labels #1e293b on the tint, values #0f172a on white,
+   placeholders #64748b on white, helper text #475569. Tokens are per level via data-level. */
+.qual-card {
+  --q-bg: #f8fafc; --q-head: #f1f5f9; --q-border: #dbe3ec; --q-accent: #64748b;
+  --q-title: #0f172a; --q-chip: #475569; --q-ring: rgb(100 116 139 / 0.28);
+  color-scheme: light;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--q-border);
+  border-left: 4px solid var(--q-accent);
+  border-radius: 0.875rem;
+  background: var(--q-bg);
+  color: #0f172a;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.05), 0 8px 18px -10px rgb(15 23 42 / 0.14);
+}
+.qual-card[data-level="HIGH_SCHOOL"]   { --q-bg: #f0f9ff; --q-head: #e0f2fe; --q-border: #bae6fd; --q-accent: #0284c7; --q-title: #0c4a6e; --q-chip: #0369a1; --q-ring: rgb(2 132 199 / 0.28); }
+.qual-card[data-level="INTERMEDIATE"]  { --q-bg: #ecfdf5; --q-head: #d1fae5; --q-border: #a7f3d0; --q-accent: #059669; --q-title: #064e3b; --q-chip: #047857; --q-ring: rgb(5 150 105 / 0.28); }
+.qual-card[data-level="UG"]            { --q-bg: #fffbeb; --q-head: #fef3c7; --q-border: #fde68a; --q-accent: #d97706; --q-title: #78350f; --q-chip: #b45309; --q-ring: rgb(217 119 6 / 0.28); }
+.qual-card[data-level="PG"]            { --q-bg: #f5f3ff; --q-head: #ede9fe; --q-border: #ddd6fe; --q-accent: #7c3aed; --q-title: #4c1d95; --q-chip: #6d28d9; --q-ring: rgb(124 58 237 / 0.28); }
+.qual-card[data-level="DOCTORAL"]      { --q-bg: #fff1f2; --q-head: #ffe4e6; --q-border: #fecdd3; --q-accent: #e11d48; --q-title: #881337; --q-chip: #be123c; --q-ring: rgb(225 29 72 / 0.26); }
+.qual-card[data-level="POST_DOCTORAL"] { --q-bg: #f0fdfa; --q-head: #ccfbf1; --q-border: #99f6e4; --q-accent: #0d9488; --q-title: #134e4a; --q-chip: #0f766e; --q-ring: rgb(13 148 136 / 0.28); }
+.qual-card[data-level="EXAM"]          { --q-bg: #eef2ff; --q-head: #e0e7ff; --q-border: #c7d2fe; --q-accent: #4f46e5; --q-title: #312e81; --q-chip: #4338ca; --q-ring: rgb(79 70 229 / 0.28); }
+
+.qual-card--view { height: 100%; }
+
+.qual-card__head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 1rem;
+  background: var(--q-head);
+  border-bottom: 1px solid var(--q-border);
+}
+.qual-card__chip {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.6rem;
+  background: #ffffff;
+  color: var(--q-chip);
+  border: 1px solid var(--q-border);
+  box-shadow: 0 1px 1px rgb(15 23 42 / 0.06);
+}
+.qual-card__title {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.9375rem;
+  line-height: 1.3rem;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+  color: var(--q-title);
+}
+.qual-card__body { padding: 1rem; }
+@media (min-width: 640px) { .qual-card__body { padding: 1.25rem; } }
+
+/* Labels and helper text */
+.qual-card label { color: #1e293b; font-size: 0.8125rem; line-height: 1.1rem; font-weight: 600; }
+.qual-card .text-muted-foreground { color: #475569; }
+
+/* Fields: white, a clear border, a soft lift, and the value / placeholder / disabled states told apart.
+   (The input type filter sits in :where() so it adds no specificity - the focus and disabled rules below must outrank it.) */
+.qual-card input:where(:not([type="checkbox"]):not([type="radio"]):not([type="file"])),
+.qual-card textarea,
+.qual-card button[role="combobox"] {
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 1px 1px rgb(15 23 42 / 0.05);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.qual-card button[role="combobox"] { font-weight: 500; }
+.qual-card input::placeholder,
+.qual-card textarea::placeholder { color: #64748b; opacity: 1; }
+.qual-card button[role="combobox"][data-placeholder] { color: #64748b; font-weight: 400; }
+.qual-card input:where(:not([type="checkbox"]):not([type="radio"]):not([type="file"])):hover:not(:disabled),
+.qual-card textarea:hover:not(:disabled),
+.qual-card button[role="combobox"]:hover:not(:disabled) { border-color: #94a3b8; }
+.qual-card input:focus-visible,
+.qual-card textarea:focus-visible,
+.qual-card button[role="combobox"]:focus-visible,
+.qual-card button[role="combobox"][data-state="open"] {
+  outline: none;
+  border-color: var(--q-accent);
+  box-shadow: 0 0 0 3px var(--q-ring);
+}
+/* The search box inside a command list lives in its own bordered panel (and dialogs render outside .qual-card):
+   no field border or focus outline of its own - the panel shows focus instead. Outlines get clipped by the
+   panel's overflow-hidden, which is what produced the cut-off blue box. */
+input[cmdk-input],
+input[cmdk-input]:hover:not(:disabled),
+input[cmdk-input]:focus,
+input[cmdk-input]:focus-visible,
+.qual-card input[cmdk-input],
+.qual-card input[cmdk-input]:hover:not(:disabled),
+.qual-card input[cmdk-input]:focus-visible {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  outline: none;
+}
+[cmdk-root]:focus-within {
+  border-color: var(--ring);
+}
+.qual-card input:disabled,
+.qual-card textarea:disabled,
+.qual-card button[role="combobox"]:disabled {
+  background: #eef2f6;
+  color: #475569;
+  border-style: dashed;
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 1;
+}

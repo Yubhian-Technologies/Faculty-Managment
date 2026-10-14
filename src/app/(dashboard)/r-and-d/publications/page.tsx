@@ -6,6 +6,7 @@ import { Eye, FlaskConical, Plus, Pencil, Trash2, Upload, Check, X } from "lucid
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { researchRecordHref } from "@/lib/research/modules";
+import { ChangedFieldsButton } from "@/components/research/PendingChangesPanel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,13 +17,31 @@ import type { ResearchPublication } from "@/types";
 
 type PublicationRow = ResearchPublication & Record<string, unknown>;
 
+// `createdAt` as sent over JSON - an admin Timestamp serializes to _seconds,
+// and a record stored before it existed sorts last rather than first.
+function submittedAt(row: PublicationRow): number {
+  const ts = row.createdAt as { _seconds?: number; seconds?: number } | undefined;
+  return (ts?._seconds ?? ts?.seconds ?? 0) * 1000;
+}
+
+// What the route actually refused with, so a refusal is readable rather than a
+// bare "Failed to ..." with the reason thrown away.
+async function serverError(res: Response): Promise<string> {
+  try {
+    const { error } = (await res.json()) as { error?: string };
+    return error || `Request failed (${res.status})`;
+  } catch {
+    return `Request failed (${res.status})`;
+  }
+}
+
 export default function RAndDPublicationsPage() {
   const router = useRouter();
   const [publications, setPublications] = useState<PublicationRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<PublicationRow | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [tab, setTab] = useState<"official" | "pending">("official");
+  const [tab, setTab] = useState<"verified" | "pending">("verified");
   const [approving, setApproving] = useState<string | null>(null);
   const [rejectTarget, setRejectTarget] = useState<PublicationRow | null>(null);
   const [rejectReason, setRejectReason] = useState("");
@@ -31,7 +50,7 @@ export default function RAndDPublicationsPage() {
   async function load() {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/college/publications");
+      const res = await fetch("/api/college/publications?scope=all");
       const data = await res.json() as { publications: PublicationRow[] };
       setPublications(data.publications ?? []);
     } catch {
@@ -43,8 +62,24 @@ export default function RAndDPublicationsPage() {
 
   useEffect(() => { void load(); }, []);
 
-  const pending = useMemo(() => publications.filter((p) => p.status === "PENDING"), [publications]);
-  const official = useMemo(() => publications.filter((p) => p.status !== "PENDING"), [publications]);
+  // Newest submission first. The API orders publications by the YEAR OF
+  // PUBLICATION, which is right for a record list but wrong for a review
+  // queue: a paper from 2010 submitted a minute ago landed halfway down a long
+  // list and looked as though it had never arrived.
+  const pending = useMemo(
+    () => publications
+      .filter((p) => p.status === "PENDING")
+      .sort((a, b) => submittedAt(b) - submittedAt(a)),
+    [publications],
+  );
+  // A publication is either waiting for R&D or verified by them - every record
+  // goes through verification now, whoever entered it (see
+  // resolveSubmissionRoute). A record with no status predates that and was
+  // R&D-entered, so it counts as verified.
+  const verified = useMemo(
+    () => publications.filter((p) => !p.status || p.status === "APPROVED"),
+    [publications],
+  );
 
   async function handleDelete(pub: PublicationRow) {
     setDeleting(true);
@@ -69,11 +104,15 @@ export default function RAndDPublicationsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ decision: "APPROVED" }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) throw new Error(await serverError(res));
       toast({ variant: "success", title: "Publication approved" });
       await load();
-    } catch {
-      toast({ variant: "destructive", title: "Failed to approve publication" });
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Failed to approve publication",
+        description: err instanceof Error ? err.message : undefined,
+      });
     } finally {
       setApproving(null);
     }
@@ -88,13 +127,17 @@ export default function RAndDPublicationsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ decision: "REJECTED", rejectionReason: rejectReason.trim() }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) throw new Error(await serverError(res));
       toast({ variant: "success", title: "Publication rejected" });
       setRejectTarget(null);
       setRejectReason("");
       await load();
-    } catch {
-      toast({ variant: "destructive", title: "Failed to reject publication" });
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Failed to reject publication",
+        description: err instanceof Error ? err.message : undefined,
+      });
     } finally {
       setRejecting(false);
     }
@@ -104,7 +147,7 @@ export default function RAndDPublicationsPage() {
     return row.ownerDesignation ?? ROLE_LABELS[row.ownerRole] ?? row.ownerRole;
   }
 
-  const officialColumns: Column<PublicationRow>[] = [
+  const verifiedColumns: Column<PublicationRow>[] = [
     {
       key: "ownerName",
       header: "Owner",
@@ -171,6 +214,7 @@ export default function RAndDPublicationsPage() {
       header: "",
       render: (row) => (
         <div className="flex items-center gap-1">
+          <ChangedFieldsButton record={row} />
           <Button
             variant="ghost" size="sm"
             onClick={(e) => { e.stopPropagation(); router.push(researchRecordHref("publications", row.id)); }}
@@ -199,7 +243,7 @@ export default function RAndDPublicationsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Research Publications"
-        description="Manage the official publication record for every staff member"
+        description="Verify and manage publication records for every staff member"
         actions={
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => router.push("/r-and-d/publications/import")}>
@@ -215,10 +259,10 @@ export default function RAndDPublicationsPage() {
       <div className="flex gap-2 border-b">
         <button
           type="button"
-          onClick={() => setTab("official")}
-          className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px ${tab === "official" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          onClick={() => setTab("verified")}
+          className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px ${tab === "verified" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
         >
-          Official Records
+          Verified
         </button>
         <button
           type="button"
@@ -230,17 +274,17 @@ export default function RAndDPublicationsPage() {
         </button>
       </div>
 
-      {tab === "official" ? (
+      {tab === "verified" ? (
         <DataTable
-          data={official}
-          columns={officialColumns}
+          data={verified}
+          columns={verifiedColumns}
           isLoading={isLoading}
           keyExtractor={(r) => r.id}
           onRowClick={(r) => router.push(researchRecordHref("publications", r.id))}
           searchPlaceholder="Search publications..."
           searchKeys={["title", "ownerName", "journalOrConference"] as (keyof PublicationRow)[]}
-          emptyTitle="No publications yet"
-          emptyDescription="Add the first publication record"
+          emptyTitle="No verified publications yet"
+          emptyDescription="Records appear here once they have been verified"
           emptyAction={
             <Button onClick={() => router.push("/r-and-d/publications/new")}>
               <FlaskConical className="h-4 w-4 mr-2" />Add Publication

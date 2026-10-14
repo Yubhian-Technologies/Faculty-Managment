@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
-import { Plus, Pencil, Trash2, Check, X, GraduationCap, AlertTriangle, ChevronDown } from "lucide-react";
+import { Plus, Pencil, Trash2, Check, X, GraduationCap, AlertTriangle, ChevronDown, Clock, Building2, ScrollText } from "lucide-react";
 import { toast } from "@/hooks/useToast";
 import { stripLeadingZeros } from "@/lib/utils";
 import { currentAcademicStartYear, deriveBatch, courseYearCoverage } from "@/lib/college/academicSession";
@@ -268,6 +269,106 @@ interface CourseCatalogSettingsCardProps {
 }
 
 interface OfferingDepartment { id: string; name: string; code: string }
+
+// Small uppercase label that opens each section of a course card.
+function CardSectionLabel({ icon: Icon, count, children }: { icon: typeof Building2; count?: number; children: React.ReactNode }) {
+  return (
+    <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+      <Icon className="h-3 w-3" />
+      {children}
+      {count !== undefined && <span className="font-medium normal-case tracking-normal text-foreground/70">({count})</span>}
+    </p>
+  );
+}
+
+// A regulation's intake batches arrive as one comma-run ("2023-2027,2024-2028"); shown as one chip each. A value that
+// does not split into anything is shown as it is, so no stored text is ever hidden. Display only.
+function batchChips(batches: string | undefined): string[] {
+  const whole = (batches ?? "").trim();
+  const parts = whole.split(",").map((b) => b.trim()).filter(Boolean);
+  return parts.length > 0 ? parts : whole ? [whole] : [];
+}
+
+const AMBER_CALLOUT =
+  "flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-400";
+
+function RegulationList({ regulations, regulationBatches }: { regulations: string[]; regulationBatches: Record<string, string> | undefined }) {
+  if (regulations.length === 0) {
+    return (
+      <p className={AMBER_CALLOUT}>
+        <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> No regulations assigned
+      </p>
+    );
+  }
+  const missingBatches = regulations.some((r) => !regulationBatches?.[r]);
+  return (
+    <div className="space-y-2">
+      <CardSectionLabel icon={ScrollText} count={regulations.length}>Regulations</CardSectionLabel>
+      <ul className="space-y-1.5">
+        {regulations.map((r) => {
+          const chips = batchChips(regulationBatches?.[r]);
+          return (
+            <li key={r} className="flex flex-wrap items-center gap-1.5">
+              <Badge variant="secondary" className="font-mono text-[11px] font-semibold">{r}</Badge>
+              {chips.length === 0 ? (
+                <span className="text-[11px] italic text-muted-foreground">no intake batches</span>
+              ) : (
+                chips.map((c) => (
+                  <Badge key={c} variant="outline" className="text-[11px] font-normal text-muted-foreground">{c}</Badge>
+                ))
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {missingBatches && (
+        <p className={AMBER_CALLOUT}>
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> Some regulations need intake batches. Edit to fix.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// How many department chips a course card shows before the rest fold into a "+N more" chip.
+const DEPARTMENT_CHIP_LIMIT = 8;
+
+// The departments offering a course, as one chip per department showing its short code (the full name would run to
+// several lines and get cut off). Display only: the same list, in the same order, with the count in the label; a long
+// list folds into "+N more", which expands in place and folds back.
+function OfferingDepartmentChips({ departments }: { departments: OfferingDepartment[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const overflow = departments.length - DEPARTMENT_CHIP_LIMIT;
+  const visible = expanded || overflow <= 0 ? departments : departments.slice(0, DEPARTMENT_CHIP_LIMIT);
+  return (
+    <div>
+      <CardSectionLabel icon={Building2} count={departments.length > 0 ? departments.length : undefined}>Departments</CardSectionLabel>
+      {departments.length === 0 ? (
+        <p className="mt-1.5 text-xs text-muted-foreground">none yet</p>
+      ) : (
+        <ul className="mt-1.5 flex flex-wrap gap-1.5">
+          {visible.map((d) => (
+            <li key={d.id}>
+              <Badge variant="outline" className="text-[11px] font-medium tracking-wide">{d.code || d.name}</Badge>
+            </li>
+          ))}
+          {overflow > 0 && (
+            <li>
+              <button
+                type="button"
+                onClick={() => setExpanded((v) => !v)}
+                aria-expanded={expanded}
+                className="inline-flex items-center rounded-full border border-dashed px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              >
+                {expanded ? "Show less" : `+${overflow} more`}
+              </button>
+            </li>
+          )}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 export function CourseCatalogSettingsCard({ readOnly = false, regulationsOnly = false, showDepartments = false }: CourseCatalogSettingsCardProps) {
   const [items, setItems] = useState<CourseCatalogItem[]>([]);
@@ -590,7 +691,7 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsOnly = 
               const busy = busyId === item.id;
               const depts = departmentsByCatalogId.get(item.id) ?? [];
               return (
-                <Card key={item.id} className={`flex flex-col ${!item.isActive ? "opacity-60" : ""}`}>
+                <Card key={item.id} className={`flex flex-col transition-shadow hover:shadow-md ${!item.isActive ? "border-dashed opacity-60" : ""}`}>
                   <CardContent className="flex flex-col flex-1 p-4">
                     {isEditing ? (
                       <div className="space-y-3">
@@ -655,67 +756,53 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsOnly = 
                       </div>
                     ) : (
                       <>
-                        {/* Header: name + actions */}
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-semibold leading-snug">{item.name}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              {item.code} · {item.durationYears} {item.durationYears === 1 ? "year" : "years"}
-                              {!item.isActive && <span className="ml-1.5 text-[10px] font-medium text-orange-500 uppercase tracking-wide">Inactive</span>}
-                            </p>
+                        {/* Header: name + code / duration / status */}
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold leading-snug break-words">{item.name}</p>
+                          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                            <Badge variant="secondary" className="font-mono text-[11px] font-semibold">{item.code}</Badge>
+                            <Badge variant="outline" className="gap-1 text-[11px] font-normal text-muted-foreground">
+                              <Clock className="h-3 w-3" />
+                              {item.durationYears} {item.durationYears === 1 ? "year" : "years"}
+                            </Badge>
+                            {!item.isActive && (
+                              <Badge variant="outline" className="border-orange-300 bg-orange-50 text-[11px] font-semibold uppercase tracking-wide text-orange-600 dark:border-orange-900/50 dark:bg-orange-950/30">
+                                Inactive
+                              </Badge>
+                            )}
                           </div>
-                          {!readOnly && (
-                            <div className="flex gap-0.5 shrink-0">
-                              {canCreate && (
-                                <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => setToggleTarget(item)} disabled={busy}>
-                                  {item.isActive ? "Deactivate" : "Activate"}
-                                </Button>
-                              )}
-                              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => startEdit(item)} aria-label="Edit">
-                                <Pencil className="h-3.5 w-3.5" />
+                        </div>
+
+                        {/* Body: departments + regulations */}
+                        <div className="mt-4 flex-1 space-y-4">
+                          {showDepartments && <OfferingDepartmentChips departments={depts} />}
+                          <RegulationList regulations={item.regulations ?? []} regulationBatches={item.regulationBatches} />
+                        </div>
+
+                        {/* Footer: actions */}
+                        {!readOnly && (
+                          <div className="mt-4 flex flex-wrap items-center gap-1.5 border-t pt-3">
+                            <Button size="sm" variant="outline" className="h-8 gap-1.5 px-2.5 text-xs" onClick={() => startEdit(item)} aria-label="Edit">
+                              <Pencil className="h-3.5 w-3.5" /> Edit
+                            </Button>
+                            {canCreate && (
+                              <Button size="sm" variant="outline" className="h-8 px-2.5 text-xs" onClick={() => setToggleTarget(item)} disabled={busy}>
+                                {item.isActive ? "Deactivate" : "Activate"}
                               </Button>
-                              {canCreate && (
-                                <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => setDeleteTarget(item)} aria-label="Delete">
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
-                              )}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Departments - plain text */}
-                        {showDepartments && (
-                          <p className="text-xs text-muted-foreground mt-2 line-clamp-2">
-                            <span className="font-medium text-foreground">Departments:</span>{" "}
-                            {depts.length === 0 ? "none yet" : depts.map((d) => `${d.name} (${d.code})`).join(", ")}
-                          </p>
+                            )}
+                            {canCreate && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="ml-auto h-8 gap-1.5 px-2.5 text-xs text-destructive hover:text-destructive"
+                                onClick={() => setDeleteTarget(item)}
+                                aria-label="Delete"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" /> Delete
+                              </Button>
+                            )}
+                          </div>
                         )}
-
-                        {/* Regulations - concise text */}
-                        <div className="mt-2 flex-1">
-                          {(item.regulations ?? []).length === 0 ? (
-                            <p className="flex items-center gap-1.5 text-xs text-amber-600">
-                              <AlertTriangle className="h-3 w-3 shrink-0" /> No regulations assigned
-                            </p>
-                          ) : (
-                            <div className="space-y-1">
-                              {(item.regulations ?? []).map((r) => {
-                                const batches = item.regulationBatches?.[r];
-                                return (
-                                  <p key={r} className="text-xs text-muted-foreground">
-                                    <span className="font-mono font-medium text-foreground">{r}</span>
-                                    {batches ? <span className="ml-1.5">{batches}</span> : ""}
-                                  </p>
-                                );
-                              })}
-                              {(item.regulations ?? []).some((r) => !item.regulationBatches?.[r]) && (
-                                <p className="flex items-center gap-1 text-xs text-amber-600">
-                                  <AlertTriangle className="h-3 w-3 shrink-0" /> Some regulations need intake batches. Edit to fix.
-                                </p>
-                              )}
-                            </div>
-                          )}
-                        </div>
                       </>
                     )}
                   </CardContent>

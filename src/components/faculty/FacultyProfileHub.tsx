@@ -15,6 +15,7 @@ import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { facultyMobileNo } from "@/lib/faculty/mobileNo";
 import { totalYearsOfExperience, formatDuration, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import { formatDate } from "@/lib/utils";
+import { FACT_GRID_COLS_4 } from "@/components/shared/factGrid";
 import { toast } from "@/hooks/useToast";
 import { DESIGNATION_LABELS, FACULTY_STATUS_LABELS, EMPLOYEE_CATEGORY_LABELS } from "@/types";
 import type { FacultyMember, FacultyStatus } from "@/types";
@@ -32,9 +33,9 @@ const STATUS_VARIANTS: Record<FacultyStatus, "default" | "secondary" | "outline"
 function Fact({ label, value }: { label: string; value: React.ReactNode }) {
   if (value === undefined || value === null || value === "") return null;
   return (
-    <div>
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-sm font-medium">{value}</p>
+    <div className="min-w-0">
+      <p className="text-xs text-muted-foreground break-words">{label}</p>
+      <p className="text-sm font-medium break-words">{value}</p>
     </div>
   );
 }
@@ -81,14 +82,18 @@ export function FacultyIdentityFacts({
     // Same order the Add/Edit Faculty wizard follows (Identity & Employment
     // -> Role/Employment Details -> Contact Details) so this summary reads
     // as "the same fields, just read-only".
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+    // Columns follow the width of this block (container query), not the browser window: beside the sidebar, in a tab
+    // or at a high zoom the block is much narrower than the window, and four fixed columns ran emails into the
+    // next field. Roughly 220px per column: 1 below 320px, 2 up to ~670px, 3 up to ~900px, 4 beyond.
+    <div className="@container">
+    <div className={`grid gap-4 ${FACT_GRID_COLS_4}`}>
       <Fact label="Employee ID" value={faculty.employeeId} />
       <Fact label="Full Name (as per SSC)" value={facultyDisplayName(faculty) || faculty.legalName} />
       <Fact label="APAAR Faculty ID" value={faculty.apaarFacultyId} />
       <Fact
         label="Department"
         value={
-          <span className="flex items-center gap-1.5">
+          <span className="flex flex-wrap items-center gap-1.5">
             {faculty.department}
             {parentDeptName && <Badge variant="secondary" className="text-xs">Sub-department of {parentDeptName}</Badge>}
           </span>
@@ -126,6 +131,7 @@ export function FacultyIdentityFacts({
       )}
       {/* No home in the Add Faculty wizard - shown last since it's not entered at Add time. */}
       <Fact label="Employee Category" value={employeeCategoryLabel} />
+    </div>
     </div>
   );
 }
@@ -205,7 +211,8 @@ export function FacultyProfileHub({
   faculty, basePath, hideFinancialModule, excludeModules, linkQuery, backHref, editHref, parentDeptName, onReRegisterFace, viewAttendanceHref,
 }: FacultyProfileHubProps) {
   const designationLabel = faculty.designation ? (DESIGNATION_LABELS[faculty.designation] ?? faculty.designation) : undefined;
-  const headerDescription = [designationLabel, faculty.department].filter(Boolean).join(" • ") || undefined;
+  const seatLabels = (faculty as { seatLabels?: string[] }).seatLabels ?? [];
+  const headerDescription = [designationLabel, faculty.department, ...seatLabels].filter(Boolean).join(" • ") || undefined;
   const [photoUrl, setPhotoUrl] = useState(faculty.profilePhotoUrl);
 
   function copyPublicProfileLink() {

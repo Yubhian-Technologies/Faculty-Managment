@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ExternalLink, Plus, Pencil } from "lucide-react";
-import { Section, SubLabel, Field, TextInput, NumInput, DateInput, RepeatingGroup } from "@/components/shared/ProfileFieldPrimitives";
+import { Section, SubLabel, Field, TextInput, NumField, DateInput, RepeatingGroup, RequiredMark } from "@/components/shared/ProfileFieldPrimitives";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -19,6 +19,7 @@ import type {
   OrganizingCommitteeMemberItem, PublicationScope, ResearchServiceFundNature, ResearchServiceRequest,
   ResearchServiceType, ResourcePersonItem, ReviewerType,
 } from "@/types";
+import { FACT_GRID_COLS_4 } from "@/components/shared/factGrid";
 
 const PREVIEW_COUNT = 3;
 const EMPTY_CONVENER: ConvenerCoordinatorItem = { name: "", department: "", type: "" };
@@ -54,19 +55,21 @@ function ResearchServiceRow({
   const label = record.title || record.reviewerPaperTitle || record.editorPublicationName || SERVICE_TYPE_LABELS[record.serviceType];
   return (
     <div className="rounded-md border bg-muted/20 shadow-sm p-2 space-y-2">
-      {isOwnProfile && record.status !== "APPROVED" && (
+      {isOwnProfile && (
         <div className="flex items-center gap-2">
-          {record.status === "PENDING" || record.status === "COORDINATOR_REVIEW" ? (
-            <Badge variant="pending" className="text-xs">{record.status === "COORDINATOR_REVIEW" ? "With R&D Coordinator" : "Pending Verification"}</Badge>
-          ) : (
-            <>
-              <Badge variant="rejected" className="text-xs">{record.status === "SENT_BACK" ? "Sent Back" : "Rejected"}</Badge>
-              {onEdit && (
-                <button type="button" onClick={() => onEdit(record)} className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1">
-                  <Pencil className="h-3 w-3" />Edit &amp; Resubmit
-                </button>
-              )}
-            </>
+          {record.status === "PENDING" && <Badge variant="pending" className="text-xs">Pending Verification</Badge>}
+          {record.status === "COORDINATOR_REVIEW" && <Badge variant="pending" className="text-xs">With R&amp;D Coordinator</Badge>}
+          {record.status === "REJECTED" && <Badge variant="rejected" className="text-xs">Rejected</Badge>}
+          {record.status === "SENT_BACK" && <Badge variant="rejected" className="text-xs">Sent Back</Badge>}
+          {onEdit && (
+            <button type="button" onClick={() => onEdit(record)} className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1">
+              <Pencil className="h-3 w-3" />
+              {record.status === "REJECTED" || record.status === "SENT_BACK"
+                ? "Edit & Resubmit"
+                : record.status === "PENDING" || record.status === "COORDINATOR_REVIEW"
+                  ? "Edit"
+                  : "Edit (sends for re-verification)"}
+            </button>
           )}
         </div>
       )}
@@ -76,27 +79,29 @@ function ResearchServiceRow({
       {record.status === "SENT_BACK" && record.sentBackReason && (
         <p className="text-xs text-destructive">Sent back: {record.sentBackReason}</p>
       )}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Field label="Type" value={SERVICE_TYPE_LABELS[record.serviceType]} />
-        <Field label="Title" value={label} />
-        {(record.serviceType === "CONFERENCE" || record.serviceType === "WORKSHOP") && (
-          <>
-            <Field label="Event Type" value={record.eventType} />
-            <Field label="Dates" value={record.startDate && record.endDate ? `${record.startDate} – ${record.endDate}` : record.startDate} />
-          </>
-        )}
-        {record.serviceType === "REVIEWER" && (
-          <>
-            <Field label="Journal/Conference" value={record.reviewerPublicationName} />
-            <Field label="Review Date" value={record.reviewerReviewDate} />
-          </>
-        )}
-        {record.serviceType === "EDITOR" && (
-          <>
-            <Field label="Editorial Role" value={record.editorialRole ? EDITORIAL_ROLE_LABELS[record.editorialRole] : undefined} />
-            <Field label="Publisher" value={record.editorPublisher} />
-          </>
-        )}
+      <div className="@container">
+        <div className={`grid gap-2 ${FACT_GRID_COLS_4}`}>
+          <Field label="Type" value={SERVICE_TYPE_LABELS[record.serviceType]} />
+          <Field label="Title" value={label} />
+          {(record.serviceType === "CONFERENCE" || record.serviceType === "WORKSHOP") && (
+            <>
+              <Field label="Event Type" value={record.eventType} />
+              <Field label="Dates" value={record.startDate && record.endDate ? `${record.startDate} – ${record.endDate}` : record.startDate} />
+            </>
+          )}
+          {record.serviceType === "REVIEWER" && (
+            <>
+              <Field label="Journal/Conference" value={record.reviewerPublicationName} />
+              <Field label="Review Date" value={record.reviewerReviewDate} />
+            </>
+          )}
+          {record.serviceType === "EDITOR" && (
+            <>
+              <Field label="Editorial Role" value={record.editorialRole ? EDITORIAL_ROLE_LABELS[record.editorialRole] : undefined} />
+              <Field label="Publisher" value={record.editorPublisher} />
+            </>
+          )}
+        </div>
       </div>
       <div className="flex flex-wrap gap-3">
         {[
@@ -342,7 +347,7 @@ function RecordFormFields({
       </DialogHeader>
       <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-5">
         <div className="space-y-2 max-w-xs">
-          <Label>Type of Contribution</Label>
+          <Label>Type of Contribution<RequiredMark required /></Label>
           <Select value={form.serviceType} onValueChange={(v) => set("serviceType", v as ResearchServiceType)}>
             <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
             <SelectContent>
@@ -355,7 +360,7 @@ function RecordFormFields({
 
         {isConferenceOrWorkshop && (
           <div className="space-y-2 max-w-xs">
-            <Label>{isConference ? "Organized Conference" : "Organized Research Workshop"}</Label>
+            <Label>{isConference ? "Organized Conference" : "Organized Research Workshop"}<RequiredMark required /></Label>
             <Select value={form.organized} onValueChange={(v) => set("organized", v as "YES" | "NO")}>
               <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
               <SelectContent>
@@ -407,7 +412,7 @@ function RecordFormFields({
                 </div>
                 <TextInput label={isConference ? "Title of the Conference" : "Title of Research Workshop"} value={form.title} onChange={(v) => set("title", v)} />
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <NumInput label="No. of Days" value={toNumberOrUndefined(form.noOfDays)} onChange={(v) => set("noOfDays", String(v))} />
+                  <NumField label="No. of Days" value={form.noOfDays} onChange={(v) => set("noOfDays", v)} />
                   <TextInput label="A.Y." value={form.academicYear} onChange={(v) => set("academicYear", v)} placeholder="e.g. 2024-25" />
                 </div>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -419,9 +424,9 @@ function RecordFormFields({
               <div className="space-y-4">
                 <SubLabel>Finances</SubLabel>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                  <NumInput label="Amount Sanctioned (Rs.)" value={toNumberOrUndefined(form.amountSanctioned)} onChange={(v) => set("amountSanctioned", String(v))} />
-                  <NumInput label="Amount Received (Rs.)" value={toNumberOrUndefined(form.amountReceived)} onChange={(v) => set("amountReceived", String(v))} />
-                  <NumInput label="Expenditure Made (Rs.)" value={toNumberOrUndefined(form.expenditureMade)} onChange={(v) => set("expenditureMade", String(v))} />
+                  <NumField label="Amount Sanctioned (Rs.)" value={form.amountSanctioned} onChange={(v) => set("amountSanctioned", v)} />
+                  <NumField label="Amount Received (Rs.)" value={form.amountReceived} onChange={(v) => set("amountReceived", v)} />
+                  <NumField label="Expenditure Made (Rs.)" value={form.expenditureMade} onChange={(v) => set("expenditureMade", v)} />
                 </div>
                 <DocumentUploadField
                   label="Sanctioned Letter"
@@ -449,7 +454,7 @@ function RecordFormFields({
                 />
               </div>
 
-              <NumInput label="No. of Convener / Coordinators" value={toNumberOrUndefined(form.convenersCount)} onChange={(v) => set("convenersCount", String(v))} />
+              <NumField label="No. of Convener / Coordinators" value={form.convenersCount} onChange={(v) => set("convenersCount", v)} />
               <RepeatingGroup
                 title="Convener / Coordinators"
                 items={form.conveners}
@@ -465,7 +470,7 @@ function RecordFormFields({
                 )}
               />
 
-              <NumInput label="No. of Organizing Committee Members" value={toNumberOrUndefined(form.committeeMembersCount)} onChange={(v) => set("committeeMembersCount", String(v))} />
+              <NumField label="No. of Organizing Committee Members" value={form.committeeMembersCount} onChange={(v) => set("committeeMembersCount", v)} />
               <RepeatingGroup
                 title="Organizing Committee Members"
                 items={form.committeeMembers}
@@ -482,7 +487,7 @@ function RecordFormFields({
             </div>
 
             <div className="space-y-5">
-              <NumInput label="No. of Resource Persons" value={toNumberOrUndefined(form.resourcePersonsCount)} onChange={(v) => set("resourcePersonsCount", String(v))} />
+              <NumField label="No. of Resource Persons" value={form.resourcePersonsCount} onChange={(v) => set("resourcePersonsCount", v)} />
               <RepeatingGroup
                 title="Resource Persons"
                 items={form.resourcePersons}
@@ -502,20 +507,20 @@ function RecordFormFields({
                 <div className="space-y-4">
                   <SubLabel>Papers</SubLabel>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <NumInput label="No. of Papers Received" value={toNumberOrUndefined(form.papersReceived)} onChange={(v) => set("papersReceived", String(v))} />
-                    <NumInput label="No. of Papers Accepted" value={toNumberOrUndefined(form.papersAccepted)} onChange={(v) => set("papersAccepted", String(v))} />
-                    <NumInput label="No. of Papers Published" value={toNumberOrUndefined(form.papersPublishedCount)} onChange={(v) => set("papersPublishedCount", String(v))} />
-                    <NumInput label="No. of Papers Indexed" value={toNumberOrUndefined(form.papersIndexedCount)} onChange={(v) => set("papersIndexedCount", String(v))} />
+                    <NumField label="No. of Papers Received" value={form.papersReceived} onChange={(v) => set("papersReceived", v)} />
+                    <NumField label="No. of Papers Accepted" value={form.papersAccepted} onChange={(v) => set("papersAccepted", v)} />
+                    <NumField label="No. of Papers Published" value={form.papersPublishedCount} onChange={(v) => set("papersPublishedCount", v)} />
+                    <NumField label="No. of Papers Indexed" value={form.papersIndexedCount} onChange={(v) => set("papersIndexedCount", v)} />
                   </div>
                 </div>
               ) : (
                 <div className="space-y-4">
                   <SubLabel>Participation</SubLabel>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <NumInput label="Participants Registered - Internal" value={toNumberOrUndefined(form.participantsRegisteredInternal)} onChange={(v) => set("participantsRegisteredInternal", String(v))} />
-                    <NumInput label="Participants Registered - External" value={toNumberOrUndefined(form.participantsRegisteredExternal)} onChange={(v) => set("participantsRegisteredExternal", String(v))} />
-                    <NumInput label="Workshop Participants Attended (Internal)" value={toNumberOrUndefined(form.papersAttendedInternal)} onChange={(v) => set("papersAttendedInternal", String(v))} />
-                    <NumInput label="Workshop Participants Attended (External)" value={toNumberOrUndefined(form.papersAttendedExternal)} onChange={(v) => set("papersAttendedExternal", String(v))} />
+                    <NumField label="Participants Registered - Internal" value={form.participantsRegisteredInternal} onChange={(v) => set("participantsRegisteredInternal", v)} />
+                    <NumField label="Participants Registered - External" value={form.participantsRegisteredExternal} onChange={(v) => set("participantsRegisteredExternal", v)} />
+                    <NumField label="Workshop Participants Attended (Internal)" value={form.papersAttendedInternal} onChange={(v) => set("papersAttendedInternal", v)} />
+                    <NumField label="Workshop Participants Attended (External)" value={form.papersAttendedExternal} onChange={(v) => set("papersAttendedExternal", v)} />
                   </div>
                 </div>
               )}
@@ -574,7 +579,7 @@ function RecordFormFields({
             </div>
             <TextInput label="Name of the Journal/Conference" value={form.reviewerPublicationName} onChange={(v) => set("reviewerPublicationName", v)} />
             <TextInput label="Publisher Name" value={form.reviewerPublisherName} onChange={(v) => set("reviewerPublisherName", v)} />
-            <TextInput label="Title of the Paper Reviewed" value={form.reviewerPaperTitle} onChange={(v) => set("reviewerPaperTitle", v)} />
+            <TextInput label="Title of the Paper Reviewed" value={form.reviewerPaperTitle} onChange={(v) => set("reviewerPaperTitle", v)} required />
             <DateInput label="Review Date" value={form.reviewerReviewDate} onChange={(v) => set("reviewerReviewDate", v)} />
             <DocumentUploadField
               label="Review Certificate / Mail"
@@ -610,7 +615,7 @@ function RecordFormFields({
                 </Select>
               </div>
             </div>
-            <TextInput label="Name of the Publication" value={form.editorPublicationName} onChange={(v) => set("editorPublicationName", v)} placeholder="Journal / Book / Proceedings Title" />
+            <TextInput label="Name of the Publication" value={form.editorPublicationName} onChange={(v) => set("editorPublicationName", v)} placeholder="Journal / Book / Proceedings Title" required />
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Publisher</Label>
@@ -643,7 +648,7 @@ function RecordFormFields({
               <Label>Editorial Responsibilities</Label>
               <Textarea value={form.editorResponsibilities} onChange={(e) => set("editorResponsibilities", e.target.value)} rows={2} placeholder="Brief description of work handled" />
             </div>
-            <NumInput label="Number of Papers / Chapters Handled" value={toNumberOrUndefined(form.editorPapersChaptersHandled)} onChange={(v) => set("editorPapersChaptersHandled", String(v))} />
+            <NumField label="Number of Papers / Chapters Handled" value={form.editorPapersChaptersHandled} onChange={(v) => set("editorPapersChaptersHandled", v)} />
             <TextInput label="Publication URL" value={form.editorPublicationUrl} onChange={(v) => set("editorPublicationUrl", v)} />
             <DocumentUploadField
               label="Appointment Letter / Certificate"

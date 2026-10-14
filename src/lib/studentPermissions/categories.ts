@@ -21,6 +21,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
   group("research-projects", "Research & Projects", ["Research activities", "Project participation", "Paper publication/presentation", "Patent activities", "External project work"]),
   group("clubs-activities", "Clubs & Student Activities", ["Club activities", "Student-organized events", "Inter-college activities", "Student societies"]),
   group("placement-career", "Placement & Career", ["Placement drives", "Off-campus drives", "Interviews", "Career fairs", "Placement training"]),
+  group("other", "Other", ["Other"]),
 ];
 
 export const ALL_CATEGORIES: PermissionCategory[] = PERMISSION_GROUPS.flatMap((g) => g.items);

@@ -27,6 +27,7 @@ export const IMPORT_COLUMNS: SubjectCsvColumn[] = [
   { key: "externalMarks", label: "External Marks", required: false, sample: "70", aliases: ["External", "External Max Marks"] },
   { key: "totalMarks", label: "Total Marks", required: false, sample: "100", aliases: ["Total", "Total Max Marks"] },
   { key: "credits", label: "Credits", required: false, sample: "3", aliases: ["Credit", "Credits"] },
+  { key: "universityCode", label: "University Code", required: false, sample: "R232101", aliases: ["Univ Code", "University Subject Code", "JNTU Code", "University Course Code"] },
   { key: "shortCode", label: "Short Code", required: false, sample: "DS", aliases: ["Short Name", "Abbreviation", "Display Code"] },
   { key: "hoursPerWeek", label: "Weekly Hours", required: false, sample: "3", aliases: ["Hours Per Week", "Hours / Week"] },
   { key: "type", label: "Type", required: false, sample: "Theory", aliases: ["Subject Type"] },
@@ -34,6 +35,7 @@ export const IMPORT_COLUMNS: SubjectCsvColumn[] = [
 ];
 
 export const IMPORT_HINTS = [
+  "University Code (optional) is the code the university uses for the subject on its result sheets (e.g. R232101). With it set, the Exam Cell can upload the university's results file as it is. Uploading the file again adds or changes it on subjects already imported.",
   "Each row is one subject. Every row is saved under the regulation, course and department selected above.",
   "Year and Semester are required. Use only the years listed above for this department. 2, II and Year 2 are all read as Year 2. For Semester, use the semester numbers listed for the year (for example 5 or 6), or 1 and 2 for the year's first and second semester.",
   "If any row has a problem, nothing is imported. Fix the file and upload it again.",

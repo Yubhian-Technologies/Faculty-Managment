@@ -10,9 +10,10 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import { useAuthStore } from "@/store/authStore";
-import { PublicationDetailsForm, emptyPublicationDetails, isPublicationDetailsValid } from "@/components/research/PublicationDetailsForm";
+import { PublicationDetailsForm, emptyPublicationDetails, publicationMissingFields } from "@/components/research/PublicationDetailsForm";
 import { externalHref } from "@/lib/publications/externalHref";
 import type { FacultyProfileFields, ResearchPublication, PublicationDetails } from "@/types";
+import { FACT_GRID_COLS_4, FACT_GRID_COLS_5 } from "@/components/shared/factGrid";
 
 const PREVIEW_COUNT = 3;
 
@@ -84,25 +85,31 @@ function PublicationRow({
         // is the primary, display-ready version of this record.
         <p className="text-sm leading-snug">{pub.citation}</p>
       ) : (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <Field label="Title" value={pub.title} />
-          <Field label="Co-Authors" value={pub.coAuthors} />
-          <Field label="Journal / Conference" value={pub.journalOrConference} />
-          <Field label="Year" value={pub.publicationYear} />
+        <div className="@container">
+          <div className={`grid gap-2 ${FACT_GRID_COLS_4}`}>
+            <Field label="Title" value={pub.title} />
+            <Field label="Co-Authors" value={pub.coAuthors} />
+            <Field label="Journal / Conference" value={pub.journalOrConference} />
+            <Field label="Year" value={pub.publicationYear} />
+          </div>
         </div>
       )}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-        {pub.citation && <Field label="Year" value={pub.publicationYear} />}
-        {pub.citation && <Field label="Journal / Conference" value={pub.journalOrConference} />}
-        {extras.map((f) => <Field key={f.label} label={f.label} value={f.value} />)}
+      <div className="@container">
+        <div className={`grid gap-2 ${FACT_GRID_COLS_5}`}>
+          {pub.citation && <Field label="Year" value={pub.publicationYear} />}
+          {pub.citation && <Field label="Journal / Conference" value={pub.journalOrConference} />}
+          {extras.map((f) => <Field key={f.label} label={f.label} value={f.value} />)}
+        </div>
       </div>
       {pub.details && (
         <div className="space-y-1.5 border-t pt-2">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <Field label="Type" value={pub.details.type} />
-            <Field label="Research Domain" value={pub.details.researchDomain} />
-            <Field label="Quartile" value={pub.details.quartile} />
-            <Field label="Internal / External Authors" value={`${pub.details.internalAuthorsCount} / ${pub.details.externalAuthorsCount}`} />
+          <div className="@container">
+            <div className={`grid gap-2 ${FACT_GRID_COLS_4}`}>
+              <Field label="Type" value={pub.details.type} />
+              <Field label="Research Domain" value={pub.details.researchDomain} />
+              <Field label="Quartile" value={pub.details.quartile} />
+              <Field label="Internal / External Authors" value={`${pub.details.internalAuthorsCount} / ${pub.details.externalAuthorsCount}`} />
+            </div>
           </div>
           {pub.details.authors.length > 0 && (
             <div className="space-y-1">
@@ -161,7 +168,8 @@ function PublicationFormFields({
   const [saving, setSaving] = useState(false);
   const editingId = editingPub?.id ?? null;
 
-  const isValid = isPublicationDetailsValid(details);
+  const missing = publicationMissingFields(details);
+  const isValid = missing.length === 0;
 
   async function handleSubmit() {
     if (!isValid) return;
@@ -202,7 +210,12 @@ function PublicationFormFields({
       <div className="flex-1 min-h-0 overflow-y-auto pr-1">
         <PublicationDetailsForm value={details} onChange={setDetails} ownCollegeId={ownCollegeId} />
       </div>
-      <DialogFooter>
+      <DialogFooter className="sm:items-center">
+        {!isValid && (
+          <p className="text-xs text-destructive sm:mr-auto sm:max-w-[60%]" role="status">
+            Required: {missing.slice(0, 6).join(", ")}{missing.length > 6 ? ` and ${missing.length - 6} more` : ""}
+          </p>
+        )}
         <Button variant="outline" onClick={onCancel} disabled={saving}>Cancel</Button>
         <Button onClick={() => void handleSubmit()} loading={saving} disabled={!isValid}>
           {editingId ? "Resubmit" : "Submit"}
@@ -320,18 +333,20 @@ export function PublicationsSection({
       {/* Hidden for now - Research Publications is getting a proper field
           redesign (see ResearchInnovationModule's sub-tabs); re-enable once
           that's in and these are re-decided as part of it, not before.
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Field label="First/Corresponding Author Pubs" value={p.publicationsFirstOrCorrespondingAuthor} />
-        <Field label="Q1 / IF > 4.0 Pubs" value={p.publicationsQ1OrHighImpact} />
-        <Field label="SCI/Scopus Count" value={p.sciScopusCount} />
-        <Field label="WoS (SCIE/ESCI) Count" value={p.wosCount} />
-        <Field label="Conference Papers" value={p.conferencePapersCount} />
-        <Field label="Book Chapters" value={p.bookChaptersCount} />
-        <Field label="Review Publications" value={p.reviewPublicationsCount} />
-        <Field label="Total Publications" value={p.totalPublications} />
-        <Field label="Total Citations" value={p.totalCitations} />
-        <Field label="H-Index" value={p.hIndex} />
-        <Field label="i10-Index" value={p.i10Index} />
+      <div className="@container">
+        <div className={`grid gap-3 ${FACT_GRID_COLS_4}`}>
+          <Field label="First/Corresponding Author Pubs" value={p.publicationsFirstOrCorrespondingAuthor} />
+          <Field label="Q1 / IF > 4.0 Pubs" value={p.publicationsQ1OrHighImpact} />
+          <Field label="SCI/Scopus Count" value={p.sciScopusCount} />
+          <Field label="WoS (SCIE/ESCI) Count" value={p.wosCount} />
+          <Field label="Conference Papers" value={p.conferencePapersCount} />
+          <Field label="Book Chapters" value={p.bookChaptersCount} />
+          <Field label="Review Publications" value={p.reviewPublicationsCount} />
+          <Field label="Total Publications" value={p.totalPublications} />
+          <Field label="Total Citations" value={p.totalCitations} />
+          <Field label="H-Index" value={p.hIndex} />
+          <Field label="i10-Index" value={p.i10Index} />
+        </div>
       </div>
       */}
 

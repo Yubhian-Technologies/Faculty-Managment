@@ -3,5 +3,5 @@
 import { PermissionsWorkspace } from "@/components/studentPermissions/PermissionsWorkspace";
 
 export default function Page() {
-  return <PermissionsWorkspace mode="student" tabs={["new", "mine"]} title="Permissions" description="Request permission for events, certifications, internships and more. Once approved, your attendance is marked On Duty for those days." />;
+  return <PermissionsWorkspace mode="student" tabs={["new", "mine", "section"]} title="Permissions" description="Submit and track student permission requests for academic activities, events, and internships." />;
 }

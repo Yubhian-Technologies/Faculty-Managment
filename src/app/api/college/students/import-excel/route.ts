@@ -12,7 +12,7 @@ import { StudentLoginError, provisionStudentLogin } from "@/lib/students/provisi
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { resolveDepartmentByNameOrCode, resolveCourseByNameOrCode, isConfiguredSecondaryDepartmentOrChild } from "@/lib/departments/codeOrNameResolver";
 import { resolveBranchYearOwner, resolveFreshmanLandingDepartment, type DepartmentYearRow } from "@/lib/departments/managedBranches";
-import { freshmanLandingDepartmentNames, type DepartmentWithId } from "@/lib/college/academicStructure";
+import { freshmanLandingDepartmentNames, departmentClaimsYearItself, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { isLikelySameUnassignedStudent } from "@/lib/students/duplicateDetection";
 import { loadExistingStudentsForImport } from "@/lib/students/importExisting";
 import { actorOf } from "@/lib/audit/actorOf";
@@ -413,8 +413,7 @@ export async function POST(request: Request) {
         if (passwordProblem) { failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: passwordProblem }); continue; }
       }
 
-      // Roll Number is required only for section-based (placed) rows - the
-      // Office's unassigned import doesn't collect it (checked in that path).
+      // Roll Number is required on every imported row (checked per path below).
       if (!row.name?.trim()) { failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: "Name is required" }); continue; }
       // Section may be blank for an "unassigned" import (a whole branch cohort
       // loaded before its sections exist); such rows must instead name a
@@ -482,7 +481,12 @@ export async function POST(request: Request) {
         // single "Add Student" endpoint enforces (college/students POST) - see
         // freshmanLandingDepartmentNames's own doc-comment for why this is
         // empty (no restriction) for a college with no shared first year.
-        if (Number(row.year) === 1 && freshmanNames.size > 0 && !freshmanNames.has(departmentName!)) {
+        const isFreshmanLandingRow = freshmanNames.size > 0 && freshmanNames.has(departmentName!);
+        // A real branch that has opened its own Years Taught for year 1 no
+        // longer needs the Freshman-department indirection - see
+        // departmentClaimsYearItself's own doc-comment.
+        const ownsYear1DirectlyRow = !isFreshmanLandingRow && departmentClaimsYearItself(allDepartmentsFull, departmentName!, 1);
+        if (Number(row.year) === 1 && freshmanNames.size > 0 && !isFreshmanLandingRow && !ownsYear1DirectlyRow) {
           failed.push({
             row: rowNum, rollNumber: row.rollNumber ?? "-",
             error: `"${departmentName}" is a real branch - 1st Year students must be imported under one of this college's Basic Science (Freshman) departments instead. Put "${departmentName}" in the Core Department column.`,
@@ -544,7 +548,7 @@ export async function POST(request: Request) {
         // before Download Template/Upload even appear (isSecondaryDepartmentRequired,
         // college-office/students/import/page.tsx) - this is the server-side
         // backstop, same as every other rule that page's picker narrows for.
-        if (Number(row.year) === 1 && freshmanNames.size > 0 && !unassignedSecondary) {
+        if (Number(row.year) === 1 && isFreshmanLandingRow && !unassignedSecondary) {
           failed.push({
             row: rowNum, rollNumber: row.rollNumber ?? "-",
             error: "Core Department is required for 1st Year students - name the branch this student will be promoted into.",
@@ -583,10 +587,14 @@ export async function POST(request: Request) {
         const yearDurationError = validateYearForCourseDuration(Number(row.year), resolvedCourseDoc?.durationYears, resolvedCourse);
         if (yearDurationError) { failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: yearDurationError }); continue; }
 
-        // De-dupe by roll (unique college-wide - see below). Roll Number is OPTIONAL: the Office often enrols students
-        // before roll numbers exist and sets them later (matched by Student Mobile No). A roll-less row is de-duped by
-        // its mobile number above, and by the name + corroborating-detail check below.
-        const roll = row.rollNumber?.trim() ?? "";
+        // De-dupe by roll (unique across all colleges - see below). Roll Number is REQUIRED in the bulk import: the
+        // file is the college's own admission sheet, which always carries it. (It stays optional on the single Add
+        // Student form, so the roll-less handling further down is still what that path's records look like.)
+        const roll = row.rollNumber == null ? "" : String(row.rollNumber).trim();
+        if (!roll) {
+          failed.push({ row: rowNum, rollNumber: "-", error: "Roll No is required" });
+          continue;
+        }
         const nameLower = row.name.trim().toLowerCase();
         const year = Number(row.year);
         const nameKey = `${nameLower}::${departmentName!.toLowerCase()}::${year}`;
@@ -760,7 +768,11 @@ export async function POST(request: Request) {
         continue;
       }
 
-      const roll = (row.rollNumber ?? "").trim();
+      const roll = row.rollNumber == null ? "" : String(row.rollNumber).trim();
+      if (!roll) {
+        failed.push({ row: rowNum, rollNumber: "-", error: "Roll No is required" });
+        continue;
+      }
       // Unique across the whole college, not just this section - held by any
       // saved student or an earlier row of this same file.
       const placedRollHolder = roll ? rollRegistry.holder(roll) : undefined;

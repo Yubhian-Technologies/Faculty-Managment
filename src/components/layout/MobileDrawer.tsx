@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { X, LogOut } from "lucide-react";
+import { X, LogOut, ChevronDown } from "lucide-react";
 import { cn, getInitials } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
 import { useUIStore } from "@/store/uiStore";
@@ -20,6 +20,7 @@ import { readOnlyNavItems } from "./readOnlyNav";
 import { LocationDeptSwitcher } from "./LocationDeptSwitcher";
 import { useWorkContext } from "@/hooks/useWorkContext";
 import { ROLE_LABELS } from "@/types";
+import { UserCardSubtitle } from "./UserCardSubtitle";
 
 const INTERVIEW_NAV_ITEM: NavItem = {
   label: "My Interviews",
@@ -45,8 +46,10 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
   const { coordinatorBatchId } = useAssignedCoordinator();
   const { hideSubDepartmentsLink } = useIsSubDepartmentHod();
   const { pendingCount: pendingHiringCount } = usePrincipalPendingHiring();
-  const { items: contextItems } = useWorkContext();
+  const { items: contextItems, active: activeContext } = useWorkContext();
   const { apply: applyCustomNav } = useCustomNav();
+  // Groups the user folded shut (keyed by section title) - same behaviour as the desktop sidebar.
+  const [closedGroups, setClosedGroups] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setSidebarOpen(false);
@@ -73,6 +76,11 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
     .filter((item) => !hideSubDepartmentsLink || item.href !== "/hod/settings/sub-departments");
   let navItems = baseNavItems;
   {
+    // "My Interviews" and "Demo Session" belong to the person, not to a seat: they are offered only
+    // in the context they can actually be opened from. Injecting them into a seat's context (Principal,
+    // HOD...) showed them twice, and opening one bounced to "My Work" because that context owns the page.
+    // (Panel scoring is reached from the seat's own pipeline board, and from My Work.)
+    const inSeatContext = !!activeContext && activeContext !== "ME";
     const injected: NavItem[] = [];
     // Skip roles that already have a static "Panel Scoring" tab in navConfig,
     // and roles whose own hiring-pipeline board already links into panel scoring.
@@ -80,12 +88,13 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
     if (
       hasInterviews &&
       !isInterviewHidden &&
+      !inSeatContext &&
       !ROLES_WITH_EMBEDDED_PANEL_ACCESS.has(user.role) &&
       !baseNavItems.some((i) => i.href === INTERVIEW_NAV_ITEM.href)
     ) {
       injected.push({ ...INTERVIEW_NAV_ITEM, roles: [user.role] });
     }
-    if (coordinatorBatchId) {
+    if (coordinatorBatchId && !inSeatContext) {
       injected.push({
         label: "Demo Session",
         href: `/coordinator/${coordinatorBatchId}`,
@@ -103,15 +112,29 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
   // RESIGNED/RETIRED: a fixed, view-only menu (see readOnlyNavItems) instead of the normal one.
   if (user.readOnlyAccess) navItems = readOnlyNavItems();
 
+  // A nav item that starts a `section` opens a new group; the items after it belong to it.
+  const groups: { title: string | null; items: NavItem[] }[] = [];
+  for (const item of navItems) {
+    if (item.section || groups.length === 0) groups.push({ title: item.section ?? null, items: [] });
+    groups[groups.length - 1].items.push(item);
+  }
+  const toggleGroup = (title: string) =>
+    setClosedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(title)) next.delete(title); else next.add(title);
+      return next;
+    });
+
   return (
     <>
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-black/60 md:hidden"
-          onClick={() => setSidebarOpen(false)}
-          aria-hidden="true"
-        />
-      )}
+      <div
+        className={cn(
+          "fixed inset-0 z-50 bg-black/60 md:hidden transition-opacity duration-300",
+          sidebarOpen ? "opacity-100" : "opacity-0 pointer-events-none"
+        )}
+        onClick={() => setSidebarOpen(false)}
+        aria-hidden="true"
+      />
       <div
         role="dialog"
         aria-modal="true"
@@ -125,7 +148,7 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
         <div className="flex items-center justify-between h-16 px-4 border-b shrink-0">
           <div className="flex items-center gap-3">
             <img src="https://res.cloudinary.com/dl88qtudz/image/upload/v1781675822/vishnulogo_r2jsjl.png" alt="Vishnu Logo" className="h-9 w-9 rounded-md object-contain shrink-0" />
-            <div>
+            <div className="min-w-0">
               <p className="text-sm font-bold">Vishnu People</p>
               <p className="text-xs text-muted-foreground">{ROLE_LABELS[user.realRole ?? user.role]}</p>
             </div>
@@ -142,33 +165,53 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
         <WorkContextSwitcher />
         <LocationDeptSwitcher />
 
-        <nav className="flex-1 min-h-0 px-3 py-4 space-y-1 overflow-y-auto overscroll-contain">
-          {navItems.map((item) => {
-            const isActive = isNavItemActive(item, pathname, navItems);
+        <nav className="flex-1 min-h-0 px-3 py-3 overflow-y-auto overscroll-contain">
+          {groups.map((group, gi) => {
+            const hasActive = group.items.some((item) => isNavItemActive(item, pathname, navItems));
+            // Same rule as the desktop sidebar: a folded group still shows the open page.
+            const open = !group.title || !closedGroups.has(group.title) || hasActive;
             return (
-              <div key={item.href}>
-                {item.section && (
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-3 pt-4 pb-1">
-                    {item.section}
-                  </p>
+              <div key={`${group.title ?? "top"}-${gi}`} className={cn(gi > 0 && "mt-3")}>
+                {group.title && (
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(group.title as string)}
+                    aria-expanded={open}
+                    className="w-full flex items-center justify-between px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-widest hover:text-foreground transition-colors"
+                  >
+                    <span className="truncate">{group.title}</span>
+                    <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-200", !open && "-rotate-90")} />
+                  </button>
                 )}
-                <Link
-                  href={item.href}
-                  className={cn(
-                    "flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-colors",
-                    isActive
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  )}
-                >
-                  <NavIcon name={item.iconName} className="h-5 w-5 shrink-0" />
-                  {item.label}
-                  {item.href === PENDING_HIRING_HREF && pendingHiringCount > 0 && (
-                    <span className="ml-auto bg-red-500 text-white text-xs rounded-full h-5 min-w-5 px-1 flex items-center justify-center font-semibold">
-                      {pendingHiringCount > 99 ? "99+" : pendingHiringCount}
-                    </span>
-                  )}
-                </Link>
+                <div className={cn("grid transition-[grid-template-rows] duration-200 ease-in-out", open ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}>
+                  <div className="overflow-hidden">
+                    <div className="space-y-1 py-0.5">
+                      {group.items.map((item) => {
+                        const isActive = isNavItemActive(item, pathname, navItems);
+                        return (
+                          <Link
+                            key={item.href}
+                            href={item.href}
+                            className={cn(
+                              "flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-all duration-200",
+                              isActive
+                                ? "bg-primary text-primary-foreground shadow-sm"
+                                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                            )}
+                          >
+                            <NavIcon name={item.iconName} className="h-5 w-5 shrink-0" />
+                            <span className="truncate">{item.label}</span>
+                            {item.href === PENDING_HIRING_HREF && pendingHiringCount > 0 && (
+                              <span className="ml-auto bg-red-500 text-white text-xs rounded-full h-5 min-w-5 px-1 flex items-center justify-center font-semibold">
+                                {pendingHiringCount > 99 ? "99+" : pendingHiringCount}
+                              </span>
+                            )}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
               </div>
             );
           })}
@@ -185,7 +228,7 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{user.name}</p>
-              <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+              <UserCardSubtitle user={user} />
             </div>
           </div>
           <button

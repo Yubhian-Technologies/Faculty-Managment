@@ -187,6 +187,7 @@ function HODFacultyContent() {
       // faculty member actually belongs to.
       const params = new URLSearchParams();
       if (status) params.set("status", status);
+      params.set("withSeats", "1");
       const res = await fetch(`/api/college/faculty?${params.toString()}`);
       const data = await res.json() as { faculty: FacultyRow[] };
       setFaculty(data.faculty ?? []);
@@ -537,8 +538,8 @@ function HODFacultyContent() {
         isLoading={isLoading}
         keyExtractor={(r) => r.id as string}
         onRowClick={(row) => router.push(withListBack(`/hod/faculty/${row.id}`, listUrl, LIST_PATH))}
-        searchPlaceholder="Search by name, email, employee ID..."
-        searchKeys={["legalName", "nameAsPerPan", "email", "employeeId", "specialization"] as (keyof FacultyRow)[]}
+        searchPlaceholder="Search by name, email, employee ID, role..."
+        searchKeys={["legalName", "nameAsPerPan", "email", "employeeId", "specialization", "seatLabels"] as (keyof FacultyRow)[]}
         // A separate historical view (date-range filters over Date of
         // Joining/Resignation/Retirement/Retainership dates), not another
         // Faculty status filter - kept beside the search box via DataTable's

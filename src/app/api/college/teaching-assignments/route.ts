@@ -157,13 +157,24 @@ export async function GET(request: Request) {
       // Viewing a specific faculty member's assignments - HOD/Principal/SuperAdmin may look up anyone;
       // everyone else (including a faculty viewing their own "Teaching Load") is restricted to themselves.
       isFacultyView = true;
-      const canViewOthers = ["HOD", "PRINCIPAL", "SUPER_ADMIN"].includes(session.role);
+      // Judged on every role the caller holds, not just the one this request
+      // resolved to: a Principal/HOD/Vice Principal seat on top of a faculty
+      // login can resolve to the faculty role here, and was then handed its
+      // OWN teaching load for someone else's resume.
+      const VIEW_OTHERS_ROLES = ["HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN"];
+      const canViewOthers = [session.role, ...(session.roles ?? [])].some((r) => VIEW_OTHERS_ROLES.includes(r));
       // teachingAssignments/timetableSlots key off the FacultyMember doc id, not
       // the login uid — resolve "myself" through the userUid back-link (see
       // GET /api/college/faculty/me for the same lookup).
-      const facultyId = requestedFacultyId && canViewOthers
+      const ownFacultyId = await resolveFacultyMemberId(db, session.collegeId, session.uid);
+      // A specific person was asked for: never quietly answer with the caller's
+      // own load instead (that is what mixed into other people's resumes).
+      if (requestedFacultyId && !canViewOthers && requestedFacultyId !== ownFacultyId) {
+        return NextResponse.json({ error: "You can only view your own teaching load" }, { status: 403 });
+      }
+      const facultyId = requestedFacultyId && (canViewOthers || requestedFacultyId === ownFacultyId)
         ? requestedFacultyId
-        : await resolveFacultyMemberId(db, session.collegeId, session.uid);
+        : ownFacultyId;
 
       assignmentQuery = assignmentQuery.where("facultyId", "==", facultyId);
 

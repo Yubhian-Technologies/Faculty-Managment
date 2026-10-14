@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ExternalLink, Plus, Pencil } from "lucide-react";
-import { Section, SubLabel, Field, TextInput, NumInput, RepeatingGroup } from "@/components/shared/ProfileFieldPrimitives";
+import { Section, SubLabel, Field, TextInput, NumField, RepeatingGroup, RequiredMark } from "@/components/shared/ProfileFieldPrimitives";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -13,7 +13,9 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
+import { innovationMissingFields } from "@/lib/research/innovationValidation";
 import type { InnovationFacultyItem, InnovationRequest, InnovationType, InnovatorType } from "@/types";
+import { FACT_GRID_COLS_4 } from "@/components/shared/factGrid";
 
 const PREVIEW_COUNT = 3;
 const EMPTY_FACULTY: InnovationFacultyItem = { name: "", department: "", contribution: "" };
@@ -39,19 +41,21 @@ function InnovationRow({
 }) {
   return (
     <div className="rounded-md border bg-muted/20 shadow-sm p-2 space-y-2">
-      {isOwnProfile && record.status !== "APPROVED" && (
+      {isOwnProfile && (
         <div className="flex items-center gap-2">
-          {record.status === "PENDING" || record.status === "COORDINATOR_REVIEW" ? (
-            <Badge variant="pending" className="text-xs">{record.status === "COORDINATOR_REVIEW" ? "With R&D Coordinator" : "Pending Verification"}</Badge>
-          ) : (
-            <>
-              <Badge variant="rejected" className="text-xs">{record.status === "SENT_BACK" ? "Sent Back" : "Rejected"}</Badge>
-              {onEdit && (
-                <button type="button" onClick={() => onEdit(record)} className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1">
-                  <Pencil className="h-3 w-3" />Edit &amp; Resubmit
-                </button>
-              )}
-            </>
+          {record.status === "PENDING" && <Badge variant="pending" className="text-xs">Pending Verification</Badge>}
+          {record.status === "COORDINATOR_REVIEW" && <Badge variant="pending" className="text-xs">With R&amp;D Coordinator</Badge>}
+          {record.status === "REJECTED" && <Badge variant="rejected" className="text-xs">Rejected</Badge>}
+          {record.status === "SENT_BACK" && <Badge variant="rejected" className="text-xs">Sent Back</Badge>}
+          {onEdit && (
+            <button type="button" onClick={() => onEdit(record)} className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1">
+              <Pencil className="h-3 w-3" />
+              {record.status === "REJECTED" || record.status === "SENT_BACK"
+                ? "Edit & Resubmit"
+                : record.status === "PENDING" || record.status === "COORDINATOR_REVIEW"
+                  ? "Edit"
+                  : "Edit (sends for re-verification)"}
+            </button>
           )}
         </div>
       )}
@@ -61,15 +65,17 @@ function InnovationRow({
       {record.status === "SENT_BACK" && record.sentBackReason && (
         <p className="text-xs text-destructive">Sent back: {record.sentBackReason}</p>
       )}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Field label="Title" value={record.innovationTitle} />
-        <Field label="Type" value={INNOVATION_TYPE_LABELS[record.innovationType]} />
-        <Field label="Innovator" value={record.innovatorType === "STUDENT" ? record.studentName : "Faculty"} />
-        <Field label="A.Y." value={record.academicYear} />
-        <Field label="TRL Level" value={record.trlLevel} />
-        <Field label="Prototype Developed" value={record.prototypeDeveloped} />
-        <Field label="Start-up Formed" value={record.startupFormed} />
-        <Field label="Presented in Competition" value={record.presentedInCompetition} />
+      <div className="@container">
+        <div className={`grid gap-2 ${FACT_GRID_COLS_4}`}>
+          <Field label="Title" value={record.innovationTitle} />
+          <Field label="Type" value={INNOVATION_TYPE_LABELS[record.innovationType]} />
+          <Field label="Innovator" value={record.innovatorType === "STUDENT" ? record.studentName : "Faculty"} />
+          <Field label="A.Y." value={record.academicYear} />
+          <Field label="TRL Level" value={record.trlLevel} />
+          <Field label="Prototype Developed" value={record.prototypeDeveloped} />
+          <Field label="Start-up Formed" value={record.startupFormed} />
+          <Field label="Presented in Competition" value={record.presentedInCompetition} />
+        </div>
       </div>
       {record.briefDescription && (
         <div>
@@ -163,9 +169,11 @@ function RecordFormFields({
     setForm((f) => ({ ...f, [key]: value }));
   }
 
-  const isValid =
-    form.academicYear.trim().length > 1 && !!form.innovatorType &&
-    form.innovationTitle.trim().length > 1 && !!form.innovationType;
+  const missing = innovationMissingFields({
+    ...form,
+    facultyInvolvedCount: toNumberOrUndefined(form.facultyInvolvedCount),
+  });
+  const isValid = missing.length === 0;
 
   async function handleSubmit() {
     if (!isValid) return;
@@ -240,7 +248,7 @@ function RecordFormFields({
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <TextInput label="Academic Year" value={form.academicYear} onChange={(v) => set("academicYear", v)} placeholder="e.g. 2024-25" required />
             <div className="space-y-2">
-              <Label>Type of Innovation <span className="text-destructive">*</span></Label>
+              <Label>Type of Innovation<RequiredMark required /></Label>
               <Select value={form.innovatorType} onValueChange={(v) => set("innovatorType", v as InnovatorType)}>
                 <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                 <SelectContent>
@@ -253,7 +261,7 @@ function RecordFormFields({
 
           {form.innovatorType === "FACULTY" && (
             <div className="space-y-4 rounded-lg border p-3">
-              <NumInput label="No. of Faculty Involved" value={toNumberOrUndefined(form.facultyInvolvedCount)} onChange={(v) => set("facultyInvolvedCount", String(v))} required />
+              <NumField label="No. of Faculty Involved" value={form.facultyInvolvedCount} onChange={(v) => set("facultyInvolvedCount", v)} required />
               <RepeatingGroup
                 title="Faculty Involved"
                 items={form.facultyMembers}
@@ -291,7 +299,7 @@ function RecordFormFields({
           <TextInput label="Innovation Title" value={form.innovationTitle} onChange={(v) => set("innovationTitle", v)} required />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label>Innovation Type <span className="text-destructive">*</span></Label>
+              <Label>Innovation Type<RequiredMark required /></Label>
               <Select value={form.innovationType} onValueChange={(v) => set("innovationType", v as InnovationType)}>
                 <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                 <SelectContent>
@@ -300,7 +308,7 @@ function RecordFormFields({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>TRL Level <span className="text-destructive">*</span></Label>
+              <Label>TRL Level<RequiredMark required /></Label>
               <Select value={form.trlLevel} onValueChange={(v) => set("trlLevel", v)}>
                 <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                 <SelectContent>
@@ -310,11 +318,11 @@ function RecordFormFields({
             </div>
           </div>
           <div className="space-y-2">
-            <Label>Problem Statement <span className="text-destructive">*</span></Label>
+            <Label>Problem Statement<RequiredMark required /></Label>
             <Textarea value={form.problemStatement} onChange={(e) => set("problemStatement", e.target.value)} rows={2} placeholder="Problem addressed by the idea" />
           </div>
           <div className="space-y-2">
-            <Label>Brief Description <span className="text-destructive">*</span></Label>
+            <Label>Brief Description<RequiredMark required /></Label>
             <Textarea value={form.briefDescription} onChange={(e) => set("briefDescription", e.target.value)} rows={3} placeholder="Short description of the innovation" />
           </div>
         </div>
@@ -324,7 +332,7 @@ function RecordFormFields({
         <div className="space-y-4">
           <SubLabel>Development Status</SubLabel>
           <div className="space-y-2 max-w-[200px]">
-            <Label>Prototype Developed <span className="text-destructive">*</span></Label>
+            <Label>Prototype Developed<RequiredMark required /></Label>
             <Select value={form.prototypeDeveloped} onValueChange={(v) => set("prototypeDeveloped", v as "YES" | "NO")}>
               <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
               <SelectContent>
@@ -335,13 +343,13 @@ function RecordFormFields({
           </div>
           {form.prototypeDeveloped === "YES" && (
             <div className="space-y-2">
-              <Label>Prototype Details <span className="text-destructive">*</span></Label>
+              <Label>Prototype Details<RequiredMark required /></Label>
               <Textarea value={form.prototypeDetails} onChange={(e) => set("prototypeDetails", e.target.value)} rows={2} placeholder="Description of developed prototype" />
             </div>
           )}
 
           <div className="space-y-2 max-w-[200px]">
-            <Label>Business Model Developed <span className="text-destructive">*</span></Label>
+            <Label>Business Model Developed<RequiredMark required /></Label>
             <Select value={form.businessModelDeveloped} onValueChange={(v) => set("businessModelDeveloped", v as "YES" | "NO")}>
               <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
               <SelectContent>
@@ -352,13 +360,13 @@ function RecordFormFields({
           </div>
           {form.businessModelDeveloped === "YES" && (
             <div className="space-y-2">
-              <Label>Business Model Details <span className="text-destructive">*</span></Label>
+              <Label>Business Model Details<RequiredMark required /></Label>
               <Textarea value={form.businessModelDetails} onChange={(e) => set("businessModelDetails", e.target.value)} rows={2} placeholder="Description of Business Model" />
             </div>
           )}
 
           <div className="space-y-2 max-w-[200px]">
-            <Label>Start-up Formed <span className="text-destructive">*</span></Label>
+            <Label>Start-up Formed<RequiredMark required /></Label>
             <Select value={form.startupFormed} onValueChange={(v) => set("startupFormed", v as "YES" | "NO")}>
               <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
               <SelectContent>
@@ -379,7 +387,7 @@ function RecordFormFields({
         <div className="space-y-4">
           <SubLabel>YUKTI</SubLabel>
           <div className="space-y-2 max-w-[200px]">
-            <Label>Verified &amp; Recommended in YUKTI <span className="text-destructive">*</span></Label>
+            <Label>Verified &amp; Recommended in YUKTI<RequiredMark required /></Label>
             <Select
               value={form.verifiedRecommendedYukti}
               onValueChange={(v) => {
@@ -418,7 +426,7 @@ function RecordFormFields({
         <div className="space-y-4">
           <SubLabel>Competition</SubLabel>
           <div className="space-y-2 max-w-[200px]">
-            <Label>Presented in any Competition <span className="text-destructive">*</span></Label>
+            <Label>Presented in any Competition<RequiredMark required /></Label>
             <Select value={form.presentedInCompetition} onValueChange={(v) => set("presentedInCompetition", v as "YES" | "NO")}>
               <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
               <SelectContent>
@@ -436,13 +444,18 @@ function RecordFormFields({
         </div>
 
         <div className="space-y-2">
-          <Label>Remarks <span className="text-destructive">*</span></Label>
+          <Label>Remarks<RequiredMark required /></Label>
           <Textarea value={form.remarks} onChange={(e) => set("remarks", e.target.value)} rows={2} placeholder="Additional information" />
         </div>
       </div>
       </div>
       </div>
-      <DialogFooter>
+      <DialogFooter className="sm:items-center">
+        {!isValid && (
+          <p className="text-xs text-destructive sm:mr-auto sm:max-w-[60%]" role="status">
+            Required: {missing.slice(0, 6).join(", ")}{missing.length > 6 ? ` and ${missing.length - 6} more` : ""}
+          </p>
+        )}
         <Button variant="outline" onClick={onCancel} disabled={saving}>Cancel</Button>
         <Button onClick={() => void handleSubmit()} loading={saving} disabled={!isValid}>
           {editingId ? "Resubmit" : "Submit"}

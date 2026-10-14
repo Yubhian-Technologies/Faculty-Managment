@@ -7,13 +7,14 @@ const base = { categoryId: "external-participation.hackathons", title: "Smart In
 
 describe("categories", () => {
   it("has stable ids, group routing keys and no duplicates", () => {
-    expect(PERMISSION_GROUPS).toHaveLength(8);
+    expect(PERMISSION_GROUPS).toHaveLength(9);
     expect(new Set(ALL_CATEGORIES.map((c) => c.id)).size).toBe(ALL_CATEGORIES.length);
     const c = findCategory("external-participation.hackathons")!;
     expect(c).toMatchObject({ label: "Hackathons", groupId: "external-participation" });
     expect(categoryTypeKeys(c)).toEqual(["external-participation.hackathons", "external-participation"]);
     expect(findCategory("nope")).toBeUndefined();
     expect(findCategory("research-projects.paper-publication-presentation")).toBeDefined();
+    expect(findCategory("other.other")).toBeDefined();
   });
 });
 
@@ -50,6 +51,10 @@ describe("dates", () => {
 describe("checkLimits", () => {
   const ok = { studentCount: 1, typeDisabled: false };
   it("passes a compliant request", () => expect(checkLimits(base, DEFAULT_LIMITS, ok)).toEqual([]));
+  it("requires otherCategory when categoryId is other.other", () => {
+    expect(checkLimits({ ...base, categoryId: "other.other" }, DEFAULT_LIMITS, ok)).toEqual(["Specify the custom permission type"]);
+    expect(checkLimits({ ...base, categoryId: "other.other", otherCategory: "Blood Donation" }, DEFAULT_LIMITS, ok)).toEqual([]);
+  });
   it("reports every problem it finds", () => {
     const errs = checkLimits({ ...base, categoryId: "zzz", toDate: "2026-12-30", proof: [] }, DEFAULT_LIMITS, { studentCount: 0, typeDisabled: false });
     expect(errs.join("|")).toMatch(/valid permission type/);

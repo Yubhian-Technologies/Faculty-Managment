@@ -3,8 +3,7 @@
 import { useEffect, useState } from "react";
 import { ExternalLink, Plus, Pencil } from "lucide-react";
 import {
-  Section, SubLabel, Field, TextInput, NumInput, DateInput, TableRepeatingGroup,
-} from "@/components/shared/ProfileFieldPrimitives";
+  Section, SubLabel, Field, TextInput, NumField, DateInput, TableRepeatingGroup, RequiredMark } from "@/components/shared/ProfileFieldPrimitives";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -21,6 +20,7 @@ import type {
   SeedFundingEquipmentItem, SeedFundingPaperItem, SeedFundingPatentItem,
   SeedFundingProjectRequest, SeedFundingProjectStatus, SeedFundingStudentItem,
 } from "@/types";
+import { FACT_GRID_COLS_4 } from "@/components/shared/factGrid";
 
 const PREVIEW_COUNT = 3;
 // Guards against a typo like 1000 spawning a thousand student rows.
@@ -54,19 +54,21 @@ function SeedFundingRow({
 }) {
   return (
     <div className="rounded-md border bg-muted/20 shadow-sm p-2 space-y-2">
-      {isOwnProfile && project.status !== "APPROVED" && (
+      {isOwnProfile && (
         <div className="flex items-center gap-2">
-          {project.status === "PENDING" || project.status === "COORDINATOR_REVIEW" ? (
-            <Badge variant="pending" className="text-xs">{project.status === "COORDINATOR_REVIEW" ? "With R&D Coordinator" : "Pending Verification"}</Badge>
-          ) : (
-            <>
-              <Badge variant="rejected" className="text-xs">{project.status === "SENT_BACK" ? "Sent Back" : "Rejected"}</Badge>
-              {onEdit && (
-                <button type="button" onClick={() => onEdit(project)} className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1">
-                  <Pencil className="h-3 w-3" />Edit &amp; Resubmit
-                </button>
-              )}
-            </>
+          {project.status === "PENDING" && <Badge variant="pending" className="text-xs">Pending Verification</Badge>}
+          {project.status === "COORDINATOR_REVIEW" && <Badge variant="pending" className="text-xs">With R&amp;D Coordinator</Badge>}
+          {project.status === "REJECTED" && <Badge variant="rejected" className="text-xs">Rejected</Badge>}
+          {project.status === "SENT_BACK" && <Badge variant="rejected" className="text-xs">Sent Back</Badge>}
+          {onEdit && (
+            <button type="button" onClick={() => onEdit(project)} className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1">
+              <Pencil className="h-3 w-3" />
+              {project.status === "REJECTED" || project.status === "SENT_BACK"
+                ? "Edit & Resubmit"
+                : project.status === "PENDING" || project.status === "COORDINATOR_REVIEW"
+                  ? "Edit"
+                  : "Edit (sends for re-verification)"}
+            </button>
           )}
         </div>
       )}
@@ -76,15 +78,17 @@ function SeedFundingRow({
       {project.status === "SENT_BACK" && project.sentBackReason && (
         <p className="text-xs text-destructive">Sent back: {project.sentBackReason}</p>
       )}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Field label="Title" value={project.title} />
-        <Field label="PI" value={project.piName} />
-        <Field label="Dept. of PI" value={project.piDepartment} />
-        <Field label="Status" value={project.projectStatus === "SANCTIONED" ? "Sanctioned" : "Completed"} />
-        <Field label="Duration (Months)" value={project.durationMonths} />
-        <Field label="Total Amount Sanctioned (Rs.)" value={project.totalAmountSanctioned} />
-        <Field label="Recurring (Rs.)" value={project.recurringAmount} />
-        <Field label="Non-Recurring (Rs.)" value={project.nonRecurringAmount} />
+      <div className="@container">
+        <div className={`grid gap-2 ${FACT_GRID_COLS_4}`}>
+          <Field label="Title" value={project.title} />
+          <Field label="PI" value={project.piName} />
+          <Field label="Dept. of PI" value={project.piDepartment} />
+          <Field label="Status" value={project.projectStatus === "SANCTIONED" ? "Sanctioned" : "Completed"} />
+          <Field label="Duration (Months)" value={project.durationMonths} />
+          <Field label="Total Amount Sanctioned (Rs.)" value={project.totalAmountSanctioned} />
+          <Field label="Recurring (Rs.)" value={project.recurringAmount} />
+          <Field label="Non-Recurring (Rs.)" value={project.nonRecurringAmount} />
+        </div>
       </div>
       {project.objectives && (
         <div>
@@ -92,11 +96,13 @@ function SeedFundingRow({
           <p className="text-sm">{project.objectives}</p>
         </div>
       )}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Field label="Equipment Procured" value={project.equipmentProcured.length} />
-        <Field label="Papers Published" value={project.papersPublished.length} />
-        <Field label="Patents Filed/Published/Granted" value={project.patents.length} />
-        <Field label="Students Trained" value={project.studentsTrainedCount} />
+      <div className="@container">
+        <div className={`grid gap-2 ${FACT_GRID_COLS_4}`}>
+          <Field label="Equipment Procured" value={project.equipmentProcured.length} />
+          <Field label="Papers Published" value={project.papersPublished.length} />
+          <Field label="Patents Filed/Published/Granted" value={project.patents.length} />
+          <Field label="Students Trained" value={project.studentsTrainedCount} />
+        </div>
       </div>
       <div className="flex flex-wrap gap-3">
         {project.progressReportUrl && (
@@ -296,10 +302,10 @@ function ProjectFormFields({
       <div className="space-y-5">
         <div className="space-y-4">
           <SubLabel>Overview</SubLabel>
-          <TextInput label="Title of the Project" value={form.title} onChange={(v) => set("title", v)} />
-          <NumInput label="Duration (Months)" value={toNumberOrUndefined(form.durationMonths)} onChange={(v) => set("durationMonths", String(v))} />
+          <TextInput label="Title of the Project" value={form.title} onChange={(v) => set("title", v)} required />
+          <NumField label="Duration (Months)" value={form.durationMonths} onChange={(v) => set("durationMonths", v)} />
           <div className="space-y-2">
-            <Label>Objectives of the Project</Label>
+            <Label>Objectives of the Project<RequiredMark required /></Label>
             <Textarea value={form.objectives} onChange={(e) => set("objectives", e.target.value)} rows={3} />
           </div>
           <div className="space-y-2">
@@ -307,7 +313,7 @@ function ProjectFormFields({
             <Textarea value={form.tentativeOutcomes} onChange={(e) => set("tentativeOutcomes", e.target.value)} rows={2} />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <TextInput label="Name of the PI" value={form.piName} onChange={(v) => set("piName", v)} />
+            <TextInput label="Name of the PI" value={form.piName} onChange={(v) => set("piName", v)} required />
             <TextInput label="Dept. of PI" value={form.piDepartment} onChange={(v) => set("piDepartment", v)} />
           </div>
         </div>
@@ -315,7 +321,7 @@ function ProjectFormFields({
         <div className="space-y-4">
           <SubLabel>Status &amp; Funding</SubLabel>
           <div className="space-y-2">
-            <Label>Status</Label>
+            <Label>Status<RequiredMark required /></Label>
             <Select value={form.projectStatus} onValueChange={(v) => set("projectStatus", v as SeedFundingProjectStatus)}>
               <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
               <SelectContent>
@@ -332,9 +338,9 @@ function ProjectFormFields({
             </div>
           )}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <NumInput label="Total Amount Sanctioned (Rs.)" value={toNumberOrUndefined(form.totalAmountSanctioned)} onChange={(v) => set("totalAmountSanctioned", String(v))} />
-            <NumInput label="Recurring (Rs.)" value={toNumberOrUndefined(form.recurringAmount)} onChange={(v) => set("recurringAmount", String(v))} />
-            <NumInput label="Non-Recurring (Rs.)" value={toNumberOrUndefined(form.nonRecurringAmount)} onChange={(v) => set("nonRecurringAmount", String(v))} />
+            <NumField label="Total Amount Sanctioned (Rs.)" value={form.totalAmountSanctioned} onChange={(v) => set("totalAmountSanctioned", v)} />
+            <NumField label="Recurring (Rs.)" value={form.recurringAmount} onChange={(v) => set("recurringAmount", v)} />
+            <NumField label="Non-Recurring (Rs.)" value={form.nonRecurringAmount} onChange={(v) => set("nonRecurringAmount", v)} />
           </div>
         </div>
 
@@ -454,13 +460,13 @@ function ProjectFormFields({
           <div className="space-y-2">
             <SubLabel>Students Projects Executed</SubLabel>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <NumInput label="UG" value={toNumberOrUndefined(form.studentsProjectsUG)} onChange={(v) => set("studentsProjectsUG", String(v))} />
-              <NumInput label="PG" value={toNumberOrUndefined(form.studentsProjectsPG)} onChange={(v) => set("studentsProjectsPG", String(v))} />
-              <NumInput label="Ph.D." value={toNumberOrUndefined(form.studentsProjectsPhD)} onChange={(v) => set("studentsProjectsPhD", String(v))} />
+              <NumField label="UG" value={form.studentsProjectsUG} onChange={(v) => set("studentsProjectsUG", v)} />
+              <NumField label="PG" value={form.studentsProjectsPG} onChange={(v) => set("studentsProjectsPG", v)} />
+              <NumField label="Ph.D." value={form.studentsProjectsPhD} onChange={(v) => set("studentsProjectsPhD", v)} />
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <NumInput label="No. of Students Trained" value={toNumberOrUndefined(form.studentsTrainedCount)} onChange={(v) => set("studentsTrainedCount", String(v))} />
-              <NumInput label="No. of External Funded Proposals Applied" value={toNumberOrUndefined(form.externalFundedProposalsApplied)} onChange={(v) => set("externalFundedProposalsApplied", String(v))} />
+              <NumField label="No. of Students Trained" value={form.studentsTrainedCount} onChange={(v) => set("studentsTrainedCount", v)} />
+              <NumField label="No. of External Funded Proposals Applied" value={form.externalFundedProposalsApplied} onChange={(v) => set("externalFundedProposalsApplied", v)} />
             </div>
           </div>
         </div>

@@ -16,6 +16,8 @@ interface DocumentUploadFieldProps {
   onUploaded: (url: string) => void;
   onRemoved: () => void;
   className?: string;
+  /** Marks the field with the same red asterisk the form inputs use. */
+  required?: boolean;
 }
 
 export function DocumentUploadField({
@@ -26,6 +28,7 @@ export function DocumentUploadField({
   onUploaded,
   onRemoved,
   className,
+  required,
 }: DocumentUploadFieldProps) {
   const { toast } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -63,7 +66,7 @@ export function DocumentUploadField({
 
   return (
     <div className={cn("space-y-1.5", className)}>
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className="text-xs font-medium text-muted-foreground">{label}{required && <span className="text-destructive"> *</span>}</p>
 
       {value ? (
         <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2">

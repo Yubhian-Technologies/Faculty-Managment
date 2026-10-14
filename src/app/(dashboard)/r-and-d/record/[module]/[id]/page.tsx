@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ResearchRecordDetails } from "@/components/research/ResearchRecordDetails";
+import { PendingChangesPanel } from "@/components/research/PendingChangesPanel";
 import { RESEARCH_MODULES } from "@/lib/research/modules";
 import { RESEARCH_FIELD_LABELS } from "@/lib/research/fieldLabels";
 import {
@@ -112,7 +113,10 @@ export default function ResearchRecordPage({
     queryKey: ["research-record", moduleSlug, id],
     enabled: !!config,
     queryFn: async () => {
-      const res = await fetch(`/api/college/${config!.apiPath}`);
+      // ?scope=all: this page is opened from R&D's queue, so the record being
+      // looked at is usually someone else's. Without it the endpoint answers
+      // with the viewer's OWN records and the row reads as not found.
+      const res = await fetch(`/api/college/${config!.apiPath}?scope=all`);
       const data = await res.json() as Record<string, unknown>;
       if (!res.ok) throw new Error("Failed to load this record");
       const list = (data[config!.responseKey] ?? []) as RecordShape[];
@@ -205,6 +209,9 @@ export default function ResearchRecordPage({
               )}
             </CardContent>
           </Card>
+
+          {/* Edited after R&D verified it: exactly which fields moved, before -> after. */}
+          <PendingChangesPanel record={record} />
 
           <Card>
             <CardContent className="p-4">

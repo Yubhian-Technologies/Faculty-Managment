@@ -50,6 +50,10 @@ export type UserRole =
   | "RND_COORDINATOR"
   | "PLACEMENT_DEPT"
   | "LIBRARY"
+  | "HOSTEL"
+  // Physical Education Director - clears sports kit/equipment dues, a 4th
+  // No-Due clearance branch alongside Library/Hostel/Placement.
+  | "PD"
   | "EXAM_CELL"
   | "WEBMASTER"
   | "COLLEGE_ACCOUNTS"
@@ -83,6 +87,8 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   RND_COORDINATOR: "R&D Coordinator",
   PLACEMENT_DEPT: "Placement Department",
   LIBRARY: "Library",
+  HOSTEL: "Hostel",
+  PD: "Physical Education Director",
   EXAM_CELL: "Exam Cell",
   WEBMASTER: "Webmaster",
   COLLEGE_ACCOUNTS: "College Accounts",
@@ -105,7 +111,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 // the one Principal-tier role a Principal itself appoints).
 export const MANAGEABLE_STAFF_ROLES: UserRole[] = [
   "HOD", "DEPARTMENT_OFFICE", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_ADMIN", "COLLEGE_STAFF",
-  "ACADEMICS", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "RND_COORDINATOR", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL",
+  "ACADEMICS", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "RND_COORDINATOR", "PLACEMENT_DEPT", "LIBRARY", "HOSTEL", "PD", "EXAM_CELL",
   "PANEL_MEMBER", "WEBMASTER", "COLLEGE_ACCOUNTS",
 ];
 
@@ -132,6 +138,8 @@ export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   RND_COORDINATOR: "/rnd-coordinator",
   PLACEMENT_DEPT: "/placement-dept",
   LIBRARY: "/library",
+  HOSTEL: "/hostel",
+  PD: "/pd",
   EXAM_CELL: "/exam-cell",
   WEBMASTER: "/webmaster",
   COLLEGE_ACCOUNTS: "/college-accounts",
@@ -176,6 +184,8 @@ export const ROLE_LEVEL: Record<UserRole, 0 | 1 | 2 | 3 | 4 | 5 | 6> = {
   RND_COORDINATOR: 4,
   PLACEMENT_DEPT: 4,
   LIBRARY: 4,
+  HOSTEL: 4,
+  PD: 4,
   EXAM_CELL: 4,
   WEBMASTER: 4,
   COLLEGE_ACCOUNTS: 4,
@@ -226,6 +236,8 @@ export const ROLE_SCOPE: Record<UserRole, RoleScope> = {
   RND_COORDINATOR: "COLLEGE",
   PLACEMENT_DEPT: "COLLEGE",
   LIBRARY: "COLLEGE",
+  HOSTEL: "COLLEGE",
+  PD: "COLLEGE",
   EXAM_CELL: "COLLEGE",
   WEBMASTER: "COLLEGE",
   COLLEGE_ACCOUNTS: "COLLEGE",
@@ -1306,13 +1318,18 @@ export type DegreeType = "B.Tech" | "BE" | "M.Tech" | "ME";
 
 export interface DegreeDetail {
   domain?: string; // Management / Engineering / Arts & Science / Medicine / Law / Others - not applicable to School/Intermediate
-  course: string; // UI label "Course" at every level (blank for Doctoral, which uses specialization instead)
+  course: string; // UI label "Course" (school levels / Postdoc); "Degree" on UG/PG. Blank for Doctoral, which uses specialization instead
   // UG/PG only, and only when course is "B.Tech/BE" (B.Tech | BE) or "M.Tech/ME" (M.Tech | ME) -
   // which of the two the qualification actually is. Required then (see lib/faculty/degreeType.ts); absent for every other course.
   degreeType?: DegreeType;
   branch: string;
-  specialization?: string; // Doctoral only - replaces the Course/Branch fields for PhD entries
+  specialization?: string; // Doctoral / Post-Doctoral: replaces the Course/Branch fields. UG/PG: free text after Course/Branch
   board?: string; // School/Intermediate only - the examining board (e.g. "State Board", "CBSE")
+  // Intermediate / Diploma / ITI entry only, one per course (all optional free text, only one is asked at a time):
+  // Intermediate -> `subject` (M.P.C, Bi.P.C ...), Diploma -> `branch` (CIV, EEE, MEC ...; the existing key), ITI -> `trade`
+  // (Fitter, Electrician ...). A value typed under one course stays stored if the course is changed later.
+  subject?: string;
+  trade?: string;
   // UG/PG only - whether institutionName below names a University or an
   // Institute; an Institute is typically affiliated to a University, which
   // affiliatedUniversity records separately.
@@ -2903,6 +2920,14 @@ export interface StudentRecord {
   // assigned, so an unassigned student is a gap the HOD needs to notice and
   // fill in, not something the system guesses.
   labBatch?: string;
+  // Mentoring: the faculty member the HOD assigned to follow this student's
+  // progress. One mentor per student. `mentorUid` is the mentor's LOGIN uid (so
+  // "my mentees" is one equality query); the others are display/audit copies.
+  // Written only by POST /api/college/mentoring/assign; absent = no mentor.
+  mentorUid?: string;
+  mentorName?: string;
+  mentorAssignedBy?: string;
+  mentorAssignedAt?: Timestamp;
   // Firebase Storage download URL, same field name as FacultyMember/FMSUser
   // above - set only via the Add/Edit form's photo upload (StudentFormDialog,
   // same AvatarUploadField Faculty uses) and its own small PATCH branch
@@ -2970,6 +2995,39 @@ export interface StudentRecord {
   bankName?: string;
   ifscCode?: string;
   lastAttendedInstitution?: string;
+  // Admission-sheet details kept as typed (see rosterFields.ts's
+  // ADMISSION_SHEET_TEXT_KEYS): seat type, parents' occupation / income, and
+  // one block per previous qualification (SSC, Inter, Diploma, Degree).
+  seatType?: string;
+  fatherOccupation?: string;
+  motherOccupation?: string;
+  annualIncome?: string;
+  sscHallTicketNo?: string;
+  sscBoard?: string;
+  sscYearOfPass?: string;
+  sscMarks?: string;
+  sscPercentage?: string;
+  sscInstitution?: string;
+  sscGradePoints?: string;
+  interHallTicketNo?: string;
+  interBoard?: string;
+  interYearOfPass?: string;
+  interMarks?: string;
+  interPercentage?: string;
+  interInstitution?: string;
+  interGradePoints?: string;
+  diplomaHallTicketNo?: string;
+  diplomaBoard?: string;
+  diplomaYearOfPass?: string;
+  diplomaMarks?: string;
+  diplomaPercentage?: string;
+  diplomaInstitution?: string;
+  degreeHallTicketNo?: string;
+  degreeBoard?: string;
+  degreeYearOfPass?: string;
+  degreeMarks?: string;
+  degreePercentage?: string;
+  degreeInstitution?: string;
   distanceFromResidenceKm?: number;
   hosteller?: boolean;
   physicallyHandicapped?: boolean;
@@ -2989,6 +3047,9 @@ export interface StudentRecord {
   studiedOutsideAPDetails?: string;
   familyIdLinkedOtherState?: boolean;
   familyIdLinkedOtherStateDetails?: string;
+  // Parents working in another state / country, and where (place of work, state/country).
+  parentsWorkingOutside?: boolean;
+  parentsWorkingOutsideDetails?: string;
   remarks?: string;
   // ─── Graduation snapshot ────────────────────────────────────────────────
   // Set once, when `status` flips to GRADUATED (students/promote route). The
@@ -3170,6 +3231,15 @@ export type NotificationType =
   | "BOOK_RESERVATION_AVAILABLE"
   // Student Documents
   | "DOCUMENT_UPLOADED"
+  // Certificate Management (No Due Certificate - see src/lib/certifications)
+  | "CERTIFICATE_FORWARDED_TO_HOD"
+  | "CERTIFICATE_HOD_REJECTED"
+  | "CERTIFICATE_CLEARANCE_REQUESTED"
+  | "CERTIFICATE_CLEARANCE_REJECTED"
+  | "CERTIFICATE_READY_FOR_ISSUANCE"
+  | "CERTIFICATE_ISSUED"
+  | "CERTIFICATE_REJECTED"
+  | "CERTIFICATE_EXAM_CELL_ISSUED"
   | "GENERAL";
 
 export interface AppNotification {
@@ -3369,7 +3439,17 @@ export type AuditAction =
   | "RD_CONSULTANCY_PROJECT_UPDATED"
   | "RD_CONSULTANCY_PROJECT_DELETED"
   | "RD_RESEARCH_PROFILE_CREATED"
-  | "RD_RESEARCH_PROFILE_UPDATED";
+  | "RD_RESEARCH_PROFILE_UPDATED"
+  // Certificate Management (No Due Certificate - see src/lib/certifications)
+  | "CERTIFICATE_REQUEST_SUBMITTED"
+  | "CERTIFICATE_HOD_APPROVED"
+  | "CERTIFICATE_HOD_REJECTED"
+  | "CERTIFICATE_CLEARANCE_ACCEPTED"
+  | "CERTIFICATE_CLEARANCE_REJECTED"
+  | "CERTIFICATE_ISSUED"
+  | "CERTIFICATE_REJECTED_AT_ISSUANCE"
+  | "CERTIFICATE_CANCELLED"
+  | "CERTIFICATE_EXAM_CELL_ISSUED";
 
 export interface AuditLog {
   id: string;

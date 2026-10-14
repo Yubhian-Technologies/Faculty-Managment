@@ -9,11 +9,13 @@ import { downloadTeachingNowPdf, downloadTeachingNowXlsx } from "@/lib/timetable
 
 interface TeachingClass { classroom: string; classLabel: string; year?: string; deptSection?: string; subject: string; faculty: string }
 
-// "Who is teaching right now" (Principal, Vice Principal, admins). No filters:
-// opening it lists every class in session at this moment (IST) - room,
-// year / department / section, subject and the faculty taking it - and Refresh
-// re-reads the clock. Backed by /api/college/teaching-now, which enforces the roles.
-export function TeachingNowFilter() {
+// "Who is teaching right now" (Principal, Vice Principal, admins, and now
+// HOD). No filters: opening it lists every class in session at this moment
+// (IST) - room, year / department / section, subject and the faculty taking
+// it - and Refresh re-reads the clock. Backed by /api/college/teaching-now,
+// which enforces the roles AND auto-narrows an HOD caller to their own
+// department tree server-side (never a client-side filter).
+export function TeachingNowFilter({ scopeLabel = "in the college" }: { scopeLabel?: string } = {}) {
   const { collegeInfo } = useCollegeInfo();
   const college = collegeInfo ?? undefined;
   const [classes, setClasses] = useState<TeachingClass[] | null>(null);
@@ -67,7 +69,9 @@ export function TeachingNowFilter() {
           <div>
             <h3 className="text-sm font-semibold">Teaching at this time</h3>
             <p className="text-xs text-muted-foreground">
-              {asOf ? `Classes in session now - ${formatDate(asOf.date)}, ${formatTime12h(asOf.from)} IST` : "Classes in session right now."}
+              {asOf
+                ? `Classes in session now ${scopeLabel} - ${formatDate(asOf.date)}, ${formatTime12h(asOf.from)} IST`
+                : `Classes in session right now ${scopeLabel}.`}
             </p>
           </div>
           <button

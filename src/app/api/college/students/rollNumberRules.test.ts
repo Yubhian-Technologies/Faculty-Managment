@@ -64,15 +64,13 @@ beforeEach(() => {
 });
 
 describe("bulk import - roll number rules", () => {
-  it("accepts a row with no roll number - it is saved roll-less, with no roll key and no roll claim", async () => {
+  it("rejects a row with no roll number (required in the bulk import) - nothing is saved", async () => {
     const { POST } = await import("@/app/api/college/students/import-excel/route");
     const res = await POST(post("/import", { records: [importRow("", "No Roll Row"), importRow("   ", "Blank Roll Row")] }));
     const json = await res.json() as { created: number; failed: { error: string }[] };
-    expect(json.created).toBe(2);
-    expect(json.failed).toEqual([]);
-    const saved = importedStudents();
-    expect(saved.map((d) => d.rollNumber)).toEqual(["", ""]);
-    expect(saved.every((d) => d.rollNumberUpper === undefined)).toBe(true);
+    expect(json.created).toBe(0);
+    expect(json.failed.map((f) => f.error)).toEqual(["Roll No is required", "Roll No is required"]);
+    expect(importedStudents()).toHaveLength(0);
   });
 
   it("rejects a roll already held by a student in ANY other department / year / section, in any case", async () => {

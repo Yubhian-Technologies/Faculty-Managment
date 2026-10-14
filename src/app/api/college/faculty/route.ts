@@ -27,6 +27,7 @@ import {
   isFacultyAvailable, FACULTY_STATUS_DATE_FIELD, FACULTY_STATUS_DATE_LABELS,
 } from "@/types";
 import { loadDepartmentIndex, stampDepartmentIds } from "@/lib/departments/stampIds";
+import { loadSeatPhrasesByHolder } from "@/lib/roles/seatLabels";
 import { whereIn, type QueryLike } from "@/lib/firestore/inQuery";
 
 export async function GET(request: Request) {
@@ -255,6 +256,24 @@ export async function GET(request: Request) {
         facultyDisplayName(b as { legalName?: string })
       )
     );
+    // Opt-in (`?withSeats=1`, the Faculty Register lists only): the seats each person holds, as short phrases
+    // ("HOD of CSE"), so a Principal / HOD can see who holds a position without opening the seat register.
+    // Additive and display-only; the pickers that reuse this route skip the extra read.
+    if (searchParams.get("withSeats") === "1") {
+      try {
+        const phrases = await loadSeatPhrasesByHolder(getAdminDb(), session.collegeId);
+        if (phrases.size > 0) {
+          for (const f of teachingOnly) {
+            const uid = typeof f.userUid === "string" ? f.userUid : "";
+            const held = uid ? phrases.get(uid) : undefined;
+            if (held?.length) f.seatLabels = held;
+          }
+        }
+      } catch (err) {
+        console.error("[college/faculty GET] seat labels", err);
+      }
+    }
+
     return NextResponse.json({ faculty: teachingOnly });
   } catch (err) {
     const badBody = badBodyResponse(err);

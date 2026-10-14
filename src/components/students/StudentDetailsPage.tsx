@@ -17,6 +17,7 @@ import { DETAIL_ROSTER_FIELDS, ROSTER_DETAIL_GROUPS, rosterFieldDisplay, type Ro
 import { formatDate } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
 import type { StudentRecord } from "@/types";
+import { FACT_GRID_COLS_3, FACT_GRID_COLS_4 } from "@/components/shared/factGrid";
 
 interface StudentDetailsPageProps {
   studentId: string;
@@ -75,8 +76,8 @@ function ordinalYear(year: number) {
 function Fact({ label, value }: { label: string; value: string | undefined }) {
   if (!value) return null;
   return (
-    <div>
-      <p className="text-xs text-muted-foreground">{label}</p>
+    <div className="min-w-0">
+      <p className="text-xs text-muted-foreground break-words">{label}</p>
       <p className="text-sm font-medium break-words">{value}</p>
     </div>
   );
@@ -109,8 +110,10 @@ function FactCard({ title, keys, student }: { title: string; keys: string[]; stu
     <Card>
       <CardContent className="p-5">
         <h3 className="text-sm font-semibold text-foreground mb-4">{title}</h3>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-3">
-          {rows.map((f) => <Fact key={f.key} label={f.label} value={f.value} />)}
+        <div className="@container">
+          <div className={`grid gap-x-4 gap-y-4 ${FACT_GRID_COLS_3}`}>
+            {rows.map((f) => <Fact key={f.key} label={f.label} value={f.value} />)}
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -130,8 +133,10 @@ function GraduationCard({ student }: { student: StudentRecord }) {
         <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
           <GraduationCap className="h-4 w-4" />Graduation
         </h3>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-3">
-          {rows.map((f) => <Fact key={f.key} label={f.label} value={f.value} />)}
+        <div className="@container">
+          <div className={`grid gap-x-4 gap-y-4 ${FACT_GRID_COLS_3}`}>
+            {rows.map((f) => <Fact key={f.key} label={f.label} value={f.value} />)}
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -269,16 +274,18 @@ export function StudentDetailsPage({ studentId, backHref, editable = false, life
                 : <Badge variant="outline" className="text-amber-600 border-amber-300">Unassigned</Badge>}
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-4">
-            <Fact label="Roll No" value={student.rollNumber} />
-            <Fact label="Course" value={student.course} />
-            <Fact label="Department" value={student.department} />
-            <Fact label="Core Department" value={student.secondaryDepartment} />
-            <Fact label="Academic Year" value={student.year ? ordinalYear(student.year) : undefined} />
-            <Fact label="Section" value={student.section} />
-            <Fact label="Batch" value={student.batch} />
-            <Fact label="Regulation" value={student.regulation} />
-            <Fact label="Lab Batch" value={student.labBatch} />
+          <div className="@container">
+            <div className={`grid gap-x-4 gap-y-4 ${FACT_GRID_COLS_4}`}>
+              <Fact label="Roll No" value={student.rollNumber} />
+              <Fact label="Course" value={student.course} />
+              <Fact label="Department" value={student.department} />
+              <Fact label="Core Department" value={student.secondaryDepartment} />
+              <Fact label="Academic Year" value={student.year ? ordinalYear(student.year) : undefined} />
+              <Fact label="Section" value={student.section} />
+              <Fact label="Batch" value={student.batch} />
+              <Fact label="Regulation" value={student.regulation} />
+              <Fact label="Lab Batch" value={student.labBatch} />
+            </div>
           </div>
         </CardContent>
       </Card>

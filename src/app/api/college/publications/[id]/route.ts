@@ -6,8 +6,10 @@ import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { holdsRole } from "@/lib/roles/seatRoles";
 import { notify } from "@/lib/notify";
 import { notifyReviewer, resolveSubmissionRoute, routeFields } from "@/lib/research/coordinatorReview";
+import { buildEditTrail, clearEditTrail, summarizeFieldChanges } from "@/lib/research/changeTracking";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import { finalizePublicationDetails, deriveFlatFields, summarizeChanges } from "@/lib/publications/deriveFlatFields";
 import { checkIsbnForSave } from "@/lib/publications/isbnGuard";
@@ -80,7 +82,7 @@ export async function PATCH(
       uid: string; title: string; status?: PublicationStatus;
       internalAuthorUids?: string[]; details?: PublicationDetails;
     };
-    const isRnD = session.role === "R_AND_D";
+    const isRnD = holdsRole(session, "R_AND_D");
     const isOwner = pub.uid === session.uid;
     const isCoAuthor = (pub.internalAuthorUids ?? []).includes(session.uid);
     if (!isRnD && !isOwner && !isCoAuthor) {
@@ -105,6 +107,7 @@ export async function PATCH(
         reviewedByName,
         reviewedAt: now,
         updatedAt: now,
+        ...(body.decision === "APPROVED" ? clearEditTrail() : {}),
         ...(body.decision === "REJECTED" ? { rejectionReason: body.rejectionReason ?? "" } : { rejectionReason: FieldValue.delete() }),
       });
 
@@ -127,9 +130,19 @@ export async function PATCH(
     // submission before R&D even looks at it). Editing an already-APPROVED
     // record reopens it for re-verification and logs exactly what changed,
     // rather than silently re-approving stale info.
-    if ((isOwner || isCoAuthor) && !isRnD) {
+    //
+    // This holds for the R&D head editing a record of their OWN too, which is
+    // what the button on their profile says it does ("Edit (sends for
+    // re-verification)"). They used to fall through to the full-edit branch
+    // below, which leaves the status alone - so their changes to an approved
+    // record went live without anyone, themselves included, verifying them.
+    // Reviewing is a separate act from editing: the decision branch above is
+    // still the only way to approve, and they can still approve their own.
+    if (isOwner || isCoAuthor) {
       const wasApproved = pub.status === "APPROVED";
-      const route = await resolveSubmissionRoute(db, session.collegeId, pub.uid, false);
+      // isRnD here only decides whether the department's R&D Coordinator sees
+      // it first, matching how the same person's NEW records are routed.
+      const route = await resolveSubmissionRoute(db, session.collegeId, pub.uid, isRnD);
       const now = new Date();
       const updates: Record<string, unknown> = {
         updatedAt: now,
@@ -149,12 +162,22 @@ export async function PATCH(
       } catch { /* best-effort */ }
 
       let changes: string[] = [];
+      let fieldSummary = "";
       if (body.details) {
         const isbnError = await checkIsbnForSave(db, session.collegeId, body.details.type, body.details.isbnNumber, { publicationId: id, previousIsbn: pub.details?.isbnNumber });
         if (isbnError) return NextResponse.json({ error: isbnError }, { status: 400 });
         const { details, internalAuthorUids } = await finalizePublicationDetails(db, session.collegeId, body.details);
         if (wasApproved && pub.details) changes = summarizeChanges(pub.details, details);
         Object.assign(updates, { details, internalAuthorUids }, deriveFlatFields(details));
+        // Exactly which detail fields moved since R&D verified it (before -> after), for the reviewer.
+        const trail = buildEditTrail({
+          existing: { ...(pub.details ?? {}), status: pub.status, verifiedSnapshot: (snap.data() as { verifiedSnapshot?: unknown }).verifiedSnapshot },
+          incoming: details as unknown as Record<string, unknown>,
+          moduleSlug: "publications", editorUid: session.uid, editorName, now,
+        });
+        Object.assign(updates, trail.updates);
+        if (trail.reopened) changes = trail.changes.map((c) => `${c.label} changed`);
+        fieldSummary = summarizeFieldChanges(trail.changes);
       } else {
         if (body.title !== undefined) updates.title = body.title;
         if (body.coAuthors !== undefined) updates.coAuthors = body.coAuthors;
@@ -177,14 +200,15 @@ export async function PATCH(
         type: "PUBLICATION_PENDING_VERIFICATION",
         title: wasApproved ? "Approved publication edited - re-verification needed" : "Publication resubmitted for verification",
         message: wasApproved
-          ? `${editorName} edited "${body.title ?? pub.title}" after approval: ${(changes.length > 0 ? changes : ["Details updated"]).join(", ")}`
+          ? `${editorName} edited "${body.title ?? pub.title}" after approval - changed: ${fieldSummary || (changes.length > 0 ? changes : ["Details updated"]).join(", ")}`
           : `${editorName} submitted/corrected "${body.title ?? pub.title}" for verification`,
         rndLink: "/r-and-d/publications",
       });
       return NextResponse.json({ ok: true });
     }
 
-    // R&D's own full edit - any field, any status.
+    // R&D editing SOMEONE ELSE's record - any field, any status. An owner's own
+    // edit is handled above, whether or not they are also R&D.
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (body.details) {
       const isbnError = await checkIsbnForSave(db, session.collegeId, body.details.type, body.details.isbnNumber, { publicationId: id, previousIsbn: pub.details?.isbnNumber });

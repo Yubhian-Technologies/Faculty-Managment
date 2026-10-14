@@ -1,8 +1,9 @@
 "use client";
 
+import { InternalFacultyPicker } from "@/components/research/InternalFacultyPicker";
 import { useEffect, useState } from "react";
 import { ExternalLink, Plus, Pencil } from "lucide-react";
-import { Section, SubLabel, Field, TextInput, NumInput, DateInput } from "@/components/shared/ProfileFieldPrimitives";
+import { Section, SubLabel, Field, TextInput, NumField, DateInput, RequiredMark } from "@/components/shared/ProfileFieldPrimitives";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -20,6 +21,7 @@ import type {
   AuthorCategory, AuthorRoleType, DiscoveryInnovationRequest, IprApplicant, IprApplicantType,
   IprCommercializationStatus, IprCommercializationType, IprInventor, IprStatus, IprType,
 } from "@/types";
+import { FACT_GRID_COLS_4 } from "@/components/shared/factGrid";
 
 const PREVIEW_COUNT = 3;
 // Guards against a typo like 1000 spawning a thousand form rows.
@@ -137,26 +139,8 @@ function InventorFields({
   colleges: CollegeOption[];
   ownCollegeId: string;
 }) {
-  const [lookup, setLookup] = useState<"idle" | "loading" | "found" | "not-found">(
-    inventor.isInternal && inventor.authorType === "FACULTY" && inventor.name ? "found" : "idle"
-  );
   const otherColleges = colleges.filter((c) => c.id !== ownCollegeId);
   const scope: "PROJECT" | "OTHERS" = inventor.affiliationCollegeId === OTHERS_COLLEGE_ID ? "OTHERS" : "PROJECT";
-
-  async function lookupFacultyId(facultyId: string) {
-    update({ facultyId, name: "" });
-    if (!facultyId.trim()) { setLookup("idle"); return; }
-    setLookup("loading");
-    try {
-      const res = await fetch(`/api/college/faculty-lookup?employeeId=${encodeURIComponent(facultyId.trim())}`);
-      if (!res.ok) { setLookup("not-found"); return; }
-      const data = await res.json() as { name?: string };
-      update({ facultyId, name: data.name ?? "" });
-      setLookup("found");
-    } catch {
-      setLookup("not-found");
-    }
-  }
 
   function onAffiliationScopeChange(next: "PROJECT" | "OTHERS") {
     if (next === "OTHERS") {
@@ -210,21 +194,19 @@ function InventorFields({
             </Select>
           </div>
           {inventor.authorType === "FACULTY" ? (
-            <div className="space-y-1.5">
-              <Label className="text-xs">Faculty ID</Label>
-              <Input value={inventor.facultyId ?? ""} onChange={(e) => void lookupFacultyId(e.target.value)} placeholder="Employee ID" />
-              {lookup === "loading" && <p className="text-xs text-muted-foreground">Looking up…</p>}
-              {lookup === "found" && inventor.name && <p className="text-xs text-green-700">{inventor.name}</p>}
-              {lookup === "not-found" && <p className="text-xs text-destructive">No faculty member found with that ID</p>}
-            </div>
+            <InternalFacultyPicker
+              facultyId={inventor.facultyId ?? ""}
+              label={<>Faculty<RequiredMark required /></>}
+              onPick={(p) => update({ facultyId: p.facultyId, name: p.name })}
+            />
           ) : (
             <>
               <div className="space-y-1.5">
-                <Label className="text-xs">Name of the Inventor</Label>
+                <Label className="text-xs">Name of the Inventor<RequiredMark required /></Label>
                 <Input value={inventor.name} onChange={(e) => update({ name: e.target.value })} placeholder="Student name" />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Student Registration Number</Label>
+                <Label className="text-xs">Student Registration Number<RequiredMark required /></Label>
                 <Input value={inventor.studentRegistrationNumber ?? ""} onChange={(e) => update({ studentRegistrationNumber: e.target.value })} />
               </div>
             </>
@@ -233,7 +215,7 @@ function InventorFields({
       ) : (
         <>
           <div className="space-y-1.5">
-            <Label className="text-xs">Name of the Inventor</Label>
+            <Label className="text-xs">Name of the Inventor<RequiredMark required /></Label>
             <Input value={inventor.name} onChange={(e) => update({ name: e.target.value })} placeholder="Inventor name" />
           </div>
           <div className="space-y-1.5">
@@ -248,7 +230,7 @@ function InventorFields({
           </div>
           {scope === "PROJECT" ? (
             <div className="space-y-1.5">
-              <Label className="text-xs">College</Label>
+              <Label className="text-xs">College<RequiredMark required /></Label>
               <Select
                 value={inventor.affiliationCollegeId ?? ""}
                 onValueChange={(id) => update({ affiliationCollegeId: id, affiliationCollegeName: otherColleges.find((c) => c.id === id)?.name ?? "" })}
@@ -262,7 +244,7 @@ function InventorFields({
           ) : (
             <>
               <div className="space-y-1.5">
-                <Label className="text-xs">Affiliation Name</Label>
+                <Label className="text-xs">Affiliation Name<RequiredMark required /></Label>
                 <Input value={inventor.affiliationCollegeName} onChange={(e) => update({ affiliationCollegeName: e.target.value })} placeholder="College/university name" />
               </div>
               <div className="space-y-1.5">
@@ -286,19 +268,21 @@ function DiscoveryInnovationRow({
 }) {
   return (
     <div className="rounded-md border bg-muted/20 shadow-sm p-2 space-y-2">
-      {isOwnProfile && record.status !== "APPROVED" && (
+      {isOwnProfile && (
         <div className="flex items-center gap-2">
-          {record.status === "PENDING" || record.status === "COORDINATOR_REVIEW" ? (
-            <Badge variant="pending" className="text-xs">{record.status === "COORDINATOR_REVIEW" ? "With R&D Coordinator" : "Pending Verification"}</Badge>
-          ) : (
-            <>
-              <Badge variant="rejected" className="text-xs">{record.status === "SENT_BACK" ? "Sent Back" : "Rejected"}</Badge>
-              {onEdit && (
-                <button type="button" onClick={() => onEdit(record)} className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1">
-                  <Pencil className="h-3 w-3" />Edit &amp; Resubmit
-                </button>
-              )}
-            </>
+          {record.status === "PENDING" && <Badge variant="pending" className="text-xs">Pending Verification</Badge>}
+          {record.status === "COORDINATOR_REVIEW" && <Badge variant="pending" className="text-xs">With R&amp;D Coordinator</Badge>}
+          {record.status === "REJECTED" && <Badge variant="rejected" className="text-xs">Rejected</Badge>}
+          {record.status === "SENT_BACK" && <Badge variant="rejected" className="text-xs">Sent Back</Badge>}
+          {onEdit && (
+            <button type="button" onClick={() => onEdit(record)} className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1">
+              <Pencil className="h-3 w-3" />
+              {record.status === "REJECTED" || record.status === "SENT_BACK"
+                ? "Edit & Resubmit"
+                : record.status === "PENDING" || record.status === "COORDINATOR_REVIEW"
+                  ? "Edit"
+                  : "Edit (sends for re-verification)"}
+            </button>
           )}
         </div>
       )}
@@ -308,22 +292,24 @@ function DiscoveryInnovationRow({
       {record.status === "SENT_BACK" && record.sentBackReason && (
         <p className="text-xs text-destructive">Sent back: {record.sentBackReason}</p>
       )}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Field label="Title" value={record.title} />
-        <Field label="Type of IPR" value={IPR_TYPE_LABELS[record.iprType]} />
-        <Field label="Status" value={record.iprStatus === "GRANTED" ? "Granted" : "Published"} />
-        <Field label="Application Number" value={record.applicationNumber} />
-        <Field label="Date of Filing" value={record.dateOfFiling} />
-        <Field label="Student Patent" value={record.isStudentPatent} />
-        {record.isStudentPatent === "YES" && (
-          <>
-            <Field label="Student Name" value={record.studentName} />
-            <Field label="Regd. No." value={record.studentRegistrationNumber} />
-            <Field label="Student Department" value={record.studentDepartment} />
-          </>
-        )}
-        <Field label="Commercialized" value={record.isCommercialized} />
-        <Field label="SDGs Mapped" value={record.sdgGoals.length > 0 ? record.sdgGoals.join(", ") : undefined} />
+      <div className="@container">
+        <div className={`grid gap-2 ${FACT_GRID_COLS_4}`}>
+          <Field label="Title" value={record.title} />
+          <Field label="Type of IPR" value={IPR_TYPE_LABELS[record.iprType]} />
+          <Field label="Status" value={record.iprStatus === "GRANTED" ? "Granted" : "Published"} />
+          <Field label="Application Number" value={record.applicationNumber} />
+          <Field label="Date of Filing" value={record.dateOfFiling} />
+          <Field label="Student Patent" value={record.isStudentPatent} />
+          {record.isStudentPatent === "YES" && (
+            <>
+              <Field label="Student Name" value={record.studentName} />
+              <Field label="Regd. No." value={record.studentRegistrationNumber} />
+              <Field label="Student Department" value={record.studentDepartment} />
+            </>
+          )}
+          <Field label="Commercialized" value={record.isCommercialized} />
+          <Field label="SDGs Mapped" value={record.sdgGoals.length > 0 ? record.sdgGoals.join(", ") : undefined} />
+        </div>
       </div>
       <div className="flex flex-wrap gap-3">
         {record.publishedProofUrl && (
@@ -566,7 +552,7 @@ function RecordFormFields({
           <SubLabel>Overview</SubLabel>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label>Type of IPR</Label>
+              <Label>Type of IPR<RequiredMark required /></Label>
               <Select value={form.iprType} onValueChange={(v) => set("iprType", v as IprType)}>
                 <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
                 <SelectContent>
@@ -575,7 +561,7 @@ function RecordFormFields({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Status of IPR</Label>
+              <Label>Status of IPR<RequiredMark required /></Label>
               <Select value={form.iprStatus} onValueChange={(v) => set("iprStatus", v as IprStatus)}>
                 <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
                 <SelectContent>
@@ -585,17 +571,17 @@ function RecordFormFields({
               </Select>
             </div>
           </div>
-          <TextInput label="Application Number of IPR" value={form.applicationNumber} onChange={(v) => set("applicationNumber", v)} />
-          <TextInput label="Title of the IPR" value={form.title} onChange={(v) => set("title", v)} />
+          <TextInput label="Application Number of IPR" value={form.applicationNumber} onChange={(v) => set("applicationNumber", v)} required />
+          <TextInput label="Title of the IPR" value={form.title} onChange={(v) => set("title", v)} required />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <DateInput label="Date of Filing" value={form.dateOfFiling} onChange={(v) => set("dateOfFiling", v)} />
-            <DateInput label="Date of Published" value={form.datePublished} onChange={(v) => set("datePublished", v)} />
+            <DateInput label="Date of Filing" value={form.dateOfFiling} onChange={(v) => set("dateOfFiling", v)} required />
+            <DateInput label="Date of Published" value={form.datePublished} onChange={(v) => set("datePublished", v)} required />
             {form.iprStatus === "GRANTED" && (
-              <DateInput label="Date of Granted" value={form.dateGranted} onChange={(v) => set("dateGranted", v)} />
+              <DateInput label="Date of Granted" value={form.dateGranted} onChange={(v) => set("dateGranted", v)} required />
             )}
           </div>
           <div className="space-y-2">
-            <Label>Is this Student Patent</Label>
+            <Label>Is this Student Patent<RequiredMark required /></Label>
             <Select value={form.isStudentPatent} onValueChange={(v) => set("isStudentPatent", v as "YES" | "NO")}>
               <SelectTrigger className="max-w-[200px]"><SelectValue placeholder="Select" /></SelectTrigger>
               <SelectContent>
@@ -606,22 +592,22 @@ function RecordFormFields({
           </div>
           {form.isStudentPatent === "YES" && (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 rounded-md bg-muted/30 p-3">
-              <TextInput label="Student Name" value={form.studentName} onChange={(v) => set("studentName", v)} />
-              <TextInput label="Regd. No." value={form.studentRegistrationNumber} onChange={(v) => set("studentRegistrationNumber", v)} />
-              <TextInput label="Department" value={form.studentDepartment} onChange={(v) => set("studentDepartment", v)} />
+              <TextInput label="Student Name" value={form.studentName} onChange={(v) => set("studentName", v)} required />
+              <TextInput label="Regd. No." value={form.studentRegistrationNumber} onChange={(v) => set("studentRegistrationNumber", v)} required />
+              <TextInput label="Department" value={form.studentDepartment} onChange={(v) => set("studentDepartment", v)} required />
             </div>
           )}
         </div>
 
         <div className="space-y-2">
-          <Label>SDG Mapped</Label>
+          <Label>SDG Mapped<RequiredMark required /></Label>
           <SdgPicker selected={form.sdgGoals} onChange={(v) => set("sdgGoals", v)} />
         </div>
 
         <div className="space-y-4">
           <SubLabel>Applicants</SubLabel>
           <div className="space-y-2 max-w-[200px]">
-            <Label>No. of Applicants</Label>
+            <Label>No. of Applicants<RequiredMark required /></Label>
             <Input
               type="number" inputMode="numeric" min={1} max={MAX_COUNT} step={1}
               value={form.applicantsCount} onChange={(e) => setApplicantsCount(e.target.value)}
@@ -630,7 +616,7 @@ function RecordFormFields({
           </div>
           {form.applicants.map((a, i) => (
             <div key={i} className="grid grid-cols-1 gap-3 sm:grid-cols-2 rounded-md bg-muted/30 p-3">
-              <TextInput label={`Name of Applicant ${i + 1}`} value={a.name} onChange={(v) => updateApplicant(i, { name: v })} />
+              <TextInput label={`Name of Applicant ${i + 1}`} value={a.name} onChange={(v) => updateApplicant(i, { name: v })} required />
               <div className="space-y-2">
                 <Label>Type of Applicant</Label>
                 <Select value={a.type} onValueChange={(v) => updateApplicant(i, { type: v as IprApplicantType })}>
@@ -647,7 +633,7 @@ function RecordFormFields({
         <div className="space-y-4">
           <SubLabel>Inventors</SubLabel>
           <div className="space-y-2 max-w-[200px]">
-            <Label>No. of Inventors</Label>
+            <Label>No. of Inventors<RequiredMark required /></Label>
             <Input
               type="number" inputMode="numeric" min={1} max={MAX_COUNT} step={1}
               value={form.inventorsCount} onChange={(e) => setInventorsCount(e.target.value)}
@@ -667,6 +653,7 @@ function RecordFormFields({
           <SubLabel>Proof of Filing</SubLabel>
           <DocumentUploadField
             label="Published Proof"
+            required
             value={form.publishedProofUrl}
             uploadEndpoint="/api/upload/ipr-doc"
             extraFields={{ kind: "published-proof" }}
@@ -676,6 +663,7 @@ function RecordFormFields({
           {form.iprStatus === "GRANTED" && (
             <DocumentUploadField
               label="Granted Proof"
+              required
               value={form.grantedProofUrl}
               uploadEndpoint="/api/upload/ipr-doc"
               extraFields={{ kind: "granted-proof" }}
@@ -727,8 +715,8 @@ function RecordFormFields({
                 </Select>
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <NumInput label="Commercialization Value (Rs.)" value={toNumberOrUndefined(form.commercializationValue)} onChange={(v) => set("commercializationValue", String(v))} />
-                <NumInput label="Revenue Generated (Rs.)" value={toNumberOrUndefined(form.revenueGenerated)} onChange={(v) => set("revenueGenerated", String(v))} />
+                <NumField label="Commercialization Value (Rs.)" value={form.commercializationValue} onChange={(v) => set("commercializationValue", v)} />
+                <NumField label="Revenue Generated (Rs.)" value={form.revenueGenerated} onChange={(v) => set("revenueGenerated", v)} />
               </div>
               <DocumentUploadField
                 label="Commercialized Proof"

@@ -36,7 +36,7 @@ function ChainEditor({ chain, allowed, labels, onChange, placeholder }: {
     <div className="flex flex-wrap items-center gap-1.5">
       {chain.length === 0 && <span className="text-xs text-muted-foreground">{placeholder}</span>}
       {chain.map((stage, i) => (
-        <span key={stage} className="inline-flex items-center gap-0.5 rounded-full border bg-muted/40 pl-2.5 pr-1 py-0.5 text-xs">
+        <span key={stage} className="inline-flex items-center gap-0.5 rounded-md border bg-muted/40 pl-2.5 pr-1 py-0.5 text-xs">
           <span className="text-muted-foreground mr-1">{i + 1}.</span>{labels[stage as PermissionStage] ?? stage}
           <button type="button" aria-label="Move earlier" disabled={i === 0} onClick={() => onChange(moveStage(chain, i, -1))} className="p-0.5 disabled:opacity-30"><ArrowUp className="h-3 w-3" /></button>
           <button type="button" aria-label="Move later" disabled={i === chain.length - 1} onClick={() => onChange(moveStage(chain, i, 1))} className="p-0.5 disabled:opacity-30"><ArrowDown className="h-3 w-3" /></button>

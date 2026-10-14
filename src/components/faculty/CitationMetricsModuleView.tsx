@@ -2,16 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { Pencil } from "lucide-react";
-import { Section, Field } from "@/components/shared/ProfileFieldPrimitives";
+import { Section, Field, NumField } from "@/components/shared/ProfileFieldPrimitives";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import type { FacultyProfileFields, CitationMetricsRequest } from "@/types";
+import { FACT_GRID_COLS_3 } from "@/components/shared/factGrid";
 
 interface RequestFormState {
   totalCitations: string;
@@ -52,12 +51,12 @@ function RequestFormFields({
     setForm((f) => ({ ...f, [key]: value }));
   }
 
+  // All four figures are required and must be whole numbers (0 is a real answer, blank is not).
+  const isValid = [form.totalCitations, form.hIndex, form.citationsExcludingSelf, form.hIndexExcludingSelf]
+    .every((v) => v.trim() !== "" && Number.isInteger(Number(v)) && Number(v) >= 0);
+
   async function handleSubmit() {
-    const values = [form.totalCitations, form.hIndex, form.citationsExcludingSelf, form.hIndexExcludingSelf];
-    if (values.some((v) => v.trim() === "" || Number.isNaN(Number(v)))) {
-      toast({ variant: "destructive", title: "All fields are required and must be valid numbers" });
-      return;
-    }
+    if (!isValid) return;
     setSaving(true);
     try {
       const res = await fetch("/api/college/citation-metrics", {
@@ -85,29 +84,17 @@ function RequestFormFields({
       </DialogHeader>
       <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label>Total No. of Citations *</Label>
-            <Input required type="number" value={form.totalCitations} onChange={(e) => set("totalCitations", e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label>H-Index *</Label>
-            <Input required type="number" value={form.hIndex} onChange={(e) => set("hIndex", e.target.value)} />
-          </div>
+          <NumField label="Total No. of Citations" value={form.totalCitations} onChange={(v) => set("totalCitations", v)} required />
+          <NumField label="H-Index" value={form.hIndex} onChange={(v) => set("hIndex", v)} required />
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label>No. of Citations Excluding Self Citations *</Label>
-            <Input required type="number" value={form.citationsExcludingSelf} onChange={(e) => set("citationsExcludingSelf", e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label>H-Index (Excluding Self Citations) *</Label>
-            <Input required type="number" value={form.hIndexExcludingSelf} onChange={(e) => set("hIndexExcludingSelf", e.target.value)} />
-          </div>
+          <NumField label="No. of Citations Excluding Self Citations" value={form.citationsExcludingSelf} onChange={(v) => set("citationsExcludingSelf", v)} required />
+          <NumField label="H-Index (Excluding Self Citations)" value={form.hIndexExcludingSelf} onChange={(v) => set("hIndexExcludingSelf", v)} required />
         </div>
       </div>
       <DialogFooter>
         <Button variant="outline" onClick={onCancel} disabled={saving}>Cancel</Button>
-        <Button onClick={() => void handleSubmit()} loading={saving}>Submit</Button>
+        <Button onClick={() => void handleSubmit()} loading={saving} disabled={!isValid}>Submit</Button>
       </DialogFooter>
     </>
   );
@@ -152,9 +139,9 @@ export function CitationMetricsSection({
             {isPending && <Badge variant="pending" className="text-xs">Pending Verification</Badge>}
             {isRejected && <Badge variant="rejected" className="text-xs">Rejected</Badge>}
           </div>
-          {loaded && !isPending && (
+          {loaded && (
             <Button variant="outline" size="sm" onClick={() => setFormOpen(true)}>
-              <Pencil className="h-3.5 w-3.5 mr-1" />{isRejected ? "Edit & Resubmit" : "Add / Edit"}
+              <Pencil className="h-3.5 w-3.5 mr-1" />{isRejected ? "Edit & Resubmit" : isPending ? "Edit" : "Add / Edit"}
             </Button>
           )}
         </div>
@@ -162,11 +149,13 @@ export function CitationMetricsSection({
       {isRejected && request?.rejectionReason && (
         <p className="text-xs text-destructive">Reason: {request.rejectionReason}</p>
       )}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Field label="Total No. of Citations" value={p.citationsTotal} />
-        <Field label="H-Index" value={p.citationsHIndex} />
-        <Field label="Citations Excluding Self Citations" value={p.citationsExcludingSelf} />
-        <Field label="H-Index (Excl. Self Citations)" value={p.citationsHIndexExcludingSelf} />
+      <div className="@container">
+        <div className={`grid gap-3 ${FACT_GRID_COLS_3}`}>
+          <Field label="Total No. of Citations" value={p.citationsTotal} />
+          <Field label="H-Index" value={p.citationsHIndex} />
+          <Field label="Citations Excluding Self Citations" value={p.citationsExcludingSelf} />
+          <Field label="H-Index (Excl. Self Citations)" value={p.citationsHIndexExcludingSelf} />
+        </div>
       </div>
 
       {isOwnProfile && (

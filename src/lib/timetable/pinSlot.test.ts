@@ -57,7 +57,7 @@ describe("pinSlotWithChecks", () => {
     expect((await pinSlotWithChecks(base(fake, { periodNumber: 7 }))).ok).toBe(true);
   });
 
-  it("refuses a taken cell, and allows an explicit two-lab split but not a third occupant or a theory mix", async () => {
+  it("refuses a taken cell, and allows an explicit two-subject split of any type but not a third subject", async () => {
     const fake = new FakeFirestore();
     fake.seed(`${C}/subjects/lab1`, { type: "PRACTICAL" });
     fake.seed(`${C}/subjects/lab2`, { type: "PRACTICAL" });
@@ -70,16 +70,45 @@ describe("pinSlotWithChecks", () => {
     // A THIRD lab is refused...
     fake.seed(`${C}/subjects/lab3`, { type: "PRACTICAL" });
     expect(await pinSlotWithChecks(base(fake, { assignmentId: "a4", subjectId: "lab3", facultyId: "f4", allowSplit: true })))
-      .toMatchObject({ ok: false, error: expect.stringMatching(/already has 2 labs sharing it/) });
+      .toMatchObject({ ok: false, error: expect.stringMatching(/already has 2 subjects sharing it/) });
     // ...but another faculty of a lab already in the cell may join it (a lab can have several faculty).
     expect((await pinSlotWithChecks(base(fake, { assignmentId: "a5", subjectId: "lab2", facultyId: "f5", allowSplit: true }))).ok).toBe(true);
 
+    // A theory subject may share a period with a lab (any types may split).
     const mixed = new FakeFirestore();
     mixed.seed(`${C}/subjects/th1`, { type: "THEORY" });
     mixed.seed(`${C}/subjects/lab1`, { type: "PRACTICAL" });
     await pinSlotWithChecks(base(mixed, { assignmentId: "a1", subjectId: "th1" }));
-    expect(await pinSlotWithChecks(base(mixed, { assignmentId: "a2", subjectId: "lab1", facultyId: "f2", allowSplit: true })))
-      .toMatchObject({ ok: false, error: expect.stringMatching(/theory class scheduled/) });
+    expect((await pinSlotWithChecks(base(mixed, { assignmentId: "a2", subjectId: "lab1", facultyId: "f2", allowSplit: true }))).ok).toBe(true);
+  });
+
+  it("lets a non-teaching subject split with anything - a theory class, a lab, or another non-teaching one", async () => {
+    const fake = new FakeFirestore();
+    fake.seed(`${C}/subjects/coun1`, { type: "NON_TEACHING" });
+    fake.seed(`${C}/subjects/th1`, { type: "THEORY" });
+    await pinSlotWithChecks(base(fake, { assignmentId: "a1", subjectId: "coun1" }));
+    const split = await pinSlotWithChecks(base(fake, { assignmentId: "a2", subjectId: "th1", facultyId: "f2", allowSplit: true }));
+    expect(split.ok).toBe(true);
+
+    // A theory-occupied cell also accepts a non-teaching subject joining it (same rule, the other way round).
+    const reversed = new FakeFirestore();
+    reversed.seed(`${C}/subjects/th1`, { type: "THEORY" });
+    reversed.seed(`${C}/subjects/coun1`, { type: "NON_TEACHING" });
+    await pinSlotWithChecks(base(reversed, { assignmentId: "a1", subjectId: "th1" }));
+    expect((await pinSlotWithChecks(base(reversed, { assignmentId: "a2", subjectId: "coun1", facultyId: "f2", allowSplit: true }))).ok).toBe(true);
+  });
+
+  it("has no cap once non-teaching is involved - a third, fourth, ... subject can all share the same period", async () => {
+    const fake = new FakeFirestore();
+    fake.seed(`${C}/subjects/coun1`, { type: "NON_TEACHING" });
+    fake.seed(`${C}/subjects/sports1`, { type: "NON_TEACHING" });
+    fake.seed(`${C}/subjects/seminar1`, { type: "NON_TEACHING" });
+    fake.seed(`${C}/subjects/crt1`, { type: "NON_TEACHING" });
+    await pinSlotWithChecks(base(fake, { assignmentId: "a1", subjectId: "coun1" }));
+    await pinSlotWithChecks(base(fake, { assignmentId: "a2", subjectId: "sports1", facultyId: "f2", allowSplit: true }));
+    expect((await pinSlotWithChecks(base(fake, { assignmentId: "a3", subjectId: "seminar1", facultyId: "f3", allowSplit: true }))).ok).toBe(true);
+    expect((await pinSlotWithChecks(base(fake, { assignmentId: "a4", subjectId: "crt1", facultyId: "f4", allowSplit: true }))).ok).toBe(true);
+    expect(slots(fake)).toHaveLength(4);
   });
 
   it("does not compare a faculty member's other sections (same period number or overlapping clock time is allowed, as before)", async () => {

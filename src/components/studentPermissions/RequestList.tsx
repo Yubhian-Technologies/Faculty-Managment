@@ -34,7 +34,7 @@ function Route({ request }: { request: PermissionRequestView }) {
         return (
           <li key={stage} className="flex items-center gap-1.5">
             {i > 0 && <span className="text-muted-foreground">→</span>}
-            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ${
+            <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 ${
               rejected ? "border-red-300 bg-red-50 text-red-800" : current ? "border-primary bg-primary/10 text-primary font-medium" : done ? "border-green-300 bg-green-50 text-green-800" : "text-muted-foreground"
             }`}>
               {done && !skipped.has(stage) && <Check className="h-3 w-3" />}
@@ -51,32 +51,44 @@ function RequestCard({ request, view, viewerUid, onAct }: { request: PermissionR
   const p = request.payload;
   const [open, setOpen] = useState(false);
   const mine = request.requesterUid === viewerUid;
+  const displayCategory = p.otherCategory || p.categoryLabel;
+
   return (
-    <Card>
-      <CardContent className="p-4 space-y-3">
-        <div className="flex flex-wrap items-start justify-between gap-2">
+    <Card className="border shadow-xs">
+      <CardContent className="p-3 sm:p-4 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="font-semibold break-words">{p.title}</p>
-            <p className="text-xs text-muted-foreground">{p.categoryLabel} · {formatRange(p.fromDate, p.toDate)} · {formatPeriods(p.periods)}</p>
+            <p className="font-semibold break-words text-sm sm:text-base">{p.title}</p>
+            <p className="text-xs text-muted-foreground">{displayCategory} · {formatRange(p.fromDate, p.toDate)} · {formatPeriods(p.periods)}</p>
           </div>
-          <div className="flex items-center gap-1.5">
-            {p.late && <Badge variant="outline" className="border-amber-300 text-amber-800" title="Raised with less than the preferred notice"><AlertTriangle className="h-3 w-3 mr-1" />Short notice</Badge>}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {p.late && <Badge variant="outline" className="border-amber-300 text-amber-800 text-xs rounded-md" title="Raised with less than the preferred notice"><AlertTriangle className="h-3 w-3 mr-1" />Short notice</Badge>}
             <StatusBadge request={request} />
           </div>
         </div>
 
-        <p className="text-sm whitespace-pre-wrap break-words">{p.description}</p>
+        <p className="text-xs sm:text-sm whitespace-pre-wrap break-words">{p.description}</p>
         {p.venue && <p className="text-xs text-muted-foreground">Venue: {p.venue}</p>}
 
-        <div className="text-sm">
-          <span className="text-muted-foreground">{request.requesterType === "FACULTY" ? "Raised by " : "Student: "}</span>
-          <span className="font-medium">{request.requesterName}</span>
-          {request.requesterType === "FACULTY" && <span className="text-muted-foreground"> for {p.students.length} student{p.students.length === 1 ? "" : "s"}</span>}
-          <span className="text-muted-foreground"> · {request.scope}</span>
+        <div className="text-xs sm:text-sm space-y-1">
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="text-muted-foreground">{request.requesterType === "FACULTY" ? "Raised by: " : "Student: "}</span>
+            <span className="font-medium text-foreground">{request.requesterName}</span>
+            {request.requesterType === "FACULTY" && <span className="text-muted-foreground"> for {p.students.length} student{p.students.length === 1 ? "" : "s"}</span>}
+            <span className="text-muted-foreground"> · Dept: {request.scope}</span>
+            {p.students.length === 1 && (
+              <span className="text-foreground font-medium"> · Year {p.students[0].year}, Section {p.students[0].section}</span>
+            )}
+          </div>
         </div>
-        {(request.requesterType === "FACULTY" || p.students.length > 1) && (
-          <div className="flex flex-wrap gap-1">
-            {p.students.slice(0, open ? undefined : 6).map((s) => <Badge key={s.id} variant="secondary" className="font-normal">{s.rollNumber} · {s.name}</Badge>)}
+
+        {p.students.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {p.students.slice(0, open ? undefined : 6).map((s) => (
+              <Badge key={s.id} variant="secondary" className="font-normal text-xs rounded-md">
+                {s.rollNumber} · {s.name} <span className="text-muted-foreground ml-1">(Yr {s.year} - Sec {s.section})</span>
+              </Badge>
+            ))}
             {!open && p.students.length > 6 && <button type="button" className="text-xs text-primary hover:underline" onClick={() => setOpen(true)}>+{p.students.length - 6} more</button>}
           </div>
         )}
@@ -84,23 +96,23 @@ function RequestCard({ request, view, viewerUid, onAct }: { request: PermissionR
         <Route request={request} />
 
         {p.proof.length > 0 && (
-          <div className="flex flex-wrap gap-3 text-sm">
+          <div className="flex flex-wrap gap-3 text-xs sm:text-sm">
             {p.proof.map((f) => <a key={f.url} href={f.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline"><ExternalLink className="h-3.5 w-3.5" />{f.name}</a>)}
           </div>
         )}
 
         {request.effectStatus === "FAILED" && (
           <div className="flex flex-wrap items-center gap-2 rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-800" role="alert">
-            Approved, but updating attendance already marked for these days didn&apos;t finish. New periods are still marked On Duty.
+            Approved, but attendance update process did not complete. New periods remain marked On Duty.
             {view !== "mine" && <Button size="sm" variant="outline" className="h-7" onClick={() => onAct({ request, action: "RETRY", needsRemark: false })}><RefreshCw className="h-3.5 w-3.5 mr-1" />Retry</Button>}
           </div>
         )}
 
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <button type="button" className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 border-t">
+          <button type="button" className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1 py-1" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
             <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`} />History
           </button>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2 justify-end">
             {mine && request.status === "PENDING" && <Button size="sm" variant="outline" onClick={() => onAct({ request, action: "CANCEL", needsRemark: false })}>Withdraw</Button>}
             {view === "inbox" && request.status === "PENDING" && !mine && (
               <>
@@ -115,8 +127,8 @@ function RequestCard({ request, view, viewerUid, onAct }: { request: PermissionR
         {open && (
           <ol className="space-y-1 border-t pt-2 text-xs text-muted-foreground">
             {request.history.map((h, i) => (
-              <li key={i}><span className="text-foreground font-medium">{h.actorName}</span> {({ SUBMIT: "raised it", APPROVE: "approved", REJECT: "rejected", CANCEL: "withdrew it", REVOKE: "revoked it", SKIP: "(skipped)" })[h.action]}
-                {h.stage ? ` as ${stageLabel(h.stage)}` : ""} · {when(h.at)}{h.remark ? ` - “${h.remark}”` : ""}</li>
+              <li key={i}><span className="text-foreground font-medium">{h.actorName}</span> {({ SUBMIT: "raised request", APPROVE: "approved", REJECT: "rejected", CANCEL: "withdrew request", REVOKE: "revoked approval", SKIP: "(skipped)" })[h.action]}
+                {h.stage ? ` as ${stageLabel(h.stage)}` : ""} · {when(h.at)}{h.remark ? ` - "${h.remark}"` : ""}</li>
             ))}
           </ol>
         )}

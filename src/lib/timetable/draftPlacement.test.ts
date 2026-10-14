@@ -88,7 +88,7 @@ describe("validatePlacement - labs sharing a period", () => {
 
   it("still refuses a THIRD lab", () => {
     const two = { slots: [...draft.slots, slot("labB", "f3", "a3")] };
-    expect(validatePlacement(ctx, two, { ...placementOpts, subjectId: "labC", facultyId: "f4", assignmentId: "a4", allowSplit: true })).toMatch(/already has 2 labs/);
+    expect(validatePlacement(ctx, two, { ...placementOpts, subjectId: "labC", facultyId: "f4", assignmentId: "a4", allowSplit: true })).toMatch(/already has 2 subjects/);
   });
 
   it("lets another faculty join a lab already in a two-lab period (co-teaching)", () => {
@@ -108,13 +108,31 @@ describe("validatePlacement - non-teaching subjects sharing a period", () => {
     expect(validatePlacement(ctx, draft, { ...placementOpts, subjectId: "skillB", facultyId: "f2", assignmentId: "a2", allowSplit: true })).toBeNull();
   });
 
-  it("still refuses a THIRD non-teaching subject in the same period", () => {
+  it("has no cap once non-teaching is involved - a THIRD (and more) non-teaching subject can still join", () => {
     const two = { slots: [...draft.slots, slot("skillB", "f2", "a2")] };
-    expect(validatePlacement(ctx, two, { ...placementOpts, subjectId: "nssC", facultyId: "f3", assignmentId: "a3", allowSplit: true })).toMatch(/already has 2 non-teaching subjects/);
+    expect(validatePlacement(ctx, two, { ...placementOpts, subjectId: "nssC", facultyId: "f3", assignmentId: "a3", allowSplit: true })).toBeNull();
   });
 
-  it("refuses splitting a non-teaching subject against a lab", () => {
+  it("lets ANY subject join a period once a non-teaching one is already there (e.g. Counselling + a lab)", () => {
     const lab = makeContext({ subjectsById: new Map([["counA", nonTeaching("counA")], ["labX", { id: "labX", type: "PRACTICAL" } as unknown as import("@/types").Subject]]) });
-    expect(validatePlacement(lab, draft, { ...placementOpts, subjectId: "labX", facultyId: "f2", assignmentId: "a2", allowSplit: true })).toMatch(/can only be split between lab subjects/);
+    expect(validatePlacement(lab, draft, { ...placementOpts, subjectId: "labX", facultyId: "f2", assignmentId: "a2", allowSplit: true })).toBeNull();
+  });
+
+  it("lets a theory subject and a lab share a period (any types may split, capped at two)", () => {
+    const theoryVsLab = makeContext({ subjectsById: new Map([
+      ["theoryA", { id: "theoryA", type: "THEORY" } as unknown as import("@/types").Subject],
+      ["labX", { id: "labX", type: "PRACTICAL" } as unknown as import("@/types").Subject],
+    ]) });
+    const theorySlot = { assignmentId: "a1", facultyId: "f1", facultyName: "f1", subjectId: "theoryA", subjectName: "theoryA", subjectType: "THEORY", day: "MON", periodNumber: 1 } as unknown as import("@/types").DraftSlot;
+    expect(validatePlacement(theoryVsLab, { slots: [theorySlot] }, { ...placementOpts, subjectId: "labX", facultyId: "f2", assignmentId: "a2", allowSplit: true })).toBeNull();
+  });
+
+  it("still refuses a THIRD subject when no non-teaching subject is involved - the 2-cap stays", () => {
+    const lab = (id: string) => ({ id, type: "PRACTICAL" }) as unknown as import("@/types").Subject;
+    const labSlot = (subjectId: string, assignmentId: string) =>
+      ({ assignmentId, facultyId: "f1", facultyName: "f1", subjectId, subjectName: subjectId, subjectType: "PRACTICAL", day: "MON", periodNumber: 1 }) as unknown as import("@/types").DraftSlot;
+    const labCtx = makeContext({ subjectsById: new Map([["labA", lab("labA")], ["labB", lab("labB")], ["labC", lab("labC")]]) });
+    const twoLabs = { slots: [labSlot("labA", "a1"), labSlot("labB", "a2")] };
+    expect(validatePlacement(labCtx, twoLabs, { ...placementOpts, subjectId: "labC", facultyId: "f3", assignmentId: "a3", allowSplit: true })).toMatch(/already has 2 subjects/);
   });
 });

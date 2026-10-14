@@ -6,6 +6,7 @@ import { Eye, Trash2, Check, X } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { researchRecordHref } from "@/lib/research/modules";
+import { ChangedFieldsButton } from "@/components/research/PendingChangesPanel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -35,7 +36,7 @@ export default function RAndDResearchServicesPage() {
   async function load() {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/college/research-services");
+      const res = await fetch("/api/college/research-services?scope=all");
       const data = await res.json() as { records: ResearchServiceRow[] };
       setRecords(data.records ?? []);
     } catch {
@@ -158,6 +159,7 @@ export default function RAndDResearchServicesPage() {
       header: "",
       render: (row) => (
         <div className="flex items-center gap-1">
+          <ChangedFieldsButton record={row} />
           <Button
             variant="ghost" size="sm"
             onClick={(e) => { e.stopPropagation(); router.push(researchRecordHref("research-services", row.id)); }}

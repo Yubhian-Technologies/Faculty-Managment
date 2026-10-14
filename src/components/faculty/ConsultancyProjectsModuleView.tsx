@@ -1,8 +1,9 @@
 "use client";
 
+import { InternalFacultyPicker } from "@/components/research/InternalFacultyPicker";
 import { useEffect, useRef, useState } from "react";
 import { ExternalLink, Plus, Pencil, Trash2 } from "lucide-react";
-import { Section, SubLabel, Field, TextInput, NumInput, DateInput } from "@/components/shared/ProfileFieldPrimitives";
+import { Section, SubLabel, Field, TextInput, NumField, DateInput, RequiredMark } from "@/components/shared/ProfileFieldPrimitives";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -21,6 +22,7 @@ import {
   CONSULTANCY_DELIVERABLES, CONSULTANCY_DELIVERABLE_LABELS,
 } from "@/lib/research/consultancyProjectOptions";
 import type { ConsultancyCategory, ConsultancyClientType, ConsultancyDeliverable, ConsultancyProjectRequest } from "@/types";
+import { FACT_GRID_COLS_4 } from "@/components/shared/factGrid";
 
 const PREVIEW_COUNT = 3;
 
@@ -33,19 +35,21 @@ function ConsultancyProjectRow({
 }) {
   return (
     <div className="rounded-md border bg-muted/20 shadow-sm p-2 space-y-2">
-      {isOwnProfile && project.status !== "APPROVED" && (
+      {isOwnProfile && (
         <div className="flex items-center gap-2">
-          {project.status === "PENDING" || project.status === "COORDINATOR_REVIEW" ? (
-            <Badge variant="pending" className="text-xs">{project.status === "COORDINATOR_REVIEW" ? "With R&D Coordinator" : "Pending Verification"}</Badge>
-          ) : (
-            <>
-              <Badge variant="rejected" className="text-xs">{project.status === "SENT_BACK" ? "Sent Back" : "Rejected"}</Badge>
-              {onEdit && (
-                <button type="button" onClick={() => onEdit(project)} className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1">
-                  <Pencil className="h-3 w-3" />Edit &amp; Resubmit
-                </button>
-              )}
-            </>
+          {project.status === "PENDING" && <Badge variant="pending" className="text-xs">Pending Verification</Badge>}
+          {project.status === "COORDINATOR_REVIEW" && <Badge variant="pending" className="text-xs">With R&amp;D Coordinator</Badge>}
+          {project.status === "REJECTED" && <Badge variant="rejected" className="text-xs">Rejected</Badge>}
+          {project.status === "SENT_BACK" && <Badge variant="rejected" className="text-xs">Sent Back</Badge>}
+          {onEdit && (
+            <button type="button" onClick={() => onEdit(project)} className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1">
+              <Pencil className="h-3 w-3" />
+              {project.status === "REJECTED" || project.status === "SENT_BACK"
+                ? "Edit & Resubmit"
+                : project.status === "PENDING" || project.status === "COORDINATOR_REVIEW"
+                  ? "Edit"
+                  : "Edit (sends for re-verification)"}
+            </button>
           )}
         </div>
       )}
@@ -55,23 +59,27 @@ function ConsultancyProjectRow({
       {project.status === "SENT_BACK" && project.sentBackReason && (
         <p className="text-xs text-destructive">Sent back: {project.sentBackReason}</p>
       )}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Field label="Title" value={project.title} />
-        <Field label="Client / Organization" value={project.clientName} />
-        <Field label="Client Type" value={CONSULTANCY_CLIENT_TYPE_LABELS[project.clientType]} />
-        <Field label="Category" value={CONSULTANCY_CATEGORY_LABELS[project.consultancyCategory]} />
+      <div className="@container">
+        <div className={`grid gap-2 ${FACT_GRID_COLS_4}`}>
+          <Field label="Title" value={project.title} />
+          <Field label="Client / Organization" value={project.clientName} />
+          <Field label="Client Type" value={CONSULTANCY_CLIENT_TYPE_LABELS[project.clientType]} />
+          <Field label="Category" value={CONSULTANCY_CATEGORY_LABELS[project.consultancyCategory]} />
+        </div>
       </div>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Field label="Faculty Consultant(s)" value={project.facultyConsultantsNames} />
-        <Field label="Department" value={project.department} />
-        <Field label="Start Date" value={project.startDate} />
-        <Field label="Status" value={project.projectStatus === "ONGOING" ? "Ongoing" : project.projectStatus === "COMPLETED" ? "Completed" : undefined} />
-        <Field label={project.projectStatus === "ONGOING" ? "Tentative End Date" : "End Date"} value={project.endDate} />
-        <Field label="Duration (Months)" value={project.durationMonths} />
-        <Field label="Approved Consultancy Amount (Rs.)" value={project.consultancyAmount} />
-        <Field label="Amount Received (Rs.)" value={project.amountReceived} />
-        <Field label="Institutional Share (Rs.)" value={project.institutionalShare} />
-        <Field label="Faculty Share (Rs.)" value={project.facultyShare} />
+      <div className="@container">
+        <div className={`grid gap-2 ${FACT_GRID_COLS_4}`}>
+          <Field label="Faculty Consultant(s)" value={project.facultyConsultantsNames} />
+          <Field label="Department" value={project.department} />
+          <Field label="Start Date" value={project.startDate} />
+          <Field label="Status" value={project.projectStatus === "ONGOING" ? "Ongoing" : project.projectStatus === "COMPLETED" ? "Completed" : undefined} />
+          <Field label={project.projectStatus === "ONGOING" ? "Tentative End Date" : "End Date"} value={project.endDate} />
+          <Field label="Duration (Months)" value={project.durationMonths} />
+          <Field label="Approved Consultancy Amount (Rs.)" value={project.consultancyAmount} />
+          <Field label="Amount Received (Rs.)" value={project.amountReceived} />
+          <Field label="Institutional Share (Rs.)" value={project.institutionalShare} />
+          <Field label="Faculty Share (Rs.)" value={project.facultyShare} />
+        </div>
       </div>
       {project.problemStatement && (
         <div>
@@ -107,9 +115,8 @@ function ConsultancyProjectRow({
   );
 }
 
-// One Faculty Consultant row: the Employee ID is typed and the name is fetched
-// from the faculty record (same lookup Research Publications/IPR use for an
-// internal author), never typed by hand.
+// One Faculty Consultant row: picked by Department, then a searchable faculty
+// list (InternalFacultyPicker); the Employee ID is stored, never typed.
 interface ConsultantRow {
   facultyId: string;
   name: string;
@@ -124,47 +131,19 @@ function FacultyConsultantRows({
   rows: ConsultantRow[];
   onChange: (next: ConsultantRow[]) => void;
 }) {
-  // Keeps the latest rows reachable from an async lookup that resolves later,
-  // so a slow response never overwrites edits made to other rows meanwhile.
-  const rowsRef = useRef(rows);
-  useEffect(() => { rowsRef.current = rows; }, [rows]);
-  const timers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
-
-  function patch(i: number, p: Partial<ConsultantRow>) {
-    const next = [...rowsRef.current];
-    next[i] = { ...next[i], ...p };
-    rowsRef.current = next;
+  function pick(i: number, p: { facultyId: string; name: string }) {
+    const next = [...rows];
+    next[i] = { facultyId: p.facultyId, name: p.name, lookup: p.name ? "found" : "idle" };
     onChange(next);
-  }
-
-  function setId(i: number, raw: string) {
-    const facultyId = raw;
-    clearTimeout(timers.current[i]);
-    if (!facultyId.trim()) { patch(i, { facultyId, name: "", lookup: "idle" }); return; }
-    patch(i, { facultyId, name: "", lookup: "loading" });
-    timers.current[i] = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/college/faculty-lookup?employeeId=${encodeURIComponent(facultyId.trim())}`);
-        const data = res.ok ? await res.json() as { name?: string } : null;
-        // Ignore a result for an ID the user has since changed.
-        if (rowsRef.current[i]?.facultyId !== facultyId) return;
-        patch(i, data?.name ? { name: data.name, lookup: "found" } : { name: "", lookup: "not-found" });
-      } catch {
-        if (rowsRef.current[i]?.facultyId === facultyId) patch(i, { name: "", lookup: "not-found" });
-      }
-    }, 400);
   }
 
   return (
     <div className="space-y-2">
-      <Label>Faculty Consultant ID(s)</Label>
+      <Label>Faculty Consultant(s)<RequiredMark required /></Label>
       {rows.map((r, i) => (
         <div key={i} className="flex items-start gap-2">
-          <div className="flex-1 space-y-1">
-            <Input value={r.facultyId} onChange={(e) => setId(i, e.target.value)} placeholder={`Faculty ID of consultant ${i + 1}`} />
-            {r.lookup === "loading" && <p className="text-xs text-muted-foreground">Looking up…</p>}
-            {r.lookup === "found" && <p className="text-xs text-green-700">{r.name}</p>}
-            {r.lookup === "not-found" && <p className="text-xs text-destructive">No faculty member found with that ID</p>}
+          <div className="flex-1">
+            <InternalFacultyPicker facultyId={r.facultyId} label={`Faculty consultant ${i + 1}`} required onPick={(p) => pick(i, p)} />
           </div>
           {rows.length > 1 && (
             <Button type="button" variant="ghost" size="sm" onClick={() => onChange(rows.filter((_, idx) => idx !== i))}>
@@ -362,20 +341,20 @@ function ProjectFormFields({
       <div className="space-y-5">
         <div className="space-y-4">
           <SubLabel>Overview</SubLabel>
-          <TextInput label="Title of the Consultancy Project" value={form.title} onChange={(v) => set("title", v)} />
+          <TextInput label="Title of the Consultancy Project" value={form.title} onChange={(v) => set("title", v)} required />
           <FacultyConsultantRows rows={form.consultants} onChange={(next) => set("consultants", next)} />
           {!editingProject?.facultyConsultants?.length && editingProject?.facultyConsultantsNames && (
             <p className="text-xs text-muted-foreground">Previously entered as text: {editingProject.facultyConsultantsNames}. Add their Faculty IDs above - they are required.</p>
           )}
-          <TextInput label="Department" value={form.department} onChange={(v) => set("department", v)} />
+          <TextInput label="Department" value={form.department} onChange={(v) => set("department", v)} required />
         </div>
 
         <div className="space-y-4">
           <SubLabel>Client &amp; Category</SubLabel>
-          <TextInput label="Client / Organization Name" value={form.clientName} onChange={(v) => set("clientName", v)} />
+          <TextInput label="Client / Organization Name" value={form.clientName} onChange={(v) => set("clientName", v)} required />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label>Client Type</Label>
+              <Label>Client Type<RequiredMark required /></Label>
               <Select value={form.clientType} onValueChange={(v) => set("clientType", v as ConsultancyClientType)}>
                 <SelectTrigger><SelectValue placeholder="Select client type" /></SelectTrigger>
                 <SelectContent>
@@ -384,7 +363,7 @@ function ProjectFormFields({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Consultancy Category</Label>
+              <Label>Consultancy Category<RequiredMark required /></Label>
               <Select value={form.consultancyCategory} onValueChange={(v) => set("consultancyCategory", v as ConsultancyCategory)}>
                 <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
                 <SelectContent>
@@ -394,11 +373,11 @@ function ProjectFormFields({
             </div>
           </div>
           <div className="space-y-2">
-            <Label>Problem Statement</Label>
+            <Label>Problem Statement<RequiredMark required /></Label>
             <Textarea value={form.problemStatement} onChange={(e) => set("problemStatement", e.target.value)} placeholder="Brief description of the work assigned" rows={3} />
           </div>
           <div className="space-y-2 max-w-[240px]">
-            <Label>Status of Consultancy Project</Label>
+            <Label>Status of Consultancy Project<RequiredMark required /></Label>
             <Select value={form.projectStatus} onValueChange={(v) => set("projectStatus", v as "ONGOING" | "COMPLETED")}>
               <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
               <SelectContent>
@@ -412,17 +391,17 @@ function ProjectFormFields({
         <div className="space-y-4">
           <SubLabel>Timeline</SubLabel>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <DateInput label="Start Date" value={form.startDate} onChange={(v) => set("startDate", v)} />
-            <DateInput label={isOngoing ? "Tentative End Date" : "End Date"} value={form.endDate} onChange={(v) => set("endDate", v)} />
-            <NumInput label="Duration (Months)" value={toNumberOrUndefined(form.durationMonths)} onChange={(v) => set("durationMonths", String(v))} />
+            <DateInput label="Start Date" value={form.startDate} onChange={(v) => set("startDate", v)} required />
+            <DateInput label={isOngoing ? "Tentative End Date" : "End Date"} value={form.endDate} onChange={(v) => set("endDate", v)} required />
+            <NumField label="Duration (Months)" value={form.durationMonths} onChange={(v) => set("durationMonths", v)} required />
           </div>
         </div>
 
         <div className="space-y-4">
           <SubLabel>Financials</SubLabel>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <NumInput label="Approved Consultancy Amount (Rs.)" value={toNumberOrUndefined(form.consultancyAmount)} onChange={(v) => set("consultancyAmount", String(v))} />
-            <NumInput label="Amount Received (Rs.)" value={toNumberOrUndefined(form.amountReceived)} onChange={(v) => set("amountReceived", String(v))} />
+            <NumField label="Approved Consultancy Amount (Rs.)" value={form.consultancyAmount} onChange={(v) => set("consultancyAmount", v)} />
+            <NumField label="Amount Received (Rs.)" value={form.amountReceived} onChange={(v) => set("amountReceived", v)} />
           </div>
           <DateInput label="Date of Amount Received" value={form.amountReceivedDate} onChange={(v) => set("amountReceivedDate", v)} />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -436,11 +415,11 @@ function ProjectFormFields({
                 </SelectContent>
               </Select>
             </div>
-            <NumInput label={isOngoing ? "Tentative Total Hours Spent during Academic Hours" : "Total Hours Spent during Academic Hours"} value={toNumberOrUndefined(form.hoursSpentDuringAcademicHours)} onChange={(v) => set("hoursSpentDuringAcademicHours", String(v))} />
+            <NumField label={isOngoing ? "Tentative Total Hours Spent during Academic Hours" : "Total Hours Spent during Academic Hours"} value={form.hoursSpentDuringAcademicHours} onChange={(v) => set("hoursSpentDuringAcademicHours", v)} />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <NumInput label="Institutional Share (Rs.)" value={toNumberOrUndefined(form.institutionalShare)} onChange={(v) => set("institutionalShare", String(v))} />
-            <NumInput label="Faculty Share (Rs.)" value={toNumberOrUndefined(form.facultyShare)} onChange={(v) => set("facultyShare", String(v))} />
+            <NumField label="Institutional Share (Rs.)" value={form.institutionalShare} onChange={(v) => set("institutionalShare", v)} />
+            <NumField label="Faculty Share (Rs.)" value={form.facultyShare} onChange={(v) => set("facultyShare", v)} />
           </div>
         </div>
       </div>
@@ -449,6 +428,7 @@ function ProjectFormFields({
       <div className="space-y-5">
         <div className="space-y-4">
           <SubLabel>Deliverables &amp; Reports</SubLabel>
+          <Label>Deliverables<RequiredMark required /></Label>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {CONSULTANCY_DELIVERABLES.map((d) => (
               <label key={d} className="flex items-center gap-2 text-sm">
@@ -467,6 +447,7 @@ function ProjectFormFields({
           />
           <DocumentUploadField
             label="Completion Report"
+            required
             value={form.completionReportUrl}
             uploadEndpoint="/api/upload/consultancy-doc"
             extraFields={{ kind: "completion-report" }}

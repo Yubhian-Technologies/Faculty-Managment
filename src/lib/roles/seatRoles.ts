@@ -8,7 +8,7 @@ import type { UserRole } from "@/types/core";
 export const SEAT_ROLES: UserRole[] = [
   "PRINCIPAL", "COLLEGE_ADMIN", "VICE_PRINCIPAL", "ACADEMICS", "HOD",
   "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "RND_COORDINATOR", "PLACEMENT_DEPT", "EXAM_CELL", "LIBRARY",
-  "WEBMASTER",
+  "HOSTEL", "PD", "WEBMASTER",
 ];
 
 // What someone's primary role can be set to when they step out of a legacy
@@ -91,6 +91,30 @@ export function pickEffectiveRole(held: string[], allowed: string[]): string | n
     if (level < bestLevel) { best = role; bestLevel = level; }
   }
   return best;
+}
+
+// Does this login hold a role, whichever one the endpoint resolved it to?
+//
+// `requireRole` reduces a caller to ONE role - the most senior among those the
+// endpoint allows (pickEffectiveRole above) - so `session.role` is not "who
+// this person is", it is "which hat this endpoint put them in". Between two
+// seats of the SAME seniority the pick is decided by seat order alone: someone
+// who is both an HOD and the college's R&D head (both ROLE_LEVEL 4) resolves
+// to "HOD" on every route that accepts both, and `session.role === "R_AND_D"`
+// is then false for the actual R&D head - who could no longer verify a
+// submission, or even see anyone else's. Ask this instead wherever the
+// question is "is this person the R&D head / the Exam Cell / ...", rather than
+// "which role is this request being evaluated as".
+//
+// It can never widen access: `roles` lists only roles the person really holds,
+// re-derived live by requireRole (lib/auth/liveRoles.ts), not read from the
+// cookie. notifyRole already resolves role broadcasts this way (lib/notify.ts).
+export function holdsRole(
+  session: { role: string; roles?: string[] },
+  ...roles: string[]
+): boolean {
+  return [session.role, ...(session.roles ?? [])]
+    .some((r) => roles.includes(normalizeStoredRole(r)));
 }
 
 // `held` ordering used everywhere: seat roles (most senior first), then the

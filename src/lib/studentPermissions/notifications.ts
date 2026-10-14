@@ -12,6 +12,7 @@ import { PERMISSION_STAGE_LABELS, type PermissionPayload, type PermissionStage }
 
 const STAGE_LINK: Record<PermissionStage, string> = {
   CLASS_INCHARGE: "/panel/student-permissions",
+  DELEGATED_FACULTY: "/panel/student-permissions",
   HOD: "/hod/student-permissions",
   VICE_PRINCIPAL: "/principal/student-permissions",
   PRINCIPAL: "/principal/student-permissions",

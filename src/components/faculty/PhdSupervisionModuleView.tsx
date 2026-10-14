@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ExternalLink, Plus, Pencil } from "lucide-react";
-import { Section, SubLabel, Field, TextInput, NumInput, DateInput, TableRepeatingGroup } from "@/components/shared/ProfileFieldPrimitives";
+import { Section, SubLabel, Field, TextInput, NumField, DateInput, TableRepeatingGroup, RequiredMark } from "@/components/shared/ProfileFieldPrimitives";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -17,6 +17,7 @@ import type {
   PhdAwardNature, PhdAwardType, PhdFellowshipType, PhdGuideStatus, PhdRecognizedSupervisor,
   PhdSupervisionRequest, SeedFundingPaperItem, SeedFundingPatentItem,
 } from "@/types";
+import { FACT_GRID_COLS_4 } from "@/components/shared/factGrid";
 
 const PREVIEW_COUNT = 3;
 const EMPTY_PAPER: SeedFundingPaperItem = { title: "", journalOrConference: "" };
@@ -37,19 +38,21 @@ function PhdSupervisionRow({
 }) {
   return (
     <div className="rounded-md border bg-muted/20 shadow-sm p-2 space-y-2">
-      {isOwnProfile && record.status !== "APPROVED" && (
+      {isOwnProfile && (
         <div className="flex items-center gap-2">
-          {record.status === "PENDING" || record.status === "COORDINATOR_REVIEW" ? (
-            <Badge variant="pending" className="text-xs">{record.status === "COORDINATOR_REVIEW" ? "With R&D Coordinator" : "Pending Verification"}</Badge>
-          ) : (
-            <>
-              <Badge variant="rejected" className="text-xs">{record.status === "SENT_BACK" ? "Sent Back" : "Rejected"}</Badge>
-              {onEdit && (
-                <button type="button" onClick={() => onEdit(record)} className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1">
-                  <Pencil className="h-3 w-3" />Edit &amp; Resubmit
-                </button>
-              )}
-            </>
+          {record.status === "PENDING" && <Badge variant="pending" className="text-xs">Pending Verification</Badge>}
+          {record.status === "COORDINATOR_REVIEW" && <Badge variant="pending" className="text-xs">With R&amp;D Coordinator</Badge>}
+          {record.status === "REJECTED" && <Badge variant="rejected" className="text-xs">Rejected</Badge>}
+          {record.status === "SENT_BACK" && <Badge variant="rejected" className="text-xs">Sent Back</Badge>}
+          {onEdit && (
+            <button type="button" onClick={() => onEdit(record)} className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1">
+              <Pencil className="h-3 w-3" />
+              {record.status === "REJECTED" || record.status === "SENT_BACK"
+                ? "Edit & Resubmit"
+                : record.status === "PENDING" || record.status === "COORDINATOR_REVIEW"
+                  ? "Edit"
+                  : "Edit (sends for re-verification)"}
+            </button>
           )}
         </div>
       )}
@@ -59,15 +62,17 @@ function PhdSupervisionRow({
       {record.status === "SENT_BACK" && record.sentBackReason && (
         <p className="text-xs text-destructive">Sent back: {record.sentBackReason}</p>
       )}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Field label="Name of the Scholar" value={record.scholarName} />
-        <Field label="Status of Guide" value={record.guideStatus === "SUPERVISOR" ? "Supervisor" : "Co-Supervisor"} />
-        <Field label="Recognized Supervisor" value={record.recognizedSupervisor === "JNTUK" ? "JNTUK" : record.otherUniversityName || "Other"} />
-        <Field label="Department" value={record.scholarDepartment} />
-        <Field label="Year of Allocation" value={record.yearOfAllocation} />
-        <Field label="Years Completed" value={record.yearsCompleted} />
-        <Field label="Degree Awarded" value={record.degreeAwarded} />
-        <Field label="Date of Award" value={record.dateOfAward} />
+      <div className="@container">
+        <div className={`grid gap-2 ${FACT_GRID_COLS_4}`}>
+          <Field label="Name of the Scholar" value={record.scholarName} />
+          <Field label="Status of Guide" value={record.guideStatus === "SUPERVISOR" ? "Supervisor" : "Co-Supervisor"} />
+          <Field label="Recognized Supervisor" value={record.recognizedSupervisor === "JNTUK" ? "JNTUK" : record.otherUniversityName || "Other"} />
+          <Field label="Department" value={record.scholarDepartment} />
+          <Field label="Year of Allocation" value={record.yearOfAllocation} />
+          <Field label="Years Completed" value={record.yearsCompleted} />
+          <Field label="Degree Awarded" value={record.degreeAwarded} />
+          <Field label="Date of Award" value={record.dateOfAward} />
+        </div>
       </div>
       <div className="flex flex-wrap gap-3">
         {record.allotmentOrderUrl && (
@@ -253,7 +258,7 @@ function RecordFormFields({
           <SubLabel>Supervision</SubLabel>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label>Recognized Supervisor</Label>
+              <Label>Recognized Supervisor<RequiredMark required /></Label>
               <Select value={form.recognizedSupervisor} onValueChange={(v) => set("recognizedSupervisor", v as PhdRecognizedSupervisor)}>
                 <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                 <SelectContent>
@@ -267,7 +272,7 @@ function RecordFormFields({
             )}
           </div>
           <div className="space-y-2">
-            <Label>Status of Guide</Label>
+            <Label>Status of Guide<RequiredMark required /></Label>
             <Select value={form.guideStatus} onValueChange={(v) => set("guideStatus", v as PhdGuideStatus)}>
               <SelectTrigger className="max-w-[220px]"><SelectValue placeholder="Select" /></SelectTrigger>
               <SelectContent>
@@ -281,7 +286,7 @@ function RecordFormFields({
         <div className="space-y-4">
           <SubLabel>Scholar Details</SubLabel>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <TextInput label="Name of the Scholar" value={form.scholarName} onChange={(v) => set("scholarName", v)} />
+            <TextInput label="Name of the Scholar" value={form.scholarName} onChange={(v) => set("scholarName", v)} required />
             <TextInput label="Department of Scholar" value={form.scholarDepartment} onChange={(v) => set("scholarDepartment", v)} />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -401,7 +406,7 @@ function RecordFormFields({
                 </Select>
               </div>
               <TextInput label="Name of Fellowship" value={form.fellowshipName} onChange={(v) => set("fellowshipName", v)} />
-              <NumInput label="Amount Received (Rs.)" value={toNumberOrUndefined(form.fellowshipAmount)} onChange={(v) => set("fellowshipAmount", String(v))} />
+              <NumField label="Amount Received (Rs.)" value={form.fellowshipAmount} onChange={(v) => set("fellowshipAmount", v)} />
             </div>
           )}
         </div>

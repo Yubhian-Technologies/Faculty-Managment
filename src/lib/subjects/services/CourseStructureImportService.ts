@@ -70,6 +70,7 @@ export interface CourseStructureAssignedSubject {
   tutorialHours: number;
   practicalHours: number;
   credits: number;
+  serialNumber?: number;
 }
 
 export interface CourseStructurePlanRow {
@@ -128,6 +129,8 @@ interface Plan {
   masterIdByCode: Map<string, string>;
   newMasterCodes: Set<string>;
   existingInstanceIds: Set<string>;
+  // Already-assigned subjects whose place in the order differs from this file's (instance id -> new S.No.).
+  serialUpdates: Map<string, number>;
   legacyToDelete: Map<string, { createdAt: unknown }>;
   writes: number;
 }
@@ -168,7 +171,10 @@ export function courseOwnershipError(
   return null;
 }
 
-function customCategoriesFrom(docs: FirebaseFirestore.DocumentData[]): CategoryDefinition[] {
+// Shared with MasterSubjectImportService - both read the same
+// colleges/{id}/subjectCategories collection to enforce the same "category
+// must be defined" rule.
+export function customCategoriesFrom(docs: FirebaseFirestore.DocumentData[]): CategoryDefinition[] {
   return docs
     .filter((d): d is CategoryDefinition => typeof d.code === "string" && typeof d.fullForm === "string")
     .map((d) => ({ code: d.code, fullForm: d.fullForm }));
@@ -290,6 +296,7 @@ export class CourseStructureImportService {
         tutorialHours: a.tutorialHours ?? 0,
         practicalHours: a.practicalHours ?? 0,
         credits: a.credits ?? 0,
+        ...(a.serialNumber != null ? { serialNumber: a.serialNumber } : {}),
       });
       slots.set(key, slot);
     }
@@ -305,7 +312,8 @@ export class CourseStructureImportService {
             semester: s.semester,
             count: s.subjects.length,
             regulations: Array.from(s.regulations).sort(),
-            subjects: s.subjects.sort((x, y) => x.code.localeCompare(y.code)),
+            // Uploaded order; by code only for subjects saved before it was kept.
+            subjects: s.subjects.sort((x, y) => (x.serialNumber ?? Infinity) - (y.serialNumber ?? Infinity) || x.code.localeCompare(y.code)),
           }))
           .sort((a, b) => a.year - b.year || a.semester - b.semester),
       },
@@ -354,7 +362,7 @@ export class CourseStructureImportService {
     const warnings = [...validation.warnings];
     const plan: Plan = {
       errors, warnings, rows: validation.rows, planRows: [],
-      masterIdByCode: new Map(), newMasterCodes: new Set(), existingInstanceIds: new Set(),
+      masterIdByCode: new Map(), newMasterCodes: new Set(), existingInstanceIds: new Set(), serialUpdates: new Map(),
       legacyToDelete: new Map(), writes: 0,
     };
     if (validation.rows.length === 0) return plan;
@@ -394,6 +402,7 @@ export class CourseStructureImportService {
         }
         instanceAction = "unchanged";
         plan.existingInstanceIds.add(instanceId);
+        if (current.serialNumber !== row.rowNumber - 1) plan.serialUpdates.set(instanceId, row.rowNumber - 1);
       }
       plan.planRows.push({ row: row.rowNumber, code: row.code, key, name: row.name, year: row.year, semester: row.semester, master: masterAction, instance: instanceAction });
     }
@@ -448,12 +457,12 @@ export class CourseStructureImportService {
       courseId: ctx.course.id,
       courseName: ctx.course.name,
       regulation: req.regulation,
-      serialNumber: row.rowNumber - 1,
       category: row.category,
       ...(row.customCategory ? { customCategory: row.customCategory } : {}),
       name: row.name,
       code: row.code,
       ...(row.shortCode ? { shortCode: row.shortCode } : {}),
+      ...(row.universityCode ? { universityCode: row.universityCode } : {}),
       hoursPerWeek: row.hoursPerWeek,
       lectureHours: row.lectureHours,
       tutorialHours: row.tutorialHours,
@@ -491,7 +500,7 @@ export class CourseStructureImportService {
     return { ok: true, ...base, verification };
   }
 
-  private async commit(req: CourseStructureRequest, ctx: LoadedContext, plan: Plan): Promise<void> {
+  private async commit(req: CourseStructureRequest, ctx: LoadedContext & { existingInstances?: SubjectSemesterAssignment[] }, plan: Plan): Promise<void> {
     const college = this.collegeRef(req.collegeId);
     const instances = college.collection("subjectSemesterAssignments");
     const subjects = college.collection("subjects");
@@ -559,6 +568,18 @@ export class CourseStructureImportService {
 
       // 3. Writes - all or nothing.
       const now = new Date();
+      // A University Code in the file is recorded on an existing subject too
+      // (and its assignments, below) - only when it is new or different.
+      const universityCodeFor = new Map<string, string>();
+      for (const [code, r] of rowByCode) if (r.universityCode) universityCodeFor.set(plan.masterIdByCode.get(code)!, r.universityCode);
+      for (const id of reusedMasterIds) {
+        const next = universityCodeFor.get(id);
+        const master = masters.get(id);
+        if (next && master && master.universityCode !== next) {
+          tx.update(subjects.doc(id), { universityCode: next, updatedAt: now });
+          masters.set(id, { ...master, universityCode: next });
+        }
+      }
       for (const code of plan.newMasterCodes) {
         const id = plan.masterIdByCode.get(code)!;
         const payload = this.masterPayload(req, ctx, rowByCode.get(code)!, now);
@@ -579,7 +600,23 @@ export class CourseStructureImportService {
           semester: p.semester,
           createdAt: legacy?.createdAt ?? now,
           now,
+          // The file's row order, kept per assignment: a subject reused from
+          // another department or an earlier upload keeps its own master S.No.,
+          // which says nothing about where it sits in THIS file.
+          serialNumber: p.row - 1,
         }));
+      }
+      // Subjects already assigned are otherwise left alone - only their place
+      // in the order is taken from this file, so uploading it again restores it.
+      for (const p of plan.planRows.filter((r) => r.instance === "unchanged")) {
+        const instanceId = `${plan.masterIdByCode.get(p.key)}_${ctx.department.id}_${p.semester}`;
+        const serialNumber = plan.serialUpdates.get(instanceId);
+        const universityCode = universityCodeFor.get(plan.masterIdByCode.get(p.key)!);
+        const current = ctx.existingInstances?.find((x) => x.id === instanceId);
+        const patch: Record<string, unknown> = {};
+        if (serialNumber != null) patch.serialNumber = serialNumber;
+        if (universityCode && current?.universityCode !== universityCode) patch.universityCode = universityCode;
+        if (Object.keys(patch).length > 0) tx.update(instances.doc(instanceId), { ...patch, updatedAt: now });
       }
       for (const ref of legacyRefs) tx.delete(ref);
     });

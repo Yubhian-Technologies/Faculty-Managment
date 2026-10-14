@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectGroup, SelectLabel, SelectItem, SelectTrig
 import { toast } from "@/hooks/useToast";
 import { useAuthStore } from "@/store/authStore";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
-import { PublicationDetailsForm, emptyPublicationDetails, isPublicationDetailsValid } from "@/components/research/PublicationDetailsForm";
+import { PublicationDetailsForm, emptyPublicationDetails, publicationMissingFields } from "@/components/research/PublicationDetailsForm";
 import { ROLE_LABELS } from "@/types";
 import type { FMSUser, PublicationDetails } from "@/types";
 
@@ -45,7 +45,8 @@ export default function NewPublicationPage() {
     .map((role) => ({ role, members: staff.filter((s) => s.role === role) }))
     .filter((g) => g.members.length > 0);
 
-  const isValid = !!uid && isPublicationDetailsValid(details);
+  const missing = [...(uid ? [] : ["Staff Member"]), ...publicationMissingFields(details)];
+  const isValid = missing.length === 0;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -97,7 +98,12 @@ export default function NewPublicationPage() {
 
             <PublicationDetailsForm value={details} onChange={setDetails} ownCollegeId={ownCollegeId} />
 
-            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end pt-4 border-t">
+              {!isValid && (
+                <p className="text-xs text-destructive sm:mr-auto" role="status">
+                  Required: {missing.slice(0, 6).join(", ")}{missing.length > 6 ? ` and ${missing.length - 6} more` : ""}
+                </p>
+              )}
               <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
               <Button type="submit" loading={saving} disabled={!isValid}>Add Publication</Button>
             </div>

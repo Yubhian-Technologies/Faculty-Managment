@@ -33,7 +33,7 @@ import type { FacultyMember, FMSUser, DegreeDetail } from "@/types";
 // `doctoral` picks which year key is exposed: yearOfAward for Doctoral/
 // Post-Doctoral entries, yearOfPassing for everything else. The other key is
 // omitted (not set to undefined) so the JSON stays minimal.
-function publicDegree(d: DegreeDetail | undefined, doctoral: boolean) {
+function publicDegree(d: DegreeDetail | undefined, doctoral: boolean, postdoctoral = false) {
   // An entry with nothing real on it (e.g. every field cleared, a year saved as 0)
   // is left out, so the public page doesn't show an empty card. Stored data is untouched.
   if (!d || !degreeHasData(d, doctoral ? "DOCTORAL" : "UG")) return undefined;
@@ -45,7 +45,7 @@ function publicDegree(d: DegreeDetail | undefined, doctoral: boolean) {
     institutionName: d.institutionName,
     // Doctoral entries only (Ph.D. - the department it was pursued in and the
     // thesis title).
-    ...(doctoral ? { departmentName: d.departmentName, thesisTitle: d.thesisTitle, yearOfAward: d.yearOfAward } : { yearOfPassing: d.yearOfPassing }),
+    ...(doctoral ? { departmentName: postdoctoral ? d.departmentName || d.branch : d.departmentName, thesisTitle: d.thesisTitle, yearOfAward: d.yearOfAward } : { yearOfPassing: d.yearOfPassing }),
   };
 }
 
@@ -135,7 +135,7 @@ export async function GET(request: Request) {
               additionalPgDetails: (ap.additionalPgDetails ?? []).map((d) => publicDegree(d, false)),
               phdDetails: publicDegree(ap.phdDetails, true),
               additionalPhdDetails: (ap.additionalPhdDetails ?? []).map((d) => publicDegree(d, true)),
-              postdoctoralFellowshipDetails: publicDegree(ap.postdoctoralFellowshipDetails, true),
+              postdoctoralFellowshipDetails: publicDegree(ap.postdoctoralFellowshipDetails, true, true),
               phdStatus: ap.phdDetails?.status,
               netSletSetGateOthers: ap.netSletSetGateOthers,
               qualifiedExam: ap.qualifiedExam,

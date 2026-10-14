@@ -38,6 +38,8 @@ const HIDDEN_KEYS = new Set([
   "addedBy", "addedByName", "createdAt", "updatedAt",
   // Internal join key, not a field anyone submitted.
   "internalAuthorUids",
+  // The edit trail is shown as its own panel above the fields, not as a field.
+  "verifiedSnapshot", "pendingChanges",
 ]);
 
 /** Values longer than this get their own full-width block rather than a cell. */

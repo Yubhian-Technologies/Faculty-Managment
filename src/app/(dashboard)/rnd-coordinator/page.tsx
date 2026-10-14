@@ -6,6 +6,7 @@ import { Check, CornerUpLeft, Eye, Pencil, X } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { ResearchRecordDetails } from "@/components/research/ResearchRecordDetails";
+import { PendingChangesPanel } from "@/components/research/PendingChangesPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -42,7 +43,7 @@ const NOT_EDITABLE = new Set([
   "id", "uid", "collegeId", "status", "createdAt", "updatedAt", "addedBy", "addedByName", "ownerName", "ownerRole",
   "ownerDesignation", "reviewDepartment", "coordinatorUid", "reviewedBy", "reviewedByName", "reviewedAt", "rejectionReason",
   "changeLog", "coordinatorReviewedBy", "coordinatorReviewedByName", "coordinatorReviewedAt", "coordinatorNote",
-  "sentBackReason", "coordinatorEdits", "internalAuthorUids",
+  "sentBackReason", "coordinatorEdits", "internalAuthorUids", "verifiedSnapshot", "pendingChanges",
 ]);
 
 type Scalar = string | number | boolean | null;
@@ -244,7 +245,10 @@ export default function RndCoordinatorPage() {
           )}
 
           {open && !editing && (
-            <ResearchRecordDetails record={open.record} labels={RESEARCH_FIELD_LABELS[open.module]} />
+            <>
+              <PendingChangesPanel record={open.record} />
+              <ResearchRecordDetails record={open.record} labels={RESEARCH_FIELD_LABELS[open.module]} />
+            </>
           )}
 
           {open && editing && (

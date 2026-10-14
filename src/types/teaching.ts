@@ -60,11 +60,6 @@ export interface Subject {
   // (TeachingAssignmentsEditor). Absent on semester-scoped subjects and
   // on subjects created before this field existed. Immutable once set.
   regulation?: string;
-  // Row position in the Academics' curriculum-table view of a course -
-  // editable, so the Academics can match a printed curriculum sheet's ordering
-  // instead of being stuck with alphabetical-by-name. Master subjects only;
-  // absent on legacy subjects created before this field existed.
-  serialNumber?: number;
   // Curriculum category (e.g. Professional Core, Open Elective) - see
   // SUBJECT_CATEGORY_LABELS. Master subjects only.
   category?: SubjectCategory;
@@ -83,6 +78,11 @@ export interface Subject {
   // An optional second short code for the same subject. The timetable editor asks which of
   // the two to show when a period of this subject is placed (stored on the slot as displayCode).
   altShortCode?: string;
+  // The university's own code for this subject (e.g. "R232101") - what its
+  // result exports use. Optional; lets the Exam Cell import a university
+  // results file as it is (lib/examResults). Copied onto the subject's
+  // semester assignments, like the name and code.
+  universityCode?: string;
   hoursPerWeek: number;
   totalHoursPerSemester?: number;
   // L-T-P breakdown (Lecture/Tutorial/Practical hours per week) alongside
@@ -139,6 +139,11 @@ export interface SubjectSemesterAssignment {
   masterSubjectId?: string; // Explicit provenance pointer
   subjectName: string;
   subjectCode: string;
+  // Position in the curriculum as the Dean Academics uploaded it (Course
+  // Structure import: the file's row order) or last edited it - lists show a
+  // semester's subjects in this order, by code only when it is absent.
+  universityCode?: string;
+  serialNumber?: number;
   shortCode?: string; // Snapshot of Subject.shortCode - see its own doc-comment
   // Snapshot attributes copied from Master Subject
   type?: SubjectType;

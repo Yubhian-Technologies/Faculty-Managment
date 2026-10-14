@@ -63,6 +63,8 @@ export interface CourseStructureRow {
   code: string;
   codeSource: "file" | "derived";
   shortCode?: string;
+  /** The university's code for the subject (Subject.universityCode). */
+  universityCode?: string;
   category: SubjectCategory;
   customCategory?: string;
   type: SubjectType;
@@ -270,6 +272,8 @@ export function validateCourseStructureRows(
     if (!code) err("code", "Subject Code couldn't be derived. Add a Subject Code.");
     else if (!/^[A-Z0-9][A-Z0-9\-/.]*$/.test(code)) err("code", `Subject Code "${code}" may only contain letters, digits, "-", "/" and ".".`);
     const shortCode = text(data.shortCode).toUpperCase() || undefined;
+    const universityCode = text(data.universityCode).toUpperCase().replace(/\s+/g, "") || undefined;
+    if (universityCode && !/^[A-Z0-9][A-Z0-9\-/.]*$/.test(universityCode)) err("universityCode", `University Code "${universityCode}" may only contain letters, digits, "-", "/" and ".".`);
 
     // Category
     const categoryRaw = text(data.category);
@@ -350,6 +354,7 @@ export function validateCourseStructureRows(
       code,
       codeSource: fileCode ? "file" : "derived",
       shortCode,
+      ...(universityCode ? { universityCode } : {}),
       category,
       customCategory,
       type,

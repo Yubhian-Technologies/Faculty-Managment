@@ -5,6 +5,8 @@ import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { holdsRole } from "@/lib/roles/seatRoles";
+import { wantsWholeCollege } from "@/lib/research/listScope";
 import { finalizeFacultyConsultants } from "@/lib/research/finalizeConsultants";
 import { validateConsultancyBody } from "@/lib/research/validateConsultancyProject";
 import { isVisibleToRnD, notifyReviewer, resolveSubmissionRoute, routeFields } from "@/lib/research/coordinatorReview";
@@ -29,18 +31,22 @@ export async function GET(request: Request) {
 
     // R&D manages every record (optionally drilling into one uid); everyone
     // else only ever sees their own.
+    // Three different reads share this endpoint: R&D's review queue (the page
+    // asks with ?scope=all), R&D looking at one person's module page (?uid=),
+    // and anyone - R&D included - looking at their OWN My Work module page,
+    // which is the default and must never widen. See wantsWholeCollege.
+    const isRnD = holdsRole(session, "R_AND_D");
+    const uidFilter = isRnD ? searchParams.get("uid") : null;
+    const wholeCollege = !uidFilter && wantsWholeCollege(request, isRnD);
+    const viewingOthers = wholeCollege || !!uidFilter;
     let query: FirebaseFirestore.Query = coll;
-    if (session.role === "R_AND_D") {
-      const uidFilter = searchParams.get("uid");
-      if (uidFilter) query = query.where("uid", "==", uidFilter);
-    } else {
-      query = query.where("uid", "==", session.uid);
-    }
+    if (uidFilter) query = query.where("uid", "==", uidFilter);
+    else if (!wholeCollege) query = query.where("uid", "==", session.uid);
 
     const snap = await query.get();
     const projects = snap.docs
       .map((d) => ({ id: d.id, ...d.data() }))
-      .filter((r) => session.role !== "R_AND_D" || isVisibleToRnD((r as { status?: string }).status))
+      .filter((r) => !viewingOthers || isVisibleToRnD((r as { status?: string }).status))
       .sort((a, b) => {
         const aTime = (a as { createdAt?: { toMillis?: () => number } }).createdAt?.toMillis?.() ?? 0;
         const bTime = (b as { createdAt?: { toMillis?: () => number } }).createdAt?.toMillis?.() ?? 0;
@@ -88,13 +94,24 @@ interface ConsultancyProjectBody {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember(...COLLEGE_STAFF_ROLES);
-    const isRnD = session.role === "R_AND_D";
+    const isRnD = holdsRole(session, "R_AND_D");
 
     const body = (await readJsonBody(request)) as ConsultancyProjectBody;
     // Self-submission can only ever credit the submitter's own login - any
     // `uid` in the body is ignored for everyone except R&D, who is recording
     // it on someone else's behalf.
-    const uid = isRnD ? body.uid : session.uid;
+    // Whose record this is. A `uid` in the body is honoured only for R&D,
+    // who can record one on someone else's behalf; everyone else's submission
+    // can only ever credit themselves.
+    //
+    // R&D falls back to their OWN uid when the body names nobody. Their My Work
+    // module page posts the fields with no uid by design ("the server infers
+    // the submitter from their own session"), which is right for every other
+    // role - but left an R&D member recording their own record with
+    // `uid === undefined`, turned away as "uid, ... are required". Their own
+    // Add page still names the staff member explicitly, so recording on
+    // someone else's behalf is unaffected. Same fix as api/college/publications.
+    const uid = (isRnD ? body.uid : undefined) ?? session.uid;
     const { title, clientName, problemStatement, startDate } = body;
     const clientType = body.clientType && CONSULTANCY_CLIENT_TYPES.includes(body.clientType) ? body.clientType : undefined;
     const consultancyCategory = body.consultancyCategory && CONSULTANCY_CATEGORIES.includes(body.consultancyCategory) ? body.consultancyCategory : undefined;

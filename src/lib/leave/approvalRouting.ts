@@ -11,7 +11,7 @@ export type LeaveApprovalRouting = Partial<Record<UserRole, LeaveApproverStage>>
 export const ROUTABLE_REQUESTER_ROLES: UserRole[] = [
   "PANEL_MEMBER", "HOD", "VICE_PRINCIPAL", "PRINCIPAL",
   "COLLEGE_OFFICE", "COLLEGE_STAFF", "ACCOUNTS", "FINANCE", "ACADEMICS", "IQAC_COORDINATOR",
-  "T_AND_P", "R_AND_D", "LIBRARY", "EXAM_CELL", "WEBMASTER", "PLACEMENT_DEPT", "PURCHASE_DEPT",
+  "T_AND_P", "R_AND_D", "LIBRARY", "HOSTEL", "PD", "EXAM_CELL", "WEBMASTER", "PLACEMENT_DEPT", "PURCHASE_DEPT",
 ];
 
 // A Principal's own leave has no one above them inside the college, so it

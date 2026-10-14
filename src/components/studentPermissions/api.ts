@@ -31,6 +31,7 @@ export const actOnRequest = async (id: string, action: RequestAction, remark?: s
 export interface FormOptions {
   enabled: boolean;
   department: string;
+  studentInfo?: { name: string; rollNumber: string; department: string; year: number; section: string };
   groups: { id: string; label: string; items: { id: string; label: string; enabled: boolean }[] }[];
   limits: PermissionLimits;
 }

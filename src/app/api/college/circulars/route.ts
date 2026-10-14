@@ -9,7 +9,7 @@ import { canSendCircular } from "@/lib/circular/permissions";
 // GET ?status=DRAFT|PUBLISHED — published visible to all college members; drafts only to sender/principal
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD", "PANEL_MEMBER", "COLLEGE_OFFICE", "COLLEGE_STAFF", "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "LIBRARY", "EXAM_CELL", "WEBMASTER", "COLLEGE_ACCOUNTS");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD", "PANEL_MEMBER", "COLLEGE_OFFICE", "COLLEGE_STAFF", "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "LIBRARY", "HOSTEL", "PD", "EXAM_CELL", "WEBMASTER", "COLLEGE_ACCOUNTS");
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status")?.trim() || undefined;
     const db = getAdminDb();
@@ -29,7 +29,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD", "PANEL_MEMBER", "COLLEGE_OFFICE", "COLLEGE_STAFF", "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "LIBRARY", "EXAM_CELL", "WEBMASTER", "COLLEGE_ACCOUNTS");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD", "PANEL_MEMBER", "COLLEGE_OFFICE", "COLLEGE_STAFF", "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "LIBRARY", "HOSTEL", "PD", "EXAM_CELL", "WEBMASTER", "COLLEGE_ACCOUNTS");
     const db = getAdminDb();
     const ok = await canSendCircular(db, session.collegeId, session.uid, session.role as never, (session as unknown as { realRole?: string }).realRole as never);
     if (!ok) return NextResponse.json({ error: "Not allowed to send circulars. Contact Principal." }, { status: 403 });
