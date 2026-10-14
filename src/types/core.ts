@@ -3449,7 +3449,14 @@ export type AuditAction =
   | "CERTIFICATE_ISSUED"
   | "CERTIFICATE_REJECTED_AT_ISSUANCE"
   | "CERTIFICATE_CANCELLED"
-  | "CERTIFICATE_EXAM_CELL_ISSUED";
+  | "CERTIFICATE_EXAM_CELL_ISSUED"
+  // Academics > Curriculum: master subjects (per catalog course + regulation) and their assignment by code.
+  | "SUBJECTS_IMPORTED"
+  | "SUBJECT_CREATED"
+  | "SUBJECT_UPDATED"
+  | "SUBJECT_DELETED"
+  | "SUBJECTS_ASSIGNED"
+  | "SUBJECT_UNASSIGNED";
 
 export interface AuditLog {
   id: string;
