@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { LocateFixed } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { CollegeCategoryField } from "@/components/shared/CollegeCategoryField";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PolygonMapPicker, type LatLng } from "@/components/shared/PolygonMapPicker";
 import { toast } from "@/hooks/useToast";
 import { COLLEGE_TYPE_LABELS } from "@/types";
-import type { CollegeType, College } from "@/types";
+import type { CollegeCategory, CollegeType, College } from "@/types";
 
 const COLLEGE_TYPES: CollegeType[] = ["ENGINEERING", "SCHOOL", "DENTAL", "PHARMACY", "POLYTECHNIC", "DEGREE"];
 
@@ -20,6 +21,7 @@ type CollegeRow = {
   id: string;
   name: string;
   type?: CollegeType;
+  collegeCategory?: CollegeCategory;
   address: string;
   contactEmail: string;
   contactPhone: string;
@@ -40,10 +42,10 @@ export default function EditCollegePage() {
   const [shape, setShape] = useState<GeofenceShape>("none");
   const [polygonPoints, setPolygonPoints] = useState<LatLng[]>([]);
   const [form, setForm] = useState<{
-    name: string; type: CollegeType | ""; address: string; contactEmail: string; contactPhone: string;
+    name: string; type: CollegeType | ""; collegeCategory: CollegeCategory; address: string; contactEmail: string; contactPhone: string;
     latitude: string; longitude: string; radiusMeters: string;
   }>({
-    name: "", type: "", address: "", contactEmail: "", contactPhone: "",
+    name: "", type: "", collegeCategory: "MAIN", address: "", contactEmail: "", contactPhone: "",
     latitude: "", longitude: "", radiusMeters: "200",
   });
 
@@ -61,6 +63,7 @@ export default function EditCollegePage() {
         setForm({
           name: college.name ?? "",
           type: college.type ?? "",
+          collegeCategory: college.collegeCategory === "TEST" ? "TEST" : "MAIN",
           address: college.address ?? "",
           contactEmail: college.contactEmail ?? "",
           contactPhone: college.contactPhone ?? "",
@@ -131,6 +134,7 @@ export default function EditCollegePage() {
           collegeId,
           name: form.name,
           type: form.type,
+          collegeCategory: form.collegeCategory,
           address: form.address,
           contactEmail: form.contactEmail,
           contactPhone: form.contactPhone,
@@ -187,6 +191,7 @@ export default function EditCollegePage() {
                 </SelectContent>
               </Select>
             </div>
+            <CollegeCategoryField value={form.collegeCategory} onChange={(c) => set({ collegeCategory: c })} idPrefix="edit-college-category" />
             <div className="space-y-2">
               <Label htmlFor="edit-address">Address</Label>
               <Input

@@ -98,6 +98,13 @@ There is **no env switch** (the old `READ_ONLY_FACULTY_COLLEGES` is gone and ign
 - **Photo:** `PATCH /api/college/student/me/photo` writes the student record + `users/{uid}` + `systemUsers/{uid}` in ONE batch (record is the source of truth, the login only feeds the avatar); `upload/profile-photo` accepts STUDENT and forces their own uid path. The Office's photo edit (`students/[id]`) now mirrors to the login the same way.
 - Each save writes an audit entry (`STUDENT_DETAILS_UPDATED`, `self: true`, field names only).
 
+### College category: Main / Test
+
+- Every college has `collegeCategory: "MAIN" | "TEST"` (missing = MAIN; `lib/colleges/category.ts`). Cross-college lists offered to COLLEGE users only hold colleges of the viewer's OWN category: `GET /api/college/colleges-directory` (publication / innovation author affiliation) and the INTERNAL/EXTERNAL labels on `GET /api/public/faculty-public`. Response shapes are unchanged; saved `affiliationCollegeId`/`Name` values are never rewritten (the two forms keep showing a saved college that is no longer offered).
+- Set from Super Admin > Colleges (edit page radio, Add College, list badge + Category filter). `PATCH /api/admin/colleges` accepts `collegeCategory` for SUPER_ADMIN only (audit `COLLEGE_CATEGORY_CHANGED`); `POST` accepts it on create (default MAIN). Group-level roles (Management, Finance, Purchase, Administration lists) are deliberately NOT filtered.
+- Registries that guarantee uniqueness stay GLOBAL on purpose (employee IDs, `studentUsernames`, `studentMobileKeys`, login lookup) - never partition them by category.
+- Tests: `lib/colleges/category.test.ts`, `app/api/college/collegesDirectory.emulator.test.ts`.
+
 ### Update student data (College Office > Students > Import > "Update student data")
 
 - Third tab beside "Add students" and "Map roll numbers" (which is untouched). The Office picks detail fields, downloads a template (Student Mobile No + the picked columns), uploads it; each row finds its student by **Student Mobile No** and updates only those fields. Rules (`lib/students/bulkUpdate.ts`): blank cell = nothing (never clears); student blank -> FILL; same value -> left alone; different -> OVERWRITE (unless "Fill blanks only"); one bad cell skips that student whole. Allow-list = the `ROSTER_DETAIL_GROUPS` fields minus `mobileNo` - never Roll No, name, course/department/year/section, status.
