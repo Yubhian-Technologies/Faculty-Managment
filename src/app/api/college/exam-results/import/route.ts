@@ -8,9 +8,9 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { gradeTableFor } from "@/lib/examResults/rules";
-import { batchTitle, normalizeBatchMeta, type ResultBatchMeta } from "@/lib/examResults/sheet";
-import { applyPriorResults, rollKey, validateResultRows, type FailedResultRow, type PriorResult, type RawResultRow } from "@/lib/examResults/importRows";
-import { actorName, batchesCol, loadResultRules, loadStudentsByRoll, loadSubjectsByCode, recordId, recordsCol } from "@/lib/examResults/store";
+import { batchTitle, completeFromTarget, examHeldLabel, normalizeBatchMeta, type ResultBatchMeta, type TargetExam } from "@/lib/examResults/sheet";
+import { applyPriorResults, applyRevaluationTargets, rollKey, validateResultRows, type FailedResultRow, type PriorResult, type RawResultRow } from "@/lib/examResults/importRows";
+import { actorName, batchesCol, examMonthContext, loadResultRules, loadStudentsByRoll, loadSubjectsByCode, recordId, recordsCol } from "@/lib/examResults/store";
 import type { ExamResultBatch } from "@/types/examResults";
 
 // Semester results import (Exam Cell). One call takes up to MAX_ROWS rows of a
@@ -49,12 +49,22 @@ export async function POST(request: Request) {
       meta = {
         courseKey: b.courseKey, courseName: b.courseName, courseIds: b.courseIds,
         department: b.department ?? "", departmentId: b.departmentId ?? "", regulation: b.regulation,
+        batch: b.batch ?? "", examHeld: b.examHeld ?? "",
         academicYear: b.academicYear, year: b.year, semester: b.semester, examType: b.examType,
+        ...(b.targetBatchId ? { targetBatchId: b.targetBatchId } : {}),
+        ...(b.revaluationOf ? { revaluationOf: b.revaluationOf } : {}),
       };
     } else {
-      const cleaned = normalizeBatchMeta(body.meta);
+      const cleaned = normalizeBatchMeta(body.meta, await examMonthContext(db, collegeId));
       if ("error" in cleaned) return NextResponse.json({ error: cleaned.error }, { status: 400 });
       meta = cleaned.meta;
+      // A Supplementary / Revaluation: the exam it is for must be published and of this class.
+      if (meta.targetBatchId) {
+        const t = await batchesCol(db, collegeId).doc(meta.targetBatchId).get();
+        const done = completeFromTarget(meta, t.exists ? (t.data() as TargetExam) : null);
+        if ("error" in done) return NextResponse.json({ error: done.error }, { status: 400 });
+        meta = done.meta;
+      }
     }
 
     const [{ rules }, students, subjects, priorSnap] = await Promise.all([
@@ -66,18 +76,28 @@ export async function POST(request: Request) {
     const gradeTable = gradeTableFor(rules, meta.regulation);
     if (gradeTable.length === 0) return NextResponse.json({ error: "Set up the grade table under Result Rules first" }, { status: 400 });
 
+    // Students with results already filed under this batch (a detained student now in a later batch).
+    const batchHistory = new Set(priorSnap.docs.filter((d) => d.get("batch") === meta.batch).map((d) => String(d.get("studentId"))));
     const checked = validateResultRows(rows, {
       students, subjects, gradeTable,
       courseIds: meta.courseIds, courseName: meta.courseName, department: meta.department, regulation: meta.regulation, academicYear: meta.academicYear,
+      batch: meta.batch, batchHistory,
     });
 
     // A student already in THIS draft (an earlier part, or an earlier upload to it).
     const inThisBatch = new Set<string>();
     const prior: PriorResult[] = [];
     for (const d of priorSnap.docs) {
-      const r = d.data() as { batchId: string; studentId: string; examType: "REGULAR" | "SUPPLEMENTARY"; subjects?: { subjectCode: string; isPass: boolean }[] };
+      const r = d.data() as {
+        batchId: string; studentId: string; examType: PriorResult["examType"]; revaluesBatchId?: string; academicYear?: string; batch?: string;
+        status?: "DRAFT" | "PUBLISHED"; subjects?: { subjectCode: string; isPass: boolean }[]; createdAt?: { toMillis?: () => number };
+      };
       if (batchId && r.batchId === batchId) inThisBatch.add(r.studentId);
-      else prior.push({ studentId: r.studentId, batchId: r.batchId, examType: r.examType, subjects: r.subjects ?? [] });
+      else prior.push({
+        studentId: r.studentId, batchId: r.batchId, examType: r.examType, academicYear: r.academicYear ?? "", status: r.status ?? "DRAFT",
+        subjects: r.subjects ?? [], at: r.createdAt?.toMillis?.() ?? 0, ...(r.revaluesBatchId ? { revaluesBatchId: r.revaluesBatchId } : {}),
+        ...(r.batch ? { batch: r.batch } : {}),
+      });
     }
     const failed: FailedResultRow[] = [...checked.failed];
     const fresh = checked.accepted.filter((a) => {
@@ -85,7 +105,11 @@ export async function POST(request: Request) {
       a.subjects.forEach((s, i) => failed.push({ row: a.rows[i], rollNumber: a.student.rollNumber, subjectCode: s.subjectCode, error: `${a.student.rollNumber} is already in this results sheet` }));
       return false;
     });
-    const history = applyPriorResults(fresh, prior, meta.examType, meta.semester);
+    // A revaluation re-grades one published sitting; Regular / Supplementary follow the sitting rules.
+    const examLabel = `${meta.revaluationOf === "SUPPLEMENTARY" ? "Supplementary" : "Regular"} ${examHeldLabel(meta.examHeld)}`;
+    const history = meta.examType === "REVALUATION"
+      ? applyRevaluationTargets(fresh, prior, meta.targetBatchId ?? "", examLabel)
+      : applyPriorResults(fresh, prior, meta.examType, meta.semester, meta.academicYear, { batch: meta.batch, targetBatchId: meta.targetBatchId });
     failed.push(...history.failed);
     // A student is never half-imported: if any of their rows is refused, none
     // of their rows are saved, so the corrected rows can be added later in one go.
@@ -131,7 +155,11 @@ export async function POST(request: Request) {
         name: a.student.name, department: a.student.department,
         ...(a.student.courseId ? { courseId: a.student.courseId } : {}),
         regulation: meta.regulation, academicYear: meta.academicYear, year: meta.year, semester: meta.semester,
-        examType: meta.examType, status: "DRAFT", subjects: a.subjects, createdAt: now, updatedAt: now,
+        batch: meta.batch, examHeld: meta.examHeld,
+        ...(a.universitySgpa !== undefined ? { universitySgpa: a.universitySgpa } : {}),
+        examType: meta.examType,
+        ...(meta.examType === "REVALUATION" ? { revaluationOf: meta.revaluationOf, revaluesBatchId: a.revaluesBatchId } : {}),
+        status: "DRAFT", subjects: a.subjects, createdAt: now, updatedAt: now,
       });
     }
     await writer.commit();
