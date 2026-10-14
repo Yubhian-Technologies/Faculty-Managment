@@ -13,7 +13,7 @@ describe("planSubjectAssignmentMoves", () => {
   ];
 
   it("clones a row with no existing branch copy", () => {
-    const plan = planSubjectAssignmentMoves(rows, "eee", new Set(), null);
+    const plan = planSubjectAssignmentMoves(rows, "eee", "EEE", new Set(), null);
     expect(plan.toCreate.map((r) => r.id)).toEqual(["s1_bs_1", "s2_bs_1", "s3_bs_2"]);
     expect(plan.toDiscard).toEqual([]);
   });
@@ -21,13 +21,13 @@ describe("planSubjectAssignmentMoves", () => {
   it("discards (never overwrites) a row the branch already has under its own deterministic id", () => {
     // s2_eee_1 already exists under EEE - s2's manager-side row must be
     // discarded, not cloned on top of it.
-    const plan = planSubjectAssignmentMoves(rows, "eee", new Set(["s2_eee_1"]), null);
+    const plan = planSubjectAssignmentMoves(rows, "eee", "EEE", new Set(["s2_eee_1"]), null);
     expect(plan.toCreate.map((r) => r.id)).toEqual(["s1_bs_1", "s3_bs_2"]);
     expect(plan.toDiscard.map((r) => r.id)).toEqual(["s2_bs_1"]);
   });
 
   it("skips a row outside the requested years without creating or discarding it", () => {
-    const plan = planSubjectAssignmentMoves(rows, "eee", new Set(), new Set([1]));
+    const plan = planSubjectAssignmentMoves(rows, "eee", "EEE", new Set(), new Set([1]));
     expect(plan.toCreate.map((r) => r.id)).toEqual(["s1_bs_1", "s2_bs_1"]);
     expect(plan.toDiscard).toEqual([]);
     expect(plan.toSkip.map((r) => r.id)).toEqual(["s3_bs_2"]);
@@ -37,10 +37,29 @@ describe("planSubjectAssignmentMoves", () => {
     const plan = planSubjectAssignmentMoves(
       [{ id: "s4_bs_1", subjectId: "s4", semester: 1 }],
       "eee",
+      "EEE",
       new Set(),
       new Set([1])
     );
     expect(plan.toCreate.map((r) => r.id)).toEqual(["s4_bs_1"]);
+    expect(plan.toSkip).toEqual([]);
+  });
+
+  it("skips a row narrowed to other core departments that don't name this branch", () => {
+    const narrowedRows = [
+      { id: "s1_bs_1", subjectId: "s1", semester: 1, secondaryDepartmentNames: ["CSE"] },
+      { id: "s2_bs_1", subjectId: "s2", semester: 1, secondaryDepartmentNames: ["CSE CYBER SECURITY"] },
+      { id: "s3_bs_1", subjectId: "s3", semester: 1 }, // unnarrowed - covers every branch
+    ];
+    const plan = planSubjectAssignmentMoves(narrowedRows, "cse-id", "CSE", new Set(), null);
+    expect(plan.toCreate.map((r) => r.id)).toEqual(["s1_bs_1", "s3_bs_1"]);
+    expect(plan.toSkip.map((r) => r.id)).toEqual(["s2_bs_1"]);
+  });
+
+  it("moves a row narrowed to this branch among several targets", () => {
+    const narrowedRows = [{ id: "s1_bs_1", subjectId: "s1", semester: 1, secondaryDepartmentNames: ["CSE", "CSBS"] }];
+    const plan = planSubjectAssignmentMoves(narrowedRows, "csbs-id", "CSBS", new Set(), null);
+    expect(plan.toCreate.map((r) => r.id)).toEqual(["s1_bs_1"]);
     expect(plan.toSkip).toEqual([]);
   });
 });

@@ -39,6 +39,22 @@ describe("SubjectMasterService.importMany", () => {
     expect(doc.hoursPerWeek).toBe(3);
   });
 
+  it("chunks a large import across multiple transactions so no single commit exceeds Firestore's write ceiling", async () => {
+    // 420 rows, each costing 3 writes (subject + code lock + name lock) = 1260
+    // total - more than one Firestore transaction's ~500-write ceiling
+    // allows, and past the 150-row chunk size twice over.
+    const records = Array.from({ length: 420 }, (_, i) => row({ code: `CS${1000 + i}`, name: `Subject ${i + 1}` }));
+    const r = await svc.importMany({ collegeId: "c1", courseId: "c-cse", regulation: "R20", records });
+    expect(r.failed).toEqual([]);
+    expect(r.created).toBe(420);
+    expect(subjects()).toHaveLength(420);
+    expect(keys()).toHaveLength(840); // code + name lock per subject
+    // Spot-check a row from each of the three chunks (1-150, 151-300, 301-420).
+    for (const code of ["CS1000", "CS1200", "CS1419"]) {
+      expect(r.createdRows.some((cr) => cr.code === code)).toBe(true);
+    }
+  });
+
   it("a dry run writes nothing", async () => {
     const r = await svc.importMany({ collegeId: "c1", courseId: "c-cse", regulation: "R20", records: [row()], dryRun: true });
     expect(r.created).toBe(1);

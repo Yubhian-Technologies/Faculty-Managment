@@ -76,6 +76,7 @@ interface MigrationCounts {
   sections: SectionMoveDetail[];
   skippedSections: SkippedSectionDetail[];
   currentSubjects: CurrentSubjectDetail[];
+  landingSubjects: CurrentSubjectDetail[];
 }
 
 type PreviewEntry = ({ ok: true } & MigrationCounts) | { ok: false; error: string };
@@ -429,23 +430,24 @@ function MigrationReviewPage({ subDepartment, branchIds, allBranches, collegeSec
                         </p>
                       )}
 
-                      {/* Which subjects land in THIS department - the same
-                          list as the left panel's "Current" subjects (the
-                          tool moves every current subject to every selected
-                          branch, nothing split per department), shown again
-                          here under this branch's own name so it reads as
-                          "X holds these subjects" rather than just a count. */}
+                      {/* Which subjects land in THIS department - a row
+                          narrowed ("Target core departments") to one or more
+                          specific branches only lands in those; an
+                          unnarrowed row lands in every branch the manager
+                          feeds. So this list (and its count) can genuinely
+                          differ from the left panel's full "Current" list
+                          and from a sibling branch's own card. */}
                       <div className="pt-1 border-t">
                         <p className="text-sm font-medium pt-2">
                           {branch?.name} will hold ({p.subjectAssignmentsMoved + p.subjectAssignmentsDeduped} subject{(p.subjectAssignmentsMoved + p.subjectAssignmentsDeduped) !== 1 ? "s" : ""})
                           {p.subjectAssignmentsDeduped > 0 && <span className="text-muted-foreground font-normal"> - {p.subjectAssignmentsDeduped} already there, deduplicated</span>}
                         </p>
-                        {currentSubjects.length === 0 ? (
+                        {p.landingSubjects.length === 0 ? (
                           <p className="text-sm text-muted-foreground">No subjects to move.</p>
                         ) : (
                           (() => {
                             const branchPage = branchSubjectsPage[branch?.id ?? ""] ?? 0;
-                            const rows = currentSubjects.slice(branchPage * REVIEW_PAGE_SIZE, (branchPage + 1) * REVIEW_PAGE_SIZE);
+                            const rows = p.landingSubjects.slice(branchPage * REVIEW_PAGE_SIZE, (branchPage + 1) * REVIEW_PAGE_SIZE);
                             return (
                               <>
                                 <div className="overflow-x-auto">
@@ -471,7 +473,7 @@ function MigrationReviewPage({ subDepartment, branchIds, allBranches, collegeSec
                                 <PageControls
                                   page={branchPage}
                                   setPage={(pg) => setBranchSubjectsPage((prev) => ({ ...prev, [branch?.id ?? ""]: pg }))}
-                                  totalItems={currentSubjects.length}
+                                  totalItems={p.landingSubjects.length}
                                   pageSize={REVIEW_PAGE_SIZE}
                                 />
                               </>
@@ -491,8 +493,9 @@ function MigrationReviewPage({ subDepartment, branchIds, allBranches, collegeSec
                     Subjects aren&apos;t duplicated - they live once in the college&apos;s shared Subjects list (see the
                     current list on the left, {currentSubjects.length} subject{currentSubjects.length !== 1 ? "s" : ""}).
                     This moves the per-department link ({totalSubjects} row{totalSubjects !== 1 ? "s" : ""}) from
-                    &quot;{subDepartment.name}&quot; to each selected core department - the same {currentSubjects.length} subjects
-                    move to every department selected above, nothing is split between them.
+                    &quot;{subDepartment.name}&quot; to each selected core department. A subject targeted
+                    (&quot;Target core departments&quot;) to specific branches only moves to those; an untargeted
+                    subject moves to every branch selected above.
                   </p>
                 </CardContent>
               </Card>
