@@ -5,37 +5,44 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { Pencil, Trash2 } from "lucide-react";
-import type { Subject, SubjectType } from "@/types";
+import type { Subject, SubjectCategory, SubjectType } from "@/types";
+import { CategoryField } from "@/components/academics/CategoryField";
 
 const PAGE_SIZE = 20;
 
 interface EditForm {
   id: string;
-  name: string; code: string; shortCode: string;
-  category: string; customCategory: string;
+  name: string; code: string; shortCode: string; altShortCode: string; universityCode: string; totalHoursPerSemester: string;
+  excludeFromTeachingLoad: boolean;
+  category: SubjectCategory | ""; customCategory: string;
   lectureHours: string; tutorialHours: string; practicalHours: string; credits: string;
   type: SubjectType;
 }
 
 function toEditForm(s: Subject): EditForm {
   return {
-    id: s.id, name: s.name ?? "", code: s.code ?? "", shortCode: s.shortCode ?? "",
+    id: s.id, name: s.name ?? "", code: s.code ?? "", shortCode: s.shortCode ?? "", altShortCode: s.altShortCode ?? "", universityCode: s.universityCode ?? "",
+    totalHoursPerSemester: s.totalHoursPerSemester != null ? String(s.totalHoursPerSemester) : "", excludeFromTeachingLoad: s.isNonTeachingLoad === true,
     category: s.category ?? "", customCategory: s.customCategory ?? "",
     lectureHours: String(s.lectureHours ?? 0), tutorialHours: String(s.tutorialHours ?? 0), practicalHours: String(s.practicalHours ?? 0),
     credits: String(s.credits ?? 0), type: s.type ?? "THEORY",
   };
 }
 
-// The master subject list for one Course + Regulation, paged client-side
+// The master subject list for one Course (catalog) + Regulation, paged client-side
 // (a course's own subject count is small - dozens, not thousands - so a
 // second paginated endpoint isn't worth it) with inline Edit/Delete reusing
-// the existing single-subject PATCH/DELETE route.
-export function SubjectsMasterTable({ courseId, courseName, regulation }: {
+// the single-subject PATCH/DELETE route. Code and Name can't be edited once a subject
+// is assigned to a semester (the server says so); everything else can.
+export function SubjectsMasterTable({ courseId, catalogId, courseName, regulation }: {
   courseId: string;
+  /** When the course has a catalog entry, list the subjects of EVERY department's copy of it. */
+  catalogId?: string;
   courseName: string;
   regulation: string;
 }) {
@@ -44,12 +51,13 @@ export function SubjectsMasterTable({ courseId, courseName, regulation }: {
   const [page, setPage] = useState(0);
   const [editForm, setEditForm] = useState<EditForm | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [editError, setEditError] = useState("");
   const [deleting, setDeleting] = useState<Subject | null>(null);
 
   async function load() {
     setIsLoading(true);
     try {
-      const qs = new URLSearchParams({ courseId, ...(regulation ? { regulation } : {}) });
+      const qs = new URLSearchParams({ ...(catalogId ? { catalogId } : { courseId }), ...(regulation ? { regulation } : {}) });
       const res = await fetch(`/api/college/subjects?${qs}`);
       const json = (await res.json()) as { subjects?: Subject[] };
       setSubjects(json.subjects ?? []);
@@ -61,7 +69,7 @@ export function SubjectsMasterTable({ courseId, courseName, regulation }: {
     }
   }
 
-  useEffect(() => { void load(); }, [courseId, regulation]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void load(); }, [courseId, catalogId, regulation]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pageCount = Math.max(1, Math.ceil(subjects.length / PAGE_SIZE));
   const pageRows = useMemo(() => subjects.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE), [subjects, page]);
@@ -69,19 +77,22 @@ export function SubjectsMasterTable({ courseId, courseName, regulation }: {
   async function handleSave() {
     if (!editForm) return;
     if (!editForm.name.trim() || !editForm.code.trim()) { toast({ variant: "destructive", title: "Name and code are required" }); return; }
+    if (!editForm.category) { toast({ variant: "destructive", title: "Category is required" }); return; }
     setIsSaving(true);
     try {
       const res = await fetch(`/api/college/subjects/${editForm.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
+        // Numbers go as typed: the server rejects an unreadable value instead of turning it into 0.
         body: JSON.stringify({
-          name: editForm.name.trim(), code: editForm.code.trim().toUpperCase(), shortCode: editForm.shortCode.trim() || undefined,
-          category: editForm.category || undefined, customCategory: editForm.category === "OTHER" ? editForm.customCategory.trim() : undefined,
-          lectureHours: Number(editForm.lectureHours) || 0, tutorialHours: Number(editForm.tutorialHours) || 0, practicalHours: Number(editForm.practicalHours) || 0,
-          credits: Number(editForm.credits) || 0, type: editForm.type,
+          name: editForm.name, code: editForm.code, shortCode: editForm.shortCode, altShortCode: editForm.altShortCode, universityCode: editForm.universityCode,
+          totalHoursPerSemester: editForm.totalHoursPerSemester, excludeFromTeachingLoad: editForm.excludeFromTeachingLoad,
+          category: editForm.category, customCategory: editForm.category === "OTHER" ? editForm.customCategory : "",
+          lectureHours: editForm.lectureHours, tutorialHours: editForm.tutorialHours, practicalHours: editForm.practicalHours,
+          credits: editForm.credits, type: editForm.type,
         }),
       });
-      if (!res.ok) { const j = (await res.json().catch(() => ({}))) as { error?: string }; toast({ variant: "destructive", title: j.error ?? "Failed to save" }); return; }
+      if (!res.ok) { const j = (await res.json().catch(() => ({}))) as { error?: string }; setEditError(j.error ?? "Failed to save"); return; }
       toast({ variant: "success", title: "Subject updated" });
       setEditForm(null);
       await load();
@@ -112,7 +123,7 @@ export function SubjectsMasterTable({ courseId, courseName, regulation }: {
         {isLoading ? (
           <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-10 rounded-md border bg-muted/30 animate-pulse" />)}</div>
         ) : subjects.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-6 text-center">No subjects imported yet for this course and regulation.</p>
+          <p className="text-sm text-muted-foreground py-6 text-center">No subjects yet for this course and regulation. Import a file or add one.</p>
         ) : (
           <>
             <div className="overflow-x-auto">
@@ -122,6 +133,7 @@ export function SubjectsMasterTable({ courseId, courseName, regulation }: {
                     <th className="py-1.5 pr-3">Category</th>
                     <th className="py-1.5 pr-3">Name</th>
                     <th className="py-1.5 pr-3">Code</th>
+                    <th className="py-1.5 pr-3">Univ. Code</th>
                     <th className="py-1.5 pr-3">L-T-P</th>
                     <th className="py-1.5 pr-3">Credits</th>
                     <th className="py-1.5 pr-3">Regulation</th>
@@ -134,11 +146,12 @@ export function SubjectsMasterTable({ courseId, courseName, regulation }: {
                       <td className="py-1.5 pr-3">{s.category === "OTHER" ? (s.customCategory || "Other") : (s.category ?? "-")}</td>
                       <td className="py-1.5 pr-3 font-medium">{s.name}</td>
                       <td className="py-1.5 pr-3 font-mono">{s.code}</td>
+                      <td className="py-1.5 pr-3 font-mono text-muted-foreground">{s.universityCode ?? "-"}</td>
                       <td className="py-1.5 pr-3 tabular-nums whitespace-nowrap">{s.lectureHours}-{s.tutorialHours}-{s.practicalHours}</td>
                       <td className="py-1.5 pr-3 tabular-nums">{s.credits}</td>
                       <td className="py-1.5 pr-3">{s.regulation ?? "-"}</td>
                       <td className="py-1.5 whitespace-nowrap">
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditForm(toEditForm(s))}><Pencil className="h-3.5 w-3.5" /></Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditError(""); setEditForm(toEditForm(s)); }}><Pencil className="h-3.5 w-3.5" /></Button>
                         <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleting(s)}><Trash2 className="h-3.5 w-3.5" /></Button>
                       </td>
                     </tr>
@@ -164,18 +177,35 @@ export function SubjectsMasterTable({ courseId, courseName, regulation }: {
           <DialogHeader><DialogTitle>Edit Subject</DialogTitle></DialogHeader>
           {editForm && (
             <div className="space-y-3">
-              <div className="space-y-1"><Label>Category</Label><Input value={editForm.category} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })} /></div>
+              <CategoryField
+                category={editForm.category}
+                customCategory={editForm.customCategory}
+                onCategoryChange={(c) => setEditForm({ ...editForm, category: c })}
+                onCustomCategoryChange={(v) => setEditForm({ ...editForm, customCategory: v })}
+                allowNew={false}
+              />
               <div className="space-y-1"><Label>Name</Label><Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} /></div>
               <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1"><Label>Code</Label><Input value={editForm.code} onChange={(e) => setEditForm({ ...editForm, code: e.target.value })} /></div>
-                <div className="space-y-1"><Label>Short Code</Label><Input value={editForm.shortCode} onChange={(e) => setEditForm({ ...editForm, shortCode: e.target.value })} /></div>
+                <div className="space-y-1"><Label>Code</Label><Input className="font-mono uppercase" value={editForm.code} onChange={(e) => setEditForm({ ...editForm, code: e.target.value })} /></div>
+                <div className="space-y-1"><Label>University Code</Label><Input className="font-mono uppercase" value={editForm.universityCode} onChange={(e) => setEditForm({ ...editForm, universityCode: e.target.value })} /></div>
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1"><Label>Short Code</Label><Input className="uppercase" value={editForm.shortCode} onChange={(e) => setEditForm({ ...editForm, shortCode: e.target.value })} /></div>
+                <div className="space-y-1"><Label>Second Short Code</Label><Input className="uppercase" placeholder="Asked when placing in the timetable" value={editForm.altShortCode} onChange={(e) => setEditForm({ ...editForm, altShortCode: e.target.value })} /></div>
+              </div>
+              <p className="text-xs text-muted-foreground">Code and Name can&apos;t change once the subject is assigned to a semester - add a new subject with the new code instead.</p>
               <div className="grid grid-cols-4 gap-3">
                 <div className="space-y-1"><Label>L</Label><Input value={editForm.lectureHours} onChange={(e) => setEditForm({ ...editForm, lectureHours: e.target.value })} /></div>
                 <div className="space-y-1"><Label>T</Label><Input value={editForm.tutorialHours} onChange={(e) => setEditForm({ ...editForm, tutorialHours: e.target.value })} /></div>
                 <div className="space-y-1"><Label>P</Label><Input value={editForm.practicalHours} onChange={(e) => setEditForm({ ...editForm, practicalHours: e.target.value })} /></div>
                 <div className="space-y-1"><Label>Credits</Label><Input value={editForm.credits} onChange={(e) => setEditForm({ ...editForm, credits: e.target.value })} /></div>
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1"><Label>Total Hours per Semester</Label><Input inputMode="decimal" placeholder="Optional" value={editForm.totalHoursPerSemester} onChange={(e) => setEditForm({ ...editForm, totalHoursPerSemester: e.target.value })} /></div>
+                <label className="flex items-end gap-2 pb-2 text-sm"><Checkbox checked={editForm.excludeFromTeachingLoad} onCheckedChange={(v) => setEditForm({ ...editForm, excludeFromTeachingLoad: v === true })} />Not in teaching load</label>
+              </div>
+              <p className="text-xs text-muted-foreground">Hours and credits here are the course-wide values; a department&apos;s own override is set on the Assign tab.</p>
+              {editError && <p className="rounded-md border border-red-200 bg-red-50 p-2 text-sm text-red-700 dark:border-destructive/20 dark:bg-destructive/10 dark:text-red-400">{editError}</p>}
             </div>
           )}
           <DialogFooter>
@@ -189,7 +219,7 @@ export function SubjectsMasterTable({ courseId, courseName, regulation }: {
         open={!!deleting}
         onOpenChange={(o) => !o && setDeleting(null)}
         title="Delete subject?"
-        description={`"${deleting?.name}" will be permanently removed.`}
+        description={`"${deleting?.name}" will be permanently removed. This is only possible while it isn't assigned to any semester.`}
         confirmLabel="Delete"
         variant="destructive"
         onConfirm={() => void handleDelete()}

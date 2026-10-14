@@ -3,21 +3,25 @@ export const dynamic = "force-dynamic";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
-import { planHoursSync } from "@/lib/subjects/hoursSync";
+import { planTeachingHoursSync } from "@/lib/subjects/hoursCascade";
+import { SUBJECT_LIMITS } from "@/lib/subjects/validation/SubjectValidator";
+import { CURRICULUM_ROLES, subjectErrorResponse } from "@/lib/subjects/http";
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { getHodDepartmentScope, canHodEditDepartmentId, canHodEditDepartment } from "@/lib/departments/scope";
 import { sectionAssignmentScope } from "@/lib/departments/sectionAssignmentScope";
 import { resolveSectionCurrentSemester } from "@/lib/college/semester";
-import { SubjectInstanceService, teachingAssignmentUsesInstance } from "@/lib/subjects/services/SubjectInstanceService";
-import { resolveSubjectIdsByCode } from "@/lib/subjects/resolveByCode";
+import { SubjectInstanceService } from "@/lib/subjects/services/SubjectInstanceService";
 import { cachedCollectionDocs } from "@/lib/firestore/sharedReads";
 import { getInChunks } from "@/lib/firestore/inQuery";
-import type { Course, Department, TeachingAssignment } from "@/types";
+import type { Course, Department, Subject, SubjectSemesterAssignment } from "@/types";
 
-// Maps a master Subject (courseId + regulation, department-independent)
-// into a specific semester FOR ONE DEPARTMENT as a concrete Subject Instance
-// (SubjectSemesterAssignment, types/teaching.ts).
+// A master Subject (catalog course + regulation, department-independent) becomes a concrete
+// Subject Instance (SubjectSemesterAssignment, types/teaching.ts) for ONE department's
+// year + semester. Instances are CREATED only by assign-by-code/route.ts; this route lists
+// them (GET), edits one department's hours/credits (PATCH) and unassigns (DELETE).
 export async function GET(request: Request) {
   try {
     const session = await requireCollegeMember(
@@ -166,358 +170,135 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ assignments });
   } catch (err) {
-    const badBody = badBodyResponse(err);
-    if (badBody) return badBody;
-    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    console.error("[subject-semester-assignments GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return subjectErrorResponse(err, "[subject-semester-assignments GET]");
   }
 }
 
-// Assigns and instantiates a Master Subject (from the subjects collection)
-// as a concrete snapshot copy for a Department + Course + Year + Semester.
-export async function POST(request: Request) {
-  try {
-    // HOD is deliberately not in this list: curriculum assignment belongs to
-    // Academics/Principal, and the HOD Subjects page is read-only. No client in
-    // the app calls this write path as an HOD (every caller only GETs, above).
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACADEMICS");
-    const body = (await readJsonBody(request)) as {
-      subjectId?: string;
-      subjectIds?: string[];
-      // Assign-by-code: the Subjects tab's text box, comma/newline-separated
-      // subject codes typed by the Office instead of picking from a
-      // preloaded list - see resolveByCode.ts for why this is the
-      // read-cheap path (only the typed codes are read, not the whole
-      // regulation's pool).
-      codes?: string[];
-      regulation?: string;
-      // The catalog group's course ids (already in the caller's memory from
-      // /api/college/courses - no extra read) codes are matched against.
-      courseIds?: string[];
-      departmentId?: string;
-      semester?: number;
-      departmentName?: string;
-      year?: number;
-      courseId?: string;
-      customOverrides?: {
-        lectureHours?: number;
-        tutorialHours?: number;
-        practicalHours?: number;
-        credits?: number;
-      };
-    };
-
-    const { subjectId, subjectIds, codes, regulation, courseIds, departmentId, semester, departmentName, year, courseId, customOverrides } = body;
-    if (!departmentId || semester == null) {
-      return NextResponse.json(
-        { error: "departmentId and semester are required" },
-        { status: 400 }
-      );
-    }
-
-    const service = new SubjectInstanceService();
-
-    // Assign-by-code: resolve codes -> subject ids (cheap, targeted reads),
-    // then bulk-assign exactly like the subjectIds branch below.
-    if (Array.isArray(codes) && codes.length > 0) {
-      if (!regulation?.trim() || !Array.isArray(courseIds) || courseIds.length === 0) {
-        return NextResponse.json({ error: "regulation and courseIds are required to assign by code" }, { status: 400 });
-      }
-      const { resolved, notFound } = await resolveSubjectIdsByCode(getAdminDb(), session.collegeId, regulation.trim(), courseIds, codes);
-      if (resolved.size === 0) {
-        return NextResponse.json({ assignedCount: 0, failed: [], notFound }, { status: 200 });
-      }
-      const result = await service.bulkAssignSubjectInstances({
-        collegeId: session.collegeId,
-        subjectIds: Array.from(resolved.values()),
-        departmentId,
-        semester: Number(semester),
-        departmentName,
-        year: year ? Number(year) : undefined,
-        courseId,
-      });
-      const subjectIdToCode = new Map(Array.from(resolved.entries()).map(([code, id]) => [id, code]));
-      const failed = result.failed.map((f) => ({ code: subjectIdToCode.get(f.subjectId) ?? f.subjectId, error: f.error }));
-      return NextResponse.json({ assignedCount: result.assignedCount, failed, notFound }, { status: 201 });
-    }
-
-    // Bulk instantiation support
-    if (Array.isArray(subjectIds) && subjectIds.length > 0) {
-      const result = await service.bulkAssignSubjectInstances({
-        collegeId: session.collegeId,
-        subjectIds,
-        departmentId,
-        semester: Number(semester),
-        departmentName,
-        year: year ? Number(year) : undefined,
-        courseId,
-      });
-      return NextResponse.json(result, { status: 201 });
-    }
-
-    if (!subjectId) {
-      return NextResponse.json(
-        { error: "subjectId or subjectIds is required" },
-        { status: 400 }
-      );
-    }
-
-    const result = await service.assignSubjectInstance({
-      collegeId: session.collegeId,
-      subjectId,
-      departmentId,
-      semester: Number(semester),
-      departmentName,
-      year: year ? Number(year) : undefined,
-      courseId,
-      customOverrides,
-    });
-
-    return NextResponse.json({ id: result.id, instance: result.instance }, { status: 201 });
-  } catch (err) {
-    const badBody = badBodyResponse(err);
-    if (badBody) return badBody;
-    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    console.error("[subject-semester-assignments POST]", err);
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Failed to assign subject" }, { status: 400 });
-  }
-}
-
-// Edits one instance's hours/credits (a department-level override of the master).
+// Edits ONE department's copy of a subject: its L-T-P hours and credits (a department-level
+// override of the master) and the core departments a feeder row is narrowed to. Subject-level
+// fields (name, code, category, type...) are edited on the master (subjects/[id]) and reach every
+// copy from there - they are never accepted here.
 export async function PATCH(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACADEMICS");
+    const session = await requireCollegeMember(...CURRICULUM_ROLES);
     const body = (await readJsonBody(request)) as {
       id?: string;
       lectureHours?: number;
       tutorialHours?: number;
       practicalHours?: number;
       credits?: number;
-      // Narrows this row's own broad `departmentId` (a feeder sub-department
-      // like "Basic Science - Chemistry", which manages several core
-      // departments and would otherwise cover all of them - see
-      // subjectCoverage.ts's managed-department fallback) down to specific
-      // core department NAMES. Set when a core department isn't itself
-      // scoped to teach this year (e.g. a shared first year, where CSE/CSBS
-      // explicitly exclude Year 1 from their own Years Taught) and so can
-      // never be `departmentId` directly - this narrows without requiring
-      // that. `null` clears it back to broad coverage.
+      // Narrows this row's own broad `departmentId` (a feeder sub-department that manages several
+      // core departments) down to specific core department NAMES; `null` clears it.
       secondaryDepartmentNames?: string[] | null;
-      // Subject-level fields already saved on the master subject (PATCH
-      // subjects/[id]); mirrored onto every assignment row of that subject so
-      // the Academics table, which reads these copies, doesn't show stale values.
-      snapshot?: {
-        subjectName?: string;
-        subjectCode?: string;
-        shortCode?: string;
-        altShortCode?: string;
-        category?: string;
-        customCategory?: string | null;
-        type?: string;
-        totalHoursPerSemester?: number | null;
-      };
     };
     if (!body.id) return NextResponse.json({ error: "id is required" }, { status: 400 });
 
-    const nums = { lectureHours: body.lectureHours, tutorialHours: body.tutorialHours, practicalHours: body.practicalHours, credits: body.credits };
-    for (const [k, v] of Object.entries(nums)) {
-      if (v !== undefined && (!Number.isFinite(Number(v)) || Number(v) < 0)) {
-        return NextResponse.json({ error: `${k} must be a non-negative number` }, { status: 400 });
-      }
-    }
-    if (body.secondaryDepartmentNames !== undefined && body.secondaryDepartmentNames !== null) {
-      if (!Array.isArray(body.secondaryDepartmentNames) || body.secondaryDepartmentNames.some((n) => typeof n !== "string" || !n.trim())) {
-        return NextResponse.json({ error: "secondaryDepartmentNames must be a list of non-empty names" }, { status: 400 });
+    const nums: [string, number | undefined, number][] = [
+      ["lectureHours", body.lectureHours, SUBJECT_LIMITS.weeklyHours],
+      ["tutorialHours", body.tutorialHours, SUBJECT_LIMITS.weeklyHours],
+      ["practicalHours", body.practicalHours, SUBJECT_LIMITS.weeklyHours],
+      ["credits", body.credits, SUBJECT_LIMITS.credits],
+    ];
+    for (const [k, v, max] of nums) {
+      if (v !== undefined && (String(v).trim() === "" || !Number.isFinite(Number(v)) || Number(v) < 0 || Number(v) > max)) {
+        return NextResponse.json({ error: `${k} must be a number between 0 and ${max}` }, { status: 400 });
       }
     }
 
-    const ref = getAdminDb().collection("colleges").doc(session.collegeId).collection("subjectSemesterAssignments").doc(body.id);
+    const db = getAdminDb();
+    const collegeRef = db.collection("colleges").doc(session.collegeId);
+    const ref = collegeRef.collection("subjectSemesterAssignments").doc(body.id);
     const snap = await ref.get();
     if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    const cur = snap.data() as {
-      subjectId: string; departmentId?: string; semester: number; year?: number;
-      lectureHours?: number; tutorialHours?: number; practicalHours?: number;
-    };
+    const cur = snap.data() as SubjectSemesterAssignment;
+
+    if (body.secondaryDepartmentNames) {
+      if (!Array.isArray(body.secondaryDepartmentNames) || body.secondaryDepartmentNames.some((n) => typeof n !== "string" || !n.trim())) {
+        return NextResponse.json({ error: "secondaryDepartmentNames must be a list of non-empty names" }, { status: 400 });
+      }
+      const known = new Set((await cachedCollectionDocs(db, session.collegeId, "departments")).map((d) => String((d.data() as { name?: string }).name ?? "")));
+      const unknown = body.secondaryDepartmentNames.filter((n) => !known.has(n));
+      if (unknown.length > 0) return NextResponse.json({ error: `Unknown department${unknown.length === 1 ? "" : "s"}: ${unknown.join(", ")}` }, { status: 400 });
+    }
 
     const lectureHours = body.lectureHours !== undefined ? Number(body.lectureHours) : cur.lectureHours ?? 0;
     const tutorialHours = body.tutorialHours !== undefined ? Number(body.tutorialHours) : cur.tutorialHours ?? 0;
     const practicalHours = body.practicalHours !== undefined ? Number(body.practicalHours) : cur.practicalHours ?? 0;
+    const credits = body.credits !== undefined ? Number(body.credits) : cur.credits ?? 0;
     const hoursPerWeek = lectureHours + tutorialHours + practicalHours;
-    // The Subjects dialog sends every field on every save, so a save that only
-    // renames a short code still arrives carrying the hours it already had.
-    // Whether this request CHANGES them decides whether an over-placed
-    // timetable is this save's doing - see planHoursSync.
     const prevHoursPerWeek = (cur.lectureHours ?? 0) + (cur.tutorialHours ?? 0) + (cur.practicalHours ?? 0);
-    const hoursChanged = hoursPerWeek !== prevHoursPerWeek;
+    const touchesNumbers = nums.some(([, v]) => v !== undefined);
 
-    // Teaching assignments copy hoursPerWeek (it caps their timetable periods),
-    // so keep the ones relying on this instance in step - but never below the
-    // periods already placed, which would leave a timetable over its own cap.
-    const db = getAdminDb();
-    const collegeRef = db.collection("colleges").doc(session.collegeId);
-    const [taSnap, deptDocs, courseDocs] = await Promise.all([
-      collegeRef.collection("teachingAssignments").where("subjectId", "==", cur.subjectId).get(),
-      cachedCollectionDocs(db, session.collegeId, "departments"),
-      cachedCollectionDocs(db, session.collegeId, "courses"),
-    ]);
-    const departments = deptDocs.map((d) => ({ id: d.id, ...d.data() })) as (Department & { id: string })[];
-    const coursesById = new Map(courseDocs.map((d) => [d.id, d.data() as Pick<Course, "departmentId" | "catalogId">]));
-    let stale = taSnap.docs.filter((d) => {
-      const ta = d.data() as TeachingAssignment;
-      return ta.hoursPerWeek !== hoursPerWeek && !!cur.departmentId
-        && teachingAssignmentUsesInstance(ta, { departmentId: cur.departmentId, semester: cur.semester, year: cur.year }, departments, coursesById);
-    });
-    if (stale.length > 0) {
-      const slotDocs = await getInChunks(stale.map((d) => d.id), (chunk) => collegeRef.collection("timetableSlots").where("assignmentId", "in", chunk));
-      const placed = new Map<string, number>();
-      for (const s of slotDocs) {
-        const id = (s.data() as { assignmentId: string }).assignmentId;
-        placed.set(id, (placed.get(id) ?? 0) + 1);
-      }
-      const plan = planHoursSync(
-        stale.map((d) => ({ id: d.id, placedPeriods: placed.get(d.id) ?? 0 })),
-        hoursPerWeek,
-        hoursChanged
-      );
-      if (plan.blockedIds.length > 0) {
-        const blocked = new Set(plan.blockedIds);
-        const who = stale.filter((d) => blocked.has(d.id)).slice(0, 3)
-          .map((d) => { const t = d.data() as TeachingAssignment; return `${t.facultyName} (${t.sectionName ?? "-"}, ${placed.get(d.id)} periods)`; }).join("; ");
-        return NextResponse.json({ error: `Can't lower hours below the periods already placed on the timetable: ${who}. Remove those periods first.` }, { status: 409 });
-      }
-      // Hours untouched by this save: an assignment already over its cap keeps
-      // the hours it has. Lowering it here would put its timetable over the cap
-      // instead of refusing, which is the very thing the refusal guards against.
-      const syncIds = new Set(plan.syncIds);
-      stale = stale.filter((d) => syncIds.has(d.id));
+    // Teaching assignments copy hoursPerWeek (it caps their timetable periods); keep them in step,
+    // but never below the periods already placed. Nothing is written if that would be violated.
+    const plan = cur.departmentId && hoursPerWeek !== prevHoursPerWeek
+      ? await planTeachingHoursSync(db, session.collegeId, cur.subjectId, [{
+          departmentId: cur.departmentId, semester: cur.semester, year: cur.year, hoursPerWeek, hoursChanged: true,
+        }])
+      : { sync: [] as { ref: FirebaseFirestore.DocumentReference; hoursPerWeek: number }[], error: undefined };
+    if (plan.error) return NextResponse.json({ error: plan.error }, { status: 409 });
+
+    // "Customized" means this copy now differs from its master; it then stops following the master's hours.
+    let isCustomized = cur.isCustomized === true;
+    if (touchesNumbers) {
+      const master = (await collegeRef.collection("subjects").doc(cur.subjectId).get()).data() as Subject | undefined;
+      isCustomized = !master
+        || lectureHours !== (master.lectureHours ?? 0) || tutorialHours !== (master.tutorialHours ?? 0)
+        || practicalHours !== (master.practicalHours ?? 0) || credits !== (master.credits ?? 0);
     }
 
-    await ref.update({
-      lectureHours,
-      tutorialHours,
-      practicalHours,
-      hoursPerWeek,
-      ...(body.credits !== undefined ? { credits: Number(body.credits) } : {}),
+    const now = new Date();
+    const batch = new ChunkedBatch(db);
+    batch.update(ref, {
+      lectureHours, tutorialHours, practicalHours, hoursPerWeek, credits,
       ...(body.secondaryDepartmentNames !== undefined
         ? { secondaryDepartmentNames: body.secondaryDepartmentNames && body.secondaryDepartmentNames.length > 0 ? body.secondaryDepartmentNames : FieldValue.delete() }
         : {}),
-      isCustomized: true,
-      updatedAt: new Date(),
+      isCustomized,
+      updatedAt: now,
     });
-    for (let i = 0; i < stale.length; i += 400) {
-      const batch = db.batch();
-      for (const d of stale.slice(i, i + 400)) batch.update(d.ref, { hoursPerWeek, updatedAt: new Date() });
-      await batch.commit();
-    }
+    for (const s of plan.sync) batch.update(s.ref, { hoursPerWeek: s.hoursPerWeek, updatedAt: now });
+    await batch.commit();
 
-    const snap2 = body.snapshot;
-    if (snap2) {
-      const fields: Record<string, unknown> = {};
-      if (snap2.subjectName != null) fields.subjectName = String(snap2.subjectName).trim();
-      if (snap2.subjectCode != null) fields.subjectCode = String(snap2.subjectCode).toUpperCase().trim();
-      if (snap2.shortCode != null) fields.shortCode = String(snap2.shortCode).trim().toUpperCase();
-      if (snap2.altShortCode != null) fields.altShortCode = String(snap2.altShortCode).trim().toUpperCase();
-      if (snap2.category != null) fields.category = snap2.category;
-      if ("customCategory" in snap2) fields.customCategory = snap2.customCategory ?? null;
-      if (snap2.type != null) fields.type = snap2.type;
-      if ("totalHoursPerSemester" in snap2) fields.totalHoursPerSemester = snap2.totalHoursPerSemester ?? null;
-      if (Object.keys(fields).length > 0) {
-        const rows = await collegeRef.collection("subjectSemesterAssignments").where("subjectId", "==", cur.subjectId).get();
-        for (let i = 0; i < rows.docs.length; i += 400) {
-          const batch = db.batch();
-          for (const d of rows.docs.slice(i, i + 400)) batch.update(d.ref, { ...fields, updatedAt: new Date() });
-          await batch.commit();
-        }
-      }
-    }
-    return NextResponse.json({ success: true, teachingAssignmentsUpdated: stale.length });
+    await writeAuditLogSafe(db, session.collegeId, {
+      action: "SUBJECT_UPDATED",
+      performedBy: session.uid,
+      performedByName: session.email,
+      targetId: body.id,
+      details: { instance: true, code: cur.subjectCode, departmentId: cur.departmentId, semester: cur.semester, lectureHours, tutorialHours, practicalHours, credits },
+    });
+    return NextResponse.json({ success: true, teachingAssignmentsUpdated: plan.sync.length });
   } catch (err) {
-    const badBody = badBodyResponse(err);
-    if (badBody) return badBody;
-    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    console.error("[subject-semester-assignments PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return subjectErrorResponse(err, "[subject-semester-assignments PATCH]");
   }
 }
 
-// Unassign - removes subject instance, or hard deletes subject & all references everywhere if hardDelete=true.
+// Unassign: removes one department's semester copy of a subject. Refused (409) while a faculty
+// teaching assignment still relies on it. The master subject and every other department's copy are untouched.
 export async function DELETE(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACADEMICS");
+    const session = await requireCollegeMember(...CURRICULUM_ROLES);
     const { searchParams } = new URL(request.url);
     const subjectId = searchParams.get("subjectId");
     const departmentId = searchParams.get("departmentId");
-    const semesterParam = searchParams.get("semester");
-    const hardDelete = searchParams.get("hardDelete") === "true";
-
-    if (!subjectId) {
-      return NextResponse.json({ error: "subjectId is required" }, { status: 400 });
+    const semester = Number(searchParams.get("semester"));
+    if (!subjectId || !departmentId || !Number.isInteger(semester) || semester < 1) {
+      return NextResponse.json({ error: "subjectId, departmentId and semester are required" }, { status: 400 });
     }
-
     const db = getAdminDb();
-    const collegeRef = db.collection("colleges").doc(session.collegeId);
-
-    if (hardDelete) {
-      // Hard delete everywhere: timetable slots, teaching assignments, subject instance assignments, master subject doc
-      const [slotsSnap, assignmentsSnap, instancesSnap] = await Promise.all([
-        collegeRef.collection("timetableSlots").where("subjectId", "==", subjectId).get(),
-        collegeRef.collection("teachingAssignments").where("subjectId", "==", subjectId).get(),
-        collegeRef.collection("subjectSemesterAssignments").where("subjectId", "==", subjectId).get(),
-      ]);
-
-      // 1. Delete timetable slots
-      for (let i = 0; i < slotsSnap.docs.length; i += 400) {
-        const batch = db.batch();
-        for (const doc of slotsSnap.docs.slice(i, i + 400)) batch.delete(doc.ref);
-        await batch.commit();
-      }
-
-      // 2. Delete teaching assignments
-      for (let i = 0; i < assignmentsSnap.docs.length; i += 400) {
-        const batch = db.batch();
-        for (const doc of assignmentsSnap.docs.slice(i, i + 400)) batch.delete(doc.ref);
-        await batch.commit();
-      }
-
-      // 3. Delete subject semester assignments
-      for (let i = 0; i < instancesSnap.docs.length; i += 400) {
-        const batch = db.batch();
-        for (const doc of instancesSnap.docs.slice(i, i + 400)) batch.delete(doc.ref);
-        await batch.commit();
-      }
-
-      // 4. Delete master subject document
-      await collegeRef.collection("subjects").doc(subjectId).delete();
-
-      return NextResponse.json({ success: true, hardDeleted: true });
-    }
-
-    if (!departmentId || semesterParam == null) {
-      return NextResponse.json({ error: "departmentId and semester are required" }, { status: 400 });
-    }
-    const semester = Number(semesterParam);
-
-    const service = new SubjectInstanceService();
-    await service.unassignSubjectInstance(session.collegeId, subjectId, departmentId, semester);
-
+    await new SubjectInstanceService(db).unassignSubjectInstance(session.collegeId, subjectId, departmentId, semester);
+    await writeAuditLogSafe(db, session.collegeId, {
+      action: "SUBJECT_UNASSIGNED",
+      performedBy: session.uid,
+      performedByName: session.email,
+      targetId: subjectId,
+      details: { departmentId, semester },
+    });
     return NextResponse.json({ success: true });
   } catch (err) {
-    const badBody = badBodyResponse(err);
-    if (badBody) return badBody;
-    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
     if (err instanceof Error && err.message.includes("active faculty teaching assignments")) {
       return NextResponse.json({ error: err.message }, { status: 409 });
     }
-    console.error("[subject-semester-assignments DELETE]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return subjectErrorResponse(err, "[subject-semester-assignments DELETE]");
   }
 }

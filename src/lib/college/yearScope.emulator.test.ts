@@ -129,18 +129,22 @@ describe.skipIf(!EMULATOR)("Years Taught: empty is not 'all', removals respect d
       expect((await POST(new Request("http://x", { method: "POST", body: body("c-it", "IT", 3) }))).status).toBe(201);
     });
 
-    it("subject assignment (SubjectInstanceService): no Years Taught -> refused; configured -> assigned", async () => {
-      const { SubjectInstanceService } = await import("@/lib/subjects/services/SubjectInstanceService");
+    it("subject assignment (assign by code): no Years Taught -> refused; configured -> assigned", async () => {
+      const { SubjectAssignService } = await import("@/lib/subjects/services/SubjectAssignService");
       const timing = (courseId: string, year: number, semester: number) =>
         col("courseYearTimings").doc(`${courseId}_year${year}`).set({ courseId, year, departmentId: "x", semesters: [{ semester }] });
+      await col("courseCatalog").doc(BTECH).update({ regulations: ["R20"] });
       await timing("c-lonely", 2, 3);
       await timing("c-it", 3, 5);
-      await col("subjects").doc("s1").set({ collegeId: C, name: "Maths", code: "M1", courseId: "c-it", courseName: "B.Tech" });
-      const svc = new SubjectInstanceService(db() as never);
-      await expect(svc.assignSubjectInstance({ collegeId: C, subjectId: "s1", departmentId: "lonely", courseId: "c-lonely", semester: 3, year: 2, departmentName: "Lonely" } as never))
+      await col("subjects").doc("s1").set({ collegeId: C, name: "Maths", code: "M1", courseId: "c-it", courseName: "B.Tech", regulation: "R20", isActive: true });
+      const svc = new SubjectAssignService(db() as never);
+      const base = { collegeId: C, regulation: "R20", codes: ["M1"] };
+      await expect(svc.run({ ...base, courseId: "c-lonely", departmentId: "lonely", year: 2, semester: 3 }, "commit"))
         .rejects.toThrow(/has no Years Taught set/);
-      const ok = await svc.assignSubjectInstance({ collegeId: C, subjectId: "s1", departmentId: "it", courseId: "c-it", semester: 5, year: 3, departmentName: "IT" } as never);
-      expect(ok.instance.year).toBe(3);
+      const ok = await svc.run({ ...base, courseId: "c-it", departmentId: "it", year: 3, semester: 5 }, "commit");
+      expect(ok.counts.toAssign).toBe(1);
+      const inst = await col("subjectSemesterAssignments").doc("s1_it_5").get();
+      expect((inst.data() as { year: number }).year).toBe(3);
     });
 
     it("departments PATCH: an EMPTY Years Taught list is refused outright (and nothing is written)", async () => {
@@ -253,18 +257,20 @@ describe.skipIf(!EMULATOR)("Years Taught: empty is not 'all', removals respect d
   });
 
   // ── Finding 8: shared years ────────────────────────────────────────────────
-  describe("8. the subject-assignment year scan follows the COURSE's own length (not 1..6)", () => {
-    it("finds the year of a semester in a course longer than 6 years, and refuses a year beyond the course", async () => {
-      const { SubjectInstanceService } = await import("@/lib/subjects/services/SubjectInstanceService");
-      await col("courses").doc("c-long").set({ collegeId: C, departmentId: "it", catalogId: BTECH, name: "Long", durationYears: 8, isActive: true });
-      await col("courseYearTimings").doc("c-long_year7").set({ courseId: "c-long", year: 7, semesters: [{ semester: 13 }] });
-      await col("courseYearTimings").doc("c-short_year5").set({ courseId: "c-short", year: 5, semesters: [{ semester: 9 }] });
-      await col("courses").doc("c-short").set({ collegeId: C, departmentId: "it", catalogId: BTECH, name: "Short", durationYears: 4, isActive: true });
-      const svc = new SubjectInstanceService(db() as never);
-      expect(await svc.resolveYearForSemester(C, "c-long", 13)).toBe(7);                         // was: never scanned past year 6
-      expect(await svc.resolveYearForSemester(C, "c-long", 13, 7)).toBe(7);                      // hint beyond 6 honoured
-      expect(await svc.resolveYearForSemester(C, "c-short", 9)).toBeNull();                      // a 4-year course has no year 5
-      expect(await svc.resolveYearForSemester(C, "c-short", 9, 5, 4)).toBeNull();
+  describe("8. assign by code follows the COURSE's own length (not 1..6)", () => {
+    it("accepts a semester of a year beyond 6 in a longer course, and refuses a year beyond a shorter one", async () => {
+      const { SubjectAssignService } = await import("@/lib/subjects/services/SubjectAssignService");
+      await col("courseCatalog").doc(BTECH).update({ regulations: ["R20"] });
+      await col("departments").doc("it").update({ courseScopes: { [BTECH]: { assignedYears: [2, 3, 4, 5, 6, 7, 8], secondaryDepartments: [] } } });
+      await col("courses").doc("c-it").update({ durationYears: 8 });
+      await col("courseYearTimings").doc("c-it_year7").set({ courseId: "c-it", year: 7, semesters: [{ semester: 13 }] });
+      await col("subjects").doc("s7").set({ collegeId: C, name: "Late", code: "L7", courseId: "c-it", courseName: "B.Tech", regulation: "R20", isActive: true });
+      const svc = new SubjectAssignService(db() as never);
+      const ok = await svc.run({ collegeId: C, courseId: "c-it", departmentId: "it", regulation: "R20", year: 7, semester: 13, codes: ["L7"] }, "commit");
+      expect(ok.counts.toAssign).toBe(1);
+      await col("courses").doc("c-it").update({ durationYears: 4 });
+      await expect(svc.run({ collegeId: C, courseId: "c-it", departmentId: "it", regulation: "R20", year: 5, semester: 9, codes: ["L7"] }, "validate"))
+        .rejects.toThrow(/Year 5 doesn't exist/);
     });
   });
 });
