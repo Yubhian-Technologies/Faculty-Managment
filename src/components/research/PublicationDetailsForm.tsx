@@ -329,6 +329,13 @@ function AuthorFields({
     author.isInternal && author.authorType === "FACULTY" && author.name ? "found" : "idle"
   );
   const otherColleges = colleges.filter((c) => c.id !== ownCollegeId);
+  // The list only offers colleges of this college's own Main/Test category. An affiliation saved earlier for a college
+  // that is no longer offered keeps showing (from its stored name) instead of turning blank - display only, never rewritten.
+  const savedCollegeId = author.affiliationCollegeId;
+  const selectableColleges =
+    savedCollegeId && savedCollegeId !== OTHERS_COLLEGE_ID && savedCollegeId !== ownCollegeId && author.affiliationCollegeName && !otherColleges.some((c) => c.id === savedCollegeId)
+      ? [...otherColleges, { id: savedCollegeId, name: author.affiliationCollegeName }]
+      : otherColleges;
   const scope: "PROJECT" | "OTHERS" = author.affiliationCollegeId === OTHERS_COLLEGE_ID ? "OTHERS" : "PROJECT";
 
   async function lookupFacultyId(facultyId: string) {
@@ -443,7 +450,7 @@ function AuthorFields({
               >
                 <SelectTrigger><SelectValue placeholder="Select college" /></SelectTrigger>
                 <SelectContent>
-                  {otherColleges.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  {selectableColleges.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
