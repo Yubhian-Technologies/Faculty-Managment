@@ -2837,6 +2837,9 @@ export interface Section {
 // for a parent department's HOD looking at a child sub-department's section.
 export type SectionListItem = Section & {
   accessLevel: "primary" | "secondary";
+  // Whether the caller (an HOD) may edit this section's teaching assignments and timetable. Absent for
+  // roles the route doesn't scope; "view" = they can see it but the department that maintains it edits it.
+  teachingAccess?: "write" | "view";
 };
 
 // ─── Student Record ─────────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { loadYearGate } from "@/lib/departments/yearAccess";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
@@ -26,8 +27,9 @@ export async function DELETE(
 
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (!slot?.department || !canHodEditDepartment(scope, slot.department)) {
-        return NextResponse.json({ error: "That timetable slot is not in your department" }, { status: 403 });
+      const gate = await loadYearGate(db, session.collegeId, scope);
+      if (!slot?.department || slot.year == null || !gate.teachingWrite(slot.department, slot.year, slot.courseId)) {
+        return NextResponse.json({ error: slot?.department && slot.year != null ? gate.teachingRefusal(slot.department, slot.year, slot.courseId) : "That timetable slot is not in your department" }, { status: 403 });
       }
     } else if (session.role === "PANEL_MEMBER" || session.role === "COLLEGE_STAFF") {
       const ok = slot?.courseId && slot.year != null

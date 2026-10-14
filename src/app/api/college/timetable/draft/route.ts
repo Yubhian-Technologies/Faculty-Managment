@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { subjectBlockKey } from "@/lib/timetable/subjectBlockSize";
+import { loadYearGate } from "@/lib/departments/yearAccess";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { loadTimetableContext } from "@/lib/timetable/loadContext";
@@ -162,11 +163,12 @@ export async function POST(request: Request) {
 
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      const gate = await loadYearGate(db, session.collegeId, scope);
       if (
-        !canHodEditDepartment(scope, ctx.section.department) &&
+        !gate.teachingWrite(ctx.section.department, ctx.section.year, ctx.section.courseId) &&
         !(await isCrossDepartmentLender(db, session.collegeId, ownDepartmentNames(scope), sectionId))
       ) {
-        return NextResponse.json({ error: "This section isn't in your department" }, { status: 403 });
+        return NextResponse.json({ error: gate.teachingRefusal(ctx.section.department, ctx.section.year, ctx.section.courseId) }, { status: 403 });
       }
     } else if (session.role === "PANEL_MEMBER" || session.role === "COLLEGE_STAFF") {
       const ok = await isTimetableIncharge(db, session.collegeId, session.uid, ctx.section.courseId, ctx.section.year);
@@ -247,10 +249,11 @@ export async function PATCH(request: Request) {
     let callerIsLender = false;
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (!canHodEditDepartment(scope, ctx.section.department)) {
+      const gate = await loadYearGate(db, session.collegeId, scope);
+      if (!gate.teachingWrite(ctx.section.department, ctx.section.year, ctx.section.courseId)) {
         callerIsLender = await isCrossDepartmentLender(db, session.collegeId, ownDepartmentNames(scope), sectionId, assignmentId);
         if (!callerIsLender) {
-          return NextResponse.json({ error: "This section isn't in your department" }, { status: 403 });
+          return NextResponse.json({ error: gate.teachingRefusal(ctx.section.department, ctx.section.year, ctx.section.courseId) }, { status: 403 });
         }
       }
     } else if (session.role === "PANEL_MEMBER" || session.role === "COLLEGE_STAFF") {
@@ -509,8 +512,9 @@ export async function DELETE(request: Request) {
       if (snap.exists) {
         const department = (snap.data() as { department?: string }).department;
         const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-        if (!department || !canHodEditDepartment(scope, department)) {
-          return NextResponse.json({ error: "This section isn't in your department" }, { status: 403 });
+        const gate = await loadYearGate(db, session.collegeId, scope);
+        if (!department || !gate.teachingWrite(department, section.year, section.courseId)) {
+          return NextResponse.json({ error: department ? gate.teachingRefusal(department, section.year, section.courseId) : "This section isn't in your department" }, { status: 403 });
         }
       }
     } else if (session.role === "PANEL_MEMBER" || session.role === "COLLEGE_STAFF") {

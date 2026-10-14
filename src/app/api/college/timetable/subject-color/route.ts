@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
+import { loadYearGate } from "@/lib/departments/yearAccess";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
@@ -27,8 +28,9 @@ export async function PATCH(request: Request) {
 
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (!canHodEditDepartment(scope, a.department ?? "")) {
-        return NextResponse.json({ error: "This subject isn't in your department" }, { status: 403 });
+      const gate = await loadYearGate(db, session.collegeId, scope);
+      if (!gate.teachingWrite(a.department ?? "", a.year ?? -1, a.courseId)) {
+        return NextResponse.json({ error: gate.teachingRefusal(a.department ?? "", a.year ?? -1, a.courseId) }, { status: 403 });
       }
     } else if (session.role === "PANEL_MEMBER" || session.role === "COLLEGE_STAFF") {
       const ok = a.courseId && a.year != null &&

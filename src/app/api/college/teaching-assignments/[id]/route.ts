@@ -7,7 +7,8 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { deleteAssignmentWithSlots } from "@/lib/teaching/deleteAssignment";
 import { hasOpenDraftToday, OPEN_DRAFT_DELETE_MESSAGE } from "@/lib/studentAttendance/openDraft";
-import { getHodDepartmentScope, canHodManageAssignment } from "@/lib/departments/scope";
+import { getHodDepartmentScope } from "@/lib/departments/scope";
+import { canHodManageTeachingAssignment } from "@/lib/departments/yearAccess";
 import type { Department } from "@/types";
 import type { DepartmentYearRow } from "@/lib/departments/managedBranches";
 
@@ -35,7 +36,7 @@ async function assertHodOwnsAssignment(
   ]);
   const allDepartments = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as (DepartmentYearRow & Pick<Department, "name">)[];
   const catalogId = (courseSnap?.data() as { catalogId?: string } | undefined)?.catalogId;
-  return canHodManageAssignment(db, collegeId, scope, allDepartments, assignment, catalogId);
+  return canHodManageTeachingAssignment(db, collegeId, scope, allDepartments, assignment, catalogId);
 }
 
 export async function PATCH(

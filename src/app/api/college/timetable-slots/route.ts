@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
+import { loadYearGate } from "@/lib/departments/yearAccess";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { pinSlotWithChecks } from "@/lib/timetable/pinSlot";
 import { openLendDepartment } from "@/lib/teaching/requestAllocations";
@@ -213,8 +214,9 @@ export async function POST(request: Request) {
     // assignmentId could pin a slot into that department's section.
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (!canHodEditDepartment(scope, assignment.department)) {
-        return NextResponse.json({ error: "That teaching assignment is not in your department" }, { status: 403 });
+      const gate = await loadYearGate(db, session.collegeId, scope);
+      if (!gate.teachingWrite(assignment.department, assignment.year, assignment.courseId)) {
+        return NextResponse.json({ error: gate.teachingRefusal(assignment.department, assignment.year, assignment.courseId) }, { status: 403 });
       }
     } else if (session.role === "PANEL_MEMBER" || session.role === "COLLEGE_STAFF") {
       const ok = await isTimetableIncharge(db, session.collegeId, session.uid, assignment.courseId, assignment.year);

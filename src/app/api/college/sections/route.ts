@@ -8,6 +8,7 @@ import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartmentId } from "@/lib/departments/scope";
+import { canHodWriteTeaching } from "@/lib/departments/yearAccess";
 import { classifySectionForHod, findBranchManager, resolveBranchYearOwner, departmentOwnsYearDirectly, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { getFacultyIdCandidates, resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
 import { resolveDepartmentCourseScope, regulationsForCourseYearByBatch, regulationsForBatchStartYear, isDeclaredFeederFor } from "@/lib/college/academicStructure";
@@ -188,7 +189,7 @@ export async function GET(request: Request) {
     const inCourses = (d: FirebaseFirestore.QueryDocumentSnapshot) => !courseIdSet || courseIdSet.has(d.data().courseId as string);
 
     const seenIds = new Set<string>();
-    const sections: { id: string; accessLevel: "primary" | "secondary"; [key: string]: unknown }[] = [];
+    const sections: { id: string; accessLevel: "primary" | "secondary"; teachingAccess?: "write" | "view"; [key: string]: unknown }[] = [];
     for (const d of primarySnap.docs.filter(inCourses)) {
       const data = d.data();
       // Own-department match. When this year is claimed by whoever manages the
@@ -276,6 +277,15 @@ export async function GET(request: Request) {
         seenIds.add(d.id);
         sections.push({ id: d.id, ...data, accessLevel: "secondary" });
 }
+     }
+
+     // Who may edit this section's TEACHING (teaching assignments + timetable): a shared year belongs to the
+     // department that maintains it, every other year to the branch's own HOD. `accessLevel` above is the
+     // roster side (students + sections); this is the other one, so a page can show the right controls.
+     if (hodScope && hodDepartments.length > 0) {
+       for (const sec of sections) {
+         sec.teachingAccess = canHodWriteTeaching(hodScope, hodDepartments, sec.department as string, sec.year as number, catalogIdByCourseId.get(sec.courseId as string)) ? "write" : "view";
+       }
      }
 
      // Semester filter: sections belong to a course+year, and CourseYearTiming

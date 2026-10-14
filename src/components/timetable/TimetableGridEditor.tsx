@@ -418,7 +418,8 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
   // year - including a managed branch's shared-year section (e.g. a Basic
   // Science sub-HOD running Mechanical's 1st year) - so it is theirs to publish,
   // exactly as the publish route already allows (canHodEditDepartment).
-  const ownsSectionYear = section?.accessLevel === "primary";
+  // teachingAccess (HOD callers) says who edits this year's teaching; absent, fall back to the roster access level.
+  const ownsSectionYear = section?.teachingAccess ? section.teachingAccess === "write" : section?.accessLevel === "primary";
   const isCrossDepartment = !isLoading && (!section || (!ownsSectionYear && myDepartments.length > 0 && !myDepartments.includes(section.department)));
   // A cross-department contributor never publishes this section themselves
   // (see handleNotify/handlePublish below and the server-side guard in

@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
+import { loadYearGate } from "@/lib/departments/yearAccess";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { loadTimetableContext } from "@/lib/timetable/loadContext";
@@ -36,8 +37,9 @@ export async function POST(request: Request) {
     // Same who-may-edit rule as the draft itself.
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (!section.department || !canHodEditDepartment(scope, section.department)) {
-        return NextResponse.json({ error: "This section isn't in your department" }, { status: 403 });
+      const gate = await loadYearGate(db, session.collegeId, scope);
+      if (!section.department || !gate.teachingWrite(section.department, section.year, section.courseId)) {
+        return NextResponse.json({ error: section.department ? gate.teachingRefusal(section.department, section.year, section.courseId) : "This section isn't in your department" }, { status: 403 });
       }
     } else if (session.role === "PANEL_MEMBER" || session.role === "COLLEGE_STAFF") {
       const ok = await isTimetableIncharge(db, session.collegeId, session.uid, section.courseId, section.year);

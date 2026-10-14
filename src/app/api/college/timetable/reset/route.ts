@@ -5,7 +5,8 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
-import { getHodDepartmentScope, canHodManageAssignment } from "@/lib/departments/scope";
+import { getHodDepartmentScope } from "@/lib/departments/scope";
+import { canHodManageTeachingAssignment } from "@/lib/departments/yearAccess";
 import type { Department } from "@/types";
 import type { DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
@@ -59,7 +60,7 @@ export async function DELETE(request: Request) {
       const allDepartments = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as (DepartmentYearRow & Pick<Department, "name">)[];
       const courseSnap = await collegeRef.collection("courses").doc(section.courseId).get();
       const catalogId = (courseSnap.data() as { catalogId?: string } | undefined)?.catalogId;
-      const ownsSection = await canHodManageAssignment(
+      const ownsSection = await canHodManageTeachingAssignment(
         db, session.collegeId, scope, allDepartments,
         { department: section.department, year: section.year, courseId: section.courseId }, catalogId,
       );
@@ -69,7 +70,7 @@ export async function DELETE(request: Request) {
           const a = d.data() as { department?: string; year?: number; courseId?: string; facultyId?: string };
           const cs = a.courseId ? await collegeRef.collection("courses").doc(a.courseId).get() : null;
           const cid = (cs?.data() as { catalogId?: string } | undefined)?.catalogId;
-          if (!(await canHodManageAssignment(db, session.collegeId, scope, allDepartments, a, cid))) { ownsAll = false; break; }
+          if (!(await canHodManageTeachingAssignment(db, session.collegeId, scope, allDepartments, a, cid))) { ownsAll = false; break; }
         }
       }
       if (!ownsSection && !ownsAll) {

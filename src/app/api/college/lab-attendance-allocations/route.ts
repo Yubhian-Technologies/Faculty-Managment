@@ -5,7 +5,8 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { getHodDepartmentScope, canHodManageAssignment } from "@/lib/departments/scope";
+import { getHodDepartmentScope } from "@/lib/departments/scope";
+import { canHodManageTeachingAssignment } from "@/lib/departments/yearAccess";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
 import { COLLECTION, normalizeRanges } from "@/lib/studentAttendance/labAllocation";
 import type { Department, TeachingAssignment } from "@/types";
@@ -76,7 +77,7 @@ export async function PUT(request: Request) {
       const deptsSnap = await collegeRef.collection("departments").get();
       const allDepartments = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as (DepartmentYearRow & Pick<Department, "name">)[];
       const catalogId = (courseSnap?.data() as { catalogId?: string } | undefined)?.catalogId;
-      if (!(await canHodManageAssignment(db, session.collegeId, scope, allDepartments, assignment, catalogId))) {
+      if (!(await canHodManageTeachingAssignment(db, session.collegeId, scope, allDepartments, assignment, catalogId))) {
         return NextResponse.json({ error: "This lab is not in your department, its sub-departments or a year you manage" }, { status: 403 });
       }
     } else {

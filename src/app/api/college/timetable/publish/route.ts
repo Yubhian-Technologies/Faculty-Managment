@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
+import { loadYearGate } from "@/lib/departments/yearAccess";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
@@ -79,9 +80,10 @@ export async function POST(request: Request) {
     // and this is the server-side backstop for that, not just a UI hint.
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (!canHodEditDepartment(scope, section.department)) {
+      const gate = await loadYearGate(db, session.collegeId, scope);
+      if (!gate.teachingWrite(section.department, section.year, section.courseId)) {
         return NextResponse.json(
-          { error: "This section isn't in your department - notify its own HOD instead of publishing it directly." },
+          { error: `${gate.teachingRefusal(section.department, section.year, section.courseId)} Notify the HOD who maintains it instead of publishing it directly.` },
           { status: 403 },
         );
       }

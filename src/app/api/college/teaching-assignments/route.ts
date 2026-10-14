@@ -10,7 +10,8 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { FieldPath } from "firebase-admin/firestore";
 import { cachedCollectionDocs } from "@/lib/firestore/sharedReads";
 import { requiredFacultyCount } from "@/lib/college/facultyRatio";
-import { getHodDepartmentScope, canHodEditDepartment, canHodManageAssignment, facultyManageableDepartmentNames } from "@/lib/departments/scope";
+import { getHodDepartmentScope, canHodEditDepartment, facultyManageableDepartmentNames } from "@/lib/departments/scope";
+import { canHodManageTeachingAssignment, canHodWriteTeaching, teachingWriteRefusal } from "@/lib/departments/yearAccess";
 import { canHodEditDepartmentYear, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { facultyActiveOn, facultyActiveOnAny, loadLabWindows } from "@/lib/students/labFacultyWindow";
@@ -292,11 +293,23 @@ export async function GET(request: Request) {
     // above), so it's always one of their own people - full "primary" access,
     // same as a direct assignment, not just a view. The DELETE handler below
     // grants the matching right (owns the faculty, not just the section).
+    const ownFacultyAssignmentIds = new Set<string>();
     for (const snap of rosterAssignmentsSnaps) {
       for (const d of snap.docs) {
         if (seenIds.has(d.id)) continue;
         seenIds.add(d.id);
+        ownFacultyAssignmentIds.add(d.id);
         assignments.push({ id: d.id, ...d.data(), accessLevel: "primary" } as TeachingAssignment & { id: string; accessLevel: "primary" | "secondary" });
+      }
+    }
+    // Shown read-only when this HOD may see an assignment but not change it: the shared year a manager
+    // maintains belongs to the manager's teaching, the branch's own HOD views it (and vice versa).
+    if (hodScopeForYearGate) {
+      for (const a of assignments) {
+        if (a.accessLevel !== "primary" || ownFacultyAssignmentIds.has(a.id)) continue;
+        if (!canHodWriteTeaching(hodScopeForYearGate, allDepartmentsForYearGate, a.department ?? "", a.year as number, catalogIdByCourseId.get(a.courseId ?? ""))) {
+          a.accessLevel = "secondary";
+        }
       }
     }
     if (requestedSemester != null) {
@@ -451,9 +464,11 @@ export async function POST(request: Request) {
         const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
         const deptsSnap = await collegeRef.collection("departments").get();
         const allDepartments = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as (DepartmentYearRow & Pick<Department, "name">)[];
-        if (!canHodEditDepartmentYear(scope, allDepartments, section.department, section.year, course.catalogId)) {
+        // Teaching assignments of a year a manager maintains (Basic Science - Maths for CSE Year 1) are
+        // the manager's to create; the branch's own HOD views them. Every other year is the branch HOD's.
+        if (!canHodWriteTeaching(scope, allDepartments, section.department, section.year, course.catalogId)) {
           return NextResponse.json(
-            { error: "Section is not in your department, one of your sub-departments, or a year your department manages" },
+            { error: teachingWriteRefusal(scope, allDepartments, section.department, section.year, course.catalogId) },
             { status: 403 },
           );
         }
@@ -849,10 +864,10 @@ export async function DELETE(request: Request) {
         const courseSnap = await collegeRef.collection("courses").doc(assignmentData.courseId).get();
         catalogId = (courseSnap.data() as { catalogId?: string } | undefined)?.catalogId;
       }
-      const canManage = await canHodManageAssignment(db, session.collegeId, scope, allDepartments, assignmentData, catalogId);
+      const canManage = await canHodManageTeachingAssignment(db, session.collegeId, scope, allDepartments, assignmentData, catalogId);
       if (!canManage) {
         return NextResponse.json(
-          { error: "You can only remove assignments in your own department, its sub-departments, a year your department manages, or one of your own faculty's assignments elsewhere" },
+          { error: "You can only remove assignments of a year your department runs (the branch's own years, or the shared year you maintain), or of your own faculty elsewhere" },
           { status: 403 },
         );
       }
