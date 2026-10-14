@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { FreshmanDepartmentBadge } from "@/components/shared/FreshmanDepartmentBadge";
 import { DepartmentChipList } from "@/components/shared/DepartmentChipList";
-import { resolveDepartmentCourseScope, type DepartmentWithId } from "@/lib/college/academicStructure";
+import { resolveDepartmentCourseScope, getFreshmanDepartmentIds, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { DepartmentCourseCard } from "@/components/academics/DepartmentCourseCard";
 import { SemesterSubjectsDialog } from "@/components/academics/SemesterSubjectsDialog";
 import { CourseYearTimingForm } from "@/components/academics/CourseYearTimingForm";
@@ -392,18 +392,23 @@ export default function DepartmentDetailPage() {
     }
   }
 
-  // Every real sub-department in the college (Department.parentDepartmentId
-  // set) other than this one - the pool "Managed By" picks from. Deliberately
-  // college-wide, not limited to a pre-configured pool on either side: the
-  // whole point of this card is to replace the old two-screen, pool-gated
-  // checkbox flow with one direct connection made here.
-  const subDepartmentOptions = useMemo(
-    () =>
-      allDepartments
-        .filter((d) => d.parentDepartmentId && d.id !== id)
-        .sort((a, b) => a.name.localeCompare(b.name)),
-    [allDepartments, id]
-  );
+  // The pool "Managed By" picks from: every real sub-department
+  // (Department.parentDepartmentId set - the VIT shape, "Basic Science" split
+  // into "Basic Science - Maths" etc) PLUS every standalone Freshman
+  // department (isCommonYearDepartment, no parent - the VWU shape, e.g.
+  // "Basic Science - Physics" independently cross-listing branches). Without
+  // the second half, a college using only the standalone shape could never
+  // reach this card's manager picker at all - every qualifying department
+  // would be filtered out for lacking a parentDepartmentId it was never meant
+  // to have. Deliberately college-wide, not limited to a pre-configured pool
+  // on either side: the whole point of this card is to replace the old
+  // two-screen, pool-gated checkbox flow with one direct connection made here.
+  const subDepartmentOptions = useMemo(() => {
+    const freshmanIds = getFreshmanDepartmentIds(allDepartments as DepartmentWithId[]);
+    return allDepartments
+      .filter((d) => d.id !== id && (d.parentDepartmentId || freshmanIds.has(d.id)))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [allDepartments, id]);
 
   // Years offered below - this department's own longest course, same bound
   // YearsTaughtAndSecondaryFields uses, so a 5-year course isn't capped at 4.
