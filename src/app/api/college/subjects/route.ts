@@ -222,22 +222,26 @@ export async function POST(request: Request) {
       // that teaches it - a master subject is department-independent (see
       // this route's own GET doc-comment), so a duplicate created under a
       // sibling department's Course doc must be caught too, matching
-      // MasterSubjectImportService's own duplicate detection (bulk import).
-      // This single-add path (also used by the Import page's "Fix and
-      // retry" dialog) previously had no check at all. Falls back to just
-      // this courseId for a legacy Course doc with no catalogId.
+      // MasterSubjectImportService's own duplicate detection (bulk import)
+      // and subjectKeys.ts's own documented scope ("catalogId when the
+      // course has one - siblings share it"). This single-add path (also
+      // used by the Import page's "Fix and retry" dialog) previously had no
+      // check at all, then briefly narrowed to departmentId when one was
+      // given - which let two departments each create their own "master"
+      // copy of the same subject instead of sharing one. Always scoped to
+      // every Course doc sharing this catalog entry; falls back to just
+      // this courseId for a legacy Course doc with no catalogId, which has
+      // no sibling to collide with anyway.
       const code = body.code.toUpperCase().trim();
       const regKey = (regulation ?? "").trim();
       const targetDeptId = body.departmentId;
+      const siblingCourseIds = course.catalogId
+        ? (await db.collection("colleges").doc(session.collegeId).collection("courses")
+            .where("catalogId", "==", course.catalogId).get()).docs.map((d) => d.id).slice(0, 30)
+        : [courseId];
 
-      // Duplicate check: scoped per department (or course if no departmentId) + regulation + code
-      const dupeQuery = targetDeptId
-        ? db.collection("colleges").doc(session.collegeId).collection("subjects")
-            .where("departmentId", "==", targetDeptId)
-        : db.collection("colleges").doc(session.collegeId).collection("subjects")
-            .where("courseId", "==", courseId);
-
-      const dupeSnap = await dupeQuery.get();
+      const dupeSnap = await db.collection("colleges").doc(session.collegeId).collection("subjects")
+        .where("courseId", "in", siblingCourseIds).get();
       let existingSubjectId: string | undefined;
       let existingSubjectName: string | undefined;
       const hasDupe = dupeSnap.docs.some((d) => {
@@ -257,7 +261,7 @@ export async function POST(request: Request) {
 
       if (hasDupe) {
         return NextResponse.json(
-          { error: `A subject with code "${code}" already exists for this regulation and department.`, existingSubjectId, existingSubjectName },
+          { error: `A subject with code "${code}" already exists for this regulation and course.`, existingSubjectId, existingSubjectName },
           { status: 409 },
         );
       }
@@ -293,9 +297,11 @@ export async function POST(request: Request) {
         updatedAt: now,
       };
 
-      const lockScope = targetDeptId
-        ? `${course.catalogId || courseId}_${targetDeptId}`
-        : (course.catalogId || courseId);
+      // Matches subjectKeys.ts's own documented scope ("catalogId when the
+      // course has one - siblings share it") - never narrowed to targetDeptId,
+      // or two departments racing this same endpoint could each win a lock
+      // for their own "copy" of the same subject.
+      const lockScope = course.catalogId || courseId;
 
       try {
         await db.runTransaction(async (tx) => {
@@ -307,7 +313,7 @@ export async function POST(request: Request) {
           // Same code held by a sibling department's course: offer it for reuse.
           const taken = e as SubjectKeyTakenError;
           return NextResponse.json({
-            error: `A subject with code "${code}" already exists for this regulation and department.`,
+            error: `A subject with code "${code}" already exists for this regulation and course.`,
             ...(taken.ownerId ? { existingSubjectId: taken.ownerId, existingSubjectName: taken.ownerName } : {}),
           }, { status: 409 });
         }

@@ -767,7 +767,7 @@ export function SubjectsStep({ initialCatalogId, initialDepartmentId, initialReg
 
       {hasLoaded && !isFullyScoped && (
         groupCourse
-          ? <SubjectsMasterTable key={`${groupCourse.id}|${regulation}`} courseId={groupCourse.id} courseName={groupCourse.name} regulation={regulation} />
+          ? <SubjectsMasterTable key={`${groupCourse.id}|${regulation}`} courseId={groupCourse.id} catalogId={catalogId} courseName={groupCourse.name} regulation={regulation} />
           : <p className="text-sm text-muted-foreground">No course found for this regulation.</p>
       )}
 

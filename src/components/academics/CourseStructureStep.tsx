@@ -434,6 +434,7 @@ export function CourseStructureStep({
         <SubjectsMasterTable
           key={`${picker.selectedCourse.id}|${regulation}|${subjectsRefreshKey}`}
           courseId={picker.selectedCourse.id}
+          catalogId={picker.selectedCourse.catalogId}
           courseName={picker.selectedCourse.name}
           regulation={regulation}
         />

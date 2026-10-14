@@ -101,9 +101,6 @@ export class CourseStructureRequestError extends Error {}
 // Configuration changed between validation and commit - route returns 409.
 export class CourseStructureConflictError extends Error {}
 
-// Firestore's per-commit ceiling, per this repo's convention (CLAUDE.md).
-const MAX_WRITES_PER_COMMIT = 500;
-
 type Dept = Department & { id: string };
 type CourseDoc = Course & { id: string };
 type MasterDoc = Subject & { id: string };
@@ -444,9 +441,10 @@ export class CourseStructureImportService {
     plan.writes = plan.newMasterCodes.size
       + plan.planRows.filter((p) => p.instance !== "unchanged").length
       + plan.legacyToDelete.size;
-    if (plan.writes > MAX_WRITES_PER_COMMIT) {
-      errors.push({ row: 0, message: `This file needs ${plan.writes} writes, more than one atomic import allows (${MAX_WRITES_PER_COMMIT}). Split it by year.` });
-    }
+    // No row-count-based rejection here any more: commit() chunks the actual
+    // writes across multiple transactions (see ROWS_PER_CHUNK there), so a
+    // file within COURSE_STRUCTURE_MAX_ROWS always has somewhere to land
+    // regardless of how many of its rows need a new master vs. reuse one.
     errors.sort((a, b) => a.row - b.row);
     return plan;
   }
@@ -500,16 +498,52 @@ export class CourseStructureImportService {
     return { ok: true, ...base, verification };
   }
 
+  // Chunked so a file near COURSE_STRUCTURE_MAX_ROWS never asks one Firestore
+  // transaction for more than its ~500-write ceiling: each chunk of rows is
+  // independently re-validated against fresh Firestore state (same checks as
+  // a single-chunk commit always ran) and committed atomically on its own.
+  // A conflict in chunk N>1 means chunks before it already landed - every
+  // thrown message below says so, since "nothing was saved" would be false.
+  private readonly ROWS_PER_CHUNK = 200; // worst case 2 writes/row = 400, safely under Firestore's 500-write cap
+
   private async commit(req: CourseStructureRequest, ctx: LoadedContext & { existingInstances?: SubjectSemesterAssignment[] }, plan: Plan): Promise<void> {
+    const totalChunks = Math.max(1, Math.ceil(plan.planRows.length / this.ROWS_PER_CHUNK));
+    for (let i = 0; i < totalChunks; i++) {
+      const rows = plan.planRows.slice(i * this.ROWS_PER_CHUNK, (i + 1) * this.ROWS_PER_CHUNK);
+      if (rows.length === 0) continue;
+      await this.commitChunk(req, ctx, plan, rows, i + 1, totalChunks);
+    }
+  }
+
+  private async commitChunk(
+    req: CourseStructureRequest,
+    ctx: LoadedContext & { existingInstances?: SubjectSemesterAssignment[] },
+    plan: Plan,
+    rows: CourseStructurePlanRow[],
+    chunkNumber: number,
+    totalChunks: number,
+  ): Promise<void> {
     const college = this.collegeRef(req.collegeId);
     const instances = college.collection("subjectSemesterAssignments");
     const subjects = college.collection("subjects");
     const rowByCode = new Map<string, CourseStructureRow>();
     for (const r of plan.rows) { const k = subjectIdentityKey(r); if (!rowByCode.has(k)) rowByCode.set(k, r); }
-    const toWrite = plan.planRows.filter((p) => p.instance !== "unchanged");
+
+    // Everything below is scoped to just THIS chunk's rows - the other
+    // chunks are handled by their own, separate call to this method.
+    const chunkKeys = new Set(rows.map((r) => r.key));
+    const toWrite = rows.filter((p) => p.instance !== "unchanged");
+    const newMasterCodes = Array.from(plan.newMasterCodes).filter((k) => chunkKeys.has(k));
     const reusedMasterIds = Array.from(new Set(
-      plan.planRows.filter((p) => p.master === "reuse").map((p) => plan.masterIdByCode.get(p.key)!)
+      rows.filter((p) => p.master === "reuse").map((p) => plan.masterIdByCode.get(p.key)!)
     ));
+    const instanceIdOf = (p: CourseStructurePlanRow) => `${plan.masterIdByCode.get(p.key)}_${ctx.department.id}_${p.semester}`;
+    const chunkInstanceIds = new Set(toWrite.map(instanceIdOf));
+    const legacyEntries = Array.from(plan.legacyToDelete.entries()).filter(([id]) => chunkInstanceIds.has(id));
+
+    const partial = chunkNumber > 1
+      ? ` Rows already processed (chunk${chunkNumber - 1 > 1 ? "s 1" : " 1"}${chunkNumber - 1 > 1 ? `-${chunkNumber - 1}` : ""} of ${totalChunks}) were already saved - only the remaining rows need re-uploading.`
+      : "";
 
     await this.db.runTransaction(async (tx) => {
       // 1. Re-read everything the plan depends on and rebuild the scope.
@@ -536,37 +570,37 @@ export class CourseStructureImportService {
           customCategoriesFrom(categoriesSnap.docs.map((d) => d.data()))
         );
       } catch (err) {
-        throw new CourseStructureConflictError(`The course or department changed during the import: ${(err as Error).message}`);
+        throw new CourseStructureConflictError(`The course or department changed during the import: ${(err as Error).message}.${partial}`);
       }
       const recheck = validateCourseStructureRows(req.records, fresh.summary.scope);
       if (!recheck.ok) {
-        throw new CourseStructureConflictError("Course-Year Timings or the department's assigned years changed during the import. Nothing was saved. Validate the file again.");
+        throw new CourseStructureConflictError(`Course-Year Timings or the department's assigned years changed during the import.${partial} Validate the file again.`);
       }
 
       // 2. Targets must still be in the state the plan saw.
-      const newMasterRefs = Array.from(plan.newMasterCodes).map((code) => subjects.doc(plan.masterIdByCode.get(code)!));
+      const newMasterRefs = newMasterCodes.map((code) => subjects.doc(plan.masterIdByCode.get(code)!));
       const reusedRefs = reusedMasterIds.map((id) => subjects.doc(id));
-      const instanceRefs = toWrite.map((p) => instances.doc(`${plan.masterIdByCode.get(p.key)}_${ctx.department.id}_${p.semester}`));
-      const legacyRefs = Array.from(plan.legacyToDelete.keys()).map((id) => instances.doc(id.replace(/_\d+$/, "")));
+      const instanceRefs = toWrite.map((p) => instances.doc(instanceIdOf(p)));
+      const legacyRefs = legacyEntries.map(([id]) => instances.doc(id.replace(/_\d+$/, "")));
       const snaps = newMasterRefs.length + reusedRefs.length + instanceRefs.length + legacyRefs.length > 0
         ? await tx.getAll(...newMasterRefs, ...reusedRefs, ...instanceRefs, ...legacyRefs)
         : [];
       let i = 0;
       for (const s of snaps.slice(i, (i += newMasterRefs.length))) {
-        if (s.exists) throw new CourseStructureConflictError(`Subject ${(s.data() as Subject).code} was created by someone else during the import. Nothing was saved. Validate the file again.`);
+        if (s.exists) throw new CourseStructureConflictError(`Subject ${(s.data() as Subject).code} was created by someone else during the import.${partial} Validate the file again.`);
       }
       const masters = new Map<string, Subject>();
       for (const s of snaps.slice(i, (i += reusedRefs.length))) {
-        if (!s.exists || (s.data() as Subject).isActive === false) throw new CourseStructureConflictError("An existing subject this file links to was removed or deactivated during the import. Nothing was saved.");
+        if (!s.exists || (s.data() as Subject).isActive === false) throw new CourseStructureConflictError(`An existing subject this file links to was removed or deactivated during the import.${partial}`);
         masters.set(s.id, s.data() as Subject);
       }
       for (const s of snaps.slice(i, (i += instanceRefs.length))) {
         if (s.exists && (s.data() as SubjectSemesterAssignment).isActive !== false) {
-          throw new CourseStructureConflictError("Some of these subjects were assigned by someone else during the import. Nothing was saved. Validate the file again.");
+          throw new CourseStructureConflictError(`Some of these subjects were assigned by someone else during the import.${partial} Validate the file again.`);
         }
       }
 
-      // 3. Writes - all or nothing.
+      // 3. Writes - all or nothing for THIS chunk.
       const now = new Date();
       // A University Code in the file is recorded on an existing subject too
       // (and its assignments, below) - only when it is new or different.
@@ -580,7 +614,7 @@ export class CourseStructureImportService {
           masters.set(id, { ...master, universityCode: next });
         }
       }
-      for (const code of plan.newMasterCodes) {
+      for (const code of newMasterCodes) {
         const id = plan.masterIdByCode.get(code)!;
         const payload = this.masterPayload(req, ctx, rowByCode.get(code)!, now);
         tx.create(subjects.doc(id), payload);
@@ -608,7 +642,7 @@ export class CourseStructureImportService {
       }
       // Subjects already assigned are otherwise left alone - only their place
       // in the order is taken from this file, so uploading it again restores it.
-      for (const p of plan.planRows.filter((r) => r.instance === "unchanged")) {
+      for (const p of rows.filter((r) => r.instance === "unchanged")) {
         const instanceId = `${plan.masterIdByCode.get(p.key)}_${ctx.department.id}_${p.semester}`;
         const serialNumber = plan.serialUpdates.get(instanceId);
         const universityCode = universityCodeFor.get(plan.masterIdByCode.get(p.key)!);

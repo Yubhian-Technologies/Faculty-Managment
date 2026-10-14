@@ -324,6 +324,30 @@ describe("Course Structure import - end to end", () => {
     expect(db.store.size).toBe(before);
   });
 
+  it("chunks a large import across multiple transactions so no single commit exceeds Firestore's write ceiling", async () => {
+    // 420 rows, all new masters + new instances (2 writes each = 840 total) -
+    // more than one Firestore transaction's ~500-write ceiling allows, and
+    // past ROWS_PER_CHUNK (200) twice over, so this exercises all three chunks.
+    const rows = Array.from({ length: 420 }, (_, i) => row({ name: `Subject ${i + 1}`, code: `CS${1000 + i}` }));
+    const res = await service.run(request(rows), "commit");
+
+    expect(res.ok).toBe(true);
+    expect(res.counts).toMatchObject({ mastersCreated: 420, instancesWritten: 420 });
+    expect(res.verification).toEqual({ checked: 420, problems: [] });
+
+    const subjects = docs("subjects");
+    const instances = docs("subjectSemesterAssignments");
+    expect(subjects).toHaveLength(420);
+    expect(instances).toHaveLength(420);
+    // Spot-check a row from each of the three chunks (1-200, 201-400, 401-420).
+    for (const code of ["CS1000", "CS1200", "CS1419"]) {
+      const subject = subjects.find((s) => s.code === code);
+      expect(subject).toBeTruthy();
+      const instance = instances.find((a) => a.subjectId === subject!.id);
+      expect(instance).toMatchObject({ regulation: "R23", courseId: "c-cse", departmentId: "cse", year: 2, semester: 3 });
+    }
+  });
+
   it("aborts with nothing saved if another import creates the same subject mid-commit", async () => {
     // Learn the deterministic id the competing import would write.
     const pristine = new Map(db.store);

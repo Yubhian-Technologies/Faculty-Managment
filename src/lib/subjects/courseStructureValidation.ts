@@ -13,9 +13,12 @@ import { resolveSubjectType } from "./normalize";
 import { categoryKey, type CategoryDefinition } from "./categoryDefinitions";
 
 // Each row can cost up to two writes (a new master subject + its semester
-// instance) and the whole file commits in one transaction, which this repo
-// keeps within Firestore's 500-writes-per-commit convention.
-export const COURSE_STRUCTURE_MAX_ROWS = 250;
+// instance). The commit itself is chunked (CourseStructureImportService.commit)
+// so no single Firestore transaction is asked for more than its ~500-write
+// ceiling even at this cap - each chunk is independently re-validated and
+// atomic, so a conflict partway through still only ever applies a whole
+// chunk, never half a row.
+export const COURSE_STRUCTURE_MAX_ROWS = 500;
 
 export const COURSE_STRUCTURE_REQUIRED_KEYS = [
   "year", "semester", "category", "name", "lectureHours", "tutorialHours", "practicalHours",

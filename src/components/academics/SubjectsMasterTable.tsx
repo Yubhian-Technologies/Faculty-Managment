@@ -34,8 +34,19 @@ function toEditForm(s: Subject): EditForm {
 // (a course's own subject count is small - dozens, not thousands - so a
 // second paginated endpoint isn't worth it) with inline Edit/Delete reusing
 // the existing single-subject PATCH/DELETE route.
-export function SubjectsMasterTable({ courseId, courseName, regulation }: {
+//
+// catalogId, when the course has one, scopes the GET to every sibling
+// department's own Course doc for the same catalog entry (the GET route's
+// own catalogId branch - see /api/college/subjects) - master subjects are
+// shared/deduped across that whole group (CourseStructureImportService), so
+// a subject imported under one department's courseId must still show up
+// here regardless of which department's Course doc this table was opened
+// from. Without it, this table silently scoped to a single courseId and
+// could show "0 subjects" for a regulation that was imported, just under a
+// sibling department's own copy of the course.
+export function SubjectsMasterTable({ courseId, catalogId, courseName, regulation }: {
   courseId: string;
+  catalogId?: string;
   courseName: string;
   regulation: string;
 }) {
@@ -49,7 +60,7 @@ export function SubjectsMasterTable({ courseId, courseName, regulation }: {
   async function load() {
     setIsLoading(true);
     try {
-      const qs = new URLSearchParams({ courseId, ...(regulation ? { regulation } : {}) });
+      const qs = new URLSearchParams({ ...(catalogId ? { catalogId } : { courseId }), ...(regulation ? { regulation } : {}) });
       const res = await fetch(`/api/college/subjects?${qs}`);
       const json = (await res.json()) as { subjects?: Subject[] };
       setSubjects(json.subjects ?? []);
@@ -61,7 +72,7 @@ export function SubjectsMasterTable({ courseId, courseName, regulation }: {
     }
   }
 
-  useEffect(() => { void load(); }, [courseId, regulation]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void load(); }, [courseId, catalogId, regulation]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pageCount = Math.max(1, Math.ceil(subjects.length / PAGE_SIZE));
   const pageRows = useMemo(() => subjects.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE), [subjects, page]);
