@@ -1116,8 +1116,11 @@ function HodStudentsContent() {
 
   // The header tick covers the page on screen (the list is paged); "Select all N
   // unassigned" and the roll-number range reach beyond it.
-  const allInViewSelected = students.length > 0 && students.every((s) => selectedIds.has(s.id));
-  const someInViewSelected = students.some((s) => selectedIds.has(s.id)) && !allInViewSelected;
+  // Students this HOD may only view (the department that maintains a shared year sees and teaches them; their
+  // branch's HOD changes them) can't be ticked, assigned or edited here.
+  const editableStudents = students.filter((s) => s.canEdit !== false);
+  const allInViewSelected = editableStudents.length > 0 && editableStudents.every((s) => selectedIds.has(s.id));
+  const someInViewSelected = editableStudents.some((s) => selectedIds.has(s.id)) && !allInViewSelected;
 
   const columns: Column<StudentRow>[] = [
     {
@@ -1127,7 +1130,7 @@ function HodStudentsContent() {
       header: (
         <Checkbox
           checked={allInViewSelected ? true : someInViewSelected ? "indeterminate" : false}
-          onCheckedChange={(checked) => setAllSelected(students, checked === true)}
+          onCheckedChange={(checked) => setAllSelected(editableStudents, checked === true)}
           aria-label="Select all students in view"
           className={SELECT_CHECKBOX_CLASS}
         />
@@ -1137,6 +1140,7 @@ function HodStudentsContent() {
         <div onClick={(e) => e.stopPropagation()}>
           <Checkbox
             checked={selectedIds.has(r.id)}
+            disabled={r.canEdit === false}
             onCheckedChange={(checked) => toggleSelected(r, checked === true)}
             aria-label={`Select ${r.name}`}
             className={SELECT_CHECKBOX_CLASS}
@@ -1212,12 +1216,16 @@ function HodStudentsContent() {
           >
             <CalendarCheck className="h-3.5 w-3.5" />
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => openAssign(r)} title={r.section ? "Move to a different section" : "Assign to a section"}>
-            <ArrowRightLeft className="h-3.5 w-3.5" />
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => openEdit(r)} title="Set roll number / status / lab batch">
-            <Pencil className="h-3.5 w-3.5" />
-          </Button>
+          {r.canEdit !== false && (
+            <>
+              <Button variant="ghost" size="sm" onClick={() => openAssign(r)} title={r.section ? "Move to a different section" : "Assign to a section"}>
+                <ArrowRightLeft className="h-3.5 w-3.5" />
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => openEdit(r)} title="Set roll number / status / lab batch">
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+            </>
+          )}
         </div>
       ),
     },
@@ -1231,7 +1239,9 @@ function HodStudentsContent() {
   const studentsHeader = (
     <PageHeader
       title="Students"
-      description="Your department's students, plus every branch grouped under it."
+      description={students.some((s) => s.canEdit === false)
+        ? "Your department's students, plus every branch grouped under it. Students of a branch you maintain are view-only here - their own department's HOD changes them."
+        : "Your department's students, plus every branch grouped under it."}
       actions={<StudentsViewTabs tabs={HOD_VIEWS} value={view} onChange={setView} />}
     />
   );

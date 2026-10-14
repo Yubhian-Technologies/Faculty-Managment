@@ -5,7 +5,7 @@ import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb, getAdminAuth } from "@/lib/firebase/admin";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
-import { canHodEditDepartmentYear, type DepartmentYearRow } from "@/lib/departments/managedBranches";
+import { canHodWriteRoster } from "@/lib/departments/yearAccess";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { setStudentLoginActive } from "@/lib/students/provisionLogin";
 import { invalidateSectionCountCache } from "@/lib/students/sectionCounts";
@@ -45,13 +45,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      let allowed = false;
-      if (scope?.departmentName) {
-        const deptsSnap = await collegeRef.collection("departments").get();
-        const all = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentYearRow[];
-        allowed = canHodEditDepartmentYear(scope, all, student.department, student.year);
-      }
-      if (!allowed) return NextResponse.json({ error: "Outside your department" }, { status: 403 });
+      // Detain / discontinue / graduate: the HOD who heads the student's branch (their secondary department
+      // while they are in a shared year), never the department that only maintains that year.
+      const allowed = !!scope?.departmentName && canHodWriteRoster(scope, student.secondaryDepartment || student.department);
+      if (!allowed) return NextResponse.json({ error: "Only the HOD who heads this student's department can do this." }, { status: 403 });
     }
 
     const now = new Date();

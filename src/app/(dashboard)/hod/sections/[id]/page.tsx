@@ -233,7 +233,7 @@ export default function SectionRosterPage() {
                 <ArrowLeft className="h-4 w-4 mr-1" />Back to Sections
               </Link>
             </Button>
-            {section.accessLevel !== "secondary" && (
+            {section.accessLevel !== "secondary" && section.canEdit !== false && (
               <Button asChild>
                 <Link href={withListBack(`/hod/sections/${id}/edit`, listHref, "/hod/sections")}>
                   <Pencil className="h-4 w-4 mr-1.5" />Edit Section & CR
@@ -262,7 +262,7 @@ export default function SectionRosterPage() {
             )}
           </span>
         </div>
-        {section.accessLevel === "secondary" && (
+        {(section.accessLevel === "secondary" || section.canEdit === false) && (
           <Badge variant="secondary" className="text-xs">View only</Badge>
         )}
       </div>

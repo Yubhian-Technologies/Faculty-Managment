@@ -8,7 +8,7 @@ import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartmentId } from "@/lib/departments/scope";
-import { canHodWriteTeaching } from "@/lib/departments/yearAccess";
+import { canHodWriteRoster, canHodWriteTeaching } from "@/lib/departments/yearAccess";
 import { classifySectionForHod, findBranchManager, resolveBranchYearOwner, departmentOwnsYearDirectly, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { getFacultyIdCandidates, resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
 import { resolveDepartmentCourseScope, regulationsForCourseYearByBatch, regulationsForBatchStartYear, isDeclaredFeederFor } from "@/lib/college/academicStructure";
@@ -189,7 +189,7 @@ export async function GET(request: Request) {
     const inCourses = (d: FirebaseFirestore.QueryDocumentSnapshot) => !courseIdSet || courseIdSet.has(d.data().courseId as string);
 
     const seenIds = new Set<string>();
-    const sections: { id: string; accessLevel: "primary" | "secondary"; teachingAccess?: "write" | "view"; [key: string]: unknown }[] = [];
+    const sections: { id: string; accessLevel: "primary" | "secondary"; teachingAccess?: "write" | "view"; canEdit?: boolean; [key: string]: unknown }[] = [];
     for (const d of primarySnap.docs.filter(inCourses)) {
       const data = d.data();
       // Own-department match. When this year is claimed by whoever manages the
@@ -284,6 +284,7 @@ export async function GET(request: Request) {
      // roster side (students + sections); this is the other one, so a page can show the right controls.
      if (hodScope && hodDepartments.length > 0) {
        for (const sec of sections) {
+         sec.canEdit = canHodWriteRoster(hodScope, sec.department as string);
          sec.teachingAccess = canHodWriteTeaching(hodScope, hodDepartments, sec.department as string, sec.year as number, catalogIdByCourseId.get(sec.courseId as string)) ? "write" : "view";
        }
      }
@@ -518,7 +519,10 @@ export async function POST(request: Request) {
           { status: 403 },
         );
       }
-      viaManagedBranch = !!body.departmentId && scope.managedDepartmentIds.includes(body.departmentId);
+      // Creating a section is a roster change: only the HOD who heads the section's department (below) -
+      // not the department that merely maintains a shared year. The branch's HOD may host the shared year
+      // its manager runs (the year check further down), which is why this is always true for an HOD now.
+      viaManagedBranch = true;
       if (body.departmentId) {
         const deptSnap = await db.collection("colleges").doc(session.collegeId)
           .collection("departments").doc(body.departmentId).get();
@@ -532,6 +536,12 @@ export async function POST(request: Request) {
         );
       } else {
         dept = scope.ownDepartmentNames[0] ?? "";
+      }
+      if (dept && !canHodWriteRoster(scope, dept)) {
+        return NextResponse.json(
+          { error: `Only the HOD who heads ${dept} can create its sections. If you maintain a shared year there, you teach in its sections but don't create them.` },
+          { status: 403 },
+        );
       }
     } else if (body.departmentId) {
       const deptSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").doc(body.departmentId).get();

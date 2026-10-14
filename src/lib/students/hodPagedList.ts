@@ -1,5 +1,6 @@
 import type { Course, StudentRecord } from "@/types";
 import { getHodDepartmentScope, type HodDepartmentScope } from "@/lib/departments/scope";
+import { canHodWriteRoster } from "@/lib/departments/yearAccess";
 import { resolveBranchYearOwner, departmentOwnsYearDirectly, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import {
   resolveCatalogId,
@@ -40,7 +41,7 @@ export const HOD_PAGE_SIZES = [10, 20, 30, 50];
 const SELECT_ALL_CAP = 2000;
 
 export type HodAccess = "primary" | "secondary";
-export type HodStudent = Omit<StudentRecord, "id"> & { id: string; accessLevel: HodAccess };
+export type HodStudent = Omit<StudentRecord, "id"> & { id: string; accessLevel: HodAccess; canEdit?: boolean };
 
 export interface HodStudentsContext {
   scope: HodDepartmentScope;
@@ -172,7 +173,7 @@ async function loadCandidates(
       // A discontinued student has no section by design - never part of the "unassigned" pool.
       if (f.unassignedOnly && data.status === "DISCONTINUED") continue;
       if (f.coreDepartment && data.secondaryDepartment !== f.coreDepartment) continue;
-      out.push({ id: d.id, ...data, accessLevel: f.level });
+      out.push({ id: d.id, ...data, accessLevel: f.level, canEdit: canHodWriteRoster(ctx.scope, (data.secondaryDepartment as string | undefined) || (data.department as string)) });
     }
   }
   return sortStudentsForList(out);

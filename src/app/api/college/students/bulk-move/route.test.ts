@@ -196,7 +196,7 @@ describe("HOD scope", () => {
   it("only moves students inside the HOD's own department", async () => {
     const { json } = await call({ studentIds: ["u1", "u4"], targetSectionId: "secB" });
     expect(json.moves.map((m) => m.id)).toEqual(["u1"]);
-    expect(json.skipped).toEqual([{ id: "u4", name: "Other Dept", reason: "Outside your department" }]);
+    expect(json.skipped).toEqual([{ id: "u4", name: "Other Dept", reason: "Not in a department you head" }]);
   });
 
   it("refuses a target section outside the HOD's department, writing nothing", async () => {

@@ -7,7 +7,7 @@ import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment, canHodEditDepartmentId } from "@/lib/departments/scope";
-import { canHodExclusivelyOwnDepartmentYear, type DepartmentYearRow } from "@/lib/departments/managedBranches";
+import { canHodWriteRoster } from "@/lib/departments/yearAccess";
 import { notConfiguredMessage } from "@/lib/college/taughtYears";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
@@ -19,52 +19,18 @@ import type { DepartmentCourseScope } from "@/types";
 import { loadDepartmentIndex, stampDepartmentIds } from "@/lib/departments/stampIds";
 import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
 
-// A parent department's HOD has full (not just view-only) access to their own
-// sub-departments' sections, and a sub-HOD has the same over every branch
-// grouped/managed under them (e.g. a Basic Science sub-HOD who runs CSE's
-// first-year sections) - same edit/delete rights as on their own department.
-// canHodEditDepartment centralizes that rule (own + child + managed); only a
-// section reached solely via `secondaryDepartments` cross-listing stays
-// view-only. Firestore security rules aren't in play here (admin SDK), so this
-// is the only enforcement point.
-//
-// A managed branch is only actually owned by the managing (sub-)HOD for the
-// YEARS that relationship covers (e.g. CIVIL under BS-English, for the shared
-// first year only) - Year 2 onward stays with CIVIL's own dedicated HOD, even
-// though the department name matches. canHodEditDepartment alone can't tell
-// the two apart since it only looks at the name, so resolveBranchYearOwner
-// disambiguates using the section's year - mirrors sections GET's own check.
+// Sections belong to the HOD who heads the section's department (or the parent of that sub-department).
+// The department that only MAINTAINS a shared year (Basic Science - Maths for CSE Year 1) sees the section and
+// teaches in it, but does not create, edit or delete it - the branch's own HOD does, whatever the year.
 async function assertHodOwnsSection(
-  db: FirebaseFirestore.Firestore,
-  collegeId: string,
+  _db: FirebaseFirestore.Firestore,
+  _collegeId: string,
   scope: Awaited<ReturnType<typeof getHodDepartmentScope>>,
   sectionDepartment: string,
-  sectionYear: number,
-  sectionCourseId: string | undefined
+  _sectionYear: number,
+  _sectionCourseId: string | undefined
 ): Promise<boolean> {
-  // Cheap gate first, so a department plainly outside this HOD's tree costs no
-  // Firestore reads. The real decision is the year-aware one below.
-  if (!canHodEditDepartment(scope, sectionDepartment)) return false;
-  const [deptsSnap, courseSnap] = await Promise.all([
-    db.collection("colleges").doc(collegeId).collection("departments").get(),
-    sectionCourseId ? db.collection("colleges").doc(collegeId).collection("courses").doc(sectionCourseId).get() : Promise.resolve(null),
-  ]);
-  const departments = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentYearRow[];
-  // A manager can run more than one course with different years, so ownership
-  // must resolve against THIS section's own course, not just its department.
-  const catalogId = courseSnap?.exists ? (courseSnap.data() as { catalogId?: string } | undefined)?.catalogId : undefined;
-  // Sections deliberately uses the STRICTER sibling here, not the shared
-  // `canHodEditDepartmentYear` Teaching Assignments/Students rely on: a branch
-  // that is simultaneously a true child of one department AND grouped under a
-  // different department's `managedDepartments` for the shared first year
-  // (e.g. "data science" is Artificial Intelligence's own child but Year 1
-  // runs under "BASIC SCIENCE ENGLISH") must be edited/deleted ONLY by the
-  // shared-year manager for that year - the branch's own permanent HOD gets
-  // view-only there (see college/sections GET's matching accessLevel tag),
-  // full ownership resuming once their own dedicated years start. See
-  // canHodExclusivelyOwnDepartmentYear's own doc-comment for why this can't
-  // just be the shared function.
-  return canHodExclusivelyOwnDepartmentYear(scope, departments, sectionDepartment, sectionYear, catalogId);
+  return canHodWriteRoster(scope, sectionDepartment);
 }
 
 export async function PATCH(
@@ -105,7 +71,7 @@ export async function PATCH(
     if (session.role === "HOD") {
       hodScope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       if (!(await assertHodOwnsSection(db, session.collegeId, hodScope, sectionDept, sectionYear, oldSection.courseId))) {
-        return NextResponse.json({ error: "You can only edit sections in your own department" }, { status: 403 });
+        return NextResponse.json({ error: "Only the HOD who heads this section's department can edit it" }, { status: 403 });
       }
     }
 
@@ -584,7 +550,7 @@ export async function DELETE(
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       if (!(await assertHodOwnsSection(db, session.collegeId, scope, data.department ?? "", data.year ?? 0, data.courseId))) {
-        return NextResponse.json({ error: "You can only delete sections in your own department" }, { status: 403 });
+        return NextResponse.json({ error: "Only the HOD who heads this section's department can delete it" }, { status: 403 });
       }
     }
 

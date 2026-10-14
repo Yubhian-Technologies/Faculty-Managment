@@ -875,7 +875,7 @@ function HODSectionsContent() {
                         <Link href={withListBack(`/hod/sections/${sec.id}`, listUrl, LIST_PATH)} className="hover:underline">
                           <div className="flex items-center gap-2 flex-wrap">
                             <p className="text-2xl font-bold tracking-tight">{sec.name}</p>
-                            {sec.accessLevel === "secondary" && (
+                            {(sec.accessLevel === "secondary" || sec.canEdit === false) && (
                               <Badge variant="secondary" className="text-xs">View only</Badge>
                             )}
                             {sec.department && deptByName.get(sec.department) && (
@@ -901,7 +901,7 @@ function HODSectionsContent() {
                           >
                             <Eye className="h-3.5 w-3.5" />
                           </button>
-                          {sec.accessLevel !== "secondary" && (
+                          {sec.accessLevel !== "secondary" && sec.canEdit !== false && (
                             <>
                               <button
                                 onClick={() => router.push(withListBack(`/hod/sections/${sec.id}/edit`, listUrl, LIST_PATH))}

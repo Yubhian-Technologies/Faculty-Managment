@@ -8,10 +8,9 @@ import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
-import { canHodEditDepartmentYear, type DepartmentYearRow } from "@/lib/departments/managedBranches";
+import { canHodWriteRoster } from "@/lib/departments/yearAccess";
 import { structureFromDepartments, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
-import { findCurrentSectionDoc } from "@/lib/students/findCurrentSectionDoc";
 import { planSectionMove } from "@/lib/students/sectionMove";
 import type { Section, StudentRecord } from "@/types";
 
@@ -69,14 +68,12 @@ export async function POST(request: Request) {
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
 
-    const [studentSnaps, deptsSnap, coursesSnap, targetSnap] = await Promise.all([
+    const [studentSnaps, deptsSnap, targetSnap] = await Promise.all([
       db.getAll(...ids.map((id) => collegeRef.collection("students").doc(id))),
       collegeRef.collection("departments").get(),
-      collegeRef.collection("courses").get(),
       targetSectionId ? collegeRef.collection("sections").doc(targetSectionId).get() : Promise.resolve(null),
     ]);
     const allDepts = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentWithId[];
-    const catalogByCourseId = new Map(coursesSnap.docs.map((c) => [c.id, (c.data() as { catalogId?: string }).catalogId]));
 
     let target: (Section & { id: string }) | null = null;
     if (targetSectionId) {
@@ -86,11 +83,10 @@ export async function POST(request: Request) {
 
     // HOD: only students AND a target section inside their own scope.
     const scope = session.role === "HOD" ? await getHodDepartmentScope(db, session.collegeId, session.uid) : null;
-    const hodDepts = allDepts as unknown as DepartmentYearRow[];
-    const inScope = (dept: string, year: number, catalogId?: string) =>
-      !scope || canHodEditDepartmentYear(scope, hodDepts, dept, year, catalogId);
-    if (scope && target && !inScope(target.department, target.year, catalogByCourseId.get(target.courseId ?? ""))) {
-      return NextResponse.json({ error: "Outside your department" }, { status: 403 });
+    // Moving students is a roster change: only whoever heads the section's and the student's BRANCH may do it.
+    const inScope = (dept: string) => !scope || canHodWriteRoster(scope, dept);
+    if (scope && target && !inScope(target.department)) {
+      return NextResponse.json({ error: "Only the HOD who heads the target section's department can move students into it." }, { status: 403 });
     }
 
     const structure = structureFromDepartments(allDepts);
@@ -126,14 +122,9 @@ export async function POST(request: Request) {
       const label = { id, name: student.name };
       if (student.status === "DISCONTINUED") { skipped.push({ ...label, reason: "Discontinued - reinstate the student first" }); continue; }
 
-      if (scope) {
-        const catalogId = student.courseId
-          ? catalogByCourseId.get(student.courseId)
-          : await catalogFromCurrentSection(db, session.collegeId, student, catalogByCourseId);
-        if (!inScope(student.department, student.year, catalogId)) {
-          skipped.push({ ...label, reason: "Outside your department" });
-          continue;
-        }
+      if (scope && !inScope(student.secondaryDepartment || student.department)) {
+        skipped.push({ ...label, reason: "Not in a department you head" });
+        continue;
       }
 
       const from = student.section ?? "";
@@ -195,14 +186,3 @@ export async function POST(request: Request) {
 
 // A legacy student with no courseId yet: the programme their current section
 // belongs to (same fallback the single PATCH uses for its HOD scope check).
-async function catalogFromCurrentSection(
-  db: FirebaseFirestore.Firestore,
-  collegeId: string,
-  student: StudentRecord,
-  catalogByCourseId: Map<string, string | undefined>
-): Promise<string | undefined> {
-  if (!student.section) return undefined;
-  const sectionDoc = await findCurrentSectionDoc(db, collegeId, student);
-  const courseId = sectionDoc ? (sectionDoc.data() as { courseId?: string }).courseId : undefined;
-  return courseId ? catalogByCourseId.get(courseId) : undefined;
-}

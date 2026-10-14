@@ -2840,6 +2840,9 @@ export type SectionListItem = Section & {
   // Whether the caller (an HOD) may edit this section's teaching assignments and timetable. Absent for
   // roles the route doesn't scope; "view" = they can see it but the department that maintains it edits it.
   teachingAccess?: "write" | "view";
+  // Whether the caller (an HOD) may create/edit/delete this section and its students - only whoever heads the
+  // section's department. Absent for roles the route doesn't scope.
+  canEdit?: boolean;
 };
 
 // ─── Student Record ─────────────────────────────────────────────────────────

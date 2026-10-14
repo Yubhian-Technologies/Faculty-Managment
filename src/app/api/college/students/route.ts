@@ -12,6 +12,7 @@ import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { normalizeRosterDetails } from "@/lib/students/rosterFields";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { notConfiguredMessage } from "@/lib/college/taughtYears";
+import { canHodWriteRoster } from "@/lib/departments/yearAccess";
 import { resolveBranchYearOwner, resolveFreshmanLandingDepartment, departmentOwnsYearDirectly, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { isConfiguredSecondaryDepartmentOrChild, resolveDepartmentByNameOrCode } from "@/lib/departments/codeOrNameResolver";
 import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
@@ -324,7 +325,7 @@ export async function GET(request: Request) {
       resolveCatalogId(allCourses, deptIdByName.get(data.department as string), data.course);
 
     const seenIds = new Set<string>();
-    const students: (Omit<StudentRecord, "id"> & { id: string; accessLevel: "primary" | "secondary" })[] = [];
+    const students: (Omit<StudentRecord, "id"> & { id: string; accessLevel: "primary" | "secondary"; canEdit?: boolean })[] = [];
     for (const d of primarySnap.docs) {
       const data = d.data() as Omit<StudentRecord, "id">;
       // Own-department match: only actually "mine" if this year isn't claimed
@@ -367,6 +368,14 @@ export async function GET(request: Request) {
         if (seenIds.has(d.id)) continue;
         seenIds.add(d.id);
         students.push({ id: d.id, ...(d.data() as Omit<StudentRecord, "id">), accessLevel: "secondary" });
+      }
+    }
+    // `accessLevel` is VISIBILITY (which list the student belongs to). `canEdit` is the separate question of
+    // whether this HOD may change them: only whoever heads the student's branch - the department that merely
+    // maintains a shared year sees and teaches the student, it doesn't edit them.
+    if (hodScope) {
+      for (const st of students) {
+        st.canEdit = canHodWriteRoster(hodScope, (st.secondaryDepartment as string | undefined) || (st.department as string));
       }
     }
     sortStudentsForList(students);
@@ -503,8 +512,11 @@ export async function POST(request: Request) {
     // An HOD/Sub-HOD may only add into a department they own or manage.
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (dept && !canHodEditDepartment(scope, dept)) {
-        return NextResponse.json({ error: "That department is not yours or one you manage" }, { status: 403 });
+      // Adding a student changes the roster: the HOD who heads the student's branch (their Core Department
+      // while they are in a shared year) - never the department that only maintains that year.
+      const addBranch = (typeof body.secondaryDepartment === "string" && body.secondaryDepartment.trim()) || dept;
+      if (dept && !canHodWriteRoster(scope, addBranch)) {
+        return NextResponse.json({ error: "Only the HOD who heads this student's department can add them." }, { status: 403 });
       }
     }
 

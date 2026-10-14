@@ -9,6 +9,7 @@ import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { normalizeRosterDetails } from "@/lib/students/rosterFields";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
 import { canHodEditDepartmentYear, resolveFreshmanLandingDepartment, type DepartmentYearRow } from "@/lib/departments/managedBranches";
+import { canHodViewYear, canHodWriteRoster } from "@/lib/departments/yearAccess";
 import { isConfiguredSecondaryDepartmentOrChild } from "@/lib/departments/codeOrNameResolver";
 import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
 import { getAcademicStructure, type DepartmentWithId } from "@/lib/college/academicStructure";
@@ -55,7 +56,17 @@ async function loadStudentAndScope(
     const deptsSnap = await db.collection("colleges").doc(collegeId).collection("departments").get();
     allDepts = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentYearRow[];
   }
-  return { scope, inHodScope };
+  // WRITING a student belongs to whoever heads their BRANCH. A shared-year student is filed under the
+  // maintaining department (primary) with their real branch as the secondary one - the branch's HOD changes
+  // them; the maintaining department only views and teaches them.
+  const branchOf = (s: Pick<StudentRecord, "department" | "secondaryDepartment">) => s.secondaryDepartment || s.department;
+  const inWriteScope = (student: Pick<StudentRecord, "department" | "secondaryDepartment">) =>
+    !scope || canHodWriteRoster(scope, branchOf(student));
+  // READING: the existing year-aware rule, plus the branch's own HOD for every year of their branch.
+  const canView = (student: Pick<StudentRecord, "department" | "secondaryDepartment" | "year">, catalogId?: string) =>
+    !scope || inHodScope(student.department, student.year, catalogId)
+    || (!!allDepts && [student.department, student.secondaryDepartment].some((b) => !!b && canHodViewYear(scope, allDepts as never, b, student.year, catalogId)));
+  return { scope, inHodScope, inWriteScope, canView };
 }
 
 async function catalogIdForCourseId(
@@ -121,9 +132,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const student = studentSnap.data() as StudentRecord;
 
     if (session.role === "HOD") {
-      const { inHodScope } = await loadStudentAndScope(db, session.collegeId, session.uid, session.role);
+      const { canView } = await loadStudentAndScope(db, session.collegeId, session.uid, session.role);
       const catalogId = await catalogIdForStudent(db, session.collegeId, student);
-      if (!inHodScope(student.department, student.year, catalogId)) {
+      if (!canView(student, catalogId)) {
         return NextResponse.json({ error: "Outside your department" }, { status: 403 });
       }
     }
@@ -193,10 +204,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
 
       if (session.role === "HOD") {
-        const { inHodScope } = await loadStudentAndScope(db, session.collegeId, session.uid, session.role);
+        const { scope: hodScope, inWriteScope } = await loadStudentAndScope(db, session.collegeId, session.uid, session.role);
         const catalogId = await catalogIdForStudent(db, session.collegeId, student);
-        if (!inHodScope(student.department, student.year, catalogId)) {
-          return NextResponse.json({ error: "Outside your department" }, { status: 403 });
+        void catalogId;
+        if (!inWriteScope(student)) {
+          return NextResponse.json({ error: "Only the HOD who heads this student's department can change them." }, { status: 403 });
         }
       }
 
@@ -232,10 +244,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const student = studentSnap.data() as StudentRecord;
 
       if (session.role === "HOD") {
-        const { inHodScope } = await loadStudentAndScope(db, session.collegeId, session.uid, session.role);
+        const { scope: hodScope, inWriteScope } = await loadStudentAndScope(db, session.collegeId, session.uid, session.role);
         const catalogId = await catalogIdForStudent(db, session.collegeId, student);
-        if (!inHodScope(student.department, student.year, catalogId)) {
-          return NextResponse.json({ error: "Outside your department" }, { status: 403 });
+        void catalogId;
+        if (!inWriteScope(student)) {
+          return NextResponse.json({ error: "Only the HOD who heads this student's department can change them." }, { status: 403 });
         }
       } else if (!["PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE"].includes(session.role)) {
         return NextResponse.json({ error: "Not allowed to edit student details" }, { status: 403 });
@@ -294,10 +307,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const student = studentSnap.data() as StudentRecord;
 
       if (session.role === "HOD") {
-        const { inHodScope } = await loadStudentAndScope(db, session.collegeId, session.uid, session.role);
+        const { scope: hodScope, inWriteScope } = await loadStudentAndScope(db, session.collegeId, session.uid, session.role);
         const catalogId = await catalogIdForStudent(db, session.collegeId, student);
-        if (!inHodScope(student.department, student.year, catalogId)) {
-          return NextResponse.json({ error: "Outside your department" }, { status: 403 });
+        void catalogId;
+        if (!inWriteScope(student)) {
+          return NextResponse.json({ error: "Only the HOD who heads this student's department can change them." }, { status: 403 });
         }
       } else if (!["PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE"].includes(session.role)) {
         return NextResponse.json({ error: "Not allowed to edit student details" }, { status: 403 });
@@ -484,10 +498,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const student = studentSnap.data() as StudentRecord;
 
       if (session.role === "HOD") {
-        const { inHodScope } = await loadStudentAndScope(db, session.collegeId, session.uid, session.role);
+        const { scope: hodScope, inWriteScope } = await loadStudentAndScope(db, session.collegeId, session.uid, session.role);
         const catalogId = await catalogIdForStudent(db, session.collegeId, student);
-        if (!inHodScope(student.department, student.year, catalogId)) {
-          return NextResponse.json({ error: "Outside your department" }, { status: 403 });
+        void catalogId;
+        if (!inWriteScope(student)) {
+          return NextResponse.json({ error: "Only the HOD who heads this student's department can change them." }, { status: 403 });
         }
       } else if (session.role === "PANEL_MEMBER") {
         const candidateIds = await getFacultyIdCandidates(db, session.collegeId, session.uid);
@@ -621,13 +636,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
     }
     if (session.role === "HOD") {
-      const { inHodScope } = await loadStudentAndScope(db, session.collegeId, session.uid, session.role);
-      const [fromCatalogId, toCatalogId] = await Promise.all([
-        catalogIdForStudent(db, session.collegeId, student),
-        catalogIdForCourseId(db, session.collegeId, targetSection.courseId),
-      ]);
-      if (!inHodScope(student.department, student.year, fromCatalogId) || !inHodScope(targetSection.department, targetSection.year, toCatalogId)) {
-        return NextResponse.json({ error: "Outside your department" }, { status: 403 });
+      const { scope: hodScope, inWriteScope } = await loadStudentAndScope(db, session.collegeId, session.uid, session.role);
+      if (!inWriteScope(student) || !hodScope || !canHodWriteRoster(hodScope, targetSection.department)) {
+        return NextResponse.json({ error: "Only the HOD who heads the student's and the section's department can place them." }, { status: 403 });
       }
     }
 
@@ -768,9 +779,9 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
       }
     }
     if (session.role === "HOD") {
-      const { inHodScope } = await loadStudentAndScope(db, session.collegeId, session.uid, session.role);
-      if (!inHodScope(student.department, student.year)) {
-        return NextResponse.json({ error: "Outside your department" }, { status: 403 });
+      const { inWriteScope } = await loadStudentAndScope(db, session.collegeId, session.uid, session.role);
+      if (!inWriteScope(student)) {
+        return NextResponse.json({ error: "Only the HOD who heads this student's department can delete them." }, { status: 403 });
       }
     }
 

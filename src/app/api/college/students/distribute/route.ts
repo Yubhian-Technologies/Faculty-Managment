@@ -7,7 +7,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
-import { canHodEditDepartmentYear, type DepartmentYearRow } from "@/lib/departments/managedBranches";
+import { canHodWriteRoster } from "@/lib/departments/yearAccess";
 import { sectionFeedsTarget } from "@/lib/sections/sectionLabel";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { compareSectionsByName } from "@/lib/students/evenSplit";
@@ -169,12 +169,14 @@ export async function POST(request: Request) {
     // ownership against the right one, not always its flat years.
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      const deptsSnap = await collegeRef.collection("departments").get();
-      const allDepts = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentYearRow[];
+      // Placing students in sections changes the roster: only whoever heads the sections' department may. The
+      // department that merely maintains a shared year (Basic Science - Maths for CSE Year 1) uses the result,
+      // it does not distribute it.
       const owningDepartments = Array.from(new Set(sections.map((s) => s.department).filter(Boolean)));
-      const allOwned = owningDepartments.every((d) => canHodEditDepartmentYear(scope, allDepts, d, year, targetCatalogId));
+      const allOwned = owningDepartments.every((d) => canHodWriteRoster(scope, d));
+      void targetCatalogId;
       if (!allOwned) {
-        return NextResponse.json({ error: "That department/year is not yours or one you manage" }, { status: 403 });
+        return NextResponse.json({ error: "Only the HOD who heads the sections' department can distribute students into them." }, { status: 403 });
       }
     }
 
