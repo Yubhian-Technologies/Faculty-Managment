@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/useToast";
-import { builtInCategories, checkCategoryDefinition, parseCategoryLines, type CategoryDefinition } from "@/lib/subjects/categoryDefinitions";
+import { builtInCategories, categoryKey, checkCategoryDefinition, isStandardCategoryCode, parseCategoryLines, type CategoryDefinition } from "@/lib/subjects/categoryDefinitions";
 
 // The Add/List/Edit/Delete category UI, shared by the standalone
 // /academics/categories page and the inline dialog opened from Course
@@ -27,7 +27,10 @@ export function CategoriesManager({ initialText = "", onChanged }: { initialText
   const [isAdding, setIsAdding] = useState(false);
   const [addError, setAddError] = useState("");
 
-  const [editing, setEditing] = useState<{ code: string; fullForm: string } | null>(null);
+  // originalCode identifies which doc is being edited (the PATCH query key);
+  // code is the (possibly changed) value typed so far - only a custom
+  // category's code input is ever shown, so isStandard locks it unchanged.
+  const [editing, setEditing] = useState<{ originalCode: string; code: string; fullForm: string; isStandard: boolean } | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [editError, setEditError] = useState("");
   const [deleting, setDeleting] = useState<CategoryDefinition | null>(null);
@@ -49,6 +52,16 @@ export function CategoriesManager({ initialText = "", onChanged }: { initialText
   useEffect(() => {
     void (async () => { await load(); })();
   }, []);
+
+  // Custom-only rows for the main table - a standard code the college has
+  // relabeled lives in `categories` too (same collection, see
+  // subject-categories/route.ts), but is rendered in the standard table below
+  // instead, merged with its default so it isn't shown twice.
+  const customOnly = useMemo(() => categories.filter((c) => !isStandardCategoryCode(c.code)), [categories]);
+  const effectiveStandard = useMemo(() => standard.map((s) => {
+    const override = categories.find((c) => categoryKey(c.code) === categoryKey(s.code));
+    return { code: s.code, fullForm: override?.fullForm ?? s.fullForm, isOverridden: !!override };
+  }), [standard, categories]);
 
   // Checked here as the API will check them, so a mistake shows before Add.
   const draft = useMemo(() => {
@@ -90,10 +103,11 @@ export function CategoriesManager({ initialText = "", onChanged }: { initialText
     setIsSavingEdit(true);
     setEditError("");
     try {
+      const codeChanged = !editing.isStandard && categoryKey(editing.code) !== categoryKey(editing.originalCode);
       const res = await fetch("/api/college/subject-categories", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editing),
+        body: JSON.stringify({ code: editing.originalCode, fullForm: editing.fullForm, ...(codeChanged ? { newCode: editing.code } : {}) }),
       });
       const json = await res.json() as { error?: string };
       if (!res.ok) { setEditError(json.error ?? "Couldn't save."); return; }
@@ -117,11 +131,11 @@ export function CategoriesManager({ initialText = "", onChanged }: { initialText
         toast({ variant: "destructive", title: json.error ?? "Couldn't remove the category" });
         return;
       }
-      toast({ variant: "success", title: `${deleting.code} removed` });
+      toast({ variant: "success", title: isStandardCategoryCode(deleting.code) ? `${deleting.code} reset to its default label` : `${deleting.code} removed` });
       await load();
       onChanged?.();
     } catch {
-      toast({ variant: "destructive", title: "Network error. Nothing was removed." });
+      toast({ variant: "destructive", title: "Network error. Nothing was changed." });
     } finally {
       setIsDeleting(false);
       setDeleting(null);
@@ -145,7 +159,7 @@ export function CategoriesManager({ initialText = "", onChanged }: { initialText
             />
             <p className="text-xs text-muted-foreground">
               Codes use letters, digits and &amp; - / . (up to 12 characters). You can paste two spreadsheet columns as they are.
-              The standard categories below are always available and can&apos;t be redefined.
+              The standard categories below are always available - edit one directly in its own row to relabel it.
             </p>
           </div>
           {(draft.errors.length > 0 || addError) && (
@@ -173,16 +187,26 @@ export function CategoriesManager({ initialText = "", onChanged }: { initialText
                 </tr>
               </thead>
               <tbody>
-                {categories.map((c) => (
+                {customOnly.map((c) => (
                   <tr key={c.code} className="border-b align-top">
-                    <td className="px-6 py-2 font-mono">{c.code}</td>
+                    <td className="px-6 py-2 font-mono">
+                      {editing?.originalCode === c.code ? (
+                        <Input
+                          aria-label={`Code for ${c.code}`}
+                          value={editing.code}
+                          onChange={(e) => setEditing({ ...editing, code: e.target.value.toUpperCase() })}
+                          onKeyDown={(e) => { if (e.key === "Enter") void handleSaveEdit(); if (e.key === "Escape") setEditing(null); }}
+                          className="font-mono"
+                        />
+                      ) : c.code}
+                    </td>
                     <td className="px-3 py-2">
-                      {editing?.code === c.code ? (
+                      {editing?.originalCode === c.code ? (
                         <div className="space-y-1">
                           <Input
                             aria-label={`Full form for ${c.code}`}
                             value={editing.fullForm}
-                            onChange={(e) => setEditing({ code: c.code, fullForm: e.target.value })}
+                            onChange={(e) => setEditing({ ...editing, fullForm: e.target.value })}
                             onKeyDown={(e) => { if (e.key === "Enter") void handleSaveEdit(); if (e.key === "Escape") setEditing(null); }}
                             autoFocus
                           />
@@ -191,28 +215,56 @@ export function CategoriesManager({ initialText = "", onChanged }: { initialText
                       ) : c.fullForm}
                     </td>
                     <td className="px-6 py-2 text-right whitespace-nowrap">
-                      {editing?.code === c.code ? (
+                      {editing?.originalCode === c.code ? (
                         <>
                           <Button size="sm" onClick={() => void handleSaveEdit()} loading={isSavingEdit}>Save</Button>
                           <Button size="sm" variant="ghost" onClick={() => { setEditing(null); setEditError(""); }}>Cancel</Button>
                         </>
                       ) : (
                         <>
-                          <Button size="sm" variant="ghost" onClick={() => { setEditing({ code: c.code, fullForm: c.fullForm }); setEditError(""); }}>Edit</Button>
+                          <Button size="sm" variant="ghost" onClick={() => { setEditing({ originalCode: c.code, code: c.code, fullForm: c.fullForm, isStandard: false }); setEditError(""); }}>Edit</Button>
                           <Button size="sm" variant="ghost" className="text-red-600" onClick={() => setDeleting(c)}>Remove</Button>
                         </>
                       )}
                     </td>
                   </tr>
                 ))}
-                {!isLoading && categories.length === 0 && !loadError && (
-                  <tr className="border-b"><td colSpan={3} className="px-6 py-3 text-muted-foreground">No categories defined yet. Add the ones your Course Structure files use.</td></tr>
+                {!isLoading && customOnly.length === 0 && !loadError && (
+                  <tr className="border-b"><td colSpan={3} className="px-6 py-3 text-muted-foreground">No custom categories defined yet. Add the ones your Course Structure files use.</td></tr>
                 )}
-                {standard.map((c) => (
-                  <tr key={c.code} className="border-b text-muted-foreground">
-                    <td className="px-6 py-2 font-mono">{c.code}</td>
-                    <td className="px-3 py-2">{c.fullForm}</td>
-                    <td className="px-6 py-2 text-right text-xs">Standard</td>
+                {effectiveStandard.map((c) => (
+                  <tr key={c.code} className="border-b align-top text-muted-foreground">
+                    <td className="px-6 py-2 font-mono" title="A standard category's code can't be changed, only its full form.">{c.code}</td>
+                    <td className="px-3 py-2">
+                      {editing?.originalCode === c.code ? (
+                        <div className="space-y-1">
+                          <Input
+                            aria-label={`Full form for ${c.code}`}
+                            value={editing.fullForm}
+                            onChange={(e) => setEditing({ ...editing, fullForm: e.target.value })}
+                            onKeyDown={(e) => { if (e.key === "Enter") void handleSaveEdit(); if (e.key === "Escape") setEditing(null); }}
+                            autoFocus
+                          />
+                          {editError && <p className="text-xs text-red-600">{editError}</p>}
+                        </div>
+                      ) : c.fullForm}
+                    </td>
+                    <td className="px-6 py-2 text-right whitespace-nowrap text-xs">
+                      {editing?.originalCode === c.code ? (
+                        <>
+                          <Button size="sm" onClick={() => void handleSaveEdit()} loading={isSavingEdit}>Save</Button>
+                          <Button size="sm" variant="ghost" onClick={() => { setEditing(null); setEditError(""); }}>Cancel</Button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="mr-2">Standard</span>
+                          <Button size="sm" variant="ghost" onClick={() => { setEditing({ originalCode: c.code, code: c.code, fullForm: c.fullForm, isStandard: true }); setEditError(""); }}>Edit</Button>
+                          {c.isOverridden && (
+                            <Button size="sm" variant="ghost" onClick={() => setDeleting(c)}>Reset</Button>
+                          )}
+                        </>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -224,9 +276,13 @@ export function CategoriesManager({ initialText = "", onChanged }: { initialText
       <ConfirmDialog
         open={!!deleting}
         onOpenChange={(open) => !open && setDeleting(null)}
-        title={`Remove ${deleting?.code}?`}
-        description={`${deleting?.fullForm}. Files can no longer use this category until it is defined again. A category that existing subjects use can't be removed.`}
-        confirmLabel="Remove"
+        title={deleting && isStandardCategoryCode(deleting.code) ? `Reset ${deleting.code} to its default label?` : `Remove ${deleting?.code}?`}
+        description={
+          deleting && isStandardCategoryCode(deleting.code)
+            ? `${deleting.fullForm} reverts to its standard label. The category itself stays defined - existing subjects are unaffected.`
+            : `${deleting?.fullForm}. Files can no longer use this category until it is defined again. A category that existing subjects use can't be removed.`
+        }
+        confirmLabel={deleting && isStandardCategoryCode(deleting.code) ? "Reset" : "Remove"}
         variant="destructive"
         loading={isDeleting}
         onConfirm={() => void handleDelete()}

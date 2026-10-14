@@ -80,12 +80,16 @@ export interface MigrateManagedBranchSubjectsResult {
   courseIdsUnresolved: number;
   /** Existing rows under the branch that still carried a secondaryDepartmentNames narrowing from before they moved here - cleared, since once a row is directly owned by this department the narrowing is both meaningless and actively wrong (it can make the row reappear in a SIBLING branch's own Subjects list). */
   secondaryDepartmentNamesCleared: number;
+  /** Sections already sitting directly under the branch (moved here by an earlier run, before this rename-on-move logic existed, or any other partial-migration history) whose name still carries this manager's own leading code prefix (e.g. "BSE-CE-A") - renamed in place to the branch's own convention, with every enrolled student's own `section` field and department history following along. Idempotent: a section that already matches its own convention is never touched again. */
+  sectionsRenamedInPlace: number;
   /** Per-section breakdown - which section, how many students, moving to which department. */
   sections: SectionMoveDetail[];
   /** Sections NOT moved because a section with the same name/year already exists under the core department. */
   skippedSections: SkippedSectionDetail[];
-  /** Every subject currently assigned to the manager (subDepartment) today, before this move - the "current state" list for the review UI. Identical across every branch this manager feeds, since subjects aren't filtered per branch. */
+  /** Every subject currently assigned to the manager (subDepartment) today, before this move - the "current state" list for the review UI. Identical across every branch this manager feeds (it's the manager's own full list, not narrowed per branch). */
   currentSubjects: CurrentSubjectDetail[];
+  /** Subjects that actually land in THIS branch once confirmed (toCreate + toDiscard, after narrowing) - what the "will hold" panel should show, as opposed to the manager's full `currentSubjects` list. */
+  landingSubjects: CurrentSubjectDetail[];
 }
 
 interface AssignmentRow {
@@ -93,6 +97,8 @@ interface AssignmentRow {
   subjectId: string;
   semester: number;
   year?: number;
+  /** Narrows this row to specific core department NAMES (see SubjectSemesterAssignment's own doc-comment) - unset/empty means it covers every branch the manager feeds. */
+  secondaryDepartmentNames?: string[];
 }
 
 /**
@@ -100,12 +106,17 @@ interface AssignmentRow {
  * own rows get cloned under the branch's departmentId (`toCreate`), which
  * are discarded because the branch already has its own copy at that
  * deterministic id (`toDiscard` - both still get their manager-side
- * original deleted), and which are left untouched because they're for a
- * year outside the requested scope (`toSkip`).
+ * original deleted), and which are left untouched (`toSkip`) because
+ * they're for a year outside the requested scope, OR because the row is
+ * narrowed (`secondaryDepartmentNames`) to one or more OTHER core
+ * departments and doesn't name this branch - a subject targeted at one
+ * specific core department must not get cloned into every sibling branch
+ * the same manager feeds.
  */
 export function planSubjectAssignmentMoves(
   rows: AssignmentRow[],
   branchDepartmentId: string,
+  branchName: string,
   existingBranchInstanceIds: ReadonlySet<string>,
   years: ReadonlySet<number> | null
 ): { toCreate: AssignmentRow[]; toDiscard: AssignmentRow[]; toSkip: AssignmentRow[] } {
@@ -117,11 +128,65 @@ export function planSubjectAssignmentMoves(
       toSkip.push(row);
       continue;
     }
+    if (row.secondaryDepartmentNames && row.secondaryDepartmentNames.length > 0 && !row.secondaryDepartmentNames.includes(branchName)) {
+      toSkip.push(row);
+      continue;
+    }
     const targetId = `${row.subjectId}_${branchDepartmentId}_${row.semester}`;
     if (existingBranchInstanceIds.has(targetId)) toDiscard.push(row);
     else toCreate.push(row);
   }
   return { toCreate, toDiscard, toSkip };
+}
+
+export interface StragglerSectionRow {
+  id: string;
+  name: string;
+  year: number;
+}
+
+export interface PlannedStragglerRename {
+  sectionId: string;
+  oldName: string;
+  newName: string;
+  year: number;
+}
+
+/**
+ * Pure decision step for A2 (straggler section renames): which sections
+ * already filed under the branch still carry the manager's own code as a
+ * leading "<managerCode>-" prefix (e.g. "BSE-CE-A" once Civil Engineering's
+ * own code "CE" is found later in the name) and can be safely trimmed down
+ * to the branch's own convention ("CE-A"). A section whose name doesn't
+ * start with the manager's code, or where the branch's code never appears
+ * as a later segment, or where the trimmed candidate would collide with a
+ * name/year another section already owns, is left untouched - never
+ * renamed, never reported as a false collision against itself.
+ */
+export function planStragglerSectionRenames(
+  branchSections: StragglerSectionRow[],
+  subDeptCode: string,
+  branchCode: string,
+  existingBranchSectionKeys: ReadonlySet<string>,
+  years: ReadonlySet<number> | null
+): PlannedStragglerRename[] {
+  if (!subDeptCode || !branchCode) return [];
+  const renames: PlannedStragglerRename[] = [];
+  const claimedKeys = new Set<string>();
+  for (const s of branchSections) {
+    if (years && !years.has(s.year)) continue;
+    const segments = s.name.split("-");
+    if ((segments[0] ?? "").toUpperCase() !== subDeptCode.toUpperCase()) continue;
+    const idx = segments.findIndex((seg, i) => i > 0 && seg.toUpperCase() === branchCode.toUpperCase());
+    if (idx === -1) continue;
+    const candidate = segments.slice(idx).join("-");
+    if (candidate === s.name) continue;
+    const key = `${candidate}|${s.year}`;
+    if (existingBranchSectionKeys.has(key) || claimedKeys.has(key)) continue;
+    claimedKeys.add(key);
+    renames.push({ sectionId: s.id, oldName: s.name, newName: candidate, year: s.year });
+  }
+  return renames;
 }
 
 async function commitInChunks(db: Db, ops: { ref: FirebaseFirestore.DocumentReference; action: "set" | "delete" | "update"; data?: Record<string, unknown> }[]): Promise<void> {
@@ -153,11 +218,13 @@ async function run(
   if (!branchSnap.exists) throw new Error("Core department not found");
   const subDeptData = subDeptSnap.data() as {
     name?: string;
+    code?: string;
     managedDepartments?: string[];
     secondaryDepartments?: string[];
     courseScopes?: Record<string, { secondaryDepartments?: string[] }>;
   };
   const subDeptName = subDeptData.name ?? "";
+  const subDeptCode = subDeptData.code ?? "";
   const branchData = branchSnap.data() as { name?: string; code?: string };
   const branchName = branchData.name ?? "";
   const branchCode = branchData.code ?? "";
@@ -289,6 +356,53 @@ async function run(
     })));
   }
 
+  // ── A2. Repair straggler sections already sitting directly under the
+  // branch (moved here by an earlier run of this same migration before this
+  // rename-on-move logic existed - see the module doc-comment) whose name
+  // still carries this manager's own leading code prefix. Idempotent: reuses
+  // the same branchSectionsSnap/branchSectionKeys already fetched above, so
+  // a section that already matches the branch's convention is a no-op every
+  // time this is re-run. ──
+  const stragglerRenames = planStragglerSectionRenames(
+    branchSectionsSnap.docs.map((d) => { const s = d.data() as Section; return { id: d.id, name: s.name, year: s.year }; }),
+    subDeptCode,
+    branchCode,
+    branchSectionKeys,
+    yearsSet
+  );
+  if (!dryRun && stragglerRenames.length > 0) {
+    const now = new Date();
+    const courseIdBySectionId = new Map(branchSectionsSnap.docs.map((d) => [d.id, (d.data() as Section).courseId]));
+    await commitInChunks(db, stragglerRenames.map((r) => ({
+      ref: collegeRef.collection("sections").doc(r.sectionId),
+      action: "update" as const,
+      data: { name: r.newName, updatedAt: now },
+    })));
+    for (const r of stragglerRenames) {
+      const courseId = courseIdBySectionId.get(r.sectionId);
+      const withCourseId = (q: FirebaseFirestore.Query) => courseId ? q.where("courseId", "==", courseId) : q;
+      const [primarySnap, secondarySnap] = await Promise.all([
+        withCourseId(collegeRef.collection("students")
+          .where("department", "==", branchName).where("section", "==", r.oldName).where("year", "==", r.year)
+        ).get(),
+        withCourseId(collegeRef.collection("students")
+          .where("secondaryDepartment", "==", branchName).where("section", "==", r.oldName).where("year", "==", r.year)
+        ).get(),
+      ]);
+      const studentDocs = [...primarySnap.docs, ...secondarySnap.docs].filter((d, i, arr) => arr.findIndex((x) => x.id === d.id) === i);
+      if (studentDocs.length === 0) continue;
+      await commitInChunks(db, studentDocs.map((sd) => ({
+        ref: sd.ref, action: "update" as const, data: { section: r.newName, updatedAt: now },
+      })));
+      const historyWrites = studentDocs.map((sd) => departmentHistoryEntry(db, collegeId, sd.id, branchName, r.newName, r.year, now, r.oldName));
+      for (let i = 0; i < historyWrites.length; i += 400) {
+        const batch = db.batch();
+        for (const h of historyWrites.slice(i, i + 400)) batch.set(h.ref, h.data);
+        await batch.commit();
+      }
+    }
+  }
+
   // ── B. Students currently filed under the manager for one of those sections ──
   const studentsSnap = await collegeRef.collection("students")
     .where("department", "==", subDeptName)
@@ -399,7 +513,7 @@ async function run(
   const rows: AssignmentRow[] = assignSnap.docs
     .map((d) => {
       const data = d.data() as SubjectSemesterAssignment;
-      return { id: d.id, subjectId: data.subjectId, semester: data.semester, year: data.year };
+      return { id: d.id, subjectId: data.subjectId, semester: data.semester, year: data.year, secondaryDepartmentNames: data.secondaryDepartmentNames };
     })
     .filter((r) => !!r.subjectId && r.semester != null);
 
@@ -417,7 +531,15 @@ async function run(
     : [];
   const existingBranchInstanceIds = new Set(existingTargets.filter((d) => d.exists).map((d) => d.id));
 
-  const { toCreate, toDiscard } = planSubjectAssignmentMoves(rows, branchDepartmentId, existingBranchInstanceIds, yearsSet);
+  const { toCreate, toDiscard } = planSubjectAssignmentMoves(rows, branchDepartmentId, branchName, existingBranchInstanceIds, yearsSet);
+
+  // What the review UI's "will hold" panel shows for THIS branch - only the
+  // rows that actually land here (toCreate + toDiscard), not the manager's
+  // full currentSubjects list.
+  const landingSubjects: CurrentSubjectDetail[] = [...toCreate, ...toDiscard].map((r) => {
+    const data = byId.get(r.id);
+    return { subjectId: r.subjectId, code: data?.subjectCode ?? "", name: data?.subjectName ?? "", semester: r.semester, year: r.year };
+  });
 
   let courseIdsUnresolved = 0;
   if (!dryRun && (toCreate.length > 0 || toDiscard.length > 0)) {
@@ -528,9 +650,11 @@ async function run(
     courseIdsRepaired,
     courseIdsUnresolved,
     secondaryDepartmentNamesCleared,
+    sectionsRenamedInPlace: stragglerRenames.length,
     sections,
     skippedSections,
     currentSubjects,
+    landingSubjects,
   };
 }
 

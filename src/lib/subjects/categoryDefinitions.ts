@@ -5,9 +5,13 @@ import { SUBJECT_CATEGORY_LABELS } from "@/types";
 // stores the code in `category`, so everything that already reads
 // Subject.category keeps working; the full form is the readable name.
 //
-// The standard set (SUBJECT_CATEGORY_LABELS) is always available and can't be
-// redefined; a college adds its own on top. Pure, so the settings page, its
-// API and the Course Structure import all apply the same rules.
+// The standard set (SUBJECT_CATEGORY_LABELS) is always available; a college
+// can relabel one (stored the same way as a custom category - a
+// subjectCategories doc whose code happens to be a standard one, see
+// subject-categories/route.ts PATCH/DELETE) or add its own on top, but
+// cannot invent a NEW code or full form that collides with the standard
+// set's own text. Pure, so the settings page, its API and the Course
+// Structure import all apply the same rules.
 
 export const CATEGORY_CODE_MAX = 12;
 export const CATEGORY_FULL_FORM_MIN = 2;
@@ -36,16 +40,28 @@ export function builtInCategories(): CategoryDefinition[] {
   return BUILT_IN.map((c) => ({ ...c }));
 }
 
+const STANDARD_BY_KEY = new Map(BUILT_IN.map((c) => [categoryKey(c.code), c]));
+
+/** Whether `code` names one of the standard (AICTE) categories - editable in place, never a "new category" collision. */
+export function isStandardCategoryCode(code: string): boolean {
+  return STANDARD_BY_KEY.has(categoryKey(code));
+}
+
+// Reserved for a BRAND NEW code/full form (one that doesn't already name a
+// standard category) - "other" itself, plus every standard category's own
+// text, so a new custom code can't duplicate what a standard one already
+// means. A standard code relabeling ITSELF is handled separately below, not
+// through this set.
 const RESERVED_KEYS = new Set<string>([
   "other",
-  ...BUILT_IN.flatMap((c) => [categoryKey(c.code), categoryKey(c.fullForm), categoryKey(SUBJECT_CATEGORY_LABELS[c.code])]),
+  ...BUILT_IN.flatMap((c) => [categoryKey(c.fullForm), categoryKey(SUBJECT_CATEGORY_LABELS[c.code])]),
 ]);
 
 export type CategoryCheck = { ok: true; code: string; fullForm: string } | { ok: false; error: string };
 
-// Validates one definition. `existing` are the college's own definitions (not
-// the standard set, which is checked here); pass the one being edited's code in
-// `ignoreCode` so it doesn't collide with itself.
+// Validates one definition. `existing` are the college's own definitions
+// (custom ones, and any standard category already relabeled); pass the one
+// being edited's code in `ignoreCode` so it doesn't collide with itself.
 export function checkCategoryDefinition(
   input: { code?: unknown; fullForm?: unknown },
   existing: CategoryDefinition[],
@@ -62,7 +78,13 @@ export function checkCategoryDefinition(
   if (fullForm.length > CATEGORY_FULL_FORM_MAX) return { ok: false, error: `The full form for ${code} is longer than ${CATEGORY_FULL_FORM_MAX} characters.` };
 
   const key = categoryKey(code);
-  if (RESERVED_KEYS.has(key) || RESERVED_KEYS.has(categoryKey(fullForm))) {
+  const fullFormKey = categoryKey(fullForm);
+  // A standard category relabeling ITSELF is exempt from its own reserved
+  // text (so it can keep, or return to, its own default) - but not from any
+  // OTHER standard category's text, which would be impersonation.
+  const standard = STANDARD_BY_KEY.get(key);
+  const ownReservedKeys = standard ? new Set([categoryKey(standard.fullForm), categoryKey(SUBJECT_CATEGORY_LABELS[standard.code])]) : null;
+  if (RESERVED_KEYS.has(key) || (RESERVED_KEYS.has(fullFormKey) && !ownReservedKeys?.has(fullFormKey))) {
     return { ok: false, error: `${code} or its full form is already a standard category.` };
   }
   const ignore = ignoreCode ? categoryKey(ignoreCode) : null;

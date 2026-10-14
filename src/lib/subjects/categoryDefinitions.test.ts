@@ -14,10 +14,16 @@ describe("checkCategoryDefinition", () => {
     expect(checkCategoryDefinition({ code: "A B", fullForm: "Something" }, mine)).toMatchObject({ ok: false });
     expect(checkCategoryDefinition({ code: "ES", fullForm: "" }, mine)).toMatchObject({ ok: false });
   });
-  it("rejects standard categories, however typed", () => {
-    expect(checkCategoryDefinition({ code: "pcc", fullForm: "My core" }, mine)).toMatchObject({ ok: false });
+  it("lets a standard category relabel itself, however typed", () => {
+    expect(checkCategoryDefinition({ code: "pcc", fullForm: "My core" }, mine)).toMatchObject({ ok: true, code: "PCC", fullForm: "My core" });
+    // Saving it back with (near enough) its own original text is not a collision with itself.
+    expect(checkCategoryDefinition({ code: "PCC", fullForm: "Professional Core" }, [])).toMatchObject({ ok: true });
+  });
+  it("still rejects a brand new code or 'Other' impersonating a standard category's own text", () => {
     expect(checkCategoryDefinition({ code: "XYZ", fullForm: "Professional Core" }, mine)).toMatchObject({ ok: false });
     expect(checkCategoryDefinition({ code: "Other", fullForm: "Anything" }, mine)).toMatchObject({ ok: false });
+    // Relabeling PCC to impersonate a DIFFERENT standard category is still blocked.
+    expect(checkCategoryDefinition({ code: "PCC", fullForm: "Basic Science" }, mine)).toMatchObject({ ok: false });
   });
   it("rejects a duplicate code or full form, but not the one being edited", () => {
     expect(checkCategoryDefinition({ code: "pc", fullForm: "Different" }, mine)).toMatchObject({ ok: false });

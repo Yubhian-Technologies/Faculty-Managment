@@ -221,42 +221,58 @@ export class SubjectMasterService {
       });
     });
 
-    const createdRows = ready.map((r) => ({ row: r.row, subjectId: r.ref.id, code: r.doc.code }));
+    const plannedRows = ready.map((r) => ({ row: r.row, subjectId: r.ref.id, code: r.doc.code }));
     if (failed.length > 0) return { created: 0, failed, warnings, createdRows: [] };
-    if (p.dryRun) return { created: ready.length, failed, warnings, createdRows };
+    if (p.dryRun) return { created: ready.length, failed, warnings, createdRows: plannedRows };
 
-    const claims: SubjectKeyClaim[] = ready.flatMap((r) => [
-      { field: "code" as const, scope: scope.scopeId, regulation, value: r.doc.code, subjectId: r.ref.id },
-      { field: "name" as const, scope: scope.scopeId, regulation, value: r.doc.name, subjectId: r.ref.id },
-    ]);
-    let conflicts: SubjectKeyConflict[] = [];
-    await this.db.runTransaction(async (tx) => {
-      conflicts = await claimSubjectKeys(tx, this.db, collegeId, claims);
-      if (conflicts.length > 0) return;
-      for (const r of ready) tx.set(r.ref, r.doc);
-    });
-    if (conflicts.length > 0) {
-      const rowOf = new Map(ready.flatMap((r) => [[`code:${r.ref.id}`, r.row], [`name:${r.ref.id}`, r.row]] as const));
-      return {
-        created: 0,
-        warnings,
-        createdRows: [],
-        failed: conflicts.map((c) => ({
-          row: rowOf.get(`${c.claim.field}:${c.claim.subjectId}`) ?? 0,
-          code: c.claim.field === "code" ? normalizeSubjectCode(c.claim.value) : "-",
-          error: `${c.claim.field === "code" ? `Code ${normalizeSubjectCode(c.claim.value)}` : `The name "${c.claim.value}"`} was just saved by someone else as ${c.ownerCode} (${c.ownerName}). Nothing was imported.`,
-        })),
-      };
+    // Chunked so a file near MASTER_IMPORT_MAX_ROWS never asks one Firestore
+    // transaction for more than its ~500-write ceiling (3 writes/subject: the
+    // doc + its code lock + its name lock, so 150 rows = 450 writes/chunk).
+    // Each chunk independently claims its own locks and commits atomically;
+    // a conflict in chunk N>1 means chunks before it already landed - the
+    // message says so, since "nothing was imported" would be false then.
+    const CHUNK_SIZE = 150;
+    const createdRows: MasterImportResult["createdRows"] = [];
+    for (let i = 0; i < ready.length; i += CHUNK_SIZE) {
+      const chunk = ready.slice(i, i + CHUNK_SIZE);
+      const chunkNumber = Math.floor(i / CHUNK_SIZE) + 1;
+      const claims: SubjectKeyClaim[] = chunk.flatMap((r) => [
+        { field: "code" as const, scope: scope.scopeId, regulation, value: r.doc.code, subjectId: r.ref.id },
+        { field: "name" as const, scope: scope.scopeId, regulation, value: r.doc.name, subjectId: r.ref.id },
+      ]);
+      let conflicts: SubjectKeyConflict[] = [];
+      await this.db.runTransaction(async (tx) => {
+        conflicts = await claimSubjectKeys(tx, this.db, collegeId, claims);
+        if (conflicts.length > 0) return;
+        for (const r of chunk) tx.set(r.ref, r.doc);
+      });
+      if (conflicts.length > 0) {
+        const rowOf = new Map(chunk.flatMap((r) => [[`code:${r.ref.id}`, r.row], [`name:${r.ref.id}`, r.row]] as const));
+        const partial = chunkNumber > 1
+          ? ` Rows already saved (the first ${createdRows.length} of ${ready.length}) stay saved - only the rest need re-importing.`
+          : " Nothing was imported.";
+        return {
+          created: createdRows.length,
+          warnings,
+          createdRows,
+          failed: conflicts.map((c) => ({
+            row: rowOf.get(`${c.claim.field}:${c.claim.subjectId}`) ?? 0,
+            code: c.claim.field === "code" ? normalizeSubjectCode(c.claim.value) : "-",
+            error: `${c.claim.field === "code" ? `Code ${normalizeSubjectCode(c.claim.value)}` : `The name "${c.claim.value}"`} was just saved by someone else as ${c.ownerCode} (${c.ownerName}).${partial}`,
+          })),
+        };
+      }
+      for (const r of chunk) createdRows.push({ row: r.row, subjectId: r.ref.id, code: r.doc.code });
     }
 
     await writeAuditLogSafe(this.db, collegeId, {
-      action: ready.length === 1 ? "SUBJECT_CREATED" : "SUBJECTS_IMPORTED",
+      action: createdRows.length === 1 ? "SUBJECT_CREATED" : "SUBJECTS_IMPORTED",
       performedBy: p.actor?.uid ?? "unknown",
       performedByName: p.actor?.name,
-      targetId: ready.length === 1 ? ready[0].ref.id : courseId,
-      details: { courseId, courseName: scope.course.name, regulation, count: ready.length, codes: ready.slice(0, 50).map((r) => r.doc.code) },
+      targetId: createdRows.length === 1 ? createdRows[0].subjectId : courseId,
+      details: { courseId, courseName: scope.course.name, regulation, count: createdRows.length, codes: createdRows.slice(0, 50).map((r) => r.code) },
     });
-    return { created: ready.length, failed, warnings, createdRows };
+    return { created: createdRows.length, failed, warnings, createdRows };
   }
 
   // ── edit ────────────────────────────────────────────────────────────────
