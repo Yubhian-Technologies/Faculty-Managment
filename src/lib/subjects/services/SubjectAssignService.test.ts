@@ -141,3 +141,50 @@ describe("SubjectAssignService scope checks", () => {
     await expect(svc.run(req({ codes: Array.from({ length: ASSIGN_MAX_CODES + 1 }, (_, i) => `C${i}`) }), "validate")).rejects.toThrow(/Maximum/);
   });
 });
+
+// VIT shape: Basic Science (no sections of its own) runs the shared first year; its child "Basic Science - Maths"
+// manages CSE. The Principal configures year-1 timings once, on Basic Science's course. The subjects are CSE's.
+describe("SubjectAssignService - a shared year belongs to the core department", () => {
+  beforeEach(() => {
+    for (const id of ["it", "lonely"]) fake.docs.delete(`${C}/departments/${id}`); // this scenario is VIT's, not the generic one above
+    // Same shape the departments API writes: per-course years, each with its (possibly empty) core-department list.
+    fake.seed(`${C}/departments/bs`, { name: "Basic Science", hasSubDepartments: true, parentRunsOwnSections: false, courseScopes: { cat1: { assignedYears: [1], secondaryDepartments: ["CSE"] } }, secondaryDepartments: ["CSE"] });
+    fake.seed(`${C}/departments/bsm`, { name: "Basic Science - Maths", parentDepartmentId: "bs", managedDepartments: ["CSE"], secondaryDepartments: [] });
+    fake.seed(`${C}/departments/cse`, { name: "CSE", courseScopes: { cat1: { assignedYears: [2, 3, 4], secondaryDepartments: [] } }, secondaryDepartments: [] });
+    fake.seed(`${C}/courses/c-bs`, { name: "B.Tech", catalogId: "cat1", departmentId: "bs", durationYears: 4, isActive: true });
+    fake.seed(`${C}/courses/c-cse`, { name: "B.Tech", catalogId: "cat1", departmentId: "cse", durationYears: 4, isActive: true });
+    fake.seed(`${C}/courseYearTimings/c-bs_year1`, { semesters: [{ semester: 1 }, { semester: 2 }] });
+    fake.seed(`${C}/courseYearTimings/c-cse_year2`, { semesters: [{ semester: 3 }, { semester: 4 }] });
+  });
+  const cse = (over: Partial<AssignByCodeRequest> = {}) => req({ courseId: "c-cse", departmentId: "cse", year: 1, semester: 1, ...over });
+
+  it("assigns year 1 to the CORE department, using the timings Basic Science configured", async () => {
+    const r = await svc.run(cse({ codes: ["CS201", "CS202"] }), "commit");
+    expect(r.ok).toBe(true);
+    expect(fake.read(`${C}/subjectSemesterAssignments/s1_cse_1`)).toMatchObject({ departmentId: "cse", departmentName: "CSE", courseId: "c-cse", year: 1, semester: 1 });
+    expect([...fake.docs.keys()].some((k) => k.includes("_bsm_") || k.includes("_bs_"))).toBe(false); // nothing is filed under Basic Science
+  });
+
+  it("offers the shared year, with its semesters, next to the department's own years", async () => {
+    const scope = await svc.getScope("c1", "c-cse", "cse");
+    expect(scope.years).toEqual([
+      { year: 1, shared: true, semesters: [1, 2] },
+      { year: 2, shared: false, semesters: [3, 4] },
+      { year: 3, shared: false, semesters: [] },
+      { year: 4, shared: false, semesters: [] },
+    ]);
+  });
+
+  it("refuses to file the shared year under the managing department, and says where to assign it", async () => {
+    await expect(svc.run(req({ courseId: "c-bs", departmentId: "bsm", year: 1, semester: 1 }), "validate")).rejects.toThrow(/Assign these subjects to that department instead/);
+    const scope = await svc.getScope("c1", "c-bs", "bsm");
+    expect(scope.years).toEqual([]);
+    expect(scope.managesBranches).toEqual([{ branch: "CSE", years: [1] }]);
+  });
+
+  it("still refuses a year nobody runs for the department, and a shared year whose semesters aren't configured", async () => {
+    fake.docs.delete(`${C}/courseYearTimings/c-bs_year1`);
+    await expect(svc.run(cse(), "validate")).rejects.toThrow(/no semesters configured/);
+    await expect(svc.run(cse({ year: 5 }), "validate")).rejects.toThrow(/Year 5 doesn't exist/);
+  });
+});

@@ -1,4 +1,4 @@
-import { managerTeachingYears } from "@/lib/departments/managedBranches";
+import { findBranchManager, managerTeachingYears, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import type { Course, Department } from "@/types";
 
 // Which ordinal years (1..durationYears) `department` actually teaches
@@ -20,4 +20,41 @@ export function teachableYearsForDepartment(
   const catalogId = course.catalogId;
   const assigned = managerTeachingYears(allDepartments, department, catalogId);
   return courseYears.filter((y) => assigned.includes(y));
+}
+
+export interface AssignableYears {
+  /** Years the department itself runs for this course (its own Years Taught). */
+  own: number[];
+  /** Years its managing department (e.g. Basic Science) runs for it - the shared first year. */
+  shared: number[];
+  /** Branches this department manages for this course, per year: assignment to a manager is refused in those years. */
+  managedBranchYears: { branch: string; years: number[] }[];
+}
+
+/**
+ * Where subjects can be assigned for `department`: its own years PLUS the shared years a managing
+ * department runs for it. A shared year's subjects belong to the CORE department (CSE), never to the
+ * manager (Basic Science) - the manager gets access to them through the managed link. A department that
+ * itself manages branches for this course is not a place to assign those years to (managedBranchYears).
+ */
+export function assignableYearsForDepartment(
+  course: Pick<Course, "durationYears" | "catalogId">,
+  department: Department,
+  allDepartments: Department[]
+): AssignableYears {
+  const own = teachableYearsForDepartment(course, department, allDepartments);
+  const inCourse = (y: number) => Number.isInteger(y) && y >= 1 && y <= course.durationYears;
+  const manager = findBranchManager(allDepartments as unknown as DepartmentYearRow[], department.name, course.catalogId);
+  const shared = manager && manager.department.id !== department.id
+    ? manager.years.filter((y) => inCourse(y) && !own.includes(y))
+    : [];
+  const managedBranchYears: AssignableYears["managedBranchYears"] = [];
+  for (const branch of department.managedDepartments ?? []) {
+    const m = findBranchManager(allDepartments as unknown as DepartmentYearRow[], branch, course.catalogId);
+    if (m && m.department.id === department.id) {
+      const years = m.years.filter(inCourse);
+      if (years.length > 0) managedBranchYears.push({ branch, years });
+    }
+  }
+  return { own, shared, managedBranchYears };
 }

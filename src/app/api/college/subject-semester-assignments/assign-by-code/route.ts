@@ -11,6 +11,21 @@ import { parseCodeList, SubjectAssignService } from "@/lib/subjects/services/Sub
 // `validate` writes nothing and reports every code (will be assigned / already there / not found /
 // deactivated). `commit` runs the same checks and saves all of them in one transaction - or none:
 // a single code with a problem means nothing is assigned (422, same per-code report).
+// GET ?courseId&departmentId -> what the Assign tab offers for that department: the years it can be assigned
+// subjects for (its own plus the shared years a managing department runs for it) and each year's semesters.
+export async function GET(request: Request) {
+  try {
+    const session = await requireCollegeMember(...CURRICULUM_ROLES);
+    const { searchParams } = new URL(request.url);
+    const courseId = searchParams.get("courseId");
+    const departmentId = searchParams.get("departmentId");
+    if (!courseId || !departmentId) return NextResponse.json({ error: "courseId and departmentId are required" }, { status: 400 });
+    return NextResponse.json(await new SubjectAssignService().getScope(session.collegeId, courseId, departmentId));
+  } catch (err) {
+    return subjectErrorResponse(err, "[subject-semester-assignments/assign-by-code GET]");
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember(...CURRICULUM_ROLES);

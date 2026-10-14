@@ -4,7 +4,8 @@ import { getInChunks } from "@/lib/firestore/inQuery";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { notConfiguredMessage } from "@/lib/college/taughtYears";
 import { currentAcademicStartYear, regulationsForCourseYearByBatch } from "@/lib/college/academicSession";
-import { teachableYearsForDepartment } from "../teachableYears";
+import { assignableYearsForDepartment } from "../teachableYears";
+import { inheritedTimingCourseId } from "@/lib/timetable/sharedYearTiming";
 import { courseOwnershipError, semestersFrom } from "../courseOwnership";
 import { normalizeSubjectCode } from "../subjectIdentity";
 import { ASSIGN_MAX_CODES } from "../limits";
@@ -60,8 +61,80 @@ export function parseCodeList(text: string): string[] {
   return text.split(/[\s,;]+/).map(normalizeSubjectCode).filter(Boolean);
 }
 
+export interface AssignScopeYear {
+  year: number;
+  /** Run for this department by a managing department (the shared first year) - its subjects still belong to THIS department. */
+  shared: boolean;
+  semesters: number[];
+}
+export interface AssignScope {
+  years: AssignScopeYear[];
+  /** Set when this department manages branches: those years are assigned on the branch, not here. */
+  managesBranches: { branch: string; years: number[] }[];
+}
+
+type DeptDoc = Department & { id: string };
+type CourseDoc = Course & { id: string };
+
 export class SubjectAssignService {
   constructor(private db: Firestore = getAdminDb()) {}
+
+  /** The course, department and everything that decides where subjects may go. */
+  private async loadWhere(collegeId: string, courseId: string, departmentId: string) {
+    const college = this.db.collection("colleges").doc(collegeId);
+    const [courseSnap, deptsSnap] = await Promise.all([
+      college.collection("courses").doc(courseId).get(),
+      college.collection("departments").get(),
+    ]);
+    if (!courseSnap.exists) throw new SubjectRequestError("Course not found.", 404);
+    const course = { ...(courseSnap.data() as Course), id: courseId, durationYears: Number((courseSnap.data() as Course).durationYears) || 0 } as CourseDoc;
+    if (course.isActive === false) throw new SubjectRequestError("This course is inactive.");
+    const departments = deptsSnap.docs.map((d) => ({ ...(d.data() as Department), id: d.id })) as DeptDoc[];
+    const department = departments.find((d) => d.id === departmentId);
+    if (!department) throw new SubjectRequestError("Department not found.", 404);
+    const [sameCatalogSnap, catalogSnap] = await Promise.all([
+      course.catalogId ? college.collection("courses").where("catalogId", "==", course.catalogId).get() : Promise.resolve(null),
+      course.catalogId ? college.collection("courseCatalog").doc(course.catalogId).get() : Promise.resolve(null),
+    ]);
+    const sameCatalog = (sameCatalogSnap ? sameCatalogSnap.docs.map((d) => ({ ...(d.data() as Course), id: d.id })) : [course]) as CourseDoc[];
+    const catalog = catalogSnap?.exists ? (catalogSnap.data() as { regulations?: string[]; regulationBatches?: Record<string, string> }) : undefined;
+    return { college, course, departments, department, sameCatalog, catalog, years: assignableYearsForDepartment(course, department, departments) };
+  }
+
+  /**
+   * The semesters configured for `year`: the department's own Course-Year Timings or - for a shared
+   * year - the managing department's (the Principal configures the shared first year once, where it is run).
+   */
+  private async semestersOf(
+    college: FirebaseFirestore.DocumentReference,
+    course: CourseDoc,
+    year: number,
+    departments: DeptDoc[],
+    sameCatalog: CourseDoc[],
+  ): Promise<number[]> {
+    const ids = [course.id];
+    const inherited = inheritedTimingCourseId(course, year, departments, sameCatalog);
+    if (inherited && inherited !== course.id) ids.push(inherited);
+    const snaps = await this.db.getAll(...ids.map((id) => college.collection("courseYearTimings").doc(`${id}_year${year}`)));
+    for (const s of snaps) {
+      const sems = semestersFrom(s.exists ? (s.data() as Partial<CourseYearTiming>) : undefined);
+      if (sems.length > 0) return sems;
+    }
+    return [];
+  }
+
+  /** What the Assign tab offers for a department: assignable years and, per year, its semesters. */
+  async getScope(collegeId: string, courseId: string, departmentId: string): Promise<AssignScope> {
+    const w = await this.loadWhere(collegeId, courseId, departmentId);
+    const managed = w.years.managedBranchYears;
+    const blocked = new Set(managed.flatMap((m) => m.years));
+    const all = [
+      ...w.years.own.filter((y) => !blocked.has(y)).map((year) => ({ year, shared: false })),
+      ...w.years.shared.map((year) => ({ year, shared: true })),
+    ].sort((a, b) => a.year - b.year);
+    const years = await Promise.all(all.map(async (y) => ({ ...y, semesters: await this.semestersOf(w.college, w.course, y.year, w.departments, w.sameCatalog) })));
+    return { years, managesBranches: managed };
+  }
 
   async run(req: AssignByCodeRequest, mode: "validate" | "commit"): Promise<AssignByCodeResult> {
     const { collegeId, courseId, departmentId, year, semester } = req;
@@ -82,25 +155,8 @@ export class SubjectAssignService {
     if (codes.length === 0) throw new SubjectRequestError("Enter at least one subject code.");
     if (codes.length > ASSIGN_MAX_CODES) throw new SubjectRequestError(`Maximum ${ASSIGN_MAX_CODES} codes at a time.`);
 
-    const college = this.db.collection("colleges").doc(collegeId);
-    const [courseSnap, deptsSnap] = await Promise.all([
-      college.collection("courses").doc(courseId).get(),
-      college.collection("departments").get(),
-    ]);
-    if (!courseSnap.exists) throw new SubjectRequestError("Course not found.", 404);
-    const course = { ...(courseSnap.data() as Course), id: courseId, durationYears: Number((courseSnap.data() as Course).durationYears) || 0 };
-    if (course.isActive === false) throw new SubjectRequestError("This course is inactive.");
-    const departments = deptsSnap.docs.map((d) => ({ ...(d.data() as Department), id: d.id }));
-    const department = departments.find((d) => d.id === departmentId);
-    if (!department) throw new SubjectRequestError("Department not found.", 404);
-
-    const [sameCatalogSnap, catalogSnap, timingSnap] = await Promise.all([
-      course.catalogId ? college.collection("courses").where("catalogId", "==", course.catalogId).get() : Promise.resolve(null),
-      course.catalogId ? college.collection("courseCatalog").doc(course.catalogId).get() : Promise.resolve(null),
-      year <= course.durationYears ? college.collection("courseYearTimings").doc(`${courseId}_year${year}`).get() : Promise.resolve(null),
-    ]);
-    const sameCatalog = sameCatalogSnap ? sameCatalogSnap.docs.map((d) => ({ ...(d.data() as Course), id: d.id })) : [course];
-    const catalog = catalogSnap?.exists ? (catalogSnap.data() as { regulations?: string[]; regulationBatches?: Record<string, string> }) : undefined;
+    const w = await this.loadWhere(collegeId, courseId, departmentId);
+    const { college, course, departments, department, sameCatalog, catalog } = w;
 
     // Everything about WHERE the subjects go must hold before a single code is looked at.
     const ownership = courseOwnershipError(course, department, departments, sameCatalog);
@@ -111,12 +167,18 @@ export class SubjectAssignService {
       throw new SubjectRequestError(`Regulation ${regulation} isn't assigned to ${course.name} (available: ${regulations.join(", ")}).`);
     }
     if (year > course.durationYears) throw new SubjectRequestError(`${course.name} runs ${course.durationYears} year${course.durationYears === 1 ? "" : "s"}; Year ${year} doesn't exist.`);
-    const teachable = teachableYearsForDepartment(course, department, departments);
-    if (teachable.length === 0) throw new SubjectRequestError(notConfiguredMessage(department.name, year, course.name));
-    if (!teachable.includes(year)) {
+    // A shared year's subjects belong to the CORE department; its manager reaches them through the managed link.
+    const managed = w.years.managedBranchYears.filter((m) => m.years.includes(year));
+    if (managed.length > 0) {
+      throw new SubjectRequestError(
+        `"${department.name}" runs Year ${year} for ${managed.map((m) => m.branch).join(", ")}. Assign these subjects to ${managed.length === 1 ? "that department" : "each of those departments"} instead - ${department.name} gets access to them automatically.`,
+      );
+    }
+    if (w.years.own.length === 0 && w.years.shared.length === 0) throw new SubjectRequestError(notConfiguredMessage(department.name, year, course.name));
+    if (!w.years.own.includes(year) && !w.years.shared.includes(year)) {
       throw new SubjectRequestError(`"${department.name}" isn't scoped to teach ${course.name} in Year ${year} - check its Years Taught.`);
     }
-    const configured = semestersFrom(timingSnap?.exists ? (timingSnap.data() as Partial<CourseYearTiming>) : undefined);
+    const configured = await this.semestersOf(college, course, year, departments, sameCatalog);
     if (!configured.includes(semester)) {
       throw new SubjectRequestError(
         configured.length === 0

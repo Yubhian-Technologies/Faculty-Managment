@@ -12,12 +12,9 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { AlertTriangle, CheckCircle2, Pencil, Trash2, X, XCircle } from "lucide-react";
 import type { Department } from "@/types";
-import { offeredYears } from "@/lib/college/departmentYears";
-import { courseYearNumbers, semesterLabel } from "@/lib/college/courseYears";
-import { useCourseSemesterPlan } from "@/hooks/useCourseSemesterPlan";
 import { managedCoreCandidates } from "@/lib/departments/departmentTree";
 import { ASSIGN_MAX_CODES } from "@/lib/subjects/limits";
-import type { AssignByCodeResult, AssignCodeResult } from "@/lib/subjects/services/SubjectAssignService";
+import type { AssignByCodeResult, AssignCodeResult, AssignScope } from "@/lib/subjects/services/SubjectAssignService";
 
 type CourseOption = { id: string; name: string; catalogId?: string; departmentId?: string; isActive?: boolean; durationYears?: number };
 type SlotRow = { id: string; subjectId: string; subjectCode: string; subjectName: string; serialNumber?: number; category?: string; credits?: number; lectureHours?: number; tutorialHours?: number; practicalHours?: number; departmentId: string; semester: number; secondaryDepartmentNames?: string[]; isCustomized?: boolean; isNonTeachingLoad?: boolean };
@@ -45,6 +42,8 @@ export function AssignByCodeStep({ catalogId, regulation, courseName, initialDep
   const [year, setYear] = useState("");
   const [semester, setSemester] = useState("");
   const [codesText, setCodesText] = useState("");
+  const [scope, setScope] = useState<AssignScope | null>(null);
+  const [scopeError, setScopeError] = useState("");
 
   const [check, setCheck] = useState<{ result: AssignByCodeResult; forKey: string } | null>(null);
   const [error, setError] = useState("");
@@ -97,17 +96,29 @@ export function AssignByCodeStep({ catalogId, regulation, courseName, initialDep
     () => courses.find((c) => c.catalogId === catalogId && c.departmentId === activeDeptId) ?? courses.find((c) => c.catalogId === catalogId) ?? null,
     [courses, catalogId, activeDeptId],
   );
-  const plan = useCourseSemesterPlan(planCourse);
-  const yearOptions = useMemo(
-    () => offeredYears(activeDept, departments, catalogId, courseYearNumbers(planCourse?.durationYears)),
-    [activeDept, departments, catalogId, planCourse],
-  );
-  const yearValue = yearOptions.includes(Number(year)) ? year : "";
-  // Only what the course's own Semester Timings configure for this year - never an invented 1-2.
-  const semesterOptions = useMemo(
-    () => (yearValue && plan.source === "timings" ? plan.semesters.filter((sem) => plan.yearOf(sem) === Number(yearValue)) : []),
-    [plan, yearValue],
-  );
+  // Years and semesters come from the server (SubjectAssignService.getScope): the department's own years PLUS
+  // the shared years a managing department runs for it, with the semesters configured where each is run.
+  useEffect(() => {
+    setScope(null);
+    setScopeError("");
+    if (!planCourse || !activeDeptId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/college/subject-semester-assignments/assign-by-code?courseId=${encodeURIComponent(planCourse.id)}&departmentId=${encodeURIComponent(activeDeptId)}`);
+        const body = (await res.json()) as AssignScope & { error?: string };
+        if (cancelled) return;
+        if (!res.ok) setScopeError(body.error ?? "Couldn't load this department's years.");
+        else setScope(body);
+      } catch {
+        if (!cancelled) setScopeError("Couldn't load this department's years.");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [planCourse, activeDeptId]);
+  const yearOptions = useMemo(() => scope?.years ?? [], [scope]);
+  const yearValue = yearOptions.some((y) => y.year === Number(year)) ? year : "";
+  const semesterOptions = useMemo(() => yearOptions.find((y) => y.year === Number(yearValue))?.semesters ?? [], [yearOptions, yearValue]);
   const semesterValue = semesterOptions.includes(Number(semester)) ? semester : "";
   // The CORE departments a feeder sub-department (e.g. Basic Science - Chemistry) actually teaches. A subject
   // assigned to the feeder covers all of them unless narrowed to specific ones below.
@@ -291,18 +302,25 @@ export function AssignByCodeStep({ catalogId, regulation, courseName, initialDep
             <div className="space-y-1.5">
               <Label className="text-xs">Year</Label>
               <select className={SELECT_CLASS} value={yearValue} disabled={!activeDeptId} onChange={(e) => setYear(e.target.value)}>
-                <option value="">{activeDeptId ? "Select year" : "Pick a department first"}</option>
-                {yearOptions.map((y) => <option key={y} value={y}>Year {y}</option>)}
+                <option value="">{!activeDeptId ? "Pick a department first" : !scope ? "Loading…" : yearOptions.length === 0 ? "No years available" : "Select year"}</option>
+                {yearOptions.map((y) => <option key={y.year} value={y.year}>Year {y.year}{y.shared ? " (shared year)" : ""}</option>)}
               </select>
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Semester</Label>
               <select className={SELECT_CLASS} value={semesterValue} disabled={!yearValue} onChange={(e) => setSemester(e.target.value)}>
                 <option value="">{yearValue ? "Select semester" : "Pick a year first"}</option>
-                {semesterOptions.map((s) => <option key={s} value={s}>{semesterLabel(plan, s)} (Sem {s})</option>)}
+                {semesterOptions.map((s) => <option key={s} value={s}>Semester {s}</option>)}
               </select>
             </div>
           </div>
+          {scopeError && <p className="text-sm text-red-600">{scopeError}</p>}
+          {!!scope && scope.managesBranches.length > 0 && (
+            <p className="flex items-start gap-1.5 text-sm text-muted-foreground">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              {activeDept?.name} runs the shared year for {scope.managesBranches.map((m) => m.branch).join(", ")}. Assign those subjects on the branch itself ({scope.managesBranches.map((m) => m.branch).join(", ")}, Year {Array.from(new Set(scope.managesBranches.flatMap((m) => m.years))).join(", ")}) - {activeDept?.name} sees and uses them automatically.
+            </p>
+          )}
           {!!activeDeptId && !!yearValue && semesterOptions.length === 0 && (
             <p className="flex items-start gap-1.5 text-sm text-amber-700 dark:text-amber-400">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />Year {yearValue} has no semesters configured in Course-Year Timings, so nothing can be assigned yet.
@@ -371,7 +389,7 @@ export function AssignByCodeStep({ catalogId, regulation, courseName, initialDep
         <Card>
           <CardContent className="space-y-3 p-4">
             <h3 className="text-sm font-semibold">
-              {activeDept?.name} · Year {yearValue} · {semesterLabel(plan, Number(semesterValue))} - {slotLoading ? "…" : `${slot.length} subject${slot.length !== 1 ? "s" : ""}`}
+              {activeDept?.name} · Year {yearValue} · Semester {semesterValue} - {slotLoading ? "…" : `${slot.length} subject${slot.length !== 1 ? "s" : ""}`}
             </h3>
             {coreDepartments.length > 0 && slot.length > 0 && (
               <div className="flex items-center gap-2">
