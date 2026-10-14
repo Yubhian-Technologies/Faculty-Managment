@@ -35,6 +35,12 @@ export const SUBJECT_CATEGORY_LABELS: Record<string, string> = {
 export interface Subject {
   id: string;
   collegeId: string;
+  // The Course Catalog entry (course) this subject belongs to, with `regulation`
+  // the subject's identity scope: catalogId + regulation + code (and + name) is
+  // unique. `courseId` below is only the Course doc the subject was filed under.
+  catalogId?: string;
+  // Normalized name (lib/subjects/subjectIdentity.ts) - what the name-uniqueness key is built from.
+  nameKey?: string;
   courseId?: string;
   courseName?: string;
   // Legacy fields - populated on existing subjects from before

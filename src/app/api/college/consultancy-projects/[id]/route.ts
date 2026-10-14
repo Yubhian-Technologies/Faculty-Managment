@@ -11,6 +11,7 @@ import { notify } from "@/lib/notify";
 import { finalizeFacultyConsultants } from "@/lib/research/finalizeConsultants";
 import { validateConsultancyBody } from "@/lib/research/validateConsultancyProject";
 import { notifyReviewer, resolveSubmissionRoute, routeFields } from "@/lib/research/coordinatorReview";
+import { buildEditTrail, clearEditTrail, summarizeFieldChanges } from "@/lib/research/changeTracking";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import { CONSULTANCY_CATEGORIES, CONSULTANCY_CLIENT_TYPES, CONSULTANCY_DELIVERABLES } from "@/lib/research/consultancyProjectOptions";
 import type { ConsultancyCategory, ConsultancyClientType, ConsultancyDeliverable, PublicationStatus } from "@/types";
@@ -145,6 +146,7 @@ export async function PATCH(
         reviewedByName,
         reviewedAt: now,
         updatedAt: now,
+        ...(body.decision === "APPROVED" ? clearEditTrail() : {}),
         ...(body.decision === "REJECTED" ? { rejectionReason: body.rejectionReason ?? "" } : { rejectionReason: FieldValue.delete() }),
       });
 
@@ -200,12 +202,18 @@ export async function PATCH(
         const editorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
         editorName = (editorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
       } catch { /* best-effort */ }
+      // After an approved record is edited, say exactly which fields moved (vs the verified version).
+      const trail = buildEditTrail({
+        existing: snap.data() as Record<string, unknown>, incoming: updates, moduleSlug: "consultancy-projects",
+        editorUid: session.uid, editorName, now,
+      });
+      Object.assign(updates, trail.updates);
       await ref.update(updates);
       await writeAuditLogSafe(db, session.collegeId, { action: "RD_CONSULTANCY_PROJECT_UPDATED", performedBy: session.uid, performedByName: editorName, targetId: id, details: { title: body.title ?? project.title } });
       await notifyReviewer(db, session.collegeId, route, {
         type: "CONSULTANCY_PROJECT_PENDING_VERIFICATION", title: wasApproved ? "Consultancy project edited after approval - re-verification needed" : "Consultancy project resubmitted for verification",
         message: wasApproved
-          ? `Consultancy project ("${body.title ?? project.title}") was edited after approval and needs re-verification`
+          ? `Consultancy project ("${body.title ?? project.title}") was edited after approval and needs re-verification - changed: ${summarizeFieldChanges(trail.changes)}`
           : `A previously rejected consultancy project ("${body.title ?? project.title}") was corrected and resubmitted`,
         rndLink: "/r-and-d/consultancy-projects",
       });

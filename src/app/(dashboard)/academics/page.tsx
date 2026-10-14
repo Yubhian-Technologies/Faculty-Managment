@@ -7,14 +7,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
 import { ROLE_LABELS } from "@/types";
-import { Library, ArrowRight, BookOpen } from "lucide-react";
+import { Library, ArrowRight, BookOpen, ShieldCheck, AlertTriangle, CheckCircle2, Info } from "lucide-react";
+import type { HealthIssue } from "@/lib/subjects/health";
 
 const QUICK_ACTIONS = [
   {
     href: "/academics/course-structure",
     icon: Library,
     title: "Curriculum",
-    description: "Set up a course's regulation document, subjects and syllabus for one department - one guided flow.",
+    description: "One flow: add a course's subjects for a regulation, assign them to a department's semester by typing their codes, and keep the regulation document and syllabus.",
   },
 ] as const;
 
@@ -23,16 +24,32 @@ export default function AcademicsDashboard() {
   const router = useRouter();
   const [courseCount, setCourseCount] = useState<number | null>(null);
 
+  const [issues, setIssues] = useState<HealthIssue[] | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [checkError, setCheckError] = useState("");
+
   useEffect(() => {
-    // Load a quick count of active courses for the stat chip
-    fetch("/api/college/courses")
-      .then((r) => r.json() as Promise<{ courses?: { isActive?: boolean }[] }>)
-      .then((d) => {
-        const active = (d.courses ?? []).filter((c) => c.isActive !== false);
-        setCourseCount(active.length);
-      })
+    // The stat chip: a count aggregate on the server, not the whole course list.
+    fetch("/api/college/academics/overview")
+      .then((r) => r.json() as Promise<{ activeCourses?: number }>)
+      .then((d) => setCourseCount(typeof d.activeCourses === "number" ? d.activeCourses : null))
       .catch(() => setCourseCount(null));
   }, []);
+
+  async function runCheck() {
+    setChecking(true);
+    setCheckError("");
+    try {
+      const res = await fetch("/api/college/academics/overview?check=1");
+      const body = (await res.json()) as { issues?: HealthIssue[]; error?: string };
+      if (!res.ok || !body.issues) throw new Error(body.error ?? "The check failed.");
+      setIssues(body.issues);
+    } catch (err) {
+      setCheckError(err instanceof Error ? err.message : "The check failed.");
+    } finally {
+      setChecking(false);
+    }
+  }
 
   return (
     <div className="space-y-8">
@@ -85,6 +102,34 @@ export default function AcademicsDashboard() {
             </Card>
           ))}
         </div>
+      </section>
+
+      <section aria-labelledby="health-heading">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 id="health-heading" className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Data check</h2>
+          <Button variant="outline" size="sm" onClick={() => void runCheck()} loading={checking}>
+            <ShieldCheck className="mr-1.5 h-4 w-4" />{issues ? "Check again" : "Run check"}
+          </Button>
+        </div>
+        <Card>
+          <CardContent className="space-y-3 p-4 text-sm">
+            {checkError && <p className="text-red-600">{checkError}</p>}
+            {!issues && !checkError && <p className="text-muted-foreground">Looks for duplicate subject codes or names, courses with no regulation, years with no semesters, and semester subjects that no longer match their master. It reads your curriculum once, only when you ask.</p>}
+            {issues && issues.length === 0 && <p className="flex items-center gap-1.5 text-green-700 dark:text-green-400"><CheckCircle2 className="h-4 w-4" />Nothing to fix. The curriculum is consistent.</p>}
+            {issues?.map((issue) => (
+              <details key={issue.code} className="rounded-md border p-3" open={issue.severity === "error"}>
+                <summary className="flex cursor-pointer items-start gap-2 font-medium">
+                  {issue.severity === "info" ? <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" /> : <AlertTriangle className={`mt-0.5 h-4 w-4 shrink-0 ${issue.severity === "error" ? "text-red-600" : "text-amber-600"}`} />}
+                  <span>{issue.title} <span className="text-muted-foreground">({issue.count})</span></span>
+                </summary>
+                <ul className="mt-2 list-disc space-y-0.5 pl-9 text-xs text-muted-foreground">
+                  {issue.items.map((it) => <li key={it}>{it}</li>)}
+                  {issue.count > issue.items.length && <li>…and {issue.count - issue.items.length} more</li>}
+                </ul>
+              </details>
+            ))}
+          </CardContent>
+        </Card>
       </section>
     </div>
   );

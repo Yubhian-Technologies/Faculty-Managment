@@ -139,9 +139,9 @@ export function CitationMetricsSection({
             {isPending && <Badge variant="pending" className="text-xs">Pending Verification</Badge>}
             {isRejected && <Badge variant="rejected" className="text-xs">Rejected</Badge>}
           </div>
-          {loaded && !isPending && (
+          {loaded && (
             <Button variant="outline" size="sm" onClick={() => setFormOpen(true)}>
-              <Pencil className="h-3.5 w-3.5 mr-1" />{isRejected ? "Edit & Resubmit" : "Add / Edit"}
+              <Pencil className="h-3.5 w-3.5 mr-1" />{isRejected ? "Edit & Resubmit" : isPending ? "Edit" : "Add / Edit"}
             </Button>
           )}
         </div>

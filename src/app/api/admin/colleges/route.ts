@@ -5,7 +5,9 @@ import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireSuperAdmin } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import type { College, CollegeType } from "@/types";
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { collegeCategoryOf, parseCollegeCategory } from "@/lib/colleges/category";
+import type { College, CollegeCategory, CollegeType } from "@/types";
 
 function isValidLatLng(latitude: unknown, longitude: unknown): boolean {
   return typeof latitude === "number" && latitude >= -90 && latitude <= 90
@@ -85,7 +87,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = (await readJsonBody(request)) as Partial<Omit<College, "type">> & { locationId?: string; type?: CollegeType | "" };
+    const body = (await readJsonBody(request)) as Partial<Omit<College, "type" | "collegeCategory">> & { locationId?: string; type?: CollegeType | ""; collegeCategory?: CollegeCategory };
     const { name, type, address, contactEmail, contactPhone } = body;
 
     if (!name || String(name).trim().length < 2) {
@@ -95,6 +97,11 @@ export async function POST(request: Request) {
     // admin-curated catalog (colleges/{id}/designations), not derived from type.
     if (type !== undefined && type !== "" && !COLLEGE_TYPES.includes(type)) {
       return NextResponse.json({ error: "Invalid college type" }, { status: 400 });
+    }
+
+    // Main / Test group (see lib/colleges/category.ts): optional, a missing value means Main.
+    if (body.collegeCategory !== undefined && !parseCollegeCategory(body.collegeCategory)) {
+      return NextResponse.json({ error: "Invalid college category" }, { status: 400 });
     }
 
     // Administration uses their own locationId; Super Admin must supply one
@@ -115,6 +122,7 @@ export async function POST(request: Request) {
       name: String(name).trim(),
       locationId,
       ...(type ? { type } : {}),
+      collegeCategory: parseCollegeCategory(body.collegeCategory) ?? "MAIN",
       address: address ?? "",
       contactEmail: contactEmail ?? "",
       contactPhone: contactPhone ?? "",
@@ -187,14 +195,23 @@ export async function PATCH(request: Request) {
       contactEmail?: string;
       contactPhone?: string;
       campusLocation?: College["campusLocation"] | null;
+      collegeCategory?: CollegeCategory;
     };
-    const { collegeId, isActive, name, type, address, contactEmail, contactPhone, campusLocation } = body;
+    const { collegeId, isActive, name, type, address, contactEmail, contactPhone, campusLocation, collegeCategory } = body;
 
     // The campus geofence gates a security-relevant check (self-attendance
     // location verification) - Super Admin only, never Administration, even
     // though Administration can edit everything else about their own colleges.
     if (campusLocation !== undefined && session.role !== "SUPER_ADMIN") {
       return NextResponse.json({ error: "Only Super Admin can set the campus location" }, { status: 401 });
+    }
+
+    // Main / Test decides which colleges see each other everywhere, so only Super Admin may change it.
+    if (collegeCategory !== undefined && session.role !== "SUPER_ADMIN") {
+      return NextResponse.json({ error: "Only Super Admin can change the college category" }, { status: 401 });
+    }
+    if (collegeCategory !== undefined && !parseCollegeCategory(collegeCategory)) {
+      return NextResponse.json({ error: "Invalid college category" }, { status: 400 });
     }
 
     if (!collegeId) {
@@ -235,7 +252,28 @@ export async function PATCH(request: Request) {
     if (contactPhone !== undefined) updates.contactPhone = contactPhone;
     if (campusLocation !== undefined) updates.campusLocation = campusLocation;
 
+    // The category is audited (old -> new) only when it actually changes; the edit form re-sends the current value.
+    let categoryChange: { from: CollegeCategory; to: CollegeCategory } | null = null;
+    if (collegeCategory !== undefined) {
+      const current = await db.collection("colleges").doc(collegeId).get();
+      if (!current.exists) return NextResponse.json({ error: "College not found" }, { status: 404 });
+      const from = collegeCategoryOf(current.data());
+      if (from !== collegeCategory) {
+        updates.collegeCategory = collegeCategory;
+        categoryChange = { from, to: collegeCategory };
+      }
+    }
+
     await db.collection("colleges").doc(collegeId).update(updates);
+
+    if (categoryChange) {
+      await writeAuditLogSafe(db, collegeId, {
+        action: "COLLEGE_CATEGORY_CHANGED",
+        performedBy: session.uid,
+        targetId: collegeId,
+        details: { from: categoryChange.from, to: categoryChange.to },
+      });
+    }
 
     return NextResponse.json({ ok: true });
   } catch (err) {

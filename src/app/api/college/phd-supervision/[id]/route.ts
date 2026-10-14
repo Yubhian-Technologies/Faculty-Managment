@@ -9,6 +9,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { holdsRole } from "@/lib/roles/seatRoles";
 import { notify } from "@/lib/notify";
 import { notifyReviewer, resolveSubmissionRoute, routeFields } from "@/lib/research/coordinatorReview";
+import { buildEditTrail, clearEditTrail, summarizeFieldChanges } from "@/lib/research/changeTracking";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import type {
   PhdAwardNature, PhdAwardType, PhdFellowshipType, PhdGuideStatus, PhdRecognizedSupervisor,
@@ -126,6 +127,7 @@ export async function PATCH(
         reviewedByName,
         reviewedAt: now,
         updatedAt: now,
+        ...(body.decision === "APPROVED" ? clearEditTrail() : {}),
         ...(body.decision === "REJECTED" ? { rejectionReason: body.rejectionReason ?? "" } : { rejectionReason: FieldValue.delete() }),
       });
 
@@ -170,12 +172,18 @@ export async function PATCH(
         const editorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
         editorName = (editorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
       } catch { /* best-effort */ }
+      // After an approved record is edited, say exactly which fields moved (vs the verified version).
+      const trail = buildEditTrail({
+        existing: snap.data() as Record<string, unknown>, incoming: updates, moduleSlug: "phd-supervision",
+        editorUid: session.uid, editorName, now,
+      });
+      Object.assign(updates, trail.updates);
       await ref.update(updates);
       await writeAuditLogSafe(db, session.collegeId, { action: "RD_PHD_SUPERVISION_UPDATED", performedBy: session.uid, performedByName: editorName, targetId: id, details: { scholarName: body.scholarName ?? record.scholarName } });
       await notifyReviewer(db, session.collegeId, route, {
         type: "PHD_SUPERVISION_PENDING_VERIFICATION", title: wasApproved ? "Ph.D. supervision record edited after approval - re-verification needed" : "Ph.D. supervision record resubmitted for verification",
         message: wasApproved
-          ? `Ph.D. supervision record ("${body.scholarName ?? record.scholarName}") was edited after approval and needs re-verification`
+          ? `Ph.D. supervision record ("${body.scholarName ?? record.scholarName}") was edited after approval and needs re-verification - changed: ${summarizeFieldChanges(trail.changes)}`
           : `A previously rejected supervision record ("${body.scholarName ?? record.scholarName}") was corrected and resubmitted`,
         rndLink: "/r-and-d/phd-supervision",
       });

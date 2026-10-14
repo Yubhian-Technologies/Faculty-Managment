@@ -15,6 +15,8 @@ interface CategoryFieldProps {
   customCategory: string;
   onCategoryChange: (category: SubjectCategory) => void;
   onCustomCategoryChange: (value: string) => void;
+  /** Offer "+ Add new category". Off for forms whose server only accepts defined categories. */
+  allowNew?: boolean;
 }
 
 // Shared by Add Subject, Edit Subject and the bulk-import "fix row" dialog.
@@ -26,7 +28,7 @@ interface CategoryFieldProps {
 // whatever's typed - reusable again for the next subject the moment this one
 // is saved. "Other" (customCategory) is kept only so a subject that already
 // used it before this existed still edits correctly.
-export function CategoryField({ category, customCategory, onCategoryChange, onCustomCategoryChange }: CategoryFieldProps) {
+export function CategoryField({ category, customCategory, onCategoryChange, onCustomCategoryChange, allowNew = true }: CategoryFieldProps) {
   const [categories, setCategories] = useState<string[]>(
     Object.keys(SUBJECT_CATEGORY_LABELS).filter((c) => c !== "OTHER")
   );
@@ -72,7 +74,7 @@ export function CategoryField({ category, customCategory, onCategoryChange, onCu
             <SelectItem key={c} value={c}>{labels[c] ? `${labels[c]} (${c})` : (SUBJECT_CATEGORY_LABELS as Record<string, string>)[c] ?? c}</SelectItem>
           ))}
           <SelectItem value="OTHER">{SUBJECT_CATEGORY_LABELS.OTHER}</SelectItem>
-          <SelectItem value={NEW_CATEGORY_VALUE}>+ Add new category…</SelectItem>
+          {allowNew && <SelectItem value={NEW_CATEGORY_VALUE}>+ Add new category…</SelectItem>}
         </SelectContent>
       </Select>
       {addingNew && (

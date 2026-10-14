@@ -13,10 +13,23 @@ import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 export async function GET(request: Request) {
   try {
     const session = await requireCollegeMember(...PUBLICATION_ELIGIBLE_ROLES);
-    const employeeId = new URL(request.url).searchParams.get("employeeId")?.trim();
-    if (!employeeId) return NextResponse.json({ error: "employeeId required" }, { status: 400 });
-
+    const params = new URL(request.url).searchParams;
+    const employeeId = params.get("employeeId")?.trim();
     const db = getAdminDb();
+
+    // Picker mode: every serving faculty member with the department they belong to,
+    // so the form can ask Department first, then a searchable faculty list.
+    if (params.get("list") === "1") {
+      const all = await db.collection("colleges").doc(session.collegeId).collection("facultyMembers").get();
+      const faculty = all.docs
+        .map((d) => d.data() as { employeeId?: string; legalName?: string; honorific?: string; department?: string; status?: string })
+        .filter((f) => f.employeeId && f.department && f.status !== "RESIGNED" && f.status !== "RETIRED")
+        .map((f) => ({ employeeId: f.employeeId as string, name: facultyDisplayName(f), department: f.department as string }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      return NextResponse.json({ faculty });
+    }
+
+    if (!employeeId) return NextResponse.json({ error: "employeeId required" }, { status: 400 });
     const snap = await db.collection("colleges").doc(session.collegeId).collection("facultyMembers")
       .where("employeeId", "==", employeeId).limit(1).get();
     if (snap.empty) return NextResponse.json({ error: "No faculty member found with that Employee ID" }, { status: 404 });

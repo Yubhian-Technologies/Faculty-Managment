@@ -8,6 +8,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { notify, notifyRole } from "@/lib/notify";
 import { REVIEWABLE_MODULES, getCoordinatorDepartments } from "@/lib/research/coordinatorReview";
+import { contentOf, diffFields } from "@/lib/research/changeTracking";
 
 // The R&D Coordinator's review queue, for every Research & Innovation module at
 // once. Scoped by the coordinator's own department seat(s): a record is only
@@ -21,6 +22,7 @@ const PROTECTED = new Set([
   "reviewedBy", "reviewedByName", "reviewedAt", "rejectionReason", "changeLog",
   "coordinatorReviewedBy", "coordinatorReviewedByName", "coordinatorReviewedAt",
   "coordinatorNote", "sentBackReason", "coordinatorEdits", "internalAuthorUids",
+  "verifiedSnapshot", "pendingChanges",
 ]);
 
 type Scalar = string | number | boolean | null;
@@ -34,6 +36,14 @@ function readPath(obj: Record<string, unknown>, path: string): { found: boolean;
     cur = (cur as Record<string, unknown>)[part];
   }
   return { found: true, value: cur };
+}
+
+/** `obj` with `path` (dotted) set to `value`, copying only the objects along the way. */
+function withPath(obj: Record<string, unknown>, path: string, value: unknown): Record<string, unknown> {
+  const [head, ...rest] = path.split(".");
+  if (rest.length === 0) return { ...obj, [head]: value };
+  const child = (obj[head] && typeof obj[head] === "object" ? obj[head] : {}) as Record<string, unknown>;
+  return { ...obj, [head]: withPath(child, rest.join("."), value) };
 }
 
 async function nameOf(db: FirebaseFirestore.Firestore, collegeId: string, uid: string): Promise<string> {
@@ -131,6 +141,14 @@ export async function PATCH(request: Request) {
       if (current.value === value) continue;
       updates[path] = value;
       editedFields.push(path);
+    }
+    // A record re-submitted after approval carries "what changed since it was
+    // verified"; a coordinator's correction moves that, so it is recomputed.
+    const verifiedSnapshot = rec.verifiedSnapshot as Record<string, unknown> | undefined;
+    if (verifiedSnapshot && editedFields.length > 0) {
+      let merged: Record<string, unknown> = rec;
+      for (const path of editedFields) merged = withPath(merged, path, updates[path]);
+      updates["pendingChanges.changes"] = diffFields(verifiedSnapshot, contentOf(merged), body.module!);
     }
     if (editedFields.length > 0) {
       updates.coordinatorEdits = FieldValue.arrayUnion({

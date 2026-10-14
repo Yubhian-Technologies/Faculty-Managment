@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ResearchRecordDetails } from "@/components/research/ResearchRecordDetails";
+import { PendingChangesPanel } from "@/components/research/PendingChangesPanel";
 import { RESEARCH_MODULES } from "@/lib/research/modules";
 import { RESEARCH_FIELD_LABELS } from "@/lib/research/fieldLabels";
 import {
@@ -208,6 +209,9 @@ export default function ResearchRecordPage({
               )}
             </CardContent>
           </Card>
+
+          {/* Edited after R&D verified it: exactly which fields moved, before -> after. */}
+          <PendingChangesPanel record={record} />
 
           <Card>
             <CardContent className="p-4">

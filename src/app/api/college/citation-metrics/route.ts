@@ -8,6 +8,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { holdsRole } from "@/lib/roles/seatRoles";
 import { wantsWholeCollege } from "@/lib/research/listScope";
 import { notifyRole } from "@/lib/notify";
+import { buildEditTrail, summarizeFieldChanges } from "@/lib/research/changeTracking";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import { resolveOwnerDesignation } from "@/lib/publications/resolveOwnerDesignation";
 import type { PublicationStatus, UserRole } from "@/types";
@@ -69,11 +70,8 @@ export async function POST(request: Request) {
     const collegeRef = db.collection("colleges").doc(session.collegeId);
     const ref = collegeRef.collection("citationMetricsRequests").doc(session.uid);
     const existing = await ref.get();
-    const existingStatus = (existing.data() as { status?: PublicationStatus } | undefined)?.status;
-    if (existingStatus === "PENDING") {
-      return NextResponse.json({ error: "A submission is already awaiting verification" }, { status: 409 });
-    }
-
+    // A still-pending submission can be edited in place: the owner may fix a
+    // value before anyone has verified it, and it stays in R&D's queue.
     const ownerSnap = await collegeRef.collection("users").doc(session.uid).get();
     const owner = ownerSnap.data() as { name?: string } | undefined;
     const ownerDesignation = await resolveOwnerDesignation(db, session.collegeId, session.uid, session.role as UserRole);
@@ -91,6 +89,15 @@ export async function POST(request: Request) {
     // themselves from the review page. See resolveSubmissionRoute.
     const status: PublicationStatus = "PENDING";
 
+    // An already-verified record that is edited carries exactly what changed
+    // (field, verified value, new value) so the reviewer sees it again.
+    const trail = buildEditTrail({
+      existing: (existing.data() ?? {}) as Record<string, unknown>,
+      incoming: fields,
+      moduleSlug: "citation-metrics",
+      editorUid: session.uid, editorName: owner?.name ?? "Unknown", now,
+    });
+
     await ref.set({
       collegeId: session.collegeId,
       uid: session.uid,
@@ -99,6 +106,7 @@ export async function POST(request: Request) {
       ...(ownerDesignation ? { ownerDesignation } : {}),
       ...fields,
       status,
+      ...trail.updates,
       createdAt: existing.exists ? (existing.data() as { createdAt?: unknown }).createdAt ?? now : now,
       updatedAt: now,
     });
@@ -110,8 +118,10 @@ export async function POST(request: Request) {
     await notifyRole(
       db, session.collegeId, "R_AND_D",
       "CITATION_METRICS_PENDING_VERIFICATION",
-      "Citation metrics submitted for verification",
-      `${owner?.name ?? "A staff member"} submitted their citation metrics for verification`,
+      trail.reopened ? "Citation metrics edited after verification - re-verification needed" : "Citation metrics submitted for verification",
+      trail.reopened
+        ? `${owner?.name ?? "A staff member"} edited their verified citation metrics - changed: ${summarizeFieldChanges(trail.changes)}`
+        : `${owner?.name ?? "A staff member"} submitted their citation metrics for verification`,
       "/r-and-d/citation-metrics"
     );
 
