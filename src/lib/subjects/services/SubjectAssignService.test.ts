@@ -142,7 +142,7 @@ describe("SubjectAssignService scope checks", () => {
   });
 });
 
-// VIT shape: Basic Science (no sections of its own) runs the shared first year; its child "Basic Science - Maths"
+// VIT shape: CSE lists Years 1-4 itself, while Basic Science (no sections of its own) maintains the first-year students; its child "Basic Science - Maths"
 // manages CSE. The Principal configures year-1 timings once, on Basic Science's course. The subjects are CSE's.
 describe("SubjectAssignService - a shared year belongs to the core department", () => {
   beforeEach(() => {
@@ -150,7 +150,7 @@ describe("SubjectAssignService - a shared year belongs to the core department", 
     // Same shape the departments API writes: per-course years, each with its (possibly empty) core-department list.
     fake.seed(`${C}/departments/bs`, { name: "Basic Science", hasSubDepartments: true, parentRunsOwnSections: false, courseScopes: { cat1: { assignedYears: [1], secondaryDepartments: ["CSE"] } }, secondaryDepartments: ["CSE"] });
     fake.seed(`${C}/departments/bsm`, { name: "Basic Science - Maths", parentDepartmentId: "bs", managedDepartments: ["CSE"], secondaryDepartments: [] });
-    fake.seed(`${C}/departments/cse`, { name: "CSE", courseScopes: { cat1: { assignedYears: [2, 3, 4], secondaryDepartments: [] } }, secondaryDepartments: [] });
+    fake.seed(`${C}/departments/cse`, { name: "CSE", courseScopes: { cat1: { assignedYears: [1, 2, 3, 4], secondaryDepartments: [] } }, secondaryDepartments: [] });
     fake.seed(`${C}/courses/c-bs`, { name: "B.Tech", catalogId: "cat1", departmentId: "bs", durationYears: 4, isActive: true });
     fake.seed(`${C}/courses/c-cse`, { name: "B.Tech", catalogId: "cat1", departmentId: "cse", durationYears: 4, isActive: true });
     fake.seed(`${C}/courseYearTimings/c-bs_year1`, { semesters: [{ semester: 1 }, { semester: 2 }] });
@@ -173,6 +173,7 @@ describe("SubjectAssignService - a shared year belongs to the core department", 
       { year: 3, shared: false, semesters: [] },
       { year: 4, shared: false, semesters: [] },
     ]);
+    expect(scope.managesBranches).toEqual([]);
   });
 
   it("refuses to file the shared year under the managing department, and says where to assign it", async () => {

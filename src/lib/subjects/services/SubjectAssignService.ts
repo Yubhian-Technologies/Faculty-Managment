@@ -129,7 +129,7 @@ export class SubjectAssignService {
     const managed = w.years.managedBranchYears;
     const blocked = new Set(managed.flatMap((m) => m.years));
     const all = [
-      ...w.years.own.filter((y) => !blocked.has(y)).map((year) => ({ year, shared: false })),
+      ...w.years.own.filter((y) => !blocked.has(y)).map((year) => ({ year, shared: w.years.managerYears.includes(year) })),
       ...w.years.shared.map((year) => ({ year, shared: true })),
     ].sort((a, b) => a.year - b.year);
     const years = await Promise.all(all.map(async (y) => ({ ...y, semesters: await this.semestersOf(w.college, w.course, y.year, w.departments, w.sameCatalog) })));

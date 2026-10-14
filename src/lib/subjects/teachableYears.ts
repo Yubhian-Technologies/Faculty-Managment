@@ -25,8 +25,10 @@ export function teachableYearsForDepartment(
 export interface AssignableYears {
   /** Years the department itself runs for this course (its own Years Taught). */
   own: number[];
-  /** Years its managing department (e.g. Basic Science) runs for it - the shared first year. */
+  /** Years only reachable through its managing department (not in its own Years Taught). */
   shared: number[];
+  /** Every year its managing department maintains for it - the shared first year - whether or not the department also lists it itself. */
+  managerYears: number[];
   /** Branches this department manages for this course, per year: assignment to a manager is refused in those years. */
   managedBranchYears: { branch: string; years: number[] }[];
 }
@@ -45,9 +47,8 @@ export function assignableYearsForDepartment(
   const own = teachableYearsForDepartment(course, department, allDepartments);
   const inCourse = (y: number) => Number.isInteger(y) && y >= 1 && y <= course.durationYears;
   const manager = findBranchManager(allDepartments as unknown as DepartmentYearRow[], department.name, course.catalogId);
-  const shared = manager && manager.department.id !== department.id
-    ? manager.years.filter((y) => inCourse(y) && !own.includes(y))
-    : [];
+  const managerYears = manager && manager.department.id !== department.id ? manager.years.filter(inCourse) : [];
+  const shared = managerYears.filter((y) => !own.includes(y));
   const managedBranchYears: AssignableYears["managedBranchYears"] = [];
   for (const branch of department.managedDepartments ?? []) {
     const m = findBranchManager(allDepartments as unknown as DepartmentYearRow[], branch, course.catalogId);
@@ -56,5 +57,5 @@ export function assignableYearsForDepartment(
       if (years.length > 0) managedBranchYears.push({ branch, years });
     }
   }
-  return { own, shared, managedBranchYears };
+  return { own, shared, managerYears, managedBranchYears };
 }
