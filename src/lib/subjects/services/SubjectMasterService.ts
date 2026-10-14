@@ -9,6 +9,7 @@ import { customCategoriesFrom, resolveImportCategory } from "../importCategory";
 import { claimSubjectKeys, keyDocId, type SubjectKeyClaim, type SubjectKeyConflict } from "../subjectKeys";
 import { normalizeSubjectCode, normalizeSubjectName, normalizeUniversityCode } from "../subjectIdentity";
 import { planTeachingHoursSync, type HoursTarget } from "../hoursCascade";
+import { MASTER_IMPORT_MAX_ROWS } from "../limits";
 import type { Subject, SubjectSemesterAssignment } from "@/types";
 
 // The one place a master subject is created, edited or removed. A master
@@ -23,8 +24,7 @@ import type { Subject, SubjectSemesterAssignment } from "@/types";
 // for data that predates the lock docs) and by lock docs claimed in the same
 // transaction as the write (so two concurrent saves cannot both win).
 
-/** Each saved row costs three writes (subject + code lock + name lock); one transaction allows 500. */
-export const MASTER_IMPORT_MAX_ROWS = 150;
+export { MASTER_IMPORT_MAX_ROWS };
 
 export type SubjectActor = { uid: string; name?: string };
 

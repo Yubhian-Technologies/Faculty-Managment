@@ -200,7 +200,7 @@ export async function PATCH(request: Request) {
       ["credits", body.credits, SUBJECT_LIMITS.credits],
     ];
     for (const [k, v, max] of nums) {
-      if (v !== undefined && (!Number.isFinite(Number(v)) || Number(v) < 0 || Number(v) > max)) {
+      if (v !== undefined && (String(v).trim() === "" || !Number.isFinite(Number(v)) || Number(v) < 0 || Number(v) > max)) {
         return NextResponse.json({ error: `${k} must be a number between 0 and ${max}` }, { status: 400 });
       }
     }

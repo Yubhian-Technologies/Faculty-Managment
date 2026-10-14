@@ -7,6 +7,7 @@ import { currentAcademicStartYear, regulationsForCourseYearByBatch } from "@/lib
 import { teachableYearsForDepartment } from "../teachableYears";
 import { courseOwnershipError, semestersFrom } from "../courseOwnership";
 import { normalizeSubjectCode } from "../subjectIdentity";
+import { ASSIGN_MAX_CODES } from "../limits";
 import { buildSubjectInstancePayload } from "./SubjectInstanceService";
 import { SubjectRequestError, type SubjectActor } from "./SubjectMasterService";
 import type { Course, CourseYearTiming, Department, Subject, SubjectSemesterAssignment } from "@/types";
@@ -16,7 +17,7 @@ import type { Course, CourseYearTiming, Department, Subject, SubjectSemesterAssi
 // types or pastes Subject Codes, and every code is checked and assigned in one
 // all-or-nothing step. Nothing here reads a file.
 
-export const ASSIGN_MAX_CODES = 100;
+export { ASSIGN_MAX_CODES };
 
 export type AssignCodeStatus =
   | "ASSIGN"            // will be (or was) assigned
