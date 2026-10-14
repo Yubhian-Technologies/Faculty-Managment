@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
-import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
+import { getHodDepartmentScope } from "@/lib/departments/scope";
+import { loadYearGate } from "@/lib/departments/yearAccess";
 import type { Section } from "@/types";
 
 // Who may manage a section's lab batches: its faculty incharge, or the HOD of its
@@ -16,8 +17,11 @@ export async function authorizedSection(
   const section = { id: snap.id, ...snap.data() } as Section;
   if (session.role === "HOD") {
     const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-    if (!canHodEditDepartment(scope, section.department)) {
-      return { error: NextResponse.json({ error: "This section isn't in your department" }, { status: 403 }) };
+    // Lab batches are teaching set-up: whoever writes this section's teaching for its year (the department that
+    // maintains a shared year, else the branch's own HOD) manages them.
+    const gate = await loadYearGate(db, session.collegeId, scope);
+    if (!gate.teachingWrite(section.department, section.year, section.courseId)) {
+      return { error: NextResponse.json({ error: gate.teachingRefusal(section.department, section.year, section.courseId) }, { status: 403 }) };
     }
   } else {
     // A faculty login: only the section they are in charge of. Section.facultyInchargeUid

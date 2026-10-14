@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { whereIn, type QueryLike } from "@/lib/firestore/inQuery";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getDepartmentTreeNames } from "@/lib/departments/scope";
@@ -148,8 +149,8 @@ export async function GET(request: Request) {
       // sections from the defaulter report - same expansion already used by
       // GET /api/college/faculty and /api/college/subjects.
       const treeNames = await getDepartmentTreeNames(db, session.collegeId, department);
-      const snap = await collegeRef.collection("sections")
-        .where("department", "in", treeNames.slice(0, 30))
+      // One query per 30 departments - a college with more must not silently lose the rest.
+      const snap = await whereIn(collegeRef.collection("sections") as unknown as QueryLike, "department", treeNames)
         .where("courseId", "==", courseId)
         .where("year", "==", year)
         .get();
@@ -166,8 +167,7 @@ export async function GET(request: Request) {
       const catalogId = requestedCourse.exists ? (requestedCourse.data() as Course).catalogId : undefined;
       const owned = managedSectionDepartments(deptDocs, department, year, catalogId).filter((n) => !treeNames.includes(n));
       if (owned.length > 0) {
-        const extraSnap = await collegeRef.collection("sections")
-          .where("department", "in", owned.slice(0, 30))
+        const extraSnap = await whereIn(collegeRef.collection("sections") as unknown as QueryLike, "department", owned)
           .where("year", "==", year)
           .get();
         const extra = extraSnap.docs.map((d) => ({ ...(d.data() as Section), id: d.id }));

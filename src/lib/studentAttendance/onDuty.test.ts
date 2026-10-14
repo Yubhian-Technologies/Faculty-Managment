@@ -83,4 +83,9 @@ describe("mergeMarkUpdates (ON_DUTY is locked)", () => {
   it("leaves unmentioned students alone", () => {
     expect(mergeMarkUpdates(entries, new Map()).map((x) => x.status)).toEqual(["ON_DUTY", null, "PRESENT", "ABSENT"]);
   });
+  it("ignores a student who is not on this class's roster - nothing is added, nobody else changes", () => {
+    const out = mergeMarkUpdates(entries, new Map([["stranger", "PRESENT" as const], ["b", "ABSENT" as const]]));
+    expect(out.map((x) => x.studentId)).toEqual(["a", "b", "c", "d"]);
+    expect(out.map((x) => x.status)).toEqual(["ON_DUTY", "ABSENT", "PRESENT", "ABSENT"]);
+  });
 });

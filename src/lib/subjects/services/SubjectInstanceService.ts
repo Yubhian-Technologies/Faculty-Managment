@@ -123,13 +123,14 @@ export class SubjectInstanceService {
     // assignment). Previously queried `semester` + the instance's
     // departmentId, but section-scoped assignments store `timetableSemester`
     // and the section course's departmentId, so the guard never matched them.
-    const [assignmentsSnap, instanceSnap, deptsSnap] = await Promise.all([
+    const [assignmentsSnap, instanceSnap] = await Promise.all([
       collegeRef.collection("teachingAssignments").where("subjectId", "==", subjectId).get(),
       collegeRef.collection("subjectSemesterAssignments").doc(`${subjectId}_${departmentId}_${semester}`).get(),
-      collegeRef.collection("departments").get(),
     ]);
     const live = assignmentsSnap.docs.map((d) => d.data() as TeachingAssignment).filter((a) => !a.isPast);
     if (live.length > 0) {
+      // Departments are only needed to judge whether a live assignment relies on this copy.
+      const deptsSnap = await collegeRef.collection("departments").get();
       const departments = deptsSnap.docs.map((d) => ({ ...(d.data() as Department), id: d.id }));
       const courseIds = Array.from(new Set(live.map((a) => a.courseId).filter((c): c is string => !!c)));
       const courseSnaps = courseIds.length > 0 ? await this.db.getAll(...courseIds.map((c) => collegeRef.collection("courses").doc(c))) : [];

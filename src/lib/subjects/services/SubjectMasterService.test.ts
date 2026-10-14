@@ -209,3 +209,27 @@ describe("SubjectMasterService.remove", () => {
     expect(subjects()).toHaveLength(1);
   });
 });
+
+describe("SubjectMasterService.update - subjects saved before the strict rules", () => {
+  // A legacy master: no credits, no L-T-P, a free-text category nobody defined.
+  const legacy = () => fake.seed(`${C}/subjects/old1`, { collegeId: "c1", courseId: "c-cse", regulation: "R20", code: "OLD1", name: "Old Subject", category: "Weird", type: "THEORY", isActive: true });
+
+  it("still lets its short code, university code and flags be edited", async () => {
+    legacy();
+    await svc.update({ collegeId: "c1", id: "old1", patch: { shortCode: "os", universityCode: "r 99 1" } });
+    expect(fake.read(`${C}/subjects/old1`)).toMatchObject({ shortCode: "OS", universityCode: "R991" });
+  });
+
+  it("keeps refusing anything that needs the missing values, saying what is missing", async () => {
+    legacy();
+    await expect(svc.update({ collegeId: "c1", id: "old1", patch: { name: "Renamed" } })).rejects.toThrow(/Credits are required/);
+    await expect(svc.update({ collegeId: "c1", id: "old1", patch: { credits: "abc" } })).rejects.toThrow(/Credits must be a number|L, T|required/);
+    expect(fake.read(`${C}/subjects/old1`)!.name).toBe("Old Subject");
+  });
+
+  it("accepts a complete, valid fix of everything at once", async () => {
+    legacy();
+    await svc.update({ collegeId: "c1", id: "old1", patch: { category: "PCC", lectureHours: 3, tutorialHours: 0, practicalHours: 0, credits: 3 } });
+    expect(fake.read(`${C}/subjects/old1`)).toMatchObject({ category: "PCC", credits: 3, hoursPerWeek: 3 });
+  });
+});

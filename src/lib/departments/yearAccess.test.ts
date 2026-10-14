@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { canHodViewYear, canHodWriteRoster, canHodWriteTeaching, teachingWriteRefusal, yearMaintainer } from "./yearAccess";
+import { FakeFirestore, asFirestore } from "@/test-support/fakeFirestore";
+import { canHodViewYear, canHodWriteRoster, canHodWriteTeaching, loadYearGate, teachingWriteRefusal, yearMaintainer } from "./yearAccess";
 
 // VIT: CSE and IT list Years 1-4; Basic Science - Maths (a sub-department of Basic Science) maintains Year 1 of both.
 const departments = [
@@ -71,5 +72,31 @@ describe("refusal wording", () => {
   });
   it("is plain for a year that isn't theirs at all", () => {
     expect(teachingWriteRefusal(bsm, departments, "CSE", 3, "cat1")).toBe("Year 3 of CSE isn't in your department.");
+  });
+});
+
+// The loader wires the rules to the real department and course documents (cached per college).
+describe("loadYearGate on stored documents", () => {
+  function seed(collegeId: string) {
+    const f = new FakeFirestore();
+    const C = `colleges/${collegeId}`;
+    for (const d of departments as unknown as { id: string }[]) f.seed(`${C}/departments/${d.id}`, d as never);
+    f.seed(`${C}/courses/c-cse`, { catalogId: "cat1", departmentId: "cse", name: "B.Tech" });
+    return asFirestore(f);
+  }
+
+  it("lets BS-Maths write Year 1 teaching of CSE (by the course's catalog entry), not Year 3; CSE the reverse", async () => {
+    const db = seed("gate1");
+    const bsmGate = await loadYearGate(db, "gate1", bsm as never);
+    expect(bsmGate.teachingWrite("CSE", 1, "c-cse")).toBe(true);
+    expect(bsmGate.teachingWrite("CSE", 3, "c-cse")).toBe(false);
+    expect(bsmGate.rosterWrite("CSE")).toBe(false);
+    expect(bsmGate.view("CSE", 1, "c-cse")).toBe(true);
+    expect(bsmGate.view("CSE", 3, "c-cse")).toBe(false);
+    const cseGate = await loadYearGate(db, "gate1", cse as never);
+    expect(cseGate.teachingWrite("CSE", 1, "c-cse")).toBe(false);
+    expect(cseGate.teachingWrite("CSE", 3, "c-cse")).toBe(true);
+    expect(cseGate.rosterWrite("CSE")).toBe(true);
+    expect(cseGate.teachingRefusal("CSE", 1, "c-cse")).toMatch(/maintained by Basic Science - Maths/);
   });
 });

@@ -16,9 +16,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const courseId = searchParams.get("courseId");
     const catalogId = searchParams.get("catalogId");
-    const academicYear = searchParams.get("academicYear");
     const regulation = searchParams.get("regulation");
-    const sessionRegulations = (searchParams.get("regulations") ?? "").split(",").map((r) => r.trim()).filter(Boolean);
 
     const db = getAdminDb();
     let query: QueryLike = db.collection("colleges").doc(session.collegeId).collection("subjects") as unknown as QueryLike;
@@ -67,7 +65,7 @@ export async function GET(request: Request) {
         .collection("courses").where("catalogId", "==", catalogId).get();
       const courseIds = coursesSnap.docs.map((d) => d.id);
       if (courseIds.length === 0) {
-        return NextResponse.json({ subjects: [], academicYears: [] });
+        return NextResponse.json({ subjects: [] });
       }
       query = whereIn(query, "courseId", courseIds);
     } else if (courseId) {
@@ -79,35 +77,7 @@ export async function GET(request: Request) {
       .map((d) => ({ id: d.id, ...d.data() }))
       .sort((a, b) => ((a as { name?: string }).name ?? "").localeCompare((b as { name?: string }).name ?? ""));
 
-    // Every session that actually has a subject for this selection - feeds the
-    // History dropdown, so it lists real data rather than a fixed window.
-    const academicYears = Array.from(new Set(
-      subjects
-        .map((s) => (s as { academicYear?: string }).academicYear)
-        .filter((y): y is string => !!y)
-    )).sort().reverse();
-
-    // Academics-only filter - a subject with no academicYear at all
-    // still matches any session rather than silently disappearing.
-    if (academicYear) {
-      const seenCore = new Set<string>();
-      subjects = subjects.filter((s) => {
-        const { academicYear: sy, regulation: sr, category, code } = s as { academicYear?: string; regulation?: string; category?: string; code?: string };
-        const isElective = category === "PEC" || category === "OEC";
-        if (!isElective && sr && sessionRegulations.length > 0) {
-          if (!sessionRegulations.includes(sr)) return false;
-          if (sy && sy !== academicYear) return false;
-          const key = `${sr}|${(code ?? "").trim().toLowerCase()}`;
-          if (code && seenCore.has(key)) return false;
-          seenCore.add(key);
-          return true;
-        }
-        return !sy || sy === academicYear;
-      });
-    }
-
-    // Same leniency as academicYear above - a subject with no regulation set
-    // still matches any filter rather than disappearing.
+    // A subject with no regulation set still matches any filter rather than disappearing.
     if (regulation) {
       subjects = subjects.filter((s) => {
         const sr = (s as { regulation?: string }).regulation;
@@ -115,7 +85,7 @@ export async function GET(request: Request) {
       });
     }
 
-    return NextResponse.json({ subjects, academicYears });
+    return NextResponse.json({ subjects });
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;

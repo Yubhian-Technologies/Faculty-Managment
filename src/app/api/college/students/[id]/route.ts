@@ -9,7 +9,7 @@ import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { normalizeRosterDetails } from "@/lib/students/rosterFields";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
 import { canHodEditDepartmentYear, resolveFreshmanLandingDepartment, type DepartmentYearRow } from "@/lib/departments/managedBranches";
-import { canHodViewYear, canHodWriteRoster } from "@/lib/departments/yearAccess";
+import { canHodViewYear, canHodWriteRoster, loadYearGate } from "@/lib/departments/yearAccess";
 import { isConfiguredSecondaryDepartmentOrChild } from "@/lib/departments/codeOrNameResolver";
 import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
 import { getAcademicStructure, type DepartmentWithId } from "@/lib/college/academicStructure";
@@ -499,9 +499,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
       if (session.role === "HOD") {
         const { scope: hodScope, inWriteScope } = await loadStudentAndScope(db, session.collegeId, session.uid, session.role);
-        const catalogId = await catalogIdForStudent(db, session.collegeId, student);
-        void catalogId;
-        if (!inWriteScope(student)) {
+        // Roll number and status: the HOD who heads the student's branch. Lab batch is TEACHING set-up (it divides a
+        // section for its lab periods), so the department that maintains the year may set it too.
+        let allowed = inWriteScope(student);
+        if (!allowed && isLabBatchOnly && hodScope) {
+          const gate = await loadYearGate(db, session.collegeId, hodScope);
+          allowed = [student.department, student.secondaryDepartment].some((b) => !!b && gate.teachingWrite(b, student.year, student.courseId));
+        }
+        if (!allowed) {
           return NextResponse.json({ error: "Only the HOD who heads this student's department can change them." }, { status: 403 });
         }
       } else if (session.role === "PANEL_MEMBER") {

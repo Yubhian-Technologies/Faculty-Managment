@@ -15,6 +15,7 @@ import {
   MapPin,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { DashboardSkeleton } from "@/components/shared/SkeletonLoader";
@@ -35,6 +36,8 @@ interface TodayPeriod {
   isSubstitute: boolean;
   room: string;
   labBatch: string;
+  /** What the faculty posted for this student in this period; PENDING until it is posted. */
+  attendance?: "PRESENT" | "ABSENT" | "ON_DUTY" | "PENDING";
 }
 
 interface TodayResponse {
@@ -77,13 +80,22 @@ export default function StudentDashboardPage() {
   const visibleAcademicModules = ACADEMIC_MODULES.filter((m) => !isHidden(m.href));
   const visibleResourceModules = RESOURCE_MODULES.filter((m) => !isHidden(m.href));
 
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+
   useEffect(() => {
+    let cancelled = false;
+    // A failed request (signed out, server error) must not read as "your login isn't linked to a student record".
     fetch("/api/college/student/me/today")
-      .then((r) => r.json() as Promise<TodayResponse>)
-      .then(setData)
-      .catch(() => toast({ variant: "destructive", title: "Failed to load dashboard" }))
-      .finally(() => setIsLoading(false));
-  }, []);
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json() as Promise<TodayResponse>;
+      })
+      .then((d) => { if (!cancelled) { setData(d); setLoadFailed(false); } })
+      .catch(() => { if (!cancelled) { setLoadFailed(true); toast({ variant: "destructive", title: "Failed to load dashboard" }); } })
+      .finally(() => { if (!cancelled) setIsLoading(false); });
+    return () => { cancelled = true; };
+  }, [reloadKey]);
 
   const student = data?.student;
   const periods = data?.periods ?? [];
@@ -98,6 +110,13 @@ export default function StudentDashboardPage() {
 
       {isLoading ? (
         <DashboardSkeleton />
+      ) : loadFailed ? (
+        <Card className="border border-dashed">
+          <CardContent className="space-y-3 p-6 text-center text-sm text-muted-foreground">
+            <p>We couldn&apos;t load your dashboard. Check your connection and try again.</p>
+            <Button variant="outline" size="sm" onClick={() => { setIsLoading(true); setReloadKey((k) => k + 1); }}>Try again</Button>
+          </CardContent>
+        </Card>
       ) : !student ? (
         <Card className="border border-dashed">
           <CardContent className="p-6 text-center text-sm text-muted-foreground">
@@ -114,7 +133,7 @@ export default function StudentDashboardPage() {
                   <CalendarDays className="h-5 w-5" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs text-muted-foreground truncate">Today's Classes</p>
+                  <p className="text-xs text-muted-foreground truncate">Today&apos;s Classes</p>
                   <p className="text-base sm:text-lg font-bold text-foreground">{periods.length} {periods.length === 1 ? "Period" : "Periods"}</p>
                 </div>
               </CardContent>
@@ -215,7 +234,7 @@ export default function StudentDashboardPage() {
           <Card className="border shadow-xs">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
               <div>
-                <CardTitle className="text-base font-semibold">Today's Schedule</CardTitle>
+                <CardTitle className="text-base font-semibold">Today&apos;s Schedule</CardTitle>
                 {data?.date && <p className="text-xs text-muted-foreground mt-0.5">{longDate(data.date)}</p>}
               </div>
               <Badge variant="outline" className="text-xs font-normal rounded-md">
@@ -250,6 +269,14 @@ export default function StudentDashboardPage() {
                           <p className="break-words text-sm font-semibold text-foreground">{p.code}</p>
                           {p.labBatch && <Badge variant="secondary" className="text-[10px] font-normal rounded-md">{p.labBatch}</Badge>}
                           {p.isSubstitute && <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-800 rounded-md">Substitute</Badge>}
+                          {p.attendance && p.attendance !== "PENDING" && (
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] rounded-md ${p.attendance === "ABSENT" ? "border-red-300 text-red-700" : "border-emerald-300 text-emerald-700"}`}
+                            >
+                              {p.attendance === "PRESENT" ? "Present" : p.attendance === "ABSENT" ? "Absent" : "On duty"}
+                            </Badge>
+                          )}
                         </div>
                         {p.subjectName && p.subjectName !== p.code && (
                           <p className="break-words text-xs text-muted-foreground mt-0.5">{p.subjectName}</p>

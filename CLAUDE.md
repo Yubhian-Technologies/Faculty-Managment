@@ -143,6 +143,16 @@ There is **no env switch** (the old `READ_ONLY_FACULTY_COLLEGES` is gone and ign
 - **No silent defaults:** credits and L/T/P are required (an explicit `0`, `-` or `NC` means none); unreadable numbers are errors. Weekly hours are always L+T+P.
 - **One-time ops for existing data (VIT, VWU):** `node scripts/audit-subject-duplicates.mjs` (read-only), resolve clashes, then `node scripts/backfill-subject-keys.mjs --college=<id> [--apply]`. Dashboard "Data check" (`GET /api/college/academics/overview?check=1`) re-checks consistency on demand.
 
+### Shared first year: who owns, who maintains (`src/lib/departments/yearAccess.ts`)
+
+- **One rule, used by every gate.** A branch (CSE) is OWNED by the HOD who heads it (or the parent of a sub-department). A shared year (CSE Year 1) is additionally MAINTAINED by a manager department (Basic Science - Maths): `findBranchManager` says which, for the years it actually teaches. CSE may also list Year 1 itself - that is the normal shape, not an overlap to block.
+- **Owner (CSE HOD):** writes students and sections for every year of the branch (`canHodWriteRoster`: heads the student's Core Department while they sit in a shared year, else their department; heads the section's department). Views Year 1 teaching.
+- **Maintainer (BS-Maths HOD):** views the Year 1 students, sections and subjects, uses them, and WRITES the Year 1 teaching assignments, timetable (draft / publish / pin / unpin / reset / subject colour / slot delete), lab allocation and lab batches (`canHodWriteTeaching`). It never edits students or sections and sees nothing of the branch's other years (`canHodViewYear`).
+- **Unmanaged years / branches:** the branch HOD writes teaching too. Principal / VP / College Office / Super Admin are unscoped as before.
+- **Lists:** `accessLevel` stays VISIBILITY (which list a row is in; pages depend on it). Editing is the separate `canEdit` flag on students and sections, and `teachingAccess` ("write" | "view") on sections; teaching-assignment rows drop to `accessLevel: "secondary"` when the caller can't change them. Pages hide the controls; the routes enforce it either way.
+- **Reading other sections' timetables stays open to HODs on purpose** (`GET timetable-slots`, draft GET).
+- **Not decided yet:** whether a manager may staff a managed branch's faculty (teaching-assignment POST still allows any faculty in `canHodEditDepartment`; `GET faculty` doesn't list them).
+
 ### Student mentoring (HOD assigns, faculty mentors)
 
 - **Model:** one mentor per student, stored on the student record (`mentorUid` = the mentor's LOGIN uid, plus `mentorName` / `mentorAssignedBy` / `mentorAssignedAt`; absent = none). Written ONLY by `POST /api/college/mentoring/assign` (HOD; every student must pass the HOD's department scope, `lib/mentoring/access.ts`; the mentor must be an available faculty member of the HOD's departments). Notes live at `students/{id}/mentoringNotes/{noteId}` (mentor + HOD only, never the student; delete = author only).

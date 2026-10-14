@@ -69,6 +69,19 @@ export async function GET() {
     const subs = slots.length > 0 ? await getActiveSubstitutionsForDates(db, session.collegeId, [today]) : [];
     const subBySlot = new Map(subs.filter((s) => s.date === today).map((s) => [s.timetableSlotId, s]));
 
+    // What the faculty posted for this student in each of today's periods (a posted period only - a draft is not
+    // yet a record). One query for the whole class-day, however many periods there are.
+    const postedToday = slots.length > 0
+      ? await collegeRef.collection("studentAttendance").where("sectionId", "==", section.id).where("date", "==", today).get()
+      : null;
+    const markFor = (periodNumber: number, subjectId: string): "PRESENT" | "ABSENT" | "ON_DUTY" | "PENDING" => {
+      const posted = postedToday?.docs
+        .map((d) => d.data() as { status?: string; periodNumber?: number; subjectId?: string; entries?: { studentId: string; status: string | null }[] })
+        .find((x) => x.status === "SUBMITTED" && x.periodNumber === periodNumber && x.subjectId === subjectId);
+      const mark = posted?.entries?.find((e) => e.studentId === student.id)?.status;
+      return mark === "PRESENT" || mark === "ABSENT" || mark === "ON_DUTY" ? mark : "PENDING";
+    };
+
     const subjectIds = Array.from(new Set(slots.map((s) => s.subjectId).filter(Boolean)));
     const subjectRefs = subjectIds.map((id) => collegeRef.collection("subjects").doc(id));
     const subjectSnaps = subjectRefs.length > 0 ? await db.getAll(...subjectRefs) : [];
@@ -100,6 +113,7 @@ export async function GET() {
           room: s.classroom ?? "",
           labBatch: effectiveLabBatch(s.labBatch, labModes, section.id, s.subjectId, s.facultyId) ?? "",
           subjectId: s.subjectId,
+          attendance: markFor(s.periodNumber, s.subjectId),
         };
       });
     // Faculty of one subject in the same period show as one entry: the subject once, every faculty listed.

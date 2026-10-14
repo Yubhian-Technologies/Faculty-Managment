@@ -65,6 +65,9 @@ type SubjectDoc = Subject & { id: string };
 
 const COLLEGE = "colleges";
 
+// Fields that can be edited on a legacy subject that doesn't yet satisfy the strict rules (see update()).
+const LEGACY_SAFE_KEYS = new Set(["shortCode", "altShortCode", "universityCode", "isActive", "excludeFromTeachingLoad"]);
+
 export class SubjectMasterService {
   constructor(private db: Firestore = getAdminDb()) {}
 
@@ -296,7 +299,24 @@ export class SubjectMasterService {
       merged.lectureHours = cur.hoursPerWeek ?? 0; merged.tutorialHours = 0; merged.practicalHours = 0;
     }
     const v = SubjectCatalogValidator.validateRow(merged);
-    if (!v.isValid || !v.data) throw new SubjectRequestError(v.errors.join("; "));
+    if (!v.isValid || !v.data) {
+      // A subject saved before the strict rules (no credits, an undefined category...) can't pass them yet. Editing its
+      // label-type fields must not be blocked by that - only fields that don't depend on the missing values are
+      // accepted then; anything else has to supply valid values for the whole subject.
+      const stored = SubjectCatalogValidator.validateRow({
+        ...merged,
+        name: cur.name, code: cur.code, shortCode: cur.shortCode ?? "", universityCode: cur.universityCode ?? "", category: cur.category ?? "",
+        customCategory: cur.customCategory ?? "", type: cur.type,
+        lectureHours: cur.lectureHours ?? (isMaster ? undefined : cur.hoursPerWeek ?? 0), tutorialHours: cur.tutorialHours ?? (isMaster ? undefined : 0),
+        practicalHours: cur.practicalHours ?? (isMaster ? undefined : 0), totalHoursPerSemester: cur.totalHoursPerSemester ?? "", credits: cur.credits,
+        internalMarks: cur.internalMarks ?? "", externalMarks: cur.externalMarks ?? "", totalMarks: cur.totalMarks ?? "",
+      });
+      const touched = Object.keys(patch).filter((k) => patch[k] !== undefined);
+      if (!stored.isValid && touched.every((k) => LEGACY_SAFE_KEYS.has(k))) {
+        return this.updateMetadata({ collegeId, id, patch, cur, isMaster, actor: p.actor });
+      }
+      throw new SubjectRequestError(v.errors.join("; "));
+    }
     const d = v.data;
 
     if (has("category")) {
@@ -451,6 +471,45 @@ export class SubjectMasterService {
 
   private async loadScopeForExisting(collegeId: string, s: SubjectDoc): Promise<CourseScope> {
     return this.loadScope(collegeId, s.courseId!, s.regulation ?? "");
+  }
+
+  /** Label-type edits of a legacy subject: no numeric rules involved, so nothing here can write a bad number. */
+  private async updateMetadata(p: { collegeId: string; id: string; patch: Record<string, unknown>; cur: SubjectDoc; isMaster: boolean; actor?: SubjectActor }) {
+    const { collegeId, id, patch, cur } = p;
+    const college = this.college(collegeId);
+    const now = new Date();
+    const updates: Record<string, unknown> = { updatedAt: now };
+    const mirror: Record<string, unknown> = {};
+    const text = (v: unknown) => String(v ?? "").trim().toUpperCase();
+    if (patch.shortCode !== undefined) { const v = text(patch.shortCode); updates.shortCode = v || FieldValue.delete(); mirror.shortCode = updates.shortCode; }
+    if (patch.altShortCode !== undefined) { const v = text(patch.altShortCode); updates.altShortCode = v || FieldValue.delete(); mirror.altShortCode = updates.altShortCode; }
+    if (patch.universityCode !== undefined) {
+      const v = normalizeUniversityCode(patch.universityCode);
+      if (v && p.isMaster && v !== normalizeUniversityCode(cur.universityCode)) {
+        const scope = await this.loadScopeForExisting(collegeId, cur);
+        const clash = (await this.loadExisting(collegeId, scope, (cur.regulation ?? "").trim())).find((s) => s.id !== id && normalizeUniversityCode(s.universityCode) === v);
+        if (clash) throw new SubjectRequestError(`University Code ${v} is already used by ${clash.code} (${clash.name}).`, 409);
+      }
+      updates.universityCode = v || FieldValue.delete(); mirror.universityCode = updates.universityCode;
+    }
+    if (patch.excludeFromTeachingLoad !== undefined) {
+      const flags = patch.excludeFromTeachingLoad === true ? { isNonTeachingLoad: true, excludeFromResume: true } : { isNonTeachingLoad: FieldValue.delete(), excludeFromResume: FieldValue.delete() };
+      Object.assign(updates, flags); Object.assign(mirror, flags);
+    }
+    const instances = await college.collection("subjectSemesterAssignments").where("subjectId", "==", id).get();
+    if (patch.isActive === false && cur.isActive !== false && !instances.empty) {
+      throw new SubjectRequestError("This subject is still assigned to a semester. Unassign it everywhere first, then deactivate it.", 409);
+    }
+    if (patch.isActive !== undefined) updates.isActive = patch.isActive === true;
+    const batch = new ChunkedBatch(this.db);
+    batch.update(college.collection("subjects").doc(id), updates);
+    if (Object.keys(mirror).length > 0) for (const i of instances.docs) batch.update(i.ref, { ...mirror, updatedAt: now });
+    await batch.commit();
+    await writeAuditLogSafe(this.db, collegeId, {
+      action: "SUBJECT_UPDATED", performedBy: p.actor?.uid ?? "unknown", performedByName: p.actor?.name, targetId: id,
+      details: { code: cur.code, name: cur.name, changed: Object.keys(patch), legacy: true },
+    });
+    return { cascaded: { instances: instances.size, teachingAssignments: 0, customizedLeftAlone: 0 } };
   }
 
   // ── delete ──────────────────────────────────────────────────────────────
