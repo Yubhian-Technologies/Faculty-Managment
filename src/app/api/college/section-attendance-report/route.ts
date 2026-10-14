@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { loadYearGate } from "@/lib/departments/yearAccess";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
@@ -197,7 +198,10 @@ export async function GET(request: Request) {
     // report on any section in the college.
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (!canHodEditDepartment(scope, section.department)) {
+      // Both the branch's own HOD and the department that maintains a shared year may read the section's
+      // report - only for the years they run (a manager sees nothing of the branch's other years).
+      const gate = await loadYearGate(db, session.collegeId, scope);
+      if (!gate.view(section.department, section.year, section.courseId)) {
         return NextResponse.json({ error: "This section isn't in your department" }, { status: 403 });
       }
     }

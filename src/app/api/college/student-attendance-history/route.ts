@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { loadEffectiveTiming } from "@/lib/college/semester";
 import { effectiveJoiningDate } from "@/lib/studentAttendance/joiningDate";
 import { NextResponse } from "next/server";
+import { loadYearGate } from "@/lib/departments/yearAccess";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
@@ -81,7 +82,11 @@ export async function GET(request: Request) {
     // no restriction.
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (!canHodEditDepartment(scope, student.department)) {
+      // A shared-year student is filed under the maintaining department with their real branch as the
+      // secondary one: either side may read them, for that year only.
+      const gate = await loadYearGate(db, session.collegeId, scope);
+      const branches = [student.department, student.secondaryDepartment].filter((d): d is string => !!d);
+      if (!branches.some((b) => gate.view(b, student.year, student.courseId))) {
         return NextResponse.json({ error: "This student isn't in your department" }, { status: 403 });
       }
     }

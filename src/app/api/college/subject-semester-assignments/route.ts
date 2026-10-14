@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
+import { loadYearGate } from "@/lib/departments/yearAccess";
 import { planTeachingHoursSync } from "@/lib/subjects/hoursCascade";
 import { SUBJECT_LIMITS } from "@/lib/subjects/validation/SubjectValidator";
 import { CURRICULUM_ROLES, subjectErrorResponse } from "@/lib/subjects/http";
@@ -166,6 +167,22 @@ export async function GET(request: Request) {
         canHodEditDepartmentId(hodScope!, String(a.departmentId ?? "")) ||
         (Array.isArray(a.secondaryDepartmentNames) && (a.secondaryDepartmentNames as unknown[]).some((n) => typeof n === "string" && canHodEditDepartment(hodScope!, n)))
       );
+    }
+
+    // An HOD sees a department's assignments for the years that are theirs to see: the branch's own HOD
+    // every year of the branch, the department that maintains a shared year only that year. (Without this a
+    // manager listed every year of the branches it manages.) Rows narrowed to a core department by name
+    // count for that department too.
+    if (hodScope) {
+      const gate = await loadYearGate(db, session.collegeId, hodScope);
+      assignments = assignments.filter((a) => {
+        const year = a.year == null ? null : Number(a.year);
+        if (year == null) return true; // legacy rows carry no year
+        const names = [String(a.departmentName ?? ""), ...(Array.isArray(a.secondaryDepartmentNames) ? (a.secondaryDepartmentNames as unknown[]).map(String) : [])];
+        const named = names.filter(Boolean);
+        if (named.length === 0) return true; // nothing to judge it by: leave it to the department filter above
+        return named.some((n) => gate.view(n, year, a.courseId ? String(a.courseId) : undefined));
+      });
     }
 
     return NextResponse.json({ assignments });
