@@ -92,11 +92,24 @@ export function AssignByCodeStep({ catalogId, regulation, courseName, initialDep
   const activeDeptId = subDeptId || deptId;
   const activeDept = useMemo(() => departments.find((d) => d.id === activeDeptId), [departments, activeDeptId]);
 
-  // The department's own Course doc for this catalog course decides the years and semesters.
-  const planCourse = useMemo(
-    () => courses.find((c) => c.catalogId === catalogId && c.departmentId === activeDeptId) ?? courses.find((c) => c.catalogId === catalogId) ?? null,
-    [courses, catalogId, activeDeptId],
-  );
+  // The department's own Course doc for this catalog course decides the years and semesters. A
+  // sub-department created by an HOD carries no Course doc of its own (only its parent does, e.g.
+  // "Artificial Intelligence" owns the Bachelor of Technology doc that "CSE [AI&DS]"/"CSE [AI&ML]"
+  // inherit) - fall back to the PARENT's copy specifically, never to "any course sharing this
+  // catalogId", since a college can have several departments each running their own independent copy
+  // of the same catalog course (e.g. every branch at VWU owns its own Bachelor of Technology doc) -
+  // grabbing an arbitrary one would send the wrong courseId to the server, which then correctly
+  // refuses it as "not run by" this department.
+  const planCourse = useMemo(() => {
+    const candidateIds = activeDept?.parentDepartmentId
+      ? [activeDeptId, activeDept.parentDepartmentId]
+      : [activeDeptId];
+    for (const id of candidateIds) {
+      const found = courses.find((c) => c.catalogId === catalogId && c.departmentId === id);
+      if (found) return found;
+    }
+    return null;
+  }, [courses, catalogId, activeDeptId, activeDept]);
   const plan = useCourseSemesterPlan(planCourse);
   const yearOptions = useMemo(
     () => offeredYears(activeDept, departments, catalogId, courseYearNumbers(planCourse?.durationYears)),
