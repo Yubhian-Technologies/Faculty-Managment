@@ -11,6 +11,8 @@ export interface CollegeInfo {
   email?: string;
   type?: CollegeType;
   logoUrl?: string;
+  hasCustomLogo?: boolean;
+  rawLogoUrl?: string;
 }
 
 export function useCollegeInfo() {

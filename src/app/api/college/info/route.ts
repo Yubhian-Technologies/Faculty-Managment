@@ -4,6 +4,9 @@ import { NextResponse } from "next/server";
 import { requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 
+import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+
 export async function GET(request: Request) {
   try {
     // Every college-scoped role reads the same public-facing identity block
@@ -34,6 +37,10 @@ export async function GET(request: Request) {
       logoUrl?: string;
     } | undefined;
 
+    const rawLogo = data?.logoUrl?.trim() ?? "";
+    const isCustom = Boolean(rawLogo && rawLogo !== "/vishnulogo.png");
+    const logoUrl = isCustom ? rawLogo : "/vishnulogo.png";
+
     return NextResponse.json({
       name: data?.name ?? "",
       code: data?.code ?? "",
@@ -42,13 +49,59 @@ export async function GET(request: Request) {
       email: data?.contactEmail || data?.email || "",
       address: data?.address ?? "",
       type: data?.type,
-      logoUrl: data?.logoUrl ?? "",
+      logoUrl,
+      hasCustomLogo: isCustom,
+      rawLogoUrl: rawLogo,
     });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     console.error("[college/info GET]", err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const session = await requireCollegeContext(
+      request,
+      "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN"
+    );
+    const body = (await readJsonBody(request)) as { logoUrl?: string | null };
+    const db = getAdminDb();
+
+    const raw = typeof body.logoUrl === "string" ? body.logoUrl.trim() : "";
+    // If empty string, null, or matching the default path, clear it to "" so it defaults to /vishnulogo.png
+    const newLogo = raw === "/vishnulogo.png" || !raw ? "" : raw;
+
+    await db.collection("colleges").doc(session.collegeId).update({
+      logoUrl: newLogo,
+      updatedAt: new Date(),
+    });
+
+    await writeAuditLogSafe(db, session.collegeId, {
+      action: "COLLEGE_SETTINGS_UPDATED",
+      performedBy: session.uid,
+      targetId: session.collegeId,
+      details: {
+        field: "logoUrl",
+        logoUrl: newLogo || "DEFAULT_VISHNU_LOGO",
+      },
+    });
+
+    return NextResponse.json({
+      ok: true,
+      logoUrl: newLogo || "/vishnulogo.png",
+      hasCustomLogo: Boolean(newLogo),
+    });
+  } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
+    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    console.error("[college/info PATCH]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }

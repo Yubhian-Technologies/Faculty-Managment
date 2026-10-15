@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyPriorResults, pickSubject, validateResultRows, type RawResultRow, type ResultImportContext, type ResultStudent, type ResultSubjectOption } from "./importRows";
+import { applyPriorResults, applyRevaluationTargets, pickSubject, validateResultRows, type PriorResult, type RawResultRow, type ResultImportContext, type ResultStudent, type ResultSubjectOption } from "./importRows";
 import { normalizeResultRules, gradeTableFor, rulesOrStarter, STARTER_GRADE_TABLE, STARTER_RULES } from "./rules";
 
 const anil: ResultStudent = { id: "s1", rollNumber: "24A91A0501", name: "Anil", department: "CSE", courseId: "c-cse", regulation: "R23" };
@@ -39,9 +39,9 @@ describe("validateResultRows", () => {
     expect(accepted[1].subjects[0]).toMatchObject({ grade: "B", points: 8, isPass: true });
   });
 
-  it("keeps a zero-credit subject, with 0 credits", () => {
+  it("keeps a zero-credit subject, with 0 credits, as a Pass", () => {
     const { accepted } = validateResultRows([row(2, "24A91A0501", "MC101", "A")], ctx());
-    expect(accepted[0].subjects[0]).toMatchObject({ credits: 0, isPass: true });
+    expect(accepted[0].subjects[0]).toMatchObject({ credits: 0, grade: "Pass", isPass: true });
   });
 
   it("rejects a row with a blank roll, subject or grade", () => {
@@ -85,6 +85,29 @@ describe("validateResultRows", () => {
   });
 });
 
+describe("supplementary checks against the earlier sitting", () => {
+  const sheet = () => validateResultRows([row(2, "24A91A0501", "MA101", "B")], ctx()).accepted;
+  const regular = (over: Partial<{ academicYear: string; status: "DRAFT" | "PUBLISHED" }> = {}) => ({
+    studentId: "s1", batchId: "b0", examType: "REGULAR" as const, academicYear: "2026-27", status: "PUBLISHED" as const,
+    subjects: [{ subjectCode: "MA101", isPass: false }], ...over,
+  });
+
+  it("is refused while the Regular result is still a draft", () => {
+    const r = applyPriorResults(sheet(), [regular({ status: "DRAFT" })], "SUPPLEMENTARY", 3, "2026-27");
+    expect(r.failed.map((f) => f.error)).toEqual(["24A91A0501's earlier result for MA101 is not published yet - publish it first"]);
+  });
+
+  it("is refused for an academic year before the Regular exam", () => {
+    const r = applyPriorResults(sheet(), [regular()], "SUPPLEMENTARY", 3, "2025-26");
+    expect(r.failed.map((f) => f.error)).toEqual(["A 2025-26 supplementary cannot come before 24A91A0501's 2026-27 exam in MA101"]);
+  });
+
+  it("is accepted in the same or a later academic year", () => {
+    expect(applyPriorResults(sheet(), [regular()], "SUPPLEMENTARY", 3, "2026-27").failed).toEqual([]);
+    expect(applyPriorResults(sheet(), [regular()], "SUPPLEMENTARY", 3, "2027-28").failed).toEqual([]);
+  });
+});
+
 describe("university codes", () => {
   const withUniv = (over: Partial<ResultImportContext> = {}) => {
     const beee = { id: "sub-beee", code: "UGBS1T1323", name: "Basic Electrical & Electronics Engineering", credits: 3, courseId: "c-cse", regulation: "R23", universityCode: "R232101" };
@@ -112,6 +135,28 @@ describe("university codes", () => {
     const { accepted, failed } = validateResultRows([row(2, "24A91A0501", "R232101", "D")], c);
     expect(accepted).toEqual([]);
     expect(failed[0].error).toContain('Subject Code "R232101" matches more than one subject');
+  });
+});
+
+describe("zero-credit subjects - Pass / Fail only", () => {
+  it("any grade is a Pass, except a failing one, with no points", () => {
+    const { accepted, failed } = validateResultRows([
+      row(2, "24A91A0501", "MC101", "S"),
+      row(3, "24A91A0502", "MC101", "P"),
+      row(4, "24MBA001", "MC101", "COMPLETED"),
+    ], ctx({ courseIds: [], department: "" }));
+    expect(failed).toEqual([]);
+    expect(accepted.map((a) => a.subjects[0])).toEqual(["S", "P", "COMPLETED"].map((given) =>
+      ({ subjectId: "sub-audit", subjectCode: "MC101", subjectName: "Constitution", credits: 0, grade: "Pass", points: 0, isPass: true, gradeAsGiven: given })));
+  });
+
+  it("F - and any grade marked failing in Result Rules (AB, MP, WH) - is a Fail", () => {
+    const { accepted } = validateResultRows([row(2, "24A91A0501", "MC101", "F"), row(3, "24A91A0502", "MC101", "ab")], ctx());
+    expect(accepted.map((a) => [a.subjects[0].grade, a.subjects[0].isPass, a.subjects[0].gradeAsGiven])).toEqual([["Fail", false, "F"], ["Fail", false, "AB"]]);
+  });
+
+  it("a credit subject still needs a grade from the grade table", () => {
+    expect(validateResultRows([row(2, "24A91A0501", "MA101", "P")], ctx()).failed[0].error).toContain('Grade "P" is not in the grade table');
   });
 });
 
@@ -175,7 +220,7 @@ describe("applyPriorResults", () => {
   const sheet = () => validateResultRows([row(2, "24A91A0501", "MA101", "B"), row(3, "24A91A0501", "CS101", "A"), row(4, "24A91A0502", "MA101", "S")], ctx()).accepted;
 
   it("Regular: refuses a student who already has Regular results for the semester, and keeps the rest", () => {
-    const r = applyPriorResults(sheet(), [{ studentId: "s1", batchId: "b0", examType: "REGULAR", subjects: [] }], "REGULAR", 1);
+    const r = applyPriorResults(sheet(), [{ studentId: "s1", batchId: "b0", examType: "REGULAR", academicYear: "2025-26", status: "PUBLISHED", subjects: [] }], "REGULAR", 1);
     expect(r.accepted.map((a) => a.student.id)).toEqual(["s2"]);
     expect(r.failed.map((f) => [f.row, f.error])).toEqual([
       [2, "24A91A0501 already has Regular results for Semester 1 in another sheet"],
@@ -184,13 +229,13 @@ describe("applyPriorResults", () => {
   });
 
   it("Regular: a student with only a Supplementary result elsewhere is not refused", () => {
-    expect(applyPriorResults(sheet(), [{ studentId: "s1", batchId: "b0", examType: "SUPPLEMENTARY", subjects: [] }], "REGULAR", 1).failed).toEqual([]);
+    expect(applyPriorResults(sheet(), [{ studentId: "s1", batchId: "b0", examType: "SUPPLEMENTARY", academicYear: "2025-26", status: "PUBLISHED", subjects: [] }], "REGULAR", 1).failed).toEqual([]);
   });
 
   it("Supplementary: only for a subject with an earlier result that is not passed yet", () => {
     const prior = [
-      { studentId: "s1", batchId: "b0", examType: "REGULAR" as const, subjects: [{ subjectCode: "MA101", isPass: false }, { subjectCode: "CS101", isPass: true }] },
-      { studentId: "s2", batchId: "b0", examType: "REGULAR" as const, subjects: [{ subjectCode: "ma101", isPass: false }] },
+      { studentId: "s1", batchId: "b0", examType: "REGULAR" as const, academicYear: "2025-26", status: "PUBLISHED" as const, subjects: [{ subjectCode: "MA101", isPass: false }, { subjectCode: "CS101", isPass: true }] },
+      { studentId: "s2", batchId: "b0", examType: "REGULAR" as const, academicYear: "2025-26", status: "PUBLISHED" as const, subjects: [{ subjectCode: "ma101", isPass: false }] },
     ];
     const r = applyPriorResults(sheet(), prior, "SUPPLEMENTARY", 1);
     expect(r.accepted.map((a) => [a.student.id, a.subjects.map((s) => s.subjectCode), a.rows])).toEqual([["s1", ["MA101"], [2]], ["s2", ["MA101"], [4]]]);
@@ -199,8 +244,8 @@ describe("applyPriorResults", () => {
 
   it("Supplementary: refuses a subject passed in an earlier supplementary sitting, or never sat", () => {
     const prior = [
-      { studentId: "s1", batchId: "b0", examType: "REGULAR" as const, subjects: [{ subjectCode: "MA101", isPass: false }] },
-      { studentId: "s1", batchId: "b1", examType: "SUPPLEMENTARY" as const, subjects: [{ subjectCode: "MA101", isPass: true }] },
+      { studentId: "s1", batchId: "b0", examType: "REGULAR" as const, academicYear: "2025-26", status: "PUBLISHED" as const, subjects: [{ subjectCode: "MA101", isPass: false }] },
+      { studentId: "s1", batchId: "b1", examType: "SUPPLEMENTARY" as const, academicYear: "2025-26", status: "PUBLISHED" as const, subjects: [{ subjectCode: "MA101", isPass: true }] },
     ];
     const r = applyPriorResults(sheet(), prior, "SUPPLEMENTARY", 1);
     expect(r.accepted).toEqual([]);
@@ -209,5 +254,87 @@ describe("applyPriorResults", () => {
       "24A91A0501 has no earlier result for CS101 in Semester 1",
       "24A91A0502 has no earlier result for MA101 in Semester 1",
     ]);
+  });
+});
+
+describe("applyRevaluationTargets", () => {
+  const sheet = () => validateResultRows([row(2, "24A91A0501", "MA101", "A"), row(3, "24A91A0501", "CS101", "B")], ctx()).accepted;
+  const regular = (over: Partial<PriorResult> = {}): PriorResult => ({
+    studentId: "s1", batchId: "reg1", examType: "REGULAR", academicYear: "2026-27", status: "PUBLISHED", at: 1,
+    subjects: [{ subjectCode: "MA101", isPass: true }, { subjectCode: "CS101", isPass: false }], ...over,
+  });
+
+  it("links each student to the picked exam, passed subjects included", () => {
+    const r = applyRevaluationTargets(sheet(), [regular()], "reg1", "Regular Nov 2026");
+    expect(r.failed).toEqual([]);
+    expect(r.accepted[0]).toMatchObject({ revaluesBatchId: "reg1" });
+    expect(r.accepted[0].subjects.map((s) => s.subjectCode)).toEqual(["MA101", "CS101"]);
+  });
+
+  it("refuses a student with no result in the picked exam", () => {
+    expect(applyRevaluationTargets(sheet(), [regular({ batchId: "other" })], "reg1", "Regular Nov 2026").failed[0].error)
+      .toBe("24A91A0501 has no result in Regular Nov 2026");
+  });
+
+  it("refuses a subject not in that exam, or already revalued for it", () => {
+    const prior = [
+      regular({ subjects: [{ subjectCode: "MA101", isPass: true }] }),
+      { studentId: "s1", batchId: "rv0", examType: "REVALUATION" as const, revaluesBatchId: "reg1", academicYear: "2026-27", status: "DRAFT" as const, subjects: [{ subjectCode: "MA101", isPass: true }] },
+    ];
+    const r = applyRevaluationTargets(sheet(), prior, "reg1", "Regular Nov 2026");
+    expect(r.accepted).toEqual([]);
+    expect(r.failed.map((f) => f.error)).toEqual([
+      "24A91A0501's Regular Nov 2026 MA101 has already been revalued",
+      "CS101 is not in 24A91A0501's Regular Nov 2026 result",
+    ]);
+  });
+});
+
+describe("batch membership", () => {
+  const withBatch = (students: ResultStudent[], over: Partial<ResultImportContext> = {}) =>
+    ctx({ students: new Map(students.map((s) => [s.rollNumber.toUpperCase(), s])), batch: "2024-2028", ...over });
+
+  it("accepts the batch itself and a lateral entrant ending the same year", () => {
+    const r = validateResultRows([row(2, "24A91A0501", "MA101", "A"), row(3, "24A91A0502", "MA101", "A")],
+      withBatch([{ ...anil, batch: "2024-2028" }, { ...bina, batch: "2025-2028" }]));
+    expect(r.failed).toEqual([]);
+  });
+
+  it("refuses another batch, and a student with no batch on record", () => {
+    const r = validateResultRows([row(2, "24A91A0501", "MA101", "A"), row(3, "24A91A0502", "MA101", "A")],
+      withBatch([{ ...anil, batch: "2023-2027" }, { ...bina, batch: undefined }]));
+    expect(r.failed.map((f) => f.error)).toEqual([
+      "24A91A0501 is in batch 2023-2027, not 2024-2028",
+      "24A91A0502 has no batch on record - set it on the student first",
+    ]);
+  });
+
+  it("accepts a detained student now in a later batch who has results filed under this one", () => {
+    const r = validateResultRows([row(2, "24A91A0501", "MA101", "A")], withBatch([{ ...anil, batch: "2025-2029" }], { batchHistory: new Set(["s1"]) }));
+    expect(r.failed).toEqual([]);
+  });
+
+  it("reads the University SGPA from the first row that has it, and '-' as withheld", () => {
+    const r = validateResultRows([
+      row(2, "24A91A0501", "MA101", "A"), row(3, "24A91A0501", "CS101", "A", { universitySgpa: "8.69" }),
+      row(4, "24A91A0502", "MA101", "F", { universitySgpa: "-" }),
+    ], ctx());
+    expect(r.accepted.map((a) => a.universitySgpa)).toEqual([8.69, null]);
+  });
+});
+
+describe("supplementary: picked exam and batch", () => {
+  const sheet = () => validateResultRows([row(2, "24A91A0501", "MA101", "B")], ctx()).accepted;
+  const reg = (over: Partial<PriorResult> = {}): PriorResult => ({ studentId: "s1", batchId: "reg1", examType: "REGULAR", academicYear: "2025-26", status: "PUBLISHED", subjects: [{ subjectCode: "MA101", isPass: false }], ...over });
+
+  it("must be a subject of the picked exam", () => {
+    expect(applyPriorResults(sheet(), [reg()], "SUPPLEMENTARY", 3, "2025-26", { targetBatchId: "reg1" }).failed).toEqual([]);
+    expect(applyPriorResults(sheet(), [reg(), reg({ batchId: "sup1", examType: "SUPPLEMENTARY", subjects: [{ subjectCode: "CS101", isPass: false }] })], "SUPPLEMENTARY", 3, "2025-26", { targetBatchId: "sup1" }).failed[0].error)
+      .toBe("MA101 is not in 24A91A0501's picked exam");
+  });
+
+  it("a detained student may write the Regular again under a new batch, but not twice in one", () => {
+    expect(applyPriorResults(sheet(), [reg({ batch: "2024-2028" })], "REGULAR", 3, "2026-27", { batch: "2025-2029" }).failed).toEqual([]);
+    expect(applyPriorResults(sheet(), [reg({ batch: "2024-2028" })], "REGULAR", 3, "2025-26", { batch: "2024-2028" }).failed).toHaveLength(1);
   });
 });

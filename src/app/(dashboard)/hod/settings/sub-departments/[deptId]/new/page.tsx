@@ -6,7 +6,6 @@ import Link from "next/link";
 import { Network, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -14,12 +13,6 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
-import {
-  buildManagedBranchOwner,
-  replaceNoOwnSectionsParents,
-  departmentRunsOwnSections,
-  type DepartmentWithId,
-} from "@/lib/college/academicStructure";
 import type { Department, FMSUser } from "@/types";
 
 // Adding a sub-department used to happen in a dialog on the list page
@@ -30,6 +23,11 @@ import type { Department, FMSUser } from "@/types";
 // college-departments POST, scoped by parentDepartmentId, and the server
 // re-checks that this HOD owns that parent and that the parent has
 // sub-departments enabled (src/app/api/college/departments/route.ts).
+//
+// Which branches this sub-department manages (Department.managedDepartments) is
+// no longer picked here - that connection (and the years it covers) is now made
+// from the Principal dashboard, on the branch's OWN department page ("Managed
+// By" card), not by ticking boxes on the manager's side.
 
 const LIST_HREF = "/hod/settings/sub-departments";
 
@@ -44,7 +42,6 @@ export default function NewSubDepartmentPage() {
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [hodUid, setHodUid] = useState("");
-  const [managedDepartments, setManagedDepartments] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const load = useCallback(async () => {
@@ -78,44 +75,7 @@ export default function NewSubDepartmentPage() {
     [allDepartments, deptId]
   );
 
-  // branch name -> the sub-department already managing it. A branch may be
-  // grouped under only ONE sub-department (enforced with a 409 by
-  // college/departments); showing it disabled here means the user never picks a
-  // branch that is going to be rejected. Same helper the server uses.
-  const branchOwner = useMemo(
-    () => buildManagedBranchOwner(allDepartments as DepartmentWithId[]),
-    [allDepartments]
-  );
-
-  // What this new sub-department may be given to manage: the branches the
-  // PRINCIPAL cross-listed on this parent department (its Core Departments),
-  // which is exactly what this page is for - dividing the parent's own branches
-  // among its sub-departments. Falls back to every top-level department when the
-  // Principal has set no Core Departments at all, so a college that never
-  // configured cross-listing still works. Either way a department that runs no
-  // sections of its own is excluded - it can hold neither sections nor students,
-  // so managing it is meaningless (its children are listed in its place).
-  const manageableBranches = useMemo(() => {
-    if (!ownDept) return [];
-    const configured = replaceNoOwnSectionsParents(
-      allDepartments as DepartmentWithId[],
-      ownDept.secondaryDepartments ?? []
-    );
-    const pool =
-      configured.length > 0
-        ? configured
-            .map((n) => allDepartments.find((d) => d.name === n))
-            .filter((d): d is Department => Boolean(d))
-        : allDepartments.filter((d) => !d.parentDepartmentId);
-    return pool.filter((d) => d.name !== ownDept.name && departmentRunsOwnSections(d));
-  }, [allDepartments, ownDept]);
-
-  const branchOptions = manageableBranches.filter((d) => d.name !== name);
   const listHref = `${LIST_HREF}?dept=${encodeURIComponent(ownDept?.name ?? "")}`;
-
-  function toggleManagedDepartment(deptName: string, checked: boolean) {
-    setManagedDepartments((prev) => (checked ? [...prev, deptName] : prev.filter((n) => n !== deptName)));
-  }
 
   async function handleAddSubDepartment(e: React.FormEvent) {
     e.preventDefault();
@@ -133,7 +93,6 @@ export default function NewSubDepartmentPage() {
           name: name.trim(),
           code: code.toUpperCase().trim(),
           parentDepartmentId: ownDept.id,
-          managedDepartments: managedDepartments.length > 0 ? managedDepartments : undefined,
         }),
       });
       const json = (await res.json()) as { error?: string; deptId?: string };
@@ -315,49 +274,10 @@ export default function NewSubDepartmentPage() {
             )}
             <p className="text-xs text-muted-foreground rounded-md border p-2.5">
               This Sub-HOD gets full edit rights (overview, sections, assign faculty) over{" "}
-              <strong className="text-foreground">{name || "this sub-department"}</strong> and every department
-              grouped under it below.
+              <strong className="text-foreground">{name || "this sub-department"}</strong> and any branch connected
+              to it. Connecting a branch (e.g. CSE) to this sub-department is done from the Principal dashboard, on
+              the branch&apos;s own department page.
             </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Core Departments</CardTitle>
-            <CardDescription>
-              Optional - group whole branches (e.g. IT and CSBS) under this sub-department. Its Sub-HOD then gets
-              full control of those branches&apos; students, sections, and academics - so they can create sections and
-              divide students across them.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <Label>Core Departments</Label>
-            {branchOptions.length > 0 ? (
-              <div className="flex flex-wrap gap-3 border rounded-md px-3 py-2">
-                {branchOptions.map((d) => {
-                  const takenBy = branchOwner.get(d.name);
-                  return (
-                    <label
-                      key={d.id}
-                      className={`flex items-center gap-1.5 text-sm ${takenBy ? "opacity-50" : ""}`}
-                      title={takenBy ? `Already a core department of ${takenBy}` : undefined}
-                    >
-                      <Checkbox
-                        disabled={!!takenBy}
-                        checked={managedDepartments.includes(d.name)}
-                        onCheckedChange={(checked) => toggleManagedDepartment(d.name, !!checked)}
-                      />
-                      {d.name}
-                      {takenBy && <span className="text-xs text-muted-foreground">({takenBy})</span>}
-                    </label>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
-                No branches available - ask your Principal to set this department&apos;s Core Departments.
-              </p>
-            )}
           </CardContent>
         </Card>
 

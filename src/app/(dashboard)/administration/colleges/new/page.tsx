@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { CollegeCategoryField } from "@/components/shared/CollegeCategoryField";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,13 +11,13 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import { COLLEGE_TYPE_LABELS } from "@/types";
-import type { CollegeType } from "@/types";
+import type { CollegeCategory, CollegeType } from "@/types";
 
 const COLLEGE_TYPES: CollegeType[] = ["ENGINEERING", "SCHOOL", "DENTAL", "PHARMACY", "POLYTECHNIC", "DEGREE"];
 
 export default function NewAdministrationCollegePage() {
   const router = useRouter();
-  const [collegeForm, setCollegeForm] = useState<{ name: string; type: CollegeType | ""; address: string; contactEmail: string; contactPhone: string }>({ name: "", type: "", address: "", contactEmail: "", contactPhone: "" });
+  const [collegeForm, setCollegeForm] = useState<{ name: string; type: CollegeType | ""; collegeCategory: CollegeCategory; address: string; contactEmail: string; contactPhone: string }>({ name: "", type: "", collegeCategory: "MAIN", address: "", contactEmail: "", contactPhone: "" });
   const [saving, setSaving] = useState(false);
 
   function set(patch: Partial<typeof collegeForm>) {
@@ -78,6 +79,7 @@ export default function NewAdministrationCollegePage() {
                 </SelectContent>
               </Select>
             </div>
+            <CollegeCategoryField value={collegeForm.collegeCategory} onChange={(c) => set({ collegeCategory: c })} idPrefix="admin-new-college-category" />
             <div className="space-y-2">
               <Label>Address</Label>
               <Input

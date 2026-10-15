@@ -84,6 +84,27 @@ describe("semesterOptionsForStudent", () => {
     expect(semesterOptionsForStudent([y1, dup], 2, "2026-01-01").filter((s) => s.semester === 2)).toHaveLength(1);
     expect(semesterOptionsForStudent([], 2, "2026-01-01")).toEqual([]);
   });
+
+  // Regression: a course-year timing can be set up per year independently
+  // (course-year-timings/route.ts only enforces uniqueness WITHIN one year's
+  // own doc, never across sibling years of the same course), so nothing stops
+  // Year 1 and Year 3 both using semester numbers 1 and 2 instead of
+  // continuing 1-2 / 5-6 globally. When that happens, the student's actual
+  // CURRENT (later) year must win the collision - not the earliest year
+  // processed - otherwise a 3rd-year student's "till now" report resolves to
+  // Year 1's long-past semester and prints "I/IV Semester-I" instead of
+  // "III/IV Semester-I".
+  it("a semester number reused on a LATER year wins the collision, not the earliest year", () => {
+    const year1Misnumbered = { year: 1, semesters: [sem(1, "2023-08-01", "2023-12-15"), sem(2, "2024-01-05", "2024-05-30")] };
+    const year3Misnumbered = { year: 3, semesters: [sem(1, "2025-07-01", "2025-11-30"), sem(2, "2025-12-15", "2026-04-30")] };
+    const opts = semesterOptionsForStudent([year1Misnumbered, year3Misnumbered], 3, "2025-09-01");
+    // Only one entry per colliding number - but it must be Year 3's (the
+    // student's real current year), not Year 1's stale 2023 dates.
+    expect(opts).toHaveLength(2);
+    expect(opts.find((s) => s.semester === 1)).toMatchObject({ year: 3, startDate: "2025-07-01" });
+    const current = currentSemesterOf(opts, "2025-09-01");
+    expect(classLabel(3, 4, current)).toBe("III/IV Semester-I");
+  });
 });
 
 describe("month picker years", () => {

@@ -1,13 +1,14 @@
 export const dynamic = "force-dynamic";
 
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
-import { claimSubjectKey, isSubjectKeyTaken, type SubjectKeyTakenError } from "@/lib/subjects/subjectKeys";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import type { SubjectCategory, SubjectType } from "@/types";
-import { SUBJECT_CATEGORY_LABELS } from "@/types";
 import { getRelatedDepartmentNames } from "@/lib/departments/scope";
+import { whereIn, type QueryLike } from "@/lib/firestore/inQuery";
+import { CURRICULUM_ROLES, subjectErrorResponse } from "@/lib/subjects/http";
+import { SubjectMasterService } from "@/lib/subjects/services/SubjectMasterService";
+import type { SubjectRowInput } from "@/lib/subjects/validation/SubjectValidator";
 
 export async function GET(request: Request) {
   try {
@@ -20,7 +21,7 @@ export async function GET(request: Request) {
     const sessionRegulations = (searchParams.get("regulations") ?? "").split(",").map((r) => r.trim()).filter(Boolean);
 
     const db = getAdminDb();
-    let query: FirebaseFirestore.Query = db.collection("colleges").doc(session.collegeId).collection("subjects");
+    let query: QueryLike = db.collection("colleges").doc(session.collegeId).collection("subjects") as unknown as QueryLike;
 
     // Master subjects (courseId present) never carry a `department` field -
     // they're course+regulation scoped, department-independent by design
@@ -45,7 +46,7 @@ export async function GET(request: Request) {
       if (names.length === 1) {
         query = query.where("department", "==", names[0]);
       } else if (names.length > 1) {
-        query = query.where("department", "in", names.slice(0, 30));
+        query = whereIn(query, "department", names);
       }
     }
 
@@ -61,14 +62,14 @@ export async function GET(request: Request) {
       // visible - and, via Assign to Semester, assignable - to every other
       // department offering the same course, not just whichever one
       // happened to receive it. Firestore caps `in` at 30 values, same as
-      // the department fan-out above.
+      // the department fan-out above (both now run one query per 30 values instead of dropping the rest).
       const coursesSnap = await db.collection("colleges").doc(session.collegeId)
         .collection("courses").where("catalogId", "==", catalogId).get();
-      const courseIds = coursesSnap.docs.map((d) => d.id).slice(0, 30);
+      const courseIds = coursesSnap.docs.map((d) => d.id);
       if (courseIds.length === 0) {
         return NextResponse.json({ subjects: [], academicYears: [] });
       }
-      query = query.where("courseId", "in", courseIds);
+      query = whereIn(query, "courseId", courseIds);
     } else if (courseId) {
       query = query.where("courseId", "==", courseId);
     }
@@ -118,282 +119,34 @@ export async function GET(request: Request) {
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
-    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    console.error("[college/subjects GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return subjectErrorResponse(err, "[college/subjects GET]");
   }
 }
 
-// Two independent creation shapes share this collection: master subjects
-// (Academics/Principal/VP/Super Admin - courseId + regulation, no
-// department/year) and semester-scoped subjects (HOD Teaching
-// Assignments page - semester + department, no course link).
-// Branch on which fields the caller sent.
+// Creates ONE master subject under a Course (catalog) + Regulation. A master has no department,
+// year or semester: it is assigned to a semester afterwards with Assign by code
+// (subject-semester-assignments/assign-by-code). Bulk creation is subjects/import.
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACADEMICS");
-    const body = (await readJsonBody(request)) as {
-      courseId?: string;
-      semester?: number;
-      name: string;
-      code: string;
-      shortCode?: string;
-      hoursPerWeek?: number;
-      totalHoursPerSemester?: number;
-      credits?: number;
-      type?: SubjectType;
-      department?: string;
-      academicYear?: string;
-      regulation?: string;
-      category?: SubjectCategory;
-      customCategory?: string;
-      lectureHours?: number;
-      tutorialHours?: number;
-      practicalHours?: number;
-      departmentId?: string;
-      year?: number;
-      /** "Don't include in teaching load" - stored as isNonTeachingLoad + excludeFromResume (see subjects/[id] PATCH). */
-      excludeFromTeachingLoad?: boolean;
-    };
+    const session = await requireCollegeMember(...CURRICULUM_ROLES);
+    const body = (await readJsonBody(request)) as SubjectRowInput & { courseId?: string; regulation?: string };
+    if (!body.courseId) return NextResponse.json({ error: "Select a course first." }, { status: 400 });
+    if (!body.regulation?.trim()) return NextResponse.json({ error: "Select a regulation first." }, { status: 400 });
 
-    if (!body.name?.trim() || !body.code?.trim()) {
-      return NextResponse.json({ error: "name and code are required" }, { status: 400 });
-    }
-
-    const db = getAdminDb();
-    const now = new Date();
-    const loadFlags = body.excludeFromTeachingLoad === true ? { isNonTeachingLoad: true, excludeFromResume: true } : {};
-
-    if (body.courseId) {
-      const { courseId } = body;
-      const courseSnap = await db.collection("colleges").doc(session.collegeId).collection("courses").doc(courseId).get();
-      if (!courseSnap.exists) return NextResponse.json({ error: "Course not found" }, { status: 404 });
-      const course = courseSnap.data() as { name: string; departmentId: string; durationYears: number; catalogId?: string };
-
-      // Optional - a subject can be added for a course even when no
-      // regulation currently resolves for it. When one IS provided, it must
-      // belong to this course's own Course Catalog entry - a Pharmacy-only
-      // code should never be accepted for a B.Tech subject. A master
-      // subject has no ordinal year of its own (see this route's own POST
-      // body type), so there's no batch/year to resolve it against here -
-      // that congruence check only makes sense once a real batch exists
-      // (Section.batch - see sections/route.ts POST, which is where it's
-      // actually enforced). Here we only check "is this regulation one the
-      // catalog has ever assigned to this course at all".
-      const regulation = body.regulation?.trim();
-      if (regulation) {
-        const catalogSnap = course.catalogId
-          ? await db.collection("colleges").doc(session.collegeId).collection("courseCatalog").doc(course.catalogId).get()
-          : null;
-        const catalogData = catalogSnap?.exists
-          ? (catalogSnap.data() as { regulations?: string[] })
-          : undefined;
-        const catalogRegulations = catalogData?.regulations ?? [];
-        if (!catalogRegulations.includes(regulation)) {
-          return NextResponse.json(
-            { error: `That regulation isn't assigned to ${course.name}. Check Course Catalog.` },
-            { status: 400 },
-          );
-        }
-      }
-
-      if (!body.category || !body.category.trim()) {
-        return NextResponse.json({ error: "A valid category is required" }, { status: 400 });
-      }
-      if (body.category === "OTHER" && !body.customCategory?.trim()) {
-        return NextResponse.json({ error: "Enter a name for the custom category" }, { status: 400 });
-      }
-      if (body.lectureHours == null || body.tutorialHours == null || body.practicalHours == null) {
-        return NextResponse.json({ error: "L, T and P are required" }, { status: 400 });
-      }
-
-      // Master subject creation is Academics/Principal/VP/Super Admin only.
-      if (session.role === "HOD") {
-        return NextResponse.json(
-          { error: "Add this subject from Teaching Assignments instead - the master Subjects form isn't available to HOD." },
-          { status: 403 },
-        );
-      }
-
-      // ── Duplicate-code check ────────────────────────────────────────────
-      // Same regulation+code within this catalog course, in ANY department
-      // that teaches it - a master subject is department-independent (see
-      // this route's own GET doc-comment), so a duplicate created under a
-      // sibling department's Course doc must be caught too, matching
-      // MasterSubjectImportService's own duplicate detection (bulk import).
-      // This single-add path (also used by the Import page's "Fix and
-      // retry" dialog) previously had no check at all. Falls back to just
-      // this courseId for a legacy Course doc with no catalogId.
-      const code = body.code.toUpperCase().trim();
-      const regKey = (regulation ?? "").trim();
-      const targetDeptId = body.departmentId;
-
-      // Duplicate check: scoped per department (or course if no departmentId) + regulation + code
-      const dupeQuery = targetDeptId
-        ? db.collection("colleges").doc(session.collegeId).collection("subjects")
-            .where("departmentId", "==", targetDeptId)
-        : db.collection("colleges").doc(session.collegeId).collection("subjects")
-            .where("courseId", "==", courseId);
-
-      const dupeSnap = await dupeQuery.get();
-      let existingSubjectId: string | undefined;
-      let existingSubjectName: string | undefined;
-      const hasDupe = dupeSnap.docs.some((d) => {
-        const data = d.data() as { code?: string; name?: string; regulation?: string; semester?: number; year?: number };
-        // Same code + regulation = same subject: the caller may reuse it instead of adding a copy.
-        if ((data.code ?? "").toUpperCase() === code && (data.regulation ?? "").trim() === regKey) {
-          existingSubjectId = d.id;
-          existingSubjectName = data.name;
-        }
-        const sameCode = (data.code ?? "").toUpperCase() === code;
-        const sameReg = (data.regulation ?? "").trim() === regKey;
-        if (body.semester && data.semester != null) {
-          return sameCode && sameReg && data.semester === Number(body.semester) && (body.year == null || data.year == null || data.year === Number(body.year));
-        }
-        return sameCode && sameReg;
-      });
-
-      if (hasDupe) {
-        return NextResponse.json(
-          { error: `A subject with code "${code}" already exists for this regulation and department.`, existingSubjectId, existingSubjectName },
-          { status: 409 },
-        );
-      }
-
-      const ref = db.collection("colleges").doc(session.collegeId).collection("subjects").doc();
-      const category = body.category;
-      const customCategory = body.category === "OTHER" ? body.customCategory!.trim() : undefined;
-
-      const subjectDoc = {
-        collegeId: session.collegeId,
-        courseId,
-        courseName: course.name,
-        ...(targetDeptId ? { departmentId: targetDeptId } : {}),
-        academicYear: body.academicYear,
-        regulation: regulation,
-        year: body.year != null ? Number(body.year) : undefined,
-        semester: body.semester != null ? Number(body.semester) : undefined,
-        category,
-        ...(customCategory ? { customCategory } : {}),
-        name: body.name.trim(),
-        code,
-        shortCode: body.shortCode?.trim() ? body.shortCode.trim().toUpperCase() : code,
-        hoursPerWeek: body.hoursPerWeek != null ? Number(body.hoursPerWeek) : 0,
-        totalHoursPerSemester: body.totalHoursPerSemester != null ? Number(body.totalHoursPerSemester) : null,
-        lectureHours: Number(body.lectureHours),
-        tutorialHours: Number(body.tutorialHours),
-        practicalHours: Number(body.practicalHours),
-        credits: body.credits != null ? Number(body.credits) : 0,
-        type: body.type ?? "THEORY",
-        ...loadFlags,
-        isActive: true,
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      const lockScope = targetDeptId
-        ? `${course.catalogId || courseId}_${targetDeptId}`
-        : (course.catalogId || courseId);
-
-      try {
-        await db.runTransaction(async (tx) => {
-          await claimSubjectKey(tx, db, session.collegeId, { scope: lockScope, regulation: regKey, code }, ref);
-          tx.set(ref, subjectDoc);
-        });
-      } catch (e) {
-        if (isSubjectKeyTaken(e)) {
-          // Same code held by a sibling department's course: offer it for reuse.
-          const taken = e as SubjectKeyTakenError;
-          return NextResponse.json({
-            error: `A subject with code "${code}" already exists for this regulation and department.`,
-            ...(taken.ownerId ? { existingSubjectId: taken.ownerId, existingSubjectName: taken.ownerName } : {}),
-          }, { status: 409 });
-        }
-        throw e;
-      }
-
-      let assignmentDoc = null;
-      if (body.departmentId && body.semester) {
-        const { buildSubjectInstancePayload } = await import("@/lib/subjects/services/SubjectInstanceService");
-        const deptSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").doc(body.departmentId).get();
-        const deptName = deptSnap.exists ? (deptSnap.data() as { name?: string }).name : undefined;
-
-        assignmentDoc = buildSubjectInstancePayload(
-          { id: ref.id, ...subjectDoc } as any,
-          {
-            collegeId: session.collegeId,
-            subjectId: ref.id,
-            courseId,
-            departmentId: body.departmentId,
-            departmentName: deptName,
-            year: body.year != null ? Number(body.year) : 1,
-            semester: Number(body.semester),
-            createdAt: now,
-            now,
-          }
-        );
-        await db.collection("colleges").doc(session.collegeId)
-          .collection("subjectSemesterAssignments")
-          .doc(assignmentDoc.id)
-          .set(assignmentDoc);
-      }
-
-      return NextResponse.json({ id: ref.id, subject: { id: ref.id, ...subjectDoc }, assignment: assignmentDoc }, { status: 201 });
-    }
-
-    if (!body.semester) {
-      return NextResponse.json({ error: "name, code, semester are required" }, { status: 400 });
-    }
-
-    let department = body.department ?? "";
-    if (session.role === "HOD") {
-      const { getHodDepartmentScope, canHodEditDepartment } = await import("@/lib/departments/scope");
-      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (!body.department?.trim() && scope.ownDepartmentNames.length > 1) {
-        return NextResponse.json(
-          { error: "You manage more than one department - specify which department this subject belongs to" },
-          { status: 400 },
-        );
-      }
-      department = body.department?.trim() || scope.ownDepartmentNames[0] || "";
-      if (!canHodEditDepartment(scope, department)) {
-        return NextResponse.json(
-          { error: "That department is not yours or one of your sub-departments" },
-          { status: 403 },
-        );
-      }
-    }
-
-    if (!department) {
-      return NextResponse.json({ error: "department is required" }, { status: 400 });
-    }
-
-    const ref = await db.collection("colleges").doc(session.collegeId).collection("subjects").add({
+    const result = await new SubjectMasterService().importMany({
       collegeId: session.collegeId,
-      department,
-      name: body.name.trim(),
-      code: body.code.trim().toUpperCase(),
-      ...(body.shortCode?.trim() ? { shortCode: body.shortCode.trim().toUpperCase() } : {}),
-      semester: Number(body.semester),
-      hoursPerWeek: Number(body.hoursPerWeek) || 0,
-      credits: Number(body.credits) || 0,
-      type: body.type ?? "THEORY",
-      ...loadFlags,
-      isActive: true,
-      createdAt: now,
-      updatedAt: now,
+      courseId: body.courseId,
+      regulation: body.regulation,
+      records: [body],
+      actor: { uid: session.uid, name: session.email },
     });
-
-    return NextResponse.json({ id: ref.id }, { status: 201 });
-  } catch (err) {
-    const badBody = badBodyResponse(err);
-    if (badBody) return badBody;
-    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (result.failed.length > 0) {
+      const first = result.failed[0];
+      return NextResponse.json({ error: first.error }, { status: first.kind === "duplicate" ? 409 : 400 });
     }
-    console.error("[college/subjects POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    const id = result.createdRows[0].subjectId;
+    return NextResponse.json({ id }, { status: 201 });
+  } catch (err) {
+    return subjectErrorResponse(err, "[college/subjects POST]");
   }
 }

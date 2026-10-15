@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { CollegeCategoryField } from "@/components/shared/CollegeCategoryField";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import { COLLEGE_TYPE_LABELS } from "@/types";
-import type { CollegeType, Location } from "@/types";
+import type { CollegeCategory, CollegeType, Location } from "@/types";
 
 const COLLEGE_TYPES: CollegeType[] = ["ENGINEERING", "SCHOOL", "DENTAL", "PHARMACY", "POLYTECHNIC", "DEGREE"];
 
@@ -20,6 +21,7 @@ export default function NewCollegePage() {
   const [name, setName] = useState("");
   const [locationId, setLocationId] = useState("");
   const [type, setType] = useState<CollegeType | "">("");
+  const [collegeCategory, setCollegeCategory] = useState<CollegeCategory>("MAIN");
   const [address, setAddress] = useState("");
   const [contactEmail, setContactEmail] = useState("");
   const [contactPhone, setContactPhone] = useState("");
@@ -53,7 +55,7 @@ export default function NewCollegePage() {
       const res = await fetch("/api/admin/colleges", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, locationId, type, address, contactEmail, contactPhone }),
+        body: JSON.stringify({ name, locationId, type, collegeCategory, address, contactEmail, contactPhone }),
       });
       const json = await res.json() as { collegeId?: string; error?: string };
       if (!res.ok) {
@@ -127,6 +129,8 @@ export default function NewCollegePage() {
                 </SelectContent>
               </Select>
             </div>
+
+            <CollegeCategoryField value={collegeCategory} onChange={setCollegeCategory} idPrefix="new-college-category" />
 
             <div className="space-y-2">
               <Label>Address</Label>

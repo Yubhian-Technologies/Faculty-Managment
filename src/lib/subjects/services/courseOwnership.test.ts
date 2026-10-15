@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 // ownership rule is under test here.
 vi.mock("@/lib/firebase/admin", () => ({ getAdminDb: () => ({}) }));
 
-import { courseOwnershipError } from "./CourseStructureImportService";
+import { courseOwnershipError } from "../courseOwnership";
 import type { Department } from "@/types";
 
 type Dept = Department & { id: string };

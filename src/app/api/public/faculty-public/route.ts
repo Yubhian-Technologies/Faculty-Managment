@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { qualifiedExamName } from "@/lib/faculty/qualifiedExams";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { collegeCategoryOf } from "@/lib/colleges/category";
 import { experienceBreakdown, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { degreeHasData } from "@/lib/faculty/degreeHasData";
@@ -98,8 +99,12 @@ export async function GET(request: Request) {
     // stores is free text typed by the faculty member, so punctuation and
     // casing routinely differ from the college record.
     const normalizeName = (v: string) => v.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    // Only colleges of the same Main/Test category as this faculty member's own count as "in the group", so a
+    // test college can never mark a real faculty member's past posting INTERNAL (or the other way round).
+    const viewedCategory = collegeCategoryOf(collegeSnap?.data() as { collegeCategory?: unknown } | undefined);
     const collegeNames = new Set(
       (await db.collection("colleges").get()).docs
+        .filter((d) => collegeCategoryOf(d.data() as { collegeCategory?: unknown }) === viewedCategory)
         .map((d) => normalizeName(((d.data() as { name?: string }).name ?? "")))
         .filter(Boolean)
     );

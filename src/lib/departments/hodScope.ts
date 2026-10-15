@@ -160,16 +160,19 @@ export function buildCourseGroups(courses: Course[]): CourseGroup[] {
  * per-course override/flat years (resolveDepartmentCourseScope), or, when it
  * has neither of its own (the usual shape for an HOD-created sub-department -
  * college/departments POST strips assignedYears from anything an HOD
- * creates, and the courseScope override is Principal-only), its parent's.
- * This is what a manager itself teaches - never a managed branch's own later
- * years, which belong to that branch's own dedicated HOD instead. A direct
- * own/inherited claim always wins outright over a feeder elsewhere claiming
- * the same year (fedYears) - see departmentClaimsYearItself's own doc-comment
- * (academicStructure.ts) for the matching rule on the Year-1 landing-
- * department check. The exclusion only fills the gap for a department left
- * UNCONFIGURED (assignedYears never set, own.length === 0 below), which would
- * otherwise fall through to the parent, or nothing, without ever ruling out a
- * year that structurally can never be this manager's own.
+ * creates, and the courseScope override is Principal-only), its parent's,
+ * UNFILTERED. A sub-department inheriting from its parent gets the SAME years
+ * the parent teaches - a core department (or its sub-department) keeps every
+ * year it structurally owns even when a Basic Science department ALSO
+ * manages one of those years for teaching assignments/timetable; that
+ * relationship is additive (see academicStructure.ts's fedYears doc-comment
+ * for the narrower, per-OTHER-department question that answers), never a
+ * reason to hide a year from the branch whose data it actually is. Previously
+ * this filtered out fedYears(manager, ...) - years some feeder explicitly
+ * named this sub-department for - which wrongly hid Year 1 from a real
+ * sub-department (e.g. "CSE [AI&DS]") even though its own Year-1 section is
+ * filed directly under its own name, proving the branch's own HOD can
+ * already hold that year regardless of a feeder also managing it.
  */
 export function managerEffectiveYears(
   manager: Department,
@@ -178,10 +181,9 @@ export function managerEffectiveYears(
 ): number[] {
   const own = resolveDepartmentCourseScope(manager, catalogId).assignedYears;
   if (own.length > 0) return own;
-  const excluded = fedYears(manager, allDepartments, catalogId);
   if (manager.parentDepartmentId) {
     const parent = allDepartments.find((p) => p.id === manager.parentDepartmentId);
-    if (parent) return resolveDepartmentCourseScope(parent, catalogId).assignedYears.filter((y) => !excluded.includes(y));
+    if (parent) return resolveDepartmentCourseScope(parent, catalogId).assignedYears;
   }
   return [];
 }

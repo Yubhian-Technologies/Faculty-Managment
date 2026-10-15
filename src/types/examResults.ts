@@ -38,7 +38,9 @@ export interface ExamResultRules {
   updatedAt?: Timestamp;
 }
 
-export type ExamResultType = "REGULAR" | "SUPPLEMENTARY";
+export type ExamResultType = "REGULAR" | "SUPPLEMENTARY" | "REVALUATION";
+/** The sitting types a revaluation can re-grade. */
+export type RevaluableExamType = "REGULAR" | "SUPPLEMENTARY";
 export type ExamResultBatchStatus = "DRAFT" | "PUBLISHED";
 
 // Stored at colleges/{id}/semesterResultBatches/{id} - one per results sheet
@@ -58,12 +60,20 @@ export interface ExamResultBatch {
   /** The branch (department) the sheet is for - every student in it belongs to this branch. */
   department: string;
   departmentId: string;
-  /** Regulation whose grade table applies; "" uses the default table. */
+  /** Regulation whose grade table applies. */
   regulation: string;
+  /** The student cohort as configured on the regulation ("2024-2028"). */
+  batch: string;
+  /** Month the exam was held, "YYYY-MM". */
+  examHeld: string;
+  /** Supplementary: the exam it re-sits; Revaluation: the exam it re-grades. */
+  targetBatchId?: string;
   academicYear: string;
   year: number;
   semester: number;
   examType: ExamResultType;
+  /** REVALUATION sheets only: which sitting of this academic year + semester it re-grades. */
+  revaluationOf?: RevaluableExamType;
   status: ExamResultBatchStatus;
   studentCount: number;
   subjectRowCount: number;
@@ -85,9 +95,12 @@ export interface ExamResultSubject {
   subjectCode: string;
   subjectName: string;
   credits: number;
+  /** A letter grade ("S", "A" ...) - or "Pass" / "Fail" for a zero-credit subject. */
   grade: string;
   points: number;
   isPass: boolean;
+  /** Zero-credit subjects: the grade exactly as the file gave it ("S", "P", "AB" ...), kept for the record. */
+  gradeAsGiven?: string;
 }
 
 // Stored at colleges/{id}/semesterResults/{batchId}_{studentId} - one document
@@ -110,7 +123,14 @@ export interface ExamResultRecord {
   academicYear: string;
   year: number;
   semester: number;
+  batch: string;
+  examHeld: string;
+  /** The university's SGPA from the file, when given (null = "-"); only compared with ours. */
+  universitySgpa?: number | null;
   examType: ExamResultType;
+  /** REVALUATION only: the sitting re-graded (its type, and the student's record's batch). */
+  revaluationOf?: RevaluableExamType;
+  revaluesBatchId?: string;
   status: ExamResultBatchStatus;
   subjects: ExamResultSubject[];
   createdAt: Timestamp;

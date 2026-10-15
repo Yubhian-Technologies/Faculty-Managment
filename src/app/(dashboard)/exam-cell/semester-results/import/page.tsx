@@ -8,15 +8,15 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/useToast";
 import { parseCSV, parseExcelFileWithRowNumbers, readFileAsText } from "@/lib/utils/csv";
 import { buildCourseGroups } from "@/lib/departments/hodScope";
 import { courseYearNumbers } from "@/lib/college/courseYears";
-import { currentTimetableAcademicYear, recentAcademicSessions } from "@/lib/college/academicSession";
-import { batchTitle, resolveResultHeaders, RESULT_COLUMNS, type ResultBatchMeta } from "@/lib/examResults/sheet";
+import { batchTitle, examHeldLabel, resolveResultHeaders, type ResultBatchMeta } from "@/lib/examResults/sheet";
 import type { FailedResultRow, RawResultRow } from "@/lib/examResults/importRows";
-import type { Course, CourseYearTiming, Department, Subject } from "@/types";
+import type { Course, CourseYearTiming, Department } from "@/types";
 import type { ExamResultBatch, ExamResultType } from "@/types/examResults";
 
 // Semester results import: pick the exam, download the template, upload the
@@ -51,6 +51,14 @@ function partsOf(rows: RawResultRow[]): RawResultRow[][] {
   return parts;
 }
 
+/** This month as "YYYY-MM" - the latest an exam can have been held. */
+function thisMonth(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+type Sitting = { id: string; title: string; examType: ExamResultType; examHeld: string; students: number; withBacklogs: number };
+
 const selectClass = "h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus:border-primary focus:outline-none disabled:opacity-50";
 
 export default function ImportSemesterResultsPage() {
@@ -70,11 +78,17 @@ function ImportSemesterResults() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [departmentId, setDepartmentId] = useState("");
   const [regulation, setRegulation] = useState("");
-  const [academicYear, setAcademicYear] = useState(() => currentTimetableAcademicYear());
+  // The programme's regulations and the batches each covers (Academics > Regulation).
+  const [regOptions, setRegOptions] = useState<{ regulation: string; batches: string[] }[]>([]);
+  const [batch, setBatch] = useState("");
   const [year, setYear] = useState("");
   const [semester, setSemester] = useState("");
   const [examType, setExamType] = useState<ExamResultType>("REGULAR");
-  const [subjects, setSubjects] = useState<Subject[]>([]);
+  // Month the exam was held ("YYYY-MM"); a Revaluation takes its exam's.
+  const [examHeld, setExamHeld] = useState("");
+  // Supplementary / Revaluation: the published exam it is for, picked from `sittings`.
+  const [targetBatchId, setTargetBatchId] = useState("");
+  const [sittings, setSittings] = useState<Sitting[]>([]);
   const [timings, setTimings] = useState<CourseYearTiming[]>([]);
 
   const [fileName, setFileName] = useState("");
@@ -117,28 +131,30 @@ function ImportSemesterResults() {
   }, [group, courses, departments]);
   const branch = branches.find((d) => d.id === departmentId) ?? null;
 
-  // The programme's subjects (for its regulations and the template's code list) and its year timings (for semesters).
+  // The programme's year timings (for its semesters).
   useEffect(() => {
     if (!group) return;
     let cancelled = false;
-    const q = group.catalogId ? `catalogId=${encodeURIComponent(group.catalogId)}` : `courseId=${encodeURIComponent(group.courseIds[0])}`;
-    void Promise.all([
-      fetch(`/api/college/subjects?${q}`).then((r) => r.json() as Promise<{ subjects?: Subject[] }>).catch(() => ({ subjects: [] })),
-      fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(group.courseIds.join(","))}`)
-        .then((r) => r.json() as Promise<{ timings?: CourseYearTiming[] }>).catch(() => ({ timings: [] })),
-    ]).then(([s, t]) => {
-      if (cancelled) return;
-      setSubjects(s.subjects ?? []);
-      setTimings(t.timings ?? []);
-    });
+    fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(group.courseIds.join(","))}`)
+      .then((r) => r.json() as Promise<{ timings?: CourseYearTiming[] }>)
+      .then((t) => { if (!cancelled) setTimings(t.timings ?? []); })
+      .catch(() => { if (!cancelled) setTimings([]); });
     return () => { cancelled = true; };
   }, [group]);
 
-  const regulations = useMemo(
-    () => [...new Set(subjects.map((s) => (s.regulation ?? "").trim().toUpperCase()).filter(Boolean))].sort(),
-    [subjects]
-  );
-  const years = group ? courseYearNumbers(group.durationYears) : [];
+  // Regulations and their batches, from the programme's catalog entry.
+  useEffect(() => {
+    if (!group) return;
+    let cancelled = false;
+    fetch(`/api/college/exam-results/options?courseKey=${encodeURIComponent(group.key)}`)
+      .then((r) => r.json() as Promise<{ regulations?: { regulation: string; batches: string[] }[] }>)
+      .then((d) => { if (!cancelled) setRegOptions(d.regulations ?? []); })
+      .catch(() => { if (!cancelled) setRegOptions([]); });
+    return () => { cancelled = true; };
+  }, [group]);
+  const batches = regOptions.find((r) => r.regulation === regulation)?.batches ?? [];
+  const batchYears = batch ? Number(batch.slice(5)) - Number(batch.slice(0, 4)) : 0;
+  const years = group ? courseYearNumbers(group.durationYears).filter((y) => !batchYears || y <= batchYears) : [];
   // The year's own semesters when its timings say so, else two a year.
   const semesters = useMemo(() => {
     const y = Number(year);
@@ -147,12 +163,37 @@ function ImportSemesterResults() {
     return own.length > 0 ? own : [2 * y - 1, 2 * y];
   }, [timings, year]);
 
+  // The published exams of this class a Supplementary / Revaluation can be for.
+  useEffect(() => {
+    if (!group || !batch || !departmentId || !year || !semester || examType === "REGULAR") return;
+    let cancelled = false;
+    const q = new URLSearchParams({ courseKey: group.key, batch, departmentId, year, semester });
+    fetch(`/api/college/exam-results/sittings?${q}`)
+      .then((r) => r.json() as Promise<{ sittings?: Sitting[] }>)
+      .then((d) => { if (!cancelled) setSittings(d.sittings ?? []); })
+      .catch(() => { if (!cancelled) setSittings([]); });
+    return () => { cancelled = true; };
+  }, [group, batch, departmentId, year, semester, examType]);
+  const target = sittings.find((x) => x.id === targetBatchId) ?? null;
+  const needsTarget = examType !== "REGULAR";
+
   const meta: ResultBatchMeta | null = draft
-    ? { courseKey: draft.courseKey, courseName: draft.courseName, courseIds: draft.courseIds, department: draft.department ?? "", departmentId: draft.departmentId ?? "", regulation: draft.regulation, academicYear: draft.academicYear, year: draft.year, semester: draft.semester, examType: draft.examType }
+    ? {
+        courseKey: draft.courseKey, courseName: draft.courseName, courseIds: draft.courseIds, department: draft.department ?? "", departmentId: draft.departmentId ?? "",
+        regulation: draft.regulation, batch: draft.batch ?? "", examHeld: draft.examHeld ?? "", academicYear: draft.academicYear, year: draft.year, semester: draft.semester, examType: draft.examType,
+        ...(draft.targetBatchId ? { targetBatchId: draft.targetBatchId } : {}), ...(draft.revaluationOf ? { revaluationOf: draft.revaluationOf } : {}),
+      }
     : appendTo
       ? null
-      : group && branch && year && semester
-        ? { courseKey: group.key, courseName: group.name, courseIds: group.courseIds, department: branch.name, departmentId: branch.id, regulation, academicYear, year: Number(year), semester: Number(semester), examType }
+      : group && regulation && batch && branch && year && semester && (!needsTarget || target) && (examType === "REVALUATION" || examHeld)
+        ? {
+            courseKey: group.key, courseName: group.name, courseIds: group.courseIds, department: branch.name, departmentId: branch.id,
+            regulation, batch, year: Number(year), semester: Number(semester), examType,
+            // The server derives the academic year and, for a Revaluation, takes the date from the picked exam.
+            examHeld: examType === "REVALUATION" ? target?.examHeld ?? "" : examHeld, academicYear: "",
+            ...(needsTarget && target ? { targetBatchId: target.id } : {}),
+            ...(examType === "REVALUATION" && target ? { revaluationOf: target.examType as "REGULAR" | "SUPPLEMENTARY" } : {}),
+          }
         : null;
 
   function resetFile() {
@@ -166,43 +207,57 @@ function ImportSemesterResults() {
     setCourseKey(v);
     setDepartmentId("");
     setRegulation("");
+    setRegOptions([]);
+    setBatch("");
     setYear("");
     setSemester("");
-    setSubjects([]);
+    setTargetBatchId("");
+    setSittings([]);
     setTimings([]);
+    setSummary(null);
+  }
+  // Any change to the class clears the picked exam (it belongs to one class).
+  function changeClass(apply: () => void) {
+    apply();
+    setTargetBatchId("");
     setSummary(null);
   }
 
   async function downloadTemplate() {
     setBusy("template");
     try {
+      // Supplementary / Revaluation: pre-filled from the picked exam.
+      type Prefill = { rollNumber: string; name: string; subjectCode: string; subjectName: string };
+      let prefilled: Prefill[] | null = null;
+      if (needsTarget && target) {
+        const res = await fetch(`/api/college/exam-results/batches/${encodeURIComponent(target.id)}/template?for=${examType}`);
+        const json = (await res.json()) as { rows?: Prefill[]; error?: string };
+        if (!res.ok) throw new Error(json.error);
+        prefilled = json.rows ?? [];
+      }
       const ExcelJS = (await import("exceljs")).default;
       const wb = new ExcelJS.Workbook();
       const sheet = wb.addWorksheet("Results");
-      sheet.addRow(RESULT_COLUMNS.map((c) => c.label));
+      sheet.addRow(["Roll No", "Subject Code", "Grade", "University SGPA"]);
       sheet.getRow(1).font = { bold: true };
-      sheet.columns = RESULT_COLUMNS.map(() => ({ width: 18 }));
-      sheet.addRow(["24A91A0501", "MA101", "A"]);
-      sheet.addRow(["24A91A0501", "CS101", "F"]);
-
-      // The programme's subjects, so codes can be copied rather than typed.
-      const list = wb.addWorksheet("Subject Codes");
-      list.addRow(["Subject Code", "Subject Name", "Credits", "Regulation"]);
-      list.getRow(1).font = { bold: true };
-      list.columns = [{ width: 16 }, { width: 44 }, { width: 10 }, { width: 12 }];
-      subjects
-        .filter((s) => !regulation || !s.regulation || s.regulation.trim().toUpperCase() === regulation)
-        .sort((a, b) => a.code.localeCompare(b.code))
-        .forEach((s) => list.addRow([s.code, s.name, s.credits ?? 0, s.regulation ?? ""]));
+      sheet.columns = [{ width: 16 }, { width: 16 }, { width: 10 }, { width: 16 }];
+      if (prefilled) for (const r of prefilled) sheet.addRow([r.rollNumber, r.subjectCode, "", ""]);
+      else {
+        sheet.addRow(["24A91A0501", "MA101", "A", "8.69"]);
+        sheet.addRow(["24A91A0501", "CS101", "F", ""]);
+      }
 
       const help = wb.addWorksheet("How to fill");
       [
         "One row per student per subject: Roll No, Subject Code and Grade - all three required.",
         "Subject Code may be the college's code (UGBS1T0523) or the university's code (R232101) once that is set on the subject under Academics > Subjects.",
         "Grade must be one of the grades in Result Rules (e.g. S, A, B ... F, AB).",
-        "Every student must belong to the branch picked on the import page.",
+        "Zero-credit subjects (mandatory / audit courses) are Pass / Fail only: any grade given is a Pass, except a failing one (F, AB, MP, WH - as marked in Result Rules), which is a Fail.",
+        "Every student must belong to the batch and branch picked on the import page.",
+        "University SGPA is optional - the university's SGPA for the student (on any one of their rows, \"-\" if withheld). It is only compared with the system's, never used to calculate.",
+        "A Supplementary template lists every subject still not passed; a Revaluation template lists every subject of the exam - delete the rows that were not revalued.",
         "Credits are taken from each subject's own record - not from this file. No marks are imported.",
-        "Delete the two example rows before uploading.",
+        "Delete any example rows before uploading.",
       ].forEach((t) => help.addRow([t]));
       help.getColumn(1).width = 110;
 
@@ -335,46 +390,75 @@ function ImportSemesterResults() {
             </select>
           </div>
           <div className="space-y-1.5">
+            <Label htmlFor="sr-regulation">Regulation *</Label>
+            <select id="sr-regulation" className={selectClass} value={regulation} onChange={(e) => changeClass(() => { setRegulation(e.target.value); setBatch(""); setYear(""); setSemester(""); })} disabled={!group}>
+              <option value="">{group && regOptions.length === 0 ? "None set - add under Academics > Regulation" : "Select a regulation"}</option>
+              {regOptions.map((r) => <option key={r.regulation} value={r.regulation}>{r.regulation}</option>)}
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="sr-batch">Batch *</Label>
+            <select id="sr-batch" className={selectClass} value={batch} onChange={(e) => changeClass(() => { setBatch(e.target.value); setYear(""); setSemester(""); })} disabled={!regulation}>
+              <option value="">{regulation && batches.length === 0 ? "No batches set for this regulation" : "Select a batch"}</option>
+              {batches.map((b) => <option key={b} value={b}>{b}</option>)}
+            </select>
+          </div>
+          <div className="space-y-1.5">
             <Label htmlFor="sr-branch">Branch *</Label>
-            <select id="sr-branch" className={selectClass} value={departmentId} onChange={(e) => { setDepartmentId(e.target.value); setSummary(null); }} disabled={!group}>
+            <select id="sr-branch" className={selectClass} value={departmentId} onChange={(e) => changeClass(() => setDepartmentId(e.target.value))} disabled={!group}>
               <option value="">{group && branches.length === 0 ? "No branch runs this course" : "Select a branch"}</option>
               {branches.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="sr-regulation">Regulation</Label>
-            <select id="sr-regulation" className={selectClass} value={regulation} onChange={(e) => { setRegulation(e.target.value); setSummary(null); }} disabled={!group}>
-              <option value="">{regulations.length ? "Not specified (default grade table)" : "None set for this course"}</option>
-              {regulations.map((r) => <option key={r} value={r}>{r}</option>)}
-            </select>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="sr-ay">Academic Year *</Label>
-            <select id="sr-ay" className={selectClass} value={academicYear} onChange={(e) => { setAcademicYear(e.target.value); setSummary(null); }}>
-              {[...new Set([academicYear, ...recentAcademicSessions()])].map((a) => <option key={a} value={a}>{a}</option>)}
-            </select>
-          </div>
-          <div className="space-y-1.5">
             <Label htmlFor="sr-year">Year *</Label>
-            <select id="sr-year" className={selectClass} value={year} onChange={(e) => { setYear(e.target.value); setSemester(""); setSummary(null); }} disabled={!group}>
+            <select id="sr-year" className={selectClass} value={year} onChange={(e) => changeClass(() => { setYear(e.target.value); setSemester(""); })} disabled={!batch}>
               <option value="">Select a year</option>
               {years.map((y) => <option key={y} value={y}>Year {y}</option>)}
             </select>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="sr-sem">Semester *</Label>
-            <select id="sr-sem" className={selectClass} value={semester} onChange={(e) => { setSemester(e.target.value); setSummary(null); }} disabled={!year}>
+            <select id="sr-sem" className={selectClass} value={semester} onChange={(e) => changeClass(() => setSemester(e.target.value))} disabled={!year}>
               <option value="">Select a semester</option>
               {semesters.map((s, i) => <option key={s} value={s}>Semester {s} ({year}-{i + 1})</option>)}
             </select>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="sr-type">Exam *</Label>
-            <select id="sr-type" className={selectClass} value={examType} onChange={(e) => { setExamType(e.target.value as ExamResultType); setSummary(null); }}>
+            <select id="sr-type" className={selectClass} value={examType} onChange={(e) => changeClass(() => setExamType(e.target.value as ExamResultType))}>
               <option value="REGULAR">Regular</option>
               <option value="SUPPLEMENTARY">Supplementary</option>
+              <option value="REVALUATION">Revaluation</option>
             </select>
           </div>
+          {needsTarget && (
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="sr-target">{examType === "SUPPLEMENTARY" ? "Re-sit of *" : "Revalue *"}</Label>
+              <select id="sr-target" className={selectClass} value={targetBatchId} onChange={(e) => { setTargetBatchId(e.target.value); setSummary(null); }} disabled={!semester || sittings.length === 0}>
+                <option value="">
+                  {!semester ? "Pick the class first" : sittings.length === 0 ? "No published exam for this class yet" : "Select the exam"}
+                </option>
+                {sittings.map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {x.examType === "SUPPLEMENTARY" ? "Supplementary" : "Regular"} · {examHeldLabel(x.examHeld) || "date not set"} · {x.students} students · {x.withBacklogs} with backlogs
+                  </option>
+                ))}
+              </select>
+              {examType === "REVALUATION" && target && (
+                <p className="text-xs text-muted-foreground">
+                  Revaluation of {target.examType === "SUPPLEMENTARY" ? "Supplementary" : "Regular"} {examHeldLabel(target.examHeld)} - only the revalued subjects; the better of the two grades counts.
+                </p>
+              )}
+            </div>
+          )}
+          {examType !== "REVALUATION" && (
+            <div className="space-y-1.5">
+              <Label htmlFor="sr-held">Exam held *</Label>
+              <Input id="sr-held" type="month" max={thisMonth()} value={examHeld} onChange={(e) => { setExamHeld(e.target.value); setSummary(null); }} />
+              {examType === "SUPPLEMENTARY" && target?.examHeld && <p className="text-xs text-muted-foreground">After {examHeldLabel(target.examHeld)}.</p>}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -388,8 +472,8 @@ function ImportSemesterResults() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Button variant="outline" onClick={() => void downloadTemplate()} loading={busy === "template"} disabled={!group}>
-            <Download className="mr-1.5 h-4 w-4" />Download template{group ? " (with this course's subject codes)" : ""}
+          <Button variant="outline" onClick={() => void downloadTemplate()} loading={busy === "template"} disabled={!group || (needsTarget && !target)}>
+            <Download className="mr-1.5 h-4 w-4" />{needsTarget ? (target ? (examType === "SUPPLEMENTARY" ? "Download template (subjects still to pass)" : "Download template (this exam's subjects)") : "Pick the exam first") : "Download template"}
           </Button>
         </CardContent>
       </Card>
@@ -406,7 +490,7 @@ function ImportSemesterResults() {
             {fileName ? <span><FileSpreadsheet className="mr-1 inline h-4 w-4" />{fileName} · {rows.length.toLocaleString()} rows</span> : "Choose the results file (.xlsx or .csv)"}
             <input type="file" accept=".xlsx,.csv" className="hidden" onChange={(e) => void handleFile(e)} disabled={!meta} />
           </label>
-          {!meta && !appendTo && <p className="text-xs text-muted-foreground">Pick the course, branch, year and semester first.</p>}
+          {!meta && !appendTo && <p className="text-xs text-muted-foreground">Pick the course, regulation, batch, branch, year, semester{needsTarget ? ", the exam" : ""}{examType !== "REVALUATION" ? " and the month it was held" : ""} first.</p>}
           {parseError && <p className="text-sm text-destructive">{parseError}</p>}
           {ignored.length > 0 && <p className="text-xs text-muted-foreground">Ignored columns: {ignored.join(", ")}</p>}
 

@@ -545,11 +545,21 @@ export const COLLEGE_TYPE_LABELS: Record<CollegeType, string> = {
   DEGREE: "Degree",
 };
 
+// Which group a college belongs to. Cross-college lists (e.g. a publication's author affiliation) only offer colleges
+// of the viewer's OWN category. A college with no value counts as MAIN - see lib/colleges/category.ts.
+export type CollegeCategory = "MAIN" | "TEST";
+
+export const COLLEGE_CATEGORY_LABELS: Record<CollegeCategory, string> = {
+  MAIN: "Main",
+  TEST: "Test",
+};
+
 export interface College {
   id: string;
   locationId?: string; // which location this college belongs to
   name: string;
   type?: CollegeType; // institution category - optional so older records without one still load
+  collegeCategory?: CollegeCategory; // Main / Test group - missing = MAIN
   logoUrl?: string;
   address?: string;
   contactEmail?: string;
@@ -3321,6 +3331,7 @@ export type AuditAction =
   | "FACULTY_CREATED"
   | "FACULTY_UPDATED"
   | "FACULTY_COLLEGE_EMAIL_CHANGED"
+  | "COLLEGE_CATEGORY_CHANGED"
   | "FACULTY_COLLEGE_EMAIL_BULK_IMPORT"
   | "FACULTY_STATUS_CHANGED"
   | "FACULTY_DELETED"
@@ -3461,7 +3472,14 @@ export type AuditAction =
   | "CERTIFICATE_ISSUED"
   | "CERTIFICATE_REJECTED_AT_ISSUANCE"
   | "CERTIFICATE_CANCELLED"
-  | "CERTIFICATE_EXAM_CELL_ISSUED";
+  | "CERTIFICATE_EXAM_CELL_ISSUED"
+  // Academics > Curriculum: master subjects (per catalog course + regulation) and their assignment by code.
+  | "SUBJECTS_IMPORTED"
+  | "SUBJECT_CREATED"
+  | "SUBJECT_UPDATED"
+  | "SUBJECT_DELETED"
+  | "SUBJECTS_ASSIGNED"
+  | "SUBJECT_UNASSIGNED";
 
 export interface AuditLog {
   id: string;
