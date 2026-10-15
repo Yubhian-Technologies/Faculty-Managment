@@ -8,24 +8,27 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useRegulationCourseDepartmentPicker } from "@/lib/subjects/hooks/useRegulationCourseDepartmentPicker";
-import { CourseStructureStep } from "@/components/academics/CourseStructureStep";
-import { SubjectsStep } from "@/components/academics/SubjectsStep";
-import { AlertTriangle } from "lucide-react";
+import { MasterSubjectsStep } from "@/components/academics/MasterSubjectsStep";
+import { AssignByCodeStep } from "@/components/academics/AssignByCodeStep";
+import { DocumentsStep } from "@/components/academics/DocumentsStep";
 
-// Curriculum: one scope (Regulation -> Course -> Department), picked once in
-// the bar below, shared by every step - instead of the old 4 separate pages
-// (Regulation, Course Structure, Subjects, Syllabus) each asking for it from
-// scratch. The URL/route stays /academics/course-structure because
-// principal/departments/[id]/page.tsx deep-links here with
-// ?catalogId=&departmentId=&regulation=. Syllabus and Regulation Doc are no
-// longer their own steps - they're a Documents switcher inside Structure
-// (CourseStructureStep.tsx), since each was a single upload card on its own
-// page with nothing else on it.
+// Curriculum: ONE flow, one scope (Regulation -> Course) picked once in the bar below and shared by
+// every tab:
+//   1. Subjects  - the course + regulation's master list: bulk import or add one at a time.
+//   2. Assign    - put those subjects into a department's year + semester by typing their codes.
+//   3. Documents - the Regulation Document and the Syllabus (no subjects).
+// There is no other way to create or assign a subject. The route stays /academics/course-structure
+// because principal/departments/[id]/page.tsx deep-links here with ?catalogId=&departmentId=&regulation=
+// (that link lands on Assign); the old ?step=structure link maps to Assign too.
 const STEPS = [
-  { key: "structure", label: "Structure" },
   { key: "subjects", label: "Subjects" },
+  { key: "assign", label: "Assign" },
+  { key: "documents", label: "Documents" },
 ] as const;
 type StepKey = (typeof STEPS)[number]["key"];
+const LEGACY_STEP: Record<string, StepKey> = { structure: "assign" };
+const asStep = (v: string | null): StepKey | null =>
+  STEPS.some((s) => s.key === v) ? (v as StepKey) : v && LEGACY_STEP[v] ? LEGACY_STEP[v] : null;
 
 function CurriculumPageInner() {
   const picker = useRegulationCourseDepartmentPicker();
@@ -33,11 +36,11 @@ function CurriculumPageInner() {
   const searchParams = useSearchParams();
 
   const stepParam = searchParams.get("step");
-  const [step, setStep] = useState<StepKey>(() =>
-    STEPS.some((s) => s.key === stepParam) ? (stepParam as StepKey) : "structure"
-  );
+  const deepLinked = !!(searchParams.get("catalogId") && searchParams.get("departmentId"));
+  const [step, setStep] = useState<StepKey>(() => asStep(stepParam) ?? (deepLinked ? "assign" : "subjects"));
   useEffect(() => {
-    if (stepParam && STEPS.some((s) => s.key === stepParam)) setStep(stepParam as StepKey);
+    const next = asStep(stepParam);
+    if (next) setStep(next);
   }, [stepParam]);
 
   function changeStep(key: StepKey) {
@@ -47,7 +50,7 @@ function CurriculumPageInner() {
 
   // Deep-link prefill from principal/departments/[id]/page.tsx
   // (?catalogId=&departmentId=[&regulation=]) - Regulation/Course/Department
-  // only; lands on the Structure step by default.
+  // only; lands on the Assign step by default.
   const [prefill, setPrefill] = useState<{ catalogId: string; departmentId: string; regulation: string | null } | null>(() => {
     const catalogId = searchParams.get("catalogId");
     const departmentId = searchParams.get("departmentId");
@@ -112,16 +115,22 @@ function CurriculumPageInner() {
           Load
         </Button>
         {!picker.isLoaded && canLoad && !picker.isLoadingData && (
-          <span className="text-sm text-muted-foreground">Click Load, then switch between the steps above without re-picking this.</span>
+          <span className="text-sm text-muted-foreground">Click Load, then switch between the tabs above without re-picking this.</span>
         )}
       </div>
 
-      {step === "structure" && <CourseStructureStep picker={picker} />}
-      {step === "subjects" && (
+      {step === "subjects" && <MasterSubjectsStep picker={picker} />}
+      {step === "assign" && (
         picker.isLoaded
-          ? <SubjectsStep initialCatalogId={picker.selectedCatalogId} initialDepartmentId={picker.selectedDepartmentId} initialRegulation={picker.selectedRegulation} />
-          : <p className="text-sm text-muted-foreground">Click Load above first - pick the Department on this tab.</p>
+          ? <AssignByCodeStep
+              catalogId={picker.selectedCatalogId}
+              regulation={picker.selectedRegulation}
+              courseName={picker.selectedCatalogItem?.name ?? ""}
+              initialDepartmentId={picker.selectedDepartmentId || undefined}
+            />
+          : <p className="text-sm text-muted-foreground">Pick a Regulation and Course above, then click Load.</p>
       )}
+      {step === "documents" && <DocumentsStep picker={picker} />}
     </div>
   );
 }

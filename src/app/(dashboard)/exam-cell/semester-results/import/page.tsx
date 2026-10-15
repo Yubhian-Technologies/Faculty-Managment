@@ -252,6 +252,7 @@ function ImportSemesterResults() {
         "One row per student per subject: Roll No, Subject Code and Grade - all three required.",
         "Subject Code may be the college's code (UGBS1T0523) or the university's code (R232101) once that is set on the subject under Academics > Subjects.",
         "Grade must be one of the grades in Result Rules (e.g. S, A, B ... F, AB).",
+        "Zero-credit subjects (mandatory / audit courses) are Pass / Fail only: any grade given is a Pass, except a failing one (F, AB, MP, WH - as marked in Result Rules), which is a Fail.",
         "Every student must belong to the batch and branch picked on the import page.",
         "University SGPA is optional - the university's SGPA for the student (on any one of their rows, \"-\" if withheld). It is only compared with the system's, never used to calculate.",
         "A Supplementary template lists every subject still not passed; a Revaluation template lists every subject of the exam - delete the rows that were not revalued.",

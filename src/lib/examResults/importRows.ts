@@ -149,12 +149,6 @@ export function validateResultRows(
     const options = ctx.subjects.get(subjectKey(subjectCode));
     if (!options || options.length === 0) { fail(`Subject Code "${subjectCode}" is not a subject of this college`); continue; }
 
-    const grade = grades.get(gradeText);
-    if (!grade) {
-      fail(`Grade "${gradeText}" is not in the grade table (${ctx.gradeTable.map((g) => g.grade).join(", ")})`);
-      continue;
-    }
-
     const subject = pickSubject(options, student, ctx);
     // A code naming two different subjects equally well (a university code
     // given to two subjects of the same course) is refused, never guessed.
@@ -164,6 +158,25 @@ export function validateResultRows(
       fail(`Subject Code "${subjectCode}" matches more than one subject (${[subject, ...best].map((o) => `${o.code} ${o.name}`).join("; ")}) - give the University Code to one subject only`);
       continue;
     }
+    // Zero-credit subjects (mandatory / audit courses) have no grade points -
+    // only Pass or Fail. Any grade the file gives is a Pass, except one marked
+    // as failing in the grade table (F, AB, MP, WH ...), which is a Fail.
+    // Credit subjects must use the grade table.
+    const credits = Number.isFinite(subject.credits) && subject.credits > 0 ? subject.credits : 0;
+    let result: { grade: string; points: number; isPass: boolean; gradeAsGiven?: string };
+    if (credits === 0) {
+      const isPass = grades.get(gradeText)?.isPass !== false;
+      result = { grade: isPass ? "Pass" : "Fail", points: 0, isPass, gradeAsGiven: gradeText };
+    } else {
+      const grade = grades.get(gradeText);
+      if (!grade) {
+        fail(`Grade "${gradeText}" is not in the grade table (${ctx.gradeTable.map((g) => g.grade).join(", ")})`);
+        continue;
+      }
+      // A failing grade never carries points into the formula.
+      result = { grade: grade.grade, points: grade.isPass ? grade.points : 0, isPass: grade.isPass };
+    }
+
     // Keyed by the subject itself, so its college code and university code
     // in two rows count as the same subject.
     const dupKey = `${student.id}::${subject.id}`;
@@ -181,11 +194,8 @@ export function validateResultRows(
       subjectId: subject.id,
       subjectCode: subject.code.trim() || subjectCode,
       subjectName: subject.name,
-      credits: Number.isFinite(subject.credits) && subject.credits > 0 ? subject.credits : 0,
-      grade: grade.grade,
-      // A failing grade never carries points into the formula.
-      points: grade.isPass ? grade.points : 0,
-      isPass: grade.isPass,
+      credits,
+      ...result,
     });
     byStudent.set(student.id, entry);
   }

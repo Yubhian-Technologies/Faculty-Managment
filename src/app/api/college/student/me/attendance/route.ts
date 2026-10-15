@@ -163,7 +163,7 @@ export async function GET(request: Request) {
         name: college?.name ?? "",
         address: college?.address ?? "",
         phone: college?.contactPhone ?? "",
-        logoUrl: college?.logoUrl ?? "",
+        logoUrl: college?.logoUrl?.trim() || "/vishnulogo.png",
       },
       scope: { view, label, from, to },
       student: {

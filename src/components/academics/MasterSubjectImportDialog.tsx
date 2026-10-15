@@ -8,11 +8,12 @@ import { Download, Upload, FileSpreadsheet, XCircle, CheckCircle2, AlertTriangle
 import { toast } from "@/hooks/useToast";
 import { parseCSV, parseExcelFile, readFileAsText, matchHeaders, getUnmatchedHeaders } from "@/lib/utils/csv";
 import { MASTER_IMPORT_COLUMNS, MASTER_IMPORT_HINTS } from "@/lib/subjects/masterImportColumns";
+import { MASTER_IMPORT_MAX_ROWS } from "@/lib/subjects/limits";
 import type { SubjectRowInput } from "@/lib/subjects/validation/SubjectValidator";
 import { CategoriesDialog } from "@/components/academics/CategoriesDialog";
 import { categoryPrefillText } from "@/components/academics/CategoriesManager";
 
-interface RowFailure { row: number; code: string; error: string; kind?: "unknown-category"; value?: string; suggestion?: string }
+interface RowFailure { row: number; code: string; error: string; kind?: "unknown-category" | "duplicate"; value?: string; suggestion?: string }
 interface ImportResult {
   ok: boolean;
   created: number;
@@ -32,13 +33,12 @@ const PREVIEW_LIMIT = 100;
 // Structure's own upload/preview/commit pattern. A category that isn't
 // defined yet blocks its row with a link to Categories instead of silently
 // storing free text.
-export function MasterSubjectImportDialog({ open, onOpenChange, courseId, courseName, regulation, academicYear, onImported }: {
+export function MasterSubjectImportDialog({ open, onOpenChange, courseId, courseName, regulation, onImported }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   courseId: string;
   courseName: string;
   regulation: string;
-  academicYear?: string;
   onImported: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -91,7 +91,7 @@ export function MasterSubjectImportDialog({ open, onOpenChange, courseId, course
       const res = await fetch("/api/college/subjects/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "validate", courseId, regulation, academicYear, records: records.map((r) => r.data) }),
+        body: JSON.stringify({ mode: "validate", courseId, regulation, records: records.map((r) => r.data) }),
       });
       const json = (await res.json()) as ImportResult & { error?: string };
       if (requestId !== validateRequestRef.current) return;
@@ -127,6 +127,10 @@ export function MasterSubjectImportDialog({ open, onOpenChange, courseId, course
       const unmatched = getUnmatchedHeaders(headerRow, keyByIndex);
       const filtered = dataRows.filter((r) => r.some((cell) => cell.trim()));
       if (filtered.length === 0) { setParseError("No data rows found."); return; }
+      if (filtered.length > MASTER_IMPORT_MAX_ROWS) {
+        setParseError(`This file has ${filtered.length} subjects; the limit is ${MASTER_IMPORT_MAX_ROWS} per import. Split it (for example by year) and import the parts one after the other.`);
+        return;
+      }
 
       // rowNumber = i + 2 matches exactly how the server numbers rows (1-indexed
       // + header), since both sides walk this same filtered (blank rows
@@ -177,7 +181,7 @@ export function MasterSubjectImportDialog({ open, onOpenChange, courseId, course
       const res = await fetch("/api/college/subjects/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "commit", courseId, regulation, academicYear, records: uploaded.records.map((r) => r.data) }),
+        body: JSON.stringify({ mode: "commit", courseId, regulation, records: uploaded.records.map((r) => r.data) }),
       });
       const json = (await res.json()) as ImportResult & { error?: string };
       if (!res.ok && res.status !== 422) { toast({ variant: "destructive", title: json.error ?? "Import failed" }); return; }
@@ -331,9 +335,15 @@ export function MasterSubjectImportDialog({ open, onOpenChange, courseId, course
 
         {result && (
           <div className="rounded-md border p-3 space-y-2 text-sm">
-            <p className="flex items-center gap-1.5 text-emerald-600 font-medium">
-              <CheckCircle2 className="h-4 w-4" />{result.created} subject{result.created !== 1 ? "s" : ""} imported
-            </p>
+            {result.created > 0 ? (
+              <p className="flex items-center gap-1.5 text-emerald-600 font-medium">
+                <CheckCircle2 className="h-4 w-4" />{result.created} subject{result.created !== 1 ? "s" : ""} imported
+              </p>
+            ) : (
+              <p className="flex items-center gap-1.5 text-destructive font-medium">
+                <XCircle className="h-4 w-4" />Nothing was imported
+              </p>
+            )}
             {result.failed.length > 0 && (
               <div>
                 <p className="flex items-center gap-1.5 text-destructive font-medium">

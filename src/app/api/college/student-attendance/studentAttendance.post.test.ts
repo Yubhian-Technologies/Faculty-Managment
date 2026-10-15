@@ -95,4 +95,26 @@ describe("POST student-attendance", () => {
     expect(res.status).toBe(201);
     expect(warn).toHaveBeenCalledWith("[student-attendance duplicate-period]", expect.objectContaining({ id: ID, others: ["a2_2026-10-07_2"] }));
   });
+
+  // Edge case: a leave substitute (not the assignment's own faculty) opens the
+  // period. The assignment still belongs to the absent faculty ("f1"), but
+  // resolveSubstituteSlotsForDate says the logged-in caller ("u1"/their
+  // facultyMemberId "f1" per the module mock) is covering timetableSlot
+  // "slotX" of this exact assignment today - so the route must own the
+  // session to the SUBSTITUTE, not silently to whoever the assignment says.
+  it("a leave substitute gets the attendance, stamped under their own identity", async () => {
+    const periodCoverage = await import("@/lib/leave/periodCoverage");
+    vi.spyOn(periodCoverage, "resolveSubstituteSlotsForDate").mockResolvedValue(
+      new Map([["slotX", { originalFacultyId: "previous-faculty-uid", originalFacultyName: "Dr Old" }]])
+    );
+    h.db = seed({
+      [`${C}/teachingAssignments/a1`]: { facultyId: "original-faculty-member-id", facultyName: "Dr Old", sectionId: "sec1", subjectId: "sub1", subjectName: "Physics", subjectCode: "PH1", timetableSemester: 1 },
+      [`${C}/timetableSlots/slotX`]: { assignmentId: "a1" },
+      [`${C}/facultyMembers/f1`]: { name: "Dr Substitute" },
+    });
+    const res = await post();
+    expect(res.status).toBe(201);
+    expect(stored()!.facultyId).toBe("u1"); // the substitute's own login uid, not "original-faculty-member-id"
+    expect(stored()).toMatchObject({ substituteForFacultyId: "previous-faculty-uid", substituteForFacultyName: "Dr Old" });
+  });
 });

@@ -96,9 +96,16 @@ const strayCourses: Course[] = [
 ];
 
 describe("a department whose years resolve to nothing", () => {
-  it("the old function offered every year (the reported bug) - that is what these rows reproduce", () => {
-    expect(managerEffectiveYears(strayDepts.find((d) => d.id === "bs-eng")!, strayDepts, BT)).toEqual([]);
-    expect(legacy(strayDepts, strayCourses, "Basic Science - English", "B.Tech")).toEqual([1, 2, 3, 4]);
+  it("a stray, unrelated department naming this sub-department as its own Core Department never shrinks its inherited years", () => {
+    // "StrayBS" is a completely separate, misconfigured department that happens to
+    // also list "Basic Science - English" in ITS OWN secondaryDepartments. That
+    // stray cross-reference is StrayBS's own problem to fix - it must never reach
+    // in and reduce what "Basic Science - English" itself inherits from ITS OWN
+    // parent ("Basic Science"). managerEffectiveYears no longer subtracts any
+    // feeder's claim at all (see its own doc-comment) - this test is the specific
+    // case that used to zero the inherited year out entirely.
+    expect(managerEffectiveYears(strayDepts.find((d) => d.id === "bs-eng")!, strayDepts, BT)).toEqual([1]);
+    expect(legacy(strayDepts, strayCourses, "Basic Science - English", "B.Tech")).toEqual([1]);
   });
 
   it("a shared-first-year sub-department now offers only its shared year", () => {

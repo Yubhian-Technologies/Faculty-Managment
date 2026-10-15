@@ -11,7 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { COLLEGE_TYPE_LABELS } from "@/types";
-import type { CollegeType } from "@/types";
+import { COLLEGE_CATEGORY_LABELS } from "@/types";
+import type { CollegeCategory, CollegeType } from "@/types";
 
 const COLLEGE_TYPES: CollegeType[] = ["ENGINEERING", "SCHOOL", "DENTAL", "PHARMACY", "POLYTECHNIC", "DEGREE"];
 
@@ -19,6 +20,7 @@ type CollegeRow = {
   id: string;
   name: string;
   type?: CollegeType;
+  collegeCategory?: CollegeCategory;
   locationId?: string;
   locationName?: string;
   address: string;
@@ -33,6 +35,7 @@ export default function CollegesPage() {
   const [colleges, setColleges] = useState<CollegeRow[]>([]);
   const [locationMap, setLocationMap] = useState<Record<string, string>>({});
   const [typeFilter, setTypeFilter] = useState<CollegeType | "All">("All");
+  const [categoryFilter, setCategoryFilter] = useState<CollegeCategory | "All">("All");
   const [isLoading, setIsLoading] = useState(true);
   const [toggling, setToggling] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -130,6 +133,18 @@ export default function CollegesPage() {
       ),
     },
     {
+      key: "collegeCategory",
+      header: "Category",
+      hideOnMobile: true,
+      // A college saved before the category existed has none, and counts as Main.
+      render: (row) => (
+        <Badge variant={row.collegeCategory === "TEST" ? "in_progress" : "secondary"} className="text-xs font-normal">
+          {COLLEGE_CATEGORY_LABELS[row.collegeCategory === "TEST" ? "TEST" : "MAIN"]}
+        </Badge>
+      ),
+      csvValue: (row) => COLLEGE_CATEGORY_LABELS[row.collegeCategory === "TEST" ? "TEST" : "MAIN"],
+    },
+    {
       key: "locationId",
       header: "Location",
       hideOnMobile: true,
@@ -215,24 +230,36 @@ export default function CollegesPage() {
       />
 
       <DataTable
-        data={typeFilter === "All" ? colleges : colleges.filter((c) => c.type === typeFilter)}
+        data={colleges.filter((c) => (typeFilter === "All" || c.type === typeFilter) && (categoryFilter === "All" || (c.collegeCategory === "TEST" ? "TEST" : "MAIN") === categoryFilter))}
         columns={columns}
         isLoading={isLoading}
         keyExtractor={(r) => r.id}
         searchPlaceholder="Search colleges..."
         searchKeys={["name"] as (keyof CollegeRow)[]}
         filterComponent={
-          <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as CollegeType | "All")}>
-            <SelectTrigger className="w-44">
-              <SelectValue placeholder="Type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="All">All Types</SelectItem>
-              {COLLEGE_TYPES.map((t) => (
-                <SelectItem key={t} value={t}>{COLLEGE_TYPE_LABELS[t]}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={categoryFilter} onValueChange={(v) => setCategoryFilter(v as CollegeCategory | "All")}>
+              <SelectTrigger className="w-40">
+                <SelectValue placeholder="Category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All">All Categories</SelectItem>
+                <SelectItem value="MAIN">{COLLEGE_CATEGORY_LABELS.MAIN}</SelectItem>
+                <SelectItem value="TEST">{COLLEGE_CATEGORY_LABELS.TEST}</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as CollegeType | "All")}>
+              <SelectTrigger className="w-44">
+                <SelectValue placeholder="Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All">All Types</SelectItem>
+                {COLLEGE_TYPES.map((t) => (
+                  <SelectItem key={t} value={t}>{COLLEGE_TYPE_LABELS[t]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         }
         emptyTitle="No colleges yet"
         emptyDescription="Add your first institution to get started"

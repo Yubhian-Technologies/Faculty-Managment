@@ -4,7 +4,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { categoryDocId, checkCategoryDefinition, type CategoryDefinition } from "@/lib/subjects/categoryDefinitions";
+import { categoryDocId, checkCategoryDefinition, isStandardCategoryCode, type CategoryDefinition } from "@/lib/subjects/categoryDefinitions";
+import { SUBJECT_CATEGORY_LABELS } from "@/types";
 
 // Subject categories the college defines for itself (short code + full form),
 // managed on Academics > Categories and used to validate Course Structure
@@ -16,6 +17,9 @@ const WRITE_ROLES = ["PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACADEMICS"] 
 const MAX_PER_REQUEST = 100;
 
 const entrySchema = z.object({ code: z.string(), fullForm: z.string() });
+// newCode: a custom category's rename target. Omitted/unchanged for a plain
+// relabel. Never honored for a standard code - see PATCH's own doc-comment.
+const patchSchema = entrySchema.extend({ newCode: z.string().optional() });
 
 function handleError(err: unknown, label: string) {
   if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
@@ -82,33 +86,82 @@ export async function POST(request: Request) {
   }
 }
 
-// Changes a category's full form. The short code is the key subjects refer to,
-// so it can't be renamed.
+// Changes a category's full form, and - for a custom category only, while
+// nothing uses it yet - its code too. A standard (AICTE) code has no doc here
+// until its first edit (that edit creates it, an upsert, same as every
+// subsequent relabel) and its code can never change: it's the literal value
+// hardcoded business logic elsewhere compares against (e.g. elective
+// detection on "PEC"/"OEC"), so renaming it would silently break that.
+// Renaming a CUSTOM code is refused while any subject already stores it -
+// nothing here cascades that value onto subjects or their semester copies,
+// so a rename only ever happens when there is nothing left to go stale.
 export async function PATCH(request: Request) {
   try {
     const session = await requireCollegeMember(...WRITE_ROLES);
-    const parsed = entrySchema.safeParse(await request.json().catch(() => null));
+    const parsed = patchSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) return NextResponse.json({ error: "Send the code and the new full form." }, { status: 400 });
 
+    const db = getAdminDb();
     const ref = categoriesRef(session.collegeId);
     const docRef = ref.doc(categoryDocId(parsed.data.code));
     const snap = await docRef.get();
-    if (!snap.exists) return NextResponse.json({ error: "That category isn't defined." }, { status: 404 });
+    const standard = isStandardCategoryCode(parsed.data.code);
+    if (!snap.exists && !standard) return NextResponse.json({ error: "That category isn't defined." }, { status: 404 });
 
+    const currentCode = snap.exists ? (snap.data() as CategoryDefinition).code : parsed.data.code.trim().toUpperCase();
     const existing = (await ref.get()).docs.map((d) => d.data() as CategoryDefinition);
-    const current = snap.data() as CategoryDefinition;
-    const check = checkCategoryDefinition({ code: current.code, fullForm: parsed.data.fullForm }, existing, current.code);
+    const wantsRename = !!parsed.data.newCode?.trim() && parsed.data.newCode.trim().toUpperCase() !== currentCode;
+
+    if (wantsRename && standard) {
+      return NextResponse.json({ error: "A standard category's code can't be changed - only its full form. Add a new category instead." }, { status: 400 });
+    }
+
+    if (wantsRename) {
+      const inUse = await db.collection("colleges").doc(session.collegeId).collection("subjects").where("category", "==", currentCode).limit(1).get();
+      if (!inUse.empty) {
+        return NextResponse.json({ error: `${currentCode} is used by existing subjects, so its code can't be changed. Add a new category instead.` }, { status: 409 });
+      }
+      const check = checkCategoryDefinition({ code: parsed.data.newCode!, fullForm: parsed.data.fullForm }, existing, currentCode);
+      if (!check.ok) return NextResponse.json({ error: check.error }, { status: 400 });
+
+      const newRef = ref.doc(categoryDocId(check.code));
+      const now = new Date();
+      try {
+        await db.runTransaction(async (tx) => {
+          const dest = await tx.get(newRef);
+          if (dest.exists) throw new Error("CATEGORY_CODE_TAKEN");
+          tx.delete(docRef);
+          tx.set(newRef, { collegeId: session.collegeId, code: check.code, fullForm: check.fullForm, createdBy: session.uid, createdAt: now, updatedAt: now });
+        });
+      } catch (err) {
+        if (err instanceof Error && err.message === "CATEGORY_CODE_TAKEN") {
+          return NextResponse.json({ error: `${check.code} is already defined.` }, { status: 409 });
+        }
+        throw err;
+      }
+      return NextResponse.json({ category: { code: check.code, fullForm: check.fullForm } });
+    }
+
+    const check = checkCategoryDefinition({ code: currentCode, fullForm: parsed.data.fullForm }, existing, currentCode);
     if (!check.ok) return NextResponse.json({ error: check.error }, { status: 400 });
 
-    await docRef.update({ fullForm: check.fullForm, updatedAt: new Date() });
-    return NextResponse.json({ category: { code: current.code, fullForm: check.fullForm } });
+    const now = new Date();
+    if (snap.exists) {
+      await docRef.update({ fullForm: check.fullForm, updatedAt: now });
+    } else {
+      await docRef.set({ collegeId: session.collegeId, code: currentCode, fullForm: check.fullForm, createdBy: session.uid, createdAt: now, updatedAt: now });
+    }
+    return NextResponse.json({ category: { code: currentCode, fullForm: check.fullForm } });
   } catch (err) {
     return handleError(err, "[college/subject-categories PATCH]");
   }
 }
 
-// Removes a definition. Refused while any subject still uses the code, so a
-// subject is never left with a category nobody can see the name of.
+// Removes a definition. For a genuine custom category this is refused while
+// any subject still uses the code, so a subject is never left with a category
+// nobody can see the name of. For a standard (AICTE) category this instead
+// resets it to its built-in label - the category itself is always defined,
+// so usage is never a reason to block it.
 export async function DELETE(request: Request) {
   try {
     const session = await requireCollegeMember(...WRITE_ROLES);
@@ -121,12 +174,14 @@ export async function DELETE(request: Request) {
     if (!snap.exists) return NextResponse.json({ error: "That category isn't defined." }, { status: 404 });
 
     const stored = (snap.data() as CategoryDefinition).code;
-    const inUse = await db.collection("colleges").doc(session.collegeId).collection("subjects").where("category", "==", stored).limit(1).get();
-    if (!inUse.empty) {
-      return NextResponse.json({ error: `${stored} is used by existing subjects, so it can't be removed.` }, { status: 409 });
+    if (!isStandardCategoryCode(stored)) {
+      const inUse = await db.collection("colleges").doc(session.collegeId).collection("subjects").where("category", "==", stored).limit(1).get();
+      if (!inUse.empty) {
+        return NextResponse.json({ error: `${stored} is used by existing subjects, so it can't be removed.` }, { status: 409 });
+      }
     }
     await docRef.delete();
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, reset: isStandardCategoryCode(stored) ? { code: stored, fullForm: SUBJECT_CATEGORY_LABELS[stored] } : undefined });
   } catch (err) {
     return handleError(err, "[college/subject-categories DELETE]");
   }
