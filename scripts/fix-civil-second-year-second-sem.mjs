@@ -14,7 +14,10 @@
 //
 // New rows are built field-for-field by the same rules as
 // buildSubjectInstancePayload (src/lib/subjects/services/SubjectInstanceService.ts),
-// which is the only thing the app itself uses to create these documents.
+// which is the only thing the app itself uses to create these documents. It no
+// longer writes universityCode or isCustomized, and neither does this - the
+// nine rows created when this was first run predate that and still carry
+// isCustomized, exactly like all 1100 rows already in the collection.
 //
 //   node scripts/fix-civil-second-year-second-sem.mjs             # dry run
 //   node scripts/fix-civil-second-year-second-sem.mjs --apply     # writes a backup first
@@ -82,7 +85,6 @@ function buildPayload(master, subjectId, serialNumber, now) {
     subjectCode: master.code ?? "",
     serialNumber,
     ...(master.shortCode ? { shortCode: master.shortCode } : {}),
-    ...(master.universityCode ? { universityCode: master.universityCode } : {}),
     courseId: COURSE,
     courseName: master.courseName ?? "",
     academicYear: master.academicYear ?? "",
@@ -106,7 +108,6 @@ function buildPayload(master, subjectId, serialNumber, now) {
     ...(master.isCustom ? { isCustom: master.isCustom } : {}),
     ...(master.isNonTeachingLoad ? { isNonTeachingLoad: master.isNonTeachingLoad } : {}),
     ...(master.excludeFromResume ? { excludeFromResume: master.excludeFromResume } : {}),
-    isCustomized: false,
     isActive: true,
     createdAt: now,
     updatedAt: now,
@@ -157,7 +158,10 @@ for (const c of creates) {
 const keeping = existing.filter((d) => !DUPLICATES.includes(String(d.data().subjectCode)));
 console.log(`\nKEEPING ${keeping.length} row(s) already correct:`);
 for (const d of keeping) console.log(`   sn=${String(d.data().serialNumber ?? "-").padStart(3)}  ${String(d.data().subjectCode).padEnd(12)} ${d.data().subjectName}`);
-console.log(`\nSemester 4 will hold ${keeping.length + creates.length} rows, ${credits} credits (the course structure says 21).`);
+const keptCredits = keeping.reduce((n, d) => n + (Number(d.data().credits) || 0), 0);
+// Count what is already there too, or a re-run with nothing left to create reports 0.
+console.log(`
+Semester 4 will hold ${keeping.length + creates.length} rows, ${credits + keptCredits} credits (the course structure says 21).`);
 
 if (!APPLY) { console.log("\nDRY RUN - nothing was written. Re-run with --apply to make these changes."); process.exit(0); }
 
