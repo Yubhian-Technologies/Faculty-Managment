@@ -254,7 +254,9 @@ export class SubjectMasterService {
         for (const r of chunk) tx.set(r.ref, r.doc);
       });
       if (conflicts.length > 0) {
-        const rowOf = new Map(chunk.map((r) => [`code:${r.ref.id}`, r.row] as const));
+        // Only "code" claims are made in this loop (name is no longer locked - see the
+        // class-level comment), so every conflict here is a code conflict.
+        const rowOf = new Map(chunk.map((r) => [r.ref.id, r.row] as const));
         const partial = chunkNumber > 1
           ? ` Rows already saved (the first ${createdRows.length} of ${ready.length}) stay saved - only the rest need re-importing.`
           : " Nothing was imported.";
@@ -263,9 +265,9 @@ export class SubjectMasterService {
           warnings,
           createdRows,
           failed: conflicts.map((c) => ({
-            row: rowOf.get(`${c.claim.field}:${c.claim.subjectId}`) ?? 0,
-            code: c.claim.field === "code" ? normalizeSubjectCode(c.claim.value) : "-",
-            error: `${c.claim.field === "code" ? `Code ${normalizeSubjectCode(c.claim.value)}` : `The name "${c.claim.value}"`} was just saved by someone else as ${c.ownerCode} (${c.ownerName}).${partial}`,
+            row: rowOf.get(c.claim.subjectId) ?? 0,
+            code: normalizeSubjectCode(c.claim.value),
+            error: `Code ${normalizeSubjectCode(c.claim.value)} was just saved by someone else as ${c.ownerCode} (${c.ownerName}).${partial}`,
           })),
         };
       }
