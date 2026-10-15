@@ -7,10 +7,12 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { holdsRole } from "@/lib/roles/seatRoles";
 import { wantsWholeCollege } from "@/lib/research/listScope";
+import { fetchOwnAndCoListed } from "@/lib/research/ownAndCoListed";
 import { isVisibleToRnD, notifyReviewer, resolveSubmissionRoute, routeFields } from "@/lib/research/coordinatorReview";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import { resolveOwnerDesignation } from "@/lib/publications/resolveOwnerDesignation";
 import { validateSponsoredProjectBody } from "@/lib/research/validateSponsoredProject";
+import { finalizeSponsoredCoPis } from "@/lib/research/finalizeSponsoredCoPis";
 import type {
   PublicationStatus, SponsoredProjectCoPI, SponsoredProjectSanctionedStatus, SponsoredProjectStatus,
   SponsoredProjectType, SponsoredProjectYearData, UserRole,
@@ -34,13 +36,11 @@ export async function GET(request: Request) {
     const uidFilter = isRnD ? searchParams.get("uid") : null;
     const wholeCollege = !uidFilter && wantsWholeCollege(request, isRnD);
     const viewingOthers = wholeCollege || !!uidFilter;
-    let query: FirebaseFirestore.Query = coll;
-    if (uidFilter) query = query.where("uid", "==", uidFilter);
-    else if (!wholeCollege) query = query.where("uid", "==", session.uid);
-
-    const snap = await query.get();
-    const projects = snap.docs
-      .map((d) => ({ id: d.id, ...d.data() }))
+    // Own rows also include the ones that name this person (Co-PI / inventor) - see fetchOwnAndCoListed.
+    const rows = wholeCollege
+      ? (await coll.get()).docs.map((d) => ({ id: d.id, ...d.data() }))
+      : await fetchOwnAndCoListed(coll, uidFilter ?? session.uid);
+    const projects = rows
       .filter((r) => !viewingOthers || isVisibleToRnD((r as { status?: string }).status))
       .sort((a, b) => {
         const aTime = (a as { createdAt?: { toMillis?: () => number } }).createdAt?.toMillis?.() ?? 0;
@@ -135,6 +135,15 @@ export async function POST(request: Request) {
     }
 
     const db = getAdminDb();
+    // Co-PIs from this college are resolved against the faculty records; the rest are kept as typed.
+    let coPis = body.coPis ?? [];
+    let internalAuthorUids: string[] = [];
+    if (coPis.length > 0) {
+      const finalized = await finalizeSponsoredCoPis(db, session.collegeId, coPis);
+      if ("error" in finalized) return NextResponse.json({ error: finalized.error }, { status: 400 });
+      coPis = finalized.coPis;
+      internalAuthorUids = finalized.internalAuthorUids;
+    }
     const ownerSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(uid).get();
     if (!ownerSnap.exists) {
       return NextResponse.json({ error: "Staff member not found" }, { status: 404 });
@@ -174,7 +183,8 @@ export async function POST(request: Request) {
       piDepartment: body.piDepartment ?? "",
       piAffiliation: body.piAffiliation ?? "",
       coPiCount: body.coPiCount ?? null,
-      coPis: body.coPis ?? [],
+      coPis,
+      internalAuthorUids,
       projectStatus,
       dateProposalSubmitted: body.dateProposalSubmitted ?? "",
       amountApplied: body.amountApplied ?? null,

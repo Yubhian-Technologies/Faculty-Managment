@@ -364,7 +364,7 @@ function ProjectFormFields({
             <div key={i} className="grid grid-cols-1 gap-3 sm:grid-cols-2 rounded-md bg-muted/30 p-3">
               <TextInput label={`Name of Student ${i + 1}`} value={s.name} onChange={(v) => updateStudent(i, { name: v })} />
               <TextInput label="Department" value={s.department} onChange={(v) => updateStudent(i, { department: v })} />
-              <TextInput label="Regd. Number" value={s.regdNumber} onChange={(v) => updateStudent(i, { regdNumber: v })} />
+              <TextInput label="Regd. Number (optional)" value={s.regdNumber} onChange={(v) => updateStudent(i, { regdNumber: v })} />
               <TextInput label="Year of Study" value={s.yearOfStudy} onChange={(v) => updateStudent(i, { yearOfStudy: v })} />
             </div>
           ))}

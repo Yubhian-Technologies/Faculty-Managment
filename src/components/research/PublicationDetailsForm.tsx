@@ -204,6 +204,14 @@ export function publicationMissingFields(details: PublicationDetails): string[] 
     if (!text(details.publishedPaperLink)) missing.push("Published Paper Link");
   }
   if (!text(details.citeAs)) missing.push("Cite the paper as");
+  // An author that is not fully filled in used to be saved anyway and quietly
+  // turned into an External author with a blank name (an Internal faculty with
+  // no one picked) - so say which one is incomplete instead. A student's
+  // registration number is optional.
+  details.authors.forEach((a, i) => {
+    const complete = a.isInternal && a.authorType === "FACULTY" ? !!a.facultyId?.trim() : !!a.name?.trim();
+    if (!complete) missing.push(`Author ${i + 1} details`);
+  });
   if (!isBook) {
     if (details.hasInternationalCollaboration === undefined) missing.push("Any International Collaboration?");
     if (details.hasIndustryCollaboration === undefined) missing.push("Any Industry Collaboration?");
@@ -383,6 +391,7 @@ function AuthorFields({
           {author.authorType === "FACULTY" ? (
             <InternalFacultyPicker
               facultyId={author.facultyId ?? ""}
+              allowFormer
               label={<>Faculty</>}
               onPick={(p) => update({ facultyId: p.facultyId, name: p.name })}
             />
@@ -393,7 +402,7 @@ function AuthorFields({
                 <Input value={author.name} onChange={(e) => update({ name: e.target.value })} placeholder="Student name" />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Student Registration Number</Label>
+                <Label className="text-xs">Student Registration Number <span className="text-muted-foreground font-normal">(optional)</span></Label>
                 <Input value={author.studentRegistrationNumber ?? ""} onChange={(e) => update({ studentRegistrationNumber: e.target.value })} />
               </div>
             </>

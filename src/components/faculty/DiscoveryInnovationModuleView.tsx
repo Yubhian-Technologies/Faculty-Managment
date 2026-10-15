@@ -196,6 +196,7 @@ function InventorFields({
           {inventor.authorType === "FACULTY" ? (
             <InternalFacultyPicker
               facultyId={inventor.facultyId ?? ""}
+              allowFormer
               label={<>Faculty<RequiredMark required /></>}
               onPick={(p) => update({ facultyId: p.facultyId, name: p.name })}
             />
@@ -206,7 +207,7 @@ function InventorFields({
                 <Input value={inventor.name} onChange={(e) => update({ name: e.target.value })} placeholder="Student name" />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Student Registration Number<RequiredMark required /></Label>
+                <Label className="text-xs">Student Registration Number <span className="text-muted-foreground font-normal">(optional)</span></Label>
                 <Input value={inventor.studentRegistrationNumber ?? ""} onChange={(e) => update({ studentRegistrationNumber: e.target.value })} />
               </div>
             </>
@@ -266,15 +267,21 @@ function DiscoveryInnovationRow({
   isOwnProfile?: boolean;
   onEdit?: (record: DiscoveryInnovationRequest) => void;
 }) {
+  // Also listed for a Co-PI / inventor named on it: they see it (and where it stands) but only the submitter edits.
+  const viewerUid = useAuthStore((s) => s.user?.uid);
+  const isSubmitter = record.uid === viewerUid;
   return (
     <div className="rounded-md border bg-muted/20 shadow-sm p-2 space-y-2">
+      {isOwnProfile && !isSubmitter && (
+        <p className="text-xs text-muted-foreground">Submitted by {record.ownerName}</p>
+      )}
       {isOwnProfile && (
         <div className="flex items-center gap-2">
           {record.status === "PENDING" && <Badge variant="pending" className="text-xs">Pending Verification</Badge>}
           {record.status === "COORDINATOR_REVIEW" && <Badge variant="pending" className="text-xs">With R&amp;D Coordinator</Badge>}
           {record.status === "REJECTED" && <Badge variant="rejected" className="text-xs">Rejected</Badge>}
           {record.status === "SENT_BACK" && <Badge variant="rejected" className="text-xs">Sent Back</Badge>}
-          {onEdit && (
+          {onEdit && isSubmitter && (
             <button type="button" onClick={() => onEdit(record)} className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1">
               <Pencil className="h-3 w-3" />
               {record.status === "REJECTED" || record.status === "SENT_BACK"
@@ -299,14 +306,6 @@ function DiscoveryInnovationRow({
           <Field label="Status" value={record.iprStatus === "GRANTED" ? "Granted" : "Published"} />
           <Field label="Application Number" value={record.applicationNumber} />
           <Field label="Date of Filing" value={record.dateOfFiling} />
-          <Field label="Student Patent" value={record.isStudentPatent} />
-          {record.isStudentPatent === "YES" && (
-            <>
-              <Field label="Student Name" value={record.studentName} />
-              <Field label="Regd. No." value={record.studentRegistrationNumber} />
-              <Field label="Student Department" value={record.studentDepartment} />
-            </>
-          )}
           <Field label="Commercialized" value={record.isCommercialized} />
           <Field label="SDGs Mapped" value={record.sdgGoals.length > 0 ? record.sdgGoals.join(", ") : undefined} />
         </div>
@@ -350,10 +349,6 @@ interface RecordFormState {
   applicants: IprApplicant[];
   inventorsCount: string;
   inventors: IprInventor[];
-  isStudentPatent: "YES" | "NO" | "";
-  studentName: string;
-  studentRegistrationNumber: string;
-  studentDepartment: string;
   publishedProofUrl: string;
   grantedProofUrl: string;
   isCommercialized: "YES" | "NO" | "";
@@ -373,7 +368,6 @@ function initialFormState(editing: DiscoveryInnovationRequest | null): RecordFor
     return {
       iprType: "", iprStatus: "", applicationNumber: "", title: "", sdgGoals: [], dateOfFiling: "",
       datePublished: "", dateGranted: "", applicantsCount: "", applicants: [], inventorsCount: "", inventors: [],
-      isStudentPatent: "", studentName: "", studentRegistrationNumber: "", studentDepartment: "",
       publishedProofUrl: "", grantedProofUrl: "", isCommercialized: "",
       commercializationStatus: "", commercializationDate: "", licenseePartner: "", commercializationType: "",
       commercializationValue: "", revenueGenerated: "", commercializedProofUrl: "", revenueGeneratedProofUrl: "",
@@ -390,8 +384,6 @@ function initialFormState(editing: DiscoveryInnovationRequest | null): RecordFor
     inventors: (editing.inventors ?? []).map((inv) => (
       inv.category === "CORRESPONDING_AUTHOR" ? { ...inv, category: "CO_AUTHOR" as const } : inv
     )),
-    isStudentPatent: editing.isStudentPatent ?? "", studentName: editing.studentName ?? "",
-    studentRegistrationNumber: editing.studentRegistrationNumber ?? "", studentDepartment: editing.studentDepartment ?? "",
     publishedProofUrl: editing.publishedProofUrl ?? "",
     grantedProofUrl: editing.grantedProofUrl ?? "", isCommercialized: editing.isCommercialized ?? "",
     commercializationStatus: editing.commercializationStatus ?? "", commercializationDate: editing.commercializationDate ?? "",
@@ -464,17 +456,14 @@ function RecordFormFields({
   const applicantsValid = form.applicants.length > 0 && form.applicants.every((a) => a.name.trim().length > 0);
   const inventorsValid = form.inventors.length > 0 && form.inventors.every((inv) => {
     if (!inv.name.trim()) return false;
-    if (inv.isInternal) return inv.authorType === "FACULTY" ? !!inv.facultyId?.trim() : !!inv.studentRegistrationNumber?.trim();
+    // A student inventor needs only a name (the registration number is optional), an internal faculty one a picked person.
+    if (inv.isInternal) return inv.authorType === "FACULTY" ? !!inv.facultyId?.trim() : true;
     return !!inv.affiliationCollegeName.trim();
   });
   const isValid =
     !!form.iprType && !!form.iprStatus && form.applicationNumber.trim().length > 1 &&
     form.title.trim().length > 1 && !!form.dateOfFiling && !!form.datePublished &&
     (form.iprStatus !== "GRANTED" || !!form.dateGranted) &&
-    !!form.isStudentPatent &&
-    (form.isStudentPatent !== "YES" || (
-      !!form.studentName.trim() && !!form.studentRegistrationNumber.trim() && !!form.studentDepartment.trim()
-    )) &&
     form.sdgGoals.length > 0 &&
     !!form.applicantsCount && applicantsValid &&
     !!form.inventorsCount && inventorsValid &&
@@ -497,11 +486,6 @@ function RecordFormFields({
         applicants: form.applicants,
         inventorsCount: toNumberOrUndefined(form.inventorsCount),
         inventors: form.inventors,
-        isStudentPatent: form.isStudentPatent || undefined,
-        // Empty (not undefined) when "No" so an edit that flips Yes -> No clears the old values.
-        studentName: form.isStudentPatent === "YES" ? form.studentName.trim() : "",
-        studentRegistrationNumber: form.isStudentPatent === "YES" ? form.studentRegistrationNumber.trim() : "",
-        studentDepartment: form.isStudentPatent === "YES" ? form.studentDepartment.trim() : "",
         publishedProofUrl: form.publishedProofUrl || undefined,
         grantedProofUrl: form.grantedProofUrl || undefined,
         isCommercialized: form.isCommercialized || undefined,
@@ -580,23 +564,6 @@ function RecordFormFields({
               <DateInput label="Date of Granted" value={form.dateGranted} onChange={(v) => set("dateGranted", v)} required />
             )}
           </div>
-          <div className="space-y-2">
-            <Label>Is this Student Patent<RequiredMark required /></Label>
-            <Select value={form.isStudentPatent} onValueChange={(v) => set("isStudentPatent", v as "YES" | "NO")}>
-              <SelectTrigger className="max-w-[200px]"><SelectValue placeholder="Select" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="YES">Yes</SelectItem>
-                <SelectItem value="NO">No</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          {form.isStudentPatent === "YES" && (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 rounded-md bg-muted/30 p-3">
-              <TextInput label="Student Name" value={form.studentName} onChange={(v) => set("studentName", v)} required />
-              <TextInput label="Regd. No." value={form.studentRegistrationNumber} onChange={(v) => set("studentRegistrationNumber", v)} required />
-              <TextInput label="Department" value={form.studentDepartment} onChange={(v) => set("studentDepartment", v)} required />
-            </div>
-          )}
         </div>
 
         <div className="space-y-2">

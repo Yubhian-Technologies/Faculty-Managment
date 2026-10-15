@@ -107,7 +107,9 @@ function PublicationRow({
             <div className={`grid gap-2 ${FACT_GRID_COLS_4}`}>
               <Field label="Type" value={pub.details.type} />
               <Field label="Research Domain" value={pub.details.researchDomain} />
-              <Field label="Quartile" value={pub.details.quartile} />
+              {/* Only a Journal has a quartile - a Conference / Book Chapter / Text Book never
+                  asks for one, so showing the label there would only ever read "-". */}
+              {pub.details.type === "JOURNAL" && <Field label="Quartile" value={pub.details.quartile} />}
               <Field label="Internal / External Authors" value={`${pub.details.internalAuthorsCount} / ${pub.details.externalAuthorsCount}`} />
             </div>
           </div>

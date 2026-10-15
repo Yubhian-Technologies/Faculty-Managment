@@ -30,7 +30,6 @@ export async function GET() {
           .get()
       )
     );
-
     const byUid = new Map<string, Omit<MentorOption, "menteeCount">>();
     for (const snap of snaps) {
       for (const d of snap.docs) {
@@ -39,6 +38,17 @@ export async function GET() {
         const name = facultyDisplayName(f);
         if (!uid || !name || byUid.has(uid)) continue;
         byUid.set(uid, { uid, name, department: f.department ?? "", designation: f.designation ?? "" });
+      }
+    }
+
+    // The HOD may mentor too: their own faculty record is offered even when it is filed outside
+    // the departments above (e.g. a Department Office login or a managed branch).
+    if (!byUid.has(session.uid)) {
+      const selfSnap = await collegeRef.collection("facultyMembers").where("userUid", "==", session.uid).limit(1).get();
+      const f = selfSnap.docs[0]?.data() as { legalName?: string; honorific?: string; department?: string; designation?: string; status?: string } | undefined;
+      const name = f ? facultyDisplayName(f) : "";
+      if (f && name && (AVAILABLE_FACULTY_STATUSES as string[]).includes(f.status ?? "")) {
+        byUid.set(session.uid, { uid: session.uid, name, department: f.department ?? "", designation: f.designation ?? "" });
       }
     }
 
@@ -51,7 +61,7 @@ export async function GET() {
     const countByUid = new Map(counts);
 
     const mentors: MentorOption[] = [...byUid.values()]
-      .map((m) => ({ ...m, menteeCount: countByUid.get(m.uid) ?? 0 }))
+      .map((m) => ({ ...m, menteeCount: countByUid.get(m.uid) ?? 0, ...(m.uid === session.uid ? { isSelf: true } : {}) }))
       .sort((a, b) => a.name.localeCompare(b.name));
     return NextResponse.json({ mentors });
   } catch (err) {

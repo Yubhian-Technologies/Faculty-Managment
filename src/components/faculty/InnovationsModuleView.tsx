@@ -283,7 +283,7 @@ function RecordFormFields({
             <div className="space-y-4 rounded-lg border p-3">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <TextInput label="Name of the Student" value={form.studentName} onChange={(v) => set("studentName", v)} required />
-                <TextInput label="Regd. No." value={form.studentRegdNo} onChange={(v) => set("studentRegdNo", v)} required />
+                <TextInput label="Regd. No. (optional)" value={form.studentRegdNo} onChange={(v) => set("studentRegdNo", v)} />
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <TextInput label="Year of Study" value={form.studentYearOfStudy} onChange={(v) => set("studentYearOfStudy", v)} required />

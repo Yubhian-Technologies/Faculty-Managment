@@ -154,7 +154,7 @@ function AssignView({ mentors, onChanged }: { mentors: MentorOption[]; onChanged
             <SelectTrigger><SelectValue placeholder="Pick a faculty member" /></SelectTrigger>
             <SelectContent>
               {mentors.map((m) => (
-                <SelectItem key={m.uid} value={m.uid}>{`${m.name} (${m.menteeCount})`}</SelectItem>
+                <SelectItem key={m.uid} value={m.uid}>{`${m.name}${m.isSelf ? " (You)" : ""} · ${m.menteeCount} mentee${m.menteeCount === 1 ? "" : "s"}`}</SelectItem>
               ))}
             </SelectContent>
           </Select>

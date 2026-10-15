@@ -39,31 +39,38 @@ export interface MenteeAttendance {
   total: { held: number; attended: number; percent: number | null };
 }
 
+/** Every semester the student has reached (years 1..their year, start date passed), with its dates and year. */
+export async function loadStudentSemesterRanges(
+  db: Firestore,
+  collegeId: string,
+  student: Pick<StudentRecord, "courseId" | "year">
+): Promise<SemesterRange[]> {
+  if (!student.courseId || student.year < 1) return [];
+  const courseId = student.courseId;
+  const timings = await Promise.all(
+    Array.from({ length: student.year }, (_, i) => i + 1).map(async (year): Promise<YearTiming | null> => {
+      const timing: CourseYearTiming | null = await loadEffectiveTiming(db, collegeId, courseId, year);
+      if (!timing?.semesters?.length) return null;
+      return {
+        year,
+        semesters: timing.semesters.map((s) => ({
+          semester: s.semester,
+          startDate: toDateStr(s.startDate),
+          endDate: toDateStr(s.endDate),
+        })),
+      };
+    })
+  );
+  return semesterOptionsForStudent(timings.filter((t): t is YearTiming => t !== null), student.year, istDateKey(new Date()));
+}
+
 export async function loadMenteeAttendance(
   db: Firestore,
   collegeId: string,
   student: StudentRecord & { id: string },
   semesterParam: number | null
 ): Promise<MenteeAttendance> {
-  let semesters: SemesterRange[] = [];
-  if (student.courseId && student.year >= 1) {
-    const courseId = student.courseId;
-    const timings = await Promise.all(
-      Array.from({ length: student.year }, (_, i) => i + 1).map(async (year): Promise<YearTiming | null> => {
-        const timing: CourseYearTiming | null = await loadEffectiveTiming(db, collegeId, courseId, year);
-        if (!timing?.semesters?.length) return null;
-        return {
-          year,
-          semesters: timing.semesters.map((s) => ({
-            semester: s.semester,
-            startDate: toDateStr(s.startDate),
-            endDate: toDateStr(s.endDate),
-          })),
-        };
-      })
-    );
-    semesters = semesterOptionsForStudent(timings.filter((t): t is YearTiming => t !== null), student.year, istDateKey(new Date()));
-  }
+  const semesters = await loadStudentSemesterRanges(db, collegeId, student);
 
   const today = istDateKey(new Date());
   const picked = semesterParam != null ? semesters.find((s) => s.semester === semesterParam) ?? null : null;

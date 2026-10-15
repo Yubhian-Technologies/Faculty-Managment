@@ -7,12 +7,20 @@ import { buildOwnProfileGroups } from "@/lib/students/ownProfile";
 import { authorizeMentoringStudent } from "@/lib/mentoring/access";
 import { mentoringErrorResponse } from "@/lib/mentoring/http";
 import { loadMenteeAttendance, loadMenteeInternalMarks, loadMenteeResults } from "@/lib/mentoring/progress";
+import { buildRecordProfile } from "@/lib/mentoring/profileRecord";
+import { entriesCol, loadProfileOverrides, toEntry } from "@/lib/mentoring/recordStore";
+import { buildSemesterSheet, loadSemesterOptions } from "@/lib/mentoring/semesterSheet";
 
 // One mentee's progress, a part at a time so each tab of the page reads only what it shows:
 //   ?part=profile     (default) identity + every roster detail group
 //   ?part=attendance  per-subject attendance (&semester=<n>, default: current semester so far)
 //   ?part=results     published semester results with SGPA / CGPA and backlogs
 //   ?part=internal    submitted internal exam marks, subject by subject
+// and, for the Student Mentoring Record (the college's booklet):
+//   ?part=record      page 1 + 7.1: the student's details, with what the mentor still can fill in
+//   ?part=semesters   the semester pages the booklet has for this student
+//   ?part=sheet       one semester page (&semester=<n>): subjects, attendance, marks, grades, SGPA / CGPA
+//   ?part=entries     every table / list row the mentor has written (scholarships, meetings, ...)
 // Read-only. Allowed for the student's mentor and the HOD who manages them.
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -55,8 +63,25 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         return NextResponse.json(await loadMenteeResults(db, session.collegeId, student.id));
       case "internal":
         return NextResponse.json(await loadMenteeInternalMarks(db, session.collegeId, student));
+      case "record": {
+        const overrides = await loadProfileOverrides(db, session.collegeId, student.id);
+        return NextResponse.json({ via: access.via, ...buildRecordProfile(student as unknown as Record<string, unknown>, overrides) });
+      }
+      case "semesters":
+        return NextResponse.json({ semesters: await loadSemesterOptions(db, session.collegeId, student) });
+      case "sheet": {
+        const sem = searchParams.get("semester");
+        if (sem == null || !/^\d{1,2}$/.test(sem)) return NextResponse.json({ error: "semester is required" }, { status: 400 });
+        const sheet = await buildSemesterSheet(db, session.collegeId, student, Number(sem));
+        if (!sheet) return NextResponse.json({ error: "This student has no such semester yet" }, { status: 404 });
+        return NextResponse.json({ sheet });
+      }
+      case "entries": {
+        const snap = await entriesCol(db, session.collegeId, student.id).limit(1000).get();
+        return NextResponse.json({ entries: snap.docs.map(toEntry) });
+      }
       default:
-        return NextResponse.json({ error: "part must be profile, attendance, results or internal" }, { status: 400 });
+        return NextResponse.json({ error: "part must be profile, attendance, results, internal, record, semesters, sheet or entries" }, { status: 400 });
     }
   } catch (err) {
     return mentoringErrorResponse(err, "[college/mentoring/students/[id] GET]");

@@ -46,7 +46,8 @@ export async function POST(request: Request) {
       if (!(AVAILABLE_FACULTY_STATUSES as string[]).includes(fac.status ?? "")) {
         return NextResponse.json({ error: "This faculty member is no longer available to mentor" }, { status: 400 });
       }
-      if (!editableDepartmentNames(scope).includes(fac.department ?? "")) {
+      // The HOD may always pick themselves.
+      if (mentorUid !== session.uid && !editableDepartmentNames(scope).includes(fac.department ?? "")) {
         return NextResponse.json({ error: "Mentor is outside your department" }, { status: 403 });
       }
       mentorName = facultyDisplayName(fac);

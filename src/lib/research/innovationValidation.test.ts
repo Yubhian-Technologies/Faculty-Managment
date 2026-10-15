@@ -13,6 +13,11 @@ describe("innovationMissingFields", () => {
     expect(innovationMissingFields(base)).toEqual([]);
   });
 
+  it("does not need the student's registration number", () => {
+    expect(innovationMissingFields({ ...base, studentRegdNo: "" })).toEqual([]);
+    expect(innovationMissingFields({ ...base, studentRegdNo: undefined })).toEqual([]);
+  });
+
   it("requires every starred field, not just title/type", () => {
     const missing = innovationMissingFields({});
     for (const label of ["Academic Year", "TRL Level", "Problem Statement", "Brief Description", "Prototype Developed", "Remarks"]) {

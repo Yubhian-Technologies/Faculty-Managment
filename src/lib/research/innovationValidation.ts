@@ -58,7 +58,7 @@ export function innovationMissingFields(b: InnovationValidationInput): string[] 
     }
   } else if (b.innovatorType === "STUDENT") {
     need(b.studentName, "Name of the Student");
-    need(b.studentRegdNo, "Regd. No.");
+    // Regd. No. is optional.
     need(b.studentYearOfStudy, "Year of Study");
     need(b.studentDepartment, "Department");
     need(b.facultyMentorName, "Name of the Faculty Mentor");
