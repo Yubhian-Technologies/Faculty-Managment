@@ -7,6 +7,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { holdsRole } from "@/lib/roles/seatRoles";
 import { wantsWholeCollege } from "@/lib/research/listScope";
+import { fetchOwnAndCoListed } from "@/lib/research/ownAndCoListed";
 import { finalizeFacultyConsultants } from "@/lib/research/finalizeConsultants";
 import { validateConsultancyBody } from "@/lib/research/validateConsultancyProject";
 import { isVisibleToRnD, notifyReviewer, resolveSubmissionRoute, routeFields } from "@/lib/research/coordinatorReview";
@@ -39,13 +40,11 @@ export async function GET(request: Request) {
     const uidFilter = isRnD ? searchParams.get("uid") : null;
     const wholeCollege = !uidFilter && wantsWholeCollege(request, isRnD);
     const viewingOthers = wholeCollege || !!uidFilter;
-    let query: FirebaseFirestore.Query = coll;
-    if (uidFilter) query = query.where("uid", "==", uidFilter);
-    else if (!wholeCollege) query = query.where("uid", "==", session.uid);
-
-    const snap = await query.get();
-    const projects = snap.docs
-      .map((d) => ({ id: d.id, ...d.data() }))
+    // Own rows also include the projects that name this person as a consultant - see fetchOwnAndCoListed.
+    const rows = wholeCollege
+      ? (await coll.get()).docs.map((d) => ({ id: d.id, ...d.data() }))
+      : await fetchOwnAndCoListed(coll, uidFilter ?? session.uid);
+    const projects = rows
       .filter((r) => !viewingOthers || isVisibleToRnD((r as { status?: string }).status))
       .sort((a, b) => {
         const aTime = (a as { createdAt?: { toMillis?: () => number } }).createdAt?.toMillis?.() ?? 0;

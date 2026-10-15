@@ -5,9 +5,9 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { findOwnStudent } from "@/lib/students/ownContext";
 import { passwordChangeRequired, passwordChangeRequiredResponse } from "@/lib/students/passwordGate";
-import { batchesCol, loadResultRules, recordsCol } from "@/lib/examResults/store";
-import { buildStudentResults, type StudentResultSitting } from "@/lib/examResults/studentResults";
-import type { ExamResultBatch, ExamResultRecord } from "@/types/examResults";
+import { loadResultRules } from "@/lib/examResults/store";
+import { buildStudentResults } from "@/lib/examResults/studentResults";
+import { loadPublishedSittings } from "@/lib/examResults/studentSittings";
 
 // The signed-in student's own semester results - always resolved from
 // session.uid, never an id from the client. Only PUBLISHED results of
@@ -24,27 +24,10 @@ export async function GET() {
     }
     if (passwordChangeRequired(own.student)) return passwordChangeRequiredResponse();
 
-    const [{ rules }, snap] = await Promise.all([
+    const [{ rules }, sittings] = await Promise.all([
       loadResultRules(db, session.collegeId),
-      recordsCol(db, session.collegeId).where("studentId", "==", own.student.id).get(),
+      loadPublishedSittings(db, session.collegeId, own.student.id),
     ]);
-    const records = snap.docs
-      .map((d) => d.data() as ExamResultRecord & { createdAt?: { toMillis?: () => number } })
-      .filter((r) => r.status === "PUBLISHED");
-    const batchIds = [...new Set(records.map((r) => r.batchId))];
-    const batches = batchIds.length
-      ? await db.getAll(...batchIds.map((id) => batchesCol(db, session.collegeId).doc(id)))
-      : [];
-    const published = new Set(batches.filter((b) => b.exists && (b.data() as ExamResultBatch).status === "PUBLISHED").map((b) => b.id));
-
-    const sittings: StudentResultSitting[] = records
-      .filter((r) => published.has(r.batchId))
-      .map((r) => ({
-        semester: r.semester, year: r.year, academicYear: r.academicYear, examHeld: r.examHeld, examType: r.examType, batchId: r.batchId,
-        ...(r.revaluationOf ? { revaluationOf: r.revaluationOf } : {}),
-        ...(r.revaluesBatchId ? { revaluesBatchId: r.revaluesBatchId } : {}),
-        at: r.createdAt?.toMillis?.() ?? 0, subjects: r.subjects ?? [],
-      }));
 
     return NextResponse.json({
       results: buildStudentResults(sittings, rules),
