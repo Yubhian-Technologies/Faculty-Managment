@@ -98,7 +98,10 @@ function AssignView({ mentors, onChanged }: { mentors: MentorOption[]; onChanged
     () => [...sections].sort((a, b) => (a.courseName ?? "").localeCompare(b.courseName ?? "") || a.year - b.year || a.name.localeCompare(b.name)),
     [sections]
   );
-  const allPicked = !!students && students.length > 0 && picked.size === students.length;
+  // A student who already has a mentor is not offered for selection: remove the mentor (row button),
+  // then they show up here again (the mentoring record stays with the student).
+  const unassigned = useMemo(() => (students ?? []).filter((s) => !s.mentorUid), [students]);
+  const allPicked = unassigned.length > 0 && unassigned.every((s) => picked.has(s.id));
 
   function toggle(id: string, on: boolean) {
     setPicked((prev) => {
@@ -108,14 +111,14 @@ function AssignView({ mentors, onChanged }: { mentors: MentorOption[]; onChanged
     });
   }
 
-  async function submit(uid: string | null) {
-    if (picked.size === 0) return;
+  async function submit(uid: string | null, ids: string[] = [...picked]) {
+    if (ids.length === 0) return;
     setBusy(true);
     try {
       const res = await fetch("/api/college/mentoring/assign", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mentorUid: uid, studentIds: [...picked] }),
+        body: JSON.stringify({ mentorUid: uid, studentIds: ids }),
       });
       const d = (await res.json().catch(() => ({}))) as { assigned?: string[]; skipped?: { id: string; reason: string }[]; error?: string };
       if (!res.ok) throw new Error(d.error || "Could not save");
@@ -162,9 +165,6 @@ function AssignView({ mentors, onChanged }: { mentors: MentorOption[]; onChanged
         <Button disabled={busy || picked.size === 0 || !mentorUid} onClick={() => submit(mentorUid)}>
           Assign {picked.size > 0 ? `${picked.size} selected` : ""}
         </Button>
-        <Button variant="outline" disabled={busy || picked.size === 0} onClick={() => submit(null)}>
-          Remove mentor
-        </Button>
       </div>
 
       {!sectionId && <p className="text-sm text-muted-foreground">Pick a section to see its students and their mentors.</p>}
@@ -176,7 +176,7 @@ function AssignView({ mentors, onChanged }: { mentors: MentorOption[]; onChanged
             <table className="w-full text-sm">
               <thead><tr className="text-left text-muted-foreground border-b">
                 <th className="py-2 pr-3 w-8">
-                  <Checkbox checked={allPicked} onCheckedChange={(v) => setPicked(v === true ? new Set(students.map((s) => s.id)) : new Set())} aria-label="Select all" />
+                  <Checkbox checked={allPicked} onCheckedChange={(v) => setPicked(v === true ? new Set(unassigned.map((s) => s.id)) : new Set())} aria-label="Select all students without a mentor" />
                 </th>
                 <th className="py-2 pr-3 font-medium">Roll No</th>
                 <th className="py-2 pr-3 font-medium">Name</th>
@@ -186,13 +186,20 @@ function AssignView({ mentors, onChanged }: { mentors: MentorOption[]; onChanged
                 {students.map((s) => (
                   <tr key={s.id} className="border-b last:border-0">
                     <td className="py-2 pr-3">
-                      <Checkbox checked={picked.has(s.id)} onCheckedChange={(v) => toggle(s.id, v === true)} aria-label={`Select ${s.name}`} />
+                      {!s.mentorUid && <Checkbox checked={picked.has(s.id)} onCheckedChange={(v) => toggle(s.id, v === true)} aria-label={`Select ${s.name}`} />}
                     </td>
                     <td className="py-2 pr-3 tabular-nums">{s.rollNumber || "—"}</td>
                     <td className="py-2 pr-3">
                       <Link href={`/hod/mentoring/${s.id}`} className="hover:underline">{s.name}</Link>
                     </td>
-                    <td className="py-2">{s.mentorName ? <Badge variant="secondary">{s.mentorName}</Badge> : <span className="text-muted-foreground">Not assigned</span>}</td>
+                    <td className="py-2">
+                      {s.mentorName ? (
+                        <span className="inline-flex items-center gap-2">
+                          <Badge variant="secondary">{s.mentorName}</Badge>
+                          <button type="button" disabled={busy} onClick={() => submit(null, [s.id])} className="text-xs text-destructive hover:underline disabled:opacity-50">Remove</button>
+                        </span>
+                      ) : <span className="text-muted-foreground">Not assigned</span>}
+                    </td>
                   </tr>
                 ))}
               </tbody>

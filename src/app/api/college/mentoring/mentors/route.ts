@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { editableDepartmentNames } from "@/lib/departments/scope";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { loadHodStudentScope } from "@/lib/mentoring/access";
+import { resolveSelfMentor } from "@/lib/mentoring/selfMentor";
 import { mentoringErrorResponse } from "@/lib/mentoring/http";
 import { AVAILABLE_FACULTY_STATUSES } from "@/types";
 import type { MentorOption } from "@/types/mentoring";
@@ -20,8 +21,6 @@ export async function GET() {
     const collegeRef = db.collection("colleges").doc(session.collegeId);
     const { scope } = await loadHodStudentScope(db, session.collegeId, session.uid);
     const departments = [...new Set(editableDepartmentNames(scope))];
-    if (departments.length === 0) return NextResponse.json({ mentors: [] });
-
     const snaps = await Promise.all(
       departments.map((department) =>
         collegeRef.collection("facultyMembers")
@@ -44,12 +43,8 @@ export async function GET() {
     // The HOD may mentor too: their own faculty record is offered even when it is filed outside
     // the departments above (e.g. a Department Office login or a managed branch).
     if (!byUid.has(session.uid)) {
-      const selfSnap = await collegeRef.collection("facultyMembers").where("userUid", "==", session.uid).limit(1).get();
-      const f = selfSnap.docs[0]?.data() as { legalName?: string; honorific?: string; department?: string; designation?: string; status?: string } | undefined;
-      const name = f ? facultyDisplayName(f) : "";
-      if (f && name && (AVAILABLE_FACULTY_STATUSES as string[]).includes(f.status ?? "")) {
-        byUid.set(session.uid, { uid: session.uid, name, department: f.department ?? "", designation: f.designation ?? "" });
-      }
+      const self = await resolveSelfMentor(db, session.collegeId, session.uid);
+      if (self) byUid.set(session.uid, { uid: session.uid, ...self });
     }
 
     const counts = await Promise.all(
