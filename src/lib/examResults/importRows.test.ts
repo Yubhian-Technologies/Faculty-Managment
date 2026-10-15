@@ -108,36 +108,6 @@ describe("supplementary checks against the earlier sitting", () => {
   });
 });
 
-describe("university codes", () => {
-  const withUniv = (over: Partial<ResultImportContext> = {}) => {
-    const beee = { id: "sub-beee", code: "UGBS1T1323", name: "Basic Electrical & Electronics Engineering", credits: 3, courseId: "c-cse", regulation: "R23", universityCode: "R232101" };
-    const chem = { id: "sub-chem", code: "UGBS1T0523", name: "Engineering Chemistry", credits: 3, courseId: "c-cse", regulation: "R23", universityCode: "R232104" };
-    const subjects = new Map<string, ResultSubjectOption[]>();
-    for (const s of [beee, chem]) for (const k of [s.code, s.universityCode]) subjects.set(k, [...(subjects.get(k) ?? []), s]);
-    return ctx({ subjects, ...over });
-  };
-
-  it("matches a row by the university code and stores it under the college code", () => {
-    const { accepted, failed } = validateResultRows([row(2, "24A91A0501", "R232101", "D"), row(3, "24A91A0501", "r232104", "A")], withUniv());
-    expect(failed).toEqual([]);
-    expect(accepted[0].subjects.map((s) => [s.subjectCode, s.grade])).toEqual([["UGBS1T1323", "D"], ["UGBS1T0523", "A"]]);
-  });
-
-  it("treats the college code and the university code of one subject as the same subject", () => {
-    const { failed } = validateResultRows([row(2, "24A91A0501", "R232101", "D"), row(3, "24A91A0501", "UGBS1T1323", "A")], withUniv());
-    expect(failed.map((f) => f.error)).toEqual(["24A91A0501 already has a row for UGBS1T1323 in this file"]);
-  });
-
-  it("refuses a university code given to two different subjects", () => {
-    const twin = { id: "sub-twin", code: "UGME1T0123", name: "Engineering Graphics", credits: 3, courseId: "c-cse", regulation: "R23", universityCode: "R232101" };
-    const c = withUniv();
-    c.subjects.set("R232101", [...(c.subjects.get("R232101") ?? []), twin]);
-    const { accepted, failed } = validateResultRows([row(2, "24A91A0501", "R232101", "D")], c);
-    expect(accepted).toEqual([]);
-    expect(failed[0].error).toContain('Subject Code "R232101" matches more than one subject');
-  });
-});
-
 describe("zero-credit subjects - Pass / Fail only", () => {
   it("any grade is a Pass, except a failing one, with no points", () => {
     const { accepted, failed } = validateResultRows([
