@@ -158,7 +158,7 @@ export async function POST(request: Request) {
     }
 
     if (details) {
-      const isbnError = await checkIsbnForSave(db, session.collegeId, details.type, details.isbnNumber);
+      const isbnError = checkIsbnForSave(details.type, details.isbnNumber);
       if (isbnError) return NextResponse.json({ error: isbnError }, { status: 400 });
     }
 
