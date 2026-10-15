@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import { Search, Download, FileSpreadsheet, Loader2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
+import { useCollegeInfo } from "@/hooks/useCollegeInfo";
 import { FacultyLeisureFilter } from "@/components/timetable/FacultyLeisureFilter";
 import { TeachingNowFilter } from "@/components/timetable/TeachingNowFilter";
 import { currentWeekDates } from "@/lib/utils";
@@ -14,9 +15,28 @@ import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
 import { courseForDepartmentPick, timetableDepartmentOptions, yearsForDepartmentPick } from "@/lib/departments/timetablePick";
 import { sectionIsOfCore } from "@/lib/departments/sectionDepartmentPick";
 import { InstitutionalTimetableTable } from "@/components/timetable/InstitutionalTimetableTable";
-import { ordinalYear } from "@/lib/timetable/gridModel";
+import { ordinalYear, resolveTimetableDays, latestEffectiveDate } from "@/lib/timetable/gridModel";
+import { buildSectionTimetablePdfHtml } from "@/lib/timetable/sectionTimetablePdf";
+import { buildSectionTimetableXlsxBuffer } from "@/lib/timetable/timetableExport";
+import { renderMultiHtmlToPdf } from "@/lib/pdf/htmlToPdf";
 import type { Course, Department, Section, CourseYearTiming, TimetableSlot, Subject, DayOfWeek } from "@/types";
 import { yearSemesterLabelIn, semesterInYearLabel } from "@/lib/academic/format";
+
+// One section's current-semester timetable, as GET /api/college/timetable-slots/export-all
+// returns it - everything buildSectionTimetablePdfHtml/buildSectionTimetableXlsxBuffer need,
+// per section, for the "Download all departments" bulk export below.
+interface BulkSectionEntry {
+  sectionId: string;
+  sectionName: string;
+  departmentName: string;
+  courseName: string;
+  year: number;
+  batch: string;
+  regulation?: string;
+  currentSemester: number | null;
+  timing: CourseYearTiming;
+  slots: TimetableSlot[];
+}
 
 // Read-only view of PUBLISHED timetables for the Principal and Vice Principal.
 // Reads `timetableSlots`, which only ever contains published slots - drafts live
@@ -41,6 +61,130 @@ export default function PrincipalTimetablePage() {
   const canSeeTeachingNow = !!user && !NO_TEACHING_NOW_ROLES.includes(user.role);
   const [panel, setPanel] = useState<"" | "leisure" | "teaching">("");
   const showLeisure = panel === "leisure";
+
+  // "ALL" view: every department's own current-semester timetable, bundled
+  // into one download instead of picking a single section. Independent of
+  // the leisure/teaching tabs above (those are Principal/VP-only; this is
+  // offered to Academics too - see NO_LEISURE_ROLES).
+  const [viewAll, setViewAll] = useState(false);
+  const [bulkSections, setBulkSections] = useState<BulkSectionEntry[] | null>(null);
+  const [bulkError, setBulkError] = useState(false);
+  const [bulkSubjects, setBulkSubjects] = useState<Subject[]>([]);
+  const [bulkWorkingDays, setBulkWorkingDays] = useState<DayOfWeek[]>([]);
+  const [isExportingAllPdf, setIsExportingAllPdf] = useState(false);
+  const [isExportingAllZip, setIsExportingAllZip] = useState(false);
+  const { collegeInfo } = useCollegeInfo();
+  // Derived rather than a separate flag - a synchronous setState(true) inside
+  // the fetch effect would be a cascading render (react-hooks/set-state-in-effect).
+  const bulkLoading = viewAll && bulkSections === null && !bulkError;
+
+  useEffect(() => {
+    if (!viewAll || bulkSections !== null || bulkError) return;
+    let cancelled = false;
+    void fetch("/api/college/timetable-slots/export-all")
+      .then((r) => r.json() as Promise<{ sections?: BulkSectionEntry[]; subjects?: Subject[]; workingDays?: DayOfWeek[]; error?: string }>)
+      .then((d) => {
+        if (cancelled) return;
+        if (d.error) throw new Error(d.error);
+        setBulkSections(d.sections ?? []);
+        setBulkSubjects(d.subjects ?? []);
+        setBulkWorkingDays(d.workingDays ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setBulkError(true);
+          toast({ variant: "destructive", title: "Failed to load all departments' timetables" });
+        }
+      });
+    return () => { cancelled = true; };
+  }, [viewAll, bulkSections, bulkError]);
+
+  function exportMetaFor(entry: BulkSectionEntry) {
+    const days = resolveTimetableDays(
+      bulkWorkingDays.length ? { workingDays: bulkWorkingDays } : null,
+      entry.slots.map((s) => s.day)
+    );
+    const occupied = new Set(entry.slots.map((s) => s.day));
+    const visibleDays = days.filter((d) => occupied.has(d));
+    const inYear = (entry.timing.semesters ?? []).map((s) => s.semester);
+    return {
+      collegeName: collegeInfo?.name,
+      collegeCode: collegeInfo?.code,
+      affiliation: collegeInfo?.affiliation,
+      address: collegeInfo?.address,
+      phone: collegeInfo?.phone,
+      logoUrl: collegeInfo?.logoUrl,
+      departmentName: entry.departmentName,
+      courseName: entry.courseName,
+      academicYear: entry.slots[0]?.academicYear,
+      semesterLabel: entry.currentSemester != null ? `Sem ${yearSemesterLabelIn(entry.year, inYear, entry.currentSemester)}` : undefined,
+      effectiveDate: latestEffectiveDate(entry.slots),
+      regulation: entry.regulation,
+      days: visibleDays.length > 0 ? visibleDays : days,
+      periods: Array.from({ length: entry.timing.numberOfPeriods }, (_, i) => i + 1),
+      periodTimings: entry.timing.periods ?? [],
+      timing: entry.timing,
+      slots: entry.slots,
+      lunchBreak: entry.timing.lunchBreak,
+      shortBreaks: entry.timing.shortBreaks,
+      subjects: bulkSubjects,
+    };
+  }
+
+  async function handleDownloadAllPdf() {
+    if (!bulkSections || bulkSections.length === 0) return;
+    setIsExportingAllPdf(true);
+    try {
+      const htmls = bulkSections.map((entry) =>
+        buildSectionTimetablePdfHtml({
+          ...exportMetaFor(entry),
+          section: { name: entry.sectionName, department: entry.departmentName, year: entry.year, courseName: entry.courseName },
+        })
+      );
+      await renderMultiHtmlToPdf(htmls, `All_Departments_Timetables_${isoDateKey(new Date())}.pdf`);
+      toast({ title: "Downloaded", description: `${bulkSections.length} sections combined into one PDF` });
+    } catch (err) {
+      console.error(err);
+      toast({ variant: "destructive", title: "Download failed", description: "Failed to generate the combined PDF" });
+    } finally {
+      setIsExportingAllPdf(false);
+    }
+  }
+
+  async function handleDownloadAllXlsxZip() {
+    if (!bulkSections || bulkSections.length === 0) return;
+    setIsExportingAllZip(true);
+    try {
+      const JSZip = (await import("jszip")).default;
+      const zip = new JSZip();
+      const usedNames = new Set<string>();
+      for (const entry of bulkSections) {
+        const buffer = await buildSectionTimetableXlsxBuffer({
+          ...exportMetaFor(entry),
+          sectionName: entry.sectionName,
+          sectionYear: entry.year,
+          batch: entry.batch,
+        });
+        let name = `${entry.departmentName}_Y${entry.year}_${entry.sectionName}`.replace(/[\\/:*?"<>|]/g, "_").replace(/\s+/g, "_");
+        if (usedNames.has(name)) name = `${name}_${entry.sectionId.slice(0, 6)}`;
+        usedNames.add(name);
+        zip.file(`${name}.xlsx`, buffer);
+      }
+      const blob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `All_Departments_Timetables_${isoDateKey(new Date())}.zip`;
+      link.click();
+      URL.revokeObjectURL(url);
+      toast({ title: "Downloaded", description: `${bulkSections.length} section workbooks zipped` });
+    } catch (err) {
+      console.error(err);
+      toast({ variant: "destructive", title: "Export failed", description: "Failed to build the Excel ZIP" });
+    } finally {
+      setIsExportingAllZip(false);
+    }
+  }
   const [courses, setCourses] = useState<Course[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   // A Course doc belongs to one department, so the same programme (e.g. B.Tech)
@@ -247,7 +391,65 @@ export default function PrincipalTimetablePage() {
     <div className="space-y-6">
       <PageHeader title="Timetable View" description="Published section timetables across the college" />
 
-      {canSeeLeisure && (
+      <div className="flex flex-wrap gap-2" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={!viewAll}
+          className={`h-9 rounded-md border px-3 text-sm font-medium ${
+            !viewAll ? "border-primary bg-primary text-primary-foreground" : "border-input bg-background hover:bg-muted"
+          }`}
+          onClick={() => setViewAll(false)}
+        >
+          Single section
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={viewAll}
+          className={`h-9 rounded-md border px-3 text-sm font-medium ${
+            viewAll ? "border-primary bg-primary text-primary-foreground" : "border-input bg-background hover:bg-muted"
+          }`}
+          onClick={() => setViewAll(true)}
+        >
+          ALL departments
+        </button>
+      </div>
+
+      {viewAll ? (
+        <div className="rounded-lg border p-6 space-y-4">
+          <div>
+            <h3 className="text-sm font-semibold">Download every department&rsquo;s timetable</h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              Every section&rsquo;s own CURRENT semester, college-wide - sections with nothing published yet are left out.
+            </p>
+          </div>
+          {bulkLoading ? (
+            <div className="h-20 rounded-md border bg-muted/30 animate-pulse" />
+          ) : bulkError || bulkSections === null ? (
+            <p className="text-sm text-muted-foreground">Could not load.</p>
+          ) : bulkSections.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No section has a published timetable for its current semester yet.</p>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">{bulkSections.length}</span> section
+                {bulkSections.length === 1 ? "" : "s"} found with a published timetable.
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <Button onClick={handleDownloadAllPdf} disabled={isExportingAllPdf}>
+                  {isExportingAllPdf ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+                  {isExportingAllPdf ? "Generating..." : "Download combined PDF"}
+                </Button>
+                <Button variant="outline" onClick={handleDownloadAllXlsxZip} disabled={isExportingAllZip}>
+                  {isExportingAllZip ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileSpreadsheet className="h-4 w-4 mr-2" />}
+                  {isExportingAllZip ? "Zipping..." : "Download Excel files (ZIP)"}
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      ) : canSeeLeisure && (
         <div className="flex flex-wrap gap-2" role="tablist">
           {([
             ["", "Section timetable"],
@@ -270,11 +472,11 @@ export default function PrincipalTimetablePage() {
         </div>
       )}
 
-      {showLeisure && <FacultyLeisureFilter />}
-      {panel === "teaching" && canSeeTeachingNow && <TeachingNowFilter />}
+      {!viewAll && showLeisure && <FacultyLeisureFilter />}
+      {!viewAll && panel === "teaching" && canSeeTeachingNow && <TeachingNowFilter />}
 
       {/* Kept mounted (just hidden) so the picked filters survive a visit to another tab. */}
-      <div className={panel === "" ? "space-y-6" : "hidden"}>
+      <div className={!viewAll && panel === "" ? "space-y-6" : "hidden"}>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="space-y-1.5">
           <label className="text-sm font-medium" htmlFor="tt-course">Course</label>

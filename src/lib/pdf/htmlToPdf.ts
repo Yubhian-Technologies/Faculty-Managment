@@ -370,8 +370,13 @@ function repeatTableHeaders(target: HTMLElement, pageHeightPx: number, laterPage
 /** Renders `html` off-screen, captures it as a canvas, and slices it into A4
  *  pages inside a jsPDF document. Shared core for both renderHtmlToPdf (saves
  *  to disk) and renderHtmlToPdfBlob (returns bytes, e.g. to attach to an email) —
- *  keep any future changes to the rendering pipeline in this one place. */
-async function renderHtmlToPdfDocument(html: string): Promise<jsPDF> {
+ *  keep any future changes to the rendering pipeline in this one place.
+ *
+ *  `existingPdf`, when passed, appends this document's pages onto it instead
+ *  of starting a fresh one (see renderMultiHtmlToPdf below) - every page this
+ *  call adds, including its first, goes through pdf.addPage() in that case,
+ *  since the passed-in document already has at least one page of its own. */
+async function renderHtmlToPdfDocument(html: string, existingPdf?: jsPDF): Promise<jsPDF> {
   const container = document.createElement("div");
   container.style.position = "fixed";
   container.style.top = "0";
@@ -433,7 +438,7 @@ async function renderHtmlToPdfDocument(html: string): Promise<jsPDF> {
     // Android browsers at ~16.7M pixels, i.e. only a few pages - so a long
     // resume came out blank/truncated past that point. A single page is always
     // well inside every browser's limit, so the full document is always kept.
-    const pdf = new jsPDF({ unit: "mm", format: "a4" });
+    const pdf = existingPdf ?? new jsPDF({ unit: "mm", format: "a4" });
     let pageHeaderImg: string | null = null;
     if (pageHeaderEl && breaks.length > 1) {
       const headTop = pageHeaderEl.getBoundingClientRect().top - target.getBoundingClientRect().top;
@@ -462,7 +467,7 @@ async function renderHtmlToPdfDocument(html: string): Promise<jsPDF> {
         scrollY: 0,
       }));
       const imgData = canvas.toDataURL("image/jpeg", 0.95);
-      if (i > 0) pdf.addPage();
+      if (existingPdf || i > 0) pdf.addPage();
       const offsetMm = i > 0 && pageHeaderImg ? pageHeaderMm : 0;
       if (offsetMm > 0 && pageHeaderImg) pdf.addImage(pageHeaderImg, "JPEG", 0, 0, A4_WIDTH_MM, pageHeaderMm);
       pdf.addImage(imgData, "JPEG", 0, offsetMm, A4_WIDTH_MM, sliceHeightPx / pxPerMm);
@@ -487,6 +492,19 @@ async function renderHtmlToPdfDocument(html: string): Promise<jsPDF> {
 export async function renderHtmlToPdf(html: string, filename: string): Promise<void> {
   const pdf = await renderHtmlToPdfDocument(html);
   pdf.save(filename);
+}
+
+/** Renders several print-ready HTML documents, one after another, into ONE
+ *  combined PDF (each document's own pages land back-to-back, in order) - e.g.
+ *  every department's section timetable bundled into a single downloadable
+ *  file instead of one PDF per section. */
+export async function renderMultiHtmlToPdf(htmls: string[], filename: string): Promise<void> {
+  if (htmls.length === 0) throw new Error("Nothing to export.");
+  let pdf: jsPDF | undefined;
+  for (const html of htmls) {
+    pdf = await renderHtmlToPdfDocument(html, pdf);
+  }
+  pdf!.save(filename);
 }
 
 /** Renders `html` to a PDF and returns the raw bytes as a Blob — e.g. to attach
