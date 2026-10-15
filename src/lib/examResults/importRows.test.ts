@@ -160,6 +160,24 @@ describe("zero-credit subjects - Pass / Fail only", () => {
   });
 });
 
+describe("sub-departments", () => {
+  const aiml = { ...bina, id: "s7", rollNumber: "24A91A0601", department: "CSE - AI&ML" };
+  const students = () => new Map([anil, aiml].map((s) => [s.rollNumber.toUpperCase(), s]));
+
+  it("the whole branch takes its sub-departments' students too", () => {
+    const r = validateResultRows([row(2, "24A91A0501", "MA101", "A"), row(3, "24A91A0601", "MA101", "A")],
+      ctx({ students: students(), allowedDepartments: ["CSE", "CSE - AI&ML"] }));
+    expect(r.failed).toEqual([]);
+  });
+
+  it("one sub-department picked takes only its own students", () => {
+    const r = validateResultRows([row(2, "24A91A0501", "MA101", "A"), row(3, "24A91A0601", "MA101", "A")],
+      ctx({ students: students(), allowedDepartments: ["CSE - AI&ML"] }));
+    expect(r.failed.map((f) => f.error)).toEqual(["24A91A0501 is not a CSE - AI&ML student (CSE)"]);
+    expect(r.accepted.map((a) => a.student.id)).toEqual(["s7"]);
+  });
+});
+
 describe("pickSubject", () => {
   it("prefers the student's own course, then the regulation, then the academic year", () => {
     const other = { ...math, id: "other-course", courseId: "c-ece" };

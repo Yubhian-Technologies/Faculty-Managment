@@ -17,6 +17,8 @@ export async function GET(request: Request) {
     const courseKey = q.get("courseKey") ?? "";
     const batch = q.get("batch") ?? "";
     const departmentId = q.get("departmentId") ?? "";
+    // A sub-department's sheet can be for the whole branch's exam or its own; a branch sheet only the branch's.
+    const subDepartmentId = q.get("subDepartmentId") ?? "";
     const year = Number(q.get("year"));
     const semester = Number(q.get("semester"));
     if (!courseKey || !batch || !departmentId || !year || !semester) return NextResponse.json({ sittings: [] });
@@ -25,7 +27,8 @@ export async function GET(request: Request) {
     const snap = await batchesCol(db, session.collegeId).where("courseKey", "==", courseKey).where("semester", "==", semester).get();
     const exams = snap.docs
       .map((d) => ({ ...(d.data() as ExamResultBatch), id: d.id }))
-      .filter((b) => b.status === "PUBLISHED" && b.examType !== "REVALUATION" && b.batch === batch && b.departmentId === departmentId && b.year === year);
+      .filter((b) => b.status === "PUBLISHED" && b.examType !== "REVALUATION" && b.batch === batch && b.departmentId === departmentId && b.year === year
+        && (!b.subDepartmentId || b.subDepartmentId === subDepartmentId));
 
     const sittings = await Promise.all(exams.map(async (b) => {
       const records = await recordsCol(db, session.collegeId).where("batchId", "==", b.id).get();
