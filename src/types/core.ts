@@ -1717,6 +1717,8 @@ export interface ConsultancyProjectRequest {
   id: string;
   collegeId: string;
   uid: string; // owning staff member - the lead/submitting consultant
+  // Login uids of the faculty consultants - the record shows on their dashboard too, from submission.
+  internalAuthorUids?: string[];
   ownerName: string;
   ownerRole: UserRole;
   ownerDesignation?: string; // see resolveOwnerDesignation.ts

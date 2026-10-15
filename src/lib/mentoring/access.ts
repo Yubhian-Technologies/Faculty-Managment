@@ -1,6 +1,7 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { getHodDepartmentScope, type HodDepartmentScope } from "@/lib/departments/scope";
 import { canHodEditDepartmentYear, type DepartmentYearRow } from "@/lib/departments/managedBranches";
+import { cachedCollectionDocs } from "@/lib/firestore/sharedReads";
 import type { StudentRecord } from "@/types";
 
 // Who may manage / read a student's mentoring data - server only.
@@ -20,21 +21,22 @@ export interface HodStudentScope {
 /** The HOD's department scope plus a per-student "is this one mine" check (course lookups cached per call). */
 export async function loadHodStudentScope(db: Firestore, collegeId: string, hodUid: string): Promise<HodStudentScope> {
   const scope = await getHodDepartmentScope(db, collegeId, hodUid);
-  const collegeRef = db.collection("colleges").doc(collegeId);
   let departments: DepartmentYearRow[] | null = null;
-  const catalogByCourse = new Map<string, string | undefined>();
+  // departments / courses change rarely and are read by every mentoring call: the shared 20 s cache
+  // (sharedReads) serves them instead of a fresh read per request.
+  let catalogByCourse: Map<string, string | undefined> | null = null;
 
   async function canManage(student: Pick<StudentRecord, "department" | "year" | "courseId">): Promise<boolean> {
     if (scope.ownDepartmentNames.length === 0) return false;
     if (!departments) {
-      const snap = await collegeRef.collection("departments").get();
-      departments = snap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentYearRow[];
+      const docs = await cachedCollectionDocs(db, collegeId, "departments");
+      departments = docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentYearRow[];
     }
     let catalogId: string | undefined;
     if (student.courseId) {
-      if (!catalogByCourse.has(student.courseId)) {
-        const c = await collegeRef.collection("courses").doc(student.courseId).get();
-        catalogByCourse.set(student.courseId, c.exists ? (c.data() as { catalogId?: string }).catalogId : undefined);
+      if (!catalogByCourse) {
+        const courseDocs = await cachedCollectionDocs(db, collegeId, "courses");
+        catalogByCourse = new Map(courseDocs.map((c) => [c.id, (c.data() as { catalogId?: string }).catalogId] as const));
       }
       catalogId = catalogByCourse.get(student.courseId);
     }
