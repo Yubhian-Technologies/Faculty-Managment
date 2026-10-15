@@ -95,9 +95,12 @@ export interface ExamResultSubject {
   subjectCode: string;
   subjectName: string;
   credits: number;
+  /** A letter grade ("S", "A" ...) - or "Pass" / "Fail" for a zero-credit subject. */
   grade: string;
   points: number;
   isPass: boolean;
+  /** Zero-credit subjects: the grade exactly as the file gave it ("S", "P", "AB" ...), kept for the record. */
+  gradeAsGiven?: string;
 }
 
 // Stored at colleges/{id}/semesterResults/{batchId}_{studentId} - one document

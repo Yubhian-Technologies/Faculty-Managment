@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/useToast";
 import { downloadCSV, toCSV } from "@/lib/utils/csv";
-import type { ResultsAnalytics } from "@/lib/examResults/analytics";
+import type { ExamAnalytics } from "@/lib/examResults/analytics";
 
 // Results Analysis - the published semester results of one class (course +
 // batch + semester), for one branch or all branches in scope. Shared by the
@@ -21,7 +21,9 @@ import type { ResultsAnalytics } from "@/lib/examResults/analytics";
 // grades, always labelled "Fail" - so nothing is told apart by shade alone.
 // Every bar carries its value as text and a hover tooltip.
 
-type ClassOption = { courseKey: string; courseName: string; batch: string; year: number; semester: number; branches: string[] };
+type ClassOption = { courseKey: string; courseName: string; regulation: string; batch: string; year: number; semester: number; branches: string[] };
+
+const uniq = <T,>(xs: T[]) => [...new Set(xs)];
 
 const BAR = "bg-[#2a78d6] dark:bg-[#3987e5]";
 const FAIL_BAR = "bg-[#d03b3b]";
@@ -114,9 +116,18 @@ function BranchTable({ rows, fmt }: { rows: { branch: string; appeared: number; 
 
 export function ResultsAnalysisView({ title = "Results Analysis", description }: { title?: string; description?: string }) {
   const [classes, setClasses] = useState<ClassOption[]>([]);
-  const [classKey, setClassKey] = useState("");
+  // Each filter narrows the next; a choice no longer offered falls back to the first option.
+  const [course, setCourse] = useState("");
+  const [regulation, setRegulation] = useState("");
+  const [batch, setBatch] = useState("");
+  const [yearSem, setYearSem] = useState(""); // "year|semester"
   const [branch, setBranch] = useState("");
-  const [data, setData] = useState<{ analytics: ResultsAnalytics; sheets: { id: string; title: string }[] } | null>(null);
+  const [section, setSection] = useState("");
+  const [sections, setSections] = useState<string[]>([]);
+  const [data, setData] = useState<{ analytics: ExamAnalytics; sheets: { id: string; title: string }[] } | null>(null);
+  // "" = every exam (final results); else one exam's key from `exams`.
+  const [exam, setExam] = useState("");
+  const [exams, setExams] = useState<{ key: string; label: string; examType: string }[]>([]);
   const [isLoadingClasses, setIsLoadingClasses] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -129,14 +140,34 @@ export function ResultsAnalysisView({ title = "Results Analysis", description }:
         if (cancelled) return;
         const list = d.classes ?? [];
         setClasses(list);
-        if (list.length > 0) setClassKey(`${list[0].courseKey}|${list[0].batch}|${list[0].semester}`);
       })
       .catch(() => { if (!cancelled) toast({ variant: "destructive", title: "Failed to load results" }); })
       .finally(() => { if (!cancelled) setIsLoadingClasses(false); });
     return () => { cancelled = true; };
   }, []);
 
-  const picked = classes.find((c) => `${c.courseKey}|${c.batch}|${c.semester}` === classKey) ?? null;
+  const pick = (options: string[], chosen: string) => (options.includes(chosen) ? chosen : options[0] ?? "");
+  const courseOptions = uniq(classes.map((c) => c.courseKey));
+  const courseKey = pick(courseOptions, course);
+  const ofCourse = classes.filter((c) => c.courseKey === courseKey);
+  const regulationOptions = uniq(ofCourse.map((c) => c.regulation)).sort();
+  const reg = pick(regulationOptions, regulation);
+  const ofReg = ofCourse.filter((c) => c.regulation === reg);
+  const batchOptions = uniq(ofReg.map((c) => c.batch)).sort().reverse();
+  const bat = pick(batchOptions, batch);
+  const ofBatch = ofReg.filter((c) => c.batch === bat).sort((x, y) => x.semester - y.semester);
+  const yearSemOptions = uniq(ofBatch.map((c) => `${c.year}|${c.semester}`));
+  const ys = pick(yearSemOptions, yearSem);
+  const picked = ofBatch.find((c) => `${c.year}|${c.semester}` === ys) ?? null;
+  /** "2-1" - year and semester within it (the semester number in brackets). */
+  const yearSemLabel = (key: string) => {
+    const [y, sem] = key.split("|").map(Number);
+    const inYear = uniq(classes.filter((c) => c.courseKey === courseKey && c.year === y).map((c) => c.semester)).sort((p, q) => p - q);
+    // Two a year unless the published semesters of that year say otherwise.
+    const position = inYear.length > 2 ? inYear.indexOf(sem) + 1 : sem - 2 * (y - 1);
+    return `${y}-${position > 0 ? position : sem} (Semester ${sem})`;
+  };
+  const courseName = (k: string) => classes.find((c) => c.courseKey === k)?.courseName ?? k;
 
   useEffect(() => {
     if (!picked) return;
@@ -144,12 +175,15 @@ export function ResultsAnalysisView({ title = "Results Analysis", description }:
     void (async () => {
       setIsLoading(true);
       try {
-        const q = new URLSearchParams({ courseKey: picked.courseKey, batch: picked.batch, semester: String(picked.semester), ...(branch ? { department: branch } : {}) });
+        const q = new URLSearchParams({
+          courseKey: picked.courseKey, batch: picked.batch, semester: String(picked.semester),
+          ...(branch ? { department: branch } : {}), ...(section ? { section } : {}), ...(exam ? { exam } : {}),
+        });
         const res = await fetch(`/api/college/exam-results/analytics?${q}`);
-        const json = (await res.json()) as { analytics?: ResultsAnalytics; sheets?: { id: string; title: string }[]; error?: string };
+        const json = (await res.json()) as { analytics?: ExamAnalytics; sheets?: { id: string; title: string }[]; sections?: string[]; exams?: { key: string; label: string; examType: string }[]; error?: string };
         if (cancelled) return;
         if (!res.ok || !json.analytics) { toast({ variant: "destructive", title: json.error ?? "Failed to load results" }); setData(null); }
-        else setData({ analytics: json.analytics, sheets: json.sheets ?? [] });
+        else { setData({ analytics: json.analytics, sheets: json.sheets ?? [] }); setSections(json.sections ?? []); setExams(json.exams ?? []); }
       } catch {
         if (!cancelled) toast({ variant: "destructive", title: "Failed to load results" });
       } finally {
@@ -157,9 +191,11 @@ export function ResultsAnalysisView({ title = "Results Analysis", description }:
       }
     })();
     return () => { cancelled = true; };
-  }, [picked, branch]);
+  }, [picked, branch, section, exam]);
 
   const a = data?.analytics;
+  const oneExam = exams.find((x) => x.key === exam) ?? null;
+  const isReval = oneExam?.examType === "REVALUATION";
   const d = a?.decimals ?? 2;
   const fmt = (v: number | null | undefined) => (v != null ? v.toFixed(d) : "–");
   const backlogRows = useMemo(() => {
@@ -172,32 +208,65 @@ export function ResultsAnalysisView({ title = "Results Analysis", description }:
     const rows = [["Roll No", "Name", "Branch", "Backlogs", "Subjects"], ...a.backlogStudents.map((s) => [
       s.rollNumber, s.name, s.branch, String(s.backlogs.length), s.backlogs.map((b) => `${b.subjectCode} ${b.subjectName}`).join("; "),
     ])];
-    downloadCSV(toCSV(rows), `backlogs_${picked.batch}_sem${picked.semester}${branch ? `_${branch}` : ""}.csv`);
+    downloadCSV(toCSV(rows), `backlogs_${picked.batch}_sem${picked.semester}${branch ? `_${branch}` : ""}${section ? `_${section}` : ""}.csv`);
   }
 
   return (
     <div className="space-y-6">
       <PageHeader title={title} description={description ?? "Published semester results - pass percentages, SGPA, subject-wise performance, toppers and backlogs."} />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <div className="space-y-1.5 lg:col-span-2">
-          <Label htmlFor="ra-class">Class</Label>
-          <select id="ra-class" className={selectClass} value={classKey} onChange={(e) => { setClassKey(e.target.value); setBranch(""); }} disabled={classes.length === 0}>
-            {classes.length === 0 && <option value="">{isLoadingClasses ? "Loading…" : "No published results yet"}</option>}
-            {classes.map((c) => {
-              const k = `${c.courseKey}|${c.batch}|${c.semester}`;
-              return <option key={k} value={k}>{c.courseName} · Batch {c.batch} · Year {c.year} · Semester {c.semester}</option>;
-            })}
+      {/* Changing a filter clears the ones after it (Branch / Section belong to one class). */}
+      <div className={`grid gap-3 sm:grid-cols-3 ${courseOptions.length > 1 ? "lg:grid-cols-7" : "lg:grid-cols-6"}`}>
+        {courseOptions.length > 1 && (
+          <div className="space-y-1.5">
+            <Label htmlFor="ra-course">Course</Label>
+            <select id="ra-course" className={selectClass} value={courseKey} onChange={(e) => { setCourse(e.target.value); setBranch(""); setSection(""); setExam(""); }}>
+              {courseOptions.map((k) => <option key={k} value={k}>{courseName(k)}</option>)}
+            </select>
+          </div>
+        )}
+        <div className="space-y-1.5">
+          <Label htmlFor="ra-reg">Regulation</Label>
+          <select id="ra-reg" className={selectClass} value={reg} onChange={(e) => { setRegulation(e.target.value); setBranch(""); setSection(""); setExam(""); }} disabled={regulationOptions.length === 0}>
+            {regulationOptions.length === 0 && <option value="">{isLoadingClasses ? "Loading…" : "No published results yet"}</option>}
+            {regulationOptions.map((r) => <option key={r} value={r}>{r || "Not set"}</option>)}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="ra-batch">Batch</Label>
+          <select id="ra-batch" className={selectClass} value={bat} onChange={(e) => { setBatch(e.target.value); setBranch(""); setSection(""); setExam(""); }} disabled={batchOptions.length === 0}>
+            {batchOptions.map((b) => <option key={b} value={b}>{b}</option>)}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="ra-ys">Year - Sem</Label>
+          <select id="ra-ys" className={selectClass} value={ys} onChange={(e) => { setYearSem(e.target.value); setBranch(""); setSection(""); setExam(""); }} disabled={yearSemOptions.length === 0}>
+            {yearSemOptions.map((k) => <option key={k} value={k}>{yearSemLabel(k)}</option>)}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="ra-exam">Exam</Label>
+          <select id="ra-exam" className={selectClass} value={exam} onChange={(e) => setExam(e.target.value)} disabled={!picked}>
+            <option value="">All exams (final results)</option>
+            {exams.map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}
           </select>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="ra-branch">Branch</Label>
-          <select id="ra-branch" className={selectClass} value={branch} onChange={(e) => setBranch(e.target.value)} disabled={!picked}>
+          <select id="ra-branch" className={selectClass} value={branch} onChange={(e) => { setBranch(e.target.value); setSection(""); }} disabled={!picked}>
             <option value="">{picked && picked.branches.length > 1 ? "All branches" : picked?.branches[0] ?? "All branches"}</option>
             {picked && picked.branches.length > 1 && picked.branches.map((b) => <option key={b} value={b}>{b}</option>)}
           </select>
         </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="ra-section">Section</Label>
+          <select id="ra-section" className={selectClass} value={section} onChange={(e) => setSection(e.target.value)} disabled={!picked || sections.length === 0}>
+            <option value="">{sections.length === 0 ? "No sections" : "All sections"}</option>
+            {sections.map((x) => <option key={x} value={x}>{x}</option>)}
+          </select>
+        </div>
       </div>
+      {section && <p className="-mt-3 text-xs text-muted-foreground">Section is each student&rsquo;s current section on their student record.</p>}
 
       {!picked ? (
         <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
@@ -206,16 +275,18 @@ export function ResultsAnalysisView({ title = "Results Analysis", description }:
       ) : isLoading || !a ? (
         <div className="h-96 rounded-lg border bg-muted/30 animate-pulse" />
       ) : a.appeared === 0 ? (
-        <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">No Regular results for this selection.</div>
+        <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">{oneExam ? "No results in this exam for this selection." : "No Regular results for this selection."}</div>
       ) : (
         <>
           <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            <Tile label="Students" value={String(a.appeared)} note="Sat the Regular exam" />
+            <Tile label={oneExam ? "Appeared" : "Students"} value={String(a.appeared)} note={oneExam ? `In ${oneExam.label}` : "Sat the Regular exam"} />
             <Tile label="Pass % now" value={`${pct(a.passedNow, a.appeared)}%`} note={`${a.passedNow} of ${a.appeared} have no backlog`} />
-            <Tile label="Regular pass %" value={`${pct(a.passedRegular, a.appeared)}%`} note="Before supplementary / revaluation" />
-            <Tile label="Average SGPA" value={fmt(a.averageSgpa)} note={`Of ${a.withSgpa} with an SGPA`} />
+            {isReval
+              ? <Tile label="Improved" value={String(a.improved ?? 0)} note={`of ${a.revalued ?? 0} subject${a.revalued === 1 ? "" : "s"} revalued`} />
+              : <Tile label={oneExam ? "Pass % in this exam" : "Regular pass %"} value={`${pct(a.passedRegular, a.appeared)}%`} note={oneExam ? "Passed every subject written" : "Before supplementary / revaluation"} />}
+            <Tile label="Average SGPA" value={fmt(a.averageSgpa)} note={oneExam ? `Right after this exam (${a.withSgpa})` : `Of ${a.withSgpa} with an SGPA`} />
             <Tile label="Highest SGPA" value={fmt(a.highestSgpa)} note={a.toppers[0] ? a.toppers[0].rollNumber : undefined} />
-            <Tile label="Backlogs" value={String(a.backlogSubjects)} note={`${a.studentsWithBacklogs} student${a.studentsWithBacklogs === 1 ? "" : "s"}`} />
+            <Tile label={oneExam ? "Failed in this exam" : "Backlogs"} value={String(a.backlogSubjects)} note={`${a.studentsWithBacklogs} student${a.studentsWithBacklogs === 1 ? "" : "s"}`} />
           </div>
 
           {a.branches.length > 1 && (
@@ -234,7 +305,7 @@ export function ResultsAnalysisView({ title = "Results Analysis", description }:
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Grade distribution</CardTitle>
-                <CardDescription>Final grade of every subject result ({a.grades.reduce((n, x) => n + x.count, 0)} in all).</CardDescription>
+                <CardDescription>{oneExam ? "Grades given in this exam" : "Final grade of every subject result"} ({a.grades.reduce((n, x) => n + x.count, 0)} in all).</CardDescription>
               </CardHeader>
               <CardContent>
                 <Columns items={a.grades.map((x) => ({ label: x.grade, value: x.count, fail: !x.isPass, tip: `${x.grade}${x.isPass ? "" : " (fail)"}: ${x.count}` }))} />
@@ -256,14 +327,18 @@ export function ResultsAnalysisView({ title = "Results Analysis", description }:
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Subject-wise results</CardTitle>
-              <CardDescription>Regular pass % is the first attempt; pass % now includes supplementaries and revaluations.</CardDescription>
+              <CardDescription>
+                {oneExam
+                  ? `Subjects written in ${oneExam.label}: pass % in this exam, and pass % now after every later exam.`
+                  : "Regular pass % is the first attempt; pass % now includes supplementaries and revaluations."}
+              </CardDescription>
             </CardHeader>
             <CardContent className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="text-left text-xs text-muted-foreground">
                   <tr className="border-b">
                     <th className="p-2">Code</th><th className="p-2">Subject</th><th className="p-2 text-right">Credits</th><th className="p-2 text-right">Appeared</th>
-                    <th className="p-2 text-right">Regular pass %</th><th className="p-2 w-48">Pass % now</th><th className="p-2 text-right">Avg points</th><th className="p-2">Grades</th>
+                    <th className="p-2 text-right">{oneExam ? "Pass % (this exam)" : "Regular pass %"}</th><th className="p-2 w-48">Pass % now</th><th className="p-2 text-right">Avg points</th><th className="p-2">Grades</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -283,7 +358,7 @@ export function ResultsAnalysisView({ title = "Results Analysis", description }:
                             <span className="w-12 text-right text-xs tabular-nums">{now}%</span>
                           </div>
                         </td>
-                        <td className="p-2 text-right tabular-nums">{s.averagePoints.toFixed(2)}</td>
+                        <td className="p-2 text-right tabular-nums">{s.credits > 0 ? s.averagePoints.toFixed(2) : "–"}</td>
                         <td className="p-2 text-xs text-muted-foreground">
                           {Object.entries(s.grades).sort((x, y) => (a.grades.findIndex((g) => g.grade === x[0])) - (a.grades.findIndex((g) => g.grade === y[0]))).map(([g, n]) => `${g} ${n}`).join(" · ")}
                         </td>
@@ -300,7 +375,7 @@ export function ResultsAnalysisView({ title = "Results Analysis", description }:
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Toppers</CardTitle>
-                <CardDescription>Highest SGPA this semester.</CardDescription>
+                <CardDescription>{oneExam ? "Highest SGPA right after this exam." : "Highest SGPA this semester."}</CardDescription>
               </CardHeader>
               <CardContent>
                 {a.toppers.length === 0 ? <p className="text-sm text-muted-foreground">No SGPA to rank yet.</p> : (
@@ -322,7 +397,7 @@ export function ResultsAnalysisView({ title = "Results Analysis", description }:
             <Card>
               <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
                 <div>
-                  <CardTitle className="text-base">Students with backlogs</CardTitle>
+                  <CardTitle className="text-base">{oneExam ? "Failed in this exam" : "Students with backlogs"}</CardTitle>
                   <CardDescription>{a.studentsWithBacklogs} student{a.studentsWithBacklogs === 1 ? "" : "s"}, most backlogs first.</CardDescription>
                 </div>
                 <Button variant="outline" size="sm" onClick={exportBacklogs} disabled={a.studentsWithBacklogs === 0}>

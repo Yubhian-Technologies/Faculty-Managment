@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildResultsAnalytics, type AnalyticsRecord } from "./analytics";
+import { buildExamAnalytics, buildResultsAnalytics, examKeyOf, type AnalyticsRecord } from "./analytics";
 import type { ExamResultSubject } from "@/types/examResults";
 import { STARTER_GRADE_TABLE } from "./rules";
 
@@ -74,5 +74,30 @@ describe("buildResultsAnalytics", () => {
 
   it("is empty with no records", () => {
     expect(buildResultsAnalytics([], strict)).toMatchObject({ appeared: 0, averageSgpa: null, highestSgpa: null, subjects: [], branches: [] });
+  });
+});
+
+describe("buildExamAnalytics - one exam", () => {
+  const regKey = examKeyOf({ examType: "REGULAR", examHeld: "2025-11" });
+  const supKey = examKeyOf({ examType: "SUPPLEMENTARY", examHeld: "2026-05" });
+
+  it("the Regular alone: its own grades, pass in it, SGPA right after it (before the supplementary)", () => {
+    const a = buildExamAnalytics(records, regKey, strict, STARTER_GRADE_TABLE, 3);
+    expect(a).toMatchObject({ appeared: 4, passedRegular: 2, passedNow: 3, studentsWithBacklogs: 2, backlogSubjects: 2 });
+    expect(a.toppers.map((t) => [t.rollNumber, t.sgpa])).toEqual([["S1", 9.5], ["S4", 9]]); // s2's SGPA was withheld after the Regular
+    expect(a.grades.find((g) => g.grade === "F")).toEqual({ grade: "F", count: 2, isPass: false });
+  });
+
+  it("the Supplementary alone: who sat it, what they passed, SGPA after it", () => {
+    const a = buildExamAnalytics(records, supKey, strict, STARTER_GRADE_TABLE, 3);
+    expect(a).toMatchObject({ appeared: 1, passedRegular: 1, passedNow: 1, backlogSubjects: 0 });
+    expect(a.subjects).toEqual([{ subjectCode: "PH", subjectName: "PH name", credits: 3, appeared: 1, passedRegular: 1, passedNow: 1, grades: { C: 1 }, averagePoints: 7 }]);
+    expect(a.toppers[0]).toMatchObject({ rollNumber: "S2", sgpa: 7.5 });
+  });
+
+  it("a revaluation counts the grades it improved", () => {
+    const rv = { ...rec("s3", "ECE", "REVALUATION", [g("MA", 3, "C"), g("PH", 3, "E")], { revaluesBatchId: "REGULAR-ECE", examHeld: "2025-11", at: 3 }), revaluationOf: "REGULAR" };
+    const a = buildExamAnalytics([...records, rv], examKeyOf(rv), strict, STARTER_GRADE_TABLE, 3);
+    expect(a).toMatchObject({ appeared: 1, revalued: 2, improved: 1, passedNow: 1 }); // F -> C improved; D -> E did not
   });
 });
