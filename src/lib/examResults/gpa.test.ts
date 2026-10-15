@@ -191,3 +191,30 @@ describe("revaluation - best of two", () => {
     expect(finalPerSubject([[sub("X", 3, 0, false)], [sub("X", 3, 8)]])[0].points).toBe(8);
   });
 });
+
+describe("CGPA from the SGPA as printed - checked against real university grade memos", () => {
+  // Semester credits 19.5 and 20.5 (CSE [Cyber Security], R23, 2024-2028, Year 1).
+  // Each semester is one subject carrying the student's weighted points, which is
+  // all the formula sees: SGPA = points / credits.
+  const sem = (credits: number, weighted: number): GpaSubject[] => [{ subjectCode: "X", credits, points: weighted / credits, isPass: true }];
+  const memo = (w1: number, w2: number) => computeCgpa([sem(19.5, w1), sem(20.5, w2)], "ALWAYS");
+
+  it("24B01A4601: SGPA 7.97 / 8.85 -> CGPA 8.42 (exact values would give 8.43)", () => {
+    expect([computeSgpa(sem(19.5, 155.5), "ALWAYS").sgpa, computeSgpa(sem(20.5, 181.5), "ALWAYS").sgpa]).toEqual([7.97, 8.85]);
+    expect(memo(155.5, 181.5).cgpa).toBe(8.42);
+    expect(computeCgpa([sem(19.5, 155.5), sem(20.5, 181.5)], "ALWAYS", 2, "EXACT").cgpa).toBe(8.43);
+  });
+
+  it("24B01A4602: SGPA 9.46 / 9.02 -> CGPA 9.23", () => {
+    expect(memo(184.5, 185).cgpa).toBe(9.23);
+  });
+
+  it("24B01A4617: SGPA 8.62 / 8.66 (rounded, not cut) -> CGPA 8.64", () => {
+    expect([computeSgpa(sem(19.5, 168), "ALWAYS").sgpa, computeSgpa(sem(20.5, 177.5), "ALWAYS").sgpa]).toEqual([8.62, 8.66]);
+    expect(memo(168, 177.5).cgpa).toBe(8.64);
+  });
+
+  it("24B01A4632: SGPA 8.36 / 8.32 -> CGPA 8.34", () => {
+    expect(memo(163, 170.5).cgpa).toBe(8.34);
+  });
+});
