@@ -253,7 +253,8 @@ export class SubjectAssignService {
       const masterSnaps = await tx.getAll(...fresh.map((p) => subjects.doc(p.subjectId!)));
       const instanceRefs = fresh.map((p) => instances.doc(`${p.subjectId}_${departmentId}_${semester}`));
       const instanceSnaps = await tx.getAll(...instanceRefs);
-      const slot = await tx.get(instances.where("courseId", "==", ctx.course.id));
+      // By department, not course: older copies of a shared year sit under the feeder's Course doc.
+      const slot = await tx.get(instances.where("departmentId", "==", departmentId));
       masterSnaps.forEach((m, i) => {
         if (!m.exists || (m.data() as Subject).isActive === false) throw new SubjectRequestError(`${fresh[i].code} was removed or deactivated while assigning. Nothing was saved.`, 409);
       });

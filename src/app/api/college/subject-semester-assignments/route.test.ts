@@ -112,3 +112,33 @@ describe("existing call shapes are unchanged", () => {
     expect(await subjectsOf(await get("?courseId=c-ce&departmentId=ce&year=1"))).toEqual([]);
   });
 });
+
+describe("a department's copies filed under another Course doc of the same programme", () => {
+  // AI&DS (child of AI) has copies filed under the feeder's course (c-bs); the Assign tab asks with AI's course.
+  beforeEach(() => {
+    const f = new FakeFirestore();
+    f.seed(`colleges/c2/departments/ai`, { name: "AI", hasSubDepartments: true, assignedYears: [1, 2, 3, 4] });
+    f.seed(`colleges/c2/departments/aids`, { name: "AIDS", parentDepartmentId: "ai", assignedYears: [1, 2, 3, 4] });
+    f.seed(`colleges/c2/departments/other`, { name: "OTHER", assignedYears: [1] });
+    f.seed(`colleges/c2/courses/c-bs`, { departmentId: "bs", catalogId: "btech", name: "B.Tech" });
+    f.seed(`colleges/c2/courses/c-ai`, { departmentId: "ai", catalogId: "btech", name: "B.Tech" });
+    f.seed(`colleges/c2/courses/c-mba`, { departmentId: "ai", catalogId: "mba", name: "MBA" });
+    const a = (id: string, o: Record<string, unknown>) => f.seed(`colleges/c2/subjectSemesterAssignments/${id}`, { year: 1, semester: 1, ...o });
+    a("x1", { subjectId: "s1", courseId: "c-bs", departmentId: "aids" });
+    a("x2", { subjectId: "s2", courseId: "c-ai", departmentId: "aids" });
+    a("x3", { subjectId: "s3", courseId: "c-bs", departmentId: "other" });
+    a("x4", { subjectId: "s4", courseId: "c-mba", departmentId: "aids" });
+    h.db = asFirestore(f);
+    h.session = { collegeId: "c2", uid: "u1", role: "PRINCIPAL" }; // its own college: departments/courses are cached per college
+  });
+
+  it("lists them whichever course of the programme they are filed under", async () => {
+    expect(await subjectsOf(await get("?courseId=c-ai&departmentId=aids&year=1&semester=1"))).toEqual(["s1", "s2"]);
+  });
+
+  it("still never mixes in another department's or another programme's copies", async () => {
+    const got = await subjectsOf(await get("?courseId=c-ai&departmentId=ai&year=1&semester=1"));
+    expect(got).not.toContain("s3");
+    expect(got).not.toContain("s4");
+  });
+});

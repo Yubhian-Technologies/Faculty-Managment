@@ -135,8 +135,25 @@ export async function GET(request: Request) {
       query = collegeRef.collection("subjectSemesterAssignments").where("courseId", "==", courseId);
     }
 
-    const snap = await query.get();
-    let assignments = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Record<string, unknown>));
+    // A department's copies may be filed under ANY Course doc of the programme (a shared year's older rows sit
+    // under the feeder's course, later ones under the core department's), so for a department listing ask by
+    // department and keep the programme's courses - asking by the one course picked missed the others.
+    let docs: FirebaseFirestore.QueryDocumentSnapshot[];
+    if (!subjectId && courseId && targetDeptIds && targetDeptIds.length > 0) {
+      const courseDocs = await cachedCollectionDocs(db, session.collegeId, "courses");
+      const picked = courseDocs.find((c) => c.id === courseId);
+      const catalogId = (picked?.data() as { catalogId?: string } | undefined)?.catalogId;
+      const group = new Set(catalogId ? courseDocs.filter((c) => (c.data() as { catalogId?: string }).catalogId === catalogId).map((c) => c.id) : [courseId]);
+      group.add(courseId);
+      const byDept = await getInChunks(targetDeptIds, (chunk) => collegeRef.collection("subjectSemesterAssignments").where("departmentId", "in", chunk));
+      docs = byDept.filter((d) => {
+        const c = (d.data() as { courseId?: string }).courseId;
+        return !c || group.has(String(c));
+      });
+    } else {
+      docs = (await query.get()).docs;
+    }
+    let assignments = docs.map((d) => ({ id: d.id, ...d.data() } as Record<string, unknown>));
 
     if (academicYear) {
       assignments = assignments.filter((a) => !a.academicYear || a.academicYear === academicYear);
