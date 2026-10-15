@@ -17,12 +17,17 @@ import type { Subject, SubjectSemesterAssignment } from "@/types";
 // department, year or semester (those are an instance, made by assign-by-code).
 //
 // Identity, inside one catalog course + regulation:
-//   - Subject Code is unique, Subject Name is unique, University Code is unique.
-//   - Code and Name cannot change once the subject is assigned anywhere: a
-//     renamed subject gets a new code, which makes it a NEW subject.
-// Uniqueness is enforced twice: against the subjects already saved (so it holds
-// for data that predates the lock docs) and by lock docs claimed in the same
-// transaction as the write (so two concurrent saves cannot both win).
+//   - Subject Code is unique, University Code is unique.
+//   - Subject Name is NOT required to be unique: the same title legitimately
+//     recurs under a different code (e.g. "Engineering Physics" in Sem 1 and
+//     Sem 2, or a lab sharing its theory subject's name) - a repeated name only
+//     gets a warning, never blocks the row.
+//   - Code cannot change once the subject is assigned anywhere: a
+//     recoded subject is a NEW subject.
+// Uniqueness (code, university code) is enforced twice: against the subjects
+// already saved (so it holds for data that predates the lock docs) and by lock
+// docs claimed in the same transaction as the write (so two concurrent saves
+// cannot both win).
 
 export { MASTER_IMPORT_MAX_ROWS };
 
@@ -171,15 +176,18 @@ export class SubjectMasterService {
       const problems: string[] = [];
       const codeOwner = codes.get(d.code);
       if (codeOwner) problems.push(`Code ${d.code} is already used by "${codeOwner.name}" for ${regulation}.`);
+      // A repeated name is only a heads-up: the same title legitimately recurs under a
+      // different code (e.g. a subject taught across two semesters, or a lab named after
+      // its theory subject), so it never blocks the row.
       const nameOwner = names.get(nameKey);
-      if (nameOwner) problems.push(`The name "${d.name}" is already used by code ${nameOwner.code} for ${regulation}.`);
+      if (nameOwner) warnings.push({ row, code: codeLabel, warning: `The name "${d.name}" is already used by code ${nameOwner.code} for ${regulation}.` });
       const univKey = d.universityCode ? normalizeUniversityCode(d.universityCode) : "";
       const univOwner = univKey ? univ.get(univKey) : undefined;
       if (univOwner) problems.push(`University Code ${d.universityCode} is already used by ${univOwner.code} (${univOwner.name}).`);
       const rowOfCode = fileCodes.get(d.code);
       if (rowOfCode != null) problems.push(`Code ${d.code} is repeated (also on row ${rowOfCode}).`);
       const rowOfName = fileNames.get(nameKey);
-      if (rowOfName != null) problems.push(`The name "${d.name}" is repeated (also on row ${rowOfName}).`);
+      if (rowOfName != null) warnings.push({ row, code: codeLabel, warning: `The name "${d.name}" is repeated (also on row ${rowOfName}).` });
       const rowOfUniv = univKey ? fileUniv.get(univKey) : undefined;
       if (rowOfUniv != null) problems.push(`University Code ${d.universityCode} is repeated (also on row ${rowOfUniv}).`);
       fileCodes.set(d.code, fileCodes.get(d.code) ?? row);
@@ -226,8 +234,8 @@ export class SubjectMasterService {
     if (p.dryRun) return { created: ready.length, failed, warnings, createdRows: plannedRows };
 
     // Chunked so a file near MASTER_IMPORT_MAX_ROWS never asks one Firestore
-    // transaction for more than its ~500-write ceiling (3 writes/subject: the
-    // doc + its code lock + its name lock, so 150 rows = 450 writes/chunk).
+    // transaction for more than its ~500-write ceiling (2 writes/subject: the
+    // doc + its code lock, so 150 rows = 300 writes/chunk).
     // Each chunk independently claims its own locks and commits atomically;
     // a conflict in chunk N>1 means chunks before it already landed - the
     // message says so, since "nothing was imported" would be false then.
@@ -236,10 +244,9 @@ export class SubjectMasterService {
     for (let i = 0; i < ready.length; i += CHUNK_SIZE) {
       const chunk = ready.slice(i, i + CHUNK_SIZE);
       const chunkNumber = Math.floor(i / CHUNK_SIZE) + 1;
-      const claims: SubjectKeyClaim[] = chunk.flatMap((r) => [
-        { field: "code" as const, scope: scope.scopeId, regulation, value: r.doc.code, subjectId: r.ref.id },
-        { field: "name" as const, scope: scope.scopeId, regulation, value: r.doc.name, subjectId: r.ref.id },
-      ]);
+      const claims: SubjectKeyClaim[] = chunk.map((r) => (
+        { field: "code" as const, scope: scope.scopeId, regulation, value: r.doc.code, subjectId: r.ref.id }
+      ));
       let conflicts: SubjectKeyConflict[] = [];
       await this.db.runTransaction(async (tx) => {
         conflicts = await claimSubjectKeys(tx, this.db, collegeId, claims);
@@ -247,7 +254,9 @@ export class SubjectMasterService {
         for (const r of chunk) tx.set(r.ref, r.doc);
       });
       if (conflicts.length > 0) {
-        const rowOf = new Map(chunk.flatMap((r) => [[`code:${r.ref.id}`, r.row], [`name:${r.ref.id}`, r.row]] as const));
+        // Only "code" claims are made in this loop (name is no longer locked - see the
+        // class-level comment), so every conflict here is a code conflict.
+        const rowOf = new Map(chunk.map((r) => [r.ref.id, r.row] as const));
         const partial = chunkNumber > 1
           ? ` Rows already saved (the first ${createdRows.length} of ${ready.length}) stay saved - only the rest need re-importing.`
           : " Nothing was imported.";
@@ -256,9 +265,9 @@ export class SubjectMasterService {
           warnings,
           createdRows,
           failed: conflicts.map((c) => ({
-            row: rowOf.get(`${c.claim.field}:${c.claim.subjectId}`) ?? 0,
-            code: c.claim.field === "code" ? normalizeSubjectCode(c.claim.value) : "-",
-            error: `${c.claim.field === "code" ? `Code ${normalizeSubjectCode(c.claim.value)}` : `The name "${c.claim.value}"`} was just saved by someone else as ${c.ownerCode} (${c.ownerName}).${partial}`,
+            row: rowOf.get(c.claim.subjectId) ?? 0,
+            code: normalizeSubjectCode(c.claim.value),
+            error: `Code ${normalizeSubjectCode(c.claim.value)} was just saved by someone else as ${c.ownerCode} (${c.ownerName}).${partial}`,
           })),
         };
       }
@@ -346,18 +355,16 @@ export class SubjectMasterService {
     }
 
     // Uniqueness against what is already saved (the lock docs below close the race).
+    // Name is deliberately not checked here - the same title legitimately recurs
+    // under a different code (see the class-level comment).
     let scopeId = cur.catalogId || cur.courseId || "";
-    if (isMaster && (identityChanged || univChanged)) {
+    if (isMaster && (codeChanged || univChanged)) {
       const scope = await this.loadScopeForExisting(collegeId, cur);
       scopeId = scope.scopeId;
       const others = (await this.loadExisting(collegeId, scope, regulation)).filter((s) => s.id !== id);
       if (codeChanged) {
         const hit = others.find((s) => normalizeSubjectCode(s.code) === d.code);
         if (hit) throw new SubjectRequestError(`Code ${d.code} is already used by "${hit.name}" for ${regulation}.`, 409);
-      }
-      if (nameChanged) {
-        const hit = others.find((s) => normalizeSubjectName(s.name) === normalizeSubjectName(d.name));
-        if (hit) throw new SubjectRequestError(`The name "${d.name}" is already used by code ${hit.code} for ${regulation}.`, 409);
       }
       if (univChanged && d.universityCode) {
         const hit = others.find((s) => normalizeUniversityCode(s.universityCode) === normalizeUniversityCode(d.universityCode));
@@ -419,18 +426,18 @@ export class SubjectMasterService {
     if (isMaster && identityChanged) {
       const claims: SubjectKeyClaim[] = [];
       if (codeChanged) claims.push({ field: "code", scope: scopeId, regulation, value: d.code, subjectId: id });
-      if (nameChanged) claims.push({ field: "name", scope: scopeId, regulation, value: d.name, subjectId: id });
       let conflicts: SubjectKeyConflict[] = [];
       await this.db.runTransaction(async (tx) => {
         conflicts = await claimSubjectKeys(tx, this.db, collegeId, claims);
         if (conflicts.length > 0) return;
         tx.update(ref, updates);
         if (codeChanged) tx.delete(college.collection("subjectKeys").doc(keyDocId({ field: "code", scope: scopeId, regulation, value: cur.code })));
+        // Deletes a legacy name lock left over from before name-uniqueness was relaxed; a no-op if none exists.
         if (nameChanged) tx.delete(college.collection("subjectKeys").doc(keyDocId({ field: "name", scope: scopeId, regulation, value: cur.name })));
       });
       if (conflicts.length > 0) {
         const c = conflicts[0];
-        throw new SubjectRequestError(`${c.claim.field === "code" ? "That code" : "That name"} was just taken by ${c.ownerCode} (${c.ownerName}).`, 409);
+        throw new SubjectRequestError(`That code was just taken by ${c.ownerCode} (${c.ownerName}).`, 409);
       }
     } else {
       await ref.update(updates);
