@@ -10,6 +10,7 @@ import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { gradeTableFor } from "@/lib/examResults/rules";
 import { batchTitle, completeFromTarget, examHeldLabel, normalizeBatchMeta, type ResultBatchMeta, type TargetExam } from "@/lib/examResults/sheet";
 import { applyPriorResults, applyRevaluationTargets, rollKey, validateResultRows, type FailedResultRow, type PriorResult, type RawResultRow } from "@/lib/examResults/importRows";
+import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
 import { actorName, batchesCol, examMonthContext, loadResultRules, loadStudentsByRoll, loadSubjectsByCode, recordId, recordsCol } from "@/lib/examResults/store";
 import type { ExamResultBatch } from "@/types/examResults";
 
@@ -94,6 +95,8 @@ export async function POST(request: Request) {
       students, subjects, gradeTable,
       courseIds: meta.courseIds, courseName: meta.courseName, department: meta.department, allowedDepartments, regulation: meta.regulation, academicYear: meta.academicYear,
       batch: meta.batch, batchHistory,
+      // For a student with no batch stored: their year of study gives it.
+      currentStartYear: Number((await resolveCollegeAcademicYear(db, collegeId)).slice(0, 4)),
     });
 
     // A student already in THIS draft (an earlier part, or an earlier upload to it).
