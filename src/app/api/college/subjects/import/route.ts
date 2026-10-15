@@ -10,8 +10,9 @@ import type { SubjectRowInput } from "@/lib/subjects/validation/SubjectValidator
 // Bulk-imports subjects into the master list of ONE Course (catalog) + Regulation. No department,
 // year or semester here - assigning is the separate "Assign by code" step.
 //
-// All or nothing: every row is checked first (code and name unique inside the course + regulation,
-// credits and L-T-P present, category defined) and a single problem anywhere means nothing is saved.
+// All or nothing: every row is checked first (code unique inside the course + regulation, credits
+// and L-T-P present, category defined - a repeated subject name is only a warning) and a single
+// blocking problem anywhere means nothing is saved.
 //   mode "validate" - dry run, writes nothing; 200 when clean, 422 with every problem otherwise.
 //   mode "commit"   - saves everything in one transaction; 201, or 422 and nothing saved.
 export async function POST(request: Request) {
