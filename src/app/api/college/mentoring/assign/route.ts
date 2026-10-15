@@ -13,6 +13,7 @@ import { actorOf } from "@/lib/audit/actorOf";
 import { notify } from "@/lib/notify";
 import { loadHodStudentScope } from "@/lib/mentoring/access";
 import { mentoringErrorResponse } from "@/lib/mentoring/http";
+import { resolveSelfMentor } from "@/lib/mentoring/selfMentor";
 import { AVAILABLE_FACULTY_STATUSES, type StudentRecord } from "@/types";
 
 const MAX_STUDENTS_PER_CALL = 200;
@@ -39,7 +40,12 @@ export async function POST(request: Request) {
 
     // The mentor must be an available faculty member of this HOD's departments with a login.
     let mentorName = "";
-    if (mentorUid) {
+    if (mentorUid && mentorUid === session.uid) {
+      // The HOD may always pick themselves (also a Principal / VP with no faculty record - see selfMentor).
+      const self = await resolveSelfMentor(db, session.collegeId, session.uid);
+      if (!self) return NextResponse.json({ error: "You are not available to mentor" }, { status: 400 });
+      mentorName = self.name;
+    } else if (mentorUid) {
       const facSnap = await collegeRef.collection("facultyMembers").where("userUid", "==", mentorUid).limit(1).get();
       const fac = facSnap.docs[0]?.data() as { legalName?: string; honorific?: string; department?: string; status?: string } | undefined;
       if (!fac) return NextResponse.json({ error: "Mentor not found" }, { status: 404 });
@@ -64,6 +70,10 @@ export async function POST(request: Request) {
       if (student.status === "GRADUATED") { skipped.push({ id: snap.id, reason: "Graduated" }); continue; }
       if (!(await canManage(student))) { skipped.push({ id: snap.id, reason: "Outside your department" }); continue; }
       if ((student.mentorUid ?? null) === mentorUid) { assigned.push(snap.id); continue; }
+      // A student who already has a mentor is not offered to another one: the mentor is removed
+      // first, then the new one assigned. Removing only clears the mentor fields - the record
+      // (notes, entries, semester sheets) hangs off the student and stays for the next mentor.
+      if (mentorUid && student.mentorUid) { skipped.push({ id: snap.id, reason: "Already has a mentor - remove the current mentor first" }); continue; }
       writer.update(snap.ref, mentorUid
         ? { mentorUid, mentorName, mentorAssignedBy: session.uid, mentorAssignedAt: now }
         : { mentorUid: FieldValue.delete(), mentorName: FieldValue.delete(), mentorAssignedBy: FieldValue.delete(), mentorAssignedAt: FieldValue.delete() });

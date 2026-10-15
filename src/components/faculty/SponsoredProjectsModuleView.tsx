@@ -16,7 +16,9 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
+import { useAuthStore } from "@/store/authStore";
 import { isValidDdMmYyyy } from "@/lib/research/validateSponsoredProject";
+import { CoPiFields, EMPTY_COPI, isCoPiComplete } from "@/components/research/CoPiFields";
 import type {
   SeedFundingEquipmentItem, SeedFundingPaperItem, SeedFundingPatentItem,
   SponsoredProjectCoPI, SponsoredProjectRequest, SponsoredProjectSanctionedStatus,
@@ -28,7 +30,6 @@ const PREVIEW_COUNT = 3;
 // Guards against a typo like 1000 spawning a thousand Co-PI rows.
 const MAX_COPIS = 50;
 
-const EMPTY_COPI: SponsoredProjectCoPI = { name: "", department: "", affiliation: "" };
 const EMPTY_EQUIPMENT: SeedFundingEquipmentItem = { name: "", makeModel: "", softwareOrHardware: "", amount: undefined, purpose: "" };
 const EMPTY_PAPER: SeedFundingPaperItem = { title: "", journalOrConference: "" };
 const EMPTY_PATENT: SeedFundingPatentItem = { applicationNo: "", applicantName: "", patentTitle: "", inventorDetails: "", status: "" };
@@ -93,6 +94,9 @@ function SponsoredProjectRow({
   isOwnProfile?: boolean;
   onEdit?: (project: SponsoredProjectRequest) => void;
 }) {
+  // Also listed for a Co-PI / inventor named on it: they see it (and where it stands) but only the submitter edits.
+  const viewerUid = useAuthStore((s) => s.user?.uid);
+  const isSubmitter = project.uid === viewerUid;
   // Reports are filed per year; the project-level ones only exist on records
   // saved before that. "Year N" is only worth prefixing when there's more than one.
   const years = project.yearlyData ?? [];
@@ -109,13 +113,16 @@ function SponsoredProjectRow({
 
   return (
     <div className="rounded-md border bg-muted/20 shadow-sm p-2 space-y-2">
+      {isOwnProfile && !isSubmitter && (
+        <p className="text-xs text-muted-foreground">Submitted by {project.ownerName}</p>
+      )}
       {isOwnProfile && (
         <div className="flex items-center gap-2">
           {project.status === "PENDING" && <Badge variant="pending" className="text-xs">Pending Verification</Badge>}
           {project.status === "COORDINATOR_REVIEW" && <Badge variant="pending" className="text-xs">With R&amp;D Coordinator</Badge>}
           {project.status === "REJECTED" && <Badge variant="rejected" className="text-xs">Rejected</Badge>}
           {project.status === "SENT_BACK" && <Badge variant="rejected" className="text-xs">Sent Back</Badge>}
-          {onEdit && (
+          {onEdit && isSubmitter && (
             <button type="button" onClick={() => onEdit(project)} className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1">
               <Pencil className="h-3 w-3" />
               {project.status === "REJECTED" || project.status === "SENT_BACK"
@@ -396,7 +403,7 @@ function ProjectFormFields({
   // Citation Metrics) - Applied vs Sanctioned each validate their own branch,
   // and a Sanctioned project's yearly groups + reports are required too.
   const coPisValid = (toNumberOrUndefined(form.coPiCount) ?? 0) === 0
-    || (form.coPis.length > 0 && form.coPis.every((c) => c.name.trim() && c.department.trim() && c.affiliation.trim()));
+    || (form.coPis.length > 0 && form.coPis.every(isCoPiComplete));
 
   const appliedValid = isSanctioned || (
     !!form.dateProposalSubmitted && form.amountApplied.trim() !== "" && !Number.isNaN(Number(form.amountApplied)) && !!form.extendedToSeedFund &&
@@ -546,11 +553,7 @@ function ProjectFormFields({
             />
           </div>
           {(toNumberOrUndefined(form.coPiCount) ?? 0) > 0 && form.coPis.map((c, i) => (
-            <div key={i} className="grid grid-cols-1 gap-3 sm:grid-cols-3 rounded-md bg-muted/30 p-3">
-              <TextInput label={`Name of Co-PI ${i + 1}`} value={c.name} onChange={(v) => updateCoPi(i, { name: v })} required />
-              <TextInput label={`Dept of Co-PI ${i + 1}`} value={c.department} onChange={(v) => updateCoPi(i, { department: v })} required />
-              <TextInput label={`Affiliation of Co-PI ${i + 1}`} value={c.affiliation} onChange={(v) => updateCoPi(i, { affiliation: v })} required />
-            </div>
+            <CoPiFields key={i} index={i} coPi={c} onChange={(patch) => updateCoPi(i, patch)} />
           ))}
         </div>
 

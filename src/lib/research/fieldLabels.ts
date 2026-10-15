@@ -128,6 +128,8 @@ export const RESEARCH_FIELD_LABELS: Record<string, Record<string, string>> = {
     dateProjectSanctioned: "Date of Project Sanctioned",
     dateProposalSubmitted: "Date of Proposal Submitted",
     department: "Dept of Co-PI",
+    facultyId: "Faculty ID of Co-PI",
+    isInternal: "Co-PI from this college",
     durationMonths: "Duration (Months)",
     extendedToSeedFund: "Is the Proposal Extended to Seed Fund",
     seedFundAmountSanctioned: "Seed Funding Amount Sanctioned (Rs.)",
