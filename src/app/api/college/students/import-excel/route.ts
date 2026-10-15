@@ -424,15 +424,20 @@ export async function POST(request: Request) {
       const identityDuplicateError = findIdentityDuplicate(row);
       if (identityDuplicateError) { failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: identityDuplicateError }); continue; }
 
-      // Student Mobile No is REQUIRED: a real 10-digit number that no other student - in this or any other college - holds
+      // Student Mobile No is normally REQUIRED (it's how a roll-less row gets mapped to a Roll No later) - but a row
+      // that already carries its Roll No/Regd No doesn't need that mapping, so it may import with mobile left blank.
+      // When given, it's still a real 10-digit number that no other student - in this or any other college - holds
       // (nor an earlier row of this file). Checked here against this college's students and this file; claimed atomically
       // (which also covers every other college) before the write below.
       const typedMobile = row.mobileNo === undefined || row.mobileNo === null ? "" : String(row.mobileNo).trim();
-      const mobileProblem = studentMobileProblem(typedMobile);
+      const rowHasRoll = row.rollNumber != null && String(row.rollNumber).trim() !== "";
+      const mobileProblem = typedMobile || !rowHasRoll ? studentMobileProblem(typedMobile) : null;
       if (mobileProblem) { failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: mobileProblem }); continue; }
-      const mobile10 = normalizeStudentMobile(typedMobile);
-      const mobileHolder = existingMobiles.get(mobile10);
-      if (mobileHolder) { failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: studentMobileTakenMessage(mobile10, mobileHolder) }); continue; }
+      const mobile10 = typedMobile ? normalizeStudentMobile(typedMobile) : "";
+      if (mobile10) {
+        const mobileHolder = existingMobiles.get(mobile10);
+        if (mobileHolder) { failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: studentMobileTakenMessage(mobile10, mobileHolder) }); continue; }
+      }
       row.mobileNo = mobile10;
 
       // Department is optional at the row level (HOD's own template has no
