@@ -8,7 +8,8 @@ import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { actorName, batchesCol, loadResultRules, recordsCol } from "@/lib/examResults/store";
 import { studentStanding, type StudentStanding } from "@/lib/examResults/gpa";
-import { batchMatches } from "@/lib/examResults/importRows";
+import { batchMatches, effectiveBatch } from "@/lib/examResults/importRows";
+import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
 import type { ExamResultBatch, ExamResultRecord } from "@/types/examResults";
 
 // One results sheet: GET (with every student's record and their SGPA / CGPA
@@ -70,6 +71,7 @@ export async function GET(_request: Request, { params }: Params) {
     let missing: { rollNumber: string; name: string }[] = [];
     if (batch.examType === "REGULAR" && batch.batch && batch.department) {
       const inSheet = new Set(list.map((r) => r.studentId));
+      const currentStartYear = Number((await resolveCollegeAcademicYear(db, session.collegeId)).slice(0, 4));
       const studentsCol = db.collection("colleges").doc(session.collegeId).collection("students");
       // A sub-department sheet: its own students. A branch sheet: the branch's and its sub-departments'.
       const names = batch.subDepartment
@@ -84,10 +86,12 @@ export async function GET(_request: Request, { params }: Params) {
       for (const d of [...own.docs, ...core.docs]) {
         if (seen.has(d.id) || inSheet.has(d.id)) continue;
         seen.add(d.id);
-        const st = d.data() as { rollNumber?: string; name?: string; batch?: string; status?: string; courseId?: string };
+        const st = d.data() as { rollNumber?: string; name?: string; batch?: string; status?: string; courseId?: string; year?: number };
         if (st.status === "DISCONTINUED") continue;
         if (st.courseId && !batch.courseIds.includes(st.courseId)) continue;
-        if (!batchMatches(st.batch, batch.batch)) continue;
+        // No batch stored: worked out from the year of study, as the import does.
+        const eff = effectiveBatch({ batch: st.batch, year: st.year }, currentStartYear);
+        if (!eff || !batchMatches(eff.batch, batch.batch)) continue;
         missing.push({ rollNumber: st.rollNumber ?? "", name: st.name ?? "" });
       }
       missing = missing.sort((a, b) => a.rollNumber.localeCompare(b.rollNumber)).slice(0, 500);

@@ -318,13 +318,24 @@ describe("batch membership", () => {
     expect(r.failed).toEqual([]);
   });
 
-  it("refuses another batch, and a student with no batch on record", () => {
+  it("refuses another batch, and a student with neither a batch nor a year of study", () => {
     const r = validateResultRows([row(2, "24A91A0501", "MA101", "A"), row(3, "24A91A0502", "MA101", "A")],
       withBatch([{ ...anil, batch: "2023-2027" }, { ...bina, batch: undefined }]));
     expect(r.failed.map((f) => f.error)).toEqual([
       "24A91A0501 is in batch 2023-2027, not 2024-2028",
-      "24A91A0502 has no batch on record - set it on the student first",
+      "24A91A0502 has no batch or year of study on record - set it on the student first",
     ]);
+  });
+
+  it("no batch stored: taken from the section's batch, else worked out from the year of study", () => {
+    const r = validateResultRows([row(2, "24A91A0501", "MA101", "A"), row(3, "24A91A0502", "MA101", "A"), row(4, "24MBA001", "MA101", "A")],
+      withBatch([
+        { ...anil, batch: undefined, sectionBatch: "2024-2028" },
+        { ...bina, batch: undefined, year: 3 },             // 2026-27, Year 3 -> 2024 intake
+        { ...mba, batch: undefined, year: 2 },              // 2026-27, Year 2 -> 2025 intake
+      ], { currentStartYear: 2026, courseIds: [], department: "" }));
+    expect(r.failed.map((f) => f.error)).toEqual(["24MBA001 is in Year 2 now, so batch 2025-, not 2024-2028"]);
+    expect(r.accepted.map((a) => a.student.id)).toEqual(["s1", "s2"]);
   });
 
   it("accepts a detained student now in a later batch who has results filed under this one", () => {
