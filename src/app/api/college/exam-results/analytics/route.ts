@@ -6,12 +6,16 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { editableDepartmentNames, getHodDepartmentScope } from "@/lib/departments/scope";
 import { batchesCol, loadResultRules, recordsCol } from "@/lib/examResults/store";
 import { gradeTableFor } from "@/lib/examResults/rules";
-import { buildResultsAnalytics, type AnalyticsRecord } from "@/lib/examResults/analytics";
+import { buildExamAnalytics, buildResultsAnalytics, examKeyOf, type AnalyticsRecord } from "@/lib/examResults/analytics";
+import { examHeldLabel } from "@/lib/examResults/sheet";
 import type { ExamResultBatch, ExamResultRecord } from "@/types/examResults";
 
 // Results Analysis - statistics of PUBLISHED semester results.
 //   GET                                          -> the classes there are results for (the filters)
-//   GET ?courseKey&batch&semester[&department]   -> statistics for that class (one branch, or all in scope)
+//   GET ?courseKey&batch&semester[&department][&section] -> statistics for that class
+//        (one branch or all in scope; a section by each student's CURRENT section
+//        on their student record - results sheets don't store one)
+//        [&exam=<examKeyOf>] -> one exam alone (else the final results)
 // Exam Cell, Principal and Vice Principal see every branch. An HOD sees only
 // the departments they head (their own, sub-departments and managed branches) -
 // enforced here, whatever the page asks for.
@@ -34,12 +38,12 @@ export async function GET(request: Request) {
     if (!courseKey || !batch || !semester) {
       // The filters: every class (course + batch + year/semester) with published results in scope.
       const snap = await batchesCol(db, session.collegeId).where("status", "==", "PUBLISHED").get();
-      const classes = new Map<string, { courseKey: string; courseName: string; batch: string; year: number; semester: number; branches: Set<string> }>();
+      const classes = new Map<string, { courseKey: string; courseName: string; regulation: string; batch: string; year: number; semester: number; branches: Set<string> }>();
       for (const d of snap.docs) {
         const b = d.data() as ExamResultBatch;
         if (!inScope(b) || !b.batch) continue;
         const k = `${b.courseKey}|${b.batch}|${b.semester}`;
-        const c = classes.get(k) ?? { courseKey: b.courseKey, courseName: b.courseName, batch: b.batch, year: b.year, semester: b.semester, branches: new Set<string>() };
+        const c = classes.get(k) ?? { courseKey: b.courseKey, courseName: b.courseName, regulation: b.regulation ?? "", batch: b.batch, year: b.year, semester: b.semester, branches: new Set<string>() };
         c.branches.add(b.department);
         classes.set(k, c);
       }
@@ -67,19 +71,43 @@ export async function GET(request: Request) {
     const snaps = await Promise.all(parts.map((p) => recordsCol(db, session.collegeId).where("batchId", "in", p).get()));
 
     // A revaluation's records count toward the branch of the sheet they re-grade.
-    const records: AnalyticsRecord[] = snaps.flatMap((s) => s.docs).map((d) => {
+    const allRecords: (AnalyticsRecord & { revaluationOf?: string })[] = snaps.flatMap((s) => s.docs).map((d) => {
       const r = d.data() as ExamResultRecord & { createdAt?: { toMillis?: () => number } };
       return {
         batchId: r.batchId, studentId: r.studentId, rollNumber: r.rollNumber, name: r.name, semester: r.semester,
-        academicYear: r.academicYear, examHeld: r.examHeld, examType: r.examType, revaluesBatchId: r.revaluesBatchId,
+        academicYear: r.academicYear, examHeld: r.examHeld, examType: r.examType, revaluesBatchId: r.revaluesBatchId, revaluationOf: r.revaluationOf,
         subjects: r.subjects ?? [], branch: branchOf.get(r.batchId) ?? "", at: r.createdAt?.toMillis?.() ?? 0,
       };
     }).filter((r) => r.studentId);
 
+    // Each student's current section, for the Section filter.
+    const studentIds = [...new Set(allRecords.map((r) => r.studentId))];
+    const studentsCol = db.collection("colleges").doc(session.collegeId).collection("students");
+    const sectionOf = new Map<string, string>();
+    for (let i = 0; i < studentIds.length; i += 300) {
+      const docs = await db.getAll(...studentIds.slice(i, i + 300).map((sid) => studentsCol.doc(sid)));
+      for (const s of docs) if (s.exists) sectionOf.set(s.id, String(s.get("section") ?? "").trim());
+    }
+    const sections = [...new Set([...sectionOf.values()].filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    const section = q.get("section") || "";
+    const records = section ? allRecords.filter((r) => sectionOf.get(r.studentId) === section) : allRecords;
+
+    // The exams of this class (one per type + month, across branch sheets), oldest first.
+    const typeLabel = (t: string, of?: string) => t === "REGULAR" ? "Regular" : t === "SUPPLEMENTARY" ? "Supplementary" : `Revaluation of ${of === "SUPPLEMENTARY" ? "Supplementary" : "Regular"}`;
+    const exams = [...new Map(sheets.map((b) => {
+      const k = examKeyOf({ examType: b.examType, examHeld: b.examHeld ?? "", revaluationOf: b.revaluationOf });
+      return [k, { key: k, label: `${typeLabel(b.examType, b.revaluationOf)} · ${examHeldLabel(b.examHeld) || b.academicYear}`, examHeld: b.examHeld ?? "", examType: b.examType }];
+    })).values()].sort((x, y) => x.examHeld.localeCompare(y.examHeld) || (x.examType === "REVALUATION" ? 1 : 0) - (y.examType === "REVALUATION" ? 1 : 0));
+    const exam = q.get("exam") || "";
     const regulation = sheets[0]?.regulation ?? "";
+    const gradeTable = gradeTableFor(rules, regulation);
     return NextResponse.json({
-      analytics: buildResultsAnalytics(records, rules, gradeTableFor(rules, regulation), semester),
+      analytics: exam && exams.some((e) => e.key === exam)
+        ? buildExamAnalytics(records, exam, rules, gradeTable, semester)
+        : buildResultsAnalytics(records, rules, gradeTable, semester),
+      exams: exams.map(({ key, label, examType }) => ({ key, label, examType })),
       rules: { showSgpa: rules.showSgpa },
+      sections,
       sheets: sheets.map((b) => ({ id: b.id, title: b.title, examType: b.examType, examHeld: b.examHeld ?? "" })),
     });
   } catch (err) {

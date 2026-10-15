@@ -39,9 +39,9 @@ describe("validateResultRows", () => {
     expect(accepted[1].subjects[0]).toMatchObject({ grade: "B", points: 8, isPass: true });
   });
 
-  it("keeps a zero-credit subject, with 0 credits", () => {
+  it("keeps a zero-credit subject, with 0 credits, as a Pass", () => {
     const { accepted } = validateResultRows([row(2, "24A91A0501", "MC101", "A")], ctx());
-    expect(accepted[0].subjects[0]).toMatchObject({ credits: 0, isPass: true });
+    expect(accepted[0].subjects[0]).toMatchObject({ credits: 0, grade: "Pass", isPass: true });
   });
 
   it("rejects a row with a blank roll, subject or grade", () => {
@@ -108,6 +108,46 @@ describe("supplementary checks against the earlier sitting", () => {
   });
 });
 
+describe("zero-credit subjects - Pass / Fail only", () => {
+  it("any grade is a Pass, except a failing one, with no points", () => {
+    const { accepted, failed } = validateResultRows([
+      row(2, "24A91A0501", "MC101", "S"),
+      row(3, "24A91A0502", "MC101", "P"),
+      row(4, "24MBA001", "MC101", "COMPLETED"),
+    ], ctx({ courseIds: [], department: "" }));
+    expect(failed).toEqual([]);
+    expect(accepted.map((a) => a.subjects[0])).toEqual(["S", "P", "COMPLETED"].map((given) =>
+      ({ subjectId: "sub-audit", subjectCode: "MC101", subjectName: "Constitution", credits: 0, grade: "Pass", points: 0, isPass: true, gradeAsGiven: given })));
+  });
+
+  it("F - and any grade marked failing in Result Rules (AB, MP, WH) - is a Fail", () => {
+    const { accepted } = validateResultRows([row(2, "24A91A0501", "MC101", "F"), row(3, "24A91A0502", "MC101", "ab")], ctx());
+    expect(accepted.map((a) => [a.subjects[0].grade, a.subjects[0].isPass, a.subjects[0].gradeAsGiven])).toEqual([["Fail", false, "F"], ["Fail", false, "AB"]]);
+  });
+
+  it("a credit subject still needs a grade from the grade table", () => {
+    expect(validateResultRows([row(2, "24A91A0501", "MA101", "P")], ctx()).failed[0].error).toContain('Grade "P" is not in the grade table');
+  });
+});
+
+describe("sub-departments", () => {
+  const aiml = { ...bina, id: "s7", rollNumber: "24A91A0601", department: "CSE - AI&ML" };
+  const students = () => new Map([anil, aiml].map((s) => [s.rollNumber.toUpperCase(), s]));
+
+  it("the whole branch takes its sub-departments' students too", () => {
+    const r = validateResultRows([row(2, "24A91A0501", "MA101", "A"), row(3, "24A91A0601", "MA101", "A")],
+      ctx({ students: students(), allowedDepartments: ["CSE", "CSE - AI&ML"] }));
+    expect(r.failed).toEqual([]);
+  });
+
+  it("one sub-department picked takes only its own students", () => {
+    const r = validateResultRows([row(2, "24A91A0501", "MA101", "A"), row(3, "24A91A0601", "MA101", "A")],
+      ctx({ students: students(), allowedDepartments: ["CSE - AI&ML"] }));
+    expect(r.failed.map((f) => f.error)).toEqual(["24A91A0501 is not a CSE - AI&ML student (CSE)"]);
+    expect(r.accepted.map((a) => a.student.id)).toEqual(["s7"]);
+  });
+});
+
 describe("pickSubject", () => {
   it("prefers the student's own course, then the regulation, then the academic year", () => {
     const other = { ...math, id: "other-course", courseId: "c-ece" };
@@ -131,7 +171,7 @@ describe("result rules", () => {
     });
     expect(out).toEqual({
       rules: {
-        showSgpa: "ALWAYS", showCgpa: "ALL_PASSED", decimals: 2,
+        showSgpa: "ALWAYS", showCgpa: "ALL_PASSED", decimals: 2, cgpaFrom: "PRINTED",
         gradeTables: { DEFAULT: [{ grade: "O", points: 10, isPass: true }, { grade: "F", points: 0, isPass: false }], R23: [{ grade: "A+", points: 10, isPass: true }] },
       },
     });
@@ -248,13 +288,24 @@ describe("batch membership", () => {
     expect(r.failed).toEqual([]);
   });
 
-  it("refuses another batch, and a student with no batch on record", () => {
+  it("refuses another batch, and a student with neither a batch nor a year of study", () => {
     const r = validateResultRows([row(2, "24A91A0501", "MA101", "A"), row(3, "24A91A0502", "MA101", "A")],
       withBatch([{ ...anil, batch: "2023-2027" }, { ...bina, batch: undefined }]));
     expect(r.failed.map((f) => f.error)).toEqual([
       "24A91A0501 is in batch 2023-2027, not 2024-2028",
-      "24A91A0502 has no batch on record - set it on the student first",
+      "24A91A0502 has no batch or year of study on record - set it on the student first",
     ]);
+  });
+
+  it("no batch stored: taken from the section's batch, else worked out from the year of study", () => {
+    const r = validateResultRows([row(2, "24A91A0501", "MA101", "A"), row(3, "24A91A0502", "MA101", "A"), row(4, "24MBA001", "MA101", "A")],
+      withBatch([
+        { ...anil, batch: undefined, sectionBatch: "2024-2028" },
+        { ...bina, batch: undefined, year: 3 },             // 2026-27, Year 3 -> 2024 intake
+        { ...mba, batch: undefined, year: 2 },              // 2026-27, Year 2 -> 2025 intake
+      ], { currentStartYear: 2026, courseIds: [], department: "" }));
+    expect(r.failed.map((f) => f.error)).toEqual(["24MBA001 is in Year 2 now, so batch 2025-, not 2024-2028"]);
+    expect(r.accepted.map((a) => a.student.id)).toEqual(["s1", "s2"]);
   });
 
   it("accepts a detained student now in a later batch who has results filed under this one", () => {

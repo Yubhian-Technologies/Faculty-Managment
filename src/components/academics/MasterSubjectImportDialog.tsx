@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Download, Upload, FileSpreadsheet, XCircle, CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
+import { Download, Upload, FileSpreadsheet, XCircle, CheckCircle2, AlertTriangle, Loader2, Pencil } from "lucide-react";
 import { toast } from "@/hooks/useToast";
 import { parseCSV, parseExcelFile, readFileAsText, matchHeaders, getUnmatchedHeaders } from "@/lib/utils/csv";
 import { MASTER_IMPORT_COLUMNS, MASTER_IMPORT_HINTS } from "@/lib/subjects/masterImportColumns";
@@ -12,6 +12,7 @@ import { MASTER_IMPORT_MAX_ROWS } from "@/lib/subjects/limits";
 import type { SubjectRowInput } from "@/lib/subjects/validation/SubjectValidator";
 import { CategoriesDialog } from "@/components/academics/CategoriesDialog";
 import { categoryPrefillText } from "@/components/academics/CategoriesManager";
+import { ImportRowEditDialog } from "@/components/academics/ImportRowEditDialog";
 
 interface RowFailure { row: number; code: string; error: string; kind?: "unknown-category" | "duplicate"; value?: string; suggestion?: string }
 interface ImportResult {
@@ -50,6 +51,7 @@ export function MasterSubjectImportDialog({ open, onOpenChange, courseId, course
   const [isImporting, setIsImporting] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [showProblemsOnly, setShowProblemsOnly] = useState(false);
+  const [editingRow, setEditingRow] = useState<number | null>(null);
 
   // ── Categories: opened inline, never navigates away from this dialog ────
   const [showCategories, setShowCategories] = useState(false);
@@ -69,6 +71,7 @@ export function MasterSubjectImportDialog({ open, onOpenChange, courseId, course
     setPreviewError("");
     setResult(null);
     setShowProblemsOnly(false);
+    setEditingRow(null);
   }
 
   function downloadTemplate() {
@@ -107,6 +110,13 @@ export function MasterSubjectImportDialog({ open, onOpenChange, courseId, course
   function refreshValidate() {
     if (!uploaded) return;
     void runValidate(uploaded.records, ++validateRequestRef.current);
+  }
+
+  function saveRowEdit(rowNumber: number, data: SubjectRowInput) {
+    if (!uploaded) return;
+    const records = uploaded.records.map((r) => (r.rowNumber === rowNumber ? { ...r, data } : r));
+    setUploaded({ ...uploaded, records });
+    void runValidate(records, ++validateRequestRef.current);
   }
 
   async function handleFile(file: File) {
@@ -173,6 +183,10 @@ export function MasterSubjectImportDialog({ open, onOpenChange, courseId, course
     return (showProblemsOnly ? list.filter((r) => errorsByRow.has(r.rowNumber)) : list).slice(0, PREVIEW_LIMIT);
   }, [uploaded, showProblemsOnly, errorsByRow]);
   const rowErrorCount = new Set((preview?.failed ?? []).map((f) => f.row)).size;
+  const editingRecord = useMemo(
+    () => (editingRow != null ? uploaded?.records.find((r) => r.rowNumber === editingRow) : undefined),
+    [editingRow, uploaded],
+  );
 
   async function handleImport() {
     if (!uploaded || !readyToImport) return;
@@ -301,9 +315,14 @@ export function MasterSubjectImportDialog({ open, onOpenChange, courseId, course
                         <td className="p-2 whitespace-nowrap tabular-nums">{data.lectureHours || "?"}-{data.tutorialHours || "?"}-{data.practicalHours || "?"}</td>
                         <td className="p-2 min-w-56">
                           {rowErrors ? (
-                            <ul className="space-y-0.5 text-red-600">
-                              {rowErrors.map((f, i) => <li key={i} className="flex gap-1"><AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />{f.error}</li>)}
-                            </ul>
+                            <div className="space-y-1">
+                              <ul className="space-y-0.5 text-red-600">
+                                {rowErrors.map((f, i) => <li key={i} className="flex gap-1"><AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />{f.error}</li>)}
+                              </ul>
+                              <Button size="sm" variant="outline" className="h-6 px-2 text-xs" onClick={() => setEditingRow(rowNumber)}>
+                                <Pencil className="mr-1 h-3 w-3" />Fix row
+                              </Button>
+                            </div>
                           ) : preview && !isValidating ? (
                             <span className="text-green-700 dark:text-green-400">OK</span>
                           ) : (
@@ -373,6 +392,16 @@ export function MasterSubjectImportDialog({ open, onOpenChange, courseId, course
         initialText={categoriesPrefill}
         onChanged={refreshValidate}
       />
+      {editingRow != null && editingRecord && (
+        <ImportRowEditDialog
+          open
+          onOpenChange={(o) => { if (!o) setEditingRow(null); }}
+          rowNumber={editingRow}
+          errors={(errorsByRow.get(editingRow) ?? []).map((f) => f.error)}
+          data={editingRecord.data}
+          onSave={(data) => saveRowEdit(editingRow, data)}
+        />
+      )}
     </Card>
   );
 }

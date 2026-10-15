@@ -33,6 +33,12 @@ export interface ExamResultRules {
   showCgpa: GpaShowRule;
   /** Decimal places SGPA / CGPA are shown to. */
   decimals: number;
+  /**
+   * What CGPA multiplies each semester's credits by: the SGPA as PRINTED
+   * (rounded to `decimals` - the university's way, checked against real grade
+   * memos), or the EXACT unrounded SGPA. Absent = PRINTED.
+   */
+  cgpaFrom?: "PRINTED" | "EXACT";
   updatedBy?: string;
   updatedByName?: string;
   updatedAt?: Timestamp;
@@ -60,6 +66,9 @@ export interface ExamResultBatch {
   /** The branch (department) the sheet is for - every student in it belongs to this branch. */
   department: string;
   departmentId: string;
+  /** Optional: one sub-department of the branch - then every student belongs to it. */
+  subDepartment?: string;
+  subDepartmentId?: string;
   /** Regulation whose grade table applies. */
   regulation: string;
   /** The student cohort as configured on the regulation ("2024-2028"). */
@@ -95,9 +104,12 @@ export interface ExamResultSubject {
   subjectCode: string;
   subjectName: string;
   credits: number;
+  /** A letter grade ("S", "A" ...) - or "Pass" / "Fail" for a zero-credit subject. */
   grade: string;
   points: number;
   isPass: boolean;
+  /** Zero-credit subjects: the grade exactly as the file gave it ("S", "P", "AB" ...), kept for the record. */
+  gradeAsGiven?: string;
 }
 
 // Stored at colleges/{id}/semesterResults/{batchId}_{studentId} - one document

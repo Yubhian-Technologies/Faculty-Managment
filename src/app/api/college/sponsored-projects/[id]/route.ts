@@ -12,6 +12,7 @@ import { notifyReviewer, resolveSubmissionRoute, routeFields } from "@/lib/resea
 import { buildEditTrail, clearEditTrail, summarizeFieldChanges } from "@/lib/research/changeTracking";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import { validateSponsoredProjectBody } from "@/lib/research/validateSponsoredProject";
+import { finalizeSponsoredCoPis } from "@/lib/research/finalizeSponsoredCoPis";
 import type {
   PublicationStatus, SponsoredProjectCoPI, SponsoredProjectRequest, SponsoredProjectSanctionedStatus,
   SponsoredProjectStatus, SponsoredProjectType, SponsoredProjectYearData,
@@ -164,6 +165,16 @@ export async function PATCH(
       return NextResponse.json({ ok: true });
     }
 
+    // Co-PIs from this college are resolved against the faculty records; the rest are kept as typed.
+    let finalCoPis: SponsoredProjectCoPI[] | undefined;
+    let finalUids: string[] | undefined;
+    if (body.coPis !== undefined) {
+      const finalized = await finalizeSponsoredCoPis(db, session.collegeId, body.coPis);
+      if ("error" in finalized) return NextResponse.json({ error: finalized.error }, { status: 400 });
+      finalCoPis = finalized.coPis;
+      finalUids = finalized.internalAuthorUids;
+    }
+
     // An owner editing their OWN record always sends it back for verification -
     // at any status, not just a rejected or sent-back one, and including an
     // owner who is also the R&D head. Editing is a separate act from
@@ -184,6 +195,7 @@ export async function PATCH(
         sentBackReason: FieldValue.delete(),
         coordinatorNote: FieldValue.delete(),
         ...pickEditableFields(body),
+        ...(finalCoPis ? { coPis: finalCoPis, internalAuthorUids: finalUids } : {}),
         updatedAt: now,
         status: route.status satisfies PublicationStatus,
         reviewedBy: FieldValue.delete(),
@@ -215,7 +227,7 @@ export async function PATCH(
       return NextResponse.json({ ok: true });
     }
 
-    await ref.update({ ...pickEditableFields(body), updatedAt: new Date() });
+    await ref.update({ ...pickEditableFields(body), ...(finalCoPis ? { coPis: finalCoPis, internalAuthorUids: finalUids } : {}), updatedAt: new Date() });
     let actorName = "Unknown";
     try {
       const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();

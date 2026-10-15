@@ -47,6 +47,9 @@ export interface ResultBatchMeta {
   courseIds: string[];
   department: string;
   departmentId: string;
+  /** Optional: one sub-department of the branch (students of only that sub-department). */
+  subDepartment?: string;
+  subDepartmentId?: string;
   regulation: string;
   /** The student cohort, as configured on the regulation ("2024-2028"). */
   batch: string;
@@ -108,6 +111,9 @@ export function normalizeBatchMeta(input: unknown, ctx: MetaContext): { meta: Re
   const department = String(b.department ?? "").trim();
   const departmentId = String(b.departmentId ?? "").trim();
   if (!department || !departmentId) return { error: "Choose a branch" };
+  const subDepartment = String(b.subDepartment ?? "").trim();
+  const subDepartmentId = String(b.subDepartmentId ?? "").trim();
+  if (!!subDepartment !== !!subDepartmentId) return { error: "Choose the sub-department again" };
   const year = Number(b.year);
   if (!Number.isInteger(year) || year < 1 || year > 10) return { error: "Choose a year" };
   const batchLength = Number(batch.slice(5)) - Number(batch.slice(0, 4));
@@ -116,7 +122,10 @@ export function normalizeBatchMeta(input: unknown, ctx: MetaContext): { meta: Re
   if (!Number.isInteger(semester) || semester < 1 || semester > 30) return { error: "Choose a semester" };
   const examType = b.examType === "SUPPLEMENTARY" || b.examType === "REGULAR" || b.examType === "REVALUATION" ? b.examType : null;
   if (!examType) return { error: "Choose Regular, Supplementary or Revaluation" };
-  const base = { courseKey, courseName, courseIds, department, departmentId, regulation, batch, year, semester };
+  const base = {
+    courseKey, courseName, courseIds, department, departmentId, regulation, batch, year, semester,
+    ...(subDepartmentId ? { subDepartment, subDepartmentId } : {}),
+  };
 
   if (examType === "REVALUATION") {
     const targetBatchId = String(b.targetBatchId ?? "").trim();
@@ -149,6 +158,7 @@ export interface TargetExam {
   courseKey: string;
   batch?: string;
   departmentId?: string;
+  subDepartmentId?: string;
   year: number;
   semester: number;
   examType: ExamResultType;
@@ -161,8 +171,10 @@ export function completeFromTarget(meta: ResultBatchMeta, target: TargetExam | n
   if (!target) return { error: "The picked exam was not found" };
   if (target.status !== "PUBLISHED") return { error: "The picked exam is not published yet - publish it first" };
   if (target.examType === "REVALUATION") return { error: "Pick a Regular or Supplementary exam" };
+  // An exam of the whole branch covers its sub-departments too; one sub-department's exam only that one.
+  const subOk = !target.subDepartmentId || target.subDepartmentId === meta.subDepartmentId;
   if (target.courseKey !== meta.courseKey || target.batch !== meta.batch || target.departmentId !== meta.departmentId
-    || target.year !== meta.year || target.semester !== meta.semester) {
+    || target.year !== meta.year || target.semester !== meta.semester || !subOk) {
     return { error: "The picked exam is for a different course, batch, branch, year or semester" };
   }
   if (meta.examType === "REVALUATION") {
@@ -179,6 +191,7 @@ export function batchTitle(m: ResultBatchMeta): string {
   return [
     m.courseName,
     m.department,
+    m.subDepartment || null,
     m.regulation || null,
     m.batch || m.academicYear,
     `Year ${m.year}`,

@@ -9,9 +9,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
-import { Pencil, Trash2 } from "lucide-react";
+import { Download, Pencil, Trash2 } from "lucide-react";
 import type { Subject, SubjectCategory, SubjectType } from "@/types";
 import { CategoryField } from "@/components/academics/CategoryField";
+import { downloadCSV, toCSV } from "@/lib/utils/csv";
 
 const PAGE_SIZE = 20;
 
@@ -101,6 +102,22 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
     }
   }
 
+  function handleExport() {
+    const header = [
+      "Category", "Name", "Code", "Short Code", "Second Short Code", "Type",
+      "Lecture Hours", "Tutorial Hours", "Practical Hours", "Credits", "Total Hours per Semester", "Regulation",
+    ];
+    const rows = subjects.map((s) => [
+      s.category === "OTHER" ? (s.customCategory || "Other") : (s.category ?? ""),
+      s.name ?? "", s.code ?? "", s.shortCode ?? "", s.altShortCode ?? "", s.type ?? "",
+      String(s.lectureHours ?? 0), String(s.tutorialHours ?? 0), String(s.practicalHours ?? 0), String(s.credits ?? 0),
+      s.totalHoursPerSemester != null ? String(s.totalHoursPerSemester) : "",
+      s.regulation ?? "",
+    ]);
+    const safeName = [courseName, regulation].filter(Boolean).join("_").replace(/[^a-z0-9]+/gi, "_");
+    downloadCSV(toCSV([header, ...rows]), `subjects_${safeName}.csv`);
+  }
+
   async function handleDelete() {
     if (!deleting) return;
     try {
@@ -118,6 +135,9 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
       <CardContent className="p-4 space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-sm">{courseName}{regulation ? ` · ${regulation}` : ""} - {subjects.length} subject{subjects.length !== 1 ? "s" : ""}</h3>
+          <Button variant="outline" size="sm" onClick={handleExport} disabled={subjects.length === 0}>
+            <Download className="mr-1.5 h-3.5 w-3.5" />Export
+          </Button>
         </div>
 
         {isLoading ? (

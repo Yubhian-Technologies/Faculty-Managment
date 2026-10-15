@@ -5,6 +5,8 @@ export type ConsultantFields = {
   facultyConsultants: ConsultancyFacultyConsultant[];
   facultyConsultantsCount: number | null;
   facultyConsultantsNames: string;
+  // Login uid of every consultant who has one - the project shows on THEIR dashboard from submission.
+  internalAuthorUids: string[];
 };
 
 // Resolves submitted Employee IDs against this college's facultyMembers so a
@@ -16,11 +18,13 @@ export async function finalizeFacultyConsultants(
 ): Promise<{ fields: ConsultantFields } | { error: string }> {
   const ids = [...new Set(facultyIds.map((v) => String(v ?? "").trim()).filter(Boolean))];
   const consultants: ConsultancyFacultyConsultant[] = [];
+  const internalAuthorUids = new Set<string>();
   for (const facultyId of ids) {
     const snap = await db.collection("colleges").doc(collegeId).collection("facultyMembers")
       .where("employeeId", "==", facultyId).limit(1).get();
-    const f = snap.docs[0]?.data() as { name?: string; legalName?: string } | undefined;
+    const f = snap.docs[0]?.data() as { name?: string; legalName?: string; userUid?: string } | undefined;
     if (!f) return { error: `No faculty member found with Faculty ID "${facultyId}"` };
+    if (f.userUid) internalAuthorUids.add(f.userUid);
     consultants.push({ facultyId, name: f.name || f.legalName || facultyId });
   }
   return {
@@ -28,6 +32,7 @@ export async function finalizeFacultyConsultants(
       facultyConsultants: consultants,
       facultyConsultantsCount: consultants.length || null,
       facultyConsultantsNames: consultants.map((c) => c.name).join(", "),
+      internalAuthorUids: [...internalAuthorUids],
     },
   };
 }

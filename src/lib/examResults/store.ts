@@ -56,11 +56,13 @@ export async function loadStudentsByRoll(db: Firestore, collegeId: string, rolls
   const wanted = [...new Set(rolls.map(rollKey).filter(Boolean))];
   const found = new Map<string, ResultStudent>();
   const toStudent = (d: FirebaseFirestore.QueryDocumentSnapshot): ResultStudent => {
-    const s = d.data() as { rollNumber?: string; name?: string; department?: string; secondaryDepartment?: string; courseId?: string; regulation?: string; batch?: string };
+    const s = d.data() as { rollNumber?: string; name?: string; department?: string; secondaryDepartment?: string; courseId?: string; regulation?: string; batch?: string; year?: number; section?: string };
     return {
       id: d.id, rollNumber: String(s.rollNumber ?? "").trim(), name: s.name ?? "", department: s.department ?? "",
       secondaryDepartment: s.secondaryDepartment, courseId: s.courseId, regulation: s.regulation, batch: s.batch,
-    };
+      ...(s.year != null ? { year: Number(s.year) } : {}),
+      ...(s.section ? { section: String(s.section) } : {}),
+    } as ResultStudent & { section?: string };
   };
   const col = college(db, collegeId).collection("students");
   const byUpper = await mapLimited(chunks(wanted, 30), 10, (part) => col.where("rollNumberUpper", "in", part).get());
@@ -75,6 +77,16 @@ export async function loadStudentsByRoll(db: Firestore, collegeId: string, rolls
   for (const snap of legacy) for (const d of snap.docs) {
     const k = rollKey(d.get("rollNumber"));
     if (k && !found.has(k)) found.set(k, toStudent(d));
+  }
+  // A student with no batch stored but placed in a section takes the section's batch.
+  const unstamped = [...found.values()].filter((s) => !s.batch && (s as { section?: string }).section);
+  if (unstamped.length > 0) {
+    const sections = await college(db, collegeId).collection("sections").get();
+    const batchOf = new Map(sections.docs.map((d) => [`${d.get("department")}|${d.get("year")}|${d.get("name")}`, String(d.get("batch") ?? "")]));
+    for (const s of unstamped) {
+      const b = batchOf.get(`${s.department}|${s.year}|${(s as { section?: string }).section}`);
+      if (b) s.sectionBatch = b;
+    }
   }
   return found;
 }

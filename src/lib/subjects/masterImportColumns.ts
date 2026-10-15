@@ -30,7 +30,7 @@ export const MASTER_IMPORT_COLUMNS: MasterSubjectCsvColumn[] = [
 export const MASTER_IMPORT_HINTS = [
   "Each row is one subject, saved under the Course and Regulation selected above - no department, year or semester here. Assign it to a department's semester afterwards with Assign by code.",
   "Category, Subject Name, Subject Code, L, T, P and Credits are required. Enter 0 (or -) where there are none; use 0 for a zero-credit course. Nothing is filled in for you.",
-  "Subject Code and Subject Name must each be unique within the course and regulation. A row that repeats either one - in the file or against a subject already saved - stops the import.",
+  "Subject Code must be unique within the course and regulation - a row that repeats one, in the file or against a subject already saved, stops the import. A repeated Subject Name is only a warning (the same title legitimately recurs under a different code, e.g. across two semesters).",
   "Category must be a standard category (HSMC, BSC, ESC, PCC, PEC, OEC, MC, PROJ) or one defined under Academics > Categories.",
-  "If any row has a problem, nothing is imported. Fix the file and upload it again.",
+  "If any row has a problem, nothing is imported. Click \"Fix row\" to correct it right there, or fix the file and upload it again.",
 ];
