@@ -85,8 +85,13 @@ export function validateSponsoredProjectBody(body: SponsoredProjectRequiredField
   if (!body.tentativeOutcomes?.trim()) return "Tentative Outcomes of Project is required";
   if (!body.piDepartment?.trim() || !body.piAffiliation?.trim()) return "Dept. and Affiliation of PI are required";
   if (body.coPiCount) {
-    if (!body.coPis?.length || body.coPis.some((c) => !c.name?.trim() || !c.department?.trim() || !c.affiliation?.trim())) {
-      return "Every Co-PI needs a Name, Department and Affiliation";
+    if (!body.coPis?.length) return "Add the details of every Co-PI";
+    // A Co-PI from this college is a picked faculty member; anyone else needs the three typed details.
+    if (body.coPis.some((c) => c.isInternal === true && !c.facultyId?.trim())) {
+      return "Pick the faculty member for every Co-PI from this college";
+    }
+    if (body.coPis.some((c) => c.isInternal !== true && (!c.name?.trim() || !c.department?.trim() || !c.affiliation?.trim()))) {
+      return "Every Co-PI from another institution needs a Name, Department and Affiliation";
     }
   }
 

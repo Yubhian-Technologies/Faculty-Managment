@@ -57,10 +57,6 @@ interface DiscoveryInnovationPatchBody {
   applicants?: IprApplicant[];
   inventorsCount?: number;
   inventors?: IprInventor[];
-  isStudentPatent?: "YES" | "NO";
-  studentName?: string;
-  studentRegistrationNumber?: string;
-  studentDepartment?: string;
   publishedProofUrl?: string;
   grantedProofUrl?: string;
   isCommercialized?: "YES" | "NO";
@@ -78,8 +74,8 @@ interface DiscoveryInnovationPatchBody {
 
 const EDITABLE_KEYS = [
   "iprType", "iprStatus", "applicationNumber", "title", "sdgGoals", "dateOfFiling", "datePublished",
-  "dateGranted", "applicantsCount", "applicants", "inventorsCount", "inventors", "isStudentPatent",
-  "studentName", "studentRegistrationNumber", "studentDepartment", "publishedProofUrl", "grantedProofUrl", "isCommercialized", "commercializationStatus",
+  "dateGranted", "applicantsCount", "applicants", "inventorsCount", "inventors",
+  "publishedProofUrl", "grantedProofUrl", "isCommercialized", "commercializationStatus",
   "commercializationDate", "licenseePartner", "commercializationType", "commercializationValue",
   "revenueGenerated", "commercializedProofUrl", "revenueGeneratedProofUrl",
 ] as const satisfies readonly (keyof DiscoveryInnovationPatchBody)[];
@@ -159,9 +155,10 @@ export async function PATCH(
       const wasApproved = record.status === "APPROVED";
 
       const iprStatus = body.iprStatus ?? record.iprStatus;
-      const inventors = body.inventors !== undefined
+      const finalizedInventors = body.inventors !== undefined
         ? await finalizeIprInventors(db, session.collegeId, body.inventors)
         : undefined;
+      const inventors = finalizedInventors?.inventors;
       const validationError = validateDiscoveryInnovationBody({ ...body, inventors }, iprStatus);
       if (validationError) {
         return NextResponse.json({ error: validationError }, { status: 400 });
@@ -174,7 +171,7 @@ export async function PATCH(
         sentBackReason: FieldValue.delete(),
         coordinatorNote: FieldValue.delete(),
         ...pickEditableFields(body),
-        ...(inventors !== undefined ? { inventors } : {}),
+        ...(finalizedInventors ? { inventors: finalizedInventors.inventors, internalAuthorUids: finalizedInventors.internalAuthorUids } : {}),
         updatedAt: now,
         status: route.status satisfies PublicationStatus,
         reviewedBy: FieldValue.delete(),

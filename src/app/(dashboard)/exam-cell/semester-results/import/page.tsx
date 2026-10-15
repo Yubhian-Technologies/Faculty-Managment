@@ -77,6 +77,8 @@ function ImportSemesterResults() {
   const [courseKey, setCourseKey] = useState("");
   const [departments, setDepartments] = useState<Department[]>([]);
   const [departmentId, setDepartmentId] = useState("");
+  // Optional: one sub-department of the branch ("" = the whole branch, sub-departments included).
+  const [subDepartmentId, setSubDepartmentId] = useState("");
   const [regulation, setRegulation] = useState("");
   // The programme's regulations and the batches each covers (Academics > Regulation).
   const [regOptions, setRegOptions] = useState<{ regulation: string; batches: string[] }[]>([]);
@@ -130,6 +132,11 @@ function ImportSemesterResults() {
     return departments.filter((d) => ids.has(d.id)).sort((a, b) => a.name.localeCompare(b.name));
   }, [group, courses, departments]);
   const branch = branches.find((d) => d.id === departmentId) ?? null;
+  const subDepartments = useMemo(
+    () => (branch ? departments.filter((d) => d.parentDepartmentId === branch.id).sort((a, b) => a.name.localeCompare(b.name)) : []),
+    [branch, departments]
+  );
+  const subDepartment = subDepartments.find((d) => d.id === subDepartmentId) ?? null;
 
   // The programme's year timings (for its semesters).
   useEffect(() => {
@@ -167,19 +174,20 @@ function ImportSemesterResults() {
   useEffect(() => {
     if (!group || !batch || !departmentId || !year || !semester || examType === "REGULAR") return;
     let cancelled = false;
-    const q = new URLSearchParams({ courseKey: group.key, batch, departmentId, year, semester });
+    const q = new URLSearchParams({ courseKey: group.key, batch, departmentId, year, semester, ...(subDepartmentId ? { subDepartmentId } : {}) });
     fetch(`/api/college/exam-results/sittings?${q}`)
       .then((r) => r.json() as Promise<{ sittings?: Sitting[] }>)
       .then((d) => { if (!cancelled) setSittings(d.sittings ?? []); })
       .catch(() => { if (!cancelled) setSittings([]); });
     return () => { cancelled = true; };
-  }, [group, batch, departmentId, year, semester, examType]);
+  }, [group, batch, departmentId, subDepartmentId, year, semester, examType]);
   const target = sittings.find((x) => x.id === targetBatchId) ?? null;
   const needsTarget = examType !== "REGULAR";
 
   const meta: ResultBatchMeta | null = draft
     ? {
         courseKey: draft.courseKey, courseName: draft.courseName, courseIds: draft.courseIds, department: draft.department ?? "", departmentId: draft.departmentId ?? "",
+        ...(draft.subDepartmentId ? { subDepartment: draft.subDepartment ?? "", subDepartmentId: draft.subDepartmentId } : {}),
         regulation: draft.regulation, batch: draft.batch ?? "", examHeld: draft.examHeld ?? "", academicYear: draft.academicYear, year: draft.year, semester: draft.semester, examType: draft.examType,
         ...(draft.targetBatchId ? { targetBatchId: draft.targetBatchId } : {}), ...(draft.revaluationOf ? { revaluationOf: draft.revaluationOf } : {}),
       }
@@ -188,6 +196,7 @@ function ImportSemesterResults() {
       : group && regulation && batch && branch && year && semester && (!needsTarget || target) && (examType === "REVALUATION" || examHeld)
         ? {
             courseKey: group.key, courseName: group.name, courseIds: group.courseIds, department: branch.name, departmentId: branch.id,
+            ...(subDepartment ? { subDepartment: subDepartment.name, subDepartmentId: subDepartment.id } : {}),
             regulation, batch, year: Number(year), semester: Number(semester), examType,
             // The server derives the academic year and, for a Revaluation, takes the date from the picked exam.
             examHeld: examType === "REVALUATION" ? target?.examHeld ?? "" : examHeld, academicYear: "",
@@ -206,6 +215,7 @@ function ImportSemesterResults() {
   function pickCourse(v: string) {
     setCourseKey(v);
     setDepartmentId("");
+    setSubDepartmentId("");
     setRegulation("");
     setRegOptions([]);
     setBatch("");
@@ -252,6 +262,7 @@ function ImportSemesterResults() {
         "One row per student per subject: Roll No, Subject Code and Grade - all three required.",
         "Subject Code may be the college's code (UGBS1T0523) or the university's code (R232101) once that is set on the subject under Academics > Subjects.",
         "Grade must be one of the grades in Result Rules (e.g. S, A, B ... F, AB).",
+        "Zero-credit subjects (mandatory / audit courses) are Pass / Fail only: any grade given is a Pass, except a failing one (F, AB, MP, WH - as marked in Result Rules), which is a Fail.",
         "Every student must belong to the batch and branch picked on the import page.",
         "University SGPA is optional - the university's SGPA for the student (on any one of their rows, \"-\" if withheld). It is only compared with the system's, never used to calculate.",
         "A Supplementary template lists every subject still not passed; a Revaluation template lists every subject of the exam - delete the rows that were not revalued.",
@@ -404,11 +415,20 @@ function ImportSemesterResults() {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="sr-branch">Branch *</Label>
-            <select id="sr-branch" className={selectClass} value={departmentId} onChange={(e) => changeClass(() => setDepartmentId(e.target.value))} disabled={!group}>
+            <select id="sr-branch" className={selectClass} value={departmentId} onChange={(e) => changeClass(() => { setDepartmentId(e.target.value); setSubDepartmentId(""); })} disabled={!group}>
               <option value="">{group && branches.length === 0 ? "No branch runs this course" : "Select a branch"}</option>
               {branches.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </div>
+          {subDepartments.length > 0 && (
+            <div className="space-y-1.5">
+              <Label htmlFor="sr-sub">Sub-Department</Label>
+              <select id="sr-sub" className={selectClass} value={subDepartmentId} onChange={(e) => changeClass(() => setSubDepartmentId(e.target.value))}>
+                <option value="">All of {branch?.name} (incl. sub-departments)</option>
+                {subDepartments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label htmlFor="sr-year">Year *</Label>
             <select id="sr-year" className={selectClass} value={year} onChange={(e) => changeClass(() => { setYear(e.target.value); setSemester(""); })} disabled={!batch}>

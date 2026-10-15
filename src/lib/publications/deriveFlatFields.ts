@@ -47,9 +47,12 @@ export async function finalizePublicationDetails(
       authors.push({ ...a, isInternal: false });
       continue;
     }
-    if (a.isInternal && a.authorType === "STUDENT" && a.studentRegistrationNumber?.trim()) {
+    if (a.isInternal && a.authorType === "STUDENT" && (a.name?.trim() || a.studentRegistrationNumber?.trim())) {
       // No student directory to verify against - trusted as entered, no
       // internalAuthorUids entry (no login to cross-link their profile to).
+      // The registration number is optional: a student author with only a
+      // name is still one of ours, and used to be turned into an External
+      // author (with no college) on save because the number was missing.
       authors.push({ ...a, isInternal: true, affiliationCollegeId: ownCollegeId, affiliationCollegeName: await ownCollege(), affiliationCountry: undefined });
       continue;
     }

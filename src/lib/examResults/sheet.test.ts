@@ -105,6 +105,22 @@ describe("completeFromTarget", () => {
   });
 });
 
+describe("sub-department", () => {
+  const ctx = { currentMonth: "2026-10", academicYearOfMonth: () => "2025-26" };
+  const good = { courseKey: "cat1", courseName: "B.Tech", courseIds: ["c1"], department: "CSE", departmentId: "d1", regulation: "R23", batch: "2024-2028", year: 2, semester: 3, examType: "REGULAR", examHeld: "2025-11" };
+  it("is optional, and goes into the title when picked", () => {
+    expect(normalizeBatchMeta(good, ctx)).not.toHaveProperty("meta.subDepartment");
+    const m = (normalizeBatchMeta({ ...good, subDepartment: "CSE - AI&ML", subDepartmentId: "d9" }, ctx) as { meta: ResultBatchMeta }).meta;
+    expect(batchTitle(m)).toBe("B.Tech · CSE · CSE - AI&ML · R23 · 2024-2028 · Year 2 · Semester 3 · Regular · Nov 2025");
+  });
+  it("a sub-department sheet may pick the whole branch's exam, not another sub-department's", () => {
+    const target: TargetExam = { status: "PUBLISHED", courseKey: "cat1", batch: "2024-2028", departmentId: "d1", year: 2, semester: 3, examType: "REGULAR", examHeld: "2025-11", academicYear: "2025-26" };
+    const sup: ResultBatchMeta = { ...(good as unknown as ResultBatchMeta), year: 2, examType: "SUPPLEMENTARY", examHeld: "2026-05", academicYear: "2025-26", subDepartment: "AI", subDepartmentId: "d9", targetBatchId: "t" };
+    expect(completeFromTarget(sup, target)).toEqual({ meta: sup });
+    expect(completeFromTarget(sup, { ...target, subDepartmentId: "d8" })).toEqual({ error: "The picked exam is for a different course, batch, branch, year or semester" });
+  });
+});
+
 describe("labels", () => {
   it("titles a sheet with its batch and exam month", () => {
     const m: ResultBatchMeta = {

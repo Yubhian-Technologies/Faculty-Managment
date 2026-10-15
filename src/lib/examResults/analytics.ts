@@ -127,9 +127,12 @@ export function buildResultsAnalytics(
       stat.grades[g] = (stat.grades[g] ?? 0) + 1;
       stat.pointsSum += final.isPass ? final.points : 0;
       subjectStats.set(k, stat);
-      const gc = gradeCounts.get(g) ?? { count: 0, isPass: final.isPass };
-      gc.count++;
-      gradeCounts.set(g, gc);
+      // Zero-credit subjects are Pass / Fail only - not part of the letter-grade chart.
+      if (s.credits > 0) {
+        const gc = gradeCounts.get(g) ?? { count: 0, isPass: final.isPass };
+        gc.count++;
+        gradeCounts.set(g, gc);
+      }
     }
 
     const b = branchStats.get(branch) ?? { branch, appeared: 0, passedRegular: 0, passedNow: 0, averageSgpa: null, sgpaSum: 0, sgpaCount: 0 };
@@ -174,5 +177,127 @@ export function buildResultsAnalytics(
     toppers: [...withSgpa].sort((a, b) => (b.sgpa as number) - (a.sgpa as number) || a.rollNumber.localeCompare(b.rollNumber)).slice(0, 10),
     backlogStudents: students.filter((s) => s.backlogs.length > 0).sort((a, b) => b.backlogs.length - a.backlogs.length || a.rollNumber.localeCompare(b.rollNumber)),
     decimals: d,
+  };
+}
+
+/** One exam of a class across its branch sheets: "REGULAR||2025-11", "REVALUATION|SUPPLEMENTARY|2026-05". */
+export function examKeyOf(r: Pick<AnalyticsRecord, "examType" | "examHeld"> & { revaluationOf?: string }): string {
+  return `${r.examType}|${r.examType === "REVALUATION" ? r.revaluationOf ?? "" : ""}|${r.examHeld ?? ""}`;
+}
+
+export interface ExamAnalytics extends ResultsAnalytics {
+  /** REVALUATION only: subject results whose revaluation grade beat the original, and how many were revalued. */
+  improved?: number;
+  revalued?: number;
+}
+
+/**
+ * Statistics of ONE exam (its records across the class's branch sheets):
+ *   passedRegular = students who passed every subject they wrote in it,
+ *   passedNow     = students with no backlog of the semester now,
+ *   grades / subjects / backlogs = that exam's own grades,
+ *   SGPA          = each student's standing right after that exam.
+ * `records` is every record of the class (for standings and the revaluation's originals).
+ */
+export function buildExamAnalytics(
+  records: (AnalyticsRecord & { revaluationOf?: string })[],
+  examKey: string,
+  rules: Pick<ExamResultRules, "showSgpa" | "showCgpa" | "decimals">,
+  gradeTable: GradeRule[] = [],
+  semester: number = records[0]?.semester ?? 0
+): ExamAnalytics {
+  const inExam = records.filter((r) => examKeyOf(r) === examKey);
+  const byStudent = new Map<string, (AnalyticsRecord & { revaluationOf?: string })[]>();
+  for (const r of records) byStudent.set(r.studentId, [...(byStudent.get(r.studentId) ?? []), r]);
+  const toSitting = (r: AnalyticsRecord): StudentSitting => ({
+    semester: r.semester, academicYear: r.academicYear, examHeld: r.examHeld, examType: r.examType, batchId: r.batchId,
+    ...(r.revaluesBatchId ? { revaluesBatchId: r.revaluesBatchId } : {}), at: r.at, subjects: r.subjects,
+  });
+
+  const subjectStats = new Map<string, SubjectStat & { pointsSum: number }>();
+  const branchStats = new Map<string, BranchStat & { sgpaSum: number; sgpaCount: number }>();
+  const gradeCounts = new Map<string, { count: number; isPass: boolean }>();
+  const students: StudentRow[] = [];
+  let passedExam = 0;
+  let passedNow = 0;
+  let improved = 0;
+  let revalued = 0;
+
+  for (const exam of inExam) {
+    const all = byStudent.get(exam.studentId) ?? [];
+    // Everything up to and including this exam, for the standing "right after" it.
+    const ordered = orderSittings(all.map((r) => ({ ...toSitting(r), _rec: r })));
+    const upto = ordered.slice(0, ordered.findIndex((s) => s._rec === exam) + 1);
+    const after = studentStanding(upto, semester, rules);
+    const finals = finalPerSubject(orderSittings(applyRevaluations(all.map(toSitting))).map((s) => s.subjects));
+    const noBacklog = finals.every((s) => s.isPass);
+    const passedAll = exam.subjects.every((s) => s.isPass);
+    if (passedAll) passedExam++;
+    if (noBacklog) passedNow++;
+
+    // A revaluation's original grades: the sheet it re-grades.
+    const original = exam.examType === "REVALUATION" ? all.find((r) => r.batchId === exam.revaluesBatchId) : undefined;
+    const finalByCode = new Map(finals.map((s) => [key(s.subjectCode), s]));
+    for (const s of exam.subjects) {
+      const k = key(s.subjectCode);
+      const stat = subjectStats.get(k) ?? { subjectCode: s.subjectCode, subjectName: s.subjectName, credits: s.credits, appeared: 0, passedRegular: 0, passedNow: 0, grades: {}, averagePoints: 0, pointsSum: 0 };
+      stat.appeared++;
+      if (s.isPass) stat.passedRegular++;
+      if ((finalByCode.get(k) ?? s).isPass) stat.passedNow++;
+      stat.grades[s.grade] = (stat.grades[s.grade] ?? 0) + 1;
+      stat.pointsSum += s.isPass ? s.points : 0;
+      subjectStats.set(k, stat);
+      if (s.credits > 0) {
+        const gc = gradeCounts.get(s.grade) ?? { count: 0, isPass: s.isPass };
+        gc.count++;
+        gradeCounts.set(s.grade, gc);
+      }
+      if (original) {
+        revalued++;
+        const before = original.subjects.find((x) => key(x.subjectCode) === k);
+        if (before && (s.isPass !== before.isPass ? s.isPass : s.points > before.points)) improved++;
+      }
+    }
+
+    const b = branchStats.get(exam.branch) ?? { branch: exam.branch, appeared: 0, passedRegular: 0, passedNow: 0, averageSgpa: null, sgpaSum: 0, sgpaCount: 0 };
+    b.appeared++;
+    if (passedAll) b.passedRegular++;
+    if (noBacklog) b.passedNow++;
+    if (after.sgpa != null) { b.sgpaSum += after.sgpa; b.sgpaCount++; }
+    branchStats.set(exam.branch, b);
+
+    const failed = exam.subjects.filter((s) => !s.isPass);
+    students.push({
+      studentId: exam.studentId, rollNumber: exam.rollNumber, name: exam.name, branch: exam.branch, sgpa: after.sgpa,
+      backlogs: failed.map((s) => ({ subjectCode: s.subjectCode, subjectName: s.subjectName })),
+    });
+  }
+
+  const d = rules.decimals;
+  const withSgpa = students.filter((s) => s.sgpa != null);
+  const sgpaValues = withSgpa.map((s) => s.sgpa as number);
+  const order = new Map(gradeTable.map((g, i) => [g.grade.toUpperCase(), i]));
+  return {
+    appeared: students.length,
+    passedRegular: passedExam,
+    passedNow,
+    averageSgpa: sgpaValues.length ? round(sgpaValues.reduce((x, y) => x + y, 0) / sgpaValues.length, d) : null,
+    highestSgpa: sgpaValues.length ? Math.max(...sgpaValues) : null,
+    withSgpa: withSgpa.length,
+    backlogSubjects: students.reduce((n, s) => n + s.backlogs.length, 0),
+    studentsWithBacklogs: students.filter((s) => s.backlogs.length > 0).length,
+    grades: [...gradeCounts.entries()].map(([grade, v]) => ({ grade, count: v.count, isPass: v.isPass }))
+      .sort((x, y) => (order.get(x.grade.toUpperCase()) ?? 99) - (order.get(y.grade.toUpperCase()) ?? 99) || x.grade.localeCompare(y.grade)),
+    sgpaBands: [
+      ...BANDS.map((band) => ({ label: band.label, count: sgpaValues.filter((v) => v >= band.min && v < band.max).length })),
+      { label: "Withheld", count: students.length - withSgpa.length },
+    ],
+    subjects: [...subjectStats.values()].map(({ pointsSum, ...s }) => ({ ...s, averagePoints: s.appeared ? round(pointsSum / s.appeared, 2) : 0 })),
+    branches: [...branchStats.values()].map(({ sgpaSum, sgpaCount, ...b }) => ({ ...b, averageSgpa: sgpaCount ? round(sgpaSum / sgpaCount, d) : null }))
+      .sort((x, y) => x.branch.localeCompare(y.branch)),
+    toppers: [...withSgpa].sort((x, y) => (y.sgpa as number) - (x.sgpa as number) || x.rollNumber.localeCompare(y.rollNumber)).slice(0, 10),
+    backlogStudents: students.filter((s) => s.backlogs.length > 0).sort((x, y) => y.backlogs.length - x.backlogs.length || x.rollNumber.localeCompare(y.rollNumber)),
+    decimals: d,
+    ...(inExam.some((r) => r.examType === "REVALUATION") ? { improved, revalued } : {}),
   };
 }

@@ -10,13 +10,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/useToast";
 import { MENTORING_NOTE_MAX_LENGTH } from "@/types/mentoring";
+import { MenteeRecord } from "./record/MenteeRecord";
 
 // One mentee's progress, read-only, for their mentor / HOD: profile, attendance,
 // semester results, internal marks, and the mentor's own notes. Each tab loads
 // only when opened (see api/college/mentoring/students/[id]).
 
-type Tab = "profile" | "attendance" | "results" | "internal" | "notes";
+type Tab = "record" | "profile" | "attendance" | "results" | "internal" | "notes";
 const TABS: { key: Tab; label: string }[] = [
+  { key: "record", label: "Mentoring Record" },
   { key: "profile", label: "Profile" },
   { key: "attendance", label: "Attendance" },
   { key: "results", label: "Semester Results" },
@@ -83,7 +85,7 @@ function useTabData<T>(url: string | null) {
 }
 
 export function MenteeProgress({ studentId, backHref }: { studentId: string; backHref: string }) {
-  const [tab, setTab] = useState<Tab>("profile");
+  const [tab, setTab] = useState<Tab>("record");
   const api = `/api/college/mentoring/students/${studentId}`;
   const profile = useTabData<ProfileData>(`${api}?part=profile`);
   const s = profile.data?.student;
@@ -129,6 +131,7 @@ export function MenteeProgress({ studentId, backHref }: { studentId: string; bac
         ))}
       </div>
 
+      {tab === "record" && <MenteeRecord studentId={studentId} studentName={s?.name ?? ""} rollNumber={s?.rollNumber ?? ""} />}
       {tab === "profile" && <ProfileTab loading={profile.loading} data={profile.data} />}
       {tab === "attendance" && <AttendanceTab api={api} />}
       {tab === "results" && <ResultsTab api={api} />}

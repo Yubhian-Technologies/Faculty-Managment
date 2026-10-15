@@ -26,6 +26,31 @@ export interface ResultStudent {
   regulation?: string;
   /** The student's cohort ("2024-2028"; a lateral entrant's starts later, ends the same year). */
   batch?: string;
+  /** Current year of study - works out the batch when none is stored (see effectiveBatchStart). */
+  year?: number;
+  /** The batch of the section the student is placed in, when any. */
+  sectionBatch?: string;
+}
+
+/**
+ * The intake year of a student's batch. A batch is stamped on the student only
+ * when they are placed into a section, so many records (students imported but
+ * not yet placed) carry none. Then it is worked out: the section's batch if
+ * placed, else from the current year of study - a Year 2 student in 2026-27
+ * started in 2025. Null when there is nothing to go on.
+ */
+export function effectiveBatch(student: Pick<ResultStudent, "batch" | "year" | "sectionBatch">, currentStartYear?: number): { batch: string; derived: boolean } | null {
+  const own = String(student.batch ?? "").trim();
+  if (own) return { batch: own, derived: false };
+  const fromSection = String(student.sectionBatch ?? "").trim();
+  if (fromSection) return { batch: fromSection, derived: true };
+  const year = Number(student.year);
+  if (currentStartYear && Number.isInteger(year) && year >= 1) {
+    const start = currentStartYear - (year - 1);
+    // Only the start year is compared (see batchMatches), so the end is a placeholder.
+    return { batch: `${start}-`, derived: true };
+  }
+  return null;
 }
 
 export interface ResultSubjectOption {
@@ -71,6 +96,9 @@ export interface ResultImportContext {
   courseName: string;
   /** The sheet's branch: a student must belong to it (as department or core department). Empty = not checked. */
   department: string;
+  /** The department names a student may carry: the branch and its sub-departments, or just the one
+   *  sub-department picked. Absent = only `department`. */
+  allowedDepartments?: string[];
   regulation: string;
   academicYear: string;
   /** The sheet's batch ("2024-2028"). Empty = not checked. */
@@ -78,6 +106,8 @@ export interface ResultImportContext {
   /** Students with results already filed under `batch` - a detained student
    *  now in a later batch still belongs to this one for those exams. */
   batchHistory?: Set<string>;
+  /** The college's current academic year's start ("2026" for 2026-27) - for a student with no batch stored. */
+  currentStartYear?: number;
 }
 
 /** A student's batch is the sheet's: the same, or (a lateral entrant) ending the same year. */
@@ -85,6 +115,8 @@ export function batchMatches(studentBatch: string | undefined, sheetBatch: strin
   const own = String(studentBatch ?? "").trim();
   if (!own) return false;
   if (own === sheetBatch) return true;
+  // A batch worked out from the year of study knows only its start year.
+  if (own.endsWith("-")) return own.slice(0, 4) === sheetBatch.slice(0, 4);
   const end = (b: string) => (/(\d{4})$/.exec(b) ?? [])[1];
   return !!end(own) && end(own) === end(sheetBatch);
 }
@@ -134,26 +166,25 @@ export function validateResultRows(
       fail(`${rollNumber} is not a ${ctx.courseName} student`);
       continue;
     }
-    if (ctx.batch && !batchMatches(student.batch, ctx.batch) && !ctx.batchHistory?.has(student.id)) {
-      fail(student.batch
-        ? `${rollNumber} is in batch ${student.batch}, not ${ctx.batch}`
-        : `${rollNumber} has no batch on record - set it on the student first`);
-      continue;
+    if (ctx.batch && !ctx.batchHistory?.has(student.id)) {
+      const eff = effectiveBatch(student, ctx.currentStartYear);
+      if (!eff) { fail(`${rollNumber} has no batch or year of study on record - set it on the student first`); continue; }
+      if (!batchMatches(eff.batch, ctx.batch)) {
+        fail(eff.derived && !student.sectionBatch
+          ? `${rollNumber} is in Year ${student.year} now, so batch ${eff.batch.slice(0, 4)}-, not ${ctx.batch}`
+          : `${rollNumber} is in batch ${eff.batch}, not ${ctx.batch}`);
+        continue;
+      }
     }
-    const branch = ctx.department.trim().toLowerCase();
-    if (branch && ![student.department, student.secondaryDepartment].some((d) => (d ?? "").trim().toLowerCase() === branch)) {
-      fail(`${rollNumber} is not a ${ctx.department} student (${student.department || "no branch on record"})`);
+    const allowed = (ctx.allowedDepartments ?? (ctx.department ? [ctx.department] : [])).map((d) => d.trim().toLowerCase()).filter(Boolean);
+    if (allowed.length > 0 && ![student.department, student.secondaryDepartment].some((d) => allowed.includes((d ?? "").trim().toLowerCase()))) {
+      const what = ctx.allowedDepartments?.length === 1 ? ctx.allowedDepartments[0] : ctx.department;
+      fail(`${rollNumber} is not a ${what} student (${student.department || "no branch on record"})`);
       continue;
     }
 
     const options = ctx.subjects.get(subjectKey(subjectCode));
     if (!options || options.length === 0) { fail(`Subject Code "${subjectCode}" is not a subject of this college`); continue; }
-
-    const grade = grades.get(gradeText);
-    if (!grade) {
-      fail(`Grade "${gradeText}" is not in the grade table (${ctx.gradeTable.map((g) => g.grade).join(", ")})`);
-      continue;
-    }
 
     const subject = pickSubject(options, student, ctx);
     // A code naming two different subjects equally well (a university code
@@ -164,6 +195,25 @@ export function validateResultRows(
       fail(`Subject Code "${subjectCode}" matches more than one subject (${[subject, ...best].map((o) => `${o.code} ${o.name}`).join("; ")}) - give the University Code to one subject only`);
       continue;
     }
+    // Zero-credit subjects (mandatory / audit courses) have no grade points -
+    // only Pass or Fail. Any grade the file gives is a Pass, except one marked
+    // as failing in the grade table (F, AB, MP, WH ...), which is a Fail.
+    // Credit subjects must use the grade table.
+    const credits = Number.isFinite(subject.credits) && subject.credits > 0 ? subject.credits : 0;
+    let result: { grade: string; points: number; isPass: boolean; gradeAsGiven?: string };
+    if (credits === 0) {
+      const isPass = grades.get(gradeText)?.isPass !== false;
+      result = { grade: isPass ? "Pass" : "Fail", points: 0, isPass, gradeAsGiven: gradeText };
+    } else {
+      const grade = grades.get(gradeText);
+      if (!grade) {
+        fail(`Grade "${gradeText}" is not in the grade table (${ctx.gradeTable.map((g) => g.grade).join(", ")})`);
+        continue;
+      }
+      // A failing grade never carries points into the formula.
+      result = { grade: grade.grade, points: grade.isPass ? grade.points : 0, isPass: grade.isPass };
+    }
+
     // Keyed by the subject itself, so its college code and university code
     // in two rows count as the same subject.
     const dupKey = `${student.id}::${subject.id}`;
@@ -181,11 +231,8 @@ export function validateResultRows(
       subjectId: subject.id,
       subjectCode: subject.code.trim() || subjectCode,
       subjectName: subject.name,
-      credits: Number.isFinite(subject.credits) && subject.credits > 0 ? subject.credits : 0,
-      grade: grade.grade,
-      // A failing grade never carries points into the formula.
-      points: grade.isPass ? grade.points : 0,
-      isPass: grade.isPass,
+      credits,
+      ...result,
     });
     byStudent.set(student.id, entry);
   }

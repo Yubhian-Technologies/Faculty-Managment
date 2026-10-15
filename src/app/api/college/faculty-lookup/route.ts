@@ -17,14 +17,19 @@ export async function GET(request: Request) {
     const employeeId = params.get("employeeId")?.trim();
     const db = getAdminDb();
 
-    // Picker mode: every serving faculty member with the department they belong to,
-    // so the form can ask Department first, then a searchable faculty list.
+    // Picker mode: every faculty member with the department they belong to, so the form can
+    // ask Department first, then a searchable faculty list. Resigned / retired people are
+    // included and flagged `former` - the picker hides them unless asked, so a long-serving
+    // colleague who has since left can still be named as a co-author of work done here.
     if (params.get("list") === "1") {
       const all = await db.collection("colleges").doc(session.collegeId).collection("facultyMembers").get();
       const faculty = all.docs
         .map((d) => d.data() as { employeeId?: string; legalName?: string; honorific?: string; department?: string; status?: string })
-        .filter((f) => f.employeeId && f.department && f.status !== "RESIGNED" && f.status !== "RETIRED")
-        .map((f) => ({ employeeId: f.employeeId as string, name: facultyDisplayName(f), department: f.department as string }))
+        .filter((f) => f.employeeId && f.department)
+        .map((f) => ({
+          employeeId: f.employeeId as string, name: facultyDisplayName(f), department: f.department as string,
+          former: f.status === "RESIGNED" || f.status === "RETIRED",
+        }))
         .sort((a, b) => a.name.localeCompare(b.name));
       return NextResponse.json({ faculty });
     }

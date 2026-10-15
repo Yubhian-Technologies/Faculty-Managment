@@ -5,6 +5,7 @@ import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { notConfiguredMessage } from "@/lib/college/taughtYears";
 import { currentAcademicStartYear, regulationsForCourseYearByBatch } from "@/lib/college/academicSession";
 import { teachableYearsForDepartment } from "../teachableYears";
+import { loadEffectiveTiming } from "@/lib/college/semester";
 import { courseOwnershipError, semestersFrom } from "../courseOwnership";
 import { normalizeSubjectCode } from "../subjectIdentity";
 import { ASSIGN_MAX_CODES } from "../limits";
@@ -116,7 +117,13 @@ export class SubjectAssignService {
     if (!teachable.includes(year)) {
       throw new SubjectRequestError(`"${department.name}" isn't scoped to teach ${course.name} in Year ${year} - check its Years Taught.`);
     }
-    const configured = semestersFrom(timingSnap?.exists ? (timingSnap.data() as Partial<CourseYearTiming>) : undefined);
+    // A branch of a shared first year has no timing of its own - the year's semesters are set once on
+    // the department that manages it. Every other screen resolves it that way (loadEffectiveTiming), so
+    // asking only for this exact course's document wrongly reported "no semesters configured".
+    let configured = semestersFrom(timingSnap?.exists ? (timingSnap.data() as Partial<CourseYearTiming>) : undefined);
+    if (configured.length === 0) {
+      configured = semestersFrom((await loadEffectiveTiming(this.db, collegeId, courseId, year)) ?? undefined);
+    }
     if (!configured.includes(semester)) {
       throw new SubjectRequestError(
         configured.length === 0
