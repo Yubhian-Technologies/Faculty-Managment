@@ -24,11 +24,12 @@ export const STARTER_GRADE_TABLE: GradeRule[] = [
   { grade: "WH", points: 0, isPass: false },
 ];
 
-export const STARTER_RULES: Pick<ExamResultRules, "gradeTables" | "showSgpa" | "showCgpa" | "decimals"> = {
+export const STARTER_RULES: Pick<ExamResultRules, "gradeTables" | "showSgpa" | "showCgpa" | "decimals" | "cgpaFrom"> = {
   gradeTables: { [DEFAULT_GRADE_TABLE_KEY]: STARTER_GRADE_TABLE },
   showSgpa: "ALL_PASSED",
   showCgpa: "ALL_PASSED",
   decimals: 2,
+  cgpaFrom: "PRINTED",
 };
 
 /** A grade as it is compared everywhere: trimmed, upper-case ("a+" -> "A+"). */
@@ -76,7 +77,7 @@ function cleanTable(input: unknown, label: string): { table: GradeRule[] } | { e
  */
 export function normalizeResultRules(
   input: unknown
-): { rules: Pick<ExamResultRules, "gradeTables" | "showSgpa" | "showCgpa" | "decimals"> } | { error: string } {
+): { rules: Pick<ExamResultRules, "gradeTables" | "showSgpa" | "showCgpa" | "decimals" | "cgpaFrom"> } | { error: string } {
   const body = (input ?? {}) as Partial<ExamResultRules>;
   if (!isShowRule(body.showSgpa)) return { error: "Choose when SGPA is shown" };
   if (!isShowRule(body.showCgpa)) return { error: "Choose when CGPA is shown" };
@@ -108,7 +109,9 @@ export function normalizeResultRules(
   for (const [key, table] of Object.entries(gradeTables)) {
     if (!table.some((g) => g.isPass)) return { error: `${key} grade table needs at least one passing grade` };
   }
-  return { rules: { gradeTables, showSgpa: body.showSgpa, showCgpa: body.showCgpa, decimals } };
+  // Absent / unknown = PRINTED (the SGPA as printed on the memo).
+  const cgpaFrom = body.cgpaFrom === "EXACT" ? "EXACT" : "PRINTED";
+  return { rules: { gradeTables, showSgpa: body.showSgpa, showCgpa: body.showCgpa, decimals, cgpaFrom } };
 }
 
 /** Stored rules, or the starter ones for a college that has saved none yet. */

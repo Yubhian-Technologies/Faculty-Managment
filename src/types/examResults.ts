@@ -33,6 +33,12 @@ export interface ExamResultRules {
   showCgpa: GpaShowRule;
   /** Decimal places SGPA / CGPA are shown to. */
   decimals: number;
+  /**
+   * What CGPA multiplies each semester's credits by: the SGPA as PRINTED
+   * (rounded to `decimals` - the university's way, checked against real grade
+   * memos), or the EXACT unrounded SGPA. Absent = PRINTED.
+   */
+  cgpaFrom?: "PRINTED" | "EXACT";
   updatedBy?: string;
   updatedByName?: string;
   updatedAt?: Timestamp;

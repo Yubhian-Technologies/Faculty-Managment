@@ -85,15 +85,18 @@ export interface CumulativeGpa {
 
 /**
  * CGPA over the semesters given (each a semester's subjects, latest result of
- * each). Worked out from the exact weighted points rather than the rounded
- * SGPAs, which is the same formula without the rounding error piling up.
+ * each): Σ(semester credits x SGPA) / Σ semester credits, by default with each
+ * SGPA as printed (rounded) - see `from`.
  */
-export function computeCgpa(semesters: GpaSubject[][], showRule: GpaShowRule, decimals = 2): CumulativeGpa {
+export function computeCgpa(semesters: GpaSubject[][], showRule: GpaShowRule, decimals = 2, from: "PRINTED" | "EXACT" = "PRINTED"): CumulativeGpa {
   // Each semester is taken in full ("ALWAYS") here - whether the CGPA itself
   // may be shown is this function's own rule, applied once below.
   const parts = semesters.map((s) => computeSgpa(s, "ALWAYS", decimals));
   const credits = parts.reduce((sum, p) => sum + p.credits, 0);
-  const weightedPoints = parts.reduce((sum, p) => sum + p.weightedPoints, 0);
+  // PRINTED: semester credits x the SGPA as printed on the memo (rounded) -
+  // the university's way: 19.5 x 7.97 + 20.5 x 8.85 = 336.84 / 40 = 8.42,
+  // where the exact values give 8.425 -> 8.43. EXACT: Σ(Ci x Gi) over everything.
+  const weightedPoints = parts.reduce((sum, p) => sum + (from === "EXACT" || p.sgpa == null ? p.weightedPoints : p.credits * p.sgpa), 0);
   const backlogs = parts.flatMap((p) => p.backlogs);
   const withheld = showRule === "ALL_PASSED" && backlogs.length > 0;
   return {
@@ -140,7 +143,7 @@ export interface StudentStanding {
 export function studentStanding(
   sittings: StudentSitting[],
   semester: number,
-  rules: { showSgpa: GpaShowRule; showCgpa: GpaShowRule; decimals: number }
+  rules: { showSgpa: GpaShowRule; showCgpa: GpaShowRule; decimals: number; cgpaFrom?: "PRINTED" | "EXACT" }
 ): StudentStanding {
   const bySemester = new Map<number, StudentSitting[]>();
   for (const s of applyRevaluations(sittings)) {
@@ -152,7 +155,7 @@ export function studentStanding(
     .map(([n, list]) => ({ n, subjects: finalPerSubject(orderSittings(list).map((s) => s.subjects)) }));
   const own = semesters.find((s) => s.n === semester)?.subjects ?? [];
   const sgpa = computeSgpa(own, rules.showSgpa, rules.decimals);
-  const cgpa = computeCgpa(semesters.map((s) => s.subjects), rules.showCgpa, rules.decimals);
+  const cgpa = computeCgpa(semesters.map((s) => s.subjects), rules.showCgpa, rules.decimals, rules.cgpaFrom ?? "PRINTED");
   return {
     sgpa: sgpa.sgpa, sgpaWithheld: sgpa.withheld,
     cgpa: cgpa.cgpa, cgpaWithheld: cgpa.withheld,
