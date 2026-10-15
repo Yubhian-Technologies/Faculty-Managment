@@ -71,6 +71,9 @@ export interface ResultImportContext {
   courseName: string;
   /** The sheet's branch: a student must belong to it (as department or core department). Empty = not checked. */
   department: string;
+  /** The department names a student may carry: the branch and its sub-departments, or just the one
+   *  sub-department picked. Absent = only `department`. */
+  allowedDepartments?: string[];
   regulation: string;
   academicYear: string;
   /** The sheet's batch ("2024-2028"). Empty = not checked. */
@@ -140,9 +143,10 @@ export function validateResultRows(
         : `${rollNumber} has no batch on record - set it on the student first`);
       continue;
     }
-    const branch = ctx.department.trim().toLowerCase();
-    if (branch && ![student.department, student.secondaryDepartment].some((d) => (d ?? "").trim().toLowerCase() === branch)) {
-      fail(`${rollNumber} is not a ${ctx.department} student (${student.department || "no branch on record"})`);
+    const allowed = (ctx.allowedDepartments ?? (ctx.department ? [ctx.department] : [])).map((d) => d.trim().toLowerCase()).filter(Boolean);
+    if (allowed.length > 0 && ![student.department, student.secondaryDepartment].some((d) => allowed.includes((d ?? "").trim().toLowerCase()))) {
+      const what = ctx.allowedDepartments?.length === 1 ? ctx.allowedDepartments[0] : ctx.department;
+      fail(`${rollNumber} is not a ${what} student (${student.department || "no branch on record"})`);
       continue;
     }
 

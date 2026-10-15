@@ -60,6 +60,9 @@ export interface ExamResultBatch {
   /** The branch (department) the sheet is for - every student in it belongs to this branch. */
   department: string;
   departmentId: string;
+  /** Optional: one sub-department of the branch - then every student belongs to it. */
+  subDepartment?: string;
+  subDepartmentId?: string;
   /** Regulation whose grade table applies. */
   regulation: string;
   /** The student cohort as configured on the regulation ("2024-2028"). */

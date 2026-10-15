@@ -71,9 +71,14 @@ export async function GET(_request: Request, { params }: Params) {
     if (batch.examType === "REGULAR" && batch.batch && batch.department) {
       const inSheet = new Set(list.map((r) => r.studentId));
       const studentsCol = db.collection("colleges").doc(session.collegeId).collection("students");
+      // A sub-department sheet: its own students. A branch sheet: the branch's and its sub-departments'.
+      const names = batch.subDepartment
+        ? [batch.subDepartment]
+        : [batch.department, ...(await db.collection("colleges").doc(session.collegeId).collection("departments")
+            .where("parentDepartmentId", "==", batch.departmentId).get()).docs.map((d) => String(d.get("name") ?? "")).filter(Boolean)];
       const [own, core] = await Promise.all([
-        studentsCol.where("department", "==", batch.department).get(),
-        studentsCol.where("secondaryDepartment", "==", batch.department).get(),
+        studentsCol.where("department", "in", names.slice(0, 30)).get(),
+        studentsCol.where("secondaryDepartment", "in", names.slice(0, 30)).get(),
       ]);
       const seen = new Set<string>();
       for (const d of [...own.docs, ...core.docs]) {
