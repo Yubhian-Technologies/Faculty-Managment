@@ -39,9 +39,9 @@ describe("validateResultRows", () => {
     expect(accepted[1].subjects[0]).toMatchObject({ grade: "B", points: 8, isPass: true });
   });
 
-  it("keeps a zero-credit subject, with 0 credits", () => {
+  it("keeps a zero-credit subject, with 0 credits, as a Pass", () => {
     const { accepted } = validateResultRows([row(2, "24A91A0501", "MC101", "A")], ctx());
-    expect(accepted[0].subjects[0]).toMatchObject({ credits: 0, isPass: true });
+    expect(accepted[0].subjects[0]).toMatchObject({ credits: 0, grade: "Pass", isPass: true });
   });
 
   it("rejects a row with a blank roll, subject or grade", () => {
@@ -135,6 +135,28 @@ describe("university codes", () => {
     const { accepted, failed } = validateResultRows([row(2, "24A91A0501", "R232101", "D")], c);
     expect(accepted).toEqual([]);
     expect(failed[0].error).toContain('Subject Code "R232101" matches more than one subject');
+  });
+});
+
+describe("zero-credit subjects - Pass / Fail only", () => {
+  it("any grade is a Pass, except a failing one, with no points", () => {
+    const { accepted, failed } = validateResultRows([
+      row(2, "24A91A0501", "MC101", "S"),
+      row(3, "24A91A0502", "MC101", "P"),
+      row(4, "24MBA001", "MC101", "COMPLETED"),
+    ], ctx({ courseIds: [], department: "" }));
+    expect(failed).toEqual([]);
+    expect(accepted.map((a) => a.subjects[0])).toEqual(["S", "P", "COMPLETED"].map((given) =>
+      ({ subjectId: "sub-audit", subjectCode: "MC101", subjectName: "Constitution", credits: 0, grade: "Pass", points: 0, isPass: true, gradeAsGiven: given })));
+  });
+
+  it("F - and any grade marked failing in Result Rules (AB, MP, WH) - is a Fail", () => {
+    const { accepted } = validateResultRows([row(2, "24A91A0501", "MC101", "F"), row(3, "24A91A0502", "MC101", "ab")], ctx());
+    expect(accepted.map((a) => [a.subjects[0].grade, a.subjects[0].isPass, a.subjects[0].gradeAsGiven])).toEqual([["Fail", false, "F"], ["Fail", false, "AB"]]);
+  });
+
+  it("a credit subject still needs a grade from the grade table", () => {
+    expect(validateResultRows([row(2, "24A91A0501", "MA101", "P")], ctx()).failed[0].error).toContain('Grade "P" is not in the grade table');
   });
 });
 
