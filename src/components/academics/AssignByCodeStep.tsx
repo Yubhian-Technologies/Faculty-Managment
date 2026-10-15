@@ -87,7 +87,16 @@ export function AssignByCodeStep({ catalogId, regulation, courseName, initialDep
     else { setDeptId(d.id); setSubDeptId(""); }
   }, [initialDepartmentId, departments]);
 
-  const topDepartments = useMemo(() => departments.filter((d) => !d.parentDepartmentId).sort((a, b) => a.name.localeCompare(b.name)), [departments]);
+  // Only departments that actually run this catalog course - own a Course doc for it,
+  // or (a parent standing in for a shared-first-year sub-department) have one that does.
+  // Was previously every top-level department in the college regardless of `catalogId`.
+  const topDepartments = useMemo(() => {
+    const ownerIds = new Set(courses.filter((c) => c.catalogId === catalogId).map((c) => c.departmentId));
+    return departments
+      .filter((d) => !d.parentDepartmentId)
+      .filter((d) => ownerIds.has(d.id) || departments.some((sub) => sub.parentDepartmentId === d.id && ownerIds.has(sub.id)))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [departments, courses, catalogId]);
   const subDepartments = useMemo(() => departments.filter((d) => d.parentDepartmentId === deptId), [departments, deptId]);
   const activeDeptId = subDeptId || deptId;
   const activeDept = useMemo(() => departments.find((d) => d.id === activeDeptId), [departments, activeDeptId]);

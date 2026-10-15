@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { editableDepartmentNames } from "@/lib/departments/scope";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { loadHodStudentScope } from "@/lib/mentoring/access";
+import { resolveSelfMentor } from "@/lib/mentoring/selfMentor";
 import { mentoringErrorResponse } from "@/lib/mentoring/http";
 import { AVAILABLE_FACULTY_STATUSES } from "@/types";
 import type { MentorOption } from "@/types/mentoring";
@@ -20,8 +21,6 @@ export async function GET() {
     const collegeRef = db.collection("colleges").doc(session.collegeId);
     const { scope } = await loadHodStudentScope(db, session.collegeId, session.uid);
     const departments = [...new Set(editableDepartmentNames(scope))];
-    if (departments.length === 0) return NextResponse.json({ mentors: [] });
-
     const snaps = await Promise.all(
       departments.map((department) =>
         collegeRef.collection("facultyMembers")
@@ -30,7 +29,6 @@ export async function GET() {
           .get()
       )
     );
-
     const byUid = new Map<string, Omit<MentorOption, "menteeCount">>();
     for (const snap of snaps) {
       for (const d of snap.docs) {
@@ -42,6 +40,13 @@ export async function GET() {
       }
     }
 
+    // The HOD may mentor too: their own faculty record is offered even when it is filed outside
+    // the departments above (e.g. a Department Office login or a managed branch).
+    if (!byUid.has(session.uid)) {
+      const self = await resolveSelfMentor(db, session.collegeId, session.uid);
+      if (self) byUid.set(session.uid, { uid: session.uid, ...self });
+    }
+
     const counts = await Promise.all(
       [...byUid.keys()].map(async (uid) => {
         const c = await collegeRef.collection("students").where("mentorUid", "==", uid).count().get();
@@ -51,7 +56,7 @@ export async function GET() {
     const countByUid = new Map(counts);
 
     const mentors: MentorOption[] = [...byUid.values()]
-      .map((m) => ({ ...m, menteeCount: countByUid.get(m.uid) ?? 0 }))
+      .map((m) => ({ ...m, menteeCount: countByUid.get(m.uid) ?? 0, ...(m.uid === session.uid ? { isSelf: true } : {}) }))
       .sort((a, b) => a.name.localeCompare(b.name));
     return NextResponse.json({ mentors });
   } catch (err) {

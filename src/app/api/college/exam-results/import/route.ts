@@ -10,6 +10,7 @@ import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { gradeTableFor } from "@/lib/examResults/rules";
 import { batchTitle, completeFromTarget, examHeldLabel, normalizeBatchMeta, type ResultBatchMeta, type TargetExam } from "@/lib/examResults/sheet";
 import { applyPriorResults, applyRevaluationTargets, rollKey, validateResultRows, type FailedResultRow, type PriorResult, type RawResultRow } from "@/lib/examResults/importRows";
+import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
 import { actorName, batchesCol, examMonthContext, loadResultRules, loadStudentsByRoll, loadSubjectsByCode, recordId, recordsCol } from "@/lib/examResults/store";
 import type { ExamResultBatch } from "@/types/examResults";
 
@@ -49,6 +50,7 @@ export async function POST(request: Request) {
       meta = {
         courseKey: b.courseKey, courseName: b.courseName, courseIds: b.courseIds,
         department: b.department ?? "", departmentId: b.departmentId ?? "", regulation: b.regulation,
+        ...(b.subDepartmentId ? { subDepartment: b.subDepartment ?? "", subDepartmentId: b.subDepartmentId } : {}),
         batch: b.batch ?? "", examHeld: b.examHeld ?? "",
         academicYear: b.academicYear, year: b.year, semester: b.semester, examType: b.examType,
         ...(b.targetBatchId ? { targetBatchId: b.targetBatchId } : {}),
@@ -67,6 +69,17 @@ export async function POST(request: Request) {
       }
     }
 
+    // The branch's sub-departments: their students belong to the branch's sheet,
+    // and a picked sub-department must be one of them.
+    const children = (await db.collection("colleges").doc(collegeId).collection("departments")
+      .where("parentDepartmentId", "==", meta.departmentId).get()).docs.map((d) => ({ id: d.id, name: String(d.get("name") ?? "") }));
+    if (meta.subDepartmentId && !children.some((c) => c.id === meta.subDepartmentId)) {
+      return NextResponse.json({ error: `That sub-department is not part of ${meta.department}` }, { status: 400 });
+    }
+    const allowedDepartments = meta.subDepartmentId
+      ? [meta.subDepartment ?? ""]
+      : [meta.department, ...children.map((c) => c.name)];
+
     const [{ rules }, students, subjects, priorSnap] = await Promise.all([
       loadResultRules(db, collegeId),
       loadStudentsByRoll(db, collegeId, rows.map((r) => String(r.rollNumber ?? ""))),
@@ -80,8 +93,10 @@ export async function POST(request: Request) {
     const batchHistory = new Set(priorSnap.docs.filter((d) => d.get("batch") === meta.batch).map((d) => String(d.get("studentId"))));
     const checked = validateResultRows(rows, {
       students, subjects, gradeTable,
-      courseIds: meta.courseIds, courseName: meta.courseName, department: meta.department, regulation: meta.regulation, academicYear: meta.academicYear,
+      courseIds: meta.courseIds, courseName: meta.courseName, department: meta.department, allowedDepartments, regulation: meta.regulation, academicYear: meta.academicYear,
       batch: meta.batch, batchHistory,
+      // For a student with no batch stored: their year of study gives it.
+      currentStartYear: Number((await resolveCollegeAcademicYear(db, collegeId)).slice(0, 4)),
     });
 
     // A student already in THIS draft (an earlier part, or an earlier upload to it).
