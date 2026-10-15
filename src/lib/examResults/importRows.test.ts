@@ -201,7 +201,7 @@ describe("result rules", () => {
     });
     expect(out).toEqual({
       rules: {
-        showSgpa: "ALWAYS", showCgpa: "ALL_PASSED", decimals: 2,
+        showSgpa: "ALWAYS", showCgpa: "ALL_PASSED", decimals: 2, cgpaFrom: "PRINTED",
         gradeTables: { DEFAULT: [{ grade: "O", points: 10, isPass: true }, { grade: "F", points: 0, isPass: false }], R23: [{ grade: "A+", points: 10, isPass: true }] },
       },
     });

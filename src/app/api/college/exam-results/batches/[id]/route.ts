@@ -86,12 +86,18 @@ export async function GET(_request: Request, { params }: Params) {
       for (const d of [...own.docs, ...core.docs]) {
         if (seen.has(d.id) || inSheet.has(d.id)) continue;
         seen.add(d.id);
-        const st = d.data() as { rollNumber?: string; name?: string; batch?: string; status?: string; courseId?: string; year?: number };
+        const st = d.data() as { rollNumber?: string; name?: string; batch?: string; status?: string; courseId?: string; year?: number; studentType?: string };
         if (st.status === "DISCONTINUED") continue;
         if (st.courseId && !batch.courseIds.includes(st.courseId)) continue;
         // No batch stored: worked out from the year of study, as the import does.
         const eff = effectiveBatch({ batch: st.batch, year: st.year }, currentStartYear);
         if (!eff || !batchMatches(eff.batch, batch.batch)) continue;
+        // A lateral entrant joins in Year 2, so a Year 1 exam is not theirs -
+        // known from their type, or from a batch starting later than the
+        // cohort's (2025-2028 in a 2024-2028 cohort).
+        const lateral = String(st.studentType ?? "").trim().toUpperCase() === "LATERAL";
+        const joinedYear = Math.max(lateral ? 2 : 1, 1 + (Number(eff.batch.slice(0, 4)) - Number(batch.batch.slice(0, 4))));
+        if (Number.isFinite(joinedYear) && batch.year < joinedYear) continue;
         missing.push({ rollNumber: st.rollNumber ?? "", name: st.name ?? "" });
       }
       missing = missing.sort((a, b) => a.rollNumber.localeCompare(b.rollNumber)).slice(0, 500);
