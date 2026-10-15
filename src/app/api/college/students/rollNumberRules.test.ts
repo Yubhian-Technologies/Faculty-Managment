@@ -83,13 +83,21 @@ describe("bulk import - roll number rules", () => {
     expect(json.failed[1].error).toContain("already assigned to Anil");
   });
 
-  it("rejects a row with no Student Mobile No (required), even when it has a roll", async () => {
+  it("accepts a row with no Student Mobile No when it already has a Roll/Regd No - mobile is only required for roll-less rows", async () => {
     const { POST } = await import("@/app/api/college/students/import-excel/route");
     const res = await POST(post("/import", { records: [importRow("26A91A0090", "No Mobile", { mobileNo: "" }), importRow("26A91A0091", "Spaces Mobile", { mobileNo: "   " })] }));
     const json = await res.json() as { created: number; failed: { error: string }[] };
+    expect(json.created).toBe(2);
+    expect(json.failed).toHaveLength(0);
+    expect(importedStudents().map((d) => d.mobileNo)).toEqual([undefined, undefined]);
+  });
+
+  it("still rejects a row with no roll and no Student Mobile No - mobile is required when there is no roll to identify the row by", async () => {
+    const { POST } = await import("@/app/api/college/students/import-excel/route");
+    const res = await POST(post("/import", { records: [importRow("", "No Roll No Mobile", { mobileNo: "" })] }));
+    const json = await res.json() as { created: number; failed: { error: string }[] };
     expect(json.created).toBe(0);
-    expect(json.failed.map((f) => f.error)).toEqual(["Student Mobile No is required", "Student Mobile No is required"]);
-    expect(importedStudents()).toHaveLength(0);
+    expect(json.failed[0].error).toBe("Student Mobile No is required");
   });
 
   it("accepts new rolls, and rejects a repeat within the same file (even with different formatting)", async () => {
