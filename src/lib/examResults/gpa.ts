@@ -37,11 +37,22 @@ export interface SemesterGpa {
   withheld: boolean;
 }
 
-function round(value: number, decimals: number): number {
+/**
+ * Rounds the way the university prints SGPA / CGPA: to the nearest, and an
+ * EXACT halfway value to the even digit ("round half to even") - 8.125 is
+ * printed 8.12 (24B01A4601, Semester 3: 162.5 / 20), while 8.6154 is 8.62.
+ * A value only a floating-point hair from halfway counts as halfway.
+ */
+export function roundGpa(value: number, decimals: number): number {
   const d = Number.isInteger(decimals) && decimals >= 0 && decimals <= 4 ? decimals : 2;
   const f = 10 ** d;
-  return Math.round((value + Number.EPSILON) * f) / f;
+  const x = value * f;
+  const floor = Math.floor(x);
+  const frac = x - floor;
+  if (Math.abs(frac - 0.5) < 1e-9) return (floor % 2 === 0 ? floor : floor + 1) / f;
+  return Math.round(x) / f;
 }
+const round = roundGpa;
 
 /**
  * The latest result of each subject: a later sitting (a supplementary exam)
