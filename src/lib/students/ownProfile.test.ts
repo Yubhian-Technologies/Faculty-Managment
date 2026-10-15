@@ -60,3 +60,19 @@ describe("slotVisibleToStudent", () => {
     expect(slotVisibleToStudent({ labBatch: "Batch 2" }, undefined)).toBe(true);
   });
 });
+
+describe("buildOwnProfileGroups includeEmpty", () => {
+  it("lists every field of every group for a mentor, a missing one with an empty value", () => {
+    const sparse = { mobileNo: "9876543210" } as Partial<StudentRecord>;
+    const own = buildOwnProfileGroups(sparse);
+    expect(own.flatMap((g) => g.rows.map((r) => r.label))).toEqual(["Student Mobile No"]);
+
+    const full = buildOwnProfileGroups(sparse, { includeEmpty: true });
+    expect(full.length).toBeGreaterThan(own.length);
+    expect(full.find((g) => g.title === "Contact & Address")?.rows.find((r) => r.label === "Student Mobile No")?.value).toBe("9876543210");
+    expect(full.flatMap((g) => g.rows).filter((r) => r.value === "").length).toBeGreaterThan(20);
+    // Follow-up answers of a Yes/No question and staff remarks are not listed as "missing".
+    const labels = full.flatMap((g) => g.rows.map((r) => r.label.toLowerCase()));
+    expect(labels.some((l) => l.includes("remarks"))).toBe(false);
+  });
+});

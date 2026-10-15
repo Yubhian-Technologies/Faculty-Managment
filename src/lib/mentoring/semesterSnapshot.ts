@@ -25,7 +25,6 @@ export interface SnapshotSubject {
   subjectId: string;
   code: string;
   shortCode?: string;
-  universityCode?: string;
   name: string;
   credits: number | null;
   serial?: number;
@@ -102,7 +101,6 @@ export async function loadLiveSemesterSubjects(
       subjectId: id,
       code: a.subjectCode ?? "",
       ...(a.shortCode ? { shortCode: a.shortCode } : {}),
-      ...(a.universityCode ? { universityCode: a.universityCode } : {}),
       name: a.subjectName ?? "",
       credits: typeof a.credits === "number" ? a.credits : null,
       ...(a.serialNumber != null ? { serial: a.serialNumber } : {}),

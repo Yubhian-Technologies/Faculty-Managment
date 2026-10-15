@@ -18,7 +18,7 @@ const PAGE_SIZE = 20;
 
 interface EditForm {
   id: string;
-  name: string; code: string; shortCode: string; altShortCode: string; universityCode: string; totalHoursPerSemester: string;
+  name: string; code: string; shortCode: string; altShortCode: string; totalHoursPerSemester: string;
   excludeFromTeachingLoad: boolean;
   category: SubjectCategory | ""; customCategory: string;
   lectureHours: string; tutorialHours: string; practicalHours: string; credits: string;
@@ -27,7 +27,7 @@ interface EditForm {
 
 function toEditForm(s: Subject): EditForm {
   return {
-    id: s.id, name: s.name ?? "", code: s.code ?? "", shortCode: s.shortCode ?? "", altShortCode: s.altShortCode ?? "", universityCode: s.universityCode ?? "",
+    id: s.id, name: s.name ?? "", code: s.code ?? "", shortCode: s.shortCode ?? "", altShortCode: s.altShortCode ?? "",
     totalHoursPerSemester: s.totalHoursPerSemester != null ? String(s.totalHoursPerSemester) : "", excludeFromTeachingLoad: s.isNonTeachingLoad === true,
     category: s.category ?? "", customCategory: s.customCategory ?? "",
     lectureHours: String(s.lectureHours ?? 0), tutorialHours: String(s.tutorialHours ?? 0), practicalHours: String(s.practicalHours ?? 0),
@@ -86,7 +86,7 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
         headers: { "Content-Type": "application/json" },
         // Numbers go as typed: the server rejects an unreadable value instead of turning it into 0.
         body: JSON.stringify({
-          name: editForm.name, code: editForm.code, shortCode: editForm.shortCode, altShortCode: editForm.altShortCode, universityCode: editForm.universityCode,
+          name: editForm.name, code: editForm.code, shortCode: editForm.shortCode, altShortCode: editForm.altShortCode,
           totalHoursPerSemester: editForm.totalHoursPerSemester, excludeFromTeachingLoad: editForm.excludeFromTeachingLoad,
           category: editForm.category, customCategory: editForm.category === "OTHER" ? editForm.customCategory : "",
           lectureHours: editForm.lectureHours, tutorialHours: editForm.tutorialHours, practicalHours: editForm.practicalHours,
@@ -104,12 +104,12 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
 
   function handleExport() {
     const header = [
-      "Category", "Name", "Code", "Short Code", "Second Short Code", "University Code", "Type",
+      "Category", "Name", "Code", "Short Code", "Second Short Code", "Type",
       "Lecture Hours", "Tutorial Hours", "Practical Hours", "Credits", "Total Hours per Semester", "Regulation",
     ];
     const rows = subjects.map((s) => [
       s.category === "OTHER" ? (s.customCategory || "Other") : (s.category ?? ""),
-      s.name ?? "", s.code ?? "", s.shortCode ?? "", s.altShortCode ?? "", s.universityCode ?? "", s.type ?? "",
+      s.name ?? "", s.code ?? "", s.shortCode ?? "", s.altShortCode ?? "", s.type ?? "",
       String(s.lectureHours ?? 0), String(s.tutorialHours ?? 0), String(s.practicalHours ?? 0), String(s.credits ?? 0),
       s.totalHoursPerSemester != null ? String(s.totalHoursPerSemester) : "",
       s.regulation ?? "",
@@ -153,7 +153,6 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
                     <th className="py-1.5 pr-3">Category</th>
                     <th className="py-1.5 pr-3">Name</th>
                     <th className="py-1.5 pr-3">Code</th>
-                    <th className="py-1.5 pr-3">Univ. Code</th>
                     <th className="py-1.5 pr-3">L-T-P</th>
                     <th className="py-1.5 pr-3">Credits</th>
                     <th className="py-1.5 pr-3">Regulation</th>
@@ -166,7 +165,6 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
                       <td className="py-1.5 pr-3">{s.category === "OTHER" ? (s.customCategory || "Other") : (s.category ?? "-")}</td>
                       <td className="py-1.5 pr-3 font-medium">{s.name}</td>
                       <td className="py-1.5 pr-3 font-mono">{s.code}</td>
-                      <td className="py-1.5 pr-3 font-mono text-muted-foreground">{s.universityCode ?? "-"}</td>
                       <td className="py-1.5 pr-3 tabular-nums whitespace-nowrap">{s.lectureHours}-{s.tutorialHours}-{s.practicalHours}</td>
                       <td className="py-1.5 pr-3 tabular-nums">{s.credits}</td>
                       <td className="py-1.5 pr-3">{s.regulation ?? "-"}</td>
@@ -205,10 +203,7 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
                 allowNew={false}
               />
               <div className="space-y-1"><Label>Name</Label><Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} /></div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1"><Label>Code</Label><Input className="font-mono uppercase" value={editForm.code} onChange={(e) => setEditForm({ ...editForm, code: e.target.value })} /></div>
-                <div className="space-y-1"><Label>University Code</Label><Input className="font-mono uppercase" value={editForm.universityCode} onChange={(e) => setEditForm({ ...editForm, universityCode: e.target.value })} /></div>
-              </div>
+              <div className="space-y-1"><Label>Code</Label><Input className="font-mono uppercase" value={editForm.code} onChange={(e) => setEditForm({ ...editForm, code: e.target.value })} /></div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1"><Label>Short Code</Label><Input className="uppercase" value={editForm.shortCode} onChange={(e) => setEditForm({ ...editForm, shortCode: e.target.value })} /></div>
                 <div className="space-y-1"><Label>Second Short Code</Label><Input className="uppercase" placeholder="Asked when placing in the timetable" value={editForm.altShortCode} onChange={(e) => setEditForm({ ...editForm, altShortCode: e.target.value })} /></div>

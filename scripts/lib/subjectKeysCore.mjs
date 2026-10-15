@@ -33,7 +33,7 @@ export function planSubjectKeys(subjects, courses, usage = new Map()) {
     if (!regulation || !scope) { unscoped.push({ id: s.id, code: d.code ?? "", reason: !regulation ? "no regulation" : "course not found" }); continue; }
     const key = `${scope}|${regulation}`;
     const list = groups.get(key) ?? [];
-    list.push({ id: s.id, scope, regulation, code: normalizeCode(d.code), rawCode: d.code, name: d.name ?? "", nameKey: normalizeName(d.name), univ: normalizeUniv(d.universityCode), courseId: d.courseId, used: usage.get(s.id) ?? 0, isActive: d.isActive !== false });
+    list.push({ id: s.id, scope, regulation, code: normalizeCode(d.code), rawCode: d.code, name: d.name ?? "", nameKey: normalizeName(d.name), courseId: d.courseId, used: usage.get(s.id) ?? 0, isActive: d.isActive !== false });
     groups.set(key, list);
   }
 
@@ -41,17 +41,17 @@ export function planSubjectKeys(subjects, courses, usage = new Map()) {
   const keys = [];     // locks to write: { id, field, subjectId }
   const subjectFixes = []; // { id, set: { catalogId?, nameKey?, code? } }
   for (const members of groups.values()) {
-    const byField = { code: new Map(), name: new Map(), universityCode: new Map() };
+    const byField = { code: new Map(), name: new Map() };
     for (const m of members) {
       const add = (map, v) => { if (v) map.set(v, [...(map.get(v) ?? []), m]); };
-      add(byField.code, m.code); add(byField.name, m.nameKey); add(byField.universityCode, m.univ);
+      add(byField.code, m.code); add(byField.name, m.nameKey);
     }
     const clashing = new Set();
     for (const [field, map] of Object.entries(byField)) {
       for (const [value, list] of map) {
         if (list.length < 2) continue;
         clashes.push({ scope: list[0].scope, regulation: list[0].regulation, field, value, members: list });
-        if (field !== "universityCode") list.forEach((m) => clashing.add(m.id));
+        list.forEach((m) => clashing.add(m.id));
       }
     }
     for (const m of members) {

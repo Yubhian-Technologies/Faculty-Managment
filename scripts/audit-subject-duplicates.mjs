@@ -1,6 +1,6 @@
 /**
  * READ-ONLY REPORT. Lists, per college, every master subject that breaks the identity rule
- *   inside one Course Catalog course + regulation: Subject Code, Subject Name and University Code are each unique.
+ *   inside one Course Catalog course + regulation: Subject Code and Subject Name are each unique.
  * Run it BEFORE scripts/backfill-subject-keys.mjs. A clash is never fixed automatically: the Office decides, per
  * group, which subject keeps the code/name (the other is renamed to a new code, merged, or removed) - this report
  * says how many semester assignments and teaching assignments hang off each member to make that call easy.

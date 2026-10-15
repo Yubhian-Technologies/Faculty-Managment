@@ -57,8 +57,6 @@ export interface ResultSubjectOption {
   id: string;
   /** The college's code - what results are stored and shown under. */
   code: string;
-  /** The university's code (Subject.universityCode), when set. */
-  universityCode?: string;
   name: string;
   credits: number;
   courseId?: string;
@@ -87,8 +85,7 @@ export interface AcceptedStudentResult {
 export interface ResultImportContext {
   /** Students of this college, by upper-case roll number. */
   students: Map<string, ResultStudent>;
-  /** Subjects of this college, by upper-case college code AND by upper-case
-   *  university code (a key may have several entries). */
+  /** Subjects of this college, by upper-case college code (a key may have several entries). */
   subjects: Map<string, ResultSubjectOption[]>;
   gradeTable: GradeRule[];
   /** The Course docs of the batch's programme. Empty = not checked. */
@@ -187,12 +184,11 @@ export function validateResultRows(
     if (!options || options.length === 0) { fail(`Subject Code "${subjectCode}" is not a subject of this college`); continue; }
 
     const subject = pickSubject(options, student, ctx);
-    // A code naming two different subjects equally well (a university code
-    // given to two subjects of the same course) is refused, never guessed.
+    // A code naming two different subjects equally well is refused, never guessed.
     const best = options.filter((o) => o.code.trim().toUpperCase() !== subject.code.trim().toUpperCase()
       && subjectScore(o, student, ctx) === subjectScore(subject, student, ctx));
     if (best.length > 0) {
-      fail(`Subject Code "${subjectCode}" matches more than one subject (${[subject, ...best].map((o) => `${o.code} ${o.name}`).join("; ")}) - give the University Code to one subject only`);
+      fail(`Subject Code "${subjectCode}" matches more than one subject (${[subject, ...best].map((o) => `${o.code} ${o.name}`).join("; ")})`);
       continue;
     }
     // Zero-credit subjects (mandatory / audit courses) have no grade points -
@@ -214,8 +210,7 @@ export function validateResultRows(
       result = { grade: grade.grade, points: grade.isPass ? grade.points : 0, isPass: grade.isPass };
     }
 
-    // Keyed by the subject itself, so its college code and university code
-    // in two rows count as the same subject.
+    // Keyed by the subject itself.
     const dupKey = `${student.id}::${subject.id}`;
     if (seen.has(dupKey)) { fail(`${rollNumber} already has a row for ${subjectCode} in this file`); continue; }
     seen.add(dupKey);

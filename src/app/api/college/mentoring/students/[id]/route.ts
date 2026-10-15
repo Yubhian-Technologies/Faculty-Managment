@@ -52,7 +52,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
             profilePhotoUrl: student.profilePhotoUrl ?? null,
             mentorName: student.mentorName ?? null,
           },
-          groups: buildOwnProfileGroups(student),
+          groups: buildOwnProfileGroups(student, { includeEmpty: true }),
         });
       case "attendance": {
         const sem = searchParams.get("semester");

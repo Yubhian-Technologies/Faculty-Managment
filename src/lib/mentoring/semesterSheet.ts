@@ -1,14 +1,15 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { istDateKey } from "@/lib/attendance/istTime";
 import { effectiveJoiningDate } from "@/lib/studentAttendance/joiningDate";
-import { computeStudentAttendanceHistory, studentDepartmentsForHistory, type StudentAttendanceHistory } from "@/lib/studentAttendance/history";
+import { computeStudentAttendanceWindows, studentDepartmentsForHistory, type StudentAttendanceHistory } from "@/lib/studentAttendance/history";
 import { calcPercent } from "@/lib/studentAttendance/percentage";
 import { currentSemesterOf, type SemesterRange } from "@/lib/studentAttendance/studentReportRange";
-import { latestPerSubject, studentStanding, type GpaSubject, type StudentSitting } from "@/lib/examResults/gpa";
-import { loadResultRules, recordsCol } from "@/lib/examResults/store";
+import { orderSittings, studentStanding, type GpaSubject } from "@/lib/examResults/gpa";
+import { loadResultRules } from "@/lib/examResults/store";
+import { asGpaSitting, finalSubjectsOfSemester, loadPublishedSittings, type PublishedSitting } from "@/lib/examResults/studentSittings";
 import { cachedCollectionDocs } from "@/lib/firestore/sharedReads";
 import type { ExamMidSchedule, StudentRecord } from "@/types";
-import type { ExamResultRecord, ExamResultSubject } from "@/types/examResults";
+import type { ExamResultSubject } from "@/types/examResults";
 import type {
   MentoringSemesterOption,
   MentoringSemesterSheet,
@@ -32,16 +33,15 @@ import {
 // faculty's submitted internal marks. Read-only apart from the subject-list copy
 // semesterSnapshot keeps. Authorization is the caller's job (access.ts).
 
-type StoredResult = ExamResultRecord & { createdAt?: { toMillis?: () => number } };
-
-const createdMs = (r: StoredResult) => r.createdAt?.toMillis?.() ?? 0;
-const sittingOrder = (r: { examType: string }) => (r.examType === "REGULAR" ? 0 : 1);
-
-async function loadPublishedRecords(db: Firestore, collegeId: string, studentId: string): Promise<StoredResult[]> {
-  const snap = await recordsCol(db, collegeId).where("studentId", "==", studentId).get();
-  // Only what the Exam Cell has published - drafts are theirs alone.
-  return snap.docs.map((d) => ({ ...(d.data() as StoredResult), id: d.id })).filter((r) => r.status === "PUBLISHED");
+// The month a sitting is labelled with: the month the exam was held ("2026-11"), else when it was imported.
+function sittingMonthMs(s: PublishedSitting): number {
+  const m = /^(\d{4})-(\d{2})$/.exec(s.examHeld ?? "");
+  return m ? Date.UTC(Number(m[1]), Number(m[2]) - 1, 15) : s.at;
 }
+
+// Only what the Exam Cell has published (a sheet whose publish completed) - the same sittings, and the
+// same engine, as the student's own Results page.
+const loadPublishedRecords = loadPublishedSittings;
 
 function optionOf(semester: number, year: number | null, inYear: number | null, current: number | null): MentoringSemesterOption {
   return { semester, label: semesterHeading(semester, year, inYear), isCurrent: current === semester };
@@ -103,13 +103,27 @@ export async function buildSemesterSheet(
   semester: number
 ): Promise<MentoringSemesterSheet | null> {
   const today = istDateKey(new Date());
+  // Everything that depends on nothing but the student and the semester starts now, together with the
+  // timings / results below, instead of one after another further down.
+  const midsP = loadMidStarts(db, collegeId, student, semester);
+  const departmentsP = studentDepartmentsForHistory(db, collegeId, student);
+  const internalP = loadMenteeInternalMarks(db, collegeId, student)
+    .catch((err) => { console.error("[mentoring/semesterSheet internal]", err); return { subjects: [] as MenteeInternalSubject[] }; });
+  const remarksP = semesterDocRef(db, collegeId, student.id, semester).get();
+  const meetingsP = db.collection("colleges").doc(collegeId).collection("students").doc(student.id).collection("mentoringEntries")
+    .where("section", "==", "meetings").where("semester", "==", semester).count().get()
+    .then((c) => c.data().count).catch(() => 0);
+  // Started early; if the page turns out to have nothing to show they are never awaited, so a failure must not go unhandled.
+  for (const p of [midsP, departmentsP, remarksP]) p.catch(() => undefined);
   const [ranges, records, { rules }] = await Promise.all([
     loadStudentSemesterRanges(db, collegeId, student),
     loadPublishedRecords(db, collegeId, student.id),
     loadResultRules(db, collegeId),
   ]);
   const range: SemesterRange | null = ranges.find((r) => r.semester === semester) ?? null;
-  const own = records.filter((r) => r.semester === semester).sort((a, b) => sittingOrder(a) - sittingOrder(b) || createdMs(a) - createdMs(b));
+  // The semester's sittings, oldest first (Regular, then supplementaries); revaluations follow the sitting they re-grade.
+  const own = orderSittings(records.filter((r) => r.semester === semester && r.examType !== "REVALUATION"));
+  const revals = records.filter((r) => r.semester === semester && r.examType === "REVALUATION");
   if (!range && own.length === 0) return null;
 
   const current = currentSemesterOf(ranges, today);
@@ -118,7 +132,7 @@ export async function buildSemesterSheet(
   const year = range?.year ?? (own[0]?.year || null);
 
   // Attendance windows: cumulative from the semester's start.
-  const mids = range ? await loadMidStarts(db, collegeId, student, semester) : { mid1: null, mid2: null };
+  const mids = range ? await midsP : { mid1: null, mid2: null };
   const start = range?.startDate ?? null;
   const end = range?.endDate ?? null;
   const windows: { mid1: AttendanceWindow | null; mid2: AttendanceWindow | null; end: AttendanceWindow | null } = {
@@ -126,16 +140,19 @@ export async function buildSemesterSheet(
     mid2: windowUpToMid(start, end, mids.mid2, today),
     end: windowEndOfSemester(start, end, today),
   };
-  const departments = await studentDepartmentsForHistory(db, collegeId, student);
+  const departments = await departmentsP;
   const joinedOn = effectiveJoiningDate(student);
-  const attendanceOf = async (w: AttendanceWindow | null): Promise<StudentAttendanceHistory | null> => {
-    if (!w) return null;
-    try { return await computeStudentAttendanceHistory(db, collegeId, student.id, departments, w, { joinedOn }); }
-    catch (err) { console.error("[mentoring/semesterSheet attendance]", err); return null; }
+  // The three windows are cumulative from the semester start: one scan of the department's sessions serves all.
+  const attendanceAll: Promise<(StudentAttendanceHistory | null)[]> = computeStudentAttendanceWindows(
+    db, collegeId, student.id, departments, [windows.mid1, windows.mid2, windows.end], { joinedOn }
+  ).catch((err) => { console.error("[mentoring/semesterSheet attendance]", err); return [null, null, null]; });
+  const attendance = {
+    mid1: attendanceAll.then((a) => a[0]),
+    mid2: attendanceAll.then((a) => a[1]),
+    end: attendanceAll.then((a) => a[2]),
   };
-  const attendance = { mid1: attendanceOf(windows.mid1), mid2: attendanceOf(windows.mid2), end: attendanceOf(windows.end) };
 
-  const mergedResults = latestPerSubject(own.map((r) => r.subjects ?? []));
+  const mergedResults = finalSubjectsOfSemester(records, semester);
   const set = await resolveSemesterSubjects({
     db, collegeId, student, semester, year, isPast,
     resultsAcademicYear: own[0]?.academicYear || null,
@@ -147,12 +164,7 @@ export async function buildSemesterSheet(
   });
 
   const [attMid1, attMid2, attEnd, internal, remarksDoc, meetings] = await Promise.all([
-    attendance.mid1, attendance.mid2, attendance.end,
-    loadMenteeInternalMarks(db, collegeId, student).catch((err) => { console.error("[mentoring/semesterSheet internal]", err); return { subjects: [] as MenteeInternalSubject[] }; }),
-    semesterDocRef(db, collegeId, student.id, semester).get(),
-    db.collection("colleges").doc(collegeId).collection("students").doc(student.id).collection("mentoringEntries")
-      .where("section", "==", "meetings").where("semester", "==", semester).count().get()
-      .then((c) => c.data().count).catch(() => 0),
+    attendance.mid1, attendance.mid2, attendance.end, internalP, remarksP, meetingsP,
   ]);
 
   const percentFor = (h: StudentAttendanceHistory | null, s: SnapshotSubject): number | null => {
@@ -169,8 +181,8 @@ export async function buildSemesterSheet(
   };
 
   const subjects: SheetSubject[] = set.subjects.map((s) => {
-    // A result row names its subject by id and by the college's or the university's code.
-    const keys = [s.code, s.universityCode, s.shortCode].filter(Boolean).map(codeKey);
+    // A result row names its subject by id and by the college's code.
+    const keys = [s.code, s.shortCode].filter(Boolean).map(codeKey);
     const graded = mergedResults.find((r) => r.subjectId === s.subjectId) ?? mergedResults.find((r) => keys.includes(codeKey(r.subjectCode)));
     return {
       subjectId: s.subjectId,
@@ -203,19 +215,23 @@ export async function buildSemesterSheet(
       const s = (r.subjects ?? []).find((x) => codeKey(x.subjectCode) === code);
       if (!s) continue;
       name = s.subjectName || name;
-      const label = r.examType === "REGULAR" ? "Regular" : `Supple ${++supple}${createdMs(r) ? ` (${monthYearLabel(createdMs(r))})` : ""}`;
+      const month = sittingMonthMs(r);
+      const label = r.examType === "REGULAR" ? "Regular" : `Supple ${++supple}${month ? ` (${monthYearLabel(month)})` : ""}`;
       attempts.push({ label, grade: s.grade, isPass: s.isPass });
+      // A revaluation of this sitting follows it; the final grade (best of the two) is the one in the table above.
+      for (const rv of orderSittings(revals.filter((x) => x.revaluesBatchId === r.batchId))) {
+        const re = (rv.subjects ?? []).find((x) => codeKey(x.subjectCode) === code);
+        if (re) attempts.push({ label: "Revaluation", grade: re.grade, isPass: re.isPass });
+      }
     }
     if (attempts.some((a) => !a.isPass)) backlogs.push({ code: own.flatMap((r) => r.subjects ?? []).find((x) => codeKey(x.subjectCode) === code)?.subjectCode ?? code, name, attempts });
   }
 
   // Overall standing up to this semester, from every published sitting.
-  const sittings: StudentSitting[] = records.map((r) => ({ semester: r.semester, examType: r.examType, at: createdMs(r), subjects: r.subjects ?? [] }));
-  const standing = studentStanding(sittings, semester, rules);
+  const standing = studentStanding(records.map(asGpaSitting), semester, rules);
   const perSemester = new Map<number, GpaSubject[]>();
   for (const n of [...new Set(records.filter((r) => r.semester <= semester).map((r) => r.semester))]) {
-    const list = sittings.filter((x) => x.semester === n).sort((a, b) => sittingOrder(a) - sittingOrder(b) || a.at - b.at);
-    perSemester.set(n, latestPerSubject(list.map((x) => x.subjects)));
+    perSemester.set(n, finalSubjectsOfSemester(records, n));
   }
   const all = [...perSemester.values()].flat();
   const remarks = remarksDoc.data() as { remarks?: string; remarksByName?: string; remarksAt?: { toDate?: () => Date } } | undefined;
