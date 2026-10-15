@@ -10,7 +10,12 @@ export const DEFAULT_TIMETABLE_LOGO_PATH = "/vishnulogo.png";
  *  also resolves inside the print window and the off-screen PDF iframe). */
 export function resolveLogoUrl(logoUrl?: string | null): string {
   const own = logoUrl?.trim();
-  if (own) return own;
+  if (own && own !== DEFAULT_TIMETABLE_LOGO_PATH) {
+    if (own.startsWith("/") && typeof window !== "undefined") {
+      return `${window.location.origin}${own}`;
+    }
+    return own;
+  }
   return typeof window !== "undefined" ? `${window.location.origin}${DEFAULT_TIMETABLE_LOGO_PATH}` : DEFAULT_TIMETABLE_LOGO_PATH;
 }
 

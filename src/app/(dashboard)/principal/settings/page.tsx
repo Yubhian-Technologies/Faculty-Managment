@@ -19,6 +19,7 @@ import { LeaveApprovalRoutingCard } from "@/components/leave/LeaveApprovalRoutin
 import { LeaveVacationStaffCard } from "@/components/leave/LeaveVacationStaffCard";
 import { LeaveTypeRulesCard } from "@/components/leave/LeaveTypeRulesCard";
 import { AttendanceNotPostedSettingsCard } from "@/components/attendance/AttendanceNotPostedSettingsCard";
+import { CollegeLogoSettingsCard } from "@/components/college/CollegeLogoSettingsCard";
 import type { FacultyNorms } from "@/types/core";
 import { subjectBlockKey } from "@/lib/timetable/subjectBlockSize";
 
@@ -191,6 +192,9 @@ export default function PrincipalSettingsPage() {
           Last updated {formatDate(settings.updatedAt)} by {settings.updatedByName ?? "Principal"}
         </div>
       )}
+
+      {/* College Logo & Branding Management */}
+      <CollegeLogoSettingsCard />
 
       {/* Single Column Layout */}
       <Card>

@@ -45,6 +45,7 @@
     "firebase-admin": "^14.0.0",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
+    "jszip": "^3.10.2",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.18.0",
     "mammoth": "^1.12.3",
