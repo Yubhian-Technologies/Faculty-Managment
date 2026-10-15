@@ -465,8 +465,7 @@ function ImportSemesterResults() {
         <CardHeader>
           <CardTitle className="text-base">2. Template</CardTitle>
           <CardDescription>
-            One row per student per subject: Roll No, Subject Code, Grade. The code may be the college code or the university code
-            (e.g. R232101) set on the subject - so the university&rsquo;s result export can be uploaded as it is. Your own results sheet works too if its headings are close
+            One row per student per subject: Roll No, Subject Code, Grade. The code must be the subject&rsquo;s college code. Your own results sheet works too if its headings are close
             (e.g. HTNO, Sub Code, Grade Secured); other columns such as Name, Credits or marks are ignored - only grades are imported.
           </CardDescription>
         </CardHeader>

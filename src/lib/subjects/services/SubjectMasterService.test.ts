@@ -178,16 +178,16 @@ describe("SubjectMasterService.update", () => {
     expect(fake.read(`${C}/subjects/${id}`)!.credits).toBe(3);
   });
 
-  it("carries hours and credits to semester copies that follow the master, not to customized ones", async () => {
+  it("carries hours and credits to every semester copy", async () => {
     const id = await make();
     instance(id);
     fake.seed(`${C}/subjectSemesterAssignments/${id}_it_3`, {
-      subjectId: id, departmentId: "it", semester: 3, year: 2, lectureHours: 1, tutorialHours: 0, practicalHours: 0, hoursPerWeek: 1, credits: 2, isCustomized: true, isActive: true,
+      subjectId: id, departmentId: "it", semester: 3, year: 2, lectureHours: 1, tutorialHours: 0, practicalHours: 0, hoursPerWeek: 1, credits: 2, isActive: true,
     });
     const r = await svc.update({ collegeId: "c1", id, patch: { lectureHours: 4, credits: 4 } });
-    expect(r.cascaded).toMatchObject({ instances: 2, customizedLeftAlone: 1 });
+    expect(r.cascaded).toMatchObject({ instances: 2 });
     expect(fake.read(`${C}/subjectSemesterAssignments/${id}_cse_3`)).toMatchObject({ hoursPerWeek: 4, credits: 4 });
-    expect(fake.read(`${C}/subjectSemesterAssignments/${id}_it_3`)).toMatchObject({ hoursPerWeek: 1, credits: 2 });
+    expect(fake.read(`${C}/subjectSemesterAssignments/${id}_it_3`)).toMatchObject({ hoursPerWeek: 4, credits: 4 });
   });
 
   it("won't lower hours below periods already placed on a timetable", async () => {
