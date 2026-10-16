@@ -415,6 +415,12 @@ export default function PrincipalSettingsPage() {
       <FinancialYearSettingsCard />
       <AttendanceNotPostedSettingsCard />
       <TimetableSignatureSettingsCard />
+      <TimetableSignatureSettingsCard
+        apiPath="/api/college/settings/teaching-load-signatures"
+        title="Teaching Load Signature Authority"
+        printsOn="Teaching Load downloads"
+        noun="Teaching Load downloads"
+      />
       <HiringTermsSettingsCard />
 
       <Card>

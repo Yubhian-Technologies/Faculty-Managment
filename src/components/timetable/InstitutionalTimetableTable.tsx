@@ -104,7 +104,6 @@ export function InstitutionalTimetableTable({
   const activeCollegeName = collegeName || collegeInfo?.name || "";
   const activeCollegeCode = collegeCode ?? (collegeInfo?.code || "");
   const activeAffiliation = affiliation ?? (collegeInfo?.affiliation || "");
-  const activeAddress = address ?? (collegeInfo?.address || "");
   const activePhone = phone ?? (collegeInfo?.phone || "");
 
   // Faculty/batches of one subject sharing a period show as ONE entry, subject once.
@@ -186,7 +185,7 @@ export function InstitutionalTimetableTable({
       collegeName: activeCollegeName,
       collegeCode: activeCollegeCode,
       affiliation: activeAffiliation,
-      address: activeAddress,
+      city: collegeInfo?.city,
       phone: activePhone,
       logoUrl: logoUrl ?? (collegeInfo?.logoUrl || ""),
       departmentName,
@@ -197,7 +196,7 @@ export function InstitutionalTimetableTable({
       regulation: section?.regulation,
       section: section ?? undefined,
       classroom,
-      classInchargeName: classInchargeName ?? section?.facultyInchargeName ?? "",
+      classInchargeName: (classInchargeName && classInchargeName !== "—" ? classInchargeName : section?.facultyInchargeName) || "",
       days: visibleDays,
       periods: Array.from({ length: timing.numberOfPeriods }, (_, i) => i + 1),
       periodTimings: timing.periods ?? [],
@@ -210,7 +209,7 @@ export function InstitutionalTimetableTable({
       signatureRows: collegeInfo?.timetableSignatureRows,
     }),
     [
-      activeCollegeName, activeCollegeCode, activeAffiliation, activeAddress, activePhone,
+      activeCollegeName, activeCollegeCode, activeAffiliation, activePhone, collegeInfo?.city,
       collegeInfo?.logoUrl, collegeInfo?.timetableSignatureRows, logoUrl, departmentName, courseName, academicYear, semesterLabel,
       effectiveDateProp, section, classroom, classInchargeName, visibleDays, timing, filteredSlots, subjects, assignments,
     ]

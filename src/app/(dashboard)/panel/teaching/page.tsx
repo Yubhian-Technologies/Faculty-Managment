@@ -242,6 +242,7 @@ export default function TeachingLoadPage() {
           courseCodeById,
           departments,
           formatDMY,
+          departmentName: user?.department,
           college,
         },
         `Semester-Timetable-${isoDateKey(weekStart)}.xlsx`
