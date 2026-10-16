@@ -9,21 +9,24 @@ import { DEPARTMENT_PICK_ALL, type DepartmentPickOption } from "@/lib/department
  * department field. Options come from `buildDepartmentPickOptions`.
  */
 export function DepartmentPickSelect({
-  value, onChange, options, allLabel = "All departments", disabled, className = "sm:w-56", id,
+  value, onChange, options, allLabel = "All departments", hideAll = false, placeholder, disabled, className = "sm:w-56", id,
 }: {
   value: string;
   onChange: (value: string) => void;
   options: DepartmentPickOption[];
   allLabel?: string;
+  /** A required pick (no "All" entry), e.g. a report that is always for one department. */
+  hideAll?: boolean;
+  placeholder?: string;
   disabled?: boolean;
   className?: string;
   id?: string;
 }) {
   return (
     <Select value={value} onValueChange={onChange} disabled={disabled}>
-      <SelectTrigger id={id} className={className}><SelectValue placeholder={allLabel} /></SelectTrigger>
+      <SelectTrigger id={id} className={className}><SelectValue placeholder={placeholder ?? allLabel} /></SelectTrigger>
       <SelectContent>
-        <SelectItem value={DEPARTMENT_PICK_ALL}>{allLabel}</SelectItem>
+        {!hideAll && <SelectItem value={DEPARTMENT_PICK_ALL}>{allLabel}</SelectItem>}
         {options.map((o) => (
           <SelectItem
             key={o.value}
