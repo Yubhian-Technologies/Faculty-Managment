@@ -36,6 +36,8 @@ export function normalizeStudentMobile(raw: unknown): string {
 }
 
 export const STUDENT_MOBILE_REQUIRED_MESSAGE = "Student Mobile No is required";
+/** A student needs a Roll No or a Student Mobile No - either one - to be added; a row with neither is refused. */
+export const ROLL_OR_MOBILE_REQUIRED_MESSAGE = "Roll No or Student Mobile No is required - give at least one";
 export const STUDENT_MOBILE_FORMAT_MESSAGE = "Student Mobile No must be exactly 10 digits, starting with 6, 7, 8 or 9";
 export const STUDENT_MOBILE_CLEAR_MESSAGE = "A student's Student Mobile No can't be removed - change it to the correct number instead";
 

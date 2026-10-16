@@ -155,12 +155,13 @@ describe("UG / PG - Field of Study (stored key `domain` unchanged)", () => {
     expect(view("UG", d({ ...ug, domain: "B.Sc" }))).toContain("B.Sc");
     expect(view("PG", d({ ...ug, domain: "MSC" }))).toContain("MSC");
   });
-  it("Ph.D. and Post-Doctoral keep the label Domain", () => {
+  it("Ph.D. and Post-Doctoral also say Field of Study (same stored key `domain`)", () => {
     const doc = d({ domain: "ENGINEERING", specialization: "ML", institutionName: "IIT", status: "AWARDED" });
     for (const level of ["DOCTORAL", "POST_DOCTORAL"] as const) {
-      expect(labels(form(level, doc))).toContain("Domain");
-      expect(labels(form(level, doc))).not.toContain("Field of Study");
-      expect(view(level, doc)).toContain(">Domain<");
+      expect(labels(form(level, doc))).toContain("Field of Study");
+      expect(labels(form(level, doc))).not.toContain("Domain");
+      expect(view(level, doc)).toContain(">Field of Study<");
+      expect(view(level, doc)).not.toContain(">Domain<");
     }
   });
 });

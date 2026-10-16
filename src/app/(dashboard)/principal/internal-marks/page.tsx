@@ -36,7 +36,11 @@ function ordinalYear(year: number | undefined) {
 export default function PrincipalInternalMarksPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
+  // ONLY the batches the last Load asked for (with their entries) - never the whole college.
   const [allBatches, setAllBatches] = useState<Batch[]>([]);
+  // College-wide counts, from three server-side aggregates (no batch is sent for them).
+  const [stats, setStats] = useState<{ totalStudents: number; submitted: number; pending: number } | null>(null);
+  const [isLoadingBatches, setIsLoadingBatches] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
   // Distinguishes "the load itself failed" from "the load succeeded and
   // genuinely found nothing" — a failed fetch (transient network/session
@@ -75,7 +79,7 @@ export default function PrincipalInternalMarksPage() {
       const [courseRes, deptRes, batchRes] = await Promise.all([
         fetch("/api/college/courses"),
         fetch("/api/college/departments"),
-        fetch("/api/college/internal-exam-marks"),
+        fetch("/api/college/internal-exam-marks?stats=1"),
       ]);
       // Every one of these must actually succeed — a fetch resolving with a
       // non-2xx status (401 from a stale session, 500 from a dev-server
@@ -87,10 +91,10 @@ export default function PrincipalInternalMarksPage() {
       }
       const courseJson = (await courseRes.json()) as { courses?: Course[] };
       const deptJson = (await deptRes.json()) as { departments?: Department[] };
-      const batchJson = (await batchRes.json()) as { batches?: Batch[] };
+      const batchJson = (await batchRes.json()) as { stats?: { totalStudents: number; submitted: number; pending: number } };
       setCourses(courseJson.courses ?? []);
       setDepartments(deptJson.departments ?? []);
-      setAllBatches(batchJson.batches ?? []);
+      setStats(batchJson.stats ?? null);
     } catch {
       setLoadError(true);
       toast({ variant: "destructive", title: "Failed to load internal marks data" });
@@ -104,6 +108,42 @@ export default function PrincipalInternalMarksPage() {
       await loadData();
     })();
   }, []);
+
+  // The marks themselves are read only for what Load asked for: year / section / subject are
+  // server-side filters, the course narrows to its Course docs, and the Exam Cell configuration
+  // of each batch comes back in the same response (no request per batch).
+  useEffect(() => {
+    if (!applied) return;
+    let cancelled = false;
+    void (async () => {
+      setIsLoadingBatches(true);
+      setLoadError(false);
+      try {
+        const qs = new URLSearchParams({ year: applied.year, include: "config" });
+        const ids = courses.filter((c) => c.name === applied.courseName).map((c) => c.id);
+        if (ids.length > 0) qs.set("courseId", ids.join(","));
+        if (applied.sectionName !== ALL) qs.set("sectionName", applied.sectionName);
+        if (applied.subjectId !== ALL) qs.set("subjectId", applied.subjectId);
+        const res = await fetch(`/api/college/internal-exam-marks?${qs}`);
+        if (!res.ok) throw new Error("load failed");
+        const json = (await res.json()) as { batches?: Batch[]; configurations?: Record<string, ExamConfiguration | null> };
+        if (cancelled) return;
+        setAllBatches(json.batches ?? []);
+        setConfigByBatchId((prev) => {
+          const next = { ...prev };
+          for (const [id, c] of Object.entries(json.configurations ?? {})) if (c) next[id] = c;
+          return next;
+        });
+      } catch {
+        if (!cancelled) { setLoadError(true); toast({ variant: "destructive", title: "Failed to load internal marks" }); }
+      } finally {
+        if (!cancelled) setIsLoadingBatches(false);
+      }
+    })();
+    return () => { cancelled = true; };
+    // `courses` only resolves the picked course name to its Course ids; a Load is what reads.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applied]);
 
   const courseNameOptions = useMemo(() => [...new Set(courses.map((c) => c.name))].sort(), [courses]);
 
@@ -337,10 +377,10 @@ export default function PrincipalInternalMarksPage() {
     return entry.name.toLowerCase().includes(q) || entry.rollNumber.toLowerCase().includes(q);
   }
 
-  // Institution-wide, independent of the current filter selection.
-  const totalStudents = allBatches.reduce((sum, b) => sum + b.totalStudents, 0);
-  const submittedCount = allBatches.filter((b) => b.status === "SUBMITTED").length;
-  const pendingCount = allBatches.filter((b) => b.status === "DRAFT").length;
+  // Counts are institution-wide (server aggregates); the average is over the marks that are loaded.
+  const totalStudents = stats?.totalStudents ?? 0;
+  const submittedCount = stats?.submitted ?? 0;
+  const pendingCount = stats?.pending ?? 0;
   const averagePercent = (() => {
     const submitted = allBatches.filter((b) => b.status === "SUBMITTED" && configByBatchId[b.id]);
     let sumPct = 0;
@@ -435,7 +475,7 @@ export default function PrincipalInternalMarksPage() {
     { label: "Total Students", value: totalStudents, icon: Users, tile: "bg-blue-50 text-blue-600" },
     { label: "Submitted", value: submittedCount, icon: CheckCircle2, tile: "bg-emerald-50 text-emerald-600" },
     { label: "Pending", value: pendingCount, icon: Clock, tile: "bg-amber-50 text-amber-600" },
-    { label: "Average Internal Marks", value: averagePercent != null ? `${averagePercent}%` : "—", icon: BarChart3, tile: "bg-purple-50 text-purple-600" },
+    { label: applied ? "Average (this selection)" : "Average Internal Marks", value: averagePercent != null ? `${averagePercent}%` : "—", icon: BarChart3, tile: "bg-purple-50 text-purple-600" },
   ];
 
   return (
@@ -444,7 +484,7 @@ export default function PrincipalInternalMarksPage() {
         title="Internal Marks"
         description="Institution-wide internal assessment management"
         actions={
-          <Button variant="outline" size="sm" onClick={() => void loadData()} disabled={isLoadingData}>
+          <Button variant="outline" size="sm" onClick={() => { void loadData(); setApplied((a) => (a ? { ...a } : a)); }} disabled={isLoadingData || isLoadingBatches}>
             <RefreshCw className="h-3.5 w-3.5" /> Refresh
           </Button>
         }
@@ -568,7 +608,11 @@ export default function PrincipalInternalMarksPage() {
         </div>
       )}
 
-      {!loadError && applied && matchingBatches.length === 0 && (
+      {applied && isLoadingBatches && (
+        <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-16 rounded-md border bg-muted/30 animate-pulse" />)}</div>
+      )}
+
+      {!loadError && applied && !isLoadingBatches && matchingBatches.length === 0 && (
         <Card>
           <CardContent className="py-12 text-center text-sm text-muted-foreground">
             No internal exam marks found for this selection — either no faculty has been assigned to teach it yet,
@@ -577,7 +621,7 @@ export default function PrincipalInternalMarksPage() {
         </Card>
       )}
 
-      {!isAllMode && matchingBatches.map((batch) => {
+      {!isLoadingBatches && !isAllMode && matchingBatches.map((batch) => {
         const config = configByBatchId[batch.id];
         const activeComponents = activeComponentsFor(batch);
         const visibleEntries = batch.entries.filter(matchesSearch);
@@ -680,7 +724,7 @@ export default function PrincipalInternalMarksPage() {
       {/* One or more of Branch/Section/Subject is "All" — matchingBatches can
           span multiple departments/sections/subjects at once, so every row
           carries its own identifying context instead of sharing one header. */}
-      {isAllMode && (
+      {!isLoadingBatches && isAllMode && (
         <div className="space-y-3">
           <div className="relative sm:max-w-xs">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
