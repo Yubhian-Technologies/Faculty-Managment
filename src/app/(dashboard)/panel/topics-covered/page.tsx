@@ -27,6 +27,8 @@ export default function TopicsCoveredPage() {
   const [assignmentId, setAssignmentId] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  // The pickers are a DRAFT; topics are read only when Load is pressed (`applied`).
+  const [applied, setApplied] = useState<{ assignmentId: string; from: string; to: string; nonce: number } | null>(null);
   const [rows, setRows] = useState<TopicRow[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState<"" | "pdf" | "xlsx">("");
@@ -48,14 +50,14 @@ export default function TopicsCoveredPage() {
   }, []);
 
   useEffect(() => {
-    if (!assignmentId) { setRows(null); return; }
+    if (!applied) { setRows(null); return; }
     let cancelled = false;
     setLoading(true);
     void (async () => {
       try {
-        const qs = new URLSearchParams({ assignmentId });
-        if (from) qs.set("from", from);
-        if (to) qs.set("to", to);
+        const qs = new URLSearchParams({ assignmentId: applied.assignmentId });
+        if (applied.from) qs.set("from", applied.from);
+        if (applied.to) qs.set("to", applied.to);
         const res = await fetch(`/api/college/topics-covered?${qs}`);
         const json = (await res.json()) as { rows?: TopicRow[]; error?: string };
         if (!res.ok) throw new Error(json.error || "Failed to load");
@@ -70,9 +72,10 @@ export default function TopicsCoveredPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [assignmentId, from, to]);
+  }, [applied]);
 
-  const current = subjects?.find((s) => s.assignmentId === assignmentId);
+  const current = subjects?.find((s) => s.assignmentId === applied?.assignmentId);
+  const filtersChanged = applied !== null && (applied.assignmentId !== assignmentId || applied.from !== from || applied.to !== to);
 
   async function exportList(kind: "pdf" | "xlsx") {
     if (!rows || !current) return;
@@ -118,6 +121,13 @@ export default function TopicsCoveredPage() {
               <label className="mb-1 block text-xs font-medium text-muted-foreground">To</label>
               <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-9" />
             </div>
+            <Button
+              size="sm"
+              disabled={!assignmentId || loading}
+              onClick={() => setApplied((prev) => ({ assignmentId, from, to, nonce: (prev?.nonce ?? 0) + 1 }))}
+            >
+              {loading ? "Loading…" : filtersChanged ? "Apply filters" : applied ? "Reload" : "Load"}
+            </Button>
             <div className="ml-auto flex gap-2">
               <Button size="sm" variant="outline" disabled={!rows?.length || exporting !== ""} onClick={() => void exportList("pdf")}>
                 <FileDown className="mr-1.5 h-3.5 w-3.5" />{exporting === "pdf" ? "Generating PDF..." : "PDF"}
@@ -128,8 +138,8 @@ export default function TopicsCoveredPage() {
             </div>
           </div>
 
-          {!assignmentId ? (
-            <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">Pick a subject to see its topics.</div>
+          {!applied ? (
+            <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">Pick a subject (and dates, if you want), then press Load.</div>
           ) : loading ? (
             <div className="h-40 rounded-lg border bg-muted/30 animate-pulse" />
           ) : !rows || rows.length === 0 ? (
