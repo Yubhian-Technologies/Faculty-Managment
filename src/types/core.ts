@@ -1717,6 +1717,8 @@ export interface ConsultancyProjectRequest {
   id: string;
   collegeId: string;
   uid: string; // owning staff member - the lead/submitting consultant
+  // Login uids of the faculty consultants - the record shows on their dashboard too, from submission.
+  internalAuthorUids?: string[];
   ownerName: string;
   ownerRole: UserRole;
   ownerDesignation?: string; // see resolveOwnerDesignation.ts
@@ -1805,6 +1807,8 @@ export interface SeedFundingProjectRequest {
   id: string;
   collegeId: string;
   uid: string; // owning staff member - the PI
+  // Login uids of the internal Co-PIs - the record shows on their dashboard too, from submission.
+  internalAuthorUids?: string[];
   ownerName: string;
   ownerRole: UserRole;
   ownerDesignation?: string;
@@ -1851,6 +1855,13 @@ export interface SponsoredProjectCoPI {
   name: string;
   department: string;
   affiliation: string;
+  // true = a faculty member of THIS college, picked by department then name. Their name,
+  // department and affiliation are filled in from the faculty record on save (never typed),
+  // and `facultyId` (their Employee ID) is what identifies them. Absent/false = someone from
+  // elsewhere (the "Other" choice), typed as name / department / affiliation - which is also
+  // what every Co-PI saved before this option existed is.
+  isInternal?: boolean;
+  facultyId?: string;
 }
 
 export type SponsoredProjectType = "TRAINING" | "TECHNICAL" | "SOCIETY" | "INFRASTRUCTURE";
@@ -2003,6 +2014,8 @@ export interface DiscoveryInnovationRequest {
   id: string;
   collegeId: string;
   uid: string;
+  // Login uids of the internal faculty inventors - the record shows on their dashboard too, from submission.
+  internalAuthorUids?: string[];
   ownerName: string;
   ownerRole: UserRole;
   ownerDesignation?: string;
@@ -2027,8 +2040,9 @@ export interface DiscoveryInnovationRequest {
   inventorsCount?: number;
   inventors: IprInventor[];
 
+  // Legacy: the "Is this Student Patent" question was removed (student inventors are captured
+  // in `inventors`). Old records may still carry these; nothing writes them any more.
   isStudentPatent?: "YES" | "NO";
-  // Only when isStudentPatent === "YES".
   studentName?: string;
   studentRegistrationNumber?: string;
   studentDepartment?: string;

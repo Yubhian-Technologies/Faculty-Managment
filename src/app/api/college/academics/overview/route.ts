@@ -29,7 +29,7 @@ export async function GET(request: Request) {
       college.collection("courses").get(),
       college.collection("departments").select("name").get(),
       college.collection("courseYearTimings").select("courseId", "year", "semesters").get(),
-      college.collection("subjects").select("code", "name", "universityCode", "courseId", "catalogId", "regulation", "isActive").get(),
+      college.collection("subjects").select("code", "name", "courseId", "catalogId", "regulation", "isActive").get(),
       college.collection("subjectSemesterAssignments").select("subjectId", "subjectCode", "subjectName", "regulation", "isActive").get(),
     ]);
     const deptName = new Map(deptsSnap.docs.map((d) => [d.id, String(d.get("name") ?? "")]));

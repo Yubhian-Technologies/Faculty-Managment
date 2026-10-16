@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { FacultySearchSelect } from "@/components/timetable/FacultySearchSelect";
 import { toast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
 import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
@@ -615,16 +616,14 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
               </div>
               <div className="space-y-2">
                 <Label>Faculty</Label>
-                <Select
+                <FacultySearchSelect
+                  faculty={availableFacultyForAssign}
                   value={assignForm.facultyId}
                   onValueChange={(v) => { setAssignForm((f) => ({ ...f, facultyId: v })); setExtraFacultyIds((ids) => ids.filter((id) => id !== v)); }}
                   disabled={!assignForm.subjectId}
-                >
-                  <SelectTrigger><SelectValue placeholder={availableFacultyForAssign.length ? "Select faculty" : "No faculty in your department"} /></SelectTrigger>
-                  <SelectContent>
-                    {availableFacultyForAssign.map((f) => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                  placeholder={availableFacultyForAssign.length ? "Select faculty" : "No faculty in your department"}
+                  className="w-full"
+                />
 
                 {/* More faculty for the same subject in this section - each picks from
                     whoever is not already chosen here or assigned to it. */}
@@ -632,14 +631,13 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
                   const chosenElsewhere = new Set([assignForm.facultyId, ...extraFacultyIds.filter((_, j) => j !== i)]);
                   return (
                     <div key={i} className="flex items-center gap-2">
-                      <Select value={id} onValueChange={(v) => setExtraFacultyIds((ids) => ids.map((x, j) => (j === i ? v : x)))}>
-                        <SelectTrigger><SelectValue placeholder="Select faculty" /></SelectTrigger>
-                        <SelectContent>
-                          {availableFacultyForAssign.filter((f) => !chosenElsewhere.has(f.id)).map((f) => (
-                            <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <FacultySearchSelect
+                        faculty={availableFacultyForAssign.filter((f) => !chosenElsewhere.has(f.id))}
+                        value={id}
+                        onValueChange={(v) => setExtraFacultyIds((ids) => ids.map((x, j) => (j === i ? v : x)))}
+                        placeholder="Select faculty"
+                        className="w-full"
+                      />
                       <Button type="button" size="icon" variant="ghost" title="Remove this faculty" onClick={() => setExtraFacultyIds((ids) => ids.filter((_, j) => j !== i))}>
                         <X className="h-4 w-4" />
                       </Button>

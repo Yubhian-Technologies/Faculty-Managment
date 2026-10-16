@@ -118,6 +118,55 @@ export async function computeStudentAttendanceHistory(
   return computeLiveHistory(db, collegeId, studentId, departments, range, opts);
 }
 
+/**
+ * One student's attendance over SEVERAL date windows, scanning the department's sessions once for the
+ * widest range and tallying each window from that - the Mentoring Record's semester sheet needs three
+ * cumulative windows (up to Mid I, Mid II and the end of the semester), which used to cost three full
+ * department scans. A window is `{ from, to }` (inclusive) or null (-> null). Same counting as
+ * computeStudentAttendanceHistory (joining date clamp, on-duty left out). When the per-student daily
+ * tally is switched on, each window takes that cheaper route on its own as before.
+ */
+export async function computeStudentAttendanceWindows(
+  db: Firestore,
+  collegeId: string,
+  studentId: string,
+  departments: string | string[],
+  windows: ({ from: string; to: string } | null)[],
+  opts: { joinedOn?: string } = {}
+): Promise<(StudentAttendanceHistory | null)[]> {
+  const clamp = (w: { from: string; to: string }) => ({ from: opts.joinedOn && w.from < opts.joinedOn ? opts.joinedOn : w.from, to: w.to });
+  const live = windows.filter((w): w is { from: string; to: string } => w !== null).map(clamp);
+  if (live.length === 0) return windows.map(() => null);
+  if (tallyMode() !== "off") {
+    return Promise.all(windows.map((w) => (w ? computeStudentAttendanceHistory(db, collegeId, studentId, departments, w, opts) : Promise.resolve(null))));
+  }
+
+  const depts = (Array.isArray(departments) ? departments : [departments]).filter(Boolean).slice(0, MAX_DEPARTMENTS);
+  if (depts.length === 0) return windows.map((w) => (w ? { subjects: [], total: { held: 0, attend: 0, percent: 0 } } : null));
+
+  const sessions = await loadSessionsInRange(db, collegeId, depts, {
+    from: live.reduce((m, w) => (w.from < m ? w.from : m), live[0].from),
+    to: live.reduce((m, w) => (w.to > m ? w.to : m), live[0].to),
+  });
+  return Promise.all(windows.map(async (original) => {
+    if (!original) return null;
+    const w = clamp(original);
+    const inWindow = sessions.filter((r) => r.date >= w.from && r.date <= w.to);
+    const tally = tallyStudentBySubject(indexSessions(inWindow), studentId);
+    const names = new Map<string, { subjectName: string; subjectCode: string }>();
+    for (const r of inWindow) {
+      if (tally.has(r.subjectId) && !names.has(r.subjectId)) names.set(r.subjectId, { subjectName: r.subjectName, subjectCode: r.subjectCode });
+    }
+    return assemble(db, collegeId, Array.from(tally.entries()).map(([subjectId, v]) => ({
+      subjectId,
+      subjectName: names.get(subjectId)?.subjectName ?? "",
+      subjectCode: names.get(subjectId)?.subjectCode ?? "",
+      held: v.held,
+      attended: v.attended,
+    })));
+  }));
+}
+
 async function computeLiveHistory(
   db: Firestore,
   collegeId: string,

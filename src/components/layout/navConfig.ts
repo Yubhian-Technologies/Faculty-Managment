@@ -93,6 +93,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "All Users", href: "/super-admin/users", iconName: "Users", roles: ["SUPER_ADMIN"], section: "Users" },
   { label: "Add User", href: "/super-admin/users/new", iconName: "UserPlus", roles: ["SUPER_ADMIN"] },
   { label: "Role Assignments", href: "/super-admin/role-assignments", iconName: "UserCog", roles: ["SUPER_ADMIN"] },
+  { label: "Faculty Profile Completion", href: "/super-admin/faculty-profile-completion", iconName: "ClipboardCheck", roles: ["SUPER_ADMIN"], section: "Reports" },
   { label: "Audit Logs", href: "/super-admin/audit-logs", iconName: "ScrollText", roles: ["SUPER_ADMIN"], section: "System" },
   { label: "Settings", href: "/super-admin/settings", iconName: "Settings2", roles: ["SUPER_ADMIN"] },
 
@@ -217,6 +218,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Internal Marks", href: "/principal/internal-marks", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
   { label: "Results Analysis", href: "/principal/results-analysis", iconName: "BarChart3", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
   { label: "Faculty", href: "/principal/faculty", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Staff & HR", legacyModule: "Staff & HR Management" },
+  { label: "Profile Completion", href: "/principal/faculty/profile-completion", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Staff & HR Management" },
   { label: "Staff", href: "/principal/staff", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Staff & HR Management" },
   { label: "Circulars", href: "/principal/circulars", iconName: "Megaphone", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Staff & HR Management" },
   // Deciding a leave request is Principal/VP authority, not College Admin's -
@@ -279,6 +281,7 @@ export const NAV_ITEMS: NavItem[] = [
   // visible per college via the Nav Visibility settings (filterVisibleNavItems).
   { label: "Dashboard", href: "/hod", iconName: "LayoutDashboard", roles: ["HOD"] },
   { label: "Faculty", href: "/hod/faculty", iconName: "UsersRound", roles: ["HOD"], section: "Department" },
+  { label: "Profile Completion", href: "/hod/faculty/profile-completion", iconName: "ClipboardCheck", roles: ["HOD"] },
   // No separate "Supporting Staff" item: it is a tab on the Faculty page
   // (hod/faculty/page.tsx), and isNavItemActive keeps Faculty highlighted there.
   { label: "Sections", href: "/hod/sections", iconName: "BookMarked", roles: ["HOD"] },

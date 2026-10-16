@@ -1,5 +1,6 @@
 import type { Firestore } from "firebase-admin/firestore";
-import { loadEffectiveTiming } from "@/lib/college/semester";
+import { cachedCollectionDocs } from "@/lib/firestore/sharedReads";
+import { inheritedTimingCourseId } from "@/lib/timetable/sharedYearTiming";
 import { istDateKey } from "@/lib/attendance/istTime";
 import { effectiveJoiningDate } from "@/lib/studentAttendance/joiningDate";
 import { computeStudentAttendanceHistory, studentDepartmentsForHistory } from "@/lib/studentAttendance/history";
@@ -11,11 +12,11 @@ import {
   type SemesterRange,
   type YearTiming,
 } from "@/lib/studentAttendance/studentReportRange";
-import { latestPerSubject, studentStanding, type StudentSitting } from "@/lib/examResults/gpa";
-import { loadResultRules, recordsCol } from "@/lib/examResults/store";
+import { loadResultRules } from "@/lib/examResults/store";
+import { buildStudentResults } from "@/lib/examResults/studentResults";
+import { finalSubjectsOfSemester, loadPublishedSittings } from "@/lib/examResults/studentSittings";
 import { resolveExamConfigForBatch } from "@/lib/exams/internalExamMarks";
 import type { CourseYearTiming, ExamConfiguration, InternalExamMarksBatch, StudentRecord } from "@/types";
-import type { ExamResultRecord, ExamResultSubject } from "@/types/examResults";
 
 // The read-only "progress" a mentor sees for one student - server only. Every
 // builder here reads existing data exactly as the student's own pages and the
@@ -39,31 +40,64 @@ export interface MenteeAttendance {
   total: { held: number; attended: number; percent: number | null };
 }
 
+/** Every semester the student has reached (years 1..their year, start date passed), with its dates and year. */
+export async function loadStudentSemesterRanges(
+  db: Firestore,
+  collegeId: string,
+  student: Pick<StudentRecord, "courseId" | "year">
+): Promise<SemesterRange[]> {
+  if (!student.courseId || student.year < 1) return [];
+  const courseId = student.courseId;
+  const years = Array.from({ length: student.year }, (_, i) => i + 1);
+  const timingsCol = db.collection("colleges").doc(collegeId).collection("courseYearTimings");
+
+  // One batched read for every year's own timing (was one round trip per year) ...
+  const own = await db.getAll(...years.map((y) => timingsCol.doc(`${courseId}_year${y}`)));
+  const byYear = new Map<number, CourseYearTiming>();
+  years.forEach((y, i) => { if (own[i].exists) byYear.set(y, own[i].data() as CourseYearTiming); });
+
+  // ... and, only for a year the course has no timing of its own (a shared first year's branch), the
+  // shared-year manager's - resolved with the same rule as loadEffectiveTiming, from the cached
+  // courses / departments and one more batched read.
+  const missing = years.filter((y) => !byYear.has(y));
+  if (missing.length > 0) {
+    const [courseDocs, deptDocs] = await Promise.all([
+      cachedCollectionDocs(db, collegeId, "courses"),
+      cachedCollectionDocs(db, collegeId, "departments"),
+    ]);
+    const courses = courseDocs.map((d) => ({ id: d.id, ...d.data() })) as unknown as Parameters<typeof inheritedTimingCourseId>[3];
+    const departments = deptDocs.map((d) => ({ id: d.id, ...d.data() })) as unknown as Parameters<typeof inheritedTimingCourseId>[2];
+    const ownCourse = courses.find((c) => c.id === courseId);
+    if (ownCourse) {
+      const inherited = missing
+        .map((year) => ({ year, id: inheritedTimingCourseId(ownCourse, year, departments, courses) }))
+        .filter((x): x is { year: number; id: string } => !!x.id);
+      if (inherited.length > 0) {
+        const snaps = await db.getAll(...inherited.map((x) => timingsCol.doc(`${x.id}_year${x.year}`)));
+        inherited.forEach((x, i) => { if (snaps[i].exists) byYear.set(x.year, snaps[i].data() as CourseYearTiming); });
+      }
+    }
+  }
+
+  const timings: YearTiming[] = [];
+  for (const year of years) {
+    const timing = byYear.get(year);
+    if (!timing?.semesters?.length) continue;
+    timings.push({
+      year,
+      semesters: timing.semesters.map((s) => ({ semester: s.semester, startDate: toDateStr(s.startDate), endDate: toDateStr(s.endDate) })),
+    });
+  }
+  return semesterOptionsForStudent(timings, student.year, istDateKey(new Date()));
+}
+
 export async function loadMenteeAttendance(
   db: Firestore,
   collegeId: string,
   student: StudentRecord & { id: string },
   semesterParam: number | null
 ): Promise<MenteeAttendance> {
-  let semesters: SemesterRange[] = [];
-  if (student.courseId && student.year >= 1) {
-    const courseId = student.courseId;
-    const timings = await Promise.all(
-      Array.from({ length: student.year }, (_, i) => i + 1).map(async (year): Promise<YearTiming | null> => {
-        const timing: CourseYearTiming | null = await loadEffectiveTiming(db, collegeId, courseId, year);
-        if (!timing?.semesters?.length) return null;
-        return {
-          year,
-          semesters: timing.semesters.map((s) => ({
-            semester: s.semester,
-            startDate: toDateStr(s.startDate),
-            endDate: toDateStr(s.endDate),
-          })),
-        };
-      })
-    );
-    semesters = semesterOptionsForStudent(timings.filter((t): t is YearTiming => t !== null), student.year, istDateKey(new Date()));
-  }
+  const semesters = await loadStudentSemesterRanges(db, collegeId, student);
 
   const today = istDateKey(new Date());
   const picked = semesterParam != null ? semesters.find((s) => s.semester === semesterParam) ?? null : null;
@@ -149,63 +183,39 @@ export interface MenteeResults {
 }
 
 export async function loadMenteeResults(db: Firestore, collegeId: string, studentId: string): Promise<MenteeResults> {
-  const [{ rules }, snap] = await Promise.all([
+  const [{ rules }, sittings] = await Promise.all([
     loadResultRules(db, collegeId),
-    recordsCol(db, collegeId).where("studentId", "==", studentId).get(),
+    loadPublishedSittings(db, collegeId, studentId),
   ]);
+  // The very same engine as the student's own Results page: revaluations (best of two), the latest
+  // passing attempt and the college's show rules, so mentor and student always see the same figures.
+  const view = buildStudentResults(sittings, rules);
 
-  type Rec = ExamResultRecord & { createdAt?: { toMillis?: () => number } };
-  const records = snap.docs
-    .map((d) => ({ ...(d.data() as Rec), id: d.id }))
-    // Only what the Exam Cell has published - drafts are theirs alone.
-    .filter((r) => r.status === "PUBLISHED");
-
-  const sittings: StudentSitting[] = records.map((r) => ({
-    semester: r.semester,
-    examType: r.examType,
-    at: r.createdAt?.toMillis?.() ?? 0,
-    subjects: r.subjects ?? [],
-  }));
-
-  const semesterNumbers = [...new Set(records.map((r) => r.semester))].sort((a, b) => a - b);
-  const order = (examType: string) => (examType === "REGULAR" ? 0 : 1);
-
-  const semesters: MenteeSemesterResult[] = semesterNumbers.map((semester) => {
-    const own = records
-      .filter((r) => r.semester === semester)
-      .sort((a, b) => order(a.examType) - order(b.examType) || (a.createdAt?.toMillis?.() ?? 0) - (b.createdAt?.toMillis?.() ?? 0));
-    const merged = latestPerSubject(own.map((r) => r.subjects ?? []));
-    const attemptsByCode = new Map<string, { examType: string; grade: string }[]>();
-    for (const r of own) {
-      for (const s of r.subjects ?? []) {
-        attemptsByCode.set(s.subjectCode, [...(attemptsByCode.get(s.subjectCode) ?? []), { examType: r.examType, grade: s.grade }]);
-      }
-    }
-    const standing = studentStanding(sittings, semester, rules);
+  const semesters: MenteeSemesterResult[] = view.semesters.map((sem) => {
+    const finals = finalSubjectsOfSemester(sittings, sem.semester);
+    const pointsOf = (code: string) => finals.find((f) => f.subjectCode.trim().toUpperCase() === code.trim().toUpperCase())?.points ?? 0;
+    const own = sittings.find((x) => x.semester === sem.semester && x.examType !== "REVALUATION");
     return {
-      semester,
-      year: own[0]?.year ?? 0,
-      academicYear: own[0]?.academicYear ?? "",
-      subjects: merged.map((s: ExamResultSubject) => ({
+      semester: sem.semester,
+      year: sem.year,
+      academicYear: own?.academicYear ?? "",
+      subjects: sem.subjects.map((s) => ({
         code: s.subjectCode,
         name: s.subjectName,
         credits: s.credits,
         grade: s.grade,
-        points: s.points,
+        points: pointsOf(s.subjectCode),
         isPass: s.isPass,
-        earlier: (attemptsByCode.get(s.subjectCode) ?? []).slice(0, -1),
+        earlier: s.attempts.slice(0, -1).map((a) => ({ examType: a.examType, grade: a.grade })),
       })),
-      sgpa: standing.sgpa,
-      sgpaWithheld: standing.sgpaWithheld,
-      cgpa: standing.cgpa,
-      cgpaWithheld: standing.cgpaWithheld,
-      backlogs: standing.semesterBacklogs,
+      sgpa: sem.sgpa,
+      sgpaWithheld: sem.sgpaWithheld,
+      cgpa: sem.cgpa,
+      cgpaWithheld: sem.cgpaWithheld,
+      backlogs: sem.backlogs,
     };
   });
-
-  const last = semesterNumbers[semesterNumbers.length - 1];
-  const overall = last != null ? studentStanding(sittings, last, rules) : null;
-  return { semesters, backlogs: overall?.backlogs ?? [], decimals: rules.decimals };
+  return { semesters, backlogs: [...new Set(view.backlogs.map((b) => b.subjectCode))], decimals: rules.decimals };
 }
 
 // ── Internal exam marks ──────────────────────────────────────────────────────

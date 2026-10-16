@@ -56,15 +56,30 @@ export default function LabBatchesPage() {
   // Bumped each time the student data is reloaded, so the lab list below re-reads the batches just saved.
   const [savedVersion, setSavedVersion] = useState(0);
 
+  // Only the picked section's students are read (section name + year narrow the query on the
+  // server) - never the whole in-charge roster. Re-run after every save to show what was stored.
+  const [isLoadingStudents, setIsLoadingStudents] = useState(false);
+  async function loadStudentsOf(sec: Section | null) {
+    if (!sec) { setStudents([]); return; }
+    setIsLoadingStudents(true);
+    try {
+      const qs = new URLSearchParams({ section: sec.name, year: String(sec.year) });
+      const res = await fetch(`/api/college/students?${qs}`);
+      const d = (await res.json()) as { students?: StudentRecord[]; error?: string };
+      if (!res.ok) throw new Error(d.error ?? "Failed");
+      setStudents(d.students ?? []);
+    } catch {
+      toast({ variant: "destructive", title: "Failed to load students" });
+    } finally {
+      setIsLoadingStudents(false);
+    }
+  }
+
   function load() {
     setIsLoading(true);
-    Promise.all([
-      fetch("/api/college/sections").then((r) => r.json() as Promise<{ sections: Section[] }>).then((d) => d.sections ?? []),
-      fetch("/api/college/students").then((r) => r.json() as Promise<{ students: StudentRecord[] }>).then((d) => d.students ?? []),
-    ])
-      .then(([sec, stu]) => {
+    fetch("/api/college/sections").then((r) => r.json() as Promise<{ sections: Section[] }>).then((d) => d.sections ?? [])
+      .then((sec) => {
         setSections(sec);
-        setStudents(stu);
         setPending(new Map());
         setLeftChecked(new Set());
         setRightChecked(new Set());
@@ -72,7 +87,9 @@ export default function LabBatchesPage() {
         setDeleteTarget(null);
         setSavedVersion((v) => v + 1);
         setLocalBatches(null);
-        setSectionId((current) => (current && sec.some((s) => s.id === current) ? current : sec[0]?.id ?? ""));
+        const keep = sec.find((s) => s.id === sectionId) ?? sec[0] ?? null;
+        setSectionId(keep?.id ?? "");
+        return loadStudentsOf(keep);
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load students" }))
       .finally(() => setIsLoading(false));
@@ -82,6 +99,7 @@ export default function LabBatchesPage() {
     // Wrapped so load()'s setState calls aren't reachable synchronously from
     // the effect body (react-hooks/set-state-in-effect).
     void (async () => { load(); })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // The API already scopes both fetches to exactly this login's in-charge
@@ -143,6 +161,7 @@ export default function LabBatchesPage() {
     setDeleteTarget(null);
     setLocalBatches(null);
     setBatchCount("");
+    void loadStudentsOf(sections.find((x) => x.id === id) ?? null);
   }
 
   function handleBatchChange(value: string) {
@@ -484,7 +503,7 @@ export default function LabBatchesPage() {
             )}
           </CardHeader>
           <CardContent>
-            {isLoading ? (
+            {isLoading || isLoadingStudents ? (
               <div className="h-64 bg-muted animate-pulse rounded-lg" />
             ) : !selectedSection ? (
               <p className="text-sm text-muted-foreground text-center py-8">Select a section to get started.</p>

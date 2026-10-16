@@ -129,6 +129,10 @@ export function ResultsAnalysisView({ title = "Results Analysis", description }:
   const [exam, setExam] = useState("");
   const [exams, setExams] = useState<{ key: string; label: string; examType: string }[]>([]);
   const [isLoadingClasses, setIsLoadingClasses] = useState(true);
+  // The pickers are a DRAFT; the analytics are read only when Load is pressed (`applied`).
+  const [applied, setApplied] = useState<{
+    courseKey: string; batch: string; semester: number; department: string; section: string; exam: string; nonce: number;
+  } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState("");
 
@@ -170,14 +174,15 @@ export function ResultsAnalysisView({ title = "Results Analysis", description }:
   const courseName = (k: string) => classes.find((c) => c.courseKey === k)?.courseName ?? k;
 
   useEffect(() => {
-    if (!picked) return;
+    if (!applied) return;
     let cancelled = false;
     void (async () => {
       setIsLoading(true);
       try {
         const q = new URLSearchParams({
-          courseKey: picked.courseKey, batch: picked.batch, semester: String(picked.semester),
-          ...(branch ? { department: branch } : {}), ...(section ? { section } : {}), ...(exam ? { exam } : {}),
+          courseKey: applied.courseKey, batch: applied.batch, semester: String(applied.semester),
+          ...(applied.department ? { department: applied.department } : {}), ...(applied.section ? { section: applied.section } : {}),
+          ...(applied.exam ? { exam: applied.exam } : {}),
         });
         const res = await fetch(`/api/college/exam-results/analytics?${q}`);
         const json = (await res.json()) as { analytics?: ExamAnalytics; sheets?: { id: string; title: string }[]; sections?: string[]; exams?: { key: string; label: string; examType: string }[]; error?: string };
@@ -191,7 +196,21 @@ export function ResultsAnalysisView({ title = "Results Analysis", description }:
       }
     })();
     return () => { cancelled = true; };
-  }, [picked, branch, section, exam]);
+  }, [applied]);
+
+  // A different class makes the Exam / Section lists (read with the last Load) stale.
+  function classChanged() { setBranch(""); setSection(""); setExam(""); setSections([]); setExams([]); }
+  const filtersChanged = applied !== null && !!picked && (
+    applied.courseKey !== picked.courseKey || applied.batch !== picked.batch || applied.semester !== picked.semester
+    || applied.department !== branch || applied.section !== section || applied.exam !== exam
+  );
+  function handleLoad() {
+    if (!picked) return;
+    setApplied((prev) => ({
+      courseKey: picked.courseKey, batch: picked.batch, semester: picked.semester,
+      department: branch, section, exam, nonce: (prev?.nonce ?? 0) + 1,
+    }));
+  }
 
   const a = data?.analytics;
   const oneExam = exams.find((x) => x.key === exam) ?? null;
@@ -216,31 +235,31 @@ export function ResultsAnalysisView({ title = "Results Analysis", description }:
       <PageHeader title={title} description={description ?? "Published semester results - pass percentages, SGPA, subject-wise performance, toppers and backlogs."} />
 
       {/* Changing a filter clears the ones after it (Branch / Section belong to one class). */}
-      <div className={`grid gap-3 sm:grid-cols-3 ${courseOptions.length > 1 ? "lg:grid-cols-7" : "lg:grid-cols-6"}`}>
+      <div className={`grid gap-3 sm:grid-cols-3 ${courseOptions.length > 1 ? "lg:grid-cols-8" : "lg:grid-cols-7"}`}>
         {courseOptions.length > 1 && (
           <div className="space-y-1.5">
             <Label htmlFor="ra-course">Course</Label>
-            <select id="ra-course" className={selectClass} value={courseKey} onChange={(e) => { setCourse(e.target.value); setBranch(""); setSection(""); setExam(""); }}>
+            <select id="ra-course" className={selectClass} value={courseKey} onChange={(e) => { setCourse(e.target.value); classChanged(); }}>
               {courseOptions.map((k) => <option key={k} value={k}>{courseName(k)}</option>)}
             </select>
           </div>
         )}
         <div className="space-y-1.5">
           <Label htmlFor="ra-reg">Regulation</Label>
-          <select id="ra-reg" className={selectClass} value={reg} onChange={(e) => { setRegulation(e.target.value); setBranch(""); setSection(""); setExam(""); }} disabled={regulationOptions.length === 0}>
+          <select id="ra-reg" className={selectClass} value={reg} onChange={(e) => { setRegulation(e.target.value); classChanged(); }} disabled={regulationOptions.length === 0}>
             {regulationOptions.length === 0 && <option value="">{isLoadingClasses ? "Loading…" : "No published results yet"}</option>}
             {regulationOptions.map((r) => <option key={r} value={r}>{r || "Not set"}</option>)}
           </select>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="ra-batch">Batch</Label>
-          <select id="ra-batch" className={selectClass} value={bat} onChange={(e) => { setBatch(e.target.value); setBranch(""); setSection(""); setExam(""); }} disabled={batchOptions.length === 0}>
+          <select id="ra-batch" className={selectClass} value={bat} onChange={(e) => { setBatch(e.target.value); classChanged(); }} disabled={batchOptions.length === 0}>
             {batchOptions.map((b) => <option key={b} value={b}>{b}</option>)}
           </select>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="ra-ys">Year - Sem</Label>
-          <select id="ra-ys" className={selectClass} value={ys} onChange={(e) => { setYearSem(e.target.value); setBranch(""); setSection(""); setExam(""); }} disabled={yearSemOptions.length === 0}>
+          <select id="ra-ys" className={selectClass} value={ys} onChange={(e) => { setYearSem(e.target.value); classChanged(); }} disabled={yearSemOptions.length === 0}>
             {yearSemOptions.map((k) => <option key={k} value={k}>{yearSemLabel(k)}</option>)}
           </select>
         </div>
@@ -265,12 +284,21 @@ export function ResultsAnalysisView({ title = "Results Analysis", description }:
             {sections.map((x) => <option key={x} value={x}>{x}</option>)}
           </select>
         </div>
+        <div className="flex flex-col justify-end">
+          <Button onClick={handleLoad} disabled={!picked || isLoading}>
+            {isLoading ? "Loading…" : filtersChanged ? "Apply filters" : applied ? "Reload" : "Load"}
+          </Button>
+        </div>
       </div>
       {section && <p className="-mt-3 text-xs text-muted-foreground">Section is each student&rsquo;s current section on their student record.</p>}
 
       {!picked ? (
         <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
           {isLoadingClasses ? "Loading…" : "No published results yet. They appear here once the Exam Cell publishes a results sheet."}
+        </div>
+      ) : !applied ? (
+        <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
+          Pick the class (and, once it is loaded, an exam or section), then press Load.
         </div>
       ) : isLoading || !a ? (
         <div className="h-96 rounded-lg border bg-muted/30 animate-pulse" />

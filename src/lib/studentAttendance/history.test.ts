@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Firestore } from "firebase-admin/firestore";
-import { clearDepartmentTallyCache, computeStudentAttendanceHistory, studentDepartmentsForHistory } from "./history";
+import { clearDepartmentTallyCache, computeStudentAttendanceHistory, computeStudentAttendanceWindows, studentDepartmentsForHistory } from "./history";
 
 // A tiny in-memory Firestore: just the calls history.ts makes (collection/doc
 // chaining, where with ==, in, >=, <=, get, getAll).
@@ -200,5 +200,37 @@ describe("computeStudentAttendanceHistory with a shared cache (student self view
     (changed["colleges/c1/studentAttendance"].a as { entries: unknown }).entries = [{ studentId: S, status: "ABSENT" }];
     const b = await computeStudentAttendanceHistory(fakeDb(changed), "c1", S, ["CSE"]);
     expect(b.total.attend).toBeLessThan(a.total.attend);
+  });
+});
+
+describe("computeStudentAttendanceWindows (one scan, several cumulative windows)", () => {
+  const store: Store = {
+    [`${C}/studentAttendance`]: {
+      a: session({ date: "2026-08-03", entries: present }),
+      b: session({ date: "2026-08-20", entries: absent }),
+      c: session({ date: "2026-09-10", entries: present }),
+      d: session({ date: "2026-09-12", subjectId: "sub-os", subjectName: "OS", subjectCode: "OS1", entries: present }),
+      e: session({ date: "2026-10-15", entries: present }),
+      f: session({ date: "2026-09-11", status: "DRAFT", entries: present }),
+      g: session({ date: "2026-09-11", department: "ECE", entries: present }),
+    },
+  };
+  const windows = [{ from: "2026-08-01", to: "2026-08-31" }, { from: "2026-08-01", to: "2026-09-30" }, { from: "2026-08-01", to: "2026-10-31" }];
+
+  it("gives each window exactly what a separate scan gives", async () => {
+    const db = fakeDb(store);
+    const together = await computeStudentAttendanceWindows(db, "c1", S, ["CSE"], windows);
+    for (let i = 0; i < windows.length; i++) {
+      const alone = await computeStudentAttendanceHistory(fakeDb(store), "c1", S, ["CSE"], windows[i]);
+      expect(together[i]).toEqual(alone);
+    }
+    expect(together[0]?.total).toEqual({ held: 2, attend: 1, percent: 50 });
+    expect(together[2]?.total.held).toBe(5);
+  });
+
+  it("returns null for a missing window and honours the joining date", async () => {
+    const r = await computeStudentAttendanceWindows(fakeDb(store), "c1", S, ["CSE"], [null, windows[1]], { joinedOn: "2026-08-15" });
+    expect(r[0]).toBeNull();
+    expect(r[1]?.total).toEqual({ held: 3, attend: 2, percent: 66.67 });
   });
 });

@@ -33,6 +33,12 @@ export interface ExamResultRules {
   showCgpa: GpaShowRule;
   /** Decimal places SGPA / CGPA are shown to. */
   decimals: number;
+  /**
+   * What CGPA multiplies each semester's credits by: the SGPA as PRINTED
+   * (rounded to `decimals` - the university's way, checked against real grade
+   * memos), or the EXACT unrounded SGPA. Absent = PRINTED.
+   */
+  cgpaFrom?: "PRINTED" | "EXACT";
   updatedBy?: string;
   updatedByName?: string;
   updatedAt?: Timestamp;
@@ -60,6 +66,9 @@ export interface ExamResultBatch {
   /** The branch (department) the sheet is for - every student in it belongs to this branch. */
   department: string;
   departmentId: string;
+  /** Optional: one sub-department of the branch - then every student belongs to it. */
+  subDepartment?: string;
+  subDepartmentId?: string;
   /** Regulation whose grade table applies. */
   regulation: string;
   /** The student cohort as configured on the regulation ("2024-2028"). */
@@ -68,6 +77,10 @@ export interface ExamResultBatch {
   examHeld: string;
   /** Supplementary: the exam it re-sits; Revaluation: the exam it re-grades. */
   targetBatchId?: string;
+  /** The same, as an exam across branches (type + month) - each student matched to their own result in it. */
+  targetExam?: { examType: "REGULAR" | "SUPPLEMENTARY"; examHeld: string };
+  /** Shared by the sheets of one every-branch upload (one per branch / sub-department). */
+  uploadId?: string;
   academicYear: string;
   year: number;
   semester: number;

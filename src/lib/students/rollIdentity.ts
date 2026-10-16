@@ -135,12 +135,37 @@ export async function claimStudentRoll(db: Firestore, claim: RollClaim, now: Dat
   });
 }
 
-/** Message for a TAKEN claim. Names the holder only when they are in the caller's own college. */
-export function rollTakenMessage(roll: string, holder: RollHolder): string {
+/**
+ * Message for a TAKEN claim. Names the holder only when they are in the caller's own college. `otherCollegeName` is
+ * for the callers that may be told which college holds it (the College Office's edit, so it knows where to look);
+ * the student's name in that other college is never given.
+ */
+export function rollTakenMessage(roll: string, holder: RollHolder, otherCollegeName?: string): string {
   if (holder.sameCollege) {
     return `Roll number ${roll} is already assigned to ${holder.name?.trim() || "another student"}. Roll numbers must be unique.`;
   }
+  if (otherCollegeName?.trim()) {
+    return `Roll number ${roll} is already registered to a student in another college (${otherCollegeName.trim()}). Roll numbers must be unique across all colleges.`;
+  }
   return `Roll number ${roll} is already registered to a student in another college. Roll numbers must be unique across all colleges.`;
+}
+
+/**
+ * Who would block this claim, WITHOUT claiming anything: null when the roll is free, retired, stale or already this
+ * student's. The same decision claimStudentRoll makes, as a plain read, so an edit can report a clash next to its other
+ * problems before it writes. Not a lock - claimStudentRoll at write time stays the authority for a race.
+ */
+export async function peekRollHolder(db: Firestore, claim: RollClaim, now: Date = new Date()): Promise<RollHolder | null> {
+  if (!studentRollKey(claim.roll)) return null;
+  const snap = await registryRef(db, claim.roll).get();
+  const cur = snap.exists ? (snap.data() as RegistryDoc) : null;
+  if (!cur || cur.active === false || isMine(cur, claim)) return null;
+  if (cur.collegeId && cur.studentDocId) {
+    const holderStudent = await db.collection("colleges").doc(cur.collegeId).collection("students").doc(cur.studentDocId).get();
+    const age = millisOf(cur.createdAt);
+    if (!holderStudent.exists && (age === null || now.getTime() - age > STALE_CLAIM_AFTER_MS)) return null;
+  }
+  return { collegeId: cur.collegeId, studentDocId: cur.studentDocId, name: cur.name, sameCollege: cur.collegeId === claim.collegeId };
 }
 
 /**

@@ -54,7 +54,9 @@ describe("normalizeBatchMeta", () => {
   it("refuses a missing or impossible choice", () => {
     expect(err({ ...good, regulation: "" })).toBe("Choose a regulation");
     expect(err({ ...good, batch: "2024" })).toBe("Choose a batch");
-    expect(err({ ...good, department: "" })).toBe("Choose a branch");
+    expect(err({ ...good, department: "" })).toBe("Choose the branch again");
+    // No branch at all = every branch in one upload.
+    expect(meta({ ...good, department: "", departmentId: "" })).toMatchObject({ department: "", departmentId: "" });
     expect(err({ ...good, year: 5 })).toBe("Batch 2024-2028 has no Year 5");
     expect(err({ ...good, semester: "x" })).toBe("Choose a semester");
     expect(err({ ...good, examType: "MAKEUP" })).toBe("Choose Regular, Supplementary or Revaluation");
@@ -102,6 +104,22 @@ describe("completeFromTarget", () => {
     const rv = { ...base, examType: "REVALUATION" as const, examHeld: "", academicYear: "" };
     expect((completeFromTarget(rv, { ...target, examType: "SUPPLEMENTARY", examHeld: "2026-05", academicYear: "2025-26" }) as { meta: ResultBatchMeta }).meta)
       .toMatchObject({ examHeld: "2026-05", academicYear: "2025-26", revaluationOf: "SUPPLEMENTARY" });
+  });
+});
+
+describe("sub-department", () => {
+  const ctx = { currentMonth: "2026-10", academicYearOfMonth: () => "2025-26" };
+  const good = { courseKey: "cat1", courseName: "B.Tech", courseIds: ["c1"], department: "CSE", departmentId: "d1", regulation: "R23", batch: "2024-2028", year: 2, semester: 3, examType: "REGULAR", examHeld: "2025-11" };
+  it("is optional, and goes into the title when picked", () => {
+    expect(normalizeBatchMeta(good, ctx)).not.toHaveProperty("meta.subDepartment");
+    const m = (normalizeBatchMeta({ ...good, subDepartment: "CSE - AI&ML", subDepartmentId: "d9" }, ctx) as { meta: ResultBatchMeta }).meta;
+    expect(batchTitle(m)).toBe("B.Tech · CSE · CSE - AI&ML · R23 · 2024-2028 · Year 2 · Semester 3 · Regular · Nov 2025");
+  });
+  it("a sub-department sheet may pick the whole branch's exam, not another sub-department's", () => {
+    const target: TargetExam = { status: "PUBLISHED", courseKey: "cat1", batch: "2024-2028", departmentId: "d1", year: 2, semester: 3, examType: "REGULAR", examHeld: "2025-11", academicYear: "2025-26" };
+    const sup: ResultBatchMeta = { ...(good as unknown as ResultBatchMeta), year: 2, examType: "SUPPLEMENTARY", examHeld: "2026-05", academicYear: "2025-26", subDepartment: "AI", subDepartmentId: "d9", targetBatchId: "t" };
+    expect(completeFromTarget(sup, target)).toEqual({ meta: sup });
+    expect(completeFromTarget(sup, { ...target, subDepartmentId: "d8" })).toEqual({ error: "The picked exam is for a different course, batch, branch, year or semester" });
   });
 });
 
