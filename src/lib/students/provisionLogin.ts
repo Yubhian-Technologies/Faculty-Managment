@@ -234,21 +234,26 @@ export async function syncStudentRollChange(
   newRoll: string,
   // Other fields to write on the student document in the SAME atomic batch
   // (e.g. a status or lab-batch edit that arrived with the roll change).
-  extraStudentFields: Record<string, unknown> = {}
+  extraStudentFields: Record<string, unknown> = {},
+  // A new name that arrived together with the roll change: written to the student, the login (Auth display name,
+  // profile, system user) and the registry entry in the same step, so the two edits can never leave the copies apart.
+  options: { newName?: string } = {}
 ): Promise<void> {
   const collegeRef = db.collection("colleges").doc(collegeId);
   const studentRef = collegeRef.collection("students").doc(studentDocId);
   const roll = newRoll.trim();
   const newUpper = rollNumberUpperOf(roll);
+  const newName = options.newName;
+  const nameChanged = newName !== undefined && newName !== before.name;
 
   if (!roll) {
-    await studentRef.update({ ...extraStudentFields, rollNumber: "", rollNumberUpper: "" });
+    await studentRef.update({ ...extraStudentFields, rollNumber: "", rollNumberUpper: "", ...(newName !== undefined ? { name: newName } : {}) });
     return;
   }
   const newKey = studentRollKey(roll);
   if (!newKey) throw new StudentLoginError("This Roll Number has no letters or digits", 400);
 
-  const claim = await claimStudentRoll(db, { roll, collegeId, studentDocId, name: before.name, uid: before.uid });
+  const claim = await claimStudentRoll(db, { roll, collegeId, studentDocId, name: newName ?? before.name, uid: before.uid });
   if (!claim.ok) {
     throw new StudentLoginError(claim.code === "TAKEN" ? rollTakenMessage(roll, claim.holder) : "This Roll Number has no letters or digits", 400);
   }
@@ -264,17 +269,28 @@ export async function syncStudentRollChange(
   const uid = before.uid;
   const hasLogin = !!uid && !!before.loginEmail;
   const newEmail = hasLogin ? studentLoginEmailForRoll(roll) : undefined;
+  // One Auth call carries whatever changed - the sign-in email, the display name, or both.
+  const authProps: { email?: string; displayName?: string } = {};
+  if (hasLogin && newEmail !== before.loginEmail) authProps.email = newEmail;
+  if (uid && nameChanged) authProps.displayName = newName;
   let emailChanged = false;
-  if (hasLogin && newEmail !== before.loginEmail) {
+  let displayNameChanged = false;
+  if (uid && Object.keys(authProps).length > 0) {
     try {
-      await adminAuth.updateUser(uid as string, { email: newEmail });
-      emailChanged = true;
+      await adminAuth.updateUser(uid, authProps);
+      emailChanged = authProps.email !== undefined;
+      displayNameChanged = authProps.displayName !== undefined;
     } catch (err) {
-      await undoClaim();
-      if (isAuthError(err, "auth/email-already-exists")) {
-        throw new StudentLoginError("A login with this identity already exists - contact your administrator", 409);
+      // A display name alone for an Auth user that no longer exists changes nothing there - carry on with the rest.
+      if (authProps.email === undefined && isAuthError(err, "auth/user-not-found")) {
+        console.error("[syncStudentRollChange] no Auth user to rename", uid);
+      } else {
+        await undoClaim();
+        if (isAuthError(err, "auth/email-already-exists")) {
+          throw new StudentLoginError("A login with this identity already exists - contact your administrator", 409);
+        }
+        throw err;
       }
-      throw err;
     }
   }
 
@@ -282,13 +298,24 @@ export async function syncStudentRollChange(
     const newRef = registryRef(db, roll);
     const now = new Date();
     const batch = db.batch();
-    batch.update(studentRef, { ...extraStudentFields, rollNumber: roll, rollNumberUpper: newUpper, ...(hasLogin ? { loginEmail: newEmail } : {}) });
+    batch.update(studentRef, {
+      ...extraStudentFields,
+      rollNumber: roll,
+      rollNumberUpper: newUpper,
+      ...(hasLogin ? { loginEmail: newEmail } : {}),
+      ...(newName !== undefined ? { name: newName } : {}),
+    });
     if (hasLogin) {
       batch.set(newRef, { uid, loginEmail: newEmail, rollKey: newKey, active: true }, { merge: true });
-      const profile = collegeRef.collection("users").doc(uid as string);
-      if ((await profile.get()).exists) batch.update(profile, { email: newEmail });
-      const system = db.collection("systemUsers").doc(uid as string);
-      if ((await system.get()).exists) batch.update(system, { email: newEmail });
+    }
+    if (uid) {
+      const loginPatch = { ...(hasLogin ? { email: newEmail } : {}), ...(nameChanged ? { name: newName } : {}) };
+      if (Object.keys(loginPatch).length > 0) {
+        const profile = collegeRef.collection("users").doc(uid);
+        if ((await profile.get()).exists) batch.update(profile, loginPatch);
+        const system = db.collection("systemUsers").doc(uid);
+        if ((await system.get()).exists) batch.update(system, loginPatch);
+      }
     }
     // Retire whatever pointed the OLD roll at this student - the global entry
     // and/or the legacy roll-keyed one - without deleting it.
@@ -309,14 +336,88 @@ export async function syncStudentRollChange(
     }
     await batch.commit();
   } catch (err) {
-    if (emailChanged) {
+    if ((emailChanged || displayNameChanged) && uid) {
       try {
-        await adminAuth.updateUser(uid as string, { email: before.loginEmail });
+        await adminAuth.updateUser(uid, {
+          ...(emailChanged ? { email: before.loginEmail } : {}),
+          ...(displayNameChanged ? { displayName: before.name } : {}),
+        });
       } catch (revertErr) {
-        console.error("[syncStudentRollChange] could not restore the Auth email", uid, revertErr);
+        console.error("[syncStudentRollChange] could not restore the Auth email / display name", uid, revertErr);
       }
     }
     await undoClaim();
+    throw err;
+  }
+}
+
+// A changed name keeps every copy of it in step, in one go: the student document, the login (Firebase Auth display
+// name, the college users profile and the systemUsers entry) and the roll registry entry (it names the holder in
+// "already assigned to ..." messages). Records that deliberately keep the name as it was when they were written -
+// past attendance sessions, audit entries - are NOT rewritten.
+// Order, so a failure part-way is undone: Auth first (nothing else has changed yet), then one Firestore batch; a
+// failure there puts the Auth display name back. Safe on a student with no login (only the document and registry).
+export async function syncStudentNameChange(
+  db: Firestore,
+  adminAuth: Auth,
+  collegeId: string,
+  studentDocId: string,
+  before: Pick<StudentRecord, "rollNumber" | "uid" | "name">,
+  newName: string,
+  // Other fields to write on the student document in the SAME atomic batch.
+  extraStudentFields: Record<string, unknown> = {}
+): Promise<void> {
+  const collegeRef = db.collection("colleges").doc(collegeId);
+  const studentRef = collegeRef.collection("students").doc(studentDocId);
+  const uid = before.uid;
+
+  let displayNameChanged = false;
+  if (uid) {
+    try {
+      await adminAuth.updateUser(uid, { displayName: newName });
+      displayNameChanged = true;
+    } catch (err) {
+      // No Auth user behind the stored uid: there is no display name to keep in step; the rest still is.
+      if (!isAuthError(err, "auth/user-not-found")) throw err;
+      console.error("[syncStudentNameChange] no Auth user to rename", uid);
+    }
+  }
+
+  try {
+    const batch = db.batch();
+    batch.update(studentRef, { ...extraStudentFields, name: newName });
+    if (uid) {
+      const profile = collegeRef.collection("users").doc(uid);
+      if ((await profile.get()).exists) batch.update(profile, { name: newName });
+      const system = db.collection("systemUsers").doc(uid);
+      if ((await system.get()).exists) batch.update(system, { name: newName });
+    }
+    // The roll's registry entry, only when it is this student's (a legacy entry that never recorded its student is
+    // recognised by the login) and still live - a retired one belongs to history.
+    const roll = before.rollNumber ?? "";
+    const candidates = [
+      ...(studentRollKey(roll) ? [registryRef(db, roll)] : []),
+      ...(rollNumberUpperOf(roll) && !rollNumberUpperOf(roll).includes("/") ? [db.collection(REGISTRY_COLLECTION).doc(rollNumberUpperOf(roll))] : []),
+    ];
+    const seen = new Set<string>();
+    for (const ref of candidates) {
+      if (seen.has(ref.path)) continue;
+      seen.add(ref.path);
+      const snap = await ref.get();
+      if (!snap.exists) continue;
+      const cur = snap.data() as { collegeId?: string; studentDocId?: string; uid?: string; active?: boolean };
+      const mine = (cur.collegeId === collegeId && cur.studentDocId === studentDocId) || (!!uid && cur.uid === uid);
+      if (mine && cur.active !== false) batch.update(ref, { name: newName });
+    }
+    await batch.commit();
+  } catch (err) {
+    if (displayNameChanged && uid) {
+      try {
+        await adminAuth.updateUser(uid, { displayName: before.name });
+      } catch (revertErr) {
+        console.error("[syncStudentNameChange] could not restore the Auth display name", uid, revertErr);
+      }
+    }
     throw err;
   }
 }

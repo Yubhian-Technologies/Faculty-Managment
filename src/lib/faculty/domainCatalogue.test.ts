@@ -45,7 +45,7 @@ function items(node: ReactNode): { value: string; text: string }[] {
   const own = el.type === SelectItem ? [{ value: String(el.props.value), text: String(el.props.children) }] : [];
   return [...own, ...items(el.props.children)];
 }
-const domainOptions = (level: DegreeLevel, value = d({})) => items(findSelect(tree(level, value), level === "DOCTORAL" || level === "POST_DOCTORAL" ? "Select domain" : "Select field of study"));
+const domainOptions = (level: DegreeLevel, value = d({})) => items(findSelect(tree(level, value), "Select field of study"));
 const courseSelect = (level: DegreeLevel, value: DegreeDetail) => findSelect(tree(level, value), "Select degree");
 const degreeOptions = (level: DegreeLevel, domain: string, course = "") => items(courseSelect(level, d({ domain, course }))).map((i) => i.value);
 
@@ -72,8 +72,8 @@ describe("UG Degree options", () => {
     expect(degreeOptions("UG", "PHARMACEUTICAL_SCIENCE")).toEqual(["B.Pharm", "Other"]);
     expect(degreeOptions("UG", "DENTAL_SCIENCE")).toEqual(["BDS", "Other"]);
   });
-  it("Engineering is unchanged and still lists BCA", () => {
-    expect(degreeOptions("UG", "ENGINEERING")).toEqual(["B.Tech/BE", "B.Tech - M.Tech Integrated/Dual Degree", "BCA", "Diploma in Engineering", "Other"]);
+  it("Engineering: B.Tech/BE, the dual degree and BCA - Diploma in Engineering is no longer offered", () => {
+    expect(degreeOptions("UG", "ENGINEERING")).toEqual(["B.Tech/BE", "B.Tech - M.Tech Integrated/Dual Degree", "BCA", "Other"]);
   });
   it("Others offers only Other", () => {
     expect(degreeOptions("UG", "OTHERS")).toEqual(["Other"]);
@@ -88,9 +88,15 @@ describe("PG Degree options", () => {
     expect(degreeOptions("PG", "PHARMACEUTICAL_SCIENCE")).toEqual(["M.Pharm", "Pharm.D", "Other"]);
     expect(degreeOptions("PG", "DENTAL_SCIENCE")).toEqual(["MDS", "Other"]);
   });
-  it("Engineering and Arts and Science are unchanged", () => {
-    expect(degreeOptions("PG", "ENGINEERING")).toEqual(["M.Tech/ME", "MCA (2-Year)", "MCA (3-Year)", "MCM", "Other"]);
-    expect(degreeOptions("PG", "ARTS_SCIENCE")).toEqual(["M.Sc.", "M.A.", "MS", "M.Ed", "M.Des.", "M.Arch.", "M.F.Tech.", "M.Plan", "MFA", "Other"]);
+  it("Engineering: M.Tech/ME, MS, MCM (MCA 2-Year / 3-Year are gone); Arts and Science gains MCA", () => {
+    expect(degreeOptions("PG", "ENGINEERING")).toEqual(["M.Tech/ME", "MS", "MCM", "Other"]);
+    expect(degreeOptions("PG", "ARTS_SCIENCE")).toEqual(["M.Sc.", "M.A.", "MS", "M.Ed", "M.Des.", "M.Arch.", "M.F.Tech.", "M.Plan", "MFA", "MCA", "Other"]);
+  });
+  it("picking MCA changes the Course/Branch hint to Computer Application; other degrees keep e.g. CSE", () => {
+    const m = (course: string, level: "PG" | "UG" = "PG") => html(createElement(DegreeFields, { label: "x", level, value: d({ domain: "ARTS_SCIENCE", course }), onChange: noop }));
+    expect(m("MCA")).toContain('placeholder="e.g. Computer Application"');
+    expect(m("M.Sc.")).toContain('placeholder="e.g. CSE"');
+    expect(m("MCA", "UG")).toContain('placeholder="e.g. CSE"');
   });
 });
 
@@ -103,6 +109,17 @@ describe("values already saved keep showing as themselves", () => {
     expect(selected("PG", "MANAGEMENT", "M.Com")).toBe("M.Com");
     expect(selected("UG", "ENGINEERING", "B.Tech/BE")).toBe("B.Tech/BE");
     expect(selected("PG", "ENGINEERING", "M.Tech/ME")).toBe("M.Tech/ME");
+  });
+  it("the removed MCA (2-Year / 3-Year) and Diploma in Engineering stay selectable as themselves for entries that hold them", () => {
+    expect(selected("PG", "ENGINEERING", "MCA (3-Year)")).toBe("MCA (3-Year)");
+    expect(selected("PG", "ENGINEERING", "MCA (2-Year)")).toBe("MCA (2-Year)");
+    expect(selected("UG", "ENGINEERING", "Diploma in Engineering")).toBe("Diploma in Engineering");
+    expect(degreeOptions("PG", "ENGINEERING", "MCA (3-Year)")).toEqual(["M.Tech/ME", "MS", "MCM", "MCA (3-Year)", "Other"]);
+    // an entry that does not hold them never sees them
+    expect(degreeOptions("PG", "ENGINEERING")).not.toContain("MCA (3-Year)");
+    expect(degreeOptions("UG", "ENGINEERING", "B.Tech/BE")).not.toContain("Diploma in Engineering");
+    // and a plain MCA stored under Others (as in the live data) is untouched
+    expect(selected("PG", "OTHERS", "MCA")).toBe("Other");
   });
   it("a FORMER option stays selectable for that entry only (PG 1-Year / 2-Year MBA, UG IPM)", () => {
     expect(selected("PG", "MANAGEMENT", "2-Year MBA")).toBe("2-Year MBA");
