@@ -34,7 +34,7 @@ for (const college of colleges) {
   // A lock that already exists for the same subject is fine; one that points at ANOTHER subject is stale or a conflict - report it.
   const newKeys = plan.keys.filter((k) => have.get(k.id) !== k.subjectId);
   const foreign = plan.keys.filter((k) => have.has(k.id) && have.get(k.id) !== k.subjectId);
-  const clashSubjects = new Set(plan.clashes.filter((c) => c.field !== "universityCode").flatMap((c) => c.members.map((m) => m.id)));
+  const clashSubjects = new Set(plan.clashes.flatMap((c) => c.members.map((m) => m.id)));
   console.log(`${name}: ${newKeys.length} lock(s) to write, ${plan.subjectFixes.length} subject(s) to update, ${clashSubjects.size} subject(s) skipped because they clash, ${foreign.length} lock(s) held by another subject`);
   for (const k of foreign.slice(0, 10)) console.log(`  lock ${k.id} (${k.field}) currently points at ${have.get(k.id)}, wanted ${k.subjectId} - will be taken over`);
   if (!apply) continue;

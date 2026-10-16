@@ -7,8 +7,10 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
 import { buildCourseGroups } from "@/lib/departments/hodScope";
-import { groupDepartmentsByParent } from "@/lib/departments/departmentTree";
-import { sectionCoreOptions, sectionIsOfCore, sectionMatchesPick } from "@/lib/departments/sectionDepartmentPick";
+import { sectionIsOfCore, sectionMatchesPick } from "@/lib/departments/sectionDepartmentPick";
+import { buildDepartmentPickOptions, DEPARTMENT_PICK_ALL, isDepartmentPickOffered, parseDepartmentPick } from "@/lib/departments/departmentPickTree";
+import { DepartmentPickSelect } from "@/components/shared/DepartmentPickSelect";
+import { departmentsOfferingCourse, yearOptionsForCourse, yearOptionsForDepartment } from "@/components/students/RosterFieldInputs";
 import { SectionRoster } from "@/components/academics/SectionRoster";
 import type { Course, Department, Section } from "@/types";
 import { courseYearNumbers } from "@/lib/college/courseYears";
@@ -90,14 +92,14 @@ export function SectionsPanel() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [hasLoaded, setHasLoaded] = useState(false);
+  // The pickers are a DRAFT: nothing is read until Load. `applied` is what the last Load asked for
+  // (the sections on screen are exactly its result); the department narrowing is applied to that result.
   const [courseKey, setCourseKey] = useState(ALL);
-  const [deptFilter, setDeptFilter] = useState(ALL);
-  // A branch the picked department (or, for a parent, its sub-departments) runs;
-  // narrows the Department pick, never widens it.
-  const [coreFilter, setCoreFilter] = useState(ALL);
+  const [deptPick, setDeptPick] = useState(DEPARTMENT_PICK_ALL);
   const [yearFilter, setYearFilter] = useState<number | typeof ALL>(ALL);
+  const [applied, setApplied] = useState<{ courseKey: string; deptPick: string; year: number | typeof ALL } | null>(null);
   const [openSectionId, setOpenSectionId] = useState<string | null>(null);
+  const hasLoaded = applied !== null;
 
   useEffect(() => {
     void (async () => {
@@ -114,12 +116,77 @@ export function SectionsPanel() {
     })();
   }, []);
 
+  // One group per programme name, not per department's Course doc.
+  const courseGroups = useMemo(() => buildCourseGroups(courses), [courses]);
+  const courseGroupByKey = useMemo(() => new Map(courseGroups.map((g) => [g.key, g])), [courseGroups]);
+
+  // ── Pickers, worked out from the configuration alone (never from loaded rows) ──
+  const pickedCourseName = courseKey === ALL ? "" : courseGroupByKey.get(courseKey)?.name ?? "";
+  const activeDepartments = useMemo(() => departments.filter((d) => d.isActive !== false), [departments]);
+  // Only the departments that offer the picked course; each sub-department and core branch is listed under its department.
+  const deptPickOptions = useMemo(() => {
+    const offered = pickedCourseName
+      ? (() => {
+        const ids = new Set(departmentsOfferingCourse(departments, courses, pickedCourseName).map((d) => d.id));
+        return activeDepartments.filter((d) => ids.has(d.id));
+      })()
+      : activeDepartments;
+    return buildDepartmentPickOptions(offered, departments, []);
+  }, [pickedCourseName, activeDepartments, departments, courses]);
+  const fallbackYears = useMemo(
+    // The years of the longest course the college runs, not an assumed 1-4.
+    () => courseYearNumbers(courses.reduce((max, c) => Math.max(max, Number(c.durationYears) || 0), 0)),
+    [courses]
+  );
+  const { department: pickedDept } = parseDepartmentPick(deptPick);
+  const yearOptions = useMemo(
+    () => (pickedDept
+      ? yearOptionsForDepartment(departments, courses, pickedDept, pickedCourseName, fallbackYears)
+      : yearOptionsForCourse(courses, pickedCourseName || undefined, fallbackYears)),
+    [pickedDept, pickedCourseName, departments, courses, fallbackYears]
+  );
+
+  function onCourseChange(key: string) {
+    setCourseKey(key);
+    const name = key === ALL ? "" : courseGroupByKey.get(key)?.name ?? "";
+    const offered = name
+      ? (() => {
+        const ids = new Set(departmentsOfferingCourse(departments, courses, name).map((d) => d.id));
+        return activeDepartments.filter((d) => ids.has(d.id));
+      })()
+      : activeDepartments;
+    const stillOffered = isDepartmentPickOffered(buildDepartmentPickOptions(offered, departments, []), deptPick);
+    const nextDept = stillOffered ? pickedDept : "";
+    if (!stillOffered) setDeptPick(DEPARTMENT_PICK_ALL);
+    const nextYears = nextDept
+      ? yearOptionsForDepartment(departments, courses, nextDept, name, fallbackYears)
+      : yearOptionsForCourse(courses, name || undefined, fallbackYears);
+    if (yearFilter !== ALL && !nextYears.includes(yearFilter)) setYearFilter(ALL);
+  }
+
+  function onDeptPickChange(value: string) {
+    setDeptPick(value);
+    const { department } = parseDepartmentPick(value);
+    const nextYears = department
+      ? yearOptionsForDepartment(departments, courses, department, pickedCourseName, fallbackYears)
+      : yearOptionsForCourse(courses, pickedCourseName || undefined, fallbackYears);
+    if (yearFilter !== ALL && !nextYears.includes(yearFilter)) setYearFilter(ALL);
+  }
+
+  // The only read. Course and Year narrow it on the SERVER (courseId / year are indexed
+  // filters on /api/college/sections); the Department pick is the year-aware rule below.
   async function loadData() {
+    const next = { courseKey, deptPick, year: yearFilter };
     setIsLoading(true);
     try {
-      const secRes = await fetch("/api/college/sections").then((r) => r.json() as Promise<{ sections?: Section[] }>);
-      setSections(secRes.sections ?? []);
-      setHasLoaded(true);
+      const qs = new URLSearchParams();
+      if (next.courseKey !== ALL) qs.set("courseId", (courseGroupByKey.get(next.courseKey)?.courseIds ?? [next.courseKey]).join(","));
+      if (next.year !== ALL) qs.set("year", String(next.year));
+      const res = await fetch(`/api/college/sections${qs.size ? `?${qs}` : ""}`);
+      const json = (await res.json()) as { sections?: Section[]; error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Failed");
+      setSections(json.sections ?? []);
+      setApplied(next);
     } catch {
       toast({ variant: "destructive", title: "Failed to load sections" });
     } finally {
@@ -127,81 +194,30 @@ export function SectionsPanel() {
     }
   }
 
-  // One group per programme name, not per department's Course doc.
-  const courseGroups = useMemo(() => buildCourseGroups(courses), [courses]);
-  const courseIdsByKey = useMemo(
-    () => new Map(courseGroups.map((g) => [g.key, new Set(g.courseIds)])),
-    [courseGroups]
-  );
+  const filtersChanged = applied !== null
+    && (applied.courseKey !== courseKey || applied.deptPick !== deptPick || applied.year !== yearFilter);
 
-  const byCourse = useMemo(
-    () => (courseKey === ALL ? sections : sections.filter((s) => courseIdsByKey.get(courseKey)?.has(s.courseId) ?? false)),
-    [sections, courseKey, courseIdsByKey]
-  );
-  // Always every active department's own name - a structural list, not
-  // narrowed to whatever's currently loaded, so a sub-department or "no own
-  // sections" parent (e.g. Basic Science / Basic Science Maths) stays a
-  // stable, selectable option instead of disappearing (or leaving the select
-  // showing a value with no matching option) once sections happen to load.
-  // Grouped, not flat: each sub-department sits under its parent, and a parent
-  // that holds nothing itself (Basic Science; AI at a college that splits it into
-  // two branches) is marked, since picking it means "all of it". Still every
-  // active department - branches such as AIDS stay selectable on their own.
+  // ── The loaded result, narrowed by the APPLIED department pick ──
   const sectionDepartmentNames = useMemo(
     () => Array.from(new Set(sections.map((s) => (s.department ?? "").trim()).filter(Boolean))),
     [sections]
   );
-  const deptOptions = useMemo(
-    () => groupDepartmentsByParent(departments, sectionDepartmentNames),
-    [departments, sectionDepartmentNames]
-  );
-
-  // A department filter never matches Section.department by literal string
-  // equality - a Section is always filed under a real branch name (e.g.
-  // "vlsi") for EVERY year, never under a sub-department or a shared-year
-  // parent (e.g. "Basic Science - Maths"/"Basic Science"), even though that is
-  // what runs its shared year (Department.managedDepartments). Picking a
-  // container must therefore be year-aware: it matches only the year(s) it
-  // actually teaches for that section's course (Basic Science -> year 1 of its
-  // branches, never their years 2-4), while picking a branch shows that
-  // branch's full roster. See sectionMatchesDepartmentFilter. A plain
-  // department is a straight name match.
+  // A department filter never matches Section.department by literal string equality - a Section is
+  // always filed under a real branch name for EVERY year, never under a sub-department or a shared-year
+  // parent, even though that is what runs its shared year. Picking a container is therefore year-aware
+  // (see sectionMatchesDepartmentFilter); a plain department is a straight name match. The old year-aware
+  // rule decides first; a parent that holds nothing also reaches its own branches (lib/departments/sectionDepartmentPick).
   const catalogIdByCourseId = useMemo(
     () => new Map(courses.map((c) => [c.id, c.catalogId])),
     [courses]
   );
-  // The old year-aware rule still decides first, so everything it matched still
-  // matches; added to it, a parent that holds nothing (AI) also reaches its own
-  // branches' sections in every year. See lib/departments/sectionDepartmentPick.
-  const byDept = useMemo(
-    () => (deptFilter === ALL
-      ? byCourse
-      : byCourse.filter((s) =>
-          sectionMatchesPick(departments, deptFilter, s, catalogIdByCourseId.get(s.courseId), sectionDepartmentNames))),
-    [byCourse, deptFilter, departments, catalogIdByCourseId, sectionDepartmentNames]
-  );
-  // The branches the pick runs, offered as a second filter once there is a choice.
-  const coreOptions = useMemo(
-    () => (deptFilter === ALL ? [] : sectionCoreOptions(departments, deptFilter, sectionDepartmentNames)),
-    [deptFilter, departments, sectionDepartmentNames]
-  );
-  const activeCore = coreOptions.includes(coreFilter) ? coreFilter : ALL;
-  const byCore = useMemo(
-    () => (activeCore === ALL ? byDept : byDept.filter((s) => sectionIsOfCore(departments, activeCore, s.department))),
-    [byDept, activeCore, departments]
-  );
-  const yearOptions = useMemo(() => {
-    if (sections.length > 0) {
-      return Array.from(new Set(byCore.map((s) => s.year))).sort((a, b) => a - b);
-    }
-    // No sections yet: the years of the longest course the college runs, not an assumed 1-4.
-    return courseYearNumbers(courses.reduce((max, c) => Math.max(max, Number(c.durationYears) || 0), 0));
-  }, [sections, byCore, courses]);
-
-  const visible = useMemo(
-    () => (yearFilter === ALL ? byCore : byCore.filter((s) => s.year === yearFilter)),
-    [byCore, yearFilter]
-  );
+  const visible = useMemo(() => {
+    if (!applied) return [];
+    const { department, coreDepartment } = parseDepartmentPick(applied.deptPick);
+    return sections.filter((s) =>
+      (!department || sectionMatchesPick(departments, department, s, catalogIdByCourseId.get(s.courseId), sectionDepartmentNames))
+      && (!coreDepartment || sectionIsOfCore(departments, coreDepartment, s.department)));
+  }, [applied, sections, departments, catalogIdByCourseId, sectionDepartmentNames]);
 
   const groups = useMemo(() => {
     const map = new Map<string, { key: string; courseName: string; year: number; sections: Section[] }>();
@@ -230,13 +246,13 @@ export function SectionsPanel() {
     <div className="space-y-6">
       <PageHeader title="Sections" description="Every section in the college - open one to see its students" />
 
-      {/* ── Single-line filter bar with Load-on-demand ── */}
+      {/* ── Filter bar: nothing is read until Load ── */}
       <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-muted/30 p-3">
         <div className="flex flex-col gap-1 min-w-[160px] flex-1">
           <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Course</label>
           <select
             value={courseKey}
-            onChange={(e) => { setCourseKey(e.target.value); setDeptFilter(ALL); setCoreFilter(ALL); setYearFilter(ALL); }}
+            onChange={(e) => onCourseChange(e.target.value)}
             className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             disabled={isLoading}
           >
@@ -244,38 +260,11 @@ export function SectionsPanel() {
             {courseGroups.map((g) => <option key={g.key} value={g.key}>{g.name}</option>)}
           </select>
         </div>
-        <div className="flex flex-col gap-1 min-w-[160px] flex-1">
+        <div className="flex flex-col gap-1 min-w-[200px] flex-1">
           <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Department</label>
-          <select
-            value={deptFilter}
-            onChange={(e) => { setDeptFilter(e.target.value); setCoreFilter(ALL); setYearFilter(ALL); }}
-            className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            disabled={isLoading}
-          >
-            <option value={ALL}>All Departments</option>
-            {/* Sub-departments sit under their parent; a native option can't be padded, so the indent is a leading em-space. */}
-            {deptOptions.map((o) => (
-              <option key={o.department.id ?? o.department.name} value={o.department.name}>
-                {o.depth === 1 ? " " : ""}{o.department.name}{o.container ? " (all sub-departments)" : ""}
-              </option>
-            ))}
-          </select>
+          {/* Sub-departments and core branches sit indented under their department - one field. */}
+          <DepartmentPickSelect value={deptPick} onChange={onDeptPickChange} options={deptPickOptions} allLabel="All Departments" disabled={isLoading} className="h-9 w-full" />
         </div>
-        {/* The branches the picked department runs - only when there is a choice to make. */}
-        {coreOptions.length > 1 && (
-          <div className="flex flex-col gap-1 min-w-[160px] flex-1">
-            <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Core department</label>
-            <select
-              value={activeCore}
-              onChange={(e) => { setCoreFilter(e.target.value); setYearFilter(ALL); }}
-              className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              disabled={isLoading}
-            >
-              <option value={ALL}>All core departments</option>
-              {coreOptions.map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
-          </div>
-        )}
         <div className="flex flex-col gap-1 min-w-[120px]">
           <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Year</label>
           <select
@@ -294,7 +283,7 @@ export function SectionsPanel() {
           disabled={isLoading}
           className="h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-60 transition-colors whitespace-nowrap"
         >
-          {isLoading ? "Loading…" : hasLoaded ? "Refresh" : "Load"}
+          {isLoading ? "Loading…" : filtersChanged ? "Apply filters" : hasLoaded ? "Refresh" : "Load"}
         </button>
       </div>
 
@@ -310,8 +299,8 @@ export function SectionsPanel() {
       ) : sections.length === 0 ? (
         <EmptyState
           icon={<BookMarked className="h-10 w-10 text-muted-foreground" />}
-          title="No sections yet"
-          description="Sections are created by each department's HOD. None have been added in this college."
+          title="No sections found"
+          description="None match these filters. Sections are created by each department's HOD."
         />
       ) : (
         <>
@@ -345,7 +334,7 @@ export function SectionsPanel() {
                   <div key={`${g.key}_${g.year}`}>
                     <div className="flex items-center gap-3 mb-3">
                       <h2 className="font-semibold text-base">
-                        {courseKey === ALL ? `${g.courseName} · ${ordinalYear(g.year)}` : ordinalYear(g.year)}
+                        {(applied?.courseKey ?? ALL) === ALL ? `${g.courseName} · ${ordinalYear(g.year)}` : ordinalYear(g.year)}
                       </h2>
                       <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${yearBadge(g.year)}`}>
                         {g.sections.length} section{g.sections.length !== 1 ? "s" : ""} · {sts} students

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/shared/Avatar";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { getFacultyProfileModules, type ProfileModuleKey } from "@/lib/faculty/profileModules";
+import { computeFacultyProfileCompletion } from "@/lib/faculty/profileCompletion";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { facultyMobileNo } from "@/lib/faculty/mobileNo";
@@ -132,6 +133,31 @@ export function FacultyIdentityFacts({
       {/* No home in the Add Faculty wizard - shown last since it's not entered at Add time. */}
       <Fact label="Employee Category" value={employeeCategoryLabel} />
     </div>
+    </div>
+  );
+}
+
+// Profile Completion summary for the viewer-facing faculty detail page only
+// (FacultyProfileHub below) - never shown on a faculty member's own "My
+// Profile" (that uses MyProfileModuleTiles instead, not this component).
+// Guarded by the caller on faculty.id && faculty.employeeId: a real
+// FacultyMember record, not a bare login account (e.g. an HOD/Principal's own
+// users doc viewed via principal/staff/[uid]).
+function FacultyProfileCompletionSummary({ faculty }: { faculty: FacultyMember }) {
+  const completion = computeFacultyProfileCompletion(faculty);
+  return (
+    <div className="pt-4 border-t space-y-2">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <p className="text-sm font-medium">Profile Completion</p>
+        <Badge variant={completion.overallPercent >= 100 ? "default" : "secondary"}>{completion.overallPercent}%</Badge>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {completion.sections.map((s) => (
+          <Badge key={s.key} variant={s.isComplete ? "default" : "outline"} className="text-xs">
+            {s.label}: {s.isComplete ? "Filled" : `${s.percent}%`}
+          </Badge>
+        ))}
+      </div>
     </div>
   );
 }
@@ -287,6 +313,9 @@ export function FacultyProfileHub({
             <FacultyStatusBadge status={faculty.status} />
           </div>
           <FacultyIdentityFacts faculty={faculty} parentDeptName={parentDeptName} />
+          {faculty.id && faculty.employeeId && (
+            <FacultyProfileCompletionSummary faculty={faculty as FacultyMember} />
+          )}
           {editHref && (
             <div className="flex justify-end pt-4 border-t">
               <Button asChild>

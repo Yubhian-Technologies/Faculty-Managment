@@ -26,14 +26,37 @@ export interface ResultStudent {
   regulation?: string;
   /** The student's cohort ("2024-2028"; a lateral entrant's starts later, ends the same year). */
   batch?: string;
+  /** Current year of study - works out the batch when none is stored (see effectiveBatchStart). */
+  year?: number;
+  /** The batch of the section the student is placed in, when any. */
+  sectionBatch?: string;
+}
+
+/**
+ * The intake year of a student's batch. A batch is stamped on the student only
+ * when they are placed into a section, so many records (students imported but
+ * not yet placed) carry none. Then it is worked out: the section's batch if
+ * placed, else from the current year of study - a Year 2 student in 2026-27
+ * started in 2025. Null when there is nothing to go on.
+ */
+export function effectiveBatch(student: Pick<ResultStudent, "batch" | "year" | "sectionBatch">, currentStartYear?: number): { batch: string; derived: boolean } | null {
+  const own = String(student.batch ?? "").trim();
+  if (own) return { batch: own, derived: false };
+  const fromSection = String(student.sectionBatch ?? "").trim();
+  if (fromSection) return { batch: fromSection, derived: true };
+  const year = Number(student.year);
+  if (currentStartYear && Number.isInteger(year) && year >= 1) {
+    const start = currentStartYear - (year - 1);
+    // Only the start year is compared (see batchMatches), so the end is a placeholder.
+    return { batch: `${start}-`, derived: true };
+  }
+  return null;
 }
 
 export interface ResultSubjectOption {
   id: string;
   /** The college's code - what results are stored and shown under. */
   code: string;
-  /** The university's code (Subject.universityCode), when set. */
-  universityCode?: string;
   name: string;
   credits: number;
   courseId?: string;
@@ -62,8 +85,7 @@ export interface AcceptedStudentResult {
 export interface ResultImportContext {
   /** Students of this college, by upper-case roll number. */
   students: Map<string, ResultStudent>;
-  /** Subjects of this college, by upper-case college code AND by upper-case
-   *  university code (a key may have several entries). */
+  /** Subjects of this college, by upper-case college code (a key may have several entries). */
   subjects: Map<string, ResultSubjectOption[]>;
   gradeTable: GradeRule[];
   /** The Course docs of the batch's programme. Empty = not checked. */
@@ -71,6 +93,9 @@ export interface ResultImportContext {
   courseName: string;
   /** The sheet's branch: a student must belong to it (as department or core department). Empty = not checked. */
   department: string;
+  /** The department names a student may carry: the branch and its sub-departments, or just the one
+   *  sub-department picked. Absent = only `department`. */
+  allowedDepartments?: string[];
   regulation: string;
   academicYear: string;
   /** The sheet's batch ("2024-2028"). Empty = not checked. */
@@ -78,6 +103,8 @@ export interface ResultImportContext {
   /** Students with results already filed under `batch` - a detained student
    *  now in a later batch still belongs to this one for those exams. */
   batchHistory?: Set<string>;
+  /** The college's current academic year's start ("2026" for 2026-27) - for a student with no batch stored. */
+  currentStartYear?: number;
 }
 
 /** A student's batch is the sheet's: the same, or (a lateral entrant) ending the same year. */
@@ -85,6 +112,8 @@ export function batchMatches(studentBatch: string | undefined, sheetBatch: strin
   const own = String(studentBatch ?? "").trim();
   if (!own) return false;
   if (own === sheetBatch) return true;
+  // A batch worked out from the year of study knows only its start year.
+  if (own.endsWith("-")) return own.slice(0, 4) === sheetBatch.slice(0, 4);
   const end = (b: string) => (/(\d{4})$/.exec(b) ?? [])[1];
   return !!end(own) && end(own) === end(sheetBatch);
 }
@@ -134,15 +163,20 @@ export function validateResultRows(
       fail(`${rollNumber} is not a ${ctx.courseName} student`);
       continue;
     }
-    if (ctx.batch && !batchMatches(student.batch, ctx.batch) && !ctx.batchHistory?.has(student.id)) {
-      fail(student.batch
-        ? `${rollNumber} is in batch ${student.batch}, not ${ctx.batch}`
-        : `${rollNumber} has no batch on record - set it on the student first`);
-      continue;
+    if (ctx.batch && !ctx.batchHistory?.has(student.id)) {
+      const eff = effectiveBatch(student, ctx.currentStartYear);
+      if (!eff) { fail(`${rollNumber} has no batch or year of study on record - set it on the student first`); continue; }
+      if (!batchMatches(eff.batch, ctx.batch)) {
+        fail(eff.derived && !student.sectionBatch
+          ? `${rollNumber} is in Year ${student.year} now, so batch ${eff.batch.slice(0, 4)}-, not ${ctx.batch}`
+          : `${rollNumber} is in batch ${eff.batch}, not ${ctx.batch}`);
+        continue;
+      }
     }
-    const branch = ctx.department.trim().toLowerCase();
-    if (branch && ![student.department, student.secondaryDepartment].some((d) => (d ?? "").trim().toLowerCase() === branch)) {
-      fail(`${rollNumber} is not a ${ctx.department} student (${student.department || "no branch on record"})`);
+    const allowed = (ctx.allowedDepartments ?? (ctx.department ? [ctx.department] : [])).map((d) => d.trim().toLowerCase()).filter(Boolean);
+    if (allowed.length > 0 && ![student.department, student.secondaryDepartment].some((d) => allowed.includes((d ?? "").trim().toLowerCase()))) {
+      const what = ctx.allowedDepartments?.length === 1 ? ctx.allowedDepartments[0] : ctx.department;
+      fail(`${rollNumber} is not a ${what} student (${student.department || "no branch on record"})`);
       continue;
     }
 
@@ -150,12 +184,11 @@ export function validateResultRows(
     if (!options || options.length === 0) { fail(`Subject Code "${subjectCode}" is not a subject of this college`); continue; }
 
     const subject = pickSubject(options, student, ctx);
-    // A code naming two different subjects equally well (a university code
-    // given to two subjects of the same course) is refused, never guessed.
+    // A code naming two different subjects equally well is refused, never guessed.
     const best = options.filter((o) => o.code.trim().toUpperCase() !== subject.code.trim().toUpperCase()
       && subjectScore(o, student, ctx) === subjectScore(subject, student, ctx));
     if (best.length > 0) {
-      fail(`Subject Code "${subjectCode}" matches more than one subject (${[subject, ...best].map((o) => `${o.code} ${o.name}`).join("; ")}) - give the University Code to one subject only`);
+      fail(`Subject Code "${subjectCode}" matches more than one subject (${[subject, ...best].map((o) => `${o.code} ${o.name}`).join("; ")})`);
       continue;
     }
     // Zero-credit subjects (mandatory / audit courses) have no grade points -
@@ -177,8 +210,7 @@ export function validateResultRows(
       result = { grade: grade.grade, points: grade.isPass ? grade.points : 0, isPass: grade.isPass };
     }
 
-    // Keyed by the subject itself, so its college code and university code
-    // in two rows count as the same subject.
+    // Keyed by the subject itself.
     const dupKey = `${student.id}::${subject.id}`;
     if (seen.has(dupKey)) { fail(`${rollNumber} already has a row for ${subjectCode} in this file`); continue; }
     seen.add(dupKey);
@@ -218,6 +250,8 @@ export interface PriorResult {
   academicYear: string;
   /** Only a PUBLISHED earlier result can be re-sat (a draft may still be deleted). */
   status: "DRAFT" | "PUBLISHED";
+  /** "2026-11" - the month the exam was held (matches a picked exam across branches). */
+  examHeld?: string;
   subjects: { subjectCode: string; isPass: boolean }[];
 }
 
@@ -236,7 +270,7 @@ export function applyPriorResults(
   examType: "REGULAR" | "SUPPLEMENTARY" | "REVALUATION",
   semester: number,
   academicYear = "",
-  opts: { batch?: string; targetBatchId?: string } = {}
+  opts: { batch?: string; targetBatchId?: string; targetByStudent?: Map<string, string> } = {}
 ): { accepted: AcceptedStudentResult[]; failed: FailedResultRow[] } {
   const startOf = (ay: string) => Number(String(ay).slice(0, 4)) || 0;
   const byStudent = new Map<string, PriorResult[]>();
@@ -283,8 +317,9 @@ export function applyPriorResults(
           : `${a.student.rollNumber} has no earlier result for ${s.subjectCode} in Semester ${semester}`);
       }
       if (passed.has(code)) return fail(`${a.student.rollNumber} has already passed ${s.subjectCode}`);
-      if (opts.targetBatchId) {
-        const target = earlier.find((p) => p.batchId === opts.targetBatchId);
+      const targetId = opts.targetByStudent ? opts.targetByStudent.get(a.student.id) : opts.targetBatchId;
+      if (opts.targetBatchId || opts.targetByStudent) {
+        const target = targetId ? earlier.find((p) => p.batchId === targetId) : undefined;
         if (!target) return fail(`${a.student.rollNumber} has no result in the picked exam`);
         if (!target.subjects.some((x) => subjectKey(x.subjectCode) === code)) return fail(`${s.subjectCode} is not in ${a.student.rollNumber}'s picked exam`);
       }
@@ -310,19 +345,21 @@ export function applyPriorResults(
 export function applyRevaluationTargets(
   accepted: AcceptedStudentResult[],
   prior: PriorResult[],
-  targetBatchId: string,
+  /** One sheet for everyone, or each student's own sheet of the exam (an upload of every branch). */
+  target: string | Map<string, string>,
   examLabel: string
 ): { accepted: AcceptedStudentResult[]; failed: FailedResultRow[] } {
   const failed: FailedResultRow[] = [];
   const kept: AcceptedStudentResult[] = [];
   for (const a of accepted) {
     const mine = prior.filter((p) => p.studentId === a.student.id);
-    const target = mine.find((p) => p.batchId === targetBatchId);
-    if (!target) {
+    const targetBatchId = typeof target === "string" ? target : target.get(a.student.id) ?? "";
+    const own = mine.find((p) => p.batchId === targetBatchId);
+    if (!own) {
       a.subjects.forEach((s, i) => failed.push({ row: a.rows[i], rollNumber: a.student.rollNumber, subjectCode: s.subjectCode, error: `${a.student.rollNumber} has no result in ${examLabel}` }));
       continue;
     }
-    const inTarget = new Set(target.subjects.map((s) => subjectKey(s.subjectCode)));
+    const inTarget = new Set(own.subjects.map((s) => subjectKey(s.subjectCode)));
     const revalued = new Set(mine
       .filter((p) => p.examType === "REVALUATION" && p.revaluesBatchId === targetBatchId)
       .flatMap((p) => p.subjects.map((s) => subjectKey(s.subjectCode))));
@@ -339,4 +376,63 @@ export function applyRevaluationTargets(
     if (subjects.length > 0) kept.push({ ...a, subjects, rows, revaluesBatchId: targetBatchId });
   }
   return { accepted: kept, failed };
+}
+
+/** A department as the grouping needs it. */
+export interface DepartmentRef {
+  id: string;
+  name: string;
+  parentDepartmentId?: string;
+}
+
+/** One sheet of an every-branch upload: a branch, or one of its sub-departments. */
+export interface BranchGroup {
+  department: string;
+  departmentId: string;
+  subDepartment?: string;
+  subDepartmentId?: string;
+  students: AcceptedStudentResult[];
+}
+
+/**
+ * Splits an every-branch upload into one sheet per branch - and one per
+ * sub-department - from each student's own record:
+ *  - a student with a core department (a 1st year enrolled under a shared /
+ *    Basic Science department) goes under that core department;
+ *  - a student in a sub-department gets that sub-department's own sheet, filed
+ *    under its parent branch;
+ *  - anyone else, their department's sheet.
+ * A student whose department isn't one of the college's is refused.
+ */
+export function groupByBranch(
+  accepted: AcceptedStudentResult[],
+  departments: DepartmentRef[]
+): { groups: BranchGroup[]; failed: FailedResultRow[] } {
+  const byName = new Map(departments.map((d) => [d.name.trim().toLowerCase(), d]));
+  const byId = new Map(departments.map((d) => [d.id, d]));
+  const groups = new Map<string, BranchGroup>();
+  const failed: FailedResultRow[] = [];
+  for (const a of accepted) {
+    const own = (a.student.secondaryDepartment || a.student.department || "").trim();
+    const dept = byName.get(own.toLowerCase());
+    if (!dept) {
+      a.subjects.forEach((s, i) => failed.push({
+        row: a.rows[i], rollNumber: a.student.rollNumber, subjectCode: s.subjectCode,
+        error: own ? `${a.student.rollNumber}'s department "${own}" is not one of the college's departments` : `${a.student.rollNumber} has no department on record`,
+      }));
+      continue;
+    }
+    const parent = dept.parentDepartmentId ? byId.get(dept.parentDepartmentId) : undefined;
+    const g = parent
+      ? { department: parent.name, departmentId: parent.id, subDepartment: dept.name, subDepartmentId: dept.id }
+      : { department: dept.name, departmentId: dept.id };
+    const k = `${g.departmentId}|${g.subDepartmentId ?? ""}`;
+    const entry = groups.get(k) ?? { ...g, students: [] };
+    entry.students.push(a);
+    groups.set(k, entry);
+  }
+  return {
+    groups: [...groups.values()].sort((x, y) => `${x.department} ${x.subDepartment ?? ""}`.localeCompare(`${y.department} ${y.subDepartment ?? ""}`)),
+    failed,
+  };
 }

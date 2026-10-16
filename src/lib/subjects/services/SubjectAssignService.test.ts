@@ -96,13 +96,13 @@ describe("SubjectAssignService commit", () => {
     expect(instances()).toHaveLength(0);
   });
 
-  it("is a no-op for what is already there - customised copies are not overwritten", async () => {
+  it("is a no-op for what is already there - existing copies are not overwritten", async () => {
     await svc.run(req({ codes: ["CS201"] }), "commit");
     const path = `${C}/subjectSemesterAssignments/s1_it_3`;
-    fake.seed(path, { ...fake.read(path)!, credits: 9, isCustomized: true, secondaryDepartmentNames: ["CSE"] });
+    fake.seed(path, { ...fake.read(path)!, credits: 9, secondaryDepartmentNames: ["CSE"] });
     const r = await svc.run(req({ codes: ["CS201", "CS202"] }), "commit");
     expect(r.counts).toMatchObject({ toAssign: 1, alreadyAssigned: 1 });
-    expect(fake.read(path)).toMatchObject({ credits: 9, isCustomized: true, secondaryDepartmentNames: ["CSE"] });
+    expect(fake.read(path)).toMatchObject({ credits: 9, secondaryDepartmentNames: ["CSE"] });
   });
 
   it("continues the order after what the semester already holds", async () => {

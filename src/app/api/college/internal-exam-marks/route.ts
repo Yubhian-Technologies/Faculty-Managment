@@ -2,12 +2,13 @@ export const dynamic = "force-dynamic";
 
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
+import { AggregateField } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { countEntered, examConfigId, resolveExamTypeForSubject } from "@/lib/exams/internalExamMarks";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { getHodDepartmentScope, editableDepartmentNames } from "@/lib/departments/scope";
-import type { ExamConfiguration, InternalExamMarkEntry, InternalExamMarksBatch, Section, StudentRecord, TeachingAssignment } from "@/types";
+import type { ExamConfiguration, ExamType, InternalExamMarkEntry, InternalExamMarksBatch, Section, StudentRecord, TeachingAssignment } from "@/types";
 
 // HOD/Principal/VP/Super Admin oversight — view-only for everyone here (write
 // access, for Principal/VP/Super Admin only, is on PATCH /[id] below). HOD is
@@ -20,9 +21,21 @@ import type { ExamConfiguration, InternalExamMarkEntry, InternalExamMarksBatch, 
 // InternalExamMarksBatch already carries them; only a batch saved before that
 // (or from a semester-scoped assignment) needs the teachingAssignments
 // fallback below.
-export async function GET() {
+//
+// A batch holds EVERY student's marks (`entries`), so reading "all batches" is the heavy
+// read. Callers therefore narrow it on the server:
+//   ?stats=1                      -> just the college-wide counts (Firestore count()/sum() aggregates, no batch is sent)
+//   ?year=&sectionName=&subjectId=&courseId=a,b&department=x,y
+//                                 -> only the matching batches (year / section / subject / department are
+//                                    Firestore filters; courseId is matched after the legacy-course fix-up below)
+//   ?meta=1                       -> the batches without `entries` (the students' marks); GET /[id] opens one
+//   &include=config               -> also the Exam Cell configuration of each returned batch (one read per
+//                                    distinct course + year + Theory/Lab, instead of one request per batch)
+// No query at all still returns everything, exactly as before.
+export async function GET(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
+    const { searchParams } = new URL(request.url);
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
     const coll = collegeRef.collection("internalExamMarks");
@@ -34,13 +47,43 @@ export async function GET() {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       const departments = editableDepartmentNames(scope);
       if (departments.length === 0) {
-        return NextResponse.json({ batches: [] });
+        return NextResponse.json(searchParams.get("stats") === "1" ? { stats: { totalStudents: 0, submitted: 0, pending: 0 } } : { batches: [] });
       }
       query = query.where("department", "in", departments);
     }
 
+    if (searchParams.get("stats") === "1") {
+      // Counts only - nothing but three numbers leaves the server.
+      const [submitted, pending, students] = await Promise.all([
+        query.where("status", "==", "SUBMITTED").count().get(),
+        query.where("status", "==", "DRAFT").count().get(),
+        query.aggregate({ total: AggregateField.sum("totalStudents") }).get(),
+      ]);
+      return NextResponse.json({
+        stats: {
+          submitted: submitted.data().count,
+          pending: pending.data().count,
+          totalStudents: Number(students.data().total ?? 0),
+        },
+      });
+    }
+
+    const yearParam = searchParams.get("year");
+    const sectionNameParam = searchParams.get("sectionName");
+    const subjectIdParam = searchParams.get("subjectId");
+    const courseIds = (searchParams.get("courseId") ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+    const departmentNames = (searchParams.get("department") ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+    if (yearParam && Number.isFinite(Number(yearParam))) query = query.where("year", "==", Number(yearParam));
+    if (sectionNameParam) query = query.where("sectionName", "==", sectionNameParam);
+    if (subjectIdParam) query = query.where("subjectId", "==", subjectIdParam);
+    // An HOD query already carries a `department in [...]`; a second `in` would not combine, so it is applied below.
+    if (departmentNames.length > 0 && session.role !== "HOD") query = query.where("department", "in", departmentNames.slice(0, 30));
+
     const snap = await query.get();
-    const rawBatches = snap.docs.map((d) => ({ id: d.id, ...d.data() } as InternalExamMarksBatch));
+    let rawBatches = snap.docs.map((d) => ({ id: d.id, ...d.data() } as InternalExamMarksBatch));
+    if (departmentNames.length > 0 && session.role === "HOD") {
+      rawBatches = rawBatches.filter((b) => departmentNames.includes(b.department));
+    }
 
     const legacyAssignmentIds = [...new Set(rawBatches.filter((b) => !b.courseId).map((b) => b.assignmentId))];
     const legacySnaps = await Promise.all(
@@ -57,9 +100,32 @@ export async function GET() {
 
     const batches = rawBatches
       .map((b) => (b.courseId ? b : { ...b, ...(legacyByAssignmentId.get(b.assignmentId) ?? { courseId: "", courseName: "" }) }))
+      .filter((b) => courseIds.length === 0 || courseIds.includes(b.courseId ?? ""))
       .sort((a, b) => (a.subjectName ?? "").localeCompare(b.subjectName ?? ""));
 
-    return NextResponse.json({ batches });
+    // meta=1: the list without the students' marks (the bulk of every batch) - open one via GET /[id].
+    if (searchParams.get("meta") === "1") {
+      return NextResponse.json({ batches: batches.map((b) => ({ ...b, entries: [] })) });
+    }
+
+    if (searchParams.get("include") !== "config") return NextResponse.json({ batches });
+
+    // The Exam Cell configuration of each batch, one read per distinct course + year + Theory/Lab.
+    const examTypeBySubject = new Map<string, Promise<ExamType>>();
+    const configByKey = new Map<string, Promise<ExamConfiguration | null>>();
+    const configurations: Record<string, ExamConfiguration | null> = {};
+    await Promise.all(batches.map(async (b) => {
+      if (!b.courseId || b.year == null) { configurations[b.id] = null; return; }
+      if (!examTypeBySubject.has(b.subjectId)) examTypeBySubject.set(b.subjectId, resolveExamTypeForSubject(collegeRef, b.subjectId));
+      const examType = await examTypeBySubject.get(b.subjectId)!;
+      const id = examConfigId(b.courseId, b.year, examType);
+      if (!configByKey.has(id)) {
+        configByKey.set(id, collegeRef.collection("examConfigurations").doc(id).get()
+          .then((c) => (c.exists ? ({ id: c.id, ...c.data() } as ExamConfiguration) : null)));
+      }
+      configurations[b.id] = await configByKey.get(id)!;
+    }));
+    return NextResponse.json({ batches, configurations });
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;

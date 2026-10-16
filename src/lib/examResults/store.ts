@@ -56,11 +56,13 @@ export async function loadStudentsByRoll(db: Firestore, collegeId: string, rolls
   const wanted = [...new Set(rolls.map(rollKey).filter(Boolean))];
   const found = new Map<string, ResultStudent>();
   const toStudent = (d: FirebaseFirestore.QueryDocumentSnapshot): ResultStudent => {
-    const s = d.data() as { rollNumber?: string; name?: string; department?: string; secondaryDepartment?: string; courseId?: string; regulation?: string; batch?: string };
+    const s = d.data() as { rollNumber?: string; name?: string; department?: string; secondaryDepartment?: string; courseId?: string; regulation?: string; batch?: string; year?: number; section?: string };
     return {
       id: d.id, rollNumber: String(s.rollNumber ?? "").trim(), name: s.name ?? "", department: s.department ?? "",
       secondaryDepartment: s.secondaryDepartment, courseId: s.courseId, regulation: s.regulation, batch: s.batch,
-    };
+      ...(s.year != null ? { year: Number(s.year) } : {}),
+      ...(s.section ? { section: String(s.section) } : {}),
+    } as ResultStudent & { section?: string };
   };
   const col = college(db, collegeId).collection("students");
   const byUpper = await mapLimited(chunks(wanted, 30), 10, (part) => col.where("rollNumberUpper", "in", part).get());
@@ -76,11 +78,20 @@ export async function loadStudentsByRoll(db: Firestore, collegeId: string, rolls
     const k = rollKey(d.get("rollNumber"));
     if (k && !found.has(k)) found.set(k, toStudent(d));
   }
+  // A student with no batch stored but placed in a section takes the section's batch.
+  const unstamped = [...found.values()].filter((s) => !s.batch && (s as { section?: string }).section);
+  if (unstamped.length > 0) {
+    const sections = await college(db, collegeId).collection("sections").get();
+    const batchOf = new Map(sections.docs.map((d) => [`${d.get("department")}|${d.get("year")}|${d.get("name")}`, String(d.get("batch") ?? "")]));
+    for (const s of unstamped) {
+      const b = batchOf.get(`${s.department}|${s.year}|${(s as { section?: string }).section}`);
+      if (b) s.sectionBatch = b;
+    }
+  }
   return found;
 }
 
-/** This college's subjects whose college code OR university code is one of
- *  `codes`, keyed by both (upper-case). */
+/** This college's subjects whose college code is one of `codes`, keyed by it (upper-case). */
 export async function loadSubjectsByCode(db: Firestore, collegeId: string, codes: string[]): Promise<Map<string, ResultSubjectOption[]>> {
   const variants = [...new Set(codes.flatMap((c) => {
     const t = String(c ?? "").trim();
@@ -88,26 +99,20 @@ export async function loadSubjectsByCode(db: Firestore, collegeId: string, codes
   }))];
   const col = college(db, collegeId).collection("subjects");
   const parts = chunks(variants, 30);
-  const snaps = await mapLimited(
-    [...parts.map((p) => ({ field: "code", p })), ...parts.map((p) => ({ field: "universityCode", p }))],
-    10,
-    ({ field, p }) => col.where(field, "in", p).get()
-  );
+  const snaps = await mapLimited(parts, 10, (p) => col.where("code", "in", p).get());
   const out = new Map<string, ResultSubjectOption[]>();
   const seen = new Set<string>();
   for (const snap of snaps) for (const d of snap.docs) {
     if (seen.has(d.id)) continue;
     seen.add(d.id);
-    const s = d.data() as { code?: string; universityCode?: string; name?: string; credits?: number; courseId?: string; regulation?: string; academicYear?: string; isActive?: boolean };
+    const s = d.data() as { code?: string; name?: string; credits?: number; courseId?: string; regulation?: string; academicYear?: string; isActive?: boolean };
     if (s.isActive === false) continue;
     const option = {
       id: d.id, code: String(s.code ?? "").trim(), name: s.name ?? "", credits: Number(s.credits) || 0,
-      ...(s.universityCode ? { universityCode: s.universityCode } : {}),
       courseId: s.courseId, regulation: s.regulation, academicYear: s.academicYear,
     };
-    for (const key of new Set([subjectKey(s.code), subjectKey(s.universityCode)].filter(Boolean))) {
-      out.set(key, [...(out.get(key) ?? []), option]);
-    }
+    const key = subjectKey(s.code);
+    if (key) out.set(key, [...(out.get(key) ?? []), option]);
   }
   return out;
 }

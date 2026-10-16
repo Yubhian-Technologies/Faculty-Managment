@@ -9,22 +9,22 @@ import { useAuth } from "@/hooks/useAuth";
 import { useCollegeInfo } from "@/hooks/useCollegeInfo";
 import { FacultyLeisureFilter } from "@/components/timetable/FacultyLeisureFilter";
 import { TeachingNowFilter } from "@/components/timetable/TeachingNowFilter";
-import { currentWeekDates } from "@/lib/utils";
 import { isoDateKey } from "@/lib/leave/dayCounter";
-import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
-import { courseForDepartmentPick, timetableDepartmentOptions, yearsForDepartmentPick } from "@/lib/departments/timetablePick";
-import { sectionIsOfCore } from "@/lib/departments/sectionDepartmentPick";
 import { InstitutionalTimetableTable } from "@/components/timetable/InstitutionalTimetableTable";
 import { ordinalYear, resolveTimetableDays, latestEffectiveDate } from "@/lib/timetable/gridModel";
 import { buildSectionTimetablePdfHtml } from "@/lib/timetable/sectionTimetablePdf";
 import { buildSectionTimetableXlsxBuffer } from "@/lib/timetable/timetableExport";
 import { renderMultiHtmlToPdf } from "@/lib/pdf/htmlToPdf";
 import type { Course, Department, Section, CourseYearTiming, TimetableSlot, Subject, DayOfWeek } from "@/types";
-import { yearSemesterLabelIn, semesterInYearLabel } from "@/lib/academic/format";
+import { DepartmentPickSelect } from "@/components/shared/DepartmentPickSelect";
+import { buildDepartmentPickOptions, DEPARTMENT_PICK_ALL, parseDepartmentPick } from "@/lib/departments/departmentPickTree";
+import { sectionIsOfCore, sectionMatchesPick } from "@/lib/departments/sectionDepartmentPick";
+import { departmentsOfferingCourse } from "@/components/students/RosterFieldInputs";
+import { yearSemesterLabelIn } from "@/lib/academic/format";
 
 // One section's current-semester timetable, as GET /api/college/timetable-slots/export-all
 // returns it - everything buildSectionTimetablePdfHtml/buildSectionTimetableXlsxBuffer need,
-// per section, for the "Download all departments" bulk export below.
+// per section, for the filtered view and downloads below.
 interface BulkSectionEntry {
   sectionId: string;
   sectionName: string;
@@ -55,49 +55,129 @@ const NO_LEISURE_ROLES = ["ACADEMICS"];
 // the same reason as above: a "working as" seat can change user.role.
 const NO_TEACHING_NOW_ROLES = ["ACADEMICS", "EXAM_CELL"];
 
+const PAGE_STEP = 10;
+
 export default function PrincipalTimetablePage() {
   const { user } = useAuth();
   const canSeeLeisure = !NO_LEISURE_ROLES.includes(user?.role ?? "");
   const canSeeTeachingNow = !!user && !NO_TEACHING_NOW_ROLES.includes(user.role);
   const [panel, setPanel] = useState<"" | "leisure" | "teaching">("");
-  const showLeisure = panel === "leisure";
 
-  // "ALL" view: every department's own current-semester timetable, bundled
-  // into one download instead of picking a single section. Independent of
-  // the leisure/teaching tabs above (those are Principal/VP-only; this is
-  // offered to Academics too - see NO_LEISURE_ROLES).
-  const [viewAll, setViewAll] = useState(false);
-  const [bulkSections, setBulkSections] = useState<BulkSectionEntry[] | null>(null);
-  const [bulkError, setBulkError] = useState(false);
+  // One view for every case: pick Course / Department / Year / Section (each defaults to "All"), press Load.
+  // Nothing about the timetables is read until Load: the pickers are built from the sections list alone
+  // (no slots), and Load then reads the timetables of exactly the sections the picks reach.
+  interface OptionSection { id: string; name: string; department: string; year: number; courseId: string; courseName: string }
+  const [optionSections, setOptionSections] = useState<OptionSection[] | null>(null);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [optionsError, setOptionsError] = useState(false);
+  const [bulkSections, setBulkSections] = useState<BulkSectionEntry[]>([]);
   const [bulkSubjects, setBulkSubjects] = useState<Subject[]>([]);
   const [bulkWorkingDays, setBulkWorkingDays] = useState<DayOfWeek[]>([]);
+  const [isLoadingTimetables, setIsLoadingTimetables] = useState(false);
   const [isExportingAllPdf, setIsExportingAllPdf] = useState(false);
   const [isExportingAllZip, setIsExportingAllZip] = useState(false);
+  const [fCourse, setFCourse] = useState("");
+  const [deptPick, setDeptPick] = useState(DEPARTMENT_PICK_ALL);
+  const [fYear, setFYear] = useState("");
+  const [fSection, setFSection] = useState("");
+  const [appliedKey, setAppliedKey] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(PAGE_STEP);
   const { collegeInfo } = useCollegeInfo();
-  // Derived rather than a separate flag - a synchronous setState(true) inside
-  // the fetch effect would be a cascading render (react-hooks/set-state-in-effect).
-  const bulkLoading = viewAll && bulkSections === null && !bulkError;
+  const optionsLoading = optionSections === null && !optionsError;
 
   useEffect(() => {
-    if (!viewAll || bulkSections !== null || bulkError) return;
     let cancelled = false;
-    void fetch("/api/college/timetable-slots/export-all")
-      .then((r) => r.json() as Promise<{ sections?: BulkSectionEntry[]; subjects?: Subject[]; workingDays?: DayOfWeek[]; error?: string }>)
-      .then((d) => {
+    void Promise.all([
+      fetch("/api/college/timetable-slots/export-all?optionsOnly=1").then((r) => r.json() as Promise<{ sections?: OptionSection[]; error?: string }>),
+      fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses?: Course[] }>),
+      fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments?: Department[] }>),
+    ])
+      .then(([sec, cou, dep]) => {
         if (cancelled) return;
-        if (d.error) throw new Error(d.error);
-        setBulkSections(d.sections ?? []);
-        setBulkSubjects(d.subjects ?? []);
-        setBulkWorkingDays(d.workingDays ?? []);
+        if (sec.error) throw new Error(sec.error);
+        setOptionSections(sec.sections ?? []);
+        setCourses(cou.courses ?? []);
+        setDepartments(dep.departments ?? []);
       })
       .catch(() => {
         if (!cancelled) {
-          setBulkError(true);
-          toast({ variant: "destructive", title: "Failed to load all departments' timetables" });
+          setOptionsError(true);
+          toast({ variant: "destructive", title: "Failed to load the timetable filters" });
         }
       });
     return () => { cancelled = true; };
-  }, [viewAll, bulkSections, bulkError]);
+  }, []);
+
+  const sortedUnique = (xs: string[]) => [...new Set(xs)].sort((a, b) => a.localeCompare(b));
+  const allSections = useMemo(() => optionSections ?? [], [optionSections]);
+  const sectionDepartmentNames = useMemo(() => sortedUnique(allSections.map((x) => x.department)), [allSections]);
+  const catalogIdByCourseId = useMemo(() => new Map(courses.map((c) => [c.id, c.catalogId])), [courses]);
+  // A section is reached by a Department pick the way every sections view reaches it: the year-aware rule
+  // of the department that runs it (a sub-department or shared-year department reaches its branches' years),
+  // then the core branch if one is picked (lib/departments/sectionDepartmentPick.ts).
+  const matchesPick = (x: OptionSection, pick: string) => {
+    const { department, coreDepartment } = parseDepartmentPick(pick);
+    return (!department || sectionMatchesPick(departments, department, x, catalogIdByCourseId.get(x.courseId), sectionDepartmentNames))
+      && (!coreDepartment || sectionIsOfCore(departments, coreDepartment, x.department));
+  };
+  // Each picker lists only what the ones before it leave - worked out from the configuration and the
+  // section list, never from timetables.
+  const filterCourses = useMemo(() => sortedUnique(allSections.map((x) => x.courseName).filter(Boolean)), [allSections]);
+  const inCourse = useMemo(() => allSections.filter((x) => !fCourse || x.courseName === fCourse), [allSections, fCourse]);
+  const deptPickOptions = useMemo(() => {
+    const active = departments.filter((d) => d.isActive !== false);
+    const offered = fCourse
+      ? (() => {
+        const ids = new Set(departmentsOfferingCourse(departments, courses, fCourse).map((d) => d.id));
+        return active.filter((d) => ids.has(d.id));
+      })()
+      : active;
+    return buildDepartmentPickOptions(offered, departments, sectionDepartmentNames);
+  }, [departments, courses, fCourse, sectionDepartmentNames]);
+  const inDept = useMemo(
+    () => inCourse.filter((x) => matchesPick(x, deptPick)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [inCourse, deptPick, departments, catalogIdByCourseId, sectionDepartmentNames]
+  );
+  const filterYears = useMemo(() => [...new Set(inDept.map((x) => x.year))].sort((a, b) => a - b), [inDept]);
+  const filterSections = useMemo(
+    () => inDept.filter((x) => !fYear || String(x.year) === fYear),
+    [inDept, fYear]
+  );
+  const draftKey = `${fCourse}|${deptPick}|${fYear}|${fSection}`;
+  const filtersChanged = appliedKey !== null && appliedKey !== draftKey;
+  // The sections the list and the downloads cover: exactly what the last Load read.
+  const shownSections = bulkSections;
+
+  async function handleLoadTimetables() {
+    const ids = (fSection ? filterSections.filter((x) => x.id === fSection) : filterSections).map((x) => x.id);
+    setIsLoadingTimetables(true);
+    try {
+      if (ids.length === 0) {
+        setBulkSections([]); setBulkSubjects([]);
+      } else {
+        // At most 150 sections a request (the server's cap); the pieces are merged.
+        const parts: string[][] = [];
+        for (let i = 0; i < ids.length; i += 150) parts.push(ids.slice(i, i + 150));
+        const results = await Promise.all(parts.map((part) =>
+          fetch(`/api/college/timetable-slots/export-all?sectionIds=${part.join(",")}`)
+            .then((r) => r.json() as Promise<{ sections?: BulkSectionEntry[]; subjects?: Subject[]; workingDays?: DayOfWeek[]; error?: string }>)
+        ));
+        const failed = results.find((r) => r.error);
+        if (failed) throw new Error(failed.error);
+        setBulkSections(results.flatMap((r) => r.sections ?? []));
+        setBulkSubjects([...new Map(results.flatMap((r) => r.subjects ?? []).map((x) => [x.id, x])).values()]);
+        setBulkWorkingDays(results[0]?.workingDays ?? []);
+      }
+      setAppliedKey(draftKey);
+      setVisibleCount(PAGE_STEP);
+    } catch {
+      toast({ variant: "destructive", title: "Failed to load timetables" });
+    } finally {
+      setIsLoadingTimetables(false);
+    }
+  }
 
   function exportMetaFor(entry: BulkSectionEntry) {
     const days = resolveTimetableDays(
@@ -132,17 +212,17 @@ export default function PrincipalTimetablePage() {
   }
 
   async function handleDownloadAllPdf() {
-    if (!bulkSections || bulkSections.length === 0) return;
+    if (shownSections.length === 0) return;
     setIsExportingAllPdf(true);
     try {
-      const htmls = bulkSections.map((entry) =>
+      const htmls = shownSections.map((entry) =>
         buildSectionTimetablePdfHtml({
           ...exportMetaFor(entry),
           section: { name: entry.sectionName, department: entry.departmentName, year: entry.year, courseName: entry.courseName },
         })
       );
       await renderMultiHtmlToPdf(htmls, `All_Departments_Timetables_${isoDateKey(new Date())}.pdf`);
-      toast({ title: "Downloaded", description: `${bulkSections.length} sections combined into one PDF` });
+      toast({ title: "Downloaded", description: `${shownSections.length} sections combined into one PDF` });
     } catch (err) {
       console.error(err);
       toast({ variant: "destructive", title: "Download failed", description: "Failed to generate the combined PDF" });
@@ -152,13 +232,13 @@ export default function PrincipalTimetablePage() {
   }
 
   async function handleDownloadAllXlsxZip() {
-    if (!bulkSections || bulkSections.length === 0) return;
+    if (shownSections.length === 0) return;
     setIsExportingAllZip(true);
     try {
       const JSZip = (await import("jszip")).default;
       const zip = new JSZip();
       const usedNames = new Set<string>();
-      for (const entry of bulkSections) {
+      for (const entry of shownSections) {
         const buffer = await buildSectionTimetableXlsxBuffer({
           ...exportMetaFor(entry),
           sectionName: entry.sectionName,
@@ -177,7 +257,7 @@ export default function PrincipalTimetablePage() {
       link.download = `All_Departments_Timetables_${isoDateKey(new Date())}.zip`;
       link.click();
       URL.revokeObjectURL(url);
-      toast({ title: "Downloaded", description: `${bulkSections.length} section workbooks zipped` });
+      toast({ title: "Downloaded", description: `${shownSections.length} section workbooks zipped` });
     } catch (err) {
       console.error(err);
       toast({ variant: "destructive", title: "Export failed", description: "Failed to build the Excel ZIP" });
@@ -185,204 +265,6 @@ export default function PrincipalTimetablePage() {
       setIsExportingAllZip(false);
     }
   }
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [departments, setDepartments] = useState<Department[]>([]);
-  // A Course doc belongs to one department, so the same programme (e.g. B.Tech)
-  // exists as a separate doc per branch. The picker selects by course NAME first,
-  // then the department narrows it to one concrete courseId.
-  const [courseName, setCourseName] = useState("");
-  const [departmentId, setDepartmentId] = useState("");
-  const [year, setYear] = useState("");
-  const [semester, setSemester] = useState<number | null>(null);
-  const [sections, setSections] = useState<Section[]>([]);
-  const [sectionId, setSectionId] = useState("");
-  // Narrows the Section list to one branch when the picked department reaches several (a parent, a sub-department).
-  const [coreFilter, setCoreFilter] = useState("");
-  const [timing, setTiming] = useState<CourseYearTiming | null>(null);
-  const [slots, setSlots] = useState<TimetableSlot[]>([]);
-  const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [workingDays, setWorkingDays] = useState<DayOfWeek[]>([]);
-  const [typeFilter, setTypeFilter] = useState<"ALL" | "THEORY" | "PRACTICAL">("ALL");
-  const [isLoading, setIsLoading] = useState(true);
-  // Derived rather than a separate flag: a synchronous setIsLoading(true) inside
-  // the fetch effect would be a cascading render (react-hooks/set-state-in-effect).
-  const [loadedFor, setLoadedFor] = useState("");
-  // What the Load button last asked for. Changing any filter clears it, so the
-  // grid never shows a section the filters no longer describe, and nothing is
-  // fetched while the user is still choosing.
-  const [applied, setApplied] = useState<{ sectionId: string; semester: number | null } | null>(null);
-  const appliedKey = applied ? `${applied.sectionId}|${applied.semester ?? ""}` : "";
-  const isLoadingGrid = Boolean(appliedKey) && loadedFor !== appliedKey;
-  // Monday of the week currently on screen - navigable via WeekNavigator,
-  // defaulting to this calendar week. weekDates pairs positionally with
-  // DAYS above, labelling each column with its actual date.
-  const [weekStart, setWeekStart] = useState<Date>(() => currentWeekDates()[0]);
-  const weekDates = useMemo(() => currentWeekDates(weekStart), [weekStart]);
-
-  /** Cascading selects clear their downstream state here, not inside an effect. */
-  function resetBelowCourse() {
-    setApplied(null);
-    setDepartmentId("");
-    setYear("");
-    setSemester(null);
-    setSections([]);
-    setSectionId("");
-    setCoreFilter("");
-    setTiming(null);
-    setSlots([]);
-  }
-  function chooseCourseName(name: string) {
-    setCourseName(name);
-    resetBelowCourse();
-  }
-  function chooseDepartment(id: string) {
-    setApplied(null);
-    setDepartmentId(id);
-    setYear("");
-    setSemester(null);
-    setSections([]);
-    setSectionId("");
-    setCoreFilter("");
-    setTiming(null);
-    setSlots([]);
-  }
-  function chooseYear(y: string) {
-    setApplied(null);
-    setYear(y);
-    setSemester(null);
-    setSections([]);
-    setSectionId("");
-    setCoreFilter("");
-    setTiming(null);
-    setSlots([]);
-  }
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const [c, d] = await Promise.all([
-          fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses: Course[] }>),
-          fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>),
-        ]);
-        if (cancelled) return;
-        setCourses((c.courses ?? []).sort((a, b) => a.name.localeCompare(b.name)));
-        setDepartments(d.departments ?? []);
-      } catch {
-        if (!cancelled) toast({ variant: "destructive", title: "Failed to load courses" });
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
-  // Distinct course names across every department.
-  const courseNames = Array.from(new Set(courses.map((c) => c.name))).sort((a, b) => a.localeCompare(b));
-  // Every department that offers the chosen course, each sub-department listed under its parent: the
-  // departments that own a Course doc (as before) plus the sub-departments that share their parent's and a
-  // parent that only organises them. See lib/departments/timetablePick.ts.
-  const departmentOptions = useMemo(
-    () => timetableDepartmentOptions(departments, courses, courseName),
-    [departments, courses, courseName]
-  );
-  // The one concrete Course doc the two selections resolve to (a sub-department shares its parent's).
-  const course = useMemo(
-    () => (departmentId ? courseForDepartmentPick(courses, departments, courseName, departmentId) : null),
-    [courses, departments, courseName, departmentId]
-  );
-  const courseId = course?.id ?? "";
-  // The picked department's "Years Taught" for this course, not the raw 1..durationYears span - e.g. Basic
-  // Science only ever publishes a 1st-year timetable for a shared 4-year B.Tech course. Empty means the
-  // department isn't configured: no years (never every year of the course). A branch also offers the year its
-  // shared-year manager teaches, and a parent with none of its own the years of its sub-departments.
-  const yearOptions = useMemo(
-    () => (course ? yearsForDepartmentPick(departments, course, departmentId) : []),
-    [course, departments, departmentId]
-  );
-
-  // The sections the picked department reaches can span several branches (Basic Science -> every branch it
-  // runs the first year for; AI -> both of its branches); a Core department narrows them to one.
-  const coreOptions = useMemo(() => {
-    const names = Array.from(new Set(sections.map((s) => s.department).filter(Boolean)));
-    return names.length > 1 ? names.sort((a, b) => a.localeCompare(b)) : [];
-  }, [sections]);
-  const activeCore = coreOptions.includes(coreFilter) ? coreFilter : "";
-  const visibleSections = useMemo(
-    () => (activeCore ? sections.filter((s) => sectionIsOfCore(departments, activeCore, s.department)) : sections),
-    [sections, activeCore, departments]
-  );
-
-  const semesterOptions = useMemo(() => {
-    if (!timing) return [];
-    const sems = timing.semesters;
-    return sems ? sems.map((s) => s.semester).sort((a, b) => a - b) : [];
-  }, [timing]);
-  // No auto-pick: until a semester is chosen the API resolves the current one.
-  const effectiveSemester = semester != null && semesterOptions.includes(semester) ? semester : null;
-
-  // Sections + timing for the resolved course-year. Deliberately NOT keyed on the
-  // semester: sections belong to a course-year, and refetching on a semester
-  // change reset the picked section (and raced the timing load). Downstream state is cleared
-  // by the choose* handlers, so this effect never has to reset anything itself.
-  //
-  // Sections are fetched by DEPARTMENT (not the resolved courseId) because a
-  // shared first-year department (e.g. "Basic Science") never has any section
-  // filed against its own Course doc - sections created through the
-  // managed-branch flow store the real branch's own courseId/department
-  // instead (see hod/sections/new). /api/college/sections?departmentId=
-  // resolves this the same way the HOD Sections page already does
-  // (deriveHodScope), so picking "Basic Science" here correctly reaches its
-  // real branches' sections. Results are still narrowed to the chosen course
-  // NAME client-side, in case the department in scope runs more than one
-  // differently-named program for the same year.
-  useEffect(() => {
-    if (!departmentId || !year) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const [s, t] = await Promise.all([
-          fetch(`/api/college/sections?departmentId=${encodeURIComponent(departmentId)}&year=${encodeURIComponent(year)}`)
-            .then((r) => r.json() as Promise<{ sections: Section[] }>),
-          fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(courseId)}`)
-            .then((r) => r.json() as Promise<{ timings: CourseYearTiming[] }>),
-        ]);
-        if (cancelled) return;
-        const courseIdsForName = new Set(courses.filter((c) => c.name === courseName).map((c) => c.id));
-        const list = (s.sections ?? [])
-          .filter((sec) => courseIdsForName.has(sec.courseId))
-          .sort((a, b) => a.name.localeCompare(b.name));
-        setSections(list);
-        setSectionId("");
-        setCoreFilter("");
-        setTiming((t.timings ?? []).find((x) => Number(x.year) === Number(year)) ?? null);
-      } catch {
-        if (!cancelled) toast({ variant: "destructive", title: "Failed to load sections" });
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [departmentId, year, courseId, courseName, courses]);
-
-  useEffect(() => {
-    if (!applied) return;
-    const { sectionId: appliedSection, semester: appliedSemester } = applied;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const d = await fetch(`/api/college/timetable-slots?sectionId=${encodeURIComponent(appliedSection)}&week=${isoDateKey(weekStart)}${appliedSemester != null ? "&semester=" + appliedSemester : ""}`)
-          .then((r) => r.json() as Promise<{ slots: TimetableSlot[]; subjects?: Subject[]; workingDays?: DayOfWeek[] }>);
-        if (cancelled) return;
-        setSlots(d.slots ?? []);
-        setSubjects(d.subjects ?? []);
-        setWorkingDays(d.workingDays ?? []);
-      } catch {
-        if (!cancelled) toast({ variant: "destructive", title: "Failed to load timetable" });
-      } finally {
-        if (!cancelled) setLoadedFor(`${appliedSection}|${appliedSemester ?? ""}`);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [applied, weekStart]);
 
   const selectClass =
     "h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:border-primary focus:outline-none";
@@ -391,65 +273,7 @@ export default function PrincipalTimetablePage() {
     <div className="space-y-6">
       <PageHeader title="Timetable View" description="Published section timetables across the college" />
 
-      <div className="flex flex-wrap gap-2" role="tablist">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={!viewAll}
-          className={`h-9 rounded-md border px-3 text-sm font-medium ${
-            !viewAll ? "border-primary bg-primary text-primary-foreground" : "border-input bg-background hover:bg-muted"
-          }`}
-          onClick={() => setViewAll(false)}
-        >
-          Single section
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={viewAll}
-          className={`h-9 rounded-md border px-3 text-sm font-medium ${
-            viewAll ? "border-primary bg-primary text-primary-foreground" : "border-input bg-background hover:bg-muted"
-          }`}
-          onClick={() => setViewAll(true)}
-        >
-          ALL departments
-        </button>
-      </div>
-
-      {viewAll ? (
-        <div className="rounded-lg border p-6 space-y-4">
-          <div>
-            <h3 className="text-sm font-semibold">Download every department&rsquo;s timetable</h3>
-            <p className="text-sm text-muted-foreground mt-1">
-              Every section&rsquo;s own CURRENT semester, college-wide - sections with nothing published yet are left out.
-            </p>
-          </div>
-          {bulkLoading ? (
-            <div className="h-20 rounded-md border bg-muted/30 animate-pulse" />
-          ) : bulkError || bulkSections === null ? (
-            <p className="text-sm text-muted-foreground">Could not load.</p>
-          ) : bulkSections.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No section has a published timetable for its current semester yet.</p>
-          ) : (
-            <>
-              <p className="text-sm text-muted-foreground">
-                <span className="font-medium text-foreground">{bulkSections.length}</span> section
-                {bulkSections.length === 1 ? "" : "s"} found with a published timetable.
-              </p>
-              <div className="flex flex-wrap gap-3">
-                <Button onClick={handleDownloadAllPdf} disabled={isExportingAllPdf}>
-                  {isExportingAllPdf ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
-                  {isExportingAllPdf ? "Generating..." : "Download combined PDF"}
-                </Button>
-                <Button variant="outline" onClick={handleDownloadAllXlsxZip} disabled={isExportingAllZip}>
-                  {isExportingAllZip ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileSpreadsheet className="h-4 w-4 mr-2" />}
-                  {isExportingAllZip ? "Zipping..." : "Download Excel files (ZIP)"}
-                </Button>
-              </div>
-            </>
-          )}
-        </div>
-      ) : canSeeLeisure && (
+      {canSeeLeisure && (
         <div className="flex flex-wrap gap-2" role="tablist">
           {([
             ["", "Section timetable"],
@@ -472,154 +296,122 @@ export default function PrincipalTimetablePage() {
         </div>
       )}
 
-      {!viewAll && showLeisure && <FacultyLeisureFilter />}
-      {!viewAll && panel === "teaching" && canSeeTeachingNow && <TeachingNowFilter />}
+      {panel === "leisure" && <FacultyLeisureFilter />}
+      {panel === "teaching" && canSeeTeachingNow && <TeachingNowFilter />}
 
       {/* Kept mounted (just hidden) so the picked filters survive a visit to another tab. */}
-      <div className={!viewAll && panel === "" ? "space-y-6" : "hidden"}>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium" htmlFor="tt-course">Course</label>
-          <select
-            id="tt-course"
-            className={selectClass}
-            value={courseName}
-            onChange={(e) => chooseCourseName(e.target.value)}
-            disabled={isLoading}
-          >
-            <option value="">Select a course</option>
-            {courseNames.map((n) => <option key={n} value={n}>{n}</option>)}
-          </select>
-        </div>
+      <div className={panel === "" ? "space-y-6" : "hidden"}>
+        {optionsLoading ? (
+          <div className="h-20 rounded-md border bg-muted/30 animate-pulse" />
+        ) : optionsError || optionSections === null ? (
+          <p className="text-sm text-muted-foreground">Could not load.</p>
+        ) : optionSections.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No sections have been created yet.</p>
+        ) : (
+          <>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5 items-end">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium" htmlFor="tt-course">Course</label>
+                <select id="tt-course" className={selectClass} value={fCourse}
+                  onChange={(e) => { setFCourse(e.target.value); setDeptPick(DEPARTMENT_PICK_ALL); setFYear(""); setFSection(""); }}>
+                  <option value="">All courses</option>
+                  {filterCourses.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium" htmlFor="tt-department">Department</label>
+                {/* Sub-departments and core branches sit indented under their department - one field. */}
+                <DepartmentPickSelect
+                  id="tt-department" value={deptPick} options={deptPickOptions} className="h-9 w-full"
+                  onChange={(v) => { setDeptPick(v); setFYear(""); setFSection(""); }}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium" htmlFor="tt-year">Year</label>
+                <select id="tt-year" className={selectClass} value={fYear}
+                  onChange={(e) => { setFYear(e.target.value); setFSection(""); }}>
+                  <option value="">All years</option>
+                  {filterYears.map((y) => <option key={y} value={String(y)}>{ordinalYear(y)}</option>)}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium" htmlFor="tt-section">Section</label>
+                <select id="tt-section" className={selectClass} value={fSection} onChange={(e) => setFSection(e.target.value)}>
+                  <option value="">All sections</option>
+                  {filterSections.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.department} · {ordinalYear(e.year)} · {e.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <Button onClick={() => void handleLoadTimetables()} disabled={isLoadingTimetables || filterSections.length === 0}>
+                {isLoadingTimetables ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Search className="h-4 w-4 mr-2" />}
+                {isLoadingTimetables ? "Loading…" : filtersChanged ? "Apply filters" : appliedKey ? "Reload timetables" : "Load timetables"}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">{filterSections.length} section{filterSections.length === 1 ? "" : "s"} match - Load reads their published timetables.</p>
 
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium" htmlFor="tt-department">Department</label>
-          <select
-            id="tt-department"
-            className={selectClass}
-            value={departmentId}
-            onChange={(e) => chooseDepartment(e.target.value)}
-            disabled={!courseName}
-          >
-            <option value="">
-              {courseName && departmentOptions.length === 0 ? "No departments" : "Select a department"}
-            </option>
-            {/* Sub-departments sit under their parent (a native option can't be padded, so the indent is a
-                leading em-space); picking a parent shows the sections of all its sub-departments. */}
-            {departmentOptions.map((o) => (
-              <option key={o.department.id} value={o.department.id}>
-                {o.depth === 1 ? " " : ""}{o.department.name}{o.coversSubDepartments ? " (all sub-departments)" : ""}
-              </option>
-            ))}
-          </select>
-        </div>
+            {appliedKey && (
+              <p className="text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">{shownSections.length}</span> section
+                {shownSections.length === 1 ? "" : "s"} with a published timetable for its current semester.
+              </p>
+            )}
+            {shownSections.length > 0 && (
+              <div className="flex flex-wrap gap-3">
+                <Button onClick={handleDownloadAllPdf} disabled={isExportingAllPdf}>
+                  {isExportingAllPdf ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+                  {isExportingAllPdf ? "Generating..." : "Download combined PDF"}
+                </Button>
+                <Button variant="outline" onClick={handleDownloadAllXlsxZip} disabled={isExportingAllZip}>
+                  {isExportingAllZip ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileSpreadsheet className="h-4 w-4 mr-2" />}
+                  {isExportingAllZip ? "Zipping..." : "Download Excel files (ZIP)"}
+                </Button>
+              </div>
+            )}
 
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium" htmlFor="tt-year">Year</label>
-          <select
-            id="tt-year"
-            className={selectClass}
-            value={year}
-            onChange={(e) => chooseYear(e.target.value)}
-            disabled={!course}
-          >
-            <option value="">Select a year</option>
-            {yearOptions.map((y) => (
-              <option key={y} value={y}>{ordinalYear(y)}</option>
-            ))}
-          </select>
-        </div>
-
-<div className="space-y-1.5">
-           <label className="text-sm font-medium" htmlFor="tt-semester">Semester</label>
-           <select
-             id="tt-semester"
-             className={selectClass}
-             value={effectiveSemester != null ? String(effectiveSemester) : ""}
-             onChange={(e) => { setApplied(null); setSemester(e.target.value ? Number(e.target.value) : null); }}
-             disabled={!timing || semesterOptions.length === 0}
-           >
-             <option value="">
-               {!year ? "Select a year" : semesterOptions.length === 0 ? "No semesters configured" : "Select semester"}
-             </option>
-             {semesterOptions.map((s) => (
-               <option key={s} value={s}>{semesterInYearLabel(semesterOptions, s, { format: "short" })}</option>
-             ))}
-           </select>
-         </div>
-
-         {coreOptions.length > 0 && (
-           <div className="space-y-1.5">
-             <label className="text-sm font-medium" htmlFor="tt-core">Core department</label>
-             <select
-               id="tt-core"
-               className={selectClass}
-               value={activeCore}
-               onChange={(e) => { setApplied(null); setCoreFilter(e.target.value); setSectionId(""); }}
-             >
-               <option value="">All core departments</option>
-               {coreOptions.map((n) => <option key={n} value={n}>{n}</option>)}
-             </select>
-           </div>
-         )}
-
-         <div className="space-y-1.5">
-           <label className="text-sm font-medium" htmlFor="tt-section">Section</label>
-           <select
-             id="tt-section"
-             className={selectClass}
-             value={sectionId}
-             onChange={(e) => { setApplied(null); setSectionId(e.target.value); }}
-             disabled={visibleSections.length === 0}
-           >
-             <option value="">{visibleSections.length === 0 ? "No sections" : "Select a section"}</option>
-             {/* Department code included: a parent department and its
-                 sub-departments each have their own "A". */}
-             {visibleSections.map((s) => (
-               <option key={s.id} value={s.id}>{sectionDisplayLabel(s, departments)}</option>
-             ))}
-           </select>
-         </div>
-
-         <div className="space-y-1.5 flex flex-col justify-end">
-           <Button onClick={() => setApplied({ sectionId, semester: effectiveSemester })} disabled={!sectionId}>
-             <Search className="h-4 w-4 mr-2" />{applied ? "Reload Timetable" : "Load Timetable"}
-           </Button>
-         </div>
-      </div>
-
-      {!applied ? (
-        <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-          Pick a course, department, year and section, then press Load Timetable.
-        </div>
-      ) : isLoadingGrid ? (
-        <div className="h-96 rounded-lg border bg-muted/30 animate-pulse" />
-      ) : !timing ? (
-        <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-          Period timings haven&rsquo;t been configured for this course year yet.
-        </div>
-      ) : slots.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-          No timetable has been published for this section yet. The HOD builds and publishes it from their Timetable page.
-        </div>
-      ) : (
-        <InstitutionalTimetableTable
-          section={sections.find((s) => s.id === sectionId)}
-          timing={timing}
-          slots={slots}
-          courseName={courseName}
-          departmentName={departments.find((d) => d.id === departmentId)?.name}
-          academicYear={slots[0]?.academicYear}
-          semesterLabel={semester ? `Sem ${yearSemesterLabelIn(Number(year), semesterOptions, Number(semester))}` : undefined}
-          workingDays={workingDays}
-          weekStart={weekStart}
-          onWeekChange={setWeekStart}
-          showWeekNav={true}
-          typeFilter={typeFilter}
-          onTypeFilterChange={setTypeFilter}
-          subjects={subjects}
-        />
-      )}
+            {!appliedKey ? (
+              <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                Leave a filter on &ldquo;All&rdquo; or narrow it down, then press Load timetables.
+              </div>
+            ) : shownSections.length === 0 ? (
+              <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                No published timetable for this selection.
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {shownSections.slice(0, visibleCount).map((entry) => {
+                  const inYear = (entry.timing.semesters ?? []).map((x) => x.semester);
+                  return (
+                    <div key={entry.sectionId} className="space-y-2">
+                      <h4 className="text-sm font-semibold">
+                        {entry.courseName} · {entry.departmentName} · {ordinalYear(entry.year)} Year · Section {entry.sectionName}
+                      </h4>
+                      <InstitutionalTimetableTable
+                        section={{ name: entry.sectionName, department: entry.departmentName, year: entry.year, courseName: entry.courseName } as unknown as Section}
+                        timing={entry.timing}
+                        slots={entry.slots}
+                        courseName={entry.courseName}
+                        departmentName={entry.departmentName}
+                        academicYear={entry.slots[0]?.academicYear}
+                        semesterLabel={entry.currentSemester != null ? `Sem ${yearSemesterLabelIn(entry.year, inYear, entry.currentSemester)}` : undefined}
+                        workingDays={bulkWorkingDays}
+                        showWeekNav={false}
+                        subjects={bulkSubjects}
+                      />
+                    </div>
+                  );
+                })}
+                {shownSections.length > visibleCount && (
+                  <Button variant="outline" onClick={() => setVisibleCount((n) => n + PAGE_STEP)}>
+                    Show more ({shownSections.length - visibleCount} left)
+                  </Button>
+                )}
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   );

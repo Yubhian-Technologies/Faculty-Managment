@@ -10,13 +10,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/useToast";
 import { MENTORING_NOTE_MAX_LENGTH } from "@/types/mentoring";
+import { MenteeRecord } from "./record/MenteeRecord";
+import { getJson } from "./record/recordApi";
 
 // One mentee's progress, read-only, for their mentor / HOD: profile, attendance,
 // semester results, internal marks, and the mentor's own notes. Each tab loads
 // only when opened (see api/college/mentoring/students/[id]).
 
-type Tab = "profile" | "attendance" | "results" | "internal" | "notes";
+type Tab = "record" | "profile" | "attendance" | "results" | "internal" | "notes";
 const TABS: { key: Tab; label: string }[] = [
+  { key: "record", label: "Mentoring Record" },
   { key: "profile", label: "Profile" },
   { key: "attendance", label: "Attendance" },
   { key: "results", label: "Semester Results" },
@@ -55,13 +58,6 @@ interface InternalData {
 }
 interface NoteRow { id: string; text: string; authorUid: string; authorName: string; createdAt: string | null; mine: boolean }
 
-async function getJson<T>(url: string): Promise<T> {
-  const res = await fetch(url);
-  const data = (await res.json().catch(() => ({}))) as T & { error?: string };
-  if (!res.ok) throw new Error(data.error || "Could not load this");
-  return data;
-}
-
 function Loading() { return <p className="text-sm text-muted-foreground py-6">Loading…</p>; }
 function Empty({ children }: { children: React.ReactNode }) { return <p className="text-sm text-muted-foreground py-6">{children}</p>; }
 const pct = (p: number | null) => (p == null ? "—" : `${p.toFixed(1)}%`);
@@ -83,7 +79,7 @@ function useTabData<T>(url: string | null) {
 }
 
 export function MenteeProgress({ studentId, backHref }: { studentId: string; backHref: string }) {
-  const [tab, setTab] = useState<Tab>("profile");
+  const [tab, setTab] = useState<Tab>("record");
   const api = `/api/college/mentoring/students/${studentId}`;
   const profile = useTabData<ProfileData>(`${api}?part=profile`);
   const s = profile.data?.student;
@@ -129,6 +125,7 @@ export function MenteeProgress({ studentId, backHref }: { studentId: string; bac
         ))}
       </div>
 
+      {tab === "record" && <MenteeRecord studentId={studentId} studentName={s?.name ?? ""} rollNumber={s?.rollNumber ?? ""} />}
       {tab === "profile" && <ProfileTab loading={profile.loading} data={profile.data} />}
       {tab === "attendance" && <AttendanceTab api={api} />}
       {tab === "results" && <ResultsTab api={api} />}
@@ -141,7 +138,17 @@ export function MenteeProgress({ studentId, backHref }: { studentId: string; bac
 function ProfileTab({ loading, data }: { loading: boolean; data: ProfileData | null }) {
   if (loading) return <Loading />;
   if (!data || data.groups.length === 0) return <Empty>No details on record yet.</Empty>;
+  const total = data.groups.reduce((n, g) => n + g.rows.length, 0);
+  const missing = data.groups.reduce((n, g) => n + g.rows.filter((r) => !r.value).length, 0);
   return (
+    <div className="space-y-4">
+      {missing > 0 && (
+        <p className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+          {missing} of {total} details are not on this student&apos;s record yet (shown as —). The College Office can fill them in
+          bulk (Students → Import → Update student data), the student can add their own, and you can add a missing one under
+          Mentoring Record → Student information.
+        </p>
+      )}
     <div className="grid gap-4 md:grid-cols-2">
       {data.groups.map((g) => (
         <Card key={g.title}>
@@ -151,13 +158,14 @@ function ProfileTab({ loading, data }: { loading: boolean; data: ProfileData | n
               {g.rows.map((r) => (
                 <div key={r.label} className="contents">
                   <dt className="text-muted-foreground">{r.label}</dt>
-                  <dd className="break-words">{r.value}</dd>
+                  <dd className={`break-words ${r.value ? "" : "text-muted-foreground/60"}`}>{r.value || "—"}</dd>
                 </div>
               ))}
             </dl>
           </CardContent>
         </Card>
       ))}
+    </div>
     </div>
   );
 }
@@ -260,7 +268,7 @@ function ResultsTab({ api }: { api: string }) {
                       <span className={r.isPass ? "" : "text-red-600 font-medium"}>{r.grade}</span>
                       {r.earlier.length > 0 && (
                         <span className="ml-2 text-xs text-muted-foreground">
-                          (earlier: {r.earlier.map((e) => `${e.grade}${e.examType === "SUPPLEMENTARY" ? " supp." : ""}`).join(", ")})
+                          (earlier: {r.earlier.map((e) => `${e.grade}${e.examType === "SUPPLEMENTARY" ? " supp." : e.examType === "REVALUATION" ? " reval." : ""}`).join(", ")})
                         </span>
                       )}
                     </td>

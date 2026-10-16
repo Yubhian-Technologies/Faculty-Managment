@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { CertificateUploadField } from "@/components/shared/CertificateUploadField";
 import { NumInput, TextInput, DateInput } from "@/components/shared/ProfileFieldPrimitives";
 import { migrateTrainingEntries } from "@/lib/faculty/fieldRenames";
+import { normalizeResourcePersonsDetails } from "@/lib/faculty/resourcePersons";
 import type {
   TrainingEntry, TrainingEntryType, TrainingParticipationRole, TrainingProgramLevel, TrainingProgramMode,
   TrainingBeneficiaryType, TrainingBeneficiaryDepartmentEntry, TrainingBeneficiarySection, TrainingCoConductor,
@@ -49,16 +50,11 @@ export function trainingEntryUsesWeeks(item: Pick<TrainingEntry, "type">): boole
   return item.type === "MOOC" || item.type === "CERTIFICATION";
 }
 
-// A record saved before "Resource Persons - Details" became a per-person
-// list still has this stored as a single free-text string in Firestore even
-// though the type now says string[] - every reader normalizes through here
-// rather than trusting the type at runtime (a raw string would crash .map()/
-// spread as if it were an array of characters).
-export function normalizeResourcePersonsDetails(value: string[] | string | undefined): string[] {
-  if (Array.isArray(value)) return value;
-  if (typeof value === "string" && value.trim()) return [value];
-  return [];
-}
+// Re-exported for ProfileFieldsView.tsx's existing import path - the real
+// definition moved to src/lib/faculty/resourcePersons.ts (a plain lib module,
+// not "use client") so server code (exportFacultyCsv.ts's buildRow, used by
+// the Faculty Profile Completion API route) can import it too.
+export { normalizeResourcePersonsDetails };
 
 
 interface DepartmentOption { id: string; name: string; }

@@ -24,20 +24,31 @@ export interface OwnProfileGroup {
   rows: OwnProfileRow[];
 }
 
-function rowFor(key: string, student: Partial<StudentRecord>): OwnProfileRow | null {
+/** Follow-up details of a Yes/No answer: left out of a full listing when empty (nothing to say about them). */
+const FOLLOW_UP_KEYS = new Set([
+  "handicappedType", "studiedOutsideAPDetails", "familyIdLinkedOtherStateDetails", "parentsWorkingOutsideDetails",
+  "permanentAddressSameAsTemporary",
+]);
+
+function rowFor(key: string, student: Partial<StudentRecord>, includeEmpty: boolean): OwnProfileRow | null {
   if (HIDDEN_KEYS.has(key)) return null;
   const field = FIELD_BY_KEY.get(key);
   if (!field) return null;
   let value = rosterFieldDisplay(field, student);
-  if (!value) return null;
+  if (!value) return includeEmpty && !FOLLOW_UP_KEYS.has(key) ? { label: field.label, value: "" } : null;
   if (key === "handicappedType") value = HANDICAPPED_TYPE_LABEL[value] ?? value;
   return { label: field.label, value };
 }
 
-/** The roster's detail groups (Academic, Personal, Contact, Family, Bank, ...) for one student, empty groups and empty fields dropped. */
-export function buildOwnProfileGroups(student: Partial<StudentRecord>): OwnProfileGroup[] {
+/**
+ * The roster's detail groups (Academic, Personal, Contact, Family, Bank, ...) for one student. By default
+ * empty fields and empty groups are dropped (the student's own page). `includeEmpty` lists every field of every
+ * group, a missing one with value "" - what a mentor needs to see what is still not on record.
+ */
+export function buildOwnProfileGroups(student: Partial<StudentRecord>, options: { includeEmpty?: boolean } = {}): OwnProfileGroup[] {
+  const includeEmpty = options.includeEmpty === true;
   return ROSTER_DETAIL_GROUPS.map((g) => ({
     title: g.title,
-    rows: g.keys.map((k) => rowFor(k, student)).filter((r): r is OwnProfileRow => r !== null),
+    rows: g.keys.map((k) => rowFor(k, student, includeEmpty)).filter((r): r is OwnProfileRow => r !== null),
   })).filter((g) => g.rows.length > 0);
 }

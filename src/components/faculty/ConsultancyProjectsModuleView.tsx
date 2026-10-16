@@ -16,6 +16,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
+import { useAuthStore } from "@/store/authStore";
 import {
   CONSULTANCY_CATEGORIES, CONSULTANCY_CATEGORY_LABELS,
   CONSULTANCY_CLIENT_TYPES, CONSULTANCY_CLIENT_TYPE_LABELS,
@@ -33,15 +34,21 @@ function ConsultancyProjectRow({
   isOwnProfile?: boolean;
   onEdit?: (project: ConsultancyProjectRequest) => void;
 }) {
+  // Also listed for a consultant named on it: they see it (and where it stands) but only the submitter edits.
+  const viewerUid = useAuthStore((s) => s.user?.uid);
+  const isSubmitter = project.uid === viewerUid;
   return (
     <div className="rounded-md border bg-muted/20 shadow-sm p-2 space-y-2">
+      {isOwnProfile && !isSubmitter && (
+        <p className="text-xs text-muted-foreground">Submitted by {project.ownerName}</p>
+      )}
       {isOwnProfile && (
         <div className="flex items-center gap-2">
           {project.status === "PENDING" && <Badge variant="pending" className="text-xs">Pending Verification</Badge>}
           {project.status === "COORDINATOR_REVIEW" && <Badge variant="pending" className="text-xs">With R&amp;D Coordinator</Badge>}
           {project.status === "REJECTED" && <Badge variant="rejected" className="text-xs">Rejected</Badge>}
           {project.status === "SENT_BACK" && <Badge variant="rejected" className="text-xs">Sent Back</Badge>}
-          {onEdit && (
+          {onEdit && isSubmitter && (
             <button type="button" onClick={() => onEdit(project)} className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1">
               <Pencil className="h-3 w-3" />
               {project.status === "REJECTED" || project.status === "SENT_BACK"

@@ -7,6 +7,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { holdsRole } from "@/lib/roles/seatRoles";
 import { wantsWholeCollege } from "@/lib/research/listScope";
+import { fetchOwnAndCoListed } from "@/lib/research/ownAndCoListed";
 import { isVisibleToRnD, notifyReviewer, resolveSubmissionRoute, routeFields } from "@/lib/research/coordinatorReview";
 import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import { resolveOwnerDesignation } from "@/lib/publications/resolveOwnerDesignation";
@@ -35,13 +36,11 @@ export async function GET(request: Request) {
     const uidFilter = isRnD ? searchParams.get("uid") : null;
     const wholeCollege = !uidFilter && wantsWholeCollege(request, isRnD);
     const viewingOthers = wholeCollege || !!uidFilter;
-    let query: FirebaseFirestore.Query = coll;
-    if (uidFilter) query = query.where("uid", "==", uidFilter);
-    else if (!wholeCollege) query = query.where("uid", "==", session.uid);
-
-    const snap = await query.get();
-    const records = snap.docs
-      .map((d) => ({ id: d.id, ...d.data() }))
+    // Own rows also include the ones that name this person (Co-PI / inventor) - see fetchOwnAndCoListed.
+    const rows = wholeCollege
+      ? (await coll.get()).docs.map((d) => ({ id: d.id, ...d.data() }))
+      : await fetchOwnAndCoListed(coll, uidFilter ?? session.uid);
+    const records = rows
       .filter((r) => !viewingOthers || isVisibleToRnD((r as { status?: string }).status))
       .sort((a, b) => {
         const aTime = (a as { createdAt?: { toMillis?: () => number } }).createdAt?.toMillis?.() ?? 0;
@@ -75,10 +74,6 @@ interface DiscoveryInnovationBody {
   applicants?: IprApplicant[];
   inventorsCount?: number;
   inventors?: IprInventor[];
-  isStudentPatent?: "YES" | "NO";
-  studentName?: string;
-  studentRegistrationNumber?: string;
-  studentDepartment?: string;
   publishedProofUrl?: string;
   grantedProofUrl?: string;
   isCommercialized?: "YES" | "NO";
@@ -120,7 +115,7 @@ export async function POST(request: Request) {
     }
 
     const db = getAdminDb();
-    const inventors = await finalizeIprInventors(db, session.collegeId, body.inventors ?? []);
+    const { inventors, internalAuthorUids } = await finalizeIprInventors(db, session.collegeId, body.inventors ?? []);
     const validationError = validateDiscoveryInnovationBody({ ...body, inventors }, iprStatus);
     if (validationError) {
       return NextResponse.json({ error: validationError }, { status: 400 });
@@ -165,10 +160,7 @@ export async function POST(request: Request) {
       applicants: body.applicants ?? [],
       inventorsCount: body.inventorsCount ?? null,
       inventors,
-      isStudentPatent: body.isStudentPatent ?? null,
-      studentName: body.isStudentPatent === "YES" ? body.studentName?.trim() ?? "" : "",
-      studentRegistrationNumber: body.isStudentPatent === "YES" ? body.studentRegistrationNumber?.trim() ?? "" : "",
-      studentDepartment: body.isStudentPatent === "YES" ? body.studentDepartment?.trim() ?? "" : "",
+      internalAuthorUids,
       publishedProofUrl: body.publishedProofUrl ?? "",
       grantedProofUrl: body.grantedProofUrl ?? "",
       isCommercialized: body.isCommercialized ?? null,

@@ -6,9 +6,42 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { countEntered, resolveExamConfigForBatch } from "@/lib/exams/internalExamMarks";
 import { resolveUserName } from "@/lib/budget/departmentScope";
+import { getHodDepartmentScope, editableDepartmentNames } from "@/lib/departments/scope";
 import type { InternalExamMarkEntry, InternalExamMarksBatch } from "@/types";
 
 const PRINCIPAL_TIER_ROLES = ["PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN"];
+
+// One batch with every student's marks and its Exam Cell configuration - what the list
+// (GET /internal-exam-marks?meta=1) leaves out so it can stay small. Same visibility as the
+// list: an HOD sees only SUBMITTED batches of their own department(s); the principal tier sees any.
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
+    const db = getAdminDb();
+    const collegeRef = db.collection("colleges").doc(session.collegeId);
+    const snap = await collegeRef.collection("internalExamMarks").doc(id).get();
+    if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    const batch = { id: snap.id, ...snap.data() } as InternalExamMarksBatch & { id: string };
+    if (session.role === "HOD") {
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      if (batch.status !== "SUBMITTED" || !editableDepartmentNames(scope).includes(batch.department)) {
+        return NextResponse.json({ error: "Not found" }, { status: 404 });
+      }
+    }
+    const resolved = await resolveExamConfigForBatch(db, collegeRef, batch);
+    return NextResponse.json({ batch, configuration: resolved?.config ?? null });
+  } catch (err) {
+    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    console.error("[college/internal-exam-marks/[id] GET]", err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
+}
 
 export async function PATCH(
   request: Request,

@@ -3,10 +3,12 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { getInChunks } from "@/lib/firestore/inQuery";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { notConfiguredMessage } from "@/lib/college/taughtYears";
-import { currentAcademicStartYear, regulationsForCourseYearByBatch } from "@/lib/college/academicSession";
+import { currentAcademicStartYear } from "@/lib/college/academicSession";
 import { teachableYearsForDepartment } from "../teachableYears";
+import { loadEffectiveTiming } from "@/lib/college/semester";
 import { courseOwnershipError, semestersFrom } from "../courseOwnership";
 import { normalizeSubjectCode } from "../subjectIdentity";
+import { regulationYearNote } from "../regulationYearNote";
 import { ASSIGN_MAX_CODES } from "../limits";
 import { buildSubjectInstancePayload } from "./SubjectInstanceService";
 import { SubjectRequestError, type SubjectActor } from "./SubjectMasterService";
@@ -116,7 +118,13 @@ export class SubjectAssignService {
     if (!teachable.includes(year)) {
       throw new SubjectRequestError(`"${department.name}" isn't scoped to teach ${course.name} in Year ${year} - check its Years Taught.`);
     }
-    const configured = semestersFrom(timingSnap?.exists ? (timingSnap.data() as Partial<CourseYearTiming>) : undefined);
+    // A branch of a shared first year has no timing of its own - the year's semesters are set once on
+    // the department that manages it. Every other screen resolves it that way (loadEffectiveTiming), so
+    // asking only for this exact course's document wrongly reported "no semesters configured".
+    let configured = semestersFrom(timingSnap?.exists ? (timingSnap.data() as Partial<CourseYearTiming>) : undefined);
+    if (configured.length === 0) {
+      configured = semestersFrom((await loadEffectiveTiming(this.db, collegeId, courseId, year)) ?? undefined);
+    }
     if (!configured.includes(semester)) {
       throw new SubjectRequestError(
         configured.length === 0
@@ -126,10 +134,8 @@ export class SubjectAssignService {
     }
 
     const warnings: string[] = [];
-    const covering = regulationsForCourseYearByBatch(catalog?.regulationBatches ?? {}, year, currentAcademicStartYear(), regulations);
-    if (covering.length > 0 && !covering.includes(regulation)) {
-      warnings.push(`Year ${year} is currently taught under ${covering.join(", ")}, not ${regulation}. These subjects will be ready for when a ${regulation} batch reaches Year ${year}.`);
-    }
+    const yearNote = regulationYearNote(catalog?.regulationBatches ?? {}, regulation, year, currentAcademicStartYear());
+    if (yearNote) warnings.push(yearNote);
 
     // Resolve codes -> subjects: only docs carrying a typed code are read, then narrowed to this catalog course + regulation.
     const groupIds = new Set(sameCatalog.map((c) => c.id));

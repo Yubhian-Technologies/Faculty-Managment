@@ -1,4 +1,4 @@
-import { normalizeSubjectCode, normalizeSubjectName, normalizeUniversityCode } from "./subjectIdentity";
+import { normalizeSubjectCode, normalizeSubjectName } from "./subjectIdentity";
 
 // The Academics data-health check: problems in the curriculum that nobody has noticed yet. Pure, so
 // the route that reads Firestore and the tests share one rulebook.
@@ -7,7 +7,7 @@ export type HealthSeverity = "error" | "warning" | "info";
 export interface HealthIssue {
   code:
     | "COURSE_NO_REGULATION" | "YEAR_NO_SEMESTERS" | "SUBJECT_UNSCOPED" | "DUPLICATE_CODE" | "DUPLICATE_NAME"
-    | "DUPLICATE_UNIVERSITY_CODE" | "INSTANCE_DRIFT" | "SUBJECT_NOT_ASSIGNED";
+    | "INSTANCE_DRIFT" | "SUBJECT_NOT_ASSIGNED";
   severity: HealthSeverity;
   title: string;
   count: number;
@@ -20,7 +20,7 @@ export interface HealthInput {
   courses: { id: string; name: string; departmentName?: string; catalogId?: string; durationYears?: number; isActive?: boolean }[];
   /** courseId -> years that have at least one semester configured. */
   yearsWithSemesters: Map<string, Set<number>>;
-  subjects: { id: string; code?: string; name?: string; universityCode?: string; courseId?: string; catalogId?: string; regulation?: string; isActive?: boolean }[];
+  subjects: { id: string; code?: string; name?: string; courseId?: string; catalogId?: string; regulation?: string; isActive?: boolean }[];
   instances: { id: string; subjectId: string; subjectCode?: string; subjectName?: string; regulation?: string; isActive?: boolean }[];
 }
 
@@ -57,7 +57,7 @@ export function computeAcademicsHealth(input: HealthInput): HealthIssue[] {
   }
   push("SUBJECT_UNSCOPED", "error", "Subjects with no regulation or no course (they can't be identified or assigned)", unscoped);
 
-  const dupes: Record<"DUPLICATE_CODE" | "DUPLICATE_NAME" | "DUPLICATE_UNIVERSITY_CODE", string[]> = { DUPLICATE_CODE: [], DUPLICATE_NAME: [], DUPLICATE_UNIVERSITY_CODE: [] };
+  const dupes: Record<"DUPLICATE_CODE" | "DUPLICATE_NAME", string[]> = { DUPLICATE_CODE: [], DUPLICATE_NAME: [] };
   for (const [key, list] of groups) {
     const regulation = key.slice(key.indexOf("|") + 1);
     const scan = (code: keyof typeof dupes, value: (s: (typeof list)[number]) => string, label: (v: string) => string) => {
@@ -67,11 +67,9 @@ export function computeAcademicsHealth(input: HealthInput): HealthIssue[] {
     };
     scan("DUPLICATE_CODE", (s) => normalizeSubjectCode(s.code), (v) => `Code ${v}`);
     scan("DUPLICATE_NAME", (s) => normalizeSubjectName(s.name), (v) => `Name "${v}"`);
-    scan("DUPLICATE_UNIVERSITY_CODE", (s) => normalizeUniversityCode(s.universityCode), (v) => `University code ${v}`);
   }
   push("DUPLICATE_CODE", "error", "Subjects sharing a code within a course and regulation (the Exam Cell can't tell them apart)", dupes.DUPLICATE_CODE);
   push("DUPLICATE_NAME", "error", "Subjects sharing a name within a course and regulation", dupes.DUPLICATE_NAME);
-  push("DUPLICATE_UNIVERSITY_CODE", "warning", "Subjects sharing a university code within a course and regulation", dupes.DUPLICATE_UNIVERSITY_CODE);
 
   const masterById = new Map(input.subjects.map((s) => [s.id, s]));
   const drift: string[] = [];

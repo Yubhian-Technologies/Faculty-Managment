@@ -169,8 +169,8 @@ export default function SemesterResultBatchPage({ params }: { params: Promise<{ 
             {batch.examType === "REGULAR" && (
               <li>
                 {missing.length === 0
-                  ? <span className="text-emerald-700 dark:text-emerald-400">✓ Every student of {batch.department} {batch.batch} has a result.</span>
-                  : <span className="text-amber-700 dark:text-amber-400">! {missing.length} student{missing.length > 1 ? "s" : ""} of {batch.department} {batch.batch} {missing.length > 1 ? "have" : "has"} no result here: {missing.slice(0, 15).map((m) => m.rollNumber).join(", ")}{missing.length > 15 ? " …" : ""}{isDraft ? " - use Add rows if they were left out." : "."}</span>}
+                  ? <span className="text-emerald-700 dark:text-emerald-400">✓ Every student of {batch.subDepartment || batch.department} {batch.batch} has a result.</span>
+                  : <span className="text-amber-700 dark:text-amber-400">! {missing.length} student{missing.length > 1 ? "s" : ""} of {batch.subDepartment || batch.department} {batch.batch} {missing.length > 1 ? "have" : "has"} no result here: {missing.slice(0, 15).map((m) => m.rollNumber).join(", ")}{missing.length > 15 ? " …" : ""}{isDraft ? " - use Add rows if they were left out." : "."}</span>}
               </li>
             )}
             {creditCheck && (

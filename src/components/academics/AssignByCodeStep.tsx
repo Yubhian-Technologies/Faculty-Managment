@@ -20,7 +20,7 @@ import { ASSIGN_MAX_CODES } from "@/lib/subjects/limits";
 import type { AssignByCodeResult, AssignCodeResult } from "@/lib/subjects/services/SubjectAssignService";
 
 type CourseOption = { id: string; name: string; catalogId?: string; departmentId?: string; isActive?: boolean; durationYears?: number };
-type SlotRow = { id: string; subjectId: string; subjectCode: string; subjectName: string; serialNumber?: number; category?: string; credits?: number; lectureHours?: number; tutorialHours?: number; practicalHours?: number; departmentId: string; semester: number; secondaryDepartmentNames?: string[]; isCustomized?: boolean; isNonTeachingLoad?: boolean };
+type SlotRow = { id: string; subjectId: string; subjectCode: string; subjectName: string; serialNumber?: number; category?: string; credits?: number; lectureHours?: number; tutorialHours?: number; practicalHours?: number; departmentId: string; semester: number; secondaryDepartmentNames?: string[]; isNonTeachingLoad?: boolean };
 
 const SELECT_CLASS = "h-9 w-full rounded-md border bg-background px-2 text-sm";
 
@@ -87,7 +87,16 @@ export function AssignByCodeStep({ catalogId, regulation, courseName, initialDep
     else { setDeptId(d.id); setSubDeptId(""); }
   }, [initialDepartmentId, departments]);
 
-  const topDepartments = useMemo(() => departments.filter((d) => !d.parentDepartmentId).sort((a, b) => a.name.localeCompare(b.name)), [departments]);
+  // Only departments that actually run this catalog course - own a Course doc for it,
+  // or (a parent standing in for a shared-first-year sub-department) have one that does.
+  // Was previously every top-level department in the college regardless of `catalogId`.
+  const topDepartments = useMemo(() => {
+    const ownerIds = new Set(courses.filter((c) => c.catalogId === catalogId).map((c) => c.departmentId));
+    return departments
+      .filter((d) => !d.parentDepartmentId)
+      .filter((d) => ownerIds.has(d.id) || departments.some((sub) => sub.parentDepartmentId === d.id && ownerIds.has(sub.id)))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [departments, courses, catalogId]);
   const subDepartments = useMemo(() => departments.filter((d) => d.parentDepartmentId === deptId), [departments, deptId]);
   const activeDeptId = subDeptId || deptId;
   const activeDept = useMemo(() => departments.find((d) => d.id === activeDeptId), [departments, activeDeptId]);
@@ -418,7 +427,6 @@ export function AssignByCodeStep({ catalogId, regulation, courseName, initialDep
                           <div className="flex flex-wrap items-center gap-1.5">
                             <span className="font-medium">{r.subjectName}</span>
                             {r.isNonTeachingLoad && <span className="rounded border border-purple-200 bg-purple-100 px-1.5 py-0.5 text-[10px] font-semibold text-purple-800 dark:border-purple-800 dark:bg-purple-950/70 dark:text-purple-300">Not in teaching load</span>}
-                            {r.isCustomized && <span className="rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground" title="This department's hours or credits differ from the course-wide values">Customised</span>}
                             {(r.secondaryDepartmentNames ?? []).length > 0 && <span className="text-[10px] text-muted-foreground">Targets:</span>}
                             {(r.secondaryDepartmentNames ?? []).map((name) => (
                               <span key={name} className="inline-flex items-center gap-1 rounded border border-blue-200 bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-800 dark:border-blue-800 dark:bg-blue-950/70 dark:text-blue-300">

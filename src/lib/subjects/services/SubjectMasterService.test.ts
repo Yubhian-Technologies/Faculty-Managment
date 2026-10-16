@@ -28,27 +28,27 @@ beforeEach(() => {
 });
 
 describe("SubjectMasterService.importMany", () => {
-  it("saves every row with both locks, in one go", async () => {
+  it("saves every row with its code lock, in one go", async () => {
     const r = await svc.importMany({ collegeId: "c1", courseId: "c-cse", regulation: "R20", records: [row(), row({ name: "Algorithms", code: "CS202" })] });
     expect(r.failed).toEqual([]);
     expect(r.created).toBe(2);
     expect(subjects()).toHaveLength(2);
-    expect(keys()).toHaveLength(4); // code + name lock per subject
+    expect(keys()).toHaveLength(2); // one code lock per subject - name is not locked
     const doc = fake.read(subjects()[0])!;
     expect(doc.catalogId).toBe("cat1");
     expect(doc.hoursPerWeek).toBe(3);
   });
 
   it("chunks a large import across multiple transactions so no single commit exceeds Firestore's write ceiling", async () => {
-    // 420 rows, each costing 3 writes (subject + code lock + name lock) = 1260
-    // total - more than one Firestore transaction's ~500-write ceiling
-    // allows, and past the 150-row chunk size twice over.
+    // 420 rows, each costing 2 writes (subject + code lock) = 840 total -
+    // more than one Firestore transaction's ~500-write ceiling allows, and
+    // past the 150-row chunk size twice over.
     const records = Array.from({ length: 420 }, (_, i) => row({ code: `CS${1000 + i}`, name: `Subject ${i + 1}` }));
     const r = await svc.importMany({ collegeId: "c1", courseId: "c-cse", regulation: "R20", records });
     expect(r.failed).toEqual([]);
     expect(r.created).toBe(420);
     expect(subjects()).toHaveLength(420);
-    expect(keys()).toHaveLength(840); // code + name lock per subject
+    expect(keys()).toHaveLength(420); // one code lock per subject
     // Spot-check a row from each of the three chunks (1-150, 151-300, 301-420).
     for (const code of ["CS1000", "CS1200", "CS1419"]) {
       expect(r.createdRows.some((cr) => cr.code === code)).toBe(true);
@@ -71,17 +71,21 @@ describe("SubjectMasterService.importMany", () => {
     expect(subjects()).toHaveLength(1);
   });
 
-  it("refuses a name that is already used under a different code (case and spacing ignored)", async () => {
+  it("allows a name that is already used under a different code, with only a warning (case and spacing ignored)", async () => {
     await svc.importMany({ collegeId: "c1", courseId: "c-cse", regulation: "R20", records: [row()] });
     const r = await svc.importMany({ collegeId: "c1", courseId: "c-cse", regulation: "R20", records: [row({ code: "CS999", name: "  data   STRUCTURES " })] });
-    expect(r.failed[0].error).toMatch(/name "Data Structures" is already used by code CS201/i);
-    expect(subjects()).toHaveLength(1);
+    expect(r.failed).toEqual([]);
+    expect(r.created).toBe(1);
+    expect(r.warnings[0].warning).toMatch(/name "Data Structures" is already used by code CS201/i);
+    expect(subjects()).toHaveLength(2);
   });
 
-  it("catches repeats inside the file", async () => {
+  it("catches a repeated CODE inside the file, but only warns on a repeated name", async () => {
     const r = await svc.importMany({ collegeId: "c1", courseId: "c-cse", regulation: "R20", records: [row(), row({ name: "Algorithms" }), row({ code: "CS9" })] });
     expect(r.created).toBe(0);
-    expect(r.failed.map((f) => f.row)).toEqual([3, 4]);
+    // row 3 (spreadsheet row) repeats row 2's code CS201; row 4 repeats row 2's name "Data Structures" - a warning, not a failure.
+    expect(r.failed.map((f) => f.row)).toEqual([3]);
+    expect(r.warnings.some((w) => w.row === 4 && /name "Data Structures" is repeated/i.test(w.warning))).toBe(true);
     expect(subjects()).toHaveLength(0);
   });
 
@@ -164,11 +168,12 @@ describe("SubjectMasterService.update", () => {
     expect(fake.read(`${C}/subjects/${id}`)!.shortCode).toBe("DS");
   });
 
-  it("refuses a code or name another subject has", async () => {
+  it("refuses a code another subject has, but allows reusing another subject's name", async () => {
     await make("CS201", "Data Structures");
     const other = await make("CS202", "Algorithms");
     await expect(svc.update({ collegeId: "c1", id: other, patch: { code: "CS201" } })).rejects.toMatchObject({ status: 409 });
-    await expect(svc.update({ collegeId: "c1", id: other, patch: { name: "data structures" } })).rejects.toMatchObject({ status: 409 });
+    await svc.update({ collegeId: "c1", id: other, patch: { name: "data structures" } });
+    expect(fake.read(`${C}/subjects/${other}`)!.name).toBe("data structures");
   });
 
   it("rejects bad numbers instead of storing them", async () => {
@@ -178,16 +183,16 @@ describe("SubjectMasterService.update", () => {
     expect(fake.read(`${C}/subjects/${id}`)!.credits).toBe(3);
   });
 
-  it("carries hours and credits to semester copies that follow the master, not to customized ones", async () => {
+  it("carries hours and credits to every semester copy", async () => {
     const id = await make();
     instance(id);
     fake.seed(`${C}/subjectSemesterAssignments/${id}_it_3`, {
-      subjectId: id, departmentId: "it", semester: 3, year: 2, lectureHours: 1, tutorialHours: 0, practicalHours: 0, hoursPerWeek: 1, credits: 2, isCustomized: true, isActive: true,
+      subjectId: id, departmentId: "it", semester: 3, year: 2, lectureHours: 1, tutorialHours: 0, practicalHours: 0, hoursPerWeek: 1, credits: 2, isActive: true,
     });
     const r = await svc.update({ collegeId: "c1", id, patch: { lectureHours: 4, credits: 4 } });
-    expect(r.cascaded).toMatchObject({ instances: 2, customizedLeftAlone: 1 });
+    expect(r.cascaded).toMatchObject({ instances: 2 });
     expect(fake.read(`${C}/subjectSemesterAssignments/${id}_cse_3`)).toMatchObject({ hoursPerWeek: 4, credits: 4 });
-    expect(fake.read(`${C}/subjectSemesterAssignments/${id}_it_3`)).toMatchObject({ hoursPerWeek: 1, credits: 2 });
+    expect(fake.read(`${C}/subjectSemesterAssignments/${id}_it_3`)).toMatchObject({ hoursPerWeek: 4, credits: 4 });
   });
 
   it("won't lower hours below periods already placed on a timetable", async () => {
