@@ -73,11 +73,14 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
 
   useEffect(() => { void load(); }, [courseId, catalogId, regulation]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Search by Subject Code or Subject Name (case-insensitive substring) over the already-loaded list.
+  // Search by Category, Subject Code or Subject Name (case-insensitive substring) over the already-loaded list.
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return subjects;
-    return subjects.filter((s) => (s.code ?? "").toLowerCase().includes(q) || (s.name ?? "").toLowerCase().includes(q));
+    return subjects.filter((s) => {
+      const category = s.category === "OTHER" ? (s.customCategory || "Other") : (s.category ?? "");
+      return [category, s.category ?? "", s.code, s.name].some((v) => String(v ?? "").toLowerCase().includes(q));
+    });
   }, [subjects, search]);
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageRows = useMemo(() => filtered.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE), [filtered, page]);
@@ -151,8 +154,8 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="pl-8"
-            placeholder="Search by subject code or name"
-            aria-label="Search subjects by code or name"
+            placeholder="Search by category, subject code or name"
+            aria-label="Search subjects by category, code or name"
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(0); }}
           />
