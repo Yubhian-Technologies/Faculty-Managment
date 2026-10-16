@@ -73,6 +73,11 @@ export default function PrincipalTimetablePage() {
   const [bulkWorkingDays, setBulkWorkingDays] = useState<DayOfWeek[]>([]);
   const [isExportingAllPdf, setIsExportingAllPdf] = useState(false);
   const [isExportingAllZip, setIsExportingAllZip] = useState(false);
+  // ALL-departments filter: Course -> Department -> Year narrow the sections; nothing is listed until Load.
+  const [fCourse, setFCourse] = useState("");
+  const [fDept, setFDept] = useState("");
+  const [fYear, setFYear] = useState("");
+  const [appliedFilter, setAppliedFilter] = useState<{ course: string; dept: string; year: string } | null>(null);
   const { collegeInfo } = useCollegeInfo();
   // Derived rather than a separate flag - a synchronous setState(true) inside
   // the fetch effect would be a cascading render (react-hooks/set-state-in-effect).
@@ -98,6 +103,31 @@ export default function PrincipalTimetablePage() {
       });
     return () => { cancelled = true; };
   }, [viewAll, bulkSections, bulkError]);
+
+  const sortedUnique = (xs: string[]) => [...new Set(xs)].sort((a, b) => a.localeCompare(b));
+  const filterCourses = useMemo(() => sortedUnique((bulkSections ?? []).map((e) => e.courseName)), [bulkSections]);
+  const filterDepts = useMemo(
+    () => sortedUnique((bulkSections ?? []).filter((e) => !fCourse || e.courseName === fCourse).map((e) => e.departmentName)),
+    [bulkSections, fCourse]
+  );
+  const filterYears = useMemo(
+    () =>
+      [...new Set((bulkSections ?? [])
+        .filter((e) => (!fCourse || e.courseName === fCourse) && (!fDept || e.departmentName === fDept))
+        .map((e) => e.year))].sort((a, b) => a - b),
+    [bulkSections, fCourse, fDept]
+  );
+  // The sections the downloads and the list below cover: all of them until a filter is loaded.
+  const shownSections = useMemo(() => {
+    if (!bulkSections) return [];
+    if (!appliedFilter) return bulkSections;
+    return bulkSections.filter(
+      (e) =>
+        (!appliedFilter.course || e.courseName === appliedFilter.course) &&
+        (!appliedFilter.dept || e.departmentName === appliedFilter.dept) &&
+        (!appliedFilter.year || String(e.year) === appliedFilter.year)
+    );
+  }, [bulkSections, appliedFilter]);
 
   function exportMetaFor(entry: BulkSectionEntry) {
     const days = resolveTimetableDays(
@@ -132,17 +162,17 @@ export default function PrincipalTimetablePage() {
   }
 
   async function handleDownloadAllPdf() {
-    if (!bulkSections || bulkSections.length === 0) return;
+    if (shownSections.length === 0) return;
     setIsExportingAllPdf(true);
     try {
-      const htmls = bulkSections.map((entry) =>
+      const htmls = shownSections.map((entry) =>
         buildSectionTimetablePdfHtml({
           ...exportMetaFor(entry),
           section: { name: entry.sectionName, department: entry.departmentName, year: entry.year, courseName: entry.courseName },
         })
       );
       await renderMultiHtmlToPdf(htmls, `All_Departments_Timetables_${isoDateKey(new Date())}.pdf`);
-      toast({ title: "Downloaded", description: `${bulkSections.length} sections combined into one PDF` });
+      toast({ title: "Downloaded", description: `${shownSections.length} sections combined into one PDF` });
     } catch (err) {
       console.error(err);
       toast({ variant: "destructive", title: "Download failed", description: "Failed to generate the combined PDF" });
@@ -152,13 +182,13 @@ export default function PrincipalTimetablePage() {
   }
 
   async function handleDownloadAllXlsxZip() {
-    if (!bulkSections || bulkSections.length === 0) return;
+    if (shownSections.length === 0) return;
     setIsExportingAllZip(true);
     try {
       const JSZip = (await import("jszip")).default;
       const zip = new JSZip();
       const usedNames = new Set<string>();
-      for (const entry of bulkSections) {
+      for (const entry of shownSections) {
         const buffer = await buildSectionTimetableXlsxBuffer({
           ...exportMetaFor(entry),
           sectionName: entry.sectionName,
@@ -177,7 +207,7 @@ export default function PrincipalTimetablePage() {
       link.download = `All_Departments_Timetables_${isoDateKey(new Date())}.zip`;
       link.click();
       URL.revokeObjectURL(url);
-      toast({ title: "Downloaded", description: `${bulkSections.length} section workbooks zipped` });
+      toast({ title: "Downloaded", description: `${shownSections.length} section workbooks zipped` });
     } catch (err) {
       console.error(err);
       toast({ variant: "destructive", title: "Export failed", description: "Failed to build the Excel ZIP" });
@@ -419,9 +449,9 @@ export default function PrincipalTimetablePage() {
       {viewAll ? (
         <div className="rounded-lg border p-6 space-y-4">
           <div>
-            <h3 className="text-sm font-semibold">Download every department&rsquo;s timetable</h3>
+            <h3 className="text-sm font-semibold">All departments&rsquo; timetables</h3>
             <p className="text-sm text-muted-foreground mt-1">
-              Every section&rsquo;s own CURRENT semester, college-wide - sections with nothing published yet are left out.
+              Pick a Course, Department and Year, then Load to view them; the downloads cover the same selection (all of them if nothing is loaded). Every section&rsquo;s own CURRENT semester - sections with nothing published yet are left out.
             </p>
           </div>
           {bulkLoading ? (
@@ -432,20 +462,77 @@ export default function PrincipalTimetablePage() {
             <p className="text-sm text-muted-foreground">No section has a published timetable for its current semester yet.</p>
           ) : (
             <>
-              <p className="text-sm text-muted-foreground">
-                <span className="font-medium text-foreground">{bulkSections.length}</span> section
-                {bulkSections.length === 1 ? "" : "s"} found with a published timetable.
-              </p>
-              <div className="flex flex-wrap gap-3">
-                <Button onClick={handleDownloadAllPdf} disabled={isExportingAllPdf}>
-                  {isExportingAllPdf ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
-                  {isExportingAllPdf ? "Generating..." : "Download combined PDF"}
-                </Button>
-                <Button variant="outline" onClick={handleDownloadAllXlsxZip} disabled={isExportingAllZip}>
-                  {isExportingAllZip ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileSpreadsheet className="h-4 w-4 mr-2" />}
-                  {isExportingAllZip ? "Zipping..." : "Download Excel files (ZIP)"}
+              <div className="grid gap-3 sm:grid-cols-4 items-end">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium">Course</label>
+                  <select className={selectClass} value={fCourse} onChange={(e) => { setFCourse(e.target.value); setFDept(""); setFYear(""); }}>
+                    <option value="">All courses</option>
+                    {filterCourses.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium">Department</label>
+                  <select className={selectClass} value={fDept} onChange={(e) => { setFDept(e.target.value); setFYear(""); }}>
+                    <option value="">All departments</option>
+                    {filterDepts.map((d) => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium">Year</label>
+                  <select className={selectClass} value={fYear} onChange={(e) => setFYear(e.target.value)}>
+                    <option value="">All years</option>
+                    {filterYears.map((y) => <option key={y} value={String(y)}>{ordinalYear(y)} Year</option>)}
+                  </select>
+                </div>
+                <Button onClick={() => setAppliedFilter({ course: fCourse, dept: fDept, year: fYear })}>
+                  <Search className="h-4 w-4 mr-2" />Load timetables
                 </Button>
               </div>
+
+              <p className="text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">{shownSections.length}</span> section
+                {shownSections.length === 1 ? "" : "s"} found with a published timetable
+                {appliedFilter ? " for this filter" : ""}.
+              </p>
+              {shownSections.length > 0 && (
+                <div className="flex flex-wrap gap-3">
+                  <Button onClick={handleDownloadAllPdf} disabled={isExportingAllPdf}>
+                    {isExportingAllPdf ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+                    {isExportingAllPdf ? "Generating..." : "Download combined PDF"}
+                  </Button>
+                  <Button variant="outline" onClick={handleDownloadAllXlsxZip} disabled={isExportingAllZip}>
+                    {isExportingAllZip ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileSpreadsheet className="h-4 w-4 mr-2" />}
+                    {isExportingAllZip ? "Zipping..." : "Download Excel files (ZIP)"}
+                  </Button>
+                </div>
+              )}
+
+              {appliedFilter && (
+                <div className="space-y-6 pt-2">
+                  {shownSections.map((entry) => {
+                    const inYear = (entry.timing.semesters ?? []).map((x) => x.semester);
+                    return (
+                      <div key={entry.sectionId} className="space-y-2">
+                        <h4 className="text-sm font-semibold">
+                          {entry.courseName} · {entry.departmentName} · {ordinalYear(entry.year)} Year · Section {entry.sectionName}
+                        </h4>
+                        <InstitutionalTimetableTable
+                          section={{ name: entry.sectionName, department: entry.departmentName, year: entry.year, courseName: entry.courseName } as unknown as Section}
+                          timing={entry.timing}
+                          slots={entry.slots}
+                          courseName={entry.courseName}
+                          departmentName={entry.departmentName}
+                          academicYear={entry.slots[0]?.academicYear}
+                          semesterLabel={entry.currentSemester != null ? `Sem ${yearSemesterLabelIn(entry.year, inYear, entry.currentSemester)}` : undefined}
+                          workingDays={bulkWorkingDays}
+                          showWeekNav={false}
+                          subjects={bulkSubjects}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </>
           )}
         </div>
