@@ -77,6 +77,10 @@ export interface ExamResultBatch {
   examHeld: string;
   /** Supplementary: the exam it re-sits; Revaluation: the exam it re-grades. */
   targetBatchId?: string;
+  /** The same, as an exam across branches (type + month) - each student matched to their own result in it. */
+  targetExam?: { examType: "REGULAR" | "SUPPLEMENTARY"; examHeld: string };
+  /** Shared by the sheets of one every-branch upload (one per branch / sub-department). */
+  uploadId?: string;
   academicYear: string;
   year: number;
   semester: number;

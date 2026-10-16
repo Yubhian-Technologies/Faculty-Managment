@@ -54,7 +54,9 @@ describe("normalizeBatchMeta", () => {
   it("refuses a missing or impossible choice", () => {
     expect(err({ ...good, regulation: "" })).toBe("Choose a regulation");
     expect(err({ ...good, batch: "2024" })).toBe("Choose a batch");
-    expect(err({ ...good, department: "" })).toBe("Choose a branch");
+    expect(err({ ...good, department: "" })).toBe("Choose the branch again");
+    // No branch at all = every branch in one upload.
+    expect(meta({ ...good, department: "", departmentId: "" })).toMatchObject({ department: "", departmentId: "" });
     expect(err({ ...good, year: 5 })).toBe("Batch 2024-2028 has no Year 5");
     expect(err({ ...good, semester: "x" })).toBe("Choose a semester");
     expect(err({ ...good, examType: "MAKEUP" })).toBe("Choose Regular, Supplementary or Revaluation");
