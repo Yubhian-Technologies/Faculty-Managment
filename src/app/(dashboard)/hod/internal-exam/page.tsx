@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ClipboardCheck, Eye, Info, Lock } from "lucide-react";
+import { ClipboardCheck, Eye, Info, Lock, Search } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,9 @@ export default function HodInternalExamPage() {
   const [sectionFilter, setSectionFilter] = useState(ALL); // sectionId ?? sectionName
   const [subjectFilter, setSubjectFilter] = useState(ALL); // subjectId
 
+  // The pickers above are a DRAFT; the table below shows only what the last Load applied.
+  const [applied, setApplied] = useState<{ course: string; year: string; faculty: string; section: string; subject: string } | null>(null);
+
   const [selectedBatch, setSelectedBatch] = useState<(InternalExamMarksBatch & { id: string }) | null>(null);
   const [selectedConfig, setSelectedConfig] = useState<ExamConfiguration | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
@@ -33,7 +36,7 @@ export default function HodInternalExamPage() {
     void (async () => {
       setIsLoading(true);
       try {
-        const res = await fetch("/api/college/internal-exam-marks");
+        const res = await fetch("/api/college/internal-exam-marks?meta=1");
         if (!res.ok) throw new Error("Failed to load submitted marks");
         const json = (await res.json()) as { batches?: (InternalExamMarksBatch & { id: string })[] };
         setBatches(json.batches ?? []);
@@ -99,7 +102,20 @@ export default function HodInternalExamPage() {
     return [...seen.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
   }, [afterSection]);
 
-  const visibleBatches = afterSection.filter((b) => subjectFilter === ALL || b.subjectId === subjectFilter);
+  const visibleBatches = useMemo(
+    () => (applied
+      ? batches.filter((b) =>
+        (applied.course === ALL || b.courseId === applied.course)
+        && (applied.year === ALL || b.year === Number(applied.year))
+        && (applied.faculty === ALL || b.facultyId === applied.faculty)
+        && (applied.section === ALL || (b.sectionId ?? b.sectionName) === applied.section)
+        && (applied.subject === ALL || b.subjectId === applied.subject))
+      : []),
+    [batches, applied]
+  );
+  const filtersChanged = applied !== null
+    && (applied.course !== courseFilter || applied.year !== yearFilter || applied.faculty !== facultyFilter
+      || applied.section !== sectionFilter || applied.subject !== subjectFilter);
   const batchPager = usePagination(visibleBatches, 20);
 
   function handleCourseChange(v: string) {
@@ -130,9 +146,11 @@ export default function HodInternalExamPage() {
     setSelectedConfig(null);
     setIsLoadingDetail(true);
     try {
-      const res = await fetch(`/api/college/exam-configurations?subjectId=${encodeURIComponent(batch.subjectId)}`);
-      const json = (await res.json()) as { configuration?: ExamConfiguration | null; error?: string };
-      if (!res.ok || !json.configuration) throw new Error(json.error ?? "Exam configuration not found");
+      // The list leaves out the students' marks; this one batch brings them and its configuration.
+      const res = await fetch(`/api/college/internal-exam-marks/${encodeURIComponent(batch.id)}`);
+      const json = (await res.json()) as { batch?: InternalExamMarksBatch & { id: string }; configuration?: ExamConfiguration | null; error?: string };
+      if (!res.ok || !json.batch || !json.configuration) throw new Error(json.error ?? "Exam configuration not found");
+      setSelectedBatch(json.batch);
       setSelectedConfig(json.configuration);
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to load marks breakdown" });
@@ -292,10 +310,22 @@ export default function HodInternalExamPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="space-y-2 flex flex-col justify-end">
+                  <Button
+                    onClick={() => { setApplied({ course: courseFilter, year: yearFilter, faculty: facultyFilter, section: sectionFilter, subject: subjectFilter }); batchPager.setPage(1); }}
+                  >
+                    <Search className="h-4 w-4 mr-2" />{filtersChanged ? "Apply filters" : applied ? "Reload" : "Load"}
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
 
+          {!applied ? (
+            <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+              Pick a course, year, faculty, section and subject (or leave them on All), then press Load.
+            </div>
+          ) : (
           <Card className="overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -349,6 +379,7 @@ export default function HodInternalExamPage() {
               </div>
             )}
           </Card>
+          )}
         </>
       )}
     </div>
