@@ -253,7 +253,11 @@ function degreeList(primary: DegreeDetail | undefined, additional: DegreeDetail[
   return [primary, ...(additional ?? [])].filter((d): d is DegreeDetail => !!d);
 }
 
-function buildRow(rawFaculty: FacultyMember, teachingSummary: string): Record<string, string> {
+// Exported for src/lib/faculty/profileCompletion.ts, which reuses this same
+// flattening (one string cell per EXPORT_FIELDS key, "" meaning blank) to
+// decide whether a field counts as filled - rather than re-deriving every
+// field from FacultyMember a second time.
+export function buildRow(rawFaculty: FacultyMember, teachingSummary: string): Record<string, string> {
   // Lift legacy key names on un-migrated docs (doc-level qualification/experienceYears,
   // flat personal keys, academicProfile) - everything below reads the new names only.
   const faculty = migrateFacultyDoc(rawFaculty as unknown as Record<string, unknown>) as unknown as FacultyMember;
