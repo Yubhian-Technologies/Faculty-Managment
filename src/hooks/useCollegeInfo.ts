@@ -13,6 +13,8 @@ export interface CollegeInfo {
   logoUrl?: string;
   hasCustomLogo?: boolean;
   rawLogoUrl?: string;
+  /** Ticked timetable signature groups (Super Admin > Settings), one row of designations each. */
+  timetableSignatureRows?: string[][];
 }
 
 export function useCollegeInfo() {
@@ -31,6 +33,9 @@ export function useCollegeInfo() {
       return d;
     },
     enabled: Boolean(collegeId),
+    // The signature rows can be changed in Settings at any time; a timetable
+    // page opened afterwards must not print the old ones from the 2-minute cache.
+    refetchOnMount: "always",
   });
 
   return { collegeInfo: data ?? null, loading: Boolean(collegeId) && isLoading, failed: isError };

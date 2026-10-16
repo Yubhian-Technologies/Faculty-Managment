@@ -17,11 +17,11 @@ import {
   buildTimetableColumns,
   timetableClassLine,
   buildClassTimetableSubtitle,
-  getHodSignatureLabel,
   latestEffectiveDate,
   resolveTimetableDays,
   slotShortCode, mergeCoTaughtSlots, continuousSpans, isLabSlot,
 } from "./gridModel";
+import { resolveSignatureRows } from "./signatureAuthority";
 
 export interface SectionTimetableXlsxOptions {
   collegeName?: string;
@@ -44,6 +44,8 @@ export interface SectionTimetableXlsxOptions {
   effectiveDate?: string;
   /** Show faculty/batches of one subject in a period as one entry (default true). */
   mergeCoTaught?: boolean;
+  /** The college's chosen signature rows (Super Admin > Settings); empty = the default In-Charge / HOD / Principal row. */
+  signatureRows?: string[][];
   days: DayOfWeek[];
   periods: number[];
   periodTimings: PeriodTiming[];
@@ -363,18 +365,19 @@ export async function buildSectionTimetableXlsxBuffer(opts: SectionTimetableXlsx
     }
   }
 
-  // ── 3 Horizontally equally-spaced signature blocks ─────────────────────────
+  // ── Equally-spaced signature blocks, one row per chosen group ──────────────
   r += 2; // spacer
-  const sigHeadings = ["TimeTable In-Charge", getHodSignatureLabel(departmentName), "PRINCIPAL"];
-  const sigGroups = splitColumns(lastCol, [1, 1, 1]);
-  const sigRowIndex = r;
-  sigHeadings.forEach((label, i) => {
-    const [from, to] = sigGroups[i];
-    sheet.getCell(sigRowIndex, from).value = label;
-    if (to > from) sheet.mergeCells(sigRowIndex, from, sigRowIndex, to);
-    styleRange(sheet, sigRowIndex, from, to, { bold: true, align: "center" });
-  });
-  sheet.getRow(sigRowIndex).height = 24;
+  for (const row of resolveSignatureRows(opts.signatureRows, departmentName)) {
+    const sigGroups = splitColumns(lastCol, row.map(() => 1));
+    row.forEach((label, i) => {
+      const [from, to] = sigGroups[i];
+      sheet.getCell(r, from).value = label;
+      if (to > from) sheet.mergeCells(r, from, r, to);
+      styleRange(sheet, r, from, to, { bold: true, align: "center" });
+    });
+    sheet.getRow(r).height = 24;
+    r += 3; // room to sign
+  }
 
   return workbook.xlsx.writeBuffer() as Promise<ArrayBuffer>;
 }

@@ -22,6 +22,7 @@ import {
   latestEffectiveDate,
   resolveTimetableDays,
   slotShortCode, mergeCoTaughtSlots,} from "./gridModel";
+import { resolveSignatureRows } from "./signatureAuthority";
 
 export interface SectionTimetablePdfOptions {
   collegeName?: string;
@@ -62,6 +63,8 @@ export interface SectionTimetablePdfOptions {
   showSignatures?: boolean;
   /** Name under the rightmost signature, e.g. "Principal". Defaults to "Principal". */
   signatureLabels?: { incharge?: string; principal?: string };
+  /** The college's chosen signature rows (Super Admin > Settings); empty = the default In-Charge / HOD / Principal row. */
+  signatureRows?: string[][];
   title?: string;
 }
 
@@ -96,6 +99,7 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
     shortBreaks,
     showSignatures = false,
     signatureLabels,
+    signatureRows,
     title,
   } = opts;
 
@@ -302,12 +306,17 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
   // managing sub-department's - a CSE section signs as HOD-CSE even when
   // Basic Science - Chemistry runs it.
   const hodLabel = getHodSignatureLabel(section?.department || resolvedDepartment);
-  const signatureHtml = `
+  const rows = signatureRows?.length
+    ? resolveSignatureRows(signatureRows, section?.department || resolvedDepartment)
+    : [[signatureLabels?.incharge || "TimeTable In-Charge", hodLabel, signatureLabels?.principal || "PRINCIPAL"]];
+  const signatureHtml = rows
+    .map(
+      (row) => `
   <div class="signature-row" style="margin-top:48px;margin-bottom:16px;padding-top:16px;display:flex;justify-content:space-between;align-items:flex-end;width:100%;page-break-inside:avoid;">
-    <div class="signature-block" style="flex:1;text-align:center;font-weight:700;font-size:9.5pt;">TimeTable In-Charge</div>
-    <div class="signature-block" style="flex:1;text-align:center;font-weight:700;font-size:9.5pt;">${escapeHtml(hodLabel)}</div>
-    <div class="signature-block" style="flex:1;text-align:center;font-weight:700;font-size:9.5pt;">${escapeHtml(signatureLabels?.principal || "PRINCIPAL")}</div>
-  </div>`;
+    ${row.map((label) => `<div class="signature-block" style="flex:1;text-align:center;font-weight:700;font-size:9.5pt;">${escapeHtml(label)}</div>`).join("\n    ")}
+  </div>`
+    )
+    .join("");
 
   const documentTitle = title || "TIME TABLE";
   return `<!DOCTYPE html>

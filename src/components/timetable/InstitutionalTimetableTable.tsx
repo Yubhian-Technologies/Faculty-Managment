@@ -42,6 +42,7 @@ import type {
 import { DAY_LABELS } from "@/types";
 
 import { useCollegeInfo } from "@/hooks/useCollegeInfo";
+import { resolveSignatureRows } from "@/lib/timetable/signatureAuthority";
 
 export interface InstitutionalTimetableTableProps {
   section?: Section | null;
@@ -206,10 +207,11 @@ export function InstitutionalTimetableTable({
       shortBreaks: timing.shortBreaks,
       subjects,
       assignments,
+      signatureRows: collegeInfo?.timetableSignatureRows,
     }),
     [
       activeCollegeName, activeCollegeCode, activeAffiliation, activeAddress, activePhone,
-      collegeInfo?.logoUrl, logoUrl, departmentName, courseName, academicYear, semesterLabel,
+      collegeInfo?.logoUrl, collegeInfo?.timetableSignatureRows, logoUrl, departmentName, courseName, academicYear, semesterLabel,
       effectiveDateProp, section, classroom, classInchargeName, visibleDays, timing, filteredSlots, subjects, assignments,
     ]
   );
@@ -876,6 +878,17 @@ export function InstitutionalTimetableTable({
             </ul>
           </div>
         )}
+
+        {/* ── Signature authority (same rows the PDF / Excel print) ─────────── */}
+        <div className="border-t px-4 py-4 bg-card space-y-6">
+          {resolveSignatureRows(collegeInfo?.timetableSignatureRows, section?.department || departmentName).map((row, i) => (
+            <div key={i} className="flex justify-between gap-2 pt-6 text-center text-xs font-bold text-foreground">
+              {row.map((label, j) => (
+                <div key={`${label}-${j}`} className="flex-1 min-w-0 break-words">{label}</div>
+              ))}
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* ── Interactive Period Details Dialog ── */}

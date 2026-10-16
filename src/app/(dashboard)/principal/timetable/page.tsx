@@ -128,6 +128,7 @@ export default function PrincipalTimetablePage() {
       lunchBreak: entry.timing.lunchBreak,
       shortBreaks: entry.timing.shortBreaks,
       subjects: bulkSubjects,
+      signatureRows: collegeInfo?.timetableSignatureRows,
     };
   }
 
