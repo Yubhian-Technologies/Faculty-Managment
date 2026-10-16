@@ -13,7 +13,7 @@ import { getActiveSubstitutionsForDates, currentWeekDateKeys } from "@/lib/leave
 import { resolveSectionCurrentSemester, resolveRequestedSemester, matchesCurrentSemester } from "@/lib/college/semester";
 import { matchesCurrentAcademicYear } from "@/lib/college/academicSession";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
-import { chunkValues } from "@/lib/firestore/inQuery";
+import { chunkValues, getInChunks } from "@/lib/firestore/inQuery";
 import { FieldPath } from "firebase-admin/firestore";
 import type { DayOfWeek, SubjectType, TimetableRules, TimetableSlot } from "@/types";
 import { DEFAULT_TIMETABLE_RULES } from "@/types";
@@ -49,12 +49,22 @@ export async function GET(request: Request) {
     const sectionSnap = await collegeRef.collection("sections").doc(sectionId).get();
     if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found" }, { status: 404 });
     const section = sectionSnap.data() as { courseId: string; year: number };
-    const [semesterResult] = await Promise.all([
+    // A master subject is filed under whichever department's Course doc created it, but is meant
+    // to be shared by every sibling department on the same Course Catalog entry (see
+    // SubjectMasterService's own doc-comment) - resolve those siblings' courseIds too, so a subject
+    // created under a DIFFERENT department's course doc still resolves its shortCode/type correctly
+    // here, the same way /api/college/subjects?catalogId= already does.
+    const [semesterResult, ownCourseSnap] = await Promise.all([
       resolveRequestedSemester(db, session.collegeId, section.courseId, section.year, requestedSemester),
+      collegeRef.collection("courses").doc(section.courseId).get(),
     ]);
     if (!semesterResult.ok) {
       return NextResponse.json({ error: semesterResult.error }, { status: 400 });
     }
+    const ownCatalogId = (ownCourseSnap.data() as { catalogId?: string } | undefined)?.catalogId;
+    const subjectCourseIds = ownCatalogId
+      ? (await collegeRef.collection("courses").where("catalogId", "==", ownCatalogId).get()).docs.map((d) => d.id)
+      : [section.courseId];
     const currentSemester = semesterResult.semester;
     const currentAcademicYear = await resolveCollegeAcademicYear(db, session.collegeId);
     const requestedAcademicYear = academicYearParam || currentAcademicYear;
@@ -66,17 +76,19 @@ export async function GET(request: Request) {
     // specific history year it may not actually belong to.
     const isBrowsingPastYear = requestedAcademicYear !== currentAcademicYear;
 
-    const [snap, assignmentsSnap, subjectsSnap, rulesSnap] = await Promise.all([
+    const [snap, assignmentsSnap, subjectDocsForGroup, rulesSnap] = await Promise.all([
       collegeRef.collection("timetableSlots").where("sectionId", "==", sectionId).get(),
       // Only for the HOD's per-subject cell colour (on-screen display).
       collegeRef.collection("teachingAssignments").where("sectionId", "==", sectionId).select("cellColor").get(),
       // Joined onto each slot below so the Timetable pages' Theory/Practical
       // filter can group by SubjectType without a second round-trip - same
       // technique as class-leader/timetable/route.ts's own Theory/Lab filter.
-      // Master subjects are scoped by courseId + regulation (no year),
-      // so we query by courseId without a year filter. Legacy subjects
-      // (which have year) are also matched since they share the same courseId.
-      collegeRef.collection("subjects").where("courseId", "==", section.courseId).get(),
+      // Master subjects are scoped by courseId + regulation (no year), so we
+      // query by courseId without a year filter - across every sibling
+      // department's courseId on the same catalog (subjectCourseIds above),
+      // not just this section's own. Legacy subjects (which have year) are
+      // also matched since they share one of these same courseIds.
+      getInChunks(subjectCourseIds, (chunk) => collegeRef.collection("subjects").where("courseId", "in", chunk)),
       // The college's own working days, so a read-only grid lays out over the
       // days this college actually teaches instead of a hardcoded Mon-Sat.
       collegeRef.collection("settings").doc("timetableRules").get(),
@@ -85,7 +97,7 @@ export async function GET(request: Request) {
       ? { ...DEFAULT_TIMETABLE_RULES, ...(rulesSnap.data() as Partial<TimetableRules>) }
       : DEFAULT_TIMETABLE_RULES;
 
-    const subjectsById = new Map(subjectsSnap.docs.map((d) => [d.id, { id: d.id, ...(d.data() as object) }]));
+    const subjectsById = new Map(subjectDocsForGroup.map((d) => [d.id, { id: d.id, ...(d.data() as object) }]));
 
     // A prior semester's or prior session's published slots stay in
     // Firestore as history (see publish/route.ts) but drop out of this
