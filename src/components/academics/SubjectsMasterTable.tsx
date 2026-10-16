@@ -9,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
-import { Download, Pencil, Trash2 } from "lucide-react";
+import { Download, Pencil, Search, Trash2 } from "lucide-react";
 import type { Subject, SubjectCategory, SubjectType } from "@/types";
 import { CategoryField } from "@/components/academics/CategoryField";
 import { downloadCSV, toCSV } from "@/lib/utils/csv";
@@ -18,7 +18,7 @@ const PAGE_SIZE = 20;
 
 interface EditForm {
   id: string;
-  name: string; code: string; shortCode: string; altShortCode: string; universityCode: string; totalHoursPerSemester: string;
+  name: string; code: string; shortCode: string; altShortCode: string; totalHoursPerSemester: string;
   excludeFromTeachingLoad: boolean;
   category: SubjectCategory | ""; customCategory: string;
   lectureHours: string; tutorialHours: string; practicalHours: string; credits: string;
@@ -27,7 +27,7 @@ interface EditForm {
 
 function toEditForm(s: Subject): EditForm {
   return {
-    id: s.id, name: s.name ?? "", code: s.code ?? "", shortCode: s.shortCode ?? "", altShortCode: s.altShortCode ?? "", universityCode: s.universityCode ?? "",
+    id: s.id, name: s.name ?? "", code: s.code ?? "", shortCode: s.shortCode ?? "", altShortCode: s.altShortCode ?? "",
     totalHoursPerSemester: s.totalHoursPerSemester != null ? String(s.totalHoursPerSemester) : "", excludeFromTeachingLoad: s.isNonTeachingLoad === true,
     category: s.category ?? "", customCategory: s.customCategory ?? "",
     lectureHours: String(s.lectureHours ?? 0), tutorialHours: String(s.tutorialHours ?? 0), practicalHours: String(s.practicalHours ?? 0),
@@ -50,6 +50,7 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [page, setPage] = useState(0);
+  const [search, setSearch] = useState("");
   const [editForm, setEditForm] = useState<EditForm | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [editError, setEditError] = useState("");
@@ -72,8 +73,14 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
 
   useEffect(() => { void load(); }, [courseId, catalogId, regulation]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const pageCount = Math.max(1, Math.ceil(subjects.length / PAGE_SIZE));
-  const pageRows = useMemo(() => subjects.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE), [subjects, page]);
+  // Search by Subject Code or Subject Name (case-insensitive substring) over the already-loaded list.
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return subjects;
+    return subjects.filter((s) => (s.code ?? "").toLowerCase().includes(q) || (s.name ?? "").toLowerCase().includes(q));
+  }, [subjects, search]);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pageRows = useMemo(() => filtered.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE), [filtered, page]);
 
   async function handleSave() {
     if (!editForm) return;
@@ -86,7 +93,7 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
         headers: { "Content-Type": "application/json" },
         // Numbers go as typed: the server rejects an unreadable value instead of turning it into 0.
         body: JSON.stringify({
-          name: editForm.name, code: editForm.code, shortCode: editForm.shortCode, altShortCode: editForm.altShortCode, universityCode: editForm.universityCode,
+          name: editForm.name, code: editForm.code, shortCode: editForm.shortCode, altShortCode: editForm.altShortCode,
           totalHoursPerSemester: editForm.totalHoursPerSemester, excludeFromTeachingLoad: editForm.excludeFromTeachingLoad,
           category: editForm.category, customCategory: editForm.category === "OTHER" ? editForm.customCategory : "",
           lectureHours: editForm.lectureHours, tutorialHours: editForm.tutorialHours, practicalHours: editForm.practicalHours,
@@ -104,12 +111,12 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
 
   function handleExport() {
     const header = [
-      "Category", "Name", "Code", "Short Code", "Second Short Code", "University Code", "Type",
+      "Category", "Name", "Code", "Short Code", "Second Short Code", "Type",
       "Lecture Hours", "Tutorial Hours", "Practical Hours", "Credits", "Total Hours per Semester", "Regulation",
     ];
     const rows = subjects.map((s) => [
       s.category === "OTHER" ? (s.customCategory || "Other") : (s.category ?? ""),
-      s.name ?? "", s.code ?? "", s.shortCode ?? "", s.altShortCode ?? "", s.universityCode ?? "", s.type ?? "",
+      s.name ?? "", s.code ?? "", s.shortCode ?? "", s.altShortCode ?? "", s.type ?? "",
       String(s.lectureHours ?? 0), String(s.tutorialHours ?? 0), String(s.practicalHours ?? 0), String(s.credits ?? 0),
       s.totalHoursPerSemester != null ? String(s.totalHoursPerSemester) : "",
       s.regulation ?? "",
@@ -140,10 +147,23 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
           </Button>
         </div>
 
+        <div className="relative max-w-sm">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="pl-8"
+            placeholder="Search by subject code or name"
+            aria-label="Search subjects by code or name"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+          />
+        </div>
+
         {isLoading ? (
           <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-10 rounded-md border bg-muted/30 animate-pulse" />)}</div>
         ) : subjects.length === 0 ? (
           <p className="text-sm text-muted-foreground py-6 text-center">No subjects yet for this course and regulation. Import a file or add one.</p>
+        ) : filtered.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-6 text-center">No subjects match &ldquo;{search.trim()}&rdquo;.</p>
         ) : (
           <>
             <div className="overflow-x-auto">
@@ -153,7 +173,6 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
                     <th className="py-1.5 pr-3">Category</th>
                     <th className="py-1.5 pr-3">Name</th>
                     <th className="py-1.5 pr-3">Code</th>
-                    <th className="py-1.5 pr-3">Univ. Code</th>
                     <th className="py-1.5 pr-3">L-T-P</th>
                     <th className="py-1.5 pr-3">Credits</th>
                     <th className="py-1.5 pr-3">Regulation</th>
@@ -166,7 +185,6 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
                       <td className="py-1.5 pr-3">{s.category === "OTHER" ? (s.customCategory || "Other") : (s.category ?? "-")}</td>
                       <td className="py-1.5 pr-3 font-medium">{s.name}</td>
                       <td className="py-1.5 pr-3 font-mono">{s.code}</td>
-                      <td className="py-1.5 pr-3 font-mono text-muted-foreground">{s.universityCode ?? "-"}</td>
                       <td className="py-1.5 pr-3 tabular-nums whitespace-nowrap">{s.lectureHours}-{s.tutorialHours}-{s.practicalHours}</td>
                       <td className="py-1.5 pr-3 tabular-nums">{s.credits}</td>
                       <td className="py-1.5 pr-3">{s.regulation ?? "-"}</td>
@@ -205,10 +223,7 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
                 allowNew={false}
               />
               <div className="space-y-1"><Label>Name</Label><Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} /></div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1"><Label>Code</Label><Input className="font-mono uppercase" value={editForm.code} onChange={(e) => setEditForm({ ...editForm, code: e.target.value })} /></div>
-                <div className="space-y-1"><Label>University Code</Label><Input className="font-mono uppercase" value={editForm.universityCode} onChange={(e) => setEditForm({ ...editForm, universityCode: e.target.value })} /></div>
-              </div>
+              <div className="space-y-1"><Label>Code</Label><Input className="font-mono uppercase" value={editForm.code} onChange={(e) => setEditForm({ ...editForm, code: e.target.value })} /></div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1"><Label>Short Code</Label><Input className="uppercase" value={editForm.shortCode} onChange={(e) => setEditForm({ ...editForm, shortCode: e.target.value })} /></div>
                 <div className="space-y-1"><Label>Second Short Code</Label><Input className="uppercase" placeholder="Asked when placing in the timetable" value={editForm.altShortCode} onChange={(e) => setEditForm({ ...editForm, altShortCode: e.target.value })} /></div>

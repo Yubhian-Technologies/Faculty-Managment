@@ -13,8 +13,3 @@ export function normalizeSubjectCode(code: unknown): string {
 export function normalizeSubjectName(name: unknown): string {
   return String(name ?? "").normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
 }
-
-/** University codes are compared without spaces, upper-cased (same as the Subject edit form stores them). */
-export function normalizeUniversityCode(code: unknown): string {
-  return String(code ?? "").replace(/\s+/g, "").toUpperCase();
-}

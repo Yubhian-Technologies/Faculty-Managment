@@ -5,6 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { editableDepartmentNames } from "@/lib/departments/scope";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { getInChunks } from "@/lib/firestore/inQuery";
 import { loadHodStudentScope } from "@/lib/mentoring/access";
 import { resolveSelfMentor } from "@/lib/mentoring/selfMentor";
 import { mentoringErrorResponse } from "@/lib/mentoring/http";
@@ -47,13 +48,14 @@ export async function GET() {
       if (self) byUid.set(session.uid, { uid: session.uid, ...self });
     }
 
-    const counts = await Promise.all(
-      [...byUid.keys()].map(async (uid) => {
-        const c = await collegeRef.collection("students").where("mentorUid", "==", uid).count().get();
-        return [uid, c.data().count] as const;
-      })
-    );
-    const countByUid = new Map(counts);
+    // Everyone's mentee count in a few batched reads (30 mentors per query, ids only) instead of one
+    // count query per mentor.
+    const countByUid = new Map<string, number>();
+    const menteeDocs = await getInChunks([...byUid.keys()], (chunk) => collegeRef.collection("students").where("mentorUid", "in", chunk).select("mentorUid"));
+    for (const d of menteeDocs) {
+      const uid = (d.data() as { mentorUid?: string }).mentorUid;
+      if (uid) countByUid.set(uid, (countByUid.get(uid) ?? 0) + 1);
+    }
 
     const mentors: MentorOption[] = [...byUid.values()]
       .map((m) => ({ ...m, menteeCount: countByUid.get(m.uid) ?? 0, ...(m.uid === session.uid ? { isSelf: true } : {}) }))
