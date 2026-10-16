@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { readSignatureGroups, selectedSignatureRows } from "@/lib/timetable/signatureAuthority";
 
 export async function GET(request: Request) {
   try {
@@ -23,7 +24,12 @@ export async function GET(request: Request) {
       "CLASS_LEADER"
     );
     const db = getAdminDb();
-    const snap = await db.collection("colleges").doc(session.collegeId).get();
+    const collegeRef = db.collection("colleges").doc(session.collegeId);
+    const [snap, sigSnap] = await Promise.all([
+      collegeRef.get(),
+      collegeRef.collection("settings").doc("timetableSignatures").get(),
+    ]);
+    const sigGroups = readSignatureGroups(sigSnap.exists ? sigSnap.data()?.groups : []);
     const data = snap.data() as {
       name?: string;
       code?: string;
@@ -52,6 +58,7 @@ export async function GET(request: Request) {
       logoUrl,
       hasCustomLogo: isCustom,
       rawLogoUrl: rawLogo,
+      timetableSignatureRows: selectedSignatureRows(sigGroups),
     });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
