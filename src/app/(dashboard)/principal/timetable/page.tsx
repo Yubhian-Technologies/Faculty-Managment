@@ -33,6 +33,8 @@ interface BulkSectionEntry {
   year: number;
   batch: string;
   regulation?: string;
+  classroomNumber?: string;
+  facultyInchargeName?: string;
   currentSemester: number | null;
   timing: CourseYearTiming;
   slots: TimetableSlot[];
@@ -191,7 +193,7 @@ export default function PrincipalTimetablePage() {
       collegeName: collegeInfo?.name,
       collegeCode: collegeInfo?.code,
       affiliation: collegeInfo?.affiliation,
-      address: collegeInfo?.address,
+      city: collegeInfo?.city,
       phone: collegeInfo?.phone,
       logoUrl: collegeInfo?.logoUrl,
       departmentName: entry.departmentName,
@@ -200,6 +202,8 @@ export default function PrincipalTimetablePage() {
       semesterLabel: entry.currentSemester != null ? `Sem ${yearSemesterLabelIn(entry.year, inYear, entry.currentSemester)}` : undefined,
       effectiveDate: latestEffectiveDate(entry.slots),
       regulation: entry.regulation,
+      classroom: entry.classroomNumber,
+      classInchargeName: entry.facultyInchargeName,
       days: visibleDays.length > 0 ? visibleDays : days,
       periods: Array.from({ length: entry.timing.numberOfPeriods }, (_, i) => i + 1),
       periodTimings: entry.timing.periods ?? [],
@@ -219,7 +223,7 @@ export default function PrincipalTimetablePage() {
       const htmls = shownSections.map((entry) =>
         buildSectionTimetablePdfHtml({
           ...exportMetaFor(entry),
-          section: { name: entry.sectionName, department: entry.departmentName, year: entry.year, courseName: entry.courseName },
+          section: { name: entry.sectionName, department: entry.departmentName, year: entry.year, courseName: entry.courseName, classroomNumber: entry.classroomNumber, facultyInchargeName: entry.facultyInchargeName },
         })
       );
       await renderMultiHtmlToPdf(htmls, `All_Departments_Timetables_${isoDateKey(new Date())}.pdf`);
@@ -390,7 +394,7 @@ export default function PrincipalTimetablePage() {
                         {entry.courseName} · {entry.departmentName} · {ordinalYear(entry.year)} Year · Section {entry.sectionName}
                       </h4>
                       <InstitutionalTimetableTable
-                        section={{ name: entry.sectionName, department: entry.departmentName, year: entry.year, courseName: entry.courseName } as unknown as Section}
+                        section={{ name: entry.sectionName, department: entry.departmentName, year: entry.year, courseName: entry.courseName, classroomNumber: entry.classroomNumber, facultyInchargeName: entry.facultyInchargeName } as unknown as Section}
                         timing={entry.timing}
                         slots={entry.slots}
                         courseName={entry.courseName}
