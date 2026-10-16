@@ -64,13 +64,16 @@ beforeEach(() => {
 });
 
 describe("bulk import - roll number rules", () => {
-  it("rejects a row with no roll number (required in the bulk import) - nothing is saved", async () => {
+  it("accepts a row with no roll number when it has its own Student Mobile No - the roll is mapped on later", async () => {
     const { POST } = await import("@/app/api/college/students/import-excel/route");
     const res = await POST(post("/import", { records: [importRow("", "No Roll Row"), importRow("   ", "Blank Roll Row")] }));
     const json = await res.json() as { created: number; failed: { error: string }[] };
-    expect(json.created).toBe(0);
-    expect(json.failed.map((f) => f.error)).toEqual(["Roll No is required", "Roll No is required"]);
-    expect(importedStudents()).toHaveLength(0);
+    expect(json.created).toBe(2);
+    expect(json.failed).toHaveLength(0);
+    expect(importedStudents().map((d) => d.rollNumber)).toEqual(["", ""]);
+    expect(importedStudents().every((d) => typeof d.mobileNo === "string" && d.mobileNo.length === 10)).toBe(true);
+    // no roll claim is written for a roll-less student
+    expect([...h.db.docs.keys()].filter((p) => p.startsWith("studentUsernames/") && p !== "studentUsernames/99Z99Z0001")).toHaveLength(0);
   });
 
   it("rejects a roll already held by a student in ANY other department / year / section, in any case", async () => {
@@ -92,12 +95,12 @@ describe("bulk import - roll number rules", () => {
     expect(importedStudents().map((d) => d.mobileNo)).toEqual([undefined, undefined]);
   });
 
-  it("still rejects a row with no roll and no Student Mobile No - mobile is required when there is no roll to identify the row by", async () => {
+  it("still rejects a row with neither a roll nor a Student Mobile No - one of the two is needed to identify the row", async () => {
     const { POST } = await import("@/app/api/college/students/import-excel/route");
     const res = await POST(post("/import", { records: [importRow("", "No Roll No Mobile", { mobileNo: "" })] }));
     const json = await res.json() as { created: number; failed: { error: string }[] };
     expect(json.created).toBe(0);
-    expect(json.failed[0].error).toBe("Student Mobile No is required");
+    expect(json.failed[0].error).toBe("Roll No or Student Mobile No is required - give at least one");
   });
 
   it("accepts new rolls, and rejects a repeat within the same file (even with different formatting)", async () => {

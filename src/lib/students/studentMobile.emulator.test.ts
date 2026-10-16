@@ -88,12 +88,22 @@ describe.skipIf(!EMULATOR)("Student Mobile No required + globally unique, Roll N
       expect(await byName("CHARAN")).toMatchObject({ rollNumber: "", section: "A", mobileNo: "9876500003" });
     });
 
-    it("REJECTS a row with no Student Mobile No (blank, spaces or missing) - nothing is saved for it", async () => {
+    it("REJECTS a row with neither a Roll No nor a Student Mobile No (blank, spaces or missing) - nothing is saved for it", async () => {
       const r = await importRows([unassigned({ name: "NOMOB1" }), unassigned({ name: "NOMOB2", mobileNo: "" }), unassigned({ name: "NOMOB3", mobileNo: "   " }), unassigned({ name: "OKAY", mobileNo: "9876500040" })]);
       expect(r.json.created).toBe(1);
       expect(r.json.failed.map((f) => f.row)).toEqual([2, 3, 4]);
-      expect(r.json.failed.every((f) => f.error === "Student Mobile No is required")).toBe(true);
+      expect(r.json.failed.every((f) => f.error === "Roll No or Student Mobile No is required - give at least one")).toBe(true);
       expect((await students()).map((s) => s.name)).toEqual(["OKAY"]);
+    });
+
+    it("ACCEPTS a row with a Roll No but no Student Mobile No, and a row with a mobile but no roll - either one is enough", async () => {
+      const r = await importRows([unassigned({ name: "ROLLONLY", rollNumber: "24R001", mobileNo: "" }), unassigned({ name: "MOBONLY", mobileNo: "9876500060" }), unassigned({ name: "BOTH", rollNumber: "24R002", mobileNo: "9876500061" })]);
+      expect(r.json.created).toBe(3);
+      expect(r.json.failed).toEqual([]);
+      expect(await byName("ROLLONLY")).toMatchObject({ rollNumber: "24R001" });
+      expect((await byName("ROLLONLY"))?.mobileNo).toBeUndefined();
+      expect(await byName("MOBONLY")).toMatchObject({ rollNumber: "", mobileNo: "9876500060" });
+      expect((await claims()).map((c) => c.id).sort()).toEqual(["9876500060", "9876500061"]);
     });
 
     it("stores the 10-digit form however the number was typed, and claims it globally", async () => {
