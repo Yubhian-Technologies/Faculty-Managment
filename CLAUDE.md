@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **FMS (Faculty Management System)** — multi-tenant faculty/staff/academics management platform for a group of colleges, organized along two tenancy axes: **Locations** (campus/city) → **Colleges** (belong to a location), with a `SUPER_ADMIN` above both.
 
-- **Framework:** Next.js **16.2.9** (App Router, Turbopack; `src/proxy.ts` replaces `middleware.ts` → `proxy()` + `config.matcher`), React **19.2**, TypeScript **5.9** (strict).
+- **Framework:** Next.js **16.3.8** (App Router, Turbopack; `src/proxy.ts` replaces `middleware.ts` → `proxy()` + `config.matcher`), React **19.2**, TypeScript **5.9** (strict).
 - **Backend:** Firebase — Auth (client SDK), **Firestore** + **Storage** via `firebase-admin` **14** server-side only. No SQL database, no Redis, no external message queue.
 - **UI:** Tailwind CSS 4, Radix/shadcn (`src/components/ui`), Zustand (`src/store`) + TanStack Query, react-hook-form + zod 4.
 - **Domain libs:** exceljs (Excel import/export), jspdf/html2canvas (client PDF), puppeteer/@sparticuz/chromium (server PDF), face-api.js + leaflet (attendance geofence/face match), nodemailer (email), react-qr-code.
