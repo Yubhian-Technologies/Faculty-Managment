@@ -23,7 +23,7 @@ import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { ratificationRecordsFromDoc } from "@/lib/faculty/ratificationHistory";
 import { allPreviousExperienceEntries, experienceBreakdown } from "@/lib/faculty/experienceCalc";
-import { normalizeResourcePersonsDetails } from "@/components/faculty/TrainingEntryFields";
+import { normalizeResourcePersonsDetails } from "@/lib/faculty/resourcePersons";
 import { awardYear } from "@/lib/faculty/awardYear";
 import { isDiplomaCourse } from "@/lib/faculty/schoolCourses";
 
