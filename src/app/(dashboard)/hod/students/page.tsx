@@ -31,11 +31,11 @@ import type { StudentRow, SectionRow } from "@/components/students/hod/types";
 import { EditStudentDialog } from "@/components/students/hod/EditStudentDialog";
 import { AssignStudentDialog } from "@/components/students/hod/AssignStudentDialog";
 import { selectableYears } from "@/lib/college/courseYears";
+import { rollupDepartmentNamesForPick } from "@/lib/departments/departmentTree";
+import { DepartmentPickSelect } from "@/components/shared/DepartmentPickSelect";
 import {
-  coreDepartmentOptions as buildCoreDepartmentOptions,
-  departmentFilterOptions as buildDepartmentFilterOptions,
-  rollupDepartmentNamesForPick,
-} from "@/lib/departments/departmentTree";
+  buildDepartmentPickOptions, departmentPickValue, parseDepartmentPick,
+} from "@/lib/departments/departmentPickTree";
 import { useSectionDepartmentState } from "@/hooks/useSectionDepartments";
 import {
   HOD_STUDENTS_LIST_PATH,
@@ -97,11 +97,21 @@ function HodStudentsContent() {
   const [pageSize, setPageSize] = useState(restored.pageSize);
   // A restored list loads itself on arrival (no second press of Load), so it
   // starts out loading rather than flashing the empty state.
-  const [hasLoaded, setHasLoaded] = useState(restored.load);
   const [isFetching, setIsFetching] = useState(restored.load);
   const [search, setSearch] = useState(restored.search);
-  const [debouncedSearch, setDebouncedSearch] = useState(restored.search.trim().toLowerCase());
-  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The pickers below are a DRAFT; nothing is read until Load. `applied` is what the last Load asked
+  // for (and what the table and the URL show); `nonce` makes a repeat Load re-read.
+  type Applied = { view: string; dept: string; core: string; course: string; year: string; search: string; nonce: number };
+  const [applied, setApplied] = useState<Applied | null>(() =>
+    restored.load
+      ? {
+        view: restored.freshmanView, dept: restored.deptFilter, core: restored.coreDeptFilter, course: restored.courseFilter,
+        year: restored.yearFilter, search: restored.search.trim().toLowerCase(), nonce: 0,
+      }
+      : null
+  );
+  const hasLoaded = applied !== null;
+  const appliedView = applied?.view ?? "none";
   // The list request returns every matching id (signed, in display order) plus
   // one page; later pages are fetched by id, so paging reads only that page's
   // documents. Rows already fetched are kept, so revisiting a page is free.
@@ -128,8 +138,13 @@ function HodStudentsContent() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [deptFilter, setDeptFilter] = useState(restored.deptFilter);
-  const [coreDeptFilter, setCoreDeptFilter] = useState(restored.coreDeptFilter);
+  // One Department pick: sub-departments and core branches are listed under their department.
+  const [deptPick, setDeptPick] = useState(
+    departmentPickValue(restored.deptFilter === "all" ? "" : restored.deptFilter, restored.coreDeptFilter === "all" ? "" : restored.coreDeptFilter)
+  );
+  const { department: pickedDept, coreDepartment: pickedCore } = parseDepartmentPick(deptPick);
+  const deptFilter = pickedDept || "all";
+  const coreDeptFilter = pickedCore || "all";
   // Matches the College Office Students page's own filter row (Course/
   // Department/Year) - this table previously only offered Department, with no
   // way to narrow a large mixed roster down to one course or year at a glance.
@@ -252,16 +267,17 @@ function HodStudentsContent() {
   // which department's incoming students) as query params.
   const filterQuery = useCallback((): URLSearchParams => {
     const params = new URLSearchParams();
-    if (freshmanView !== "none") {
-      params.set("incoming", freshmanView);
+    if (!applied) return params;
+    if (applied.view !== "none") {
+      params.set("incoming", applied.view);
       return params;
     }
-    if (deptFilter !== "all") params.set("department", deptFilter);
-    if (coreDeptFilter !== "all") params.set("coreDepartment", coreDeptFilter);
-    if (courseFilter !== "all") params.set("course", courseFilter);
-    if (yearFilter !== "all") params.set("year", yearFilter);
+    if (applied.dept !== "all") params.set("department", applied.dept);
+    if (applied.core !== "all") params.set("coreDepartment", applied.core);
+    if (applied.course !== "all") params.set("course", applied.course);
+    if (applied.year !== "all") params.set("year", applied.year);
     return params;
-  }, [freshmanView, deptFilter, coreDeptFilter, courseFilter, yearFilter]);
+  }, [applied]);
 
   const executeLoad = useCallback(async (targetPage: number, targetSize: number) => {
     const seq = ++requestSeq.current;
@@ -270,7 +286,7 @@ function HodStudentsContent() {
       const params = filterQuery();
       params.set("page", String(targetPage));
       params.set("pageSize", String(targetSize));
-      if (debouncedSearch) params.set("search", debouncedSearch);
+      if (applied?.search) params.set("search", applied.search);
       const res = await fetch(`/api/college/students?${params.toString()}`);
       const json = await res.json() as { students?: StudentRow[]; total?: number; unassignedTotal?: number; orderedIds?: string[]; page?: number; error?: string };
       if (seq !== requestSeq.current) return; // a newer search/filter/refresh superseded this one
@@ -291,10 +307,10 @@ function HodStudentsContent() {
     } finally {
       if (seq === requestSeq.current) setIsFetching(false);
     }
-  }, [filterQuery, debouncedSearch]);
+  }, [filterQuery, applied]);
 
-  // Once loaded, a changed filter, Freshman's Department or search fetches the
-  // first page again (the page SIZE is read from a ref so changing it doesn't).
+  // Load (a new `applied`) fetches the first page again - a filter edit alone never does
+  // (the page SIZE is read from a ref so changing it doesn't either).
   // The very first load of a list restored from the URL opens on its saved page.
   useEffect(() => {
     if (!hasLoaded) return;
@@ -307,10 +323,10 @@ function HodStudentsContent() {
   // profile in `?back=` so that page's Back button returns to it.
   const listUrl = useMemo(
     () => buildHodStudentsListUrl({
-      load: hasLoaded, freshmanView, deptFilter, coreDeptFilter, courseFilter, yearFilter,
-      search: debouncedSearch, page, pageSize,
+      load: hasLoaded, freshmanView: appliedView, deptFilter: applied?.dept ?? "all", coreDeptFilter: applied?.core ?? "all",
+      courseFilter: applied?.course ?? "all", yearFilter: applied?.year ?? "all", search: applied?.search ?? "", page, pageSize,
     }),
-    [hasLoaded, freshmanView, deptFilter, coreDeptFilter, courseFilter, yearFilter, debouncedSearch, page, pageSize]
+    [hasLoaded, appliedView, applied, page, pageSize]
   );
   useEffect(() => {
     if (typeof window === "undefined" || window.location.pathname !== HOD_STUDENTS_LIST_PATH) return;
@@ -328,7 +344,7 @@ function HodStudentsContent() {
       setIsFetching(true);
       try {
         const params = new URLSearchParams({ ids: missing.join(",") });
-        if (freshmanView !== "none") params.set("incoming", freshmanView);
+        if (appliedView !== "none") params.set("incoming", appliedView);
         const res = await fetch(`/api/college/students?${params.toString()}`);
         const json = await res.json() as { students?: StudentRow[]; error?: string };
         if (seq !== requestSeq.current) return;
@@ -350,29 +366,31 @@ function HodStudentsContent() {
     setPageSize(nextSize);
   }
 
+  const filtersChanged = applied !== null && (
+    applied.view !== freshmanView || applied.search !== search.trim().toLowerCase()
+    || (freshmanView === "none" && (applied.dept !== deptFilter || applied.core !== coreDeptFilter
+      || applied.course !== courseFilter || applied.year !== yearFilter))
+  );
+
+  // The only thing that reads: freeze the pickers as `applied`; the effect above fetches the first page.
   function handleLoad() {
-    const nextSearch = search.trim().toLowerCase();
     // The sections (for the Assign / Move / Distribute dialogs) are read once,
     // then again after a change - not on every Refresh.
     if (!sectionsLoaded.current) void loadSections();
-    if (!hasLoaded) {
-      setDebouncedSearch(nextSearch);
-      setHasLoaded(true); // the effect above fetches the first page
-      return;
-    }
-    // A changed search term re-creates executeLoad, which the effect above
-    // answers - fetching here too would just read the same list twice.
-    if (nextSearch !== debouncedSearch) {
-      setDebouncedSearch(nextSearch);
-      return;
-    }
-    void executeLoad(1, pageSizeRef.current);
+    restorePageRef.current = 1;
+    setApplied((prev) => ({
+      view: freshmanView,
+      dept: freshmanView === "none" ? deptFilter : "all",
+      core: freshmanView === "none" ? coreDeptFilter : "all",
+      course: freshmanView === "none" ? courseFilter : "all",
+      year: freshmanView === "none" ? yearFilter : "all",
+      search: search.trim().toLowerCase(),
+      nonce: (prev?.nonce ?? 0) + 1,
+    }));
   }
 
   function onSearchChange(value: string) {
     setSearch(value);
-    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-    searchDebounceRef.current = setTimeout(() => setDebouncedSearch(value.trim().toLowerCase()), 350);
   }
 
   async function refreshMeta() {
@@ -474,33 +492,18 @@ function HodStudentsContent() {
   // back to the whole scope when nothing would qualify, so the list is never
   // empty. A scoped name with no department document is kept as typed. See
   // lib/departments/departmentTree.ts.
-  const departmentOptions = useMemo(() => {
+  const departmentPickOptions = useMemo(() => {
     const docs = scopedDepartmentNames
       .map((n) => departments.find((d) => d.name === n))
       .filter((d): d is NonNullable<typeof d> => !!d);
     const known = new Set(docs.map((d) => d.name));
-    const options = buildDepartmentFilterOptions(docs, departments, sectionDepartments)
-      .map((o) => ({ name: o.department.name, depth: o.depth, container: o.container }));
+    const options = buildDepartmentPickOptions(docs, departments, sectionDepartments);
     for (const n of scopedDepartmentNames) {
-      if (!known.has(n)) options.push({ name: n, depth: 0, container: false });
+      if (!known.has(n)) options.push({ value: departmentPickValue(n), label: n, depth: 0, department: n, coreDepartment: "", container: false });
     }
     return options;
   }, [scopedDepartmentNames, departments, sectionDepartments]);
 
-  // The branches a shared-first-year department holds the first year for -
-  // the students' Core Department. For a parent, the ones its sub-departments
-  // hold it for; with no department picked, everything in this HOD's scope, so
-  // one pick ("AIDS") reaches that branch's first years across every
-  // sub-department. Offered only when there are any.
-  const coreDepartmentOptions = useMemo(
-    () => buildCoreDepartmentOptions(
-      departments,
-      deptFilter === "all" ? scopedDepartmentNames : [deptFilter],
-      sectionDepartments
-    ),
-    [deptFilter, departments, scopedDepartmentNames, sectionDepartments]
-  );
-  const coreDeptValue = coreDepartmentOptions.includes(coreDeptFilter) ? coreDeptFilter : "all";
   // The "Freshman's Department" view: students currently held by some OTHER
   // (Freshman's) department who are pre-registered toward one of THIS HOD's own
   // departments - accessLevel "secondary" (students/route.ts's own
@@ -970,13 +973,13 @@ function HodStudentsContent() {
     setCourseFilter(value);
   }
 
-  function onDeptFilterChange(value: string) {
-    const nextYearOptions = value !== "all"
-      ? yearOptionsForDepartment(departments, courses, value, courseFilter === "all" ? "" : courseFilter, fallbackYears)
+  function onDeptPickChange(value: string) {
+    const { department } = parseDepartmentPick(value);
+    const nextYearOptions = department
+      ? yearOptionsForDepartment(departments, courses, department, courseFilter === "all" ? "" : courseFilter, fallbackYears)
       : yearOptionsForCourse(courses, courseFilter === "all" ? undefined : courseFilter, fallbackYears);
     if (yearFilter !== "all" && !nextYearOptions.includes(Number(yearFilter))) setYearFilter("all");
-    setCoreDeptFilter("all");
-    setDeptFilter(value);
+    setDeptPick(value);
   }
 
   function toggleDistSection(id: string, checked: boolean) {
@@ -1514,26 +1517,7 @@ function HodStudentsContent() {
                     {courseNames.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                <Select value={deptFilter} onValueChange={onDeptFilterChange}>
-                  <SelectTrigger className="w-48"><SelectValue placeholder="All departments" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All departments</SelectItem>
-                    {departmentOptions.map((o) => (
-                      <SelectItem key={o.name} value={o.name} className={o.depth === 1 ? "pl-8" : undefined}>
-                        {o.name}{o.container ? " (all sub-departments)" : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {coreDepartmentOptions.length > 0 && (
-                  <Select value={coreDeptValue} onValueChange={setCoreDeptFilter}>
-                    <SelectTrigger className="w-48"><SelectValue placeholder="All core departments" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All core departments</SelectItem>
-                      {coreDepartmentOptions.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                )}
+                <DepartmentPickSelect value={deptPick} onChange={onDeptPickChange} options={departmentPickOptions} className="w-56" />
                 <Select value={yearFilter} onValueChange={setYearFilter}>
                   <SelectTrigger className="w-36"><SelectValue placeholder="All years" /></SelectTrigger>
                   <SelectContent>
@@ -1544,7 +1528,7 @@ function HodStudentsContent() {
               </div>
             )}
             <Button type="button" onClick={handleLoad} disabled={isFetching || isLoading} className="whitespace-nowrap">
-              {isFetching ? "Loading…" : hasLoaded ? "Refresh" : "Load"}
+              {isFetching ? "Loading…" : filtersChanged ? "Apply filters" : hasLoaded ? "Refresh" : "Load"}
             </Button>
           </div>
         </div>
@@ -1561,10 +1545,10 @@ function HodStudentsContent() {
           <TableSkeleton rows={5} cols={visibleColumns.length} />
         ) : students.length === 0 ? (
           <EmptyState
-            title={isFreshmanView ? "No incoming students here" : "No students yet"}
+            title={appliedView !== "none" ? "No incoming students here" : "No students yet"}
             description={
-              isFreshmanView
-                ? `No students are currently held by ${freshmanView} and pre-registered to your department(s).`
+              appliedView !== "none"
+                ? `No students are currently held by ${appliedView} and pre-registered to your department(s).`
                 : "Once the College Office imports your branches' students, they show up here to be sectioned."
             }
           />
