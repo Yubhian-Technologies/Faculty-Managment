@@ -5,7 +5,7 @@ import { requireManagement } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getPublicationsForUid } from "@/lib/firestore/publications";
 import { migrateFacultyDoc, migrateUserDoc } from "@/lib/faculty/fieldRenames";
-import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { compareFacultyForList } from "@/lib/faculty/sortFacultyForList";
 
 // MANAGEMENT is read-only - this route only implements GET.
 export async function GET(_request: Request, { params }: { params: Promise<{ collegeId: string; deptId: string }> }) {
@@ -30,7 +30,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ col
 
     const faculty = facultySnap.docs
       .map((d) => ({ id: d.id, ...migrateFacultyDoc(d.data()) }))
-      .sort((a, b) => facultyDisplayName(a as { legalName?: string }).localeCompare(facultyDisplayName(b as { legalName?: string })));
+      .sort(compareFacultyForList(deptData?.hodUid));
 
     const hod = hodSnap?.exists ? { uid: hodSnap.id, ...migrateUserDoc(hodSnap.data() ?? {}) } : null;
     const hodPublications = hod ? await getPublicationsForUid(db, collegeId, hod.uid) : [];

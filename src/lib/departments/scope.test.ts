@@ -3,6 +3,7 @@ import {
   canHodEditDepartment,
   canHodManageFacultyDepartment,
   canHodEditDepartmentId,
+  canHodViewDepartmentId,
   editableDepartmentNames,
   facultyManageableDepartmentNames,
   ownDepartmentNames,
@@ -60,6 +61,23 @@ const multiDeptHodScope: HodDepartmentScope = {
   childDepartmentIds: [],
   managedDepartmentNames: [],
   managedDepartmentIds: [],
+};
+
+// A true sub-department (parentDepartmentId set) with no Course doc of its
+// own, e.g. "CSE [AI&ML]" under "ARTIFICIAL INTELLIGENCE" - inherits its
+// parent's single shared course, so Course-Year Timings filed under the
+// parent's id are genuinely this HOD's own course-year to SEE, even though
+// editing them stays with whoever heads the parent.
+const subDeptNoOwnCourseScope: HodDepartmentScope = {
+  departmentName: "CSE [AI&ML]",
+  departmentId: "aiml",
+  ownDepartmentNames: ["CSE [AI&ML]"],
+  ownDepartmentIds: ["aiml"],
+  childDepartmentNames: [],
+  childDepartmentIds: [],
+  managedDepartmentNames: [],
+  managedDepartmentIds: [],
+  parentDepartmentIds: ["ai"],
 };
 
 describe("canHodEditDepartment", () => {
@@ -137,6 +155,31 @@ describe("canHodEditDepartmentId - same rule, keyed by id", () => {
   it("refuses an id outside the HOD's tree, and an empty id", () => {
     expect(canHodEditDepartmentId(subHodScope, "mech")).toBe(false);
     expect(canHodEditDepartmentId(subHodScope, "")).toBe(false);
+  });
+
+  it("refuses a sub-department's own parent - editing stays with the parent's own HOD", () => {
+    expect(canHodEditDepartmentId(subDeptNoOwnCourseScope, "ai")).toBe(false);
+  });
+});
+
+describe("canHodViewDepartmentId - read-only widening for a sub-department's inherited parent course", () => {
+  it("allows everything canHodEditDepartmentId already allows", () => {
+    expect(canHodViewDepartmentId(subHodScope, "bse")).toBe(true);
+    expect(canHodViewDepartmentId(subHodScope, "ai")).toBe(true);
+  });
+
+  it("additionally allows a sub-department's own parent id", () => {
+    expect(canHodViewDepartmentId(subDeptNoOwnCourseScope, "ai")).toBe(true);
+  });
+
+  it("still refuses an id outside the HOD's tree and parent, and an empty id", () => {
+    expect(canHodViewDepartmentId(subDeptNoOwnCourseScope, "mech")).toBe(false);
+    expect(canHodViewDepartmentId(subDeptNoOwnCourseScope, "")).toBe(false);
+  });
+
+  it("is a no-op for a scope with no parentDepartmentIds at all (older/plain scopes)", () => {
+    expect(canHodViewDepartmentId(multiDeptHodScope, "civ")).toBe(true);
+    expect(canHodViewDepartmentId(multiDeptHodScope, "someOtherDept")).toBe(false);
   });
 });
 

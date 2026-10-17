@@ -5,6 +5,7 @@
 // (src/lib/pdf/resumeTemplate.ts) and the Edit Faculty Details page
 // (TeachingLoadTable) so the two always agree, and both keep current/past
 // visually separated rather than intermixed.
+import { toRoman, formatShortCourseName } from "@/lib/academic/format";
 
 export interface TeachingLoadRow {
   academicYear?: string;
@@ -27,17 +28,19 @@ export interface TeachingLoadGroups {
   past: TeachingLoadRow[];
 }
 
-// Combines Year / Branch / Semester / Section into one column instead of four,
-// for both the resume PDF and the Edit Faculty Details preview table. Branch
-// is the faculty member's department (e.g. "CSE"), not `courseName` - the
-// latter is the degree/program (e.g. "B.Tech"), which is the same for every
-// row and isn't a "branch". Falls back to courseName only for the Module 2
-// static course rows, which never carry a department and would otherwise show
-// nothing identifying in this column.
+// Combines Year+Degree / Semester / Section into one column, for both the
+// resume PDF and the Edit Faculty Details preview table. Year renders as
+// "IV B.Tech." (roman numeral + short degree name, e.g. "B.Tech"/"MBA" from
+// `courseName` - see its own doc-comment) rather than the branch/department
+// name, which this column deliberately omits. Falls back to courseName alone
+// only for the Module 2 static course rows, which never carry a year and
+// would otherwise show nothing identifying in this column.
 export function formatClassColumn(row: TeachingLoadRow): string {
+  const yearCourse = row.year != null
+    ? `${[toRoman(row.year), formatShortCourseName(row.courseName)].filter(Boolean).join(" ")}.`
+    : row.courseName;
   const parts = [
-    row.year != null ? `Year ${row.year}` : undefined,
-    row.department ?? row.courseName,
+    yearCourse || undefined,
     row.semester != null && row.semester !== "" ? String(row.semester) : undefined,
     row.section || undefined,
   ].filter((p): p is string => !!p);
