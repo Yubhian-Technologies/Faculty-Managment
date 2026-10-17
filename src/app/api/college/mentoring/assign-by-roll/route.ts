@@ -35,7 +35,7 @@ export async function POST(request: Request) {
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
-    const { scope, canManage } = await loadHodStudentScope(db, session.collegeId, session.uid);
+    const { scope, canAssign } = await loadHodStudentScope(db, session.collegeId, session.uid);
 
     const mentor = await resolveMentorForHod(db, session.collegeId, session.uid, scope, mentorUid);
     if (!mentor.ok) return NextResponse.json({ error: mentor.error }, { status: mentor.status });
@@ -55,7 +55,7 @@ export async function POST(request: Request) {
     const plan: RollPlanItem[] = [];
     for (const roll of rolls) {
       const found = studentByRoll.get(roll);
-      const manageable = found ? await canManage(found.data) : false;
+      const manageable = found ? await canAssign(found.data) : false;
       const student: RollStudent | undefined = found && {
         id: found.data.id, name: found.data.name, section: found.data.section, year: found.data.year,
         status: found.data.status, mentorUid: found.data.mentorUid, mentorName: found.data.mentorName,

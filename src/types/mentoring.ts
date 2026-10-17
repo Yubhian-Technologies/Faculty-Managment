@@ -41,6 +41,8 @@ export interface MentorOption {
   menteeCount: number;
   /** The HOD themselves - an HOD may mentor students too. */
   isSelf?: boolean;
+  /** Only when a section was asked for: has a teaching assignment on that class. */
+  teaches?: boolean;
 }
 
 // ─── Mentoring Record (the college's "Student Mentoring Record" booklet) ──────
@@ -50,7 +52,7 @@ export interface MentorOption {
 // (students/{id}/mentoringSemesters/{n}) - see lib/mentoring/*.
 
 /** Where a value on the record came from. */
-export type RecordValueSource = "STUDENT" | "MENTOR" | "DERIVED";
+export type RecordValueSource = "STUDENT" | "MENTOR" | "DERIVED" | "HOD";
 
 export type RecordFieldKind = "text" | "date" | "phone" | "email" | "landline" | "address";
 
@@ -64,10 +66,12 @@ export interface RecordFieldView {
   source: RecordValueSource | null;
   /** True only while the value is missing (a value already on the student's record is never overwritten here). */
   editable: boolean;
+  /** Must be filled in (hostel name / room of a hosteller). */
+  required?: boolean;
 }
 
 export interface RecordProfileGroup {
-  id: "student" | "father" | "mother" | "guardian";
+  id: "student" | "father" | "mother" | "hostel" | "entrance";
   title: string;
   fields: RecordFieldView[];
 }
@@ -84,6 +88,8 @@ export interface QualifyingRow {
 export interface MentoringRecordProfile {
   groups: RecordProfileGroup[];
   qualifying: QualifyingRow[];
+  /** The rest of the student's own record (academic, bank, documents, ...), read-only; "" = not on record. */
+  otherGroups: { title: string; rows: { label: string; value: string }[] }[];
   /** Fields still missing that the mentor can fill (drives the "n details missing" hint). */
   missingCount: number;
 }
