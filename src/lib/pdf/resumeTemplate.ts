@@ -453,7 +453,7 @@ export function getResumeHTML(rawData: ResumeData): string {
   // Each experience entry's own Roles/Responsibilities, plus any legacy shared text no entry
   // could hold (see FacultyProfileFields.teachingRolesResponsibilities).
   const roleBullets = (label: string, entries: PreviousInstitution[] | undefined, unplaced: string | undefined) => [
-    ...(entries ?? [])
+    ...sortExperienceLatestFirst(entries ?? [])
       .filter((e) => e.rolesResponsibilities?.trim())
       .map((e) => `${label} Roles/Responsibilities${e.institutionName ? ` (${esc(e.institutionName)})` : ""}: ${esc(e.rolesResponsibilities)}`),
     unplaced?.trim() && `${label} Roles/Responsibilities: ${esc(unplaced)}`,
