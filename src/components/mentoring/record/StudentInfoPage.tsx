@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Info, Lock, Save } from "lucide-react";
+import { Info, Lock, Pencil, Save } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/useToast";
-import { CATEGORY_OPTIONS, entrySection } from "@/lib/mentoring/recordSections";
+import { CATEGORY_OPTIONS, QUALIFICATION_OPTIONS, entrySection } from "@/lib/mentoring/recordSections";
 import type { MentoringEntry, MentoringRecordProfile, RecordFieldView } from "@/types/mentoring";
 import { EntrySectionView, type EntryEditor } from "./EntrySection";
 import { sendJson, useLoaded } from "./recordApi";
@@ -19,6 +19,7 @@ import { sendJson, useLoaded } from "./recordApi";
 // and is kept separately from the student's record.
 
 function SourceTag({ field }: { field: RecordFieldView }) {
+  if (field.source === "HOD") return <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal">Edited by HOD</Badge>;
   if (field.source === "MENTOR") return <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal">Added by mentor</Badge>;
   if (field.source === "STUDENT" || field.source === "DERIVED") {
     return <Lock className="h-3 w-3 text-muted-foreground/60 print:hidden" aria-label="From the student's record" />;
@@ -26,7 +27,7 @@ function SourceTag({ field }: { field: RecordFieldView }) {
   return null;
 }
 
-function FieldInput({ field, value, onChange }: { field: RecordFieldView; value: string; onChange: (v: string) => void }) {
+function FieldInput({ field, value, onChange, qualification = "" }: { field: RecordFieldView; value: string; onChange: (v: string) => void; qualification?: string }) {
   if (field.key === "category") {
     return (
       <Select value={value} onValueChange={onChange}>
@@ -35,33 +36,119 @@ function FieldInput({ field, value, onChange }: { field: RecordFieldView; value:
       </Select>
     );
   }
+  if (field.key === "previousQualification") {
+    return (
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className="h-9"><SelectValue placeholder="Choose" /></SelectTrigger>
+        <SelectContent>{QUALIFICATION_OPTIONS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+      </Select>
+    );
+  }
+  if (field.key === "entranceType") {
+    // EAPCET follows Class XII (Intermediate), ECET follows a Diploma; once the route is known only its exam is offered.
+    const only = qualification.startsWith("Diploma") ? ["ECET"] : qualification.startsWith("Intermediate") ? ["EAPCET"] : ["EAPCET", "ECET"];
+    const options = [...only, ...(value && !only.includes(value.toUpperCase()) ? [value] : [])];
+    return (
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className="h-9"><SelectValue placeholder="Choose" /></SelectTrigger>
+        <SelectContent>{options.map((o) => <SelectItem key={o} value={o}>{o === "EAPCET" ? "EAPCET (after Class XII)" : o === "ECET" ? "ECET (after Diploma)" : o}</SelectItem>)}</SelectContent>
+      </Select>
+    );
+  }
+  if (field.key === "hosteller") {
+    return (
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className="h-9"><SelectValue placeholder="Choose" /></SelectTrigger>
+        <SelectContent>{["Yes", "No"].map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+      </Select>
+    );
+  }
   if (field.kind === "address") {
     return <Textarea value={value} rows={2} maxLength={500} placeholder="Not on record - add it" onChange={(e) => onChange(e.target.value)} />;
   }
+  const isYear = field.key.endsWith("YearOfPass") || field.key === "entranceYear";
+  const isRank = field.key === "entranceRank";
+  const isPercent = field.key.endsWith("Percentage");
   return (
     <Input
       className="h-9"
       type={field.kind === "date" ? "date" : "text"}
-      inputMode={field.kind === "phone" || field.kind === "landline" ? "tel" : field.kind === "email" ? "email" : undefined}
+      inputMode={field.kind === "phone" ? "tel" : field.kind === "email" ? "email" : isYear || isRank ? "numeric" : isPercent ? "decimal" : undefined}
       value={value}
-      maxLength={field.kind === "phone" ? 13 : 200}
-      placeholder="Not on record - add it"
-      onChange={(e) => onChange(e.target.value)}
+      maxLength={field.kind === "phone" ? 13 : isYear ? 4 : isRank ? 7 : isPercent ? 6 : 200}
+      placeholder={isYear ? "YYYY" : isPercent ? "0 - 100" : "Not on record - add it"}
+      // Year and percentage take digits only (a percentage may have a decimal point).
+      onChange={(e) => onChange(isYear || isRank ? e.target.value.replace(/\D/g, "") : isPercent ? e.target.value.replace(/[^\d.]/g, "") : e.target.value)}
     />
   );
 }
 
-function FieldCell({ field, draft, setDraft }: { field: RecordFieldView; draft: string | undefined; setDraft: (key: string, v: string) => void }) {
+function FieldCell({ field, draft, setDraft, qualification }: { field: RecordFieldView; draft: string | undefined; setDraft: (key: string, v: string) => void; qualification: string }) {
+  // A value that is already on record is shown as text; the pencil (HOD, or the mentor for their own entry) opens it for editing.
+  const [editing, setEditing] = useState(false);
+  const open = field.editable && (!field.value || editing || draft !== undefined);
   return (
     <div className="min-w-0">
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
-        <span>{field.label}</span>
+        <span>{field.label}{field.required ? " *" : ""}</span>
         <SourceTag field={field} />
       </div>
-      {field.editable
-        ? <FieldInput field={field} value={draft ?? field.value} onChange={(v) => setDraft(field.key, v)} />
-        : <p className="text-sm break-words whitespace-pre-wrap min-h-5">{field.value || <span className="text-muted-foreground">—</span>}</p>}
+      {open
+        ? <FieldInput field={field} value={draft ?? field.value} qualification={qualification} onChange={(v) => setDraft(field.key, v)} />
+        : (
+          <div className="flex items-start gap-1.5">
+            <p className="text-sm break-words whitespace-pre-wrap min-h-5 min-w-0 flex-1">{field.value || <span className="text-muted-foreground">—</span>}</p>
+            {field.editable && (
+              <button type="button" aria-label={`Edit ${field.label}`} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground print:hidden" onClick={() => setEditing(true)}>
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        )}
     </div>
+  );
+}
+
+function QualifyingCell({ field, draft, setDraft }: { field: RecordFieldView; draft: string | undefined; setDraft: (key: string, v: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  if (field.editable && (!field.value || editing || draft !== undefined)) {
+    return <FieldInput field={field} value={draft ?? field.value} onChange={(v) => setDraft(field.key, v)} />;
+  }
+  return (
+    <span className="flex items-start gap-1">
+      <span className="break-words">{field.value || <span className="text-muted-foreground">—</span>}</span>
+      {field.editable && (
+        <button type="button" aria-label={`Edit ${field.label}`} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground print:hidden" onClick={() => setEditing(true)}>
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </span>
+  );
+}
+
+// "Any guardian?" first; the guardian form and the Add guardian button appear only for Yes (or once one is on record).
+function GuardiansCard({ api, entries, editor }: { api: string; entries: MentoringEntry[]; editor: EntryEditor }) {
+  const section = entrySection("guardians");
+  const [answer, setAnswer] = useState<"yes" | "no" | null>(null);
+  if (!section) return null;
+  const hasRows = entries.some((e) => e.section === "guardians");
+  const showForm = hasRows || answer === "yes";
+  if (showForm) return <EntrySectionView section={section} entries={entries} api={api} editor={editor} />;
+  return (
+    <Card>
+      <CardContent className="pt-5 space-y-3">
+        <div>
+          <h3 className="text-base font-semibold leading-tight">{section.title}</h3>
+          {section.hint && <p className="text-xs text-muted-foreground mt-0.5">{section.hint}</p>}
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-sm">Does the student have a guardian?</span>
+          <Button size="sm" variant="outline" onClick={() => setAnswer("yes")}>Yes</Button>
+          <Button size="sm" variant={answer === "no" ? "default" : "outline"} onClick={() => setAnswer("no")}>No</Button>
+        </div>
+        {answer === "no" && <p className="text-sm text-muted-foreground">No guardian.</p>}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -101,6 +188,23 @@ export function StudentInfoPage({ api, entries, editor }: { api: string; entries
     }
   }
 
+  // Hostel name / room show as soon as "Hosteller" is Yes, saved or not.
+  const hostellerField = allFields.find((x) => x.key === "hosteller");
+  const isHostellerNow = (drafts.hosteller ?? hostellerField?.value ?? "").trim().toUpperCase() === "YES";
+
+  // Rank, year and hall ticket show once an entrance exam is chosen (saved or not).
+  const entranceField = allFields.find((x) => x.key === "entranceType");
+  const entranceNow = (drafts.entranceType ?? entranceField?.value ?? "").trim().toUpperCase();
+  // The route (Intermediate or Diploma) comes from the student's record; only that qualifying row is shown
+  // (a row that already holds data stays visible). Until the route is known, both are.
+  const qualificationField = allFields.find((x) => x.key === "previousQualification");
+  const qualificationNow = (drafts.previousQualification ?? qualificationField?.value ?? "").trim();
+  const qualifyingRows = (data?.qualifying ?? []).filter((q) => {
+    if (q.prefix === "ssc" || !qualificationNow) return true;
+    if ([q.institution, q.yearOfPass, q.board, q.percentage].some((x) => x.value)) return true;
+    return q.prefix === (qualificationNow.startsWith("Diploma") ? "diploma" : "inter");
+  });
+
   if (loading && !data) return <p className="text-sm text-muted-foreground py-6">Loading…</p>;
   if (error && !data) return <p className="text-sm text-muted-foreground py-6">{error}</p>;
   if (!data) return null;
@@ -125,9 +229,9 @@ export function StudentInfoPage({ api, entries, editor }: { api: string; entries
             <CardHeader className="pb-2"><CardTitle className="text-base">{g.title}</CardTitle></CardHeader>
             <CardContent>
               <div className={`grid gap-x-4 gap-y-3 ${g.id === "student" ? "sm:grid-cols-2 lg:grid-cols-3" : "sm:grid-cols-2"}`}>
-                {g.fields.map((f) => (
+                {g.fields.filter((f) => (g.id !== "hostel" || f.key === "hosteller" || isHostellerNow) && (g.id !== "entrance" || f.key === "entranceType" || entranceNow)).map((f) => (
                   <div key={f.key} className={f.kind === "address" ? "sm:col-span-2" : ""}>
-                    <FieldCell field={f} draft={drafts[f.key]} setDraft={setDraft} />
+                    <FieldCell field={f} draft={drafts[f.key]} setDraft={setDraft} qualification={qualificationNow} />
                   </div>
                 ))}
               </div>
@@ -153,15 +257,13 @@ export function StudentInfoPage({ api, entries, editor }: { api: string; entries
               </tr>
             </thead>
             <tbody>
-              {data.qualifying.map((q) => (
+              {qualifyingRows.map((q) => (
                 <tr key={q.prefix} className="border-b last:border-0 align-top">
                   <td className="py-2 pr-3 font-medium">{q.exam}</td>
                   {[q.institution, q.yearOfPass, q.board, q.percentage].map((f) => (
                     <td key={f.key} className="py-2 pr-3 last:pr-0">
-                      {f.editable
-                        ? <FieldInput field={f} value={drafts[f.key] ?? f.value} onChange={(v) => setDraft(f.key, v)} />
-                        : <span className="break-words">{f.value || <span className="text-muted-foreground">—</span>}</span>}
-                      {f.source === "MENTOR" && <div className="mt-0.5"><SourceTag field={f} /></div>}
+                      <QualifyingCell field={f} draft={drafts[f.key]} setDraft={setDraft} />
+                      {(f.source === "MENTOR" || f.source === "HOD") && <div className="mt-0.5"><SourceTag field={f} /></div>}
                     </td>
                   ))}
                 </tr>
@@ -171,8 +273,37 @@ export function StudentInfoPage({ api, entries, editor }: { api: string; entries
         </CardContent>
       </Card>
 
-      {entrySection("siblings") && <EntrySectionView section={entrySection("siblings")!} entries={entries} api={api} editor={editor} />}
+      <GuardiansCard api={api} entries={entries} editor={editor} />
+      {entrySection("siblings") &&<EntrySectionView section={entrySection("siblings")!} entries={entries} api={api} editor={editor} />}
       {entrySection("addressChanges") && <EntrySectionView section={entrySection("addressChanges")!} entries={entries} api={api} editor={editor} />}
+
+      {(data.otherGroups?.length ?? 0) > 0 && (
+        <div className="space-y-3">
+          <div>
+            <h3 className="text-base font-semibold leading-tight">Other details on the student&apos;s record</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Read-only. The College Office keeps these (Students → Import → Update student data) and the student can update some of them.
+            </p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            {(data.otherGroups ?? []).map((g) => (
+              <Card key={g.title} className="break-inside-avoid">
+                <CardHeader className="pb-2"><CardTitle className="text-base">{g.title}</CardTitle></CardHeader>
+                <CardContent>
+                  <dl className="grid grid-cols-[minmax(0,40%)_1fr] gap-x-3 gap-y-1.5 text-sm">
+                    {g.rows.map((r) => (
+                      <div key={r.label} className="contents">
+                        <dt className="text-muted-foreground">{r.label}</dt>
+                        <dd className={`break-words ${r.value ? "" : "text-muted-foreground/60"}`}>{r.value || "—"}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
 
       {changeCount > 0 && (
         <div className="sticky bottom-3 z-10 flex items-center justify-between gap-3 rounded-lg border bg-background/95 backdrop-blur px-4 py-2.5 shadow-lg print:hidden">

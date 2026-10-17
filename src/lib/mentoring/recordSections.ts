@@ -79,6 +79,23 @@ export const ENTRY_SECTIONS: EntrySection[] = [
     emptyText: "No sibling recorded.",
   },
   {
+    key: "guardians",
+    title: "Guardian",
+    hint: "Someone other than the parents who looks after the student. Kept by the mentor - students cannot edit it.",
+    layout: "table",
+    columns: [
+      { key: "name", label: "Name of the guardian", kind: "text", required: true },
+      { key: "relationship", label: "Relationship", kind: "text", placeholder: "Uncle, aunt, ..." },
+      { key: "occupation", label: "Occupation", kind: "text" },
+      { key: "mobile", label: "Mobile number", kind: "text", placeholder: "9876543210", max: 15 },
+      { key: "email", label: "E-mail", kind: "text" },
+      { key: "address", label: "Address", kind: "textarea", max: 500 },
+    ],
+    maxEntries: 5,
+    addLabel: "Add guardian",
+    emptyText: "No guardian recorded.",
+  },
+  {
     key: "addressChanges",
     title: "Change of address or phone number",
     hint: "Changes the student tells the mentor about, after the details above were filled in.",
@@ -215,6 +232,9 @@ export const ENTRY_SECTIONS: EntrySection[] = [
 const BY_KEY = new Map(ENTRY_SECTIONS.map((s) => [s.key, s]));
 export const entrySection = (key: string): EntrySection | undefined => BY_KEY.get(key);
 
+/** How a student reached the degree: Intermediate (then EAPCET) or Diploma (then ECET). */
+export const QUALIFICATION_OPTIONS = ["Intermediate (Class XII)", "Diploma (Polytechnic)"] as const;
+
 /** The four categories the booklet ticks. */
 export const CATEGORY_OPTIONS = ["OC", "OBC", "SC", "ST"] as const;
 
@@ -264,6 +284,12 @@ export function cleanEntryValues(section: EntrySection, input: unknown): CleanEn
     if (col.kind === "date" && !isRealDate(s)) return { ok: false, error: `${col.label} must be a valid date` };
     if (col.kind === "month" && !/^\d{4}-(0[1-9]|1[0-2])$/.test(s)) return { ok: false, error: `${col.label} must be a valid month` };
     if (col.kind === "select" && !(col.options ?? []).includes(s)) return { ok: false, error: `${col.label} must be one of: ${(col.options ?? []).join(", ")}` };
+    if (section.key === "guardians" && col.key === "mobile") {
+      const digits = s.replace(/[\s-]/g, "").replace(/^(\+91|91|0)(?=\d{10}$)/, "");
+      if (!/^[6-9]\d{9}$/.test(digits)) return { ok: false, error: `${col.label} must be exactly 10 digits, starting with 6, 7, 8 or 9` };
+      values[col.key] = digits;
+      continue;
+    }
     values[col.key] = s;
   }
   if (!Object.values(values).some((v) => typeof v === "string")) return { ok: false, error: "Fill in at least one detail" };

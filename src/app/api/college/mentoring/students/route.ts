@@ -13,7 +13,8 @@ import type { Section, StudentRecord } from "@/types";
 // The HOD's two views of who has (or lacks) a mentor:
 //   ?sectionId=<id>   the section's current students, each with their mentor
 //   ?mentorUid=<uid>  the students that faculty member mentors
-// Both only ever return students the HOD manages.
+// The section list only ever returns a section whose year the HOD runs themselves (a year another
+// department runs is not offered for assigning); the mentee list, students the HOD may view.
 export async function GET(request: Request) {
   try {
     const session = await requireCollegeMember("HOD");
@@ -26,14 +27,14 @@ export async function GET(request: Request) {
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
-    const { canManage } = await loadHodStudentScope(db, session.collegeId, session.uid);
+    const { canManage, canAssign, canViewSection } = await loadHodStudentScope(db, session.collegeId, session.uid);
 
     let students: (StudentRecord & { id: string })[] = [];
     if (sectionId) {
       const sectionSnap = await collegeRef.collection("sections").doc(sectionId).get();
       if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found" }, { status: 404 });
       const section = sectionSnap.data() as Section;
-      const allowed = await canManage({ department: section.department, year: section.year, courseId: section.courseId });
+      const allowed = searchParams.get("for") === "view" ? await canViewSection(section) : await canAssign(section);
       if (!allowed) return NextResponse.json({ error: "Outside your department" }, { status: 403 });
       students = await fetchSectionStudents(collegeRef, {
         department: section.department,

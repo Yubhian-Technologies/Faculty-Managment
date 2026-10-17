@@ -45,10 +45,10 @@ function rowFor(key: string, student: Partial<StudentRecord>, includeEmpty: bool
  * empty fields and empty groups are dropped (the student's own page). `includeEmpty` lists every field of every
  * group, a missing one with value "" - what a mentor needs to see what is still not on record.
  */
-export function buildOwnProfileGroups(student: Partial<StudentRecord>, options: { includeEmpty?: boolean } = {}): OwnProfileGroup[] {
+export function buildOwnProfileGroups(student: Partial<StudentRecord>, options: { includeEmpty?: boolean; /** Roster keys to leave out (already shown elsewhere). */ exclude?: ReadonlySet<string> } = {}): OwnProfileGroup[] {
   const includeEmpty = options.includeEmpty === true;
   return ROSTER_DETAIL_GROUPS.map((g) => ({
     title: g.title,
-    rows: g.keys.map((k) => rowFor(k, student, includeEmpty)).filter((r): r is OwnProfileRow => r !== null),
+    rows: g.keys.filter((k) => !options.exclude?.has(k)).map((k) => rowFor(k, student, includeEmpty)).filter((r): r is OwnProfileRow => r !== null),
   })).filter((g) => g.rows.length > 0);
 }
