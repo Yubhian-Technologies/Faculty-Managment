@@ -1,6 +1,6 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { getHodDepartmentScope, type HodDepartmentScope } from "@/lib/departments/scope";
-import { canHodEditDepartmentYear, type DepartmentYearRow } from "@/lib/departments/managedBranches";
+import { canHodEditDepartmentYear, canHodExclusivelyOwnDepartmentYear, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { cachedCollectionDocs } from "@/lib/firestore/sharedReads";
 import type { StudentRecord } from "@/types";
 
@@ -16,6 +16,18 @@ export interface HodStudentScope {
   scope: HodDepartmentScope;
   /** True when this HOD manages the student (their department, that year). */
   canManage: (student: Pick<StudentRecord, "department" | "year" | "courseId">) => Promise<boolean>;
+  /**
+   * Stricter than canManage, for ASSIGNING mentors: a year that another department runs (the shared
+   * first year under Basic Science, say) is theirs alone to assign - the students' own permanent HOD
+   * can still view them (canManage) but is not offered them to assign.
+   */
+  canAssign: (student: Pick<StudentRecord, "department" | "year" | "courseId">) => Promise<boolean>;
+  /**
+   * May this HOD LOOK at a section's students: what canManage allows, plus a section cross-listed to
+   * one of their departments (a shared first-year section that feeds their branch) - the same
+   * read-only reach the Sections page gives them.
+   */
+  canViewSection: (section: Pick<StudentRecord, "department" | "year" | "courseId"> & { secondaryDepartments?: string[] }) => Promise<boolean>;
 }
 
 /** The HOD's department scope plus a per-student "is this one mine" check (course lookups cached per call). */
@@ -26,7 +38,10 @@ export async function loadHodStudentScope(db: Firestore, collegeId: string, hodU
   // (sharedReads) serves them instead of a fresh read per request.
   let catalogByCourse: Map<string, string | undefined> | null = null;
 
-  async function canManage(student: Pick<StudentRecord, "department" | "year" | "courseId">): Promise<boolean> {
+  async function judge(
+    student: Pick<StudentRecord, "department" | "year" | "courseId">,
+    test: typeof canHodEditDepartmentYear
+  ): Promise<boolean> {
     if (scope.ownDepartmentNames.length === 0) return false;
     if (!departments) {
       const docs = await cachedCollectionDocs(db, collegeId, "departments");
@@ -40,10 +55,17 @@ export async function loadHodStudentScope(db: Firestore, collegeId: string, hodU
       }
       catalogId = catalogByCourse.get(student.courseId);
     }
-    return canHodEditDepartmentYear(scope, departments, student.department, student.year, catalogId);
+    return test(scope, departments, student.department, student.year, catalogId);
   }
 
-  return { scope, canManage };
+  return {
+    scope,
+    canManage: (student) => judge(student, canHodEditDepartmentYear),
+    canAssign: (student) => judge(student, canHodExclusivelyOwnDepartmentYear),
+    canViewSection: async (section) =>
+      (section.secondaryDepartments ?? []).some((n) => scope.ownDepartmentNames.includes(n) || scope.childDepartmentNames.includes(n)) ||
+      judge(section, canHodEditDepartmentYear),
+  };
 }
 
 export type MentoringAccess =
@@ -67,4 +89,15 @@ export async function authorizeMentoringStudent(
     if (await canManage(student)) return { ok: true, via: "HOD", student };
   }
   return { ok: false, status: 403, error: "You are not this student's mentor" };
+}
+
+/** True when `session` is the HOD who manages this student - the only person who may correct details the student's own record holds. */
+export async function isManagingHod(
+  db: Firestore,
+  session: { collegeId: string; uid: string; role: string },
+  student: Pick<StudentRecord, "department" | "year" | "courseId">
+): Promise<boolean> {
+  if (session.role !== "HOD") return false;
+  const { canManage } = await loadHodStudentScope(db, session.collegeId, session.uid);
+  return canManage(student);
 }

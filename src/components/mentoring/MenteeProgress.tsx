@@ -13,14 +13,13 @@ import { MENTORING_NOTE_MAX_LENGTH } from "@/types/mentoring";
 import { MenteeRecord } from "./record/MenteeRecord";
 import { getJson } from "./record/recordApi";
 
-// One mentee's progress, read-only, for their mentor / HOD: profile, attendance,
+// One mentee's progress for their mentor / HOD: the mentoring record (which also carries the whole student profile), attendance,
 // semester results, internal marks, and the mentor's own notes. Each tab loads
 // only when opened (see api/college/mentoring/students/[id]).
 
-type Tab = "record" | "profile" | "attendance" | "results" | "internal" | "notes";
+type Tab = "record" | "attendance" | "results" | "internal" | "notes";
 const TABS: { key: Tab; label: string }[] = [
   { key: "record", label: "Mentoring Record" },
-  { key: "profile", label: "Profile" },
   { key: "attendance", label: "Attendance" },
   { key: "results", label: "Semester Results" },
   { key: "internal", label: "Internal Marks" },
@@ -32,7 +31,6 @@ interface ProfileData {
     id: string; name: string; rollNumber: string; department: string; secondaryDepartment: string | null;
     course: string; section: string; year: number; batch: string; status: string; profilePhotoUrl: string | null; mentorName: string | null;
   };
-  groups: { title: string; rows: { label: string; value: string }[] }[];
 }
 interface AttendanceData {
   semesters: { semester: number; label: string }[];
@@ -95,9 +93,9 @@ export function MenteeProgress({ studentId, backHref }: { studentId: string; bac
         <div className="flex items-center gap-4">
           {s.profilePhotoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={s.profilePhotoUrl} alt="" className="h-16 w-16 rounded-full object-cover border" />
+            <img src={s.profilePhotoUrl} alt="" className="h-28 w-[5.25rem] rounded-md object-cover border shrink-0" />
           ) : (
-            <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center text-xl font-semibold text-muted-foreground">
+            <div className="h-28 w-[5.25rem] rounded-md bg-muted flex items-center justify-center text-2xl font-semibold text-muted-foreground border shrink-0">
               {s.name.slice(0, 1).toUpperCase()}
             </div>
           )}
@@ -126,46 +124,10 @@ export function MenteeProgress({ studentId, backHref }: { studentId: string; bac
       </div>
 
       {tab === "record" && <MenteeRecord studentId={studentId} studentName={s?.name ?? ""} rollNumber={s?.rollNumber ?? ""} />}
-      {tab === "profile" && <ProfileTab loading={profile.loading} data={profile.data} />}
       {tab === "attendance" && <AttendanceTab api={api} />}
       {tab === "results" && <ResultsTab api={api} />}
       {tab === "internal" && <InternalTab api={api} />}
       {tab === "notes" && <NotesTab api={api} />}
-    </div>
-  );
-}
-
-function ProfileTab({ loading, data }: { loading: boolean; data: ProfileData | null }) {
-  if (loading) return <Loading />;
-  if (!data || data.groups.length === 0) return <Empty>No details on record yet.</Empty>;
-  const total = data.groups.reduce((n, g) => n + g.rows.length, 0);
-  const missing = data.groups.reduce((n, g) => n + g.rows.filter((r) => !r.value).length, 0);
-  return (
-    <div className="space-y-4">
-      {missing > 0 && (
-        <p className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-          {missing} of {total} details are not on this student&apos;s record yet (shown as —). The College Office can fill them in
-          bulk (Students → Import → Update student data), the student can add their own, and you can add a missing one under
-          Mentoring Record → Student information.
-        </p>
-      )}
-    <div className="grid gap-4 md:grid-cols-2">
-      {data.groups.map((g) => (
-        <Card key={g.title}>
-          <CardHeader className="pb-2"><CardTitle className="text-base">{g.title}</CardTitle></CardHeader>
-          <CardContent>
-            <dl className="grid grid-cols-[minmax(0,40%)_1fr] gap-x-3 gap-y-1.5 text-sm">
-              {g.rows.map((r) => (
-                <div key={r.label} className="contents">
-                  <dt className="text-muted-foreground">{r.label}</dt>
-                  <dd className={`break-words ${r.value ? "" : "text-muted-foreground/60"}`}>{r.value || "—"}</dd>
-                </div>
-              ))}
-            </dl>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
     </div>
   );
 }

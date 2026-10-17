@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { buildOwnProfileGroups } from "@/lib/students/ownProfile";
-import { authorizeMentoringStudent } from "@/lib/mentoring/access";
+import { authorizeMentoringStudent, isManagingHod } from "@/lib/mentoring/access";
 import { mentoringErrorResponse } from "@/lib/mentoring/http";
 import { loadMenteeAttendance, loadMenteeInternalMarks, loadMenteeResults } from "@/lib/mentoring/progress";
 import { buildRecordProfile } from "@/lib/mentoring/profileRecord";
@@ -65,7 +65,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         return NextResponse.json(await loadMenteeInternalMarks(db, session.collegeId, student));
       case "record": {
         const overrides = await loadProfileOverrides(db, session.collegeId, student.id);
-        return NextResponse.json({ via: access.via, ...buildRecordProfile(student as unknown as Record<string, unknown>, overrides) });
+        return NextResponse.json({ via: access.via, ...buildRecordProfile(student as unknown as Record<string, unknown>, overrides, await isManagingHod(db, session, student)) });
       }
       case "semesters":
         return NextResponse.json({ semesters: await loadSemesterOptions(db, session.collegeId, student) });
