@@ -181,8 +181,8 @@ export async function buildSemesterSheet(
   };
 
   const subjects: SheetSubject[] = set.subjects.map((s) => {
-    // A result row names its subject by id and by the college's or the university's code.
-    const keys = [s.code, s.universityCode, s.shortCode].filter(Boolean).map(codeKey);
+    // A result row names its subject by id and by the college's code.
+    const keys = [s.code, s.shortCode].filter(Boolean).map(codeKey);
     const graded = mergedResults.find((r) => r.subjectId === s.subjectId) ?? mergedResults.find((r) => keys.includes(codeKey(r.subjectCode)));
     return {
       subjectId: s.subjectId,

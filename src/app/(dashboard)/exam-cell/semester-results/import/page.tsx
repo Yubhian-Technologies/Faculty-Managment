@@ -16,7 +16,7 @@ import { buildCourseGroups } from "@/lib/departments/hodScope";
 import { courseYearNumbers } from "@/lib/college/courseYears";
 import { batchTitle, examHeldLabel, resolveResultHeaders, type ResultBatchMeta } from "@/lib/examResults/sheet";
 import type { FailedResultRow, RawResultRow } from "@/lib/examResults/importRows";
-import type { Course, CourseYearTiming, Department } from "@/types";
+import type { Course, CourseYearTiming } from "@/types";
 import type { ExamResultBatch, ExamResultType } from "@/types/examResults";
 
 // Semester results import: pick the exam, download the template, upload the
@@ -30,7 +30,11 @@ import type { ExamResultBatch, ExamResultType } from "@/types/examResults";
 const PART_ROWS = 2500;
 const MAX_FILE_ROWS = 60000;
 
-type Summary = { students: number; subjectRows: number; failed: FailedResultRow[]; zeroCreditCodes: string[] };
+type Summary = {
+  students: number; subjectRows: number; failed: FailedResultRow[]; zeroCreditCodes: string[];
+  /** Students per sheet - one per branch, and per sub-department (from each student's own department). */
+  groups: { department: string; subDepartment: string; students: number }[];
+};
 
 function partsOf(rows: RawResultRow[]): RawResultRow[][] {
   const byRoll = new Map<string, RawResultRow[]>();
@@ -57,7 +61,8 @@ function thisMonth(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-type Sitting = { id: string; title: string; examType: ExamResultType; examHeld: string; students: number; withBacklogs: number };
+/** A published exam of the class across its branch sheets (`ids`). */
+type Sitting = { id: string; ids: string[]; title: string; examType: ExamResultType; examHeld: string; students: number; withBacklogs: number; branches?: number };
 
 const selectClass = "h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus:border-primary focus:outline-none disabled:opacity-50";
 
@@ -75,10 +80,6 @@ function ImportSemesterResults() {
   const [draft, setDraft] = useState<ExamResultBatch | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
   const [courseKey, setCourseKey] = useState("");
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [departmentId, setDepartmentId] = useState("");
-  // Optional: one sub-department of the branch ("" = the whole branch, sub-departments included).
-  const [subDepartmentId, setSubDepartmentId] = useState("");
   const [regulation, setRegulation] = useState("");
   // The programme's regulations and the batches each covers (Academics > Regulation).
   const [regOptions, setRegOptions] = useState<{ regulation: string; batches: string[] }[]>([]);
@@ -117,26 +118,14 @@ function ImportSemesterResults() {
   useEffect(() => {
     Promise.all([
       fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses?: Course[] }>),
-      fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments?: Department[] }>),
     ])
-      .then(([c, d]) => { setCourses(c.courses ?? []); setDepartments(d.departments ?? []); })
+      .then(([c]) => { setCourses(c.courses ?? []); })
       .catch(() => toast({ variant: "destructive", title: "Failed to load courses" }));
   }, []);
 
   const groups = useMemo(() => buildCourseGroups(courses), [courses]);
   const group = groups.find((g) => g.key === courseKey) ?? null;
-  // The branches that run this programme: the departments owning one of its Course docs.
-  const branches = useMemo(() => {
-    if (!group) return [];
-    const ids = new Set(courses.filter((c) => group.courseIds.includes(c.id)).map((c) => c.departmentId));
-    return departments.filter((d) => ids.has(d.id)).sort((a, b) => a.name.localeCompare(b.name));
-  }, [group, courses, departments]);
-  const branch = branches.find((d) => d.id === departmentId) ?? null;
-  const subDepartments = useMemo(
-    () => (branch ? departments.filter((d) => d.parentDepartmentId === branch.id).sort((a, b) => a.name.localeCompare(b.name)) : []),
-    [branch, departments]
-  );
-  const subDepartment = subDepartments.find((d) => d.id === subDepartmentId) ?? null;
+
 
   // The programme's year timings (for its semesters).
   useEffect(() => {
@@ -172,15 +161,16 @@ function ImportSemesterResults() {
 
   // The published exams of this class a Supplementary / Revaluation can be for.
   useEffect(() => {
-    if (!group || !batch || !departmentId || !year || !semester || examType === "REGULAR") return;
+    if (!group || !batch || !year || !semester || examType === "REGULAR") return;
     let cancelled = false;
-    const q = new URLSearchParams({ courseKey: group.key, batch, departmentId, year, semester, ...(subDepartmentId ? { subDepartmentId } : {}) });
+    // No branch: the exams across every branch's sheets.
+    const q = new URLSearchParams({ courseKey: group.key, batch, year, semester });
     fetch(`/api/college/exam-results/sittings?${q}`)
       .then((r) => r.json() as Promise<{ sittings?: Sitting[] }>)
       .then((d) => { if (!cancelled) setSittings(d.sittings ?? []); })
       .catch(() => { if (!cancelled) setSittings([]); });
     return () => { cancelled = true; };
-  }, [group, batch, departmentId, subDepartmentId, year, semester, examType]);
+  }, [group, batch, year, semester, examType]);
   const target = sittings.find((x) => x.id === targetBatchId) ?? null;
   const needsTarget = examType !== "REGULAR";
 
@@ -189,18 +179,19 @@ function ImportSemesterResults() {
         courseKey: draft.courseKey, courseName: draft.courseName, courseIds: draft.courseIds, department: draft.department ?? "", departmentId: draft.departmentId ?? "",
         ...(draft.subDepartmentId ? { subDepartment: draft.subDepartment ?? "", subDepartmentId: draft.subDepartmentId } : {}),
         regulation: draft.regulation, batch: draft.batch ?? "", examHeld: draft.examHeld ?? "", academicYear: draft.academicYear, year: draft.year, semester: draft.semester, examType: draft.examType,
-        ...(draft.targetBatchId ? { targetBatchId: draft.targetBatchId } : {}), ...(draft.revaluationOf ? { revaluationOf: draft.revaluationOf } : {}),
+        ...(draft.targetBatchId ? { targetBatchId: draft.targetBatchId } : {}), ...(draft.targetExam ? { targetExam: draft.targetExam } : {}),
+        ...(draft.revaluationOf ? { revaluationOf: draft.revaluationOf } : {}),
       }
     : appendTo
       ? null
-      : group && regulation && batch && branch && year && semester && (!needsTarget || target) && (examType === "REVALUATION" || examHeld)
+      : group && regulation && batch && year && semester && (!needsTarget || target) && (examType === "REVALUATION" || examHeld)
         ? {
-            courseKey: group.key, courseName: group.name, courseIds: group.courseIds, department: branch.name, departmentId: branch.id,
-            ...(subDepartment ? { subDepartment: subDepartment.name, subDepartmentId: subDepartment.id } : {}),
+            // No branch: every student's own department decides their sheet.
+            courseKey: group.key, courseName: group.name, courseIds: group.courseIds, department: "", departmentId: "",
             regulation, batch, year: Number(year), semester: Number(semester), examType,
             // The server derives the academic year and, for a Revaluation, takes the date from the picked exam.
             examHeld: examType === "REVALUATION" ? target?.examHeld ?? "" : examHeld, academicYear: "",
-            ...(needsTarget && target ? { targetBatchId: target.id } : {}),
+            ...(needsTarget && target ? { targetExam: { examType: target.examType as "REGULAR" | "SUPPLEMENTARY", examHeld: target.examHeld } } : {}),
             ...(examType === "REVALUATION" && target ? { revaluationOf: target.examType as "REGULAR" | "SUPPLEMENTARY" } : {}),
           }
         : null;
@@ -214,8 +205,6 @@ function ImportSemesterResults() {
   }
   function pickCourse(v: string) {
     setCourseKey(v);
-    setDepartmentId("");
-    setSubDepartmentId("");
     setRegulation("");
     setRegOptions([]);
     setBatch("");
@@ -240,10 +229,15 @@ function ImportSemesterResults() {
       type Prefill = { rollNumber: string; name: string; subjectCode: string; subjectName: string };
       let prefilled: Prefill[] | null = null;
       if (needsTarget && target) {
-        const res = await fetch(`/api/college/exam-results/batches/${encodeURIComponent(target.id)}/template?for=${examType}`);
-        const json = (await res.json()) as { rows?: Prefill[]; error?: string };
-        if (!res.ok) throw new Error(json.error);
-        prefilled = json.rows ?? [];
+        // Every branch's sheet of the picked exam.
+        prefilled = [];
+        for (const id of target.ids) {
+          const res = await fetch(`/api/college/exam-results/batches/${encodeURIComponent(id)}/template?for=${examType}`);
+          const json = (await res.json()) as { rows?: Prefill[]; error?: string };
+          if (!res.ok) throw new Error(json.error);
+          prefilled.push(...(json.rows ?? []));
+        }
+        prefilled.sort((x, y) => x.rollNumber.localeCompare(y.rollNumber));
       }
       const ExcelJS = (await import("exceljs")).default;
       const wb = new ExcelJS.Workbook();
@@ -263,7 +257,8 @@ function ImportSemesterResults() {
         "Subject Code may be the college's code (UGBS1T0523) or the university's code (R232101) once that is set on the subject under Academics > Subjects.",
         "Grade must be one of the grades in Result Rules (e.g. S, A, B ... F, AB).",
         "Zero-credit subjects (mandatory / audit courses) are Pass / Fail only: any grade given is a Pass, except a failing one (F, AB, MP, WH - as marked in Result Rules), which is a Fail.",
-        "Every student must belong to the batch and branch picked on the import page.",
+        "Students of every branch can be in one file - each student's own department decides their sheet (a sub-department gets its own; a 1st year under Basic Science goes to their core department).",
+        "Every student must belong to the batch picked on the import page.",
         "University SGPA is optional - the university's SGPA for the student (on any one of their rows, \"-\" if withheld). It is only compared with the system's, never used to calculate.",
         "A Supplementary template lists every subject still not passed; a Revaluation template lists every subject of the exam - delete the rows that were not revalued.",
         "Credits are taken from each subject's own record - not from this file. No marks are imported.",
@@ -327,34 +322,50 @@ function ImportSemesterResults() {
     if (!meta || rows.length === 0) return;
     setBusy(dryRun ? "check" : "save");
     const parts = partsOf(rows);
-    const total: Summary = { students: 0, subjectRows: 0, failed: [], zeroCreditCodes: [] };
-    let batchId: string | null = draft?.id ?? null;
+    const total: Summary = { students: 0, subjectRows: 0, failed: [], zeroCreditCodes: [], groups: [] };
+    // Adding to one draft: its id. A new upload: the id the first saved part returns, so the
+    // next parts join the same sheets.
+    const batchId: string | null = draft?.id ?? null;
+    let uploadId: string | null = null;
+    const sheetIds = new Set<string>();
     try {
       for (let i = 0; i < parts.length; i++) {
         setProgress(parts.length > 1 ? `Part ${i + 1} of ${parts.length}…` : "");
         const res: Response = await fetch("/api/college/exam-results/import", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ dryRun, rows: parts[i], ...(batchId ? { batchId } : { meta }) }),
+          body: JSON.stringify({ dryRun, rows: parts[i], ...(batchId ? { batchId } : { meta, ...(uploadId ? { uploadId } : {}) }) }),
         });
-        const json = (await res.json().catch(() => ({}))) as Partial<Summary> & { batchId?: string | null; error?: string };
+        const json = (await res.json().catch(() => ({}))) as Partial<Summary> & { batchId?: string | null; batchIds?: string[]; uploadId?: string | null; error?: string };
         if (!res.ok) {
           toast({ variant: "destructive", title: json.error ?? "Import failed" });
           if (batchId) router.push(`/exam-cell/semester-results/${batchId}`);
+          else if (sheetIds.size > 0) router.push("/exam-cell/semester-results");
           return;
         }
         total.students += json.students ?? 0;
         total.subjectRows += json.subjectRows ?? 0;
         total.failed.push(...(json.failed ?? []));
         total.zeroCreditCodes = [...new Set([...total.zeroCreditCodes, ...(json.zeroCreditCodes ?? [])])];
-        if (!dryRun && json.batchId) batchId = json.batchId;
+        for (const g of json.groups ?? []) {
+          const same = total.groups.find((x) => x.department === g.department && x.subDepartment === g.subDepartment);
+          if (same) same.students += g.students; else total.groups.push({ ...g });
+        }
+        if (!dryRun) {
+          if (json.uploadId) uploadId = json.uploadId;
+          for (const id of json.batchIds ?? (json.batchId ? [json.batchId] : [])) sheetIds.add(id);
+        }
       }
       total.failed.sort((a, b) => a.row - b.row);
       setSummary(total);
       if (!dryRun) {
-        if (batchId) {
-          toast({ variant: "success", title: `Saved as draft: ${total.students} students`, description: total.failed.length ? `${total.failed.length} row(s) were refused.` : undefined });
-          router.push(`/exam-cell/semester-results/${batchId}`);
+        if (sheetIds.size > 0) {
+          toast({
+            variant: "success",
+            title: `Saved as draft: ${total.students} students in ${sheetIds.size} sheet${sheetIds.size > 1 ? "s" : ""}`,
+            description: total.failed.length ? `${total.failed.length} row(s) were refused.` : undefined,
+          });
+          router.push(sheetIds.size === 1 ? `/exam-cell/semester-results/${[...sheetIds][0]}` : "/exam-cell/semester-results");
         } else {
           toast({ variant: "destructive", title: "Nothing was saved - every row was refused" });
         }
@@ -362,6 +373,7 @@ function ImportSemesterResults() {
     } catch {
       toast({ variant: "destructive", title: "Network error" });
       if (batchId) router.push(`/exam-cell/semester-results/${batchId}`);
+      else if (sheetIds.size > 0) router.push("/exam-cell/semester-results");
     } finally {
       setBusy(null);
       setProgress("");
@@ -414,22 +426,6 @@ function ImportSemesterResults() {
             </select>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="sr-branch">Branch *</Label>
-            <select id="sr-branch" className={selectClass} value={departmentId} onChange={(e) => changeClass(() => { setDepartmentId(e.target.value); setSubDepartmentId(""); })} disabled={!group}>
-              <option value="">{group && branches.length === 0 ? "No branch runs this course" : "Select a branch"}</option>
-              {branches.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
-          </div>
-          {subDepartments.length > 0 && (
-            <div className="space-y-1.5">
-              <Label htmlFor="sr-sub">Sub-Department</Label>
-              <select id="sr-sub" className={selectClass} value={subDepartmentId} onChange={(e) => changeClass(() => setSubDepartmentId(e.target.value))}>
-                <option value="">All of {branch?.name} (incl. sub-departments)</option>
-                {subDepartments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
-            </div>
-          )}
-          <div className="space-y-1.5">
             <Label htmlFor="sr-year">Year *</Label>
             <select id="sr-year" className={selectClass} value={year} onChange={(e) => changeClass(() => { setYear(e.target.value); setSemester(""); })} disabled={!batch}>
               <option value="">Select a year</option>
@@ -460,7 +456,7 @@ function ImportSemesterResults() {
                 </option>
                 {sittings.map((x) => (
                   <option key={x.id} value={x.id}>
-                    {x.examType === "SUPPLEMENTARY" ? "Supplementary" : "Regular"} · {examHeldLabel(x.examHeld) || "date not set"} · {x.students} students · {x.withBacklogs} with backlogs
+                    {x.examType === "SUPPLEMENTARY" ? "Supplementary" : "Regular"} · {examHeldLabel(x.examHeld) || "date not set"} · {x.students} students · {x.withBacklogs} with backlogs{x.branches && x.branches > 1 ? ` · ${x.branches} sheets` : ""}
                   </option>
                 ))}
               </select>
@@ -485,8 +481,7 @@ function ImportSemesterResults() {
         <CardHeader>
           <CardTitle className="text-base">2. Template</CardTitle>
           <CardDescription>
-            One row per student per subject: Roll No, Subject Code, Grade. The code may be the college code or the university code
-            (e.g. R232101) set on the subject - so the university&rsquo;s result export can be uploaded as it is. Your own results sheet works too if its headings are close
+            One row per student per subject: Roll No, Subject Code, Grade. The code must be the subject&rsquo;s college code. Your own results sheet works too if its headings are close
             (e.g. HTNO, Sub Code, Grade Secured); other columns such as Name, Credits or marks are ignored - only grades are imported.
           </CardDescription>
         </CardHeader>
@@ -509,7 +504,7 @@ function ImportSemesterResults() {
             {fileName ? <span><FileSpreadsheet className="mr-1 inline h-4 w-4" />{fileName} · {rows.length.toLocaleString()} rows</span> : "Choose the results file (.xlsx or .csv)"}
             <input type="file" accept=".xlsx,.csv" className="hidden" onChange={(e) => void handleFile(e)} disabled={!meta} />
           </label>
-          {!meta && !appendTo && <p className="text-xs text-muted-foreground">Pick the course, regulation, batch, branch, year, semester{needsTarget ? ", the exam" : ""}{examType !== "REVALUATION" ? " and the month it was held" : ""} first.</p>}
+          {!meta && !appendTo && <p className="text-xs text-muted-foreground">Pick the course, regulation, batch, year, semester{needsTarget ? ", the exam" : ""}{examType !== "REVALUATION" ? " and the month it was held" : ""} first.</p>}
           {parseError && <p className="text-sm text-destructive">{parseError}</p>}
           {ignored.length > 0 && <p className="text-xs text-muted-foreground">Ignored columns: {ignored.join(", ")}</p>}
 
@@ -533,6 +528,16 @@ function ImportSemesterResults() {
                 <Badge variant="secondary">{summary.subjectRows} subject results ready</Badge>
                 <Badge variant={summary.failed.length ? "destructive" : "secondary"}>{summary.failed.length} row(s) refused</Badge>
               </div>
+              {summary.groups.length > 0 && (
+                <div className="text-sm">
+                  <p className="text-xs text-muted-foreground">One draft sheet per branch / sub-department, from each student&rsquo;s own department:</p>
+                  <div className="mt-1 flex flex-wrap gap-1.5">
+                    {summary.groups.map((g) => (
+                      <Badge key={`${g.department}|${g.subDepartment}`} variant="outline">{g.subDepartment || g.department} · {g.students}</Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
               {summary.zeroCreditCodes.length > 0 && (
                 <p className="text-xs text-amber-700 dark:text-amber-400">
                   No credits set for: {summary.zeroCreditCodes.join(", ")} - these count as zero-credit subjects (left out of SGPA, still must be passed). Set credits under Subjects if that is wrong.

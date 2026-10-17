@@ -14,7 +14,7 @@ const SELECT_CLASS = "h-9 w-full rounded-md border bg-background px-2 text-sm";
 
 interface Form {
   category: SubjectCategory | ""; customCategory: string;
-  name: string; code: string; shortCode: string; universityCode: string; type: string;
+  name: string; code: string; shortCode: string; type: string;
   lectureHours: string; tutorialHours: string; practicalHours: string; credits: string;
 }
 
@@ -25,7 +25,6 @@ function toForm(d: SubjectRowInput): Form {
     name: d.name?.toString() ?? "",
     code: d.code?.toString() ?? "",
     shortCode: d.shortCode?.toString() ?? "",
-    universityCode: d.universityCode?.toString() ?? "",
     type: d.type?.toString() ?? "",
     lectureHours: d.lectureHours != null ? String(d.lectureHours) : "",
     tutorialHours: d.tutorialHours != null ? String(d.tutorialHours) : "",
@@ -59,7 +58,6 @@ export function ImportRowEditDialog({ open, onOpenChange, rowNumber, errors, dat
       name: form.name,
       code: form.code,
       shortCode: form.shortCode,
-      universityCode: form.universityCode,
       type: form.type || undefined,
       lectureHours: form.lectureHours,
       tutorialHours: form.tutorialHours,
@@ -89,7 +87,6 @@ export function ImportRowEditDialog({ open, onOpenChange, rowNumber, errors, dat
           <div className="space-y-1.5"><Label>Subject Name *</Label><Input value={form.name} onChange={(e) => set("name", e.target.value)} /></div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5"><Label>Subject Code *</Label><Input value={form.code} onChange={(e) => set("code", e.target.value)} className="font-mono uppercase" /></div>
-            <div className="space-y-1.5"><Label>University Code</Label><Input value={form.universityCode} onChange={(e) => set("universityCode", e.target.value)} className="font-mono uppercase" /></div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5"><Label>Short Code</Label><Input value={form.shortCode} onChange={(e) => set("shortCode", e.target.value)} className="uppercase" /></div>

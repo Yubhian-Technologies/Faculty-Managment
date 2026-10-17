@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { FMSUser } from "@/types";
 import { LOCATION_SCOPED_ROLES } from "@/types";
+import { normalizeNameTitle } from "@/lib/faculty/facultyDisplayName";
 
 interface AuthState {
   user: FMSUser | null;
@@ -46,8 +47,10 @@ export const useAuthStore = create<AuthState>()(
       // the incoming user does not say either way (undefined), a flag already in the store is
       // kept. useAuth always states it explicitly (true/false) after asking the server, so a
       // reinstatement still clears it.
-      setUser: (user) =>
+      setUser: (rawUser) =>
         set((state) => {
+          // Titles in the login's name show as "Mrs" / "Dr", not "MRS" / "DR".
+          const user = rawUser && rawUser.name ? { ...rawUser, name: normalizeNameTitle(rawUser.name) } : rawUser;
           const sameUser = !!user && !!state.user && user.uid === state.user.uid;
           const keepReadOnly = sameUser && user!.readOnlyAccess === undefined && state.user!.readOnlyAccess === true;
           return {

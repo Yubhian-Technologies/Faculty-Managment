@@ -10,28 +10,53 @@ import { inheritedTimingCourseId } from "@/lib/timetable/sharedYearTiming";
 import { DEFAULT_TIMETABLE_RULES } from "@/types";
 import type { Course, CourseYearTiming, Department, Section, Subject, TimetableRules, TimetableSlot } from "@/types";
 
-// Bulk counterpart to GET /api/college/timetable-slots: every section's
-// CURRENT-semester published timetable in one read, for the Principal/
-// Academics "Download all departments" button. A section with nothing
-// published, or whose course-year has no Course-Year Timings at all, is left
-// out entirely - the same "no timetable yet" state the single-section view
-// already shows, just skipped here instead of rendered as an empty page.
-export async function GET() {
+// Bulk counterpart to GET /api/college/timetable-slots: the CURRENT-semester published
+// timetable of many sections, for the Principal / Academics Timetable View. A section with
+// nothing published, or whose course-year has no Course-Year Timings at all, is left out - the
+// same "no timetable yet" state the single-section view already shows, just skipped here.
+//
+// Two cheap calls instead of one that reads the whole college (every section, every subject,
+// every published slot):
+//   ?optionsOnly=1        -> the sections themselves (no slots, no subjects): what the Course /
+//                            Department / Year / Section pickers are built from.
+//   ?sectionIds=a,b,c     -> the timetables of exactly those sections (at most MAX_IDS): the slots are
+//                            read for those sections only, and only the subjects those slots use.
+const MAX_IDS = 150;
+
+export async function GET(request: Request) {
   try {
     const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACADEMICS");
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
+    const { searchParams } = new URL(request.url);
 
-    const [sectionsSnap, coursesSnap, deptsSnap, timingsSnap, subjectsSnap, slotsSnap, rulesSnap, currentAcademicYear] =
+    if (searchParams.get("optionsOnly") === "1") {
+      const snap = await collegeRef.collection("sections").get();
+      const sections = snap.docs
+        .map((d) => {
+          const x = d.data() as Section;
+          return { id: d.id, name: x.name, department: x.department, year: x.year, courseId: x.courseId, courseName: x.courseName ?? "", batch: x.batch };
+        })
+        .sort((a, b) => a.department.localeCompare(b.department) || a.year - b.year || a.name.localeCompare(b.name));
+      return NextResponse.json({ sections });
+    }
+
+    const ids = Array.from(new Set((searchParams.get("sectionIds") ?? "").split(",").map((x) => x.trim()).filter(Boolean)));
+    if (ids.length === 0) return NextResponse.json({ error: "sectionIds is required" }, { status: 400 });
+    if (ids.length > MAX_IDS) return NextResponse.json({ error: `At most ${MAX_IDS} sections per request` }, { status: 400 });
+
+    const chunks: string[][] = [];
+    for (let i = 0; i < ids.length; i += 30) chunks.push(ids.slice(i, i + 30));
+
+    const [sectionDocs, coursesSnap, deptsSnap, timingsSnap, rulesSnap, currentAcademicYear, ...slotSnaps] =
       await Promise.all([
-        collegeRef.collection("sections").get(),
+        db.getAll(...ids.map((id) => collegeRef.collection("sections").doc(id))),
         collegeRef.collection("courses").get(),
         collegeRef.collection("departments").get(),
         collegeRef.collection("courseYearTimings").get(),
-        collegeRef.collection("subjects").get(),
-        collegeRef.collection("timetableSlots").get(),
         collegeRef.collection("settings").doc("timetableRules").get(),
         resolveCollegeAcademicYear(db, session.collegeId),
+        ...chunks.map((c) => collegeRef.collection("timetableSlots").where("sectionId", "in", c).get()),
       ]);
 
     const rules: TimetableRules = rulesSnap.exists
@@ -42,7 +67,6 @@ export async function GET() {
     const departments = deptsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as (Department & { id: string })[];
     const courseById = new Map(courses.map((c) => [c.id, c]));
     const timingsByDocId = new Map(timingsSnap.docs.map((d) => [d.id, d.data() as CourseYearTiming]));
-    const subjects = subjectsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as (Subject & { id: string })[];
 
     // Same shared-first-year fallback loadEffectiveTiming uses, inlined here
     // since every course-year is resolved locally in one pass rather than
@@ -57,14 +81,17 @@ export async function GET() {
     }
 
     const slotsBySection = new Map<string, (TimetableSlot & { id: string })[]>();
-    for (const d of slotsSnap.docs) {
-      const slot = { id: d.id, ...d.data() } as TimetableSlot & { id: string };
-      const list = slotsBySection.get(slot.sectionId) ?? [];
-      list.push(slot);
-      slotsBySection.set(slot.sectionId, list);
+    for (const snap of slotSnaps) {
+      for (const d of snap.docs) {
+        const slot = { id: d.id, ...d.data() } as TimetableSlot & { id: string };
+        const list = slotsBySection.get(slot.sectionId) ?? [];
+        list.push(slot);
+        slotsBySection.set(slot.sectionId, list);
+      }
     }
 
-    const sections = sectionsSnap.docs
+    const sections = sectionDocs
+      .filter((d) => d.exists)
       .map((d) => ({ id: d.id, ...d.data() }) as Section & { id: string })
       .sort((a, b) => a.department.localeCompare(b.department) || a.year - b.year || a.name.localeCompare(b.name));
 
@@ -76,6 +103,8 @@ export async function GET() {
       year: number;
       batch: string;
       regulation?: string;
+      classroomNumber?: string;
+      facultyInchargeName?: string;
       currentSemester: number | null;
       timing: CourseYearTiming;
       slots: (TimetableSlot & { id: string })[];
@@ -99,11 +128,20 @@ export async function GET() {
         year: section.year,
         batch: section.batch,
         regulation: section.regulation,
+        classroomNumber: section.classroomNumber || undefined,
+        facultyInchargeName: section.facultyInchargeName || undefined,
         currentSemester,
         timing,
         slots,
       });
     }
+
+    // Only the subjects these timetables actually use (not the whole subject catalogue).
+    const subjectIds = Array.from(new Set(result.flatMap((r) => r.slots.map((s) => s.subjectId)).filter((x): x is string => !!x)));
+    const subjectDocs = subjectIds.length > 0
+      ? await db.getAll(...subjectIds.map((id) => collegeRef.collection("subjects").doc(id)))
+      : [];
+    const subjects = subjectDocs.filter((d) => d.exists).map((d) => ({ id: d.id, ...d.data() })) as (Subject & { id: string })[];
 
     return NextResponse.json({ workingDays: rules.workingDays, subjects, sections: result });
   } catch (err) {

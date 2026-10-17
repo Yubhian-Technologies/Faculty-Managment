@@ -16,7 +16,7 @@ import { resolveSectionCurrentSemester } from "@/lib/college/semester";
 import { SubjectInstanceService } from "@/lib/subjects/services/SubjectInstanceService";
 import { cachedCollectionDocs } from "@/lib/firestore/sharedReads";
 import { getInChunks } from "@/lib/firestore/inQuery";
-import type { Course, Department, Subject, SubjectSemesterAssignment } from "@/types";
+import type { Course, Department, SubjectSemesterAssignment } from "@/types";
 
 // A master Subject (catalog course + regulation, department-independent) becomes a concrete
 // Subject Instance (SubjectSemesterAssignment, types/teaching.ts) for ONE department's
@@ -227,7 +227,6 @@ export async function PATCH(request: Request) {
     const credits = body.credits !== undefined ? Number(body.credits) : cur.credits ?? 0;
     const hoursPerWeek = lectureHours + tutorialHours + practicalHours;
     const prevHoursPerWeek = (cur.lectureHours ?? 0) + (cur.tutorialHours ?? 0) + (cur.practicalHours ?? 0);
-    const touchesNumbers = nums.some(([, v]) => v !== undefined);
 
     // Teaching assignments copy hoursPerWeek (it caps their timetable periods); keep them in step,
     // but never below the periods already placed. Nothing is written if that would be violated.
@@ -238,15 +237,6 @@ export async function PATCH(request: Request) {
       : { sync: [] as { ref: FirebaseFirestore.DocumentReference; hoursPerWeek: number }[], error: undefined };
     if (plan.error) return NextResponse.json({ error: plan.error }, { status: 409 });
 
-    // "Customized" means this copy now differs from its master; it then stops following the master's hours.
-    let isCustomized = cur.isCustomized === true;
-    if (touchesNumbers) {
-      const master = (await collegeRef.collection("subjects").doc(cur.subjectId).get()).data() as Subject | undefined;
-      isCustomized = !master
-        || lectureHours !== (master.lectureHours ?? 0) || tutorialHours !== (master.tutorialHours ?? 0)
-        || practicalHours !== (master.practicalHours ?? 0) || credits !== (master.credits ?? 0);
-    }
-
     const now = new Date();
     const batch = new ChunkedBatch(db);
     batch.update(ref, {
@@ -254,7 +244,6 @@ export async function PATCH(request: Request) {
       ...(body.secondaryDepartmentNames !== undefined
         ? { secondaryDepartmentNames: body.secondaryDepartmentNames && body.secondaryDepartmentNames.length > 0 ? body.secondaryDepartmentNames : FieldValue.delete() }
         : {}),
-      isCustomized,
       updatedAt: now,
     });
     for (const s of plan.sync) batch.update(s.ref, { hoursPerWeek: s.hoursPerWeek, updatedAt: now });

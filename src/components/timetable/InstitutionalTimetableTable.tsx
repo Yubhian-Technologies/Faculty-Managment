@@ -42,6 +42,7 @@ import type {
 import { DAY_LABELS } from "@/types";
 
 import { useCollegeInfo } from "@/hooks/useCollegeInfo";
+import { resolveSignatureRows } from "@/lib/timetable/signatureAuthority";
 
 export interface InstitutionalTimetableTableProps {
   section?: Section | null;
@@ -103,7 +104,6 @@ export function InstitutionalTimetableTable({
   const activeCollegeName = collegeName || collegeInfo?.name || "";
   const activeCollegeCode = collegeCode ?? (collegeInfo?.code || "");
   const activeAffiliation = affiliation ?? (collegeInfo?.affiliation || "");
-  const activeAddress = address ?? (collegeInfo?.address || "");
   const activePhone = phone ?? (collegeInfo?.phone || "");
 
   // Faculty/batches of one subject sharing a period show as ONE entry, subject once.
@@ -185,7 +185,7 @@ export function InstitutionalTimetableTable({
       collegeName: activeCollegeName,
       collegeCode: activeCollegeCode,
       affiliation: activeAffiliation,
-      address: activeAddress,
+      city: collegeInfo?.city,
       phone: activePhone,
       logoUrl: logoUrl ?? (collegeInfo?.logoUrl || ""),
       departmentName,
@@ -196,7 +196,7 @@ export function InstitutionalTimetableTable({
       regulation: section?.regulation,
       section: section ?? undefined,
       classroom,
-      classInchargeName: classInchargeName ?? section?.facultyInchargeName ?? "",
+      classInchargeName: (classInchargeName && classInchargeName !== "—" ? classInchargeName : section?.facultyInchargeName) || "",
       days: visibleDays,
       periods: Array.from({ length: timing.numberOfPeriods }, (_, i) => i + 1),
       periodTimings: timing.periods ?? [],
@@ -206,10 +206,11 @@ export function InstitutionalTimetableTable({
       shortBreaks: timing.shortBreaks,
       subjects,
       assignments,
+      signatureRows: collegeInfo?.timetableSignatureRows,
     }),
     [
-      activeCollegeName, activeCollegeCode, activeAffiliation, activeAddress, activePhone,
-      collegeInfo?.logoUrl, logoUrl, departmentName, courseName, academicYear, semesterLabel,
+      activeCollegeName, activeCollegeCode, activeAffiliation, activePhone, collegeInfo?.city,
+      collegeInfo?.logoUrl, collegeInfo?.timetableSignatureRows, logoUrl, departmentName, courseName, academicYear, semesterLabel,
       effectiveDateProp, section, classroom, classInchargeName, visibleDays, timing, filteredSlots, subjects, assignments,
     ]
   );
@@ -876,6 +877,17 @@ export function InstitutionalTimetableTable({
             </ul>
           </div>
         )}
+
+        {/* ── Signature authority (same rows the PDF / Excel print) ─────────── */}
+        <div className="border-t px-4 py-4 bg-card space-y-6">
+          {resolveSignatureRows(collegeInfo?.timetableSignatureRows, section?.department || departmentName).map((row, i) => (
+            <div key={i} className="flex justify-between gap-2 pt-6 text-center text-xs font-bold text-foreground">
+              {row.map((label, j) => (
+                <div key={`${label}-${j}`} className="flex-1 min-w-0 break-words">{label}</div>
+              ))}
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* ── Interactive Period Details Dialog ── */}

@@ -164,7 +164,7 @@ export async function PATCH(
       let changes: string[] = [];
       let fieldSummary = "";
       if (body.details) {
-        const isbnError = await checkIsbnForSave(db, session.collegeId, body.details.type, body.details.isbnNumber, { publicationId: id, previousIsbn: pub.details?.isbnNumber });
+        const isbnError = checkIsbnForSave(body.details.type, body.details.isbnNumber, { previousIsbn: pub.details?.isbnNumber });
         if (isbnError) return NextResponse.json({ error: isbnError }, { status: 400 });
         const { details, internalAuthorUids } = await finalizePublicationDetails(db, session.collegeId, body.details);
         if (wasApproved && pub.details) changes = summarizeChanges(pub.details, details);
@@ -211,7 +211,7 @@ export async function PATCH(
     // edit is handled above, whether or not they are also R&D.
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (body.details) {
-      const isbnError = await checkIsbnForSave(db, session.collegeId, body.details.type, body.details.isbnNumber, { publicationId: id, previousIsbn: pub.details?.isbnNumber });
+      const isbnError = checkIsbnForSave(body.details.type, body.details.isbnNumber, { previousIsbn: pub.details?.isbnNumber });
       if (isbnError) return NextResponse.json({ error: isbnError }, { status: 400 });
       const { details, internalAuthorUids } = await finalizePublicationDetails(db, session.collegeId, body.details);
       Object.assign(updates, { details, internalAuthorUids }, deriveFlatFields(details));

@@ -9,6 +9,7 @@ import { SUBJECT_COLORS, isSubjectColor } from "@/lib/timetable/subjectColors";
 import { facultySpans } from "@/lib/timetable/facultySpans";
 import { toast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
+import { useCollegeInfo } from "@/hooks/useCollegeInfo";
 import { formatDMY, currentWeekDates } from "@/lib/utils";
 import { isoDateKey } from "@/lib/leave/dayCounter";
 import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
@@ -179,6 +180,8 @@ export default function HODTeachingPage() {
     return set;
   }
 
+  const { collegeInfo } = useCollegeInfo();
+  const college = collegeInfo ?? undefined;
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isExportingXlsx, setIsExportingXlsx] = useState(false);
 
@@ -206,6 +209,7 @@ export default function HODTeachingPage() {
         courseCodeById,
         departments,
         formatDMY,
+        college,
       });
       await renderHtmlToPdf(html, `Faculty-Teaching-Load-${isoDateKey(weekStart)}.pdf`);
       toast({ title: "Timetable downloaded", description: "Saved as PDF" });
@@ -240,6 +244,8 @@ export default function HODTeachingPage() {
           courseCodeById,
           departments,
           formatDMY,
+          departmentName: user?.department,
+          college,
         },
         `Semester-Timetable-${isoDateKey(weekStart)}.xlsx`
       );
@@ -274,6 +280,7 @@ export default function HODTeachingPage() {
       courseCodeById,
       departments,
       formatDMY,
+      college,
     });
     const printWindow = window.open("", "_blank");
     if (!printWindow) {

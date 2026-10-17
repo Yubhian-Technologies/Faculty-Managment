@@ -1,6 +1,6 @@
 import { SUBJECT_CATEGORY_LABELS, type SubjectCategory, type SubjectType } from "@/types";
 import { resolveSubjectCategory, resolveSubjectType } from "@/lib/subjects/normalize";
-import { normalizeSubjectCode, normalizeUniversityCode } from "@/lib/subjects/subjectIdentity";
+import { normalizeSubjectCode } from "@/lib/subjects/subjectIdentity";
 
 // The one rulebook for a master subject's own fields (single add, bulk import).
 // Nothing is invented: a missing credit value is an error, not "L + T + P/2",
@@ -12,7 +12,6 @@ export interface SubjectRowInput {
   name?: string;
   code?: string;
   shortCode?: string;
-  universityCode?: string;
   type?: string;
   lectureHours?: string | number;
   tutorialHours?: string | number;
@@ -32,7 +31,6 @@ export interface ValidatedSubjectRow {
   name: string;
   code: string;
   shortCode?: string;
-  universityCode?: string;
   category: SubjectCategory;
   customCategory?: string;
   type: SubjectType;
@@ -92,7 +90,6 @@ export class SubjectCatalogValidator {
     else if (/[\s/\\]/.test(code)) errors.push("Code must not contain spaces or slashes");
 
     const shortCode = row.shortCode?.toString().trim().toUpperCase() || undefined;
-    const universityCode = normalizeUniversityCode(row.universityCode) || undefined;
 
     const categoryText = row.category?.toString().trim();
     let category: SubjectCategory | undefined;
@@ -165,7 +162,6 @@ export class SubjectCatalogValidator {
         name: name!,
         code,
         shortCode,
-        universityCode,
         category: category!,
         customCategory: category === "OTHER" ? customCategory : undefined,
         type,

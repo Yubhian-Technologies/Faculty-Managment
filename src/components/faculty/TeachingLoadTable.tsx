@@ -94,7 +94,7 @@ export function TeachingLoadTable({ groups, previous = [], facultyName, departme
     try {
       const input = {
         groups, previous, facultyName, department,
-        college: collegeInfo ? { name: collegeInfo.name, code: collegeInfo.code, affiliation: collegeInfo.affiliation, address: collegeInfo.address, phone: collegeInfo.phone, logoUrl: collegeInfo.logoUrl } : undefined,
+        college: collegeInfo ? { name: collegeInfo.name, code: collegeInfo.code, affiliation: collegeInfo.affiliation, address: collegeInfo.address, city: collegeInfo.city, phone: collegeInfo.phone, logoUrl: collegeInfo.logoUrl, teachingLoadSignatureRows: collegeInfo.teachingLoadSignatureRows } : undefined,
       };
       const base = `Teaching-Load${facultyName ? `-${facultyName.replace(/[^A-Za-z0-9]+/g, "-")}` : ""}`;
       if (kind === "pdf") await downloadTeachingLoadPdf(input, base);

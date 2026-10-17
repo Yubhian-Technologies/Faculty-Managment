@@ -10,10 +10,10 @@ import { Badge } from "@/components/ui/badge";
 import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { FacultySearchSelect } from "@/components/timetable/FacultySearchSelect";
 import { toast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkContext } from "@/hooks/useWorkContext";
-import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { CourseYearTiming, DayOfWeek, FacultyAssignmentRequest, FacultyMember, RequestAllocation } from "@/types";
 import { requestAllocations } from "@/lib/teaching/requestAllocations";
 import { DAY_LABELS } from "@/types";
@@ -451,15 +451,12 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
 
                     {dir === "incoming" && !r.busyClosed && addingAnotherId === r.id && (
                       <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/20 p-3">
-                        <Select
+                        <FacultySearchSelect
+                          faculty={pickable}
                           value={pickedFaculty[r.id] ?? ""}
                           onValueChange={(v) => setPickedFaculty((p) => ({ ...p, [r.id]: v }))}
-                        >
-                          <SelectTrigger className="w-64"><SelectValue placeholder={pickable.length ? "Select another faculty" : "No other faculty available"} /></SelectTrigger>
-                          <SelectContent>
-                            {pickable.map((f) => <SelectItem key={f.id} value={f.id}>{facultyDisplayName(f)}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
+                          placeholder={pickable.length ? "Select another faculty" : "No other faculty available"}
+                        />
                         <Button size="sm" loading={busyId === r.id} disabled={!pickedFaculty[r.id]} onClick={() => void handleAllocate(r.id)}>
                           Allocate
                         </Button>
@@ -494,15 +491,12 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
 
                           {dir === "incoming" && changingKey === `${r.id}:${a.facultyId}` && (
                             <div className="flex flex-wrap items-center gap-2">
-                              <Select
+                              <FacultySearchSelect
+                                faculty={pickable}
                                 value={changePick[`${r.id}:${a.facultyId}`] ?? ""}
                                 onValueChange={(v) => setChangePick((p) => ({ ...p, [`${r.id}:${a.facultyId}`]: v }))}
-                              >
-                                <SelectTrigger className="w-64"><SelectValue placeholder={pickable.length ? "Select the new faculty" : "No other faculty available"} /></SelectTrigger>
-                                <SelectContent>
-                                  {pickable.map((f) => <SelectItem key={f.id} value={f.id}>{facultyDisplayName(f)}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
+                                placeholder={pickable.length ? "Select the new faculty" : "No other faculty available"}
+                              />
                               <Button size="sm" loading={busyId === r.id} disabled={!changePick[`${r.id}:${a.facultyId}`]} onClick={() => void handleChangeFaculty(r.id, a.facultyId)}>
                                 Save new faculty
                               </Button>
@@ -634,15 +628,12 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
 
                 {dir === "incoming" && r.status === "PENDING" && (
                   <div className="flex flex-wrap items-center gap-2 pt-1">
-                    <Select
+                    <FacultySearchSelect
+                      faculty={facultyFor(r)}
                       value={pickedFaculty[r.id] ?? ""}
                       onValueChange={(v) => setPickedFaculty((p) => ({ ...p, [r.id]: v }))}
-                    >
-                      <SelectTrigger className="w-64"><SelectValue placeholder={facultyFor(r).length ? "Select faculty" : "No faculty in your department"} /></SelectTrigger>
-                      <SelectContent>
-                        {facultyFor(r).map((f) => <SelectItem key={f.id} value={f.id}>{facultyDisplayName(f)}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                      placeholder={facultyFor(r).length ? "Select faculty" : "No faculty in your department"}
+                    />
                     <Button size="sm" loading={busyId === r.id} onClick={() => void handleAllocate(r.id)}>
                       Allocate
                     </Button>

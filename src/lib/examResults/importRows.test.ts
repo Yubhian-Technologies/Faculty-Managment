@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyPriorResults, applyRevaluationTargets, pickSubject, validateResultRows, type PriorResult, type RawResultRow, type ResultImportContext, type ResultStudent, type ResultSubjectOption } from "./importRows";
+import { applyPriorResults, applyRevaluationTargets, groupByBranch, pickSubject, validateResultRows, type PriorResult, type RawResultRow, type ResultImportContext, type ResultStudent, type ResultSubjectOption } from "./importRows";
 import { normalizeResultRules, gradeTableFor, rulesOrStarter, STARTER_GRADE_TABLE, STARTER_RULES } from "./rules";
 
 const anil: ResultStudent = { id: "s1", rollNumber: "24A91A0501", name: "Anil", department: "CSE", courseId: "c-cse", regulation: "R23" };
@@ -105,36 +105,6 @@ describe("supplementary checks against the earlier sitting", () => {
   it("is accepted in the same or a later academic year", () => {
     expect(applyPriorResults(sheet(), [regular()], "SUPPLEMENTARY", 3, "2026-27").failed).toEqual([]);
     expect(applyPriorResults(sheet(), [regular()], "SUPPLEMENTARY", 3, "2027-28").failed).toEqual([]);
-  });
-});
-
-describe("university codes", () => {
-  const withUniv = (over: Partial<ResultImportContext> = {}) => {
-    const beee = { id: "sub-beee", code: "UGBS1T1323", name: "Basic Electrical & Electronics Engineering", credits: 3, courseId: "c-cse", regulation: "R23", universityCode: "R232101" };
-    const chem = { id: "sub-chem", code: "UGBS1T0523", name: "Engineering Chemistry", credits: 3, courseId: "c-cse", regulation: "R23", universityCode: "R232104" };
-    const subjects = new Map<string, ResultSubjectOption[]>();
-    for (const s of [beee, chem]) for (const k of [s.code, s.universityCode]) subjects.set(k, [...(subjects.get(k) ?? []), s]);
-    return ctx({ subjects, ...over });
-  };
-
-  it("matches a row by the university code and stores it under the college code", () => {
-    const { accepted, failed } = validateResultRows([row(2, "24A91A0501", "R232101", "D"), row(3, "24A91A0501", "r232104", "A")], withUniv());
-    expect(failed).toEqual([]);
-    expect(accepted[0].subjects.map((s) => [s.subjectCode, s.grade])).toEqual([["UGBS1T1323", "D"], ["UGBS1T0523", "A"]]);
-  });
-
-  it("treats the college code and the university code of one subject as the same subject", () => {
-    const { failed } = validateResultRows([row(2, "24A91A0501", "R232101", "D"), row(3, "24A91A0501", "UGBS1T1323", "A")], withUniv());
-    expect(failed.map((f) => f.error)).toEqual(["24A91A0501 already has a row for UGBS1T1323 in this file"]);
-  });
-
-  it("refuses a university code given to two different subjects", () => {
-    const twin = { id: "sub-twin", code: "UGME1T0123", name: "Engineering Graphics", credits: 3, courseId: "c-cse", regulation: "R23", universityCode: "R232101" };
-    const c = withUniv();
-    c.subjects.set("R232101", [...(c.subjects.get("R232101") ?? []), twin]);
-    const { accepted, failed } = validateResultRows([row(2, "24A91A0501", "R232101", "D")], c);
-    expect(accepted).toEqual([]);
-    expect(failed[0].error).toContain('Subject Code "R232101" matches more than one subject');
   });
 });
 
@@ -365,5 +335,51 @@ describe("supplementary: picked exam and batch", () => {
   it("a detained student may write the Regular again under a new batch, but not twice in one", () => {
     expect(applyPriorResults(sheet(), [reg({ batch: "2024-2028" })], "REGULAR", 3, "2026-27", { batch: "2025-2029" }).failed).toEqual([]);
     expect(applyPriorResults(sheet(), [reg({ batch: "2024-2028" })], "REGULAR", 3, "2025-26", { batch: "2024-2028" }).failed).toHaveLength(1);
+  });
+});
+
+describe("groupByBranch - every branch in one upload", () => {
+  const depts = [
+    { id: "cse", name: "CSE" }, { id: "ece", name: "ECE" },
+    { id: "cs", name: "CSE [CYBER SECURITY]", parentDepartmentId: "cse" },
+    { id: "bs", name: "Basic Science" },
+  ];
+  const stu = (id: string, roll: string, department: string, secondaryDepartment?: string) =>
+    ({ student: { id, rollNumber: roll, name: id, department, ...(secondaryDepartment ? { secondaryDepartment } : {}) }, subjects: [{ subjectId: "m", subjectCode: "MA101", subjectName: "M", credits: 3, grade: "A", points: 9, isPass: true }], rows: [2] });
+
+  it("one sheet per branch, a sub-department its own, a Basic Science 1st year under the core department", () => {
+    const r = groupByBranch([
+      stu("a", "R1", "CSE"), stu("b", "R2", "ECE"), stu("c", "R3", "CSE [CYBER SECURITY]"),
+      stu("d", "R4", "Basic Science", "ECE"), stu("e", "R5", "CSE"),
+    ], depts);
+    expect(r.failed).toEqual([]);
+    expect(r.groups.map((g) => [g.department, g.subDepartment ?? "", g.students.map((x) => x.student.id)])).toEqual([
+      ["CSE", "", ["a", "e"]],
+      ["CSE", "CSE [CYBER SECURITY]", ["c"]],
+      ["ECE", "", ["b", "d"]],
+    ]);
+  });
+
+  it("refuses a student with no department, or one the college doesn't have", () => {
+    const r = groupByBranch([stu("a", "R1", ""), stu("b", "R2", "MECH")], depts);
+    expect(r.groups).toEqual([]);
+    expect(r.failed.map((f) => f.error)).toEqual(["R1 has no department on record", 'R2\'s department "MECH" is not one of the college\'s departments']);
+  });
+});
+
+describe("picked exam per student (every-branch upload)", () => {
+  const sheet = () => validateResultRows([row(2, "24A91A0501", "MA101", "B"), row(3, "24A91A0502", "MA101", "A")], ctx()).accepted;
+  const reg = (studentId: string, batchId: string): PriorResult => ({ studentId, batchId, examType: "REGULAR", academicYear: "2025-26", status: "PUBLISHED", subjects: [{ subjectCode: "MA101", isPass: false }] });
+
+  it("a supplementary checks each student against their own branch's sheet of the exam", () => {
+    const targets = new Map([["s1", "reg-cse"], ["s2", "reg-ece"]]);
+    expect(applyPriorResults(sheet(), [reg("s1", "reg-cse"), reg("s2", "reg-ece")], "SUPPLEMENTARY", 3, "2025-26", { targetByStudent: targets }).failed).toEqual([]);
+    expect(applyPriorResults(sheet(), [reg("s1", "reg-cse")], "SUPPLEMENTARY", 3, "2025-26", { targetByStudent: new Map([["s1", "reg-cse"]]) }).failed.map((f) => f.error))
+      .toEqual(["24A91A0502 has no earlier result for MA101 in Semester 3"]);
+  });
+
+  it("a revaluation links each student to their own sheet of the exam", () => {
+    const r = applyRevaluationTargets(sheet(), [reg("s1", "reg-cse"), reg("s2", "reg-ece")], new Map([["s1", "reg-cse"], ["s2", "reg-ece"]]), "Regular Dec 2025");
+    expect(r.accepted.map((a) => [a.student.id, a.revaluesBatchId])).toEqual([["s1", "reg-cse"], ["s2", "reg-ece"]]);
   });
 });

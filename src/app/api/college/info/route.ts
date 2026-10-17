@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { readSignatureGroups, selectedSignatureRows } from "@/lib/timetable/signatureAuthority";
 
 export async function GET(request: Request) {
   try {
@@ -23,7 +24,14 @@ export async function GET(request: Request) {
       "CLASS_LEADER"
     );
     const db = getAdminDb();
-    const snap = await db.collection("colleges").doc(session.collegeId).get();
+    const collegeRef = db.collection("colleges").doc(session.collegeId);
+    const [snap, sigSnap, loadSigSnap] = await Promise.all([
+      collegeRef.get(),
+      collegeRef.collection("settings").doc("timetableSignatures").get(),
+      collegeRef.collection("settings").doc("teachingLoadSignatures").get(),
+    ]);
+    const sigGroups = readSignatureGroups(sigSnap.exists ? sigSnap.data()?.groups : []);
+    const loadSigGroups = readSignatureGroups(loadSigSnap.exists ? loadSigSnap.data()?.groups : []);
     const data = snap.data() as {
       name?: string;
       code?: string;
@@ -37,6 +45,18 @@ export async function GET(request: Request) {
       logoUrl?: string;
     } | undefined;
 
+    // The college's city (its location's city) - printed beside the college name on timetables.
+    let city = "";
+    const locationId = (snap.data() as { locationId?: string } | undefined)?.locationId;
+    if (locationId) {
+      try {
+        const loc = await db.collection("locations").doc(locationId).get();
+        city = ((loc.data() as { city?: string } | undefined)?.city ?? "").trim();
+      } catch (err) {
+        console.error("[college/info GET] location lookup", err);
+      }
+    }
+
     const rawLogo = data?.logoUrl?.trim() ?? "";
     const isCustom = Boolean(rawLogo && rawLogo !== "/vishnulogo.png");
     const logoUrl = isCustom ? rawLogo : "/vishnulogo.png";
@@ -48,10 +68,13 @@ export async function GET(request: Request) {
       phone: data?.contactPhone || data?.phone || "",
       email: data?.contactEmail || data?.email || "",
       address: data?.address ?? "",
+      city,
       type: data?.type,
       logoUrl,
       hasCustomLogo: isCustom,
       rawLogoUrl: rawLogo,
+      timetableSignatureRows: selectedSignatureRows(sigGroups),
+      teachingLoadSignatureRows: selectedSignatureRows(loadSigGroups),
     });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {

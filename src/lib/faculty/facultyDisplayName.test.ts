@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { facultyDisplayName } from "./facultyDisplayName";
+import { facultyDisplayName, normalizeNameTitle } from "./facultyDisplayName";
 import { buildPersonalDetailsUpdate } from "@/lib/firestore/personalDetails";
 import { personalPatchBody, personalRecordFromDoc } from "./personalRecord";
 
@@ -16,6 +16,12 @@ describe("facultyDisplayName", () => {
   it("never doubles the period when the catalog entry already has one", () => {
     expect(facultyDisplayName({ legalName: "ANITHA REDDY", honorific: "Dr" })).toBe("Dr.ANITHA REDDY");
     expect(facultyDisplayName({ legalName: "ANITHA REDDY", honorific: "Dr." })).toBe("Dr.ANITHA REDDY");
+  });
+
+  it("shows the honorific as first capital then small letters", () => {
+    expect(facultyDisplayName({ legalName: "ANITHA REDDY", honorific: "MRS" })).toBe("Mrs.ANITHA REDDY");
+    expect(facultyDisplayName({ legalName: "ANITHA REDDY", honorific: "DR." })).toBe("Dr.ANITHA REDDY");
+    expect(facultyDisplayName({ legalName: "RAVI", honorific: "mr" })).toBe("Mr.RAVI");
   });
 
   it("never prefixes an honorific onto a blank name", () => {
@@ -53,5 +59,14 @@ describe("nameAsPerPan (independent of legalName, like nameAsPerAadhar)", () => 
     const body = personalPatchBody(personalRecordFromDoc({ legalName: "A", nameAsPerPan: "B" }) as never);
     expect(body.nameAsPerPan).toBe("B");
     expect(body.legalName).toBe("A");
+  });
+});
+
+describe("normalizeNameTitle", () => {
+  it("fixes a leading title only", () => {
+    expect(normalizeNameTitle("MRS.ANITHA REDDY")).toBe("Mrs.ANITHA REDDY");
+    expect(normalizeNameTitle("DR. RAVI")).toBe("Dr. RAVI");
+    expect(normalizeNameTitle("MR RAVI")).toBe("Mr RAVI");
+    expect(normalizeNameTitle("MRINAL DAS")).toBe("MRINAL DAS");
   });
 });

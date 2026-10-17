@@ -21,6 +21,7 @@ import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { mobileNoFromBody } from "@/lib/faculty/mobileNo";
 import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { compareFacultyForList } from "@/lib/faculty/sortFacultyForList";
 import type { Designation, FacultyStatus, EmployeeCategory } from "@/types";
 import {
   EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE, SELECTABLE_FACULTY_STATUS_VALUES, FACULTY_STATUS_ERROR_MESSAGE,
@@ -251,11 +252,18 @@ export async function GET(request: Request) {
     let teachingOnly = faculty.filter((f) => !LEGACY_TECHNICAL_DESIGNATIONS.includes(f.designation as string));
     if (availableOnly) teachingOnly = teachingOnly.filter((f) => isFacultyAvailable(f.status as string));
 
-    teachingOnly.sort((a, b) =>
-      facultyDisplayName(a as { legalName?: string }).localeCompare(
-        facultyDisplayName(b as { legalName?: string })
-      )
-    );
+    // Department's HOD first, then the rest by Date of Joining (seniority) -
+    // an HOD viewing their own roster is always this session; anyone else
+    // (Office/Principal/VP/pickers) asking about one specific department
+    // needs that department's own hodUid looked up.
+    let hodUid: string | undefined = session.role === "HOD" ? session.uid : undefined;
+    if (!hodUid && deptFilter) {
+      const deptSnap = await db
+        .collection("colleges").doc(session.collegeId).collection("departments")
+        .where("name", "==", deptFilter).limit(1).get();
+      hodUid = (deptSnap.docs[0]?.data() as { hodUid?: string } | undefined)?.hodUid;
+    }
+    teachingOnly.sort(compareFacultyForList(hodUid));
     // Opt-in (`?withSeats=1`, the Faculty Register lists only): the seats each person holds, as short phrases
     // ("HOD of CSE"), so a Principal / HOD can see who holds a position without opening the seat register.
     // Additive and display-only; the pickers that reuse this route skip the extra read.

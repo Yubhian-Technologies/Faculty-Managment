@@ -62,6 +62,9 @@ export interface ResultBatchMeta {
   examHeld: string;
   /** Supplementary: the exam it re-sits. Revaluation: the exam it re-grades. Both must be published. */
   targetBatchId?: string;
+  /** The same, across branches (an upload of every branch at once): the exam's type and month.
+   *  Each student is matched to their own result in it. */
+  targetExam?: { examType: "REGULAR" | "SUPPLEMENTARY"; examHeld: string };
   /** REVALUATION only: the type of the exam it re-grades (taken from that exam). */
   revaluationOf?: "REGULAR" | "SUPPLEMENTARY";
 }
@@ -108,9 +111,10 @@ export function normalizeBatchMeta(input: unknown, ctx: MetaContext): { meta: Re
   if (regulation.length > 20) return { error: "Regulation is too long" };
   const batch = String(b.batch ?? "").trim();
   if (!BATCH.test(batch)) return { error: "Choose a batch" };
+  // No branch = every branch at once: each student's own department decides their sheet.
   const department = String(b.department ?? "").trim();
   const departmentId = String(b.departmentId ?? "").trim();
-  if (!department || !departmentId) return { error: "Choose a branch" };
+  if (!!department !== !!departmentId) return { error: "Choose the branch again" };
   const subDepartment = String(b.subDepartment ?? "").trim();
   const subDepartmentId = String(b.subDepartmentId ?? "").trim();
   if (!!subDepartment !== !!subDepartmentId) return { error: "Choose the sub-department again" };
@@ -127,11 +131,18 @@ export function normalizeBatchMeta(input: unknown, ctx: MetaContext): { meta: Re
     ...(subDepartmentId ? { subDepartment, subDepartmentId } : {}),
   };
 
+  // The picked exam: one sheet (targetBatchId), or an exam across branches (targetExam).
+  const te = b.targetExam as { examType?: unknown; examHeld?: unknown } | undefined;
+  const targetExam = te && (te.examType === "REGULAR" || te.examType === "SUPPLEMENTARY") && MONTH.test(String(te.examHeld ?? ""))
+    ? { examType: te.examType, examHeld: String(te.examHeld) } as const
+    : undefined;
+  const targetBatchId = String(b.targetBatchId ?? "").trim();
+  const target = targetExam ? { targetExam } : targetBatchId ? { targetBatchId } : null;
+
   if (examType === "REVALUATION") {
-    const targetBatchId = String(b.targetBatchId ?? "").trim();
-    if (!targetBatchId) return { error: "Choose the exam being revalued" };
+    if (!target) return { error: "Choose the exam being revalued" };
     // Date, academic year and type are the revalued exam's - filled in by completeFromTarget.
-    return { meta: { ...base, examType, targetBatchId, examHeld: "", academicYear: "" } };
+    return { meta: { ...base, examType, ...target, examHeld: "", academicYear: "" } };
   }
 
   const examHeld = String(b.examHeld ?? "").trim();
@@ -147,9 +158,8 @@ export function normalizeBatchMeta(input: unknown, ctx: MetaContext): { meta: Re
     return { meta: { ...base, examType, examHeld, academicYear } };
   }
 
-  const targetBatchId = String(b.targetBatchId ?? "").trim();
-  if (!targetBatchId) return { error: "Choose the exam this supplementary is for" };
-  return { meta: { ...base, examType, examHeld, academicYear: ctx.academicYearOfMonth(examHeld), targetBatchId } };
+  if (!target) return { error: "Choose the exam this supplementary is for" };
+  return { meta: { ...base, examType, examHeld, academicYear: ctx.academicYearOfMonth(examHeld), ...target } };
 }
 
 /** The exam a Supplementary / Revaluation points at, as the import route loads it. */
@@ -173,8 +183,10 @@ export function completeFromTarget(meta: ResultBatchMeta, target: TargetExam | n
   if (target.examType === "REVALUATION") return { error: "Pick a Regular or Supplementary exam" };
   // An exam of the whole branch covers its sub-departments too; one sub-department's exam only that one.
   const subOk = !target.subDepartmentId || target.subDepartmentId === meta.subDepartmentId;
-  if (target.courseKey !== meta.courseKey || target.batch !== meta.batch || target.departmentId !== meta.departmentId
-    || target.year !== meta.year || target.semester !== meta.semester || !subOk) {
+  // Every branch at once: any branch's sheet of the exam stands for it.
+  const branchOk = !meta.departmentId || (target.departmentId === meta.departmentId && subOk);
+  if (target.courseKey !== meta.courseKey || target.batch !== meta.batch || !branchOk
+    || target.year !== meta.year || target.semester !== meta.semester) {
     return { error: "The picked exam is for a different course, batch, branch, year or semester" };
   }
   if (meta.examType === "REVALUATION") {
@@ -190,7 +202,7 @@ export function completeFromTarget(meta: ResultBatchMeta, target: TargetExam | n
 export function batchTitle(m: ResultBatchMeta): string {
   return [
     m.courseName,
-    m.department,
+    m.department || null,
     m.subDepartment || null,
     m.regulation || null,
     m.batch || m.academicYear,

@@ -7,7 +7,7 @@ import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { SubjectCatalogValidator, type SubjectRowInput } from "../validation/SubjectValidator";
 import { customCategoriesFrom, resolveImportCategory } from "../importCategory";
 import { claimSubjectKeys, keyDocId, type SubjectKeyClaim, type SubjectKeyConflict } from "../subjectKeys";
-import { normalizeSubjectCode, normalizeSubjectName, normalizeUniversityCode } from "../subjectIdentity";
+import { normalizeSubjectCode, normalizeSubjectName } from "../subjectIdentity";
 import { planTeachingHoursSync, type HoursTarget } from "../hoursCascade";
 import { MASTER_IMPORT_MAX_ROWS } from "../limits";
 import type { Subject, SubjectSemesterAssignment } from "@/types";
@@ -17,17 +17,16 @@ import type { Subject, SubjectSemesterAssignment } from "@/types";
 // department, year or semester (those are an instance, made by assign-by-code).
 //
 // Identity, inside one catalog course + regulation:
-//   - Subject Code is unique, University Code is unique.
+//   - Subject Code is unique.
 //   - Subject Name is NOT required to be unique: the same title legitimately
 //     recurs under a different code (e.g. "Engineering Physics" in Sem 1 and
 //     Sem 2, or a lab sharing its theory subject's name) - a repeated name only
 //     gets a warning, never blocks the row.
 //   - Code cannot change once the subject is assigned anywhere: a
 //     recoded subject is a NEW subject.
-// Uniqueness (code, university code) is enforced twice: against the subjects
-// already saved (so it holds for data that predates the lock docs) and by lock
-// docs claimed in the same transaction as the write (so two concurrent saves
-// cannot both win).
+// Uniqueness (code) is enforced twice: against the subjects already saved (so it
+// holds for data that predates the lock docs) and by lock docs claimed in the
+// same transaction as the write (so two concurrent saves cannot both win).
 
 export { MASTER_IMPORT_MAX_ROWS };
 
@@ -139,10 +138,8 @@ export class SubjectMasterService {
 
     const codes = new Map(existing.map((s) => [normalizeSubjectCode(s.code), s]));
     const names = new Map(existing.map((s) => [normalizeSubjectName(s.name), s]));
-    const univ = new Map(existing.filter((s) => s.universityCode).map((s) => [normalizeUniversityCode(s.universityCode), s]));
     const fileCodes = new Map<string, number>();
     const fileNames = new Map<string, number>();
-    const fileUniv = new Map<string, number>();
 
     const failed: MasterImportFailure[] = [];
     const warnings: MasterImportResult["warnings"] = [];
@@ -181,18 +178,12 @@ export class SubjectMasterService {
       // its theory subject), so it never blocks the row.
       const nameOwner = names.get(nameKey);
       if (nameOwner) warnings.push({ row, code: codeLabel, warning: `The name "${d.name}" is already used by code ${nameOwner.code} for ${regulation}.` });
-      const univKey = d.universityCode ? normalizeUniversityCode(d.universityCode) : "";
-      const univOwner = univKey ? univ.get(univKey) : undefined;
-      if (univOwner) problems.push(`University Code ${d.universityCode} is already used by ${univOwner.code} (${univOwner.name}).`);
       const rowOfCode = fileCodes.get(d.code);
       if (rowOfCode != null) problems.push(`Code ${d.code} is repeated (also on row ${rowOfCode}).`);
       const rowOfName = fileNames.get(nameKey);
       if (rowOfName != null) warnings.push({ row, code: codeLabel, warning: `The name "${d.name}" is repeated (also on row ${rowOfName}).` });
-      const rowOfUniv = univKey ? fileUniv.get(univKey) : undefined;
-      if (rowOfUniv != null) problems.push(`University Code ${d.universityCode} is repeated (also on row ${rowOfUniv}).`);
       fileCodes.set(d.code, fileCodes.get(d.code) ?? row);
       fileNames.set(nameKey, fileNames.get(nameKey) ?? row);
-      if (univKey) fileUniv.set(univKey, fileUniv.get(univKey) ?? row);
       if (problems.length > 0) return fail(problems.join(" "), { kind: "duplicate" });
 
       ready.push({
@@ -210,7 +201,6 @@ export class SubjectMasterService {
           nameKey,
           code: d.code,
           ...(d.shortCode ? { shortCode: d.shortCode } : {}),
-          ...(d.universityCode ? { universityCode: d.universityCode } : {}),
           hoursPerWeek: d.hoursPerWeek,
           ...(d.totalHoursPerSemester != null ? { totalHoursPerSemester: d.totalHoursPerSemester } : {}),
           lectureHours: d.lectureHours,
@@ -285,7 +275,7 @@ export class SubjectMasterService {
   }
 
   // ── edit ────────────────────────────────────────────────────────────────
-  async update(p: { collegeId: string; id: string; patch: Record<string, unknown>; actor?: SubjectActor }): Promise<{ cascaded: { instances: number; teachingAssignments: number; customizedLeftAlone: number } }> {
+  async update(p: { collegeId: string; id: string; patch: Record<string, unknown>; actor?: SubjectActor }): Promise<{ cascaded: { instances: number; teachingAssignments: number } }> {
     const { collegeId, id, patch } = p;
     const college = this.college(collegeId);
     const ref = college.collection("subjects").doc(id);
@@ -303,7 +293,6 @@ export class SubjectMasterService {
       name: pick("name", cur.name) as string,
       code: pick("code", cur.code) as string,
       shortCode: pick("shortCode", cur.shortCode ?? "") as string,
-      universityCode: pick("universityCode", cur.universityCode ?? "") as string,
       category: pick("category", cur.category ?? "") as string,
       customCategory: pick("customCategory", cur.customCategory ?? "") as string,
       type: pick("type", cur.type) as string,
@@ -333,7 +322,6 @@ export class SubjectMasterService {
 
     const codeChanged = normalizeSubjectCode(d.code) !== normalizeSubjectCode(cur.code);
     const nameChanged = normalizeSubjectName(d.name) !== normalizeSubjectName(cur.name);
-    const univChanged = normalizeUniversityCode(d.universityCode) !== normalizeUniversityCode(cur.universityCode);
     const identityChanged = codeChanged || nameChanged;
     const regulation = (cur.regulation ?? "").trim();
 
@@ -358,7 +346,7 @@ export class SubjectMasterService {
     // Name is deliberately not checked here - the same title legitimately recurs
     // under a different code (see the class-level comment).
     let scopeId = cur.catalogId || cur.courseId || "";
-    if (isMaster && (codeChanged || univChanged)) {
+    if (isMaster && codeChanged) {
       const scope = await this.loadScopeForExisting(collegeId, cur);
       scopeId = scope.scopeId;
       const others = (await this.loadExisting(collegeId, scope, regulation)).filter((s) => s.id !== id);
@@ -366,17 +354,12 @@ export class SubjectMasterService {
         const hit = others.find((s) => normalizeSubjectCode(s.code) === d.code);
         if (hit) throw new SubjectRequestError(`Code ${d.code} is already used by "${hit.name}" for ${regulation}.`, 409);
       }
-      if (univChanged && d.universityCode) {
-        const hit = others.find((s) => normalizeUniversityCode(s.universityCode) === normalizeUniversityCode(d.universityCode));
-        if (hit) throw new SubjectRequestError(`University Code ${d.universityCode} is already used by ${hit.code} (${hit.name}).`, 409);
-      }
     }
 
     const now = new Date();
     const updates: Record<string, unknown> = {
       name: d.name, nameKey: normalizeSubjectName(d.name), code: d.code,
       shortCode: d.shortCode ?? FieldValue.delete(),
-      universityCode: d.universityCode ?? FieldValue.delete(),
       category: d.category,
       customCategory: d.customCategory ?? FieldValue.delete(),
       type: d.type,
@@ -403,18 +386,16 @@ export class SubjectMasterService {
       || d.lectureHours !== (cur.lectureHours ?? 0) || d.tutorialHours !== (cur.tutorialHours ?? 0) || d.practicalHours !== (cur.practicalHours ?? 0);
     const creditsChanged = d.credits !== cur.credits;
     const mirror: Record<string, unknown> = {
-      shortCode: updates.shortCode, universityCode: updates.universityCode, category: updates.category,
+      shortCode: updates.shortCode, category: updates.category,
       customCategory: updates.customCategory, type: updates.type, totalHoursPerSemester: updates.totalHoursPerSemester,
       ...(has("altShortCode") ? { altShortCode: updates.altShortCode } : {}),
       ...(loadFlag != null ? { isNonTeachingLoad: updates.isNonTeachingLoad, excludeFromResume: updates.excludeFromResume } : {}),
     };
 
     const instances = instancesSnap.docs.map((x) => ({ ref: x.ref, ...(x.data() as SubjectSemesterAssignment) }));
-    const followHours = instances.filter((i) => !i.isCustomized);
-    const customizedLeftAlone = instances.length - followHours.length;
     let sync: { ref: DocumentReference; hoursPerWeek: number }[] = [];
-    if (hoursChanged && followHours.length > 0) {
-      const targets: HoursTarget[] = followHours
+    if (hoursChanged && instances.length > 0) {
+      const targets: HoursTarget[] = instances
         .filter((i) => !!i.departmentId)
         .map((i) => ({ departmentId: i.departmentId!, semester: i.semester, year: i.year, hoursPerWeek: d.hoursPerWeek, hoursChanged: true }));
       const plan = await planTeachingHoursSync(this.db, collegeId, id, targets);
@@ -446,7 +427,7 @@ export class SubjectMasterService {
     const batch = new ChunkedBatch(this.db);
     for (const i of instances) {
       const patchInst: Record<string, unknown> = { ...mirror, updatedAt: now };
-      if (!i.isCustomized && (hoursChanged || creditsChanged)) {
+      if (hoursChanged || creditsChanged) {
         Object.assign(patchInst, {
           lectureHours: d.lectureHours, tutorialHours: d.tutorialHours, practicalHours: d.practicalHours,
           hoursPerWeek: d.hoursPerWeek, credits: d.credits,
@@ -469,7 +450,7 @@ export class SubjectMasterService {
       targetId: id,
       details: { code: cur.code, name: cur.name, regulation, changed: Object.keys(patch) },
     });
-    return { cascaded: { instances: instances.length, teachingAssignments: sync.length, customizedLeftAlone } };
+    return { cascaded: { instances: instances.length, teachingAssignments: sync.length } };
   }
 
   private async loadScopeForExisting(collegeId: string, s: SubjectDoc): Promise<CourseScope> {

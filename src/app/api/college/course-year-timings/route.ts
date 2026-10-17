@@ -4,7 +4,7 @@ import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { getHodDepartmentScope, canHodEditDepartmentId, facultyManageableDepartmentNames } from "@/lib/departments/scope";
+import { getHodDepartmentScope, canHodEditDepartmentId, canHodViewDepartmentId, facultyManageableDepartmentNames } from "@/lib/departments/scope";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
 import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
 import { getFreshmanDepartmentIds, structureFromDepartments } from "@/lib/college/academicStructure";
@@ -40,13 +40,16 @@ export async function GET(request: Request) {
     const snap = await query.get();
     let timings = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as (CourseYearTiming & { id: string })[];
 
-    // Read access scoped the same way PATCH already restricts writes below -
-    // an HOD may only see their own department's (or a sub-department's/
-    // managed branch's) course-year timings, never an arbitrary department's.
+    // Read access is wider than PATCH's write restriction below: a true
+    // sub-department with no Course doc of its own (e.g. "CSE [AI&ML]" under
+    // "ARTIFICIAL INTELLIGENCE") inherits its parent's single shared course,
+    // so the timings filed under the PARENT's departmentId are genuinely this
+    // HOD's own course-year to see, even though editing them stays with
+    // whoever heads the parent - see canHodViewDepartmentId's own doc-comment.
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      const ownedTimings = timings.filter((t) => canHodEditDepartmentId(scope, t.departmentId));
-      const deniedTimings = timings.filter((t) => !canHodEditDepartmentId(scope, t.departmentId));
+      const ownedTimings = timings.filter((t) => canHodViewDepartmentId(scope, t.departmentId));
+      const deniedTimings = timings.filter((t) => !canHodViewDepartmentId(scope, t.departmentId));
 
       // A lending HOD deep-linked here via a fulfilled Assignment Request
       // (their own faculty placed to teach a subject on ANOTHER department's
