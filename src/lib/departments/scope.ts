@@ -49,6 +49,13 @@ export interface HodDepartmentScope {
   managedDepartmentNames: string[];
   // Same set, by id (same order) - for routes that validate a target id.
   managedDepartmentIds: string[];
+  // The parentDepartmentId of each owned department that has one (a true
+  // sub-department, e.g. "CSE [AI&ML]" under "ARTIFICIAL INTELLIGENCE") -
+  // optional/additive so existing literal HodDepartmentScope objects (tests,
+  // older callers) keep compiling unchanged. Read-only: see
+  // canHodViewDepartmentId's own doc-comment for why this is never folded
+  // into canHodEditDepartmentId.
+  parentDepartmentIds?: string[];
 }
 
 /**
@@ -159,6 +166,24 @@ export function canHodEditDepartmentId(scope: HodDepartmentScope, departmentId: 
   );
 }
 
+/**
+ * READ-ONLY widening of canHodEditDepartmentId: also true when `departmentId`
+ * is the PARENT of one of this HOD's own departments. A true sub-department
+ * with no Course doc of its own (e.g. "CSE [AI&ML]" under "ARTIFICIAL
+ * INTELLIGENCE") inherits its parent's single shared Course doc - same
+ * fallback api/college/courses already uses (`deptDoc.parentDepartmentId ??
+ * deptDoc.id`) - so data filed under the parent's departmentId (Course-Year
+ * Timings, namely) is genuinely this HOD's to SEE even though they have no
+ * authority to edit it. Deliberately NOT folded into canHodEditDepartmentId
+ * itself: editing the parent's shared timings has to stay with whoever heads
+ * the parent, since a sub-department changing it would move the whole shared
+ * class schedule out from under every sibling sub-department at once.
+ */
+export function canHodViewDepartmentId(scope: HodDepartmentScope, departmentId: string): boolean {
+  if (!departmentId) return false;
+  return canHodEditDepartmentId(scope, departmentId) || (scope.parentDepartmentIds ?? []).includes(departmentId);
+}
+
 const emptyScope: HodDepartmentScope = {
   departmentName: "",
   departmentId: null,
@@ -168,6 +193,7 @@ const emptyScope: HodDepartmentScope = {
   childDepartmentIds: [],
   managedDepartmentNames: [],
   managedDepartmentIds: [],
+  parentDepartmentIds: [],
 };
 
 export async function getHodDepartmentScope(
@@ -223,12 +249,14 @@ export async function getHodDepartmentScope(
   const childNameSet = new Set<string>();
   const childIdSet = new Set<string>();
   const managedNameSet = new Set<string>();
+  const parentIdSet = new Set<string>();
 
   for (const snap of ownSnaps) {
     const deptDoc = snap.docs[0];
     if (!deptDoc) continue;
     ownDepartmentIds.push(deptDoc.id);
-    const dept = deptDoc.data() as { hasSubDepartments?: boolean; managedDepartments?: string[] };
+    const dept = deptDoc.data() as { hasSubDepartments?: boolean; managedDepartments?: string[]; parentDepartmentId?: string };
+    if (dept.parentDepartmentId) parentIdSet.add(dept.parentDepartmentId);
 
     // Start with this department's own grouped branches; a parent HOD also
     // rolls up every branch grouped under its sub-HODs (below), so e.g. the
@@ -311,6 +339,7 @@ export async function getHodDepartmentScope(
     childDepartmentIds,
     managedDepartmentNames,
     managedDepartmentIds,
+    parentDepartmentIds: Array.from(parentIdSet).slice(0, 30),
   };
 }
 
