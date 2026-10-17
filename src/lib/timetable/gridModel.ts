@@ -212,15 +212,22 @@ export interface AllocationEntry {
  * previous copy kept only the first slot's `facultyName`, so a subject taught
  * by two faculty across sections, or split into lab batches, lost the second
  * one), plus the room and batch labels a split lab needs to be legible.
+ *
+ * `hoursPerWeek` is counted directly from the PUBLISHED slots passed in
+ * (distinct day+period pairs, so a lab split into parallel batches on the
+ * same period is one period, not two) - never the Teaching Assignment's own
+ * stored `hoursPerWeek` snapshot, which drifts the moment someone adds,
+ * removes, or merges a period on the timetable itself without separately
+ * re-editing the assignment. The published grid is the source of truth here.
  */
 export function buildAllocationList(
   slots: TimetableSlot[],
   opts: {
     subjects?: Map<string, Subject> | Subject[];
-    assignments?: { subjectId?: string; facultyName?: string; hoursPerWeek?: number; subjectType?: string }[];
+    assignments?: { subjectId?: string; facultyName?: string; subjectType?: string }[];
   } = {},
 ): AllocationEntry[] {
-  const byKey = new Map<string, AllocationEntry & { facultySet: Set<string> }>();
+  const byKey = new Map<string, AllocationEntry & { facultySet: Set<string>; periodKeys: Set<string> }>();
 
   for (const slot of slots) {
     const key = slot.subjectId || slot.subjectName;
@@ -236,17 +243,19 @@ export function buildAllocationList(
         shortCode: slotShortCode(slot, opts.subjects),
         name: subject?.name ?? slot.subjectName ?? "",
         subjectType: subject?.type ?? assign?.subjectType,
-        hoursPerWeek: assign?.hoursPerWeek,
+        hoursPerWeek: undefined,
         faculty: "",
         classroom: slot.classroom,
         labBatches: [],
         facultySet: new Set<string>(),
+        periodKeys: new Set<string>(),
       };
       byKey.set(key, entry);
     }
     if (slot.labBatch && !entry.labBatches.includes(slot.labBatch)) {
       entry.labBatches.push(slot.labBatch);
     }
+    entry.periodKeys.add(`${slot.day}|${slot.periodNumber}`);
     // The assigned faculty, not a one-day substitute - the allocation table
     // describes who owns the subject, and a leave cover would otherwise be
     // listed as a permanent second teacher.
@@ -254,8 +263,9 @@ export function buildAllocationList(
     if (name) entry.facultySet.add(name);
   }
 
-  return Array.from(byKey.values()).map(({ facultySet, ...rest }) => ({
+  return Array.from(byKey.values()).map(({ facultySet, periodKeys, ...rest }) => ({
     ...rest,
+    hoursPerWeek: periodKeys.size,
     // "Not assigned" only when genuinely nobody is - previously the literal
     // "Unassigned" was baked in, uppercase, whether or not that was true.
     faculty: Array.from(facultySet).join(" / ") || "Not assigned",
