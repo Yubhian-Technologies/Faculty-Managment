@@ -9,7 +9,7 @@ import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { PublicationsSection } from "@/components/faculty/PublicationsModuleView";
 import { normalizeResourcePersonsDetails, trainingEntryHidesBeneficiaries, trainingEntryUsesWeeks } from "@/components/faculty/TrainingEntryFields";
 import { awardYear } from "@/lib/faculty/awardYear";
-import { totalYearsOfExperience, formatDuration, durationBetween, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
+import { totalYearsOfExperience, formatDuration, durationBetween, allPreviousExperienceEntries, sortExperienceLatestFirst } from "@/lib/faculty/experienceCalc";
 import { toDate } from "@/lib/utils";
 import {
   TRAINING_ENTRY_TYPE_LABELS, TRAINING_PARTICIPATION_ROLE_LABELS, CERTIFICATION_TYPE_LABELS, PROFESSIONAL_BODY_LABELS, MEMBERSHIP_VALIDITY_LABELS,
@@ -139,9 +139,9 @@ export function ExperienceModule({
   // entry (nothing to hold it, or the latest entry already has different text) - shown
   // read-only so it never silently disappears.
   const experienceGroups: { label: string; entries: PreviousInstitution[]; roleLabel: string; unplacedRole: string | undefined }[] = [
-    { label: "Academic Experience", entries: p.academicExperience ?? [], roleLabel: "Academic Roles/Responsibilities", unplacedRole: p.teachingRolesResponsibilities },
-    { label: "Industry Experience", entries: p.industryExperience ?? [], roleLabel: "Industry Roles/Responsibilities", unplacedRole: p.industryRolesResponsibilities },
-    { label: "Research Experience", entries: p.researchExperience ?? [], roleLabel: "Research Roles/Responsibilities", unplacedRole: p.researchRolesResponsibilities },
+    { label: "Academic Experience", entries: sortExperienceLatestFirst(p.academicExperience ?? []), roleLabel: "Academic Roles/Responsibilities", unplacedRole: p.teachingRolesResponsibilities },
+    { label: "Industry Experience", entries: sortExperienceLatestFirst(p.industryExperience ?? []), roleLabel: "Industry Roles/Responsibilities", unplacedRole: p.industryRolesResponsibilities },
+    { label: "Research Experience", entries: sortExperienceLatestFirst(p.researchExperience ?? []), roleLabel: "Research Roles/Responsibilities", unplacedRole: p.researchRolesResponsibilities },
   ];
   return (
     <Section number={2} title="Previous Experience">

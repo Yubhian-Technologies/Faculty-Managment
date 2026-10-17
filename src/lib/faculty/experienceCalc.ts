@@ -100,6 +100,21 @@ export function allPreviousExperienceEntries(p: ExperienceEntriesSource | undefi
   ];
 }
 
+// Latest first: ordered by the end date (a blank/open end = still running, so it
+// leads), then the start date; rows with no dates keep their order at the end.
+// Returns a new array - never mutates the stored list.
+export function sortExperienceLatestFirst<T extends PreviousInstitutionLike>(rows: T[]): T[] {
+  const key = (r: T) => {
+    const from = r.fromDate ?? (r.fromYear ? `${r.fromYear}-01-01` : "");
+    const to = r.toDate ?? (r.toYear ? `${r.toYear}-01-01` : "");
+    return { from, to: to || (from ? "9999-12-31" : "") };
+  };
+  return rows
+    .map((r, i) => ({ r, i, k: key(r) }))
+    .sort((a, b) => b.k.to.localeCompare(a.k.to) || b.k.from.localeCompare(a.k.from) || a.i - b.i)
+    .map((x) => x.r);
+}
+
 // Legacy rows that only have fromYear/toYear (pre-dating the From/To Date
 // fields) anchor to Jan 1 of each year - same read-time fallback
 // ExperienceFields itself uses.
