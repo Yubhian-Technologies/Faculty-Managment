@@ -126,7 +126,7 @@ export default function HODDashboard() {
     <div className="space-y-6">
       <PageHeader
         title={`Welcome, ${user?.name ?? "HOD"}`}
-        description={`${departmentLabel} - Department Portal`}
+        description={`${departmentLabel} - Head Of Department`}
         actions={
           !isHiringHidden && (
             <Button asChild>

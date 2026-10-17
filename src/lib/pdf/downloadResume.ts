@@ -1,7 +1,8 @@
 import { auth } from "@/lib/firebase/client";
 import { renderHtmlToPdf } from "@/lib/pdf/htmlToPdf";
 
-export async function downloadResumePdf(record: Record<string, unknown>, filenameHint: string): Promise<void> {
+// The resume as an HTML document, exactly as the PDF is made from it - also what the preview shows.
+export async function fetchResumeHtml(record: Record<string, unknown>): Promise<string> {
   // Distinct from the app's httpOnly session cookie that gates every page/API
   // route - this route authenticates via the client-side Firebase Auth SDK
   // instead (see AGENTS.md's PDF generation notes), so the two can desync:
@@ -27,7 +28,11 @@ export async function downloadResumePdf(record: Record<string, unknown>, filenam
   // The route returns the resume as HTML (see AGENTS.md - no headless-browser
   // dependency server-side); it's converted into a real, downloadable PDF here
   // in the browser instead.
-  const html = await res.text();
+  return res.text();
+}
+
+export async function downloadResumePdf(record: Record<string, unknown>, filenameHint: string): Promise<void> {
+  const html = await fetchResumeHtml(record);
   const safeHint = filenameHint.replace(/[^a-zA-Z0-9-_]+/g, "-").replace(/^-+|-+$/g, "") || "resume";
   await renderHtmlToPdf(html, `resume-${safeHint}.pdf`);
 }

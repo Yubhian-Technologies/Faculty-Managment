@@ -6,10 +6,10 @@
 //
 // The keys and their order match renderSection() calls in resumeTemplate.ts.
 export const RESUME_SECTIONS = [
-  { key: "personal", label: "Personal & Contact Details" },
-  { key: "education", label: "Education" },
+  { key: "personal", label: "Personal" },
+  { key: "education", label: "Academic Details" },
   { key: "experience", label: "Experience" },
-  { key: "teachingLoad", label: "Teaching Load" },
+  { key: "teachingLoad", label: "Teaching" },
   { key: "research", label: "Research & Innovation" },
   { key: "otherInfo", label: "Other Information" },
   { key: "financial", label: "Financial Standing" },

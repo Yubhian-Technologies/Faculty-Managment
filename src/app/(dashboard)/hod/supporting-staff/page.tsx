@@ -183,8 +183,8 @@ export default function HODSupportingStaffPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Supporting Staff"
-        description="Technical staff records for your department and the branches you manage"
+        title="Staff Profiles"
+        description="Staff records of the Department"
         actions={
           <div className="flex gap-2">
             <Button
@@ -207,7 +207,7 @@ export default function HODSupportingStaffPage() {
       <SegmentedTabs
         value={pathname?.startsWith("/hod/supporting-staff") ? "supporting" : "faculty"}
         options={[
-          { key: "faculty", label: "Teaching Faculty", href: "/hod/faculty" },
+          { key: "faculty", label: "Teaching Staff", href: "/hod/faculty" },
           { key: "supporting", label: "Supporting Staff", href: "/hod/supporting-staff" },
         ]}
       />
