@@ -12,6 +12,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { useAuthStore } from "@/store/authStore";
+import { useCollegeInfo } from "@/hooks/useCollegeInfo";
+import { ROLE_LABELS } from "@/types";
 import { useNavVisibility } from "@/hooks/useNavVisibility";
 import { isPathHidden } from "@/components/layout/navConfig";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
@@ -28,6 +30,7 @@ import { CollegeBrandingDashboardCard } from "@/components/college/CollegeBrandi
 // live stats and pending-approval lists.
 export function PrincipalDashboardHome({ fallbackName }: { fallbackName: string }) {
   const user = useAuthStore((s) => s.user);
+  const { collegeInfo } = useCollegeInfo();
   const { hiddenModules, hiddenItems } = useNavVisibility();
   const isHidden = (href: string) => !!user?.role && isPathHidden(href, user.role, hiddenModules, hiddenItems);
   // Each cached independently via the shared query client (lib/queryClient.ts,
@@ -65,7 +68,7 @@ export function PrincipalDashboardHome({ fallbackName }: { fallbackName: string 
     <div className="space-y-6">
       <PageHeader
         title={`Hello, ${user?.name?.split(" ")[0] ?? fallbackName}`}
-        description="Pending approvals and hiring status"
+        description={[user?.role ? ROLE_LABELS[user.role] : fallbackName, collegeInfo?.name].filter(Boolean).join(" - ")}
       />
 
       <CollegeBrandingDashboardCard />

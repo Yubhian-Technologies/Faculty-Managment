@@ -19,6 +19,16 @@ export function facultyDisplayName(
 ): string {
   const name = f?.legalName?.trim() || "";
   if (!name) return "";
-  const honorific = f?.honorific?.trim().replace(/\.+$/, "");
+  const raw = f?.honorific?.trim().replace(/\.+$/, "");
+  // Shown as "Mrs" / "Mr" / "Dr", whatever case it was typed or stored in.
+  const honorific = raw ? raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase() : "";
   return honorific ? `${honorific}.${name}` : name;
+}
+
+// A name already saved with its title baked in ("MRS.ANITHA", "DR. RAVI" - the
+// login's mirrored `name`) shown with that title as "Mrs" / "Dr": first capital,
+// then small letters. Only a leading, well-known title is touched.
+const LEADING_TITLE = /^(mrs|mr|ms|miss|dr|prof|smt|sri|shri)(?=[.\s])/i;
+export function normalizeNameTitle(name: string): string {
+  return name.replace(LEADING_TITLE, (t) => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase());
 }

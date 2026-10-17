@@ -455,7 +455,7 @@ function PrincipalFacultyContent() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Faculty Register"
+        title="Staff Profiles"
         description="Filter and manage teaching faculty across all departments"
         actions={
           <div className="flex items-center gap-2">
@@ -488,7 +488,7 @@ function PrincipalFacultyContent() {
         <SegmentedTabs
           value="faculty"
           options={[
-            { key: "faculty", label: "Teaching Faculty", href: "/principal/faculty" },
+            { key: "faculty", label: "Teaching Staff", href: "/principal/faculty" },
             { key: "supporting", label: "Supporting Staff", href: "/principal/faculty/supporting-staff" },
           ]}
         />

@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { UserPlus, Eye, Upload, Trash2, LogIn, FileDown, UserCog, History, Pencil } from "lucide-react";
+import { UserPlus, Eye, Upload, Trash2, LogIn, FileDown, UserCog, History, Pencil, ArrowUp, ArrowDown, X, ScanEye } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -13,15 +13,20 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Avatar } from "@/components/shared/Avatar";
 import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ExportFacultyDialog } from "@/components/faculty/ExportFacultyDialog";
 import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
-import { downloadFacultyResume } from "@/lib/faculty/downloadFacultyResume";
+import { downloadFacultyResume, previewFacultyResumeHtml } from "@/lib/faculty/downloadFacultyResume";
+import { ResumePreviewDialog } from "@/components/faculty/ResumePreviewDialog";
+import { DEFAULT_RESUME_SECTIONS } from "@/lib/pdf/resumeSections";
 import { ResumeSectionsDialog } from "@/components/faculty/ResumeSectionsDialog";
 import { FacultyDesignationCell, FacultyExperienceCell, FacultyStatusCell, JoiningLine } from "@/components/faculty/facultyListCells";
 import type { ResumeSectionKey } from "@/lib/pdf/resumeSections";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { toDate } from "@/lib/utils";
+import { allPreviousExperienceEntries, experienceBreakdown } from "@/lib/faculty/experienceCalc";
 import type { FacultyMember, CollegeType, Department } from "@/types";
 import { useListUrlSync } from "@/hooks/useListUrlSync";
 import { buildListUrl, readListChoice, readListString, withListBack } from "@/lib/listReturn";
@@ -40,15 +45,99 @@ const SELECT_CHECKBOX_CLASS =
 
 const LIST_PATH = "/hod/faculty";
 
-const STATUS_TABS = [
-  { key: "", label: "All" },
+// The Status dropdown. The first group are the stored statuses; "Inactive" is anyone no longer
+// working here (Resigned or Retired), and Ratified / Non-Ratified read the ratification status.
+const STATUS_OPTIONS = [
   { key: "INTERVIEW_DONE", label: "Interview Done" },
   { key: "ACTIVE", label: "Active" },
+  { key: "INACTIVE", label: "Inactive" },
+  { key: "RATIFIED", label: "Ratified" },
+  { key: "NOT_RATIFIED", label: "Non-Ratified" },
   { key: "RETAINERSHIP", label: "Retainership" },
   { key: "ON_LEAVE", label: "On Leave" },
   { key: "RESIGNED", label: "Resigned" },
   { key: "RETIRED", label: "Retired" },
 ];
+const GENDER_OPTIONS = ["Male", "Female"];
+const ALL = "__all";
+
+function matchesStatus(f: FacultyRow, key: string): boolean {
+  if (!key) return true;
+  const status = f.status as string | undefined;
+  if (key === "INACTIVE") return status === "RESIGNED" || status === "RETIRED";
+  if (key === "RATIFIED") return f.ratificationStatus === "Ratified";
+  if (key === "NOT_RATIFIED") return f.ratificationStatus === "Not Ratified";
+  return status === key;
+}
+
+function joiningMillis(f: FacultyRow): number {
+  return toDate(f.joiningDate as Parameters<typeof toDate>[0])?.getTime() ?? 0;
+}
+
+function experienceYears(f: FacultyRow): number {
+  return experienceBreakdown(allPreviousExperienceEntries(f.academicProfile), f.joiningDate).total;
+}
+
+type SortState = { key: "joining" | "experience"; dir: "desc" | "asc" } | null;
+
+// Off: a dropdown pill - pick a value and it turns blue (on, combined with the other blue ones).
+// On: a blue pill showing the choice; touch it to turn that one filter off.
+function FilterSelect({ label, allLabel, value, options, onChange }: {
+  label: string;
+  allLabel: string;
+  value: string;
+  options: { key: string; label: string }[];
+  onChange: (value: string) => void;
+}) {
+  if (value) {
+    return (
+      <button
+        type="button"
+        title={`Turn off ${label} filter`}
+        aria-label={`${label}: ${options.find((o) => o.key === value)?.label ?? value} - turn off`}
+        onClick={() => onChange("")}
+        className="flex h-9 items-center gap-2 rounded-full border border-primary bg-primary px-3 text-sm text-primary-foreground"
+      >
+        {options.find((o) => o.key === value)?.label ?? value}
+        <X className="h-3.5 w-3.5" />
+      </button>
+    );
+  }
+  return (
+    <Select value="" onValueChange={(v) => onChange(v === ALL ? "" : v)}>
+      <SelectTrigger className="h-9 w-auto min-w-[8.5rem] gap-2 rounded-full text-sm" aria-label={label}>
+        <SelectValue placeholder={label} />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={ALL}>{allLabel}</SelectItem>
+        {options.map((o) => <SelectItem key={o.key} value={o.key}>{o.label}</SelectItem>)}
+      </SelectContent>
+    </Select>
+  );
+}
+
+// Up arrow = high to low, down arrow = low to high; clicking the lit arrow again clears the sort.
+function SortPill({ label, active, onChange }: { label: string; active: "desc" | "asc" | null; onChange: (dir: "desc" | "asc" | null) => void }) {
+  const arrow = (dir: "desc" | "asc", Icon: typeof ArrowUp, title: string) => (
+    <button
+      type="button"
+      title={title}
+      aria-label={`${label}: ${title}`}
+      aria-pressed={active === dir}
+      onClick={() => onChange(active === dir ? null : dir)}
+      className={`rounded p-0.5 transition-colors ${active === dir ? "bg-white text-primary" : active ? "text-primary-foreground/80 hover:bg-white/20" : "text-muted-foreground hover:bg-muted"}`}
+    >
+      <Icon className="h-4 w-4" />
+    </button>
+  );
+  return (
+    <div className={`flex h-9 items-center gap-1.5 rounded-full border px-3 text-sm ${active ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background"}`}>
+      <span>{label}</span>
+      {arrow("desc", ArrowUp, "High to low")}
+      {arrow("asc", ArrowDown, "Low to high")}
+    </div>
+  );
+}
 
 function HODFacultyContent() {
   const router = useRouter();
@@ -58,12 +147,18 @@ function HODFacultyContent() {
   // the page then mirrors them back into the URL (listUrl below).
   const searchParams = useSearchParams();
   const [restored] = useState(() => ({
-    status: readListChoice(searchParams, "status", STATUS_TABS.map((t) => t.key).filter(Boolean), ""),
+    status: readListChoice(searchParams, "status", STATUS_OPTIONS.map((t) => t.key), ""),
     department: readListString(searchParams, "department", ""),
   }));
   const [faculty, setFaculty] = useState<FacultyRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>(restored.status);
+  const [genderFilter, setGenderFilter] = useState("");
+  const [qualFilter, setQualFilter] = useState("");
+  // "desc" = up arrow: most senior first (earliest joining / most experience), "asc" = down arrow: the reverse.
+  // Only what the person picked with the arrows. null = nothing picked: the list is then
+  // quietly ordered by most experience first (see effectiveSort), without lighting any arrow.
+  const [sort, setSort] = useState<SortState>(null);
   // "" = every department in the roster; otherwise one department's faculty.
   const [deptFilter, setDeptFilter] = useState<string>(restored.department);
   // Export-only selection - when empty, ExportFacultyDialog exports everyone
@@ -77,6 +172,8 @@ function HODFacultyContent() {
   // The row whose Download was clicked - the section picker opens against it,
   // and the actual generation waits until the choice is made.
   const [resumeTarget, setResumeTarget] = useState<FacultyRow | null>(null);
+  // The row whose resume is being previewed on screen (before any download).
+  const [previewTarget, setPreviewTarget] = useState<FacultyRow | null>(null);
   const [collegeName, setCollegeName] = useState("");
   const [collegeType, setCollegeType] = useState<CollegeType | undefined>(undefined);
   const myDepartments = useMyDepartments();
@@ -173,7 +270,7 @@ function HODFacultyContent() {
     return map;
   }, [allFacultyForHodLookup]);
 
-  async function load(status: string) {
+  async function load() {
     setIsLoading(true);
     try {
       // Default (unscoped) roster: a parent HOD runs their whole real
@@ -185,8 +282,8 @@ function HODFacultyContent() {
       // canHodManageFacultyDepartment, lib/departments/scope.ts). Each row's
       // own department badge (below) keeps it clear which one a given
       // faculty member actually belongs to.
+      // Every status is fetched; the Status dropdown filters on this page.
       const params = new URLSearchParams();
-      if (status) params.set("status", status);
       params.set("withSeats", "1");
       const res = await fetch(`/api/college/faculty?${params.toString()}`);
       const data = await res.json() as { faculty: FacultyRow[] };
@@ -202,13 +299,28 @@ function HODFacultyContent() {
     // Awaited in a wrapper so the loader's setState calls aren't reachable
     // synchronously from the effect body (react-hooks/set-state-in-effect).
     void (async () => {
-        await load(statusFilter);
-        // Switching tabs changes which rows exist at all - a stale selection
-        // from the previous tab would otherwise silently export rows no
-        // longer even shown.
-        setSelectedIds(new Set());
+        await load();
     })();
-  }, [statusFilter]);
+  }, []);
+
+  // Changing a filter changes which rows are shown - a stale selection would
+  // otherwise silently export rows no longer even shown.
+  // Every filter is its own switch: a blue one is on and they stack with each other; touch a blue
+  // one again to turn just that one off.
+  function clearFilters() {
+    setStatusFilter("");
+    setGenderFilter("");
+    setQualFilter("");
+    setSort(null);
+  }
+
+  function changeFilter(kind: "status" | "gender" | "qual" | "sort", value: string | SortState) {
+    if (kind === "status") setStatusFilter(value as string);
+    else if (kind === "gender") setGenderFilter(value as string);
+    else if (kind === "qual") setQualFilter(value as string);
+    else setSort(value as SortState);
+    setSelectedIds(new Set());
+  }
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -231,7 +343,7 @@ function HODFacultyContent() {
         next.delete(deleteTarget.id as string);
         return next;
       });
-      void load(statusFilter);
+      void load();
     } catch {
       toast({ variant: "destructive", title: "Failed to delete faculty record", description: "Network error - please try again." });
     } finally {
@@ -260,20 +372,55 @@ function HODFacultyContent() {
   // Departments present in the roster - shown as filter chips once the register
   // spans more than one (an HOD of several departments, or one with
   // sub-departments), so their faculty aren't lumped into a single list.
+  const qualificationOptions = useMemo(() => {
+    const byKey = new Map<string, string>();
+    for (const f of faculty) {
+      const q = (f.highestQualification as string | undefined)?.trim();
+      if (q && !byKey.has(q.toLowerCase())) byKey.set(q.toLowerCase(), q);
+    }
+    return Array.from(byKey.values()).sort((a, b) => a.localeCompare(b));
+  }, [faculty]);
+  const activeQualFilter = qualificationOptions.some((q) => q.toLowerCase() === qualFilter.toLowerCase()) ? qualFilter : "";
+
+  const filteredFaculty = useMemo(
+    () => faculty.filter((f) =>
+      matchesStatus(f, statusFilter) &&
+      (!genderFilter || f.gender === genderFilter) &&
+      (!activeQualFilter || (f.highestQualification as string | undefined)?.trim().toLowerCase() === activeQualFilter.toLowerCase())
+    ),
+    [faculty, statusFilter, genderFilter, activeQualFilter]
+  );
+
   const departmentChips = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const f of faculty) {
+    for (const f of filteredFaculty) {
       const d = (f.department as string | undefined)?.trim();
       if (d) counts.set(d, (counts.get(d) ?? 0) + 1);
     }
     const names = Array.from(counts.keys()).sort((a, b) => a.localeCompare(b));
     return names.map((name) => ({ name, count: counts.get(name) ?? 0 }));
-  }, [faculty]);
+  }, [filteredFaculty]);
   const activeDeptFilter = departmentChips.some((c) => c.name === deptFilter) ? deptFilter : "";
-  const visibleFaculty = useMemo(
-    () => (activeDeptFilter ? faculty.filter((f) => (f.department as string | undefined)?.trim() === activeDeptFilter) : faculty),
-    [faculty, activeDeptFilter]
+  const filtersApplied = !!statusFilter || !!genderFilter || !!activeQualFilter;
+  const effectiveSort = useMemo<NonNullable<SortState>>(
+    () => (sort ?? { key: "experience", dir: "desc" }),
+    [sort]
   );
+  const visibleFaculty = useMemo(() => {
+    const rows = activeDeptFilter ? filteredFaculty.filter((f) => (f.department as string | undefined)?.trim() === activeDeptFilter) : filteredFaculty;
+    const value = effectiveSort.key === "joining" ? joiningMillis : experienceYears;
+    // Up arrow ("desc") = the most senior first for both columns: the most experience, and so the
+    // earliest Date of Joining. Down arrow ("asc") is the reverse.
+    const sign = (effectiveSort.dir === "desc" ? -1 : 1) * (effectiveSort.key === "joining" ? -1 : 1);
+    // A person with no value (no joining date / no experience) always goes last, in either direction.
+    return [...rows].sort((a, b) => {
+      const va = value(a), vb = value(b);
+      if (!va || !vb) return (va ? 0 : 1) - (vb ? 0 : 1);
+      return sign * (va - vb);
+    });
+  }, [filteredFaculty, activeDeptFilter, effectiveSort]);
+
+  const noFilters = !filtersApplied && !sort;
 
   const allSelected = visibleFaculty.length > 0 && visibleFaculty.every((f) => selectedIds.has(f.id as string));
   const someSelected = visibleFaculty.some((f) => selectedIds.has(f.id as string)) && !allSelected;
@@ -382,6 +529,15 @@ function HODFacultyContent() {
             variant="ghost"
             size="sm"
             className="h-8 w-8 p-0"
+            title="Preview resume"
+            onClick={(e) => { e.stopPropagation(); setPreviewTarget(row); }}
+          >
+            <ScanEye className="h-4 w-4" /><span className="sr-only">Preview resume</span>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0"
             title="Download resume PDF"
             loading={downloadingResumeId === (row.id as string)}
             onClick={(e) => { e.stopPropagation(); setResumeTarget(row); }}
@@ -414,8 +570,8 @@ function HODFacultyContent() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Faculty Register"
-        description="Teaching staff records for your department"
+        title="Staff Profiles"
+        description="Staff records of the Department"
         actions={
           <div className="flex items-center gap-2">
             {selectedIds.size > 0 && (
@@ -430,7 +586,7 @@ function HODFacultyContent() {
               <Upload className="h-4 w-4 mr-2" />Import
             </Button>
             <ExportFacultyDialog
-              faculty={selectedIds.size > 0 ? faculty.filter((f) => selectedIds.has(f.id as string)) : visibleFaculty}
+              faculty={selectedIds.size > 0 ? filteredFaculty.filter((f) => selectedIds.has(f.id as string)) : visibleFaculty}
               isSelection={selectedIds.size > 0}
             />
             <Button onClick={() => router.push("/hod/faculty/new")}>
@@ -444,25 +600,47 @@ function HODFacultyContent() {
         <SegmentedTabs
           value={pathname?.startsWith("/hod/supporting-staff") ? "supporting" : "faculty"}
           options={[
-            { key: "faculty", label: "Teaching Faculty", href: "/hod/faculty" },
+            { key: "faculty", label: "Teaching Staff", href: "/hod/faculty" },
             { key: "supporting", label: "Supporting Staff", href: "/hod/supporting-staff" },
           ]}
         />
       )}
 
-      <div className="flex gap-2 flex-wrap">
-        {STATUS_TABS.map((tab) => (
-          <button key={tab.key} onClick={() => setStatusFilter(tab.key)}
-            className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${statusFilter === tab.key ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border hover:bg-muted"}`}>
-            {tab.label}
-          </button>
-        ))}
+      <div className="flex gap-2 flex-wrap items-center">
+        <button
+          onClick={() => { clearFilters(); setSelectedIds(new Set()); }}
+          className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${noFilters ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border hover:bg-muted"}`}>
+          All
+        </button>
+        <FilterSelect
+          label="Gender"
+          allLabel="All Genders"
+          value={genderFilter}
+          options={GENDER_OPTIONS.map((g) => ({ key: g, label: g }))}
+          onChange={(v) => changeFilter("gender", v)}
+        />
+        <FilterSelect
+          label="Qualification"
+          allLabel="All Qualifications"
+          value={activeQualFilter}
+          options={qualificationOptions.map((q) => ({ key: q, label: q }))}
+          onChange={(v) => changeFilter("qual", v)}
+        />
+        <SortPill label="Date of Joining" active={sort?.key === "joining" ? sort.dir : null} onChange={(dir) => changeFilter("sort", dir ? { key: "joining", dir } : null)} />
+        <SortPill label="Experience" active={sort?.key === "experience" ? sort.dir : null} onChange={(dir) => changeFilter("sort", dir ? { key: "experience", dir } : null)} />
+        <FilterSelect
+          label="Status"
+          allLabel="All Statuses"
+          value={statusFilter}
+          options={STATUS_OPTIONS}
+          onChange={(v) => changeFilter("status", v)}
+        />
       </div>
 
       {departmentChips.length > 1 && (
         <div className="flex gap-2 flex-wrap items-center">
           <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide mr-1">Department</span>
-          {[{ name: "", count: faculty.length }, ...departmentChips].map((c) => (
+          {[{ name: "", count: filteredFaculty.length }, ...departmentChips].map((c) => (
             <button key={c.name || "all"} onClick={() => setDeptFilter(c.name)}
               className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${activeDeptFilter === c.name ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border hover:bg-muted"}`}>
               {c.name || "All Departments"} <span className="opacity-70">({c.count})</span>
@@ -587,6 +765,16 @@ function HODFacultyContent() {
         onConfirm={() => void handleRemoveSubHod()}
         loading={isRemovingSubHod}
       />
+
+      {/* ── Resume preview ── */}
+      {previewTarget && (
+        <ResumePreviewDialog
+          personName={facultyDisplayName(previewTarget) || "this faculty member"}
+          loadHtml={() => previewFacultyResumeHtml(previewTarget, collegeName, DEFAULT_RESUME_SECTIONS)}
+          onOpenChange={(o) => { if (!o) setPreviewTarget(null); }}
+          onDownload={() => { setResumeTarget(previewTarget); setPreviewTarget(null); }}
+        />
+      )}
 
       {/* ── Resume section picker ── */}
       {resumeTarget && (
