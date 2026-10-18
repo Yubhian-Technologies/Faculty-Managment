@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyPriorResults, applyRevaluationTargets, groupByBranch, pickSubject, validateResultRows, type PriorResult, type RawResultRow, type ResultImportContext, type ResultStudent, type ResultSubjectOption } from "./importRows";
+import { applyPriorResults, applyRevaluationTargets, groupByBranch, pickSubject, validateResultRows, wrongBatchFile, type PriorResult, type RawResultRow, type ResultImportContext, type ResultStudent, type ResultSubjectOption } from "./importRows";
 import { normalizeResultRules, gradeTableFor, rulesOrStarter, STARTER_GRADE_TABLE, STARTER_RULES } from "./rules";
 
 const anil: ResultStudent = { id: "s1", rollNumber: "24A91A0501", name: "Anil", department: "CSE", courseId: "c-cse", regulation: "R23" };
@@ -288,13 +288,11 @@ describe("batch membership", () => {
     expect(r.failed).toEqual([]);
   });
 
-  it("refuses another batch, and a student with neither a batch nor a year of study", () => {
+  it("another batch, or none on record, is a note - the result still goes to the Roll No's student", () => {
     const r = validateResultRows([row(2, "24A91A0501", "MA101", "A"), row(3, "24A91A0502", "MA101", "A")],
       withBatch([{ ...anil, batch: "2023-2027" }, { ...bina, batch: undefined }]));
-    expect(r.failed.map((f) => f.error)).toEqual([
-      "24A91A0501 is in batch 2023-2027, not 2024-2028",
-      "24A91A0502 has no batch or year of study on record - set it on the student first",
-    ]);
+    expect(r.failed).toEqual([]);
+    expect(r.accepted.map((a) => [a.student.id, a.otherBatch])).toEqual([["s1", "2023-2027"], ["s2", ""]]);
   });
 
   it("no batch stored: taken from the section's batch, else worked out from the year of study", () => {
@@ -304,13 +302,24 @@ describe("batch membership", () => {
         { ...bina, batch: undefined, year: 3 },             // 2026-27, Year 3 -> 2024 intake
         { ...mba, batch: undefined, year: 2 },              // 2026-27, Year 2 -> 2025 intake
       ], { currentStartYear: 2026, courseIds: [], department: "" }));
-    expect(r.failed.map((f) => f.error)).toEqual(["24MBA001 is in Year 2 now, so batch 2025-, not 2024-2028"]);
-    expect(r.accepted.map((a) => a.student.id)).toEqual(["s1", "s2"]);
+    expect(r.failed).toEqual([]);
+    expect(r.accepted.map((a) => a.otherBatch)).toEqual([undefined, undefined, "Year 2 now (2025-)"]);
   });
 
-  it("accepts a detained student now in a later batch who has results filed under this one", () => {
+  it("a detained student now in a later batch with results already under this one gets no note", () => {
     const r = validateResultRows([row(2, "24A91A0501", "MA101", "A")], withBatch([{ ...anil, batch: "2025-2029" }], { batchHistory: new Set(["s1"]) }));
-    expect(r.failed).toEqual([]);
+    expect(r.accepted[0].otherBatch).toBeUndefined();
+  });
+
+  it("stops only a file that is mostly another batch (5+ students and over half)", () => {
+    const st = (n: number, batch: string): ResultStudent => ({ ...anil, id: `s${n}`, rollNumber: `R${n}`, batch });
+    const file = (other: number, same: number) => {
+      const students = [...Array.from({ length: other }, (_, i) => st(i, "2023-2027")), ...Array.from({ length: same }, (_, i) => st(100 + i, "2024-2028"))];
+      return validateResultRows(students.map((s, i) => row(i + 2, s.rollNumber, "MA101", "A")), withBatch(students)).accepted;
+    };
+    expect(wrongBatchFile(file(6, 4), "2024-2028")).toBe("6 of 10 students are not in batch 2024-2028 on record (most are 2023-2027) - check the batch picked for this file");
+    expect(wrongBatchFile(file(5, 5), "2024-2028")).toBeNull();   // not over half
+    expect(wrongBatchFile(file(3, 0), "2024-2028")).toBeNull();   // a few detained students on their own
   });
 
   it("reads the University SGPA from the first row that has it, and '-' as withheld", () => {
