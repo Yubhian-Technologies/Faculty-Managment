@@ -30,18 +30,18 @@ describe("fmtDate / joiningLabel", () => {
 
   it("an Interview Done faculty has only an expected joining date", () => {
     expect(joiningLabel("INTERVIEW_DONE")).toBe("Expected to join");
-    for (const s of ["ACTIVE", "ON_LEAVE", "RESIGNED", "RETIRED", "RETAINERSHIP", undefined]) expect(joiningLabel(s)).toBe("Joined");
+    for (const s of ["ACTIVE", "ON_LEAVE", "RESIGNED", "RETIRED", "RETAINERSHIP", undefined]) expect(joiningLabel(s)).toBe("DOJ");
   });
 });
 
 describe("JoiningLine", () => {
-  it("shows 'Joined' for a joined faculty and 'Expected to join' for Interview Done", () => {
-    expect(html(createElement(JoiningLine, { row: row() }))).toContain("Joined: 02 Apr 2026");
+  it("shows 'DOJ' for a joined faculty and 'Expected to join' for Interview Done", () => {
+    expect(html(createElement(JoiningLine, { row: row() }))).toContain("DOJ: 02 Apr 2026");
     expect(html(createElement(JoiningLine, { row: row({ status: "INTERVIEW_DONE" }) }))).toContain("Expected to join: 02 Apr 2026");
   });
   it("shows a dash rather than 'Invalid Date' when there is no joining date", () => {
     const out = html(createElement(JoiningLine, { row: row({ joiningDate: undefined }) }));
-    expect(out).toContain("Joined: -");
+    expect(out).toContain("DOJ: -");
     expect(out).not.toMatch(/Invalid|NaN|undefined/);
   });
 });

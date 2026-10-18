@@ -2831,6 +2831,11 @@ export interface Section {
   labBatches?: string[];
   classLeaderUid?: string;
   classLeaderName?: string;
+  // Class Representatives (CR-1 / CR-2) - a record on the section, apart from the Class Leader login above.
+  // The HOD sets how many the section has (0-2; absent = 2); the faculty incharge (or HOD) then picks
+  // that many students from the section's roster. Name / roll are copied so the header needs no lookup.
+  classRepresentativeCount?: number;
+  classRepresentatives?: { studentId: string; name: string; rollNumber?: string }[];
   studentCount: number;
   // Secondary — the branch this section feeds, e.g. a shared first-year Basic
   // Science section whose cohort promotes into CSE. Chosen per section from the
@@ -3355,6 +3360,7 @@ export type AuditAction =
   | "LAB_ATTENDANCE_ALLOCATED"
   | "LAB_BATCH_MODE_SET"
   | "SECTION_LAB_BATCHES_SET"
+  | "SECTION_CLASS_REPS_SET"
   // Supporting Staff module
   | "SUPPORTING_STAFF_CREATED"
   | "SUPPORTING_STAFF_UPDATED"

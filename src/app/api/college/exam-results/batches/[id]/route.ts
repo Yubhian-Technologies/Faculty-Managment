@@ -78,13 +78,17 @@ export async function GET(_request: Request, { params }: Params) {
         ? [batch.subDepartment]
         : [batch.department, ...(await db.collection("colleges").doc(session.collegeId).collection("departments")
             .where("parentDepartmentId", "==", batch.departmentId).get()).docs.map((d) => String(d.get("name") ?? "")).filter(Boolean)];
-      const [own, core] = await Promise.all([
+      const [own, core, regulars] = await Promise.all([
         studentsCol.where("department", "in", names.slice(0, 30)).get(),
         studentsCol.where("secondaryDepartment", "in", names.slice(0, 30)).get(),
+        recordsCol(db, session.collegeId).where("courseKey", "==", batch.courseKey).where("semester", "==", batch.semester)
+          .where("examType", "==", "REGULAR").select("studentId", "batch").get(),
       ]);
+      // A detained student who wrote this semester's Regular under another batch is not missing here.
+      const wroteEarlier = new Set(regulars.docs.filter((d) => d.get("batch") && d.get("batch") !== batch.batch).map((d) => String(d.get("studentId"))));
       const seen = new Set<string>();
       for (const d of [...own.docs, ...core.docs]) {
-        if (seen.has(d.id) || inSheet.has(d.id)) continue;
+        if (seen.has(d.id) || inSheet.has(d.id) || wroteEarlier.has(d.id)) continue;
         seen.add(d.id);
         const st = d.data() as { rollNumber?: string; name?: string; batch?: string; status?: string; courseId?: string; year?: number; studentType?: string };
         if (st.status === "DISCONTINUED") continue;

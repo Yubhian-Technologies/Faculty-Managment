@@ -44,10 +44,10 @@ export function fmtDate(val: unknown): string {
 // INTERVIEW_DONE faculty haven't actually joined yet - their joiningDate is the
 // proposed date from the offer letter, so it reads as an expectation, not a fact.
 export function joiningLabel(status: unknown): string {
-  return status === "INTERVIEW_DONE" ? "Expected to join" : "Joined";
+  return status === "INTERVIEW_DONE" ? "Expected to join" : "DOJ";
 }
 
-/** "Joined: 02 Apr 2026" / "Expected to join: 01 Jul 2026". */
+/** "DOJ: 02 Apr 2026" / "Expected to join: 01 Jul 2026". */
 export function JoiningLine({ row, className = "text-xs text-muted-foreground" }: { row: FacultyListRow; className?: string }) {
   return <p className={className}>{joiningLabel(row.status)}: {fmtDate(row.joiningDate)}</p>;
 }

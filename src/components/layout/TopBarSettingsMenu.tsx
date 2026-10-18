@@ -7,7 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ChangePasswordDialog } from "@/components/shared/ChangePasswordDialog";
 import { CollegeAdminAccountMenu } from "@/components/layout/CollegeAdminAccountMenu";
-import { getSettingsHref } from "@/components/layout/navConfig";
+import { getSettingsHref, getNavItemsForRole, isSettingsNavItem } from "@/components/layout/navConfig";
+import { useWorkContext } from "@/hooks/useWorkContext";
+import { departmentOfContext } from "@/lib/roles/activeHodDepartment";
+import type { UserRole } from "@/types";
 import { useAuthStore } from "@/store/authStore";
 
 const ITEM_CLASS =
@@ -29,6 +32,7 @@ const ITEM_CLASS =
 //     it.
 export function TopBarSettingsMenu({ hiddenItems = [] }: { hiddenItems?: string[] }) {
   const user = useAuthStore((s) => s.user);
+  const { active } = useWorkContext();
   const [menuOpen, setMenuOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
@@ -37,7 +41,11 @@ export function TopBarSettingsMenu({ hiddenItems = [] }: { hiddenItems?: string[
 
   const isCollegeAdmin = user.realRole === "COLLEGE_ADMIN";
   const isSuperAdmin = user.realRole === "SUPER_ADMIN";
-  const settingsHref = getSettingsHref(user.role, user.roles ?? user.seatRoles ?? []);
+  // Working as a seat (e.g. a Vice Principal working as Head of Department): that seat's own Settings page, not the
+  // login's primary role's. "My Work" / no seats keep the primary role's.
+  const activeSeat = active && active !== "ME" ? ((departmentOfContext(active) !== null ? "HOD" : active) as UserRole) : null;
+  const seatSettingsHref = activeSeat ? getNavItemsForRole(activeSeat).find(isSettingsNavItem)?.href ?? null : null;
+  const settingsHref = seatSettingsHref ?? getSettingsHref(user.role, user.roles ?? user.seatRoles ?? []);
   const showSettings = !!settingsHref && !hiddenItems.includes(settingsHref);
 
   if (!showSettings && !isCollegeAdmin && !isSuperAdmin) return null;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { resolveListBack } from "@/lib/listReturn";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -10,13 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { useAuthStore } from "@/store/authStore";
 import { buildCourseGroups } from "@/lib/departments/hodScope";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
-import type { Course, Department, Section, StudentRecord } from "@/types";
+import type { Course, Department, Section } from "@/types";
 
 type SectionRow = Section & { id: string };
 // `id` is the facultyMembers doc id. `userUid` is the faculty member's actual
@@ -47,10 +45,6 @@ const EMPTY_FORM: SectionForm = {
 
 type ClassDetails = Pick<SectionForm, "facultyInchargeUid" | "facultyInchargeName" | "classroomNumber">;
 const EMPTY_CLASS_DETAILS: ClassDetails = { facultyInchargeUid: "", facultyInchargeName: "", classroomNumber: "" };
-
-type ClassLeaderUser = { uid: string; name: string; email: string };
-type NewClassLeaderForm = { email: string; password: string; name?: string };
-const EMPTY_NEW_CLASS_LEADER: NewClassLeaderForm = { email: "", password: "", name: "" };
 
 // A value shown as plain text, in the same box shape as the inputs around it.
 function ReadOnlyValue({ children }: { children: React.ReactNode }) {
@@ -96,23 +90,6 @@ export default function EditSectionPage() {
   const [editingClassDetails, setEditingClassDetails] = useState(false);
   const [savedClassDetails, setSavedClassDetails] = useState<ClassDetails>(EMPTY_CLASS_DETAILS);
 
-  // Class Leader (CR) login - bound to this section via Section.classLeaderUid.
-  const [classLeaderUid, setClassLeaderUid] = useState<string | undefined>(undefined);
-  const [classLeaderUser, setClassLeaderUser] = useState<ClassLeaderUser | null>(null);
-  const [classLeaderLoading, setClassLeaderLoading] = useState(false);
-  const [newClassLeader, setNewClassLeader] = useState<NewClassLeaderForm>(EMPTY_NEW_CLASS_LEADER);
-  const [creatingClassLeader, setCreatingClassLeader] = useState(false);
-  const [resetPasswordOpen, setResetPasswordOpen] = useState(false);
-  const [resetPasswordValue, setResetPasswordValue] = useState("");
-  const [resettingPassword, setResettingPassword] = useState(false);
-  const [removeClassLeaderOpen, setRemoveClassLeaderOpen] = useState(false);
-  const [removingClassLeader, setRemovingClassLeader] = useState(false);
-
-  // Section Students for CR selection
-  const [sectionStudents, setSectionStudents] = useState<StudentRecord[]>([]);
-  const [selectedStudentId, setSelectedStudentId] = useState<string>("none");
-  const [studentsLoading, setStudentsLoading] = useState(false);
-
   // Faculty come from the department picked above the Faculty Incharge list - an HOD of
   // several departments (e.g. IT and CSBS) chooses which department's faculty to pick from.
   useEffect(() => {
@@ -146,7 +123,6 @@ export default function EditSectionPage() {
         setEnrolledCount(s.studentCount ?? 0);
         setOwnerDept(s.department ?? "");
         setBranch(s.secondaryDepartments?.[0] ?? "");
-        setClassLeaderUid(s.classLeaderUid);
         const loaded: SectionForm = {
           courseId: s.courseId ?? "",
           name: s.name,
@@ -168,30 +144,6 @@ export default function EditSectionPage() {
       .finally(() => setLoading(false));
   }, [sectionId, router, listHref]);
 
-  // Fetch section students for CR selection dropdown
-  useEffect(() => {
-    if (!sectionName || !form.year) return;
-    setStudentsLoading(true);
-    fetch(`/api/college/students?section=${encodeURIComponent(sectionName)}&year=${encodeURIComponent(form.year)}`)
-      .then((r) => r.json() as Promise<{ students?: StudentRecord[] }>)
-      .then((d) => {
-        const list = d.students ?? [];
-        const filtered = list.filter(
-          (s) =>
-            s.section === sectionName ||
-            s.department === ownerDept ||
-            s.secondaryDepartment === ownerDept ||
-            (branch && (s.department === branch || s.secondaryDepartment === branch))
-        );
-        const finalStudents = (filtered.length > 0 ? filtered : list).sort((a, b) =>
-          (a.name ?? "").localeCompare(b.name ?? "")
-        );
-        setSectionStudents(finalStudents);
-      })
-      .catch(() => {})
-      .finally(() => setStudentsLoading(false));
-  }, [sectionName, form.year, ownerDept, branch]);
-
   useEffect(() => {
     if (!ownerDept) return;
     const deptId = departments.find((d) => d.name === ownerDept)?.id;
@@ -201,133 +153,6 @@ export default function EditSectionPage() {
       .then((d) => setCourses((d.courses ?? []).sort((a, b) => a.name.localeCompare(b.name))))
       .catch(() => toast({ variant: "destructive", title: "Failed to load courses" }));
   }, [ownerDept, departments]);
-
-  const loadClassLeaderUser = useCallback(async (uid: string) => {
-    setClassLeaderLoading(true);
-    try {
-      const r = await fetch(`/api/college/users/${uid}`);
-      const d = await r.json() as { user?: { uid: string; name: string; email: string } };
-      setClassLeaderUser(d.user ? { uid: d.user.uid, name: d.user.name, email: d.user.email } : null);
-    } catch {
-      setClassLeaderUser(null);
-    } finally {
-      setClassLeaderLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!classLeaderUid) return;
-    void (async () => { await loadClassLeaderUser(classLeaderUid); })();
-  }, [classLeaderUid, loadClassLeaderUser]);
-
-  function handleStudentSelect(studentId: string) {
-    setSelectedStudentId(studentId);
-    if (studentId === "none") {
-      setNewClassLeader(EMPTY_NEW_CLASS_LEADER);
-      return;
-    }
-    const st = sectionStudents.find((s) => s.id === studentId);
-    if (st) {
-      const defaultEmail = st.email || (st.rollNumber ? `${st.rollNumber.toLowerCase()}@student.college` : "");
-      setNewClassLeader((c) => ({
-        ...c,
-        email: defaultEmail,
-        name: st.name,
-      }));
-    }
-  }
-
-  async function handleCreateClassLeader(e: React.FormEvent) {
-    e.preventDefault();
-    if (!newClassLeader.email.trim() || !newClassLeader.password) {
-      toast({ variant: "destructive", title: "Email and password are both required" });
-      return;
-    }
-    if (newClassLeader.password.length < 6) {
-      toast({ variant: "destructive", title: "Password must be at least 6 characters" });
-      return;
-    }
-    setCreatingClassLeader(true);
-    try {
-      const res = await fetch("/api/college/users", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: newClassLeader.email.trim(),
-          password: newClassLeader.password,
-          role: "CLASS_LEADER",
-          sectionId,
-          name: newClassLeader.name?.trim() || undefined,
-        }),
-      });
-      const json = await res.json() as { uid?: string; error?: string };
-      if (!res.ok || !json.uid) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to create Class Leader login" });
-        return;
-      }
-      toast({ variant: "success", title: "Class Leader account created" });
-      setNewClassLeader(EMPTY_NEW_CLASS_LEADER);
-      setSelectedStudentId("none");
-      setClassLeaderUid(json.uid);
-    } catch {
-      toast({ variant: "destructive", title: "Network error, please try again" });
-    } finally {
-      setCreatingClassLeader(false);
-    }
-  }
-
-  async function handleResetPassword() {
-    if (!classLeaderUser) return;
-    if (resetPasswordValue.length < 6) {
-      toast({ variant: "destructive", title: "Password must be at least 6 characters" });
-      return;
-    }
-    setResettingPassword(true);
-    try {
-      const res = await fetch(`/api/college/users/${classLeaderUser.uid}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ newPassword: resetPasswordValue }),
-      });
-      if (!res.ok) {
-        const json = await res.json() as { error?: string };
-        toast({ variant: "destructive", title: json.error ?? "Failed to reset password" });
-        return;
-      }
-      toast({ variant: "success", title: "Password reset" });
-      setResetPasswordOpen(false);
-      setResetPasswordValue("");
-    } catch {
-      toast({ variant: "destructive", title: "Network error, please try again" });
-    } finally {
-      setResettingPassword(false);
-    }
-  }
-
-  async function handleRemoveClassLeader() {
-    if (!classLeaderUser) return;
-    setRemovingClassLeader(true);
-    try {
-      const res = await fetch(`/api/college/users/${classLeaderUser.uid}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isActive: false }),
-      });
-      if (!res.ok) {
-        const json = await res.json() as { error?: string };
-        toast({ variant: "destructive", title: json.error ?? "Failed to remove Class Leader login" });
-        return;
-      }
-      toast({ variant: "success", title: "Class Leader login removed" });
-      setClassLeaderUser(null);
-      setClassLeaderUid(undefined);
-      setRemoveClassLeaderOpen(false);
-    } catch {
-      toast({ variant: "destructive", title: "Network error, please try again" });
-    } finally {
-      setRemovingClassLeader(false);
-    }
-  }
 
   function setF(patch: Partial<SectionForm>) {
     setForm((f) => ({ ...f, ...patch }));
@@ -577,79 +402,6 @@ export default function EditSectionPage() {
             </Card>
           </div>
 
-          {/* Right Column: Class Leader Login */}
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Class Leader Login</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {classLeaderLoading ? (
-                  <div className="h-16 animate-pulse rounded-md border bg-muted/30" />
-                ) : classLeaderUser ? (
-                  <div className="space-y-4">
-                    <div className="rounded-md border px-3 py-2">
-                      <p className="text-sm font-medium">{classLeaderUser.name}</p>
-                      <p className="text-xs text-muted-foreground">{classLeaderUser.email}</p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button type="button" variant="outline" size="sm" onClick={() => setResetPasswordOpen(true)}>
-                        Reset Password
-                      </Button>
-                      <Button type="button" variant="destructive" size="sm" onClick={() => setRemoveClassLeaderOpen(true)}>
-                        Remove
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <p className="text-xs text-muted-foreground">
-                      No Class Leader (CR) login yet for this section. Select a student from this section to create their account.
-                    </p>
-                    <div className="space-y-2">
-                      <Label>Select Student (CR)</Label>
-                      <Select value={selectedStudentId} onValueChange={handleStudentSelect}>
-                        <SelectTrigger>
-                          <SelectValue placeholder={studentsLoading ? "Loading section students…" : "Select student"} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">- Select student -</SelectItem>
-                          {sectionStudents.map((st) => (
-                            <SelectItem key={st.id} value={st.id}>
-                              {st.name} {st.rollNumber ? `(${st.rollNumber})` : st.email ? `(${st.email})` : ""}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Email</Label>
-                      <Input
-                        type="email"
-                        autoComplete="off"
-                        value={newClassLeader.email}
-                        onChange={(e) => setNewClassLeader((c) => ({ ...c, email: e.target.value }))}
-                        placeholder="classleader@college.edu"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Temporary Password</Label>
-                      <Input
-                        type="password"
-                        autoComplete="new-password"
-                        value={newClassLeader.password}
-                        onChange={(e) => setNewClassLeader((c) => ({ ...c, password: e.target.value }))}
-                        placeholder="Min 6 characters"
-                      />
-                    </div>
-                    <Button type="button" size="sm" loading={creatingClassLeader} onClick={(e) => void handleCreateClassLeader(e)}>
-                      Create Class Leader
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
         </div>
 
         <div className="flex flex-col-reverse gap-3 border-t pt-4 sm:flex-row sm:justify-end">
@@ -657,39 +409,6 @@ export default function EditSectionPage() {
           <Button type="submit" loading={saving}>Save Changes</Button>
         </div>
       </form>
-
-      <Dialog open={resetPasswordOpen} onOpenChange={setResetPasswordOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Reset Class Leader Password</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label>New Password</Label>
-            <Input
-              type="password"
-              autoComplete="new-password"
-              value={resetPasswordValue}
-              onChange={(e) => setResetPasswordValue(e.target.value)}
-              placeholder="Min 6 characters"
-            />
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setResetPasswordOpen(false)}>Cancel</Button>
-            <Button type="button" loading={resettingPassword} onClick={() => void handleResetPassword()}>Reset Password</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <ConfirmDialog
-        open={removeClassLeaderOpen}
-        onOpenChange={setRemoveClassLeaderOpen}
-        title="Remove Class Leader login?"
-        description={`This deactivates ${classLeaderUser?.name ?? "this"}'s login and frees up this section for a new Class Leader.`}
-        confirmLabel="Remove"
-        variant="destructive"
-        onConfirm={() => void handleRemoveClassLeader()}
-        loading={removingClassLeader}
-      />
     </div>
   );
 }
