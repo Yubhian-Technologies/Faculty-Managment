@@ -28,6 +28,7 @@ import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { toDate } from "@/lib/utils";
 import { allPreviousExperienceEntries, experienceBreakdown } from "@/lib/faculty/experienceCalc";
 import type { FacultyMember, CollegeType, Department } from "@/types";
+import { DESIGNATION_LABELS } from "@/types";
 import { useListUrlSync } from "@/hooks/useListUrlSync";
 import { buildListUrl, readListChoice, readListString, withListBack } from "@/lib/listReturn";
 
@@ -155,6 +156,7 @@ function HODFacultyContent() {
   const [statusFilter, setStatusFilter] = useState<string>(restored.status);
   const [genderFilter, setGenderFilter] = useState("");
   const [qualFilter, setQualFilter] = useState("");
+  const [designationFilter, setDesignationFilter] = useState("");
   // "desc" = up arrow: most senior first (earliest joining / most experience), "asc" = down arrow: the reverse.
   // Only what the person picked with the arrows. null = nothing picked: the list is then
   // quietly ordered by most experience first (see effectiveSort), without lighting any arrow.
@@ -311,13 +313,15 @@ function HODFacultyContent() {
     setStatusFilter("");
     setGenderFilter("");
     setQualFilter("");
+    setDesignationFilter("");
     setSort(null);
   }
 
-  function changeFilter(kind: "status" | "gender" | "qual" | "sort", value: string | SortState) {
+  function changeFilter(kind: "status" | "gender" | "qual" | "designation" | "sort", value: string | SortState) {
     if (kind === "status") setStatusFilter(value as string);
     else if (kind === "gender") setGenderFilter(value as string);
     else if (kind === "qual") setQualFilter(value as string);
+    else if (kind === "designation") setDesignationFilter(value as string);
     else setSort(value as SortState);
     setSelectedIds(new Set());
   }
@@ -382,13 +386,25 @@ function HODFacultyContent() {
   }, [faculty]);
   const activeQualFilter = qualificationOptions.some((q) => q.toLowerCase() === qualFilter.toLowerCase()) ? qualFilter : "";
 
+  // Only the designations the roster actually holds (stored value -> display label).
+  const designationOptions = useMemo(() => {
+    const byKey = new Map<string, string>();
+    for (const f of faculty) {
+      const d = (f.designation as string | undefined)?.trim();
+      if (d && !byKey.has(d)) byKey.set(d, DESIGNATION_LABELS[d] ?? d);
+    }
+    return Array.from(byKey, ([key, label]) => ({ key, label })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [faculty]);
+  const activeDesignationFilter = designationOptions.some((o) => o.key === designationFilter) ? designationFilter : "";
+
   const filteredFaculty = useMemo(
     () => faculty.filter((f) =>
       matchesStatus(f, statusFilter) &&
       (!genderFilter || f.gender === genderFilter) &&
-      (!activeQualFilter || (f.highestQualification as string | undefined)?.trim().toLowerCase() === activeQualFilter.toLowerCase())
+      (!activeQualFilter || (f.highestQualification as string | undefined)?.trim().toLowerCase() === activeQualFilter.toLowerCase()) &&
+      (!activeDesignationFilter || (f.designation as string | undefined)?.trim() === activeDesignationFilter)
     ),
-    [faculty, statusFilter, genderFilter, activeQualFilter]
+    [faculty, statusFilter, genderFilter, activeQualFilter, activeDesignationFilter]
   );
 
   const departmentChips = useMemo(() => {
@@ -401,7 +417,7 @@ function HODFacultyContent() {
     return names.map((name) => ({ name, count: counts.get(name) ?? 0 }));
   }, [filteredFaculty]);
   const activeDeptFilter = departmentChips.some((c) => c.name === deptFilter) ? deptFilter : "";
-  const filtersApplied = !!statusFilter || !!genderFilter || !!activeQualFilter;
+  const filtersApplied = !!statusFilter || !!genderFilter || !!activeQualFilter || !!activeDesignationFilter;
   const effectiveSort = useMemo<NonNullable<SortState>>(
     () => (sort ?? { key: "experience", dir: "desc" }),
     [sort]
@@ -625,6 +641,13 @@ function HODFacultyContent() {
           value={activeQualFilter}
           options={qualificationOptions.map((q) => ({ key: q, label: q }))}
           onChange={(v) => changeFilter("qual", v)}
+        />
+        <FilterSelect
+          label="Designation"
+          allLabel="All Designations"
+          value={activeDesignationFilter}
+          options={designationOptions}
+          onChange={(v) => changeFilter("designation", v)}
         />
         <SortPill label="Date of Joining" active={sort?.key === "joining" ? sort.dir : null} onChange={(dir) => changeFilter("sort", dir ? { key: "joining", dir } : null)} />
         <SortPill label="Experience" active={sort?.key === "experience" ? sort.dir : null} onChange={(dir) => changeFilter("sort", dir ? { key: "experience", dir } : null)} />
