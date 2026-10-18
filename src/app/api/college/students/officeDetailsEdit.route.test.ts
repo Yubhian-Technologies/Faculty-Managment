@@ -84,7 +84,7 @@ describe("Name is saved - and reaches every copy of it", () => {
     expect(h.auth.calls).toHaveLength(0);
   });
 
-  it("the name and a Roll No change together: one write, the new roll's entry carries the new name, one Auth call", async () => {
+  it("the name and a Regd. No change together: one write, the new roll's entry carries the new name, one Auth call", async () => {
     const res = await patch("s1", { name: "Anil Kumar", rollNumber: "R1-NEW" });
     expect(res.status).toBe(200);
     expect(h.db.get(`${C}/students/s1`)).toMatchObject({ name: "Anil Kumar", rollNumber: "R1-NEW", loginEmail: "r1new@students.internal" });
@@ -247,7 +247,7 @@ describe("Nothing is dropped without a word", () => {
     expect(body.rejected).toEqual([]);
   });
 
-  it("a Roll No sent by a role that may not change it is reported as ignored; the other fields still save", async () => {
+  it("a Regd. No sent by a role that may not change it is reported as ignored; the other fields still save", async () => {
     h.session = { collegeId: "c1", uid: "hod1", role: "HOD" };
     const res = await patch("s2", { rollNumber: "HACKED-1", gender: "Male" });
     expect(res.status).toBe(200);
@@ -260,10 +260,10 @@ describe("Nothing is dropped without a word", () => {
 
 describe("A College Admin login (College Office account + College Admin seat) edits as the Office", () => {
   // requireRole evaluates such a login as PRINCIPAL (the most senior role the route allows) but lists every role it
-  // really holds in `roles` - the Roll No change used to be dropped for them while every other field saved.
+  // really holds in `roles` - the Regd. No change used to be dropped for them while every other field saved.
   const collegeAdmin = { collegeId: "c1", uid: "admin1", role: "PRINCIPAL", roles: ["PRINCIPAL", "COLLEGE_OFFICE"] };
 
-  it("a Roll No change is saved, with the login following it and the name, exactly as for the Office", async () => {
+  it("a Regd. No change is saved, with the login following it and the name, exactly as for the Office", async () => {
     h.session = collegeAdmin;
     const res = await patch("s1", { rollNumber: "R1-NEW", name: "Anil Kumar", gender: "Male" });
     expect(res.status).toBe(200);
@@ -277,7 +277,7 @@ describe("A College Admin login (College Office account + College Admin seat) ed
     expect(audits().map((a) => a.action)).toEqual(expect.arrayContaining(["STUDENT_ROLL_CHANGED", "STUDENT_DETAILS_UPDATED"]));
   });
 
-  it("gets the same checks: a Roll No held in another college is refused (naming the college) and nothing is saved", async () => {
+  it("gets the same checks: a Regd. No held in another college is refused (naming the college) and nothing is saved", async () => {
     h.session = collegeAdmin;
     const res = await patch("s2", { rollNumber: "z-9", gender: "Male" });
     expect(res.status).toBe(400);
@@ -306,7 +306,7 @@ describe("A College Admin login (College Office account + College Admin seat) ed
 });
 
 describe("A refusal keeps the whole save out", () => {
-  it("a Roll No held in another college names that college (never the student), and nothing else is saved", async () => {
+  it("a Regd. No held in another college names that college (never the student), and nothing else is saved", async () => {
     const res = await patch("s2", { rollNumber: "z-9", name: "Bala Krishna", gender: "Male" });
     expect(res.status).toBe(400);
     const body = await res.json();
@@ -317,7 +317,7 @@ describe("A refusal keeps the whole save out", () => {
     expect(h.db.get("studentUsernames/R2")?.name).toBe("Bala");
   });
 
-  it("a Roll No problem and a field problem are reported together", async () => {
+  it("a Regd. No problem and a field problem are reported together", async () => {
     const res = await patch("s2", { rollNumber: "r-1", scholarship: "maybe" });
     expect(res.status).toBe(400);
     const body = await res.json();

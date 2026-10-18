@@ -328,7 +328,7 @@ export default function SectionRosterPage() {
             <div className="relative w-full sm:w-64">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search roll no, name..."
+                placeholder="Search Regd. No, name..."
                 value={search}
                 onChange={(e) => {
                   setSearch(e.target.value);
@@ -367,7 +367,7 @@ export default function SectionRosterPage() {
                 <table className="w-full text-sm">
                   <thead className="bg-muted/50">
                     <tr>
-                      <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Roll No.</th>
+                      <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Regd. No.</th>
                       <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Name</th>
                       {students.some((s) => s.secondaryDepartment) && (
                         <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Registered Branch</th>

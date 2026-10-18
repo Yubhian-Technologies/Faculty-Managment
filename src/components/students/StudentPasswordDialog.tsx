@@ -11,7 +11,7 @@ import { STUDENT_PASSWORD_MIN_LENGTH, studentPasswordError } from "@/lib/student
 // The College Office types the password a student's login is created (or reset)
 // with - the system never invents one. It is sent straight to the server, which
 // hands it to Firebase Auth; it is not stored, shown again or emailed. Students
-// sign in with their Roll Number and this password and can change it themselves.
+// sign in with their Regd. No and this password and can change it themselves.
 export function StudentPasswordDialog({
   open,
   title,

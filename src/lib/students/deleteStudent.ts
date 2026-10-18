@@ -9,7 +9,7 @@ import { REGISTRY_COLLECTION, registryRef } from "@/lib/students/rollIdentity";
 //   - the student document and its departmentHistory entries,
 //   - their login: the Firebase Auth user, colleges/{id}/users/{uid} and systemUsers/{uid}
 //     (only when those are student profiles, never a staff member's),
-//   - their roll number's registry entry (studentUsernames), so the number is free again.
+//   - their Regd. No's registry entry (studentUsernames), so the number is free again.
 // Records that merely REFER to the student by id (attendance sessions, marks, library
 // history, uploaded documents) belong to other modules and are left as they are.
 //

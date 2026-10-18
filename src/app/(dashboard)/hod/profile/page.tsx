@@ -12,8 +12,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import type { Department } from "@/types";
 import { MyResumeDownloadButton } from "@/components/faculty/MyResumeDownloadButton";
+import { FacultyProfileRedirect } from "@/components/faculty/FacultyProfileRedirect";
 
-export default function HodProfilePage() {
+function HodProfilePageContent() {
   const { user } = useAuth();
   const myDepartments = useMyDepartments();
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -60,4 +61,9 @@ export default function HodProfilePage() {
       <MyProfileModuleTiles basePath="/hod/profile" />
     </div>
   );
+}
+
+// A login that has a faculty record is taken to the one faculty profile (the avatar's); anyone else keeps this page.
+export default function HodProfilePage() {
+  return <FacultyProfileRedirect><HodProfilePageContent /></FacultyProfileRedirect>;
 }

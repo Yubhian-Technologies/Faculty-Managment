@@ -154,6 +154,7 @@ export default function PrincipalStaffModuleEditPage() {
         <PageHeader
           title={`Edit ${moduleDef.label}`}
           description={name}
+          note={moduleDef.description}
           actions={
             <Button variant="outline" asChild>
               <Link href={`/principal/staff/${uid}/${moduleKey}`}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
@@ -170,6 +171,7 @@ export default function PrincipalStaffModuleEditPage() {
       <PageHeader
         title={`Edit ${moduleDef.label}`}
         description={name}
+        note={moduleDef.description}
         actions={
           <Button variant="outline" asChild>
             <Link href={`/principal/staff/${uid}/${moduleKey}`}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>

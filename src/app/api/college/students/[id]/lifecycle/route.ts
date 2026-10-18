@@ -92,7 +92,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           .where("year", "==", target.year)
           .get();
         if (dup.docs.some((d) => d.id !== id)) {
-          return NextResponse.json({ error: "Roll number already exists in the target section" }, { status: 400 });
+          return NextResponse.json({ error: "Regd. No already exists in the target section" }, { status: 400 });
         }
       }
       batch.update(studentRef, plan.update);

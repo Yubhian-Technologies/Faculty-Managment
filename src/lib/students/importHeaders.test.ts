@@ -58,13 +58,13 @@ describe("resolveStudentImportHeaders", () => {
   });
 
   it("leaves Caste alone when the file has its own Sub Caste column, or no Category", () => {
-    const own = resolveStudentImportHeaders(["Roll No", "Caste", "Sub Caste"], columns).keyMap;
+    const own = resolveStudentImportHeaders(["Regd. No", "Caste", "Sub Caste"], columns).keyMap;
     expect(own).toEqual({ 0: "rollNumber", 1: "caste", 2: "subCaste" });
-    expect(resolveStudentImportHeaders(["Roll No", "Caste"], columns).keyMap).toEqual({ 0: "rollNumber", 1: "caste" });
+    expect(resolveStudentImportHeaders(["Regd. No", "Caste"], columns).keyMap).toEqual({ 0: "rollNumber", 1: "caste" });
   });
 
   it("still reports a column it does not know", () => {
-    expect(resolveStudentImportHeaders(["Roll No", "Favourite Colour"], columns).unmatched).toEqual(["Favourite Colour"]);
+    expect(resolveStudentImportHeaders(["Regd. No", "Favourite Colour"], columns).unmatched).toEqual(["Favourite Colour"]);
   });
 });
 

@@ -21,7 +21,7 @@ interface Props {
   handleSaveEdit: () => Promise<void> | void;
 }
 
-// The HOD Students page's "edit a student" dialog (roll number, status, lab batch).
+// The HOD Students page's "edit a student" dialog (Regd. No, status, lab batch).
 export function EditStudentDialog({
   editTarget, setEditTarget, editRoll, setEditRoll, editStatus, setEditStatus,
   editLabBatch, setEditLabBatch, editLabBatchSuggestions, isSavingEdit, handleSaveEdit,
@@ -37,7 +37,7 @@ export function EditStudentDialog({
             {editTarget?.department} · Year {editTarget?.year} · {editTarget?.section ? `Section ${editTarget.section}` : "Unassigned"}
           </p>
           <div className="space-y-2">
-            <Label htmlFor="edit-roll">Roll Number</Label>
+            <Label htmlFor="edit-roll">Regd. No</Label>
             <Input
               id="edit-roll"
               value={editRoll}
@@ -45,7 +45,7 @@ export function EditStudentDialog({
               placeholder="e.g. 21A91A0501"
               autoComplete="off"
             />
-            <p className="text-xs text-muted-foreground">The student&apos;s unique roll number - it can be corrected, but must not be used by any other student.</p>
+            <p className="text-xs text-muted-foreground">The student&apos;s unique Regd. No - it can be corrected, but must not be used by any other student.</p>
           </div>
           <div className="space-y-2">
             <Label>Status</Label>

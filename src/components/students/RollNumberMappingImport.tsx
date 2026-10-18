@@ -14,7 +14,7 @@ import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, Al
 import { parseCSV, parseExcelFile, readFileAsText, toCSV, downloadCSV } from "@/lib/utils/csv";
 import type { RollMapOutcome, RollMapResult } from "@/lib/students/rollMapping";
 
-// Maps EXISTING students to their Roll No, matched on Student Mobile No.
+// Maps EXISTING students to their Regd. No, matched on Student Mobile No.
 // Deliberately separate from the "Add students" import beside it: that one
 // creates students, this one only fills in a field on students already there.
 // It never creates, never deletes, and never clears a roll.
@@ -22,7 +22,7 @@ import type { RollMapOutcome, RollMapResult } from "@/lib/students/rollMapping";
 // Laid out as the same numbered-step flow as that import - template, upload,
 // preview, act - so the Office is not learning a second page.
 
-const HEADERS = ["Student Mobile No", "Roll No", "Name"];
+const HEADERS = ["Student Mobile No", "Regd. No", "Name"];
 const SAMPLE: string[][] = [
   HEADERS,
   ["9876543210", "22A91A0501", "Optional - only warns about a mismatch"],
@@ -30,22 +30,22 @@ const SAMPLE: string[][] = [
 
 const HINTS = [
   "Student Mobile No is how each row finds its student - it must be the number already on their record.",
-  "Roll No is what will be set. Roll numbers are unique across every college.",
+  "Regd. No is what will be set. Regd. Nos are unique across every college.",
   "Name is optional. It only warns you about a mismatch; it is never matched on and never written.",
-  "A student who already has this exact roll is skipped, so re-running the same file is safe.",
+  "A student who already has this exact Regd. No is skipped, so re-running the same file is safe.",
   "Nothing is written until you press Apply - check the preview first.",
-  "A roll number is never cleared or deleted by this import.",
+  "A Regd. No is never cleared or deleted by this import.",
 ];
 
 const OUTCOME_LABELS: { key: RollMapOutcome; label: string; tone: "good" | "warn" | "bad" }[] = [
-  { key: "WILL_SET", label: "Will set roll", tone: "good" },
-  { key: "ALREADY_SET", label: "Already has this roll", tone: "good" },
-  { key: "DIFFERENT_ROLL", label: "Has a different roll", tone: "warn" },
+  { key: "WILL_SET", label: "Will set Regd. No", tone: "good" },
+  { key: "ALREADY_SET", label: "Already has this Regd. No", tone: "good" },
+  { key: "DIFFERENT_ROLL", label: "Has a different Regd. No", tone: "warn" },
   { key: "NO_MATCH", label: "No student with this mobile", tone: "bad" },
   { key: "MOBILE_SHARED", label: "Mobile shared by two students", tone: "bad" },
-  { key: "ROLL_TAKEN", label: "Roll already used", tone: "bad" },
-  { key: "DUPLICATE_IN_FILE", label: "Same roll twice in the file", tone: "bad" },
-  { key: "BAD_ROLL", label: "Roll No unusable", tone: "bad" },
+  { key: "ROLL_TAKEN", label: "Regd. No already used", tone: "bad" },
+  { key: "DUPLICATE_IN_FILE", label: "Same Regd. No twice in the file", tone: "bad" },
+  { key: "BAD_ROLL", label: "Regd. No unusable", tone: "bad" },
   { key: "BAD_MOBILE", label: "Mobile No unusable", tone: "bad" },
 ];
 
@@ -104,11 +104,11 @@ export function RollNumberMappingImport() {
       const header = grid[0].map((h) => h.trim().toLowerCase());
       const col = (...names: string[]) => header.findIndex((h) => names.includes(h));
       const mobileAt = col("student mobile no", "mobile no", "mobile", "phone", "student mobile");
-      const rollAt = col("roll no", "roll number", "rollno", "roll");
+      const rollAt = col("regd. no", "regd no", "regdno", "regd", "roll no", "roll number", "rollno", "roll");
       const nameAt = col("name", "student name");
 
       if (mobileAt < 0 || rollAt < 0) {
-        setParseError('The file needs a "Student Mobile No" column and a "Roll No" column.');
+        setParseError('The file needs a "Student Mobile No" column and a "Regd. No" column.');
         setRows([]);
         return;
       }
@@ -159,16 +159,16 @@ export function RollNumberMappingImport() {
         body: JSON.stringify({ rows, replaceExisting }),
       });
       const json = (await res.json()) as ApplyResponse;
-      if (!res.ok) throw new Error(json.error ?? "Could not apply the roll numbers");
+      if (!res.ok) throw new Error(json.error ?? "Could not apply the Regd. Nos");
       setApplyResult(json);
       await preview(); // so the table shows what is now true and a second apply is a no-op
       toast({
         variant: (json.failedCount ?? 0) > 0 ? "destructive" : "success",
-        title: `${json.appliedCount ?? 0} roll number(s) set`,
+        title: `${json.appliedCount ?? 0} Regd. No(s) set`,
         ...((json.failedCount ?? 0) > 0 ? { description: `${json.failedCount} row(s) failed - download the results.` } : {}),
       });
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Could not apply the roll numbers" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Could not apply the Regd. Nos" });
     } finally {
       setIsApplying(false);
     }
@@ -182,13 +182,13 @@ export function RollNumberMappingImport() {
     ].sort((a, b) => a.r.rowNumber - b.r.rowNumber);
     downloadCSV(
       toCSV([
-        ["Row", "Student Mobile No", "Roll No", "Name", "Status", "Outcome", "Reason", "Student"],
+        ["Row", "Student Mobile No", "Regd. No", "Name", "Status", "Outcome", "Reason", "Student"],
         ...all.map(({ r, status, error }) => [
           String(r.rowNumber), r.mobile, r.roll, r.name ?? "",
           status, r.outcome, error || r.message, r.studentName ?? "",
         ]),
       ]),
-      `import-roll-nos-results-${new Date().toISOString().slice(0, 10)}.csv`
+      `import-regd-nos-results-${new Date().toISOString().slice(0, 10)}.csv`
     );
   }
 
@@ -228,8 +228,8 @@ export function RollNumberMappingImport() {
   return (
     <div className="max-w-5xl space-y-6">
       <PageHeader
-        title="Map Roll Numbers"
-        description="Set Roll No on students already on the roster, matched by their Student Mobile No - nothing is written until you apply"
+        title="Map Regd. Nos"
+        description="Set Regd. No on students already on the roster, matched by their Student Mobile No - nothing is written until you apply"
         actions={
           <Button variant="outline" asChild>
             <Link href={backHref}><ArrowLeft className="h-4 w-4 mr-1" />Back to Dashboard</Link>
@@ -241,14 +241,14 @@ export function RollNumberMappingImport() {
         <CardHeader><CardTitle className="text-base flex items-center gap-2">{step(1)}Download Template</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Download the template, fill in each student&rsquo;s mobile number and roll number, and upload it below.
+            Download the template, fill in each student&rsquo;s mobile number and Regd. No, and upload it below.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-muted-foreground bg-muted/40 rounded-lg p-3">
             {HINTS.map((h) => (
               <p key={h} className="flex items-start gap-1"><span className="text-primary mt-0.5">•</span>{h}</p>
             ))}
           </div>
-          <Button onClick={() => downloadCSV(toCSV(SAMPLE), "import-roll-nos-template.csv")} className="gap-2">
+          <Button onClick={() => downloadCSV(toCSV(SAMPLE), "import-regd-nos-template.csv")} className="gap-2">
             <Download className="h-4 w-4" />Download Template (CSV)
           </Button>
         </CardContent>
@@ -266,7 +266,7 @@ export function RollNumberMappingImport() {
             <FileSpreadsheet className="h-10 w-10 text-muted-foreground" />
             <div className="text-center">
               <p className="font-medium text-sm">Click to select a CSV or Excel file</p>
-              <p className="text-xs text-muted-foreground mt-1">.csv or .xlsx supported - needs a Student Mobile No and a Roll No column</p>
+              <p className="text-xs text-muted-foreground mt-1">.csv or .xlsx supported - needs a Student Mobile No and a Regd. No column</p>
             </div>
           </button>
           {parseError && (
@@ -290,7 +290,7 @@ export function RollNumberMappingImport() {
             <label className="flex items-start gap-2 text-sm">
               <Checkbox checked={replaceExisting} onCheckedChange={(v) => { setReplaceExisting(v === true); reset(); }} />
               <span>
-                Replace a roll number a student already has
+                Replace a Regd. No a student already has
                 <span className="block text-xs text-muted-foreground">
                   Off by default. With this off, a student who already holds a different roll is skipped.
                 </span>
@@ -334,7 +334,7 @@ export function RollNumberMappingImport() {
                   <tr className="border-b bg-muted/40">
                     <th className="text-left p-2 font-medium text-muted-foreground w-8">#</th>
                     <th className="text-left p-2 font-medium text-muted-foreground whitespace-nowrap">Student Mobile No</th>
-                    <th className="text-left p-2 font-medium text-muted-foreground whitespace-nowrap">Roll No</th>
+                    <th className="text-left p-2 font-medium text-muted-foreground whitespace-nowrap">Regd. No</th>
                     <th className="text-left p-2 font-medium text-muted-foreground whitespace-nowrap">Student</th>
                     <th className="text-left p-2 font-medium text-muted-foreground whitespace-nowrap">What happens</th>
                   </tr>
@@ -383,7 +383,7 @@ export function RollNumberMappingImport() {
             <div className="flex gap-3">
               <Button onClick={() => void apply()} loading={isApplying} disabled={willSet === 0}>
                 <Upload className="h-4 w-4 mr-2" />
-                Set {willSet} Roll Number{willSet !== 1 ? "s" : ""}
+                Set {willSet} Regd. No{willSet !== 1 ? "s" : ""}
               </Button>
               <Button variant="outline" onClick={() => { setRows([]); setFileName(""); reset(); }}>
                 Clear
@@ -401,7 +401,7 @@ export function RollNumberMappingImport() {
                 ? <CheckCircle2 className="h-5 w-5 text-green-600" />
                 : <XCircle className="h-5 w-5 text-red-600" />}
               <p className="font-medium">
-                {applyResult.appliedCount ?? 0} roll number{(applyResult.appliedCount ?? 0) !== 1 ? "s" : ""} set
+                {applyResult.appliedCount ?? 0} Regd. No{(applyResult.appliedCount ?? 0) !== 1 ? "s" : ""} set
                 {(applyResult.failedCount ?? 0) > 0 && <span className="text-red-600"> &middot; {applyResult.failedCount} failed</span>}
                 <span className="text-muted-foreground font-normal"> &middot; {applyResult.skippedCount ?? 0} skipped</span>
               </p>
@@ -429,7 +429,7 @@ export function RollNumberMappingImport() {
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
               Create logins for the {loginCandidates.length} student{loginCandidates.length !== 1 ? "s" : ""} this run gave a
-              roll number to. They sign in with their Roll No and this password, and can change it afterwards.
+              Regd. No to. They sign in with their Regd. No and this password, and can change it afterwards.
             </p>
             <div className="flex flex-wrap items-end gap-3">
               <div className="space-y-1.5">

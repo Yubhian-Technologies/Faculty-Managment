@@ -332,7 +332,7 @@ interface FormProps {
   /** Academic years offered by the Year select. */
   years: number[];
   /**
-   * Rendered read-only with a note. Used for Roll No on Edit: it's a template
+   * Rendered read-only with a note. Used for Regd. No on Edit: it's a template
    * column the Office can set at intake, but correcting it afterwards belongs
    * to the department (see students/[id] PATCH).
    */
@@ -378,7 +378,7 @@ function FieldInputBody({ field, values, onChange, departments, courseNames, cou
     // doesn't look like a different, unformatted field.
     const displayValue = field.key === "year" && value ? ordinalYear(Number(value)) : value;
     const caption = readOnlyCaptions?.[field.key] ?? (field.key === "rollNumber"
-      ? "The student's unique Roll No. Corrections are made by the department (Students page)."
+      ? "The student's unique Regd. No. Corrections are made by the department (Students page)."
       : "Set when the student was added - use Sectioning/Promotion to move them, not this form.");
     return (
       <div className="space-y-2">

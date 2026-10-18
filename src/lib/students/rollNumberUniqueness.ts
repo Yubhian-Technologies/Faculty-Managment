@@ -1,7 +1,7 @@
-// A student's roll number is a unique identifier - the same way a faculty
+// A student's Regd. No is a unique identifier - the same way a faculty
 // member's employee id is. It used to be unique only within one
 // (department, course, section, year), which let two students in different
-// branches or years share a number. Every path that writes a roll number
+// branches or years share a number. Every path that writes a Regd. No
 // (import, single add, roll-number edit) goes through these helpers for the
 // writer's OWN college (checked against the real student documents, so it also
 // covers students from before the registry); uniqueness across ALL colleges is
@@ -12,7 +12,7 @@
 
 import { studentRollKey } from "@/lib/students/loginDefaults";
 
-/** Trimmed roll number, "" when absent. */
+/** Trimmed Regd. No, "" when absent. */
 export function normalizeRoll(roll: unknown): string {
   return typeof roll === "string" ? roll.trim() : "";
 }
@@ -27,7 +27,7 @@ export function rollKey(roll: unknown): string {
 }
 
 export function rollNumberTakenMessage(roll: string, holderName?: string): string {
-  return `Roll number ${roll} is already assigned to ${holderName?.trim() || "another student"}. Roll numbers must be unique.`;
+  return `Regd. No ${roll} is already assigned to ${holderName?.trim() || "another student"}. Regd. Nos must be unique.`;
 }
 
 /**

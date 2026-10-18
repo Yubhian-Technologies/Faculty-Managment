@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import { allPreviousExperienceEntries, totalYearsOfExperience } from "@/lib/faculty/experienceCalc";
+import { allPreviousExperienceEntries, formatDurationList, totalYearsOfExperience } from "@/lib/faculty/experienceCalc";
 import { DESIGNATION_LABELS, FACULTY_STATUS_LABELS } from "@/types";
 import type { Designation, FacultyMember, FacultyStatus } from "@/types";
 
@@ -82,27 +82,39 @@ export function FacultyDesignationCell({ row }: { row: FacultyListRow }) {
   );
 }
 
-/** Total / internal / external years of experience, computed live. */
+/**
+ * Total / Internal / External experience as three colour-coded lines, each "x yrs, y mos, z days" with zero units left out,
+ * computed live. Same three numbers, from the same calculation, as the Experience facts on the faculty profile page.
+ */
 export function FacultyExperienceCell({ row }: { row: FacultyListRow }) {
   // Computed live from Date of Joining + the Academic/Industry/Research
   // Experience entries - the same canonical calc as the Faculty Details page
   // (FacultyProfileHub), not the stored (and only periodically re-saved)
   // totalYearsOfExperience field.
   const previousExperienceEntries = allPreviousExperienceEntries(row.academicProfile);
-  const totalYears = totalYearsOfExperience(previousExperienceEntries, row.joiningDate).years;
-  const internalYears = totalYearsOfExperience(undefined, row.joiningDate).years;
-  const externalYears = totalYearsOfExperience(previousExperienceEntries, undefined).years;
+  const total = totalYearsOfExperience(previousExperienceEntries, row.joiningDate);
+  const internal = row.joiningDate != null ? totalYearsOfExperience(undefined, row.joiningDate) : null; // unknown without a joining date
+  const external = totalYearsOfExperience(previousExperienceEntries, undefined);
+  const none = (d: { years: number; months: number; days: number } | null) => !d || (d.years === 0 && d.months === 0 && d.days === 0);
+  const lines = [
+    { label: "Total:", value: formatDurationList(total), dot: "bg-primary", strong: true },
+    { label: "Internal:", value: internal ? formatDurationList(internal) : "-", dot: "bg-emerald-500", strong: false, empty: none(internal) },
+    { label: "External:", value: none(external) ? "-" : formatDurationList(external), dot: "bg-amber-500", strong: false, empty: none(external) },
+  ];
   return (
-    <div className="space-y-0.5">
-      <p className="text-sm font-medium">{totalYears} yrs</p>
-      {row.joiningDate != null && (
-        <p className="text-xs text-muted-foreground">Int: {internalYears} · Ext: {externalYears}</p>
-      )}
-    </div>
+    <dl className="grid grid-cols-[auto_auto_1fr] items-center gap-x-2 gap-y-1.5 whitespace-nowrap tabular-nums" data-testid="experience-cell">
+      {lines.map((l) => (
+        <div key={l.label} className="contents">
+          <span className={`h-2 w-2 rounded-full ${l.dot}`} aria-hidden="true" />
+          <dt className="text-[11px] font-medium text-muted-foreground">{l.label}</dt>
+          <dd className={l.strong ? "text-sm font-semibold text-foreground" : `text-xs ${l.empty ? "text-muted-foreground" : "text-foreground/90"}`}>{l.value}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
-const PENDING_RATIFICATION = new Set(["Not Yet Attended", "Attended", "Not Yet Ratified", "Not Ratified"]);
+const PENDING_RATIFICATION = new Set(["Not Yet Attended", "Attended", "Not Ratified"]);
 
 /** Status badge with the ratification status under it. */
 export function FacultyStatusCell({ row }: { row: FacultyListRow }) {
@@ -113,10 +125,9 @@ export function FacultyStatusCell({ row }: { row: FacultyListRow }) {
         {FACULTY_STATUS_LABELS[row.status as FacultyStatus] ?? (row.status as string)}
       </Badge>
       {ratification && (
-        // "Ratified" is green; the not-yet-ratified ones (Not Yet Attended / Attended /
-        // Not Yet Ratified, and the older "Not Ratified") are amber. A stray stored
-        // value (one live record holds "Not Applicable") is shown as-is but neutral,
-        // rather than styled as a pending ratification.
+        // "Ratified" is green; the not-ratified ones (Not Yet Attended / Attended / Not Ratified)
+        // are amber. A stray stored value (one live record holds "Not Applicable") is shown
+        // as-is but neutral, rather than styled as a pending ratification.
         <p className={`text-[10px] font-medium ${
           ratification === "Ratified" ? "text-green-600" : PENDING_RATIFICATION.has(ratification) ? "text-amber-600" : "text-muted-foreground"
         }`}>

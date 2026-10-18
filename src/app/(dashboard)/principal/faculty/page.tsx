@@ -326,7 +326,7 @@ function PrincipalFacultyContent() {
     },
     {
       key: "totalYearsOfExperience",
-      header: "Total Experience",
+      header: "Experience",
       hideOnMobile: true,
       render: (row) => <FacultyExperienceCell row={row} />,
     },

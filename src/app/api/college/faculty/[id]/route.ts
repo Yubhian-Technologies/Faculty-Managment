@@ -23,7 +23,8 @@ import {
 import { PROMOTION_HISTORY_KEY, DESIGNATION_MANAGED_BY_HISTORY_MESSAGE } from "@/lib/faculty/promotionHistory";
 import { designationKey } from "@/lib/designations/config";
 import { resolveDesignation } from "@/lib/designations/validate";
-import { resolveHonorific } from "@/lib/honorifics/validate";
+import { resolveHonorific, fetchActiveHonorificNames } from "@/lib/honorifics/validate";
+import { honorificForPhd } from "@/lib/faculty/phdHonorific";
 import { syncLinkedLoginName } from "@/lib/roles/loginSync";
 import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { withLegacyFacultyKeysDeleted } from "@/lib/faculty/legacyKeyDeletes";
@@ -326,6 +327,19 @@ export async function PATCH(
         }
         updates.honorific = honorificResult.name;
       }
+    }
+
+    // Ph.D -> "Dr." (lib/faculty/phdHonorific.ts). Only when this save sets the Highest Qualification, the caller sent no
+    // honorific of their own, and none is stored yet - a chosen honorific (or a deliberate blank sent with the request) is never
+    // replaced. Setting updates.honorific here means the display-name cascade below (login name, teaching assignments,
+    // timetable, sections) carries it exactly like a hand-picked honorific.
+    if (body.honorific === undefined && typeof updates.highestQualification === "string") {
+      const storedHonorific = (snap.data() as { honorific?: string }).honorific;
+      const dr = honorificForPhd(
+        { isPhd: updates.highestQualification === "Ph.D", honorific: storedHonorific },
+        await fetchActiveHonorificNames(db, session.collegeId),
+      );
+      if (dr) updates.honorific = dr;
     }
 
     // Extra contact numbers beyond the primary Mobile No - cleaned/filtered

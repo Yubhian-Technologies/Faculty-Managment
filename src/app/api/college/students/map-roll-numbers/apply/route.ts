@@ -13,7 +13,7 @@ import type { StudentRecord } from "@/types";
 /** Written one student at a time, so a failure is one row rather than a batch. */
 const CHUNK = 500;
 
-// Sets Roll No on students matched by Student Mobile No.
+// Sets Regd. No on students matched by Student Mobile No.
 //
 // Writing goes through syncStudentRollChange (lib/students/provisionLogin.ts) -
 // the same path the Office's per-student roll edit uses. That claims the roll in
@@ -83,7 +83,7 @@ export async function POST(request: Request) {
               name: before.name ?? row.studentName ?? "",
               from: (before.rollNumber ?? "").trim(),
               to: row.rollTrimmed,
-              via: "Import Roll Nos",
+              via: "Import Regd. Nos",
               matchedOnMobile: row.mobileNormalized,
               fileRow: row.rowNumber,
             },
@@ -98,7 +98,7 @@ export async function POST(request: Request) {
             ? err.message
             : err instanceof Error
               ? err.message
-              : "Could not set this roll number";
+              : "Could not set this Regd. No";
           failed.push({ ...row, error: message });
         }
       }

@@ -44,7 +44,7 @@ interface TeamStats {
 // Technical split (School - see hasSupportingStaffSplit), matching the same
 // nav-hide Sidebar.tsx already applies.
 const HOD_MODULES = [
-  { label: "Teaching Faculty", description: "Department faculty list", href: "/hod/faculty", icon: UsersRound, color: "bg-blue-50 text-blue-600" },
+  { label: "Teaching Staff", description: "Department faculty list", href: "/hod/faculty", icon: UsersRound, color: "bg-blue-50 text-blue-600" },
   { label: "Supporting Staff", description: "Technical staff for your department", href: "/hod/supporting-staff", icon: UsersRound, color: "bg-teal-50 text-teal-600" },
   { label: "Hiring", description: "Pipeline · candidates · sessions", href: "/hod/pipeline", icon: ClipboardPlus, color: "bg-indigo-50 text-indigo-600" },
 ];

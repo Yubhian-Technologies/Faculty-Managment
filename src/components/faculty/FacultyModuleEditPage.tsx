@@ -175,6 +175,7 @@ export function FacultyModuleEditPage({
       <PageHeader
         title={`Edit ${moduleDef.label}`}
         description={name}
+        note={moduleDef.description}
         actions={
           <Button variant="outline" asChild>
             <Link href={moduleHref}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>

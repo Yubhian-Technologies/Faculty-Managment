@@ -27,7 +27,7 @@ import type { Section, StudentRecord } from "@/types";
 // new students are imported over time - a student sitting in a section that
 // wasn't picked is never touched. Only students who actually change section
 // get written (and get a departmentHistory entry); re-running with nothing new
-// to place is a no-op. Roll numbers are left exactly as imported. This is the
+// to place is a no-op. Regd. Nos are left exactly as imported. This is the
 // "divide the branch's students into sections A/B/C by surname" step a
 // sub-HOD runs after creating the sections.
 //

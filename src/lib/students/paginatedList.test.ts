@@ -28,7 +28,7 @@ describe("rollInRange", () => {
     expect(rollInRange("245", { rollTo: "249" })).toBe(true);
   });
 
-  it("never matches a student with no roll number once a range is active", () => {
+  it("never matches a student with no Regd. No once a range is active", () => {
     expect(rollInRange("", { rollFrom: "A" })).toBe(false);
     expect(rollInRange(undefined, { rollTo: "Z" })).toBe(false);
     expect(rollInRange("   ", { rollFrom: "A", rollTo: "Z" })).toBe(false);

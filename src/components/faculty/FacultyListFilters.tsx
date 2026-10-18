@@ -5,6 +5,7 @@ import { ArrowUp, ArrowDown, X } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toDate } from "@/lib/utils";
 import { allPreviousExperienceEntries, experienceBreakdown } from "@/lib/faculty/experienceCalc";
+import { compareDefaultFacultyOrder } from "@/lib/faculty/listOrder";
 import { DESIGNATION_LABELS } from "@/types";
 
 // The HOD Faculty register's filter row (Gender / Qualification / Designation / Status pills and the
@@ -157,7 +158,9 @@ export function useFacultyListFilters<T extends Row>(
       (!activeDesignation || (f.designation as string | undefined)?.trim() === activeDesignation)
     );
     if (!sort && keepOrderWhenUnsorted) return filtered;
-    const eff = sort ?? { key: "experience" as const, dir: "desc" as const };
+    // Nothing picked: HOD, then Principal, then internal experience, highest first (lib/faculty/listOrder.ts).
+    if (!sort) return [...filtered].sort(compareDefaultFacultyOrder);
+    const eff = sort;
     const value = eff.key === "joining" ? joiningMillis : experienceYears;
     // Up arrow ("desc") = the most senior first for both columns: the most experience, and so the
     // earliest Date of Joining. Down arrow ("asc") is the reverse.

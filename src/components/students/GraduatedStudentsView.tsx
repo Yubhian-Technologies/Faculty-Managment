@@ -182,7 +182,7 @@ export function GraduatedStudentsView({ showHeader = true, studentDetailHref }: 
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") load(); }}
-            placeholder="Search by name, roll number or department"
+            placeholder="Search by name, Regd. No or department"
             className="pl-9"
           />
         </div>
@@ -234,7 +234,7 @@ export function GraduatedStudentsView({ showHeader = true, studentDetailHref }: 
                       <table className="w-full text-sm">
                         <thead className="bg-muted/40">
                           <tr className="text-left text-xs text-muted-foreground">
-                            <th className="p-2.5 font-medium">Roll No.</th>
+                            <th className="p-2.5 font-medium">Regd. No.</th>
                             <th className="p-2.5 font-medium">Name</th>
                             <th className="p-2.5 font-medium">Department</th>
                             <th className="p-2.5 font-medium">Graduated On</th>

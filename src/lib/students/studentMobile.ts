@@ -2,8 +2,8 @@ import type { Firestore } from "firebase-admin/firestore";
 
 // Student Mobile No - REQUIRED, and unique across ALL students of ALL colleges.
 //
-// The Office enrols students before roll numbers exist, so the student's own mobile number is the reference that
-// later maps a Roll No onto the right student. That only works if every student has one, no two students (in any
+// The Office enrols students before Regd. Nos exist, so the student's own mobile number is the reference that
+// later maps a Regd. No onto the right student. That only works if every student has one, no two students (in any
 // college) share one, and the same number typed two ways ("98765 43210", "+91 9876543210") counts as the same number.
 //
 // ENFORCEMENT
@@ -21,7 +21,7 @@ import type { Firestore } from "firebase-admin/firestore";
 //    PENDING_MS only, exactly like the employee-ID locks (lib/firestore/employeeIdKeys.ts).
 //  - LIMIT (same as the roll registry): a student of ANOTHER college saved before the claim documents existed has none
 //    until scripts/backfill-student-mobile-keys.mjs has run, so their number is not seen from here until then.
-//  - The roll number stays what it was: optional, and unique across ALL colleges when given (rollIdentity.ts).
+//  - The Regd. No stays what it was: optional, and unique across ALL colleges when given (rollIdentity.ts).
 
 export const STUDENT_MOBILE_KEYS = "studentMobileKeys";
 const PENDING_MS = 2 * 60 * 1000;
@@ -36,8 +36,8 @@ export function normalizeStudentMobile(raw: unknown): string {
 }
 
 export const STUDENT_MOBILE_REQUIRED_MESSAGE = "Student Mobile No is required";
-/** A student needs a Roll No or a Student Mobile No - either one - to be added; a row with neither is refused. */
-export const ROLL_OR_MOBILE_REQUIRED_MESSAGE = "Roll No or Student Mobile No is required - give at least one";
+/** A student needs a Regd. No or a Student Mobile No - either one - to be added; a row with neither is refused. */
+export const ROLL_OR_MOBILE_REQUIRED_MESSAGE = "Regd. No or Student Mobile No is required - give at least one";
 export const STUDENT_MOBILE_FORMAT_MESSAGE = "Student Mobile No must be exactly 10 digits, starting with 6, 7, 8 or 9";
 export const STUDENT_MOBILE_CLEAR_MESSAGE = "A student's Student Mobile No can't be removed - change it to the correct number instead";
 
@@ -59,7 +59,7 @@ export interface StudentMobileHolder {
 /** Names the holder only when they are in the caller's own college - never reveals another college's student. */
 export function studentMobileTakenMessage(mobile: string, holder: { name?: string; rollNumber?: string; sameCollege?: boolean }): string {
   if (holder.sameCollege === false) return `Student Mobile No ${mobile} is already used by a student of another college`;
-  const who = [holder.name?.trim(), holder.rollNumber?.trim() ? `Roll No ${holder.rollNumber.trim()}` : ""].filter(Boolean).join(", ");
+  const who = [holder.name?.trim(), holder.rollNumber?.trim() ? `Regd. No ${holder.rollNumber.trim()}` : ""].filter(Boolean).join(", ");
   return `Student Mobile No ${mobile} is already used by another student${who ? ` (${who})` : ""}`;
 }
 

@@ -52,6 +52,7 @@ export interface PersonalDetailsSource {
   emergencyContactRelation?: string;
   emergencyContactMobileNo?: string;
   ratificationStatus?: string;
+  ratificationAttended?: boolean;
   ratificationProceedingsNumber?: string;
   ratificationDate?: Timestamp | Date | { _seconds: number; _nanoseconds?: number } | { seconds: number; nanoseconds?: number };
   // Faculty-only multi-entry shape (see lib/faculty/ratificationHistory.ts) -
@@ -226,8 +227,8 @@ export function PersonalDetailsView({ value, hideLegalName = false, hiddenFields
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Ratification</p>
           <div className="@container">
             <div className={`grid gap-4 ${FACT_GRID_COLS_4}`}>
-              <Field label="Ratification Status" value={ratificationDisplay(p.ratificationStatus).status} />
-              {ratificationDisplay(p.ratificationStatus).result && <Field label="Ratification Decision" value={ratificationDisplay(p.ratificationStatus).result} />}
+              <Field label="Ratification Status" value={ratificationDisplay(p.ratificationStatus, p.ratificationAttended).status} />
+              {ratificationDisplay(p.ratificationStatus, p.ratificationAttended).result && <Field label="Ratification Decision" value={ratificationDisplay(p.ratificationStatus, p.ratificationAttended).result} />}
             </div>
           </div>
           {isRatified(p.ratificationStatus) && (

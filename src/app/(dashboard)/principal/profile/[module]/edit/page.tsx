@@ -16,10 +16,11 @@ import { FacultyProfileModuleEditor, type FacultyEditRecord } from "@/components
 import { PROFILE_MODULES, SELF_EDIT_DISABLED_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileModules";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
+import { FacultyProfileRedirect } from "@/components/faculty/FacultyProfileRedirect";
 
 // Principal/VP have no FacultyMember record - seeds directly from useAuth()'s
 // user (same source their View side already uses), PATCHes /api/college/users/me.
-export default function PrincipalProfileModuleEditPage() {
+function PrincipalProfileModuleEditPageContent() {
   const router = useRouter();
   const params = useParams<{ module: string }>();
   const moduleKey = params.module as ProfileModuleKey;
@@ -127,6 +128,7 @@ export default function PrincipalProfileModuleEditPage() {
       <div className="space-y-6">
         <PageHeader
           title={`Edit ${moduleDef.label}`}
+          note={moduleDef.description}
           actions={
             <Button variant="outline" asChild>
               <Link href={`/principal/profile/${moduleKey}`}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
@@ -142,6 +144,7 @@ export default function PrincipalProfileModuleEditPage() {
     <div className="space-y-6">
       <PageHeader
         title={`Edit ${moduleDef.label}`}
+        note={moduleDef.description}
         actions={
           <Button variant="outline" asChild>
             <Link href={`/principal/profile/${moduleKey}`}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
@@ -167,4 +170,9 @@ export default function PrincipalProfileModuleEditPage() {
       </Card>
     </div>
   );
+}
+
+// A login that has a faculty record is taken to the one faculty profile (the avatar's); anyone else keeps this page.
+export default function PrincipalProfileModuleEditPage() {
+  return <FacultyProfileRedirect><PrincipalProfileModuleEditPageContent /></FacultyProfileRedirect>;
 }

@@ -27,7 +27,7 @@ export function graduateBatchLabel(s: GraduateLike): string {
 /**
  * Display order: course A-Z, then newest batch first within a course (the
  * group someone is most likely looking for right after a promotion run), then
- * roll number. Rows of one course/batch group are therefore contiguous, so
+ * Regd. No. Rows of one course/batch group are therefore contiguous, so
  * paging through this order keeps each group together.
  */
 export function compareGraduates(a: GraduateLike, b: GraduateLike): number {

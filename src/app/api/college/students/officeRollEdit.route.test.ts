@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FakeAuth, FakeFirestore } from "@/lib/testing/fakeFirestore.testutil";
 
-// The College Office's student Edit form may change the Roll No; every other role's
+// The College Office's student Edit form may change the Regd. No; every other role's
 // edit still ignores it. Real route against in-memory fakes only.
 
 const h = vi.hoisted(() => ({
@@ -50,7 +50,7 @@ beforeEach(() => {
   });
 });
 
-describe("College Office edit form: Roll No is editable", () => {
+describe("College Office edit form: Regd. No is editable", () => {
   it("changes the roll together with the other edited fields in ONE write, and the login follows (registry, Auth email, profile) with the password kept", async () => {
     const res = await patch("s1", { rollNumber: "R1-NEW", mobileNo: "9876543210" });
     expect(res.status).toBe(200);
@@ -126,7 +126,7 @@ describe("College Office edit form: Roll No is editable", () => {
   });
 });
 
-describe("every OTHER role's edit still ignores the Roll No", () => {
+describe("every OTHER role's edit still ignores the Regd. No", () => {
   for (const role of ["HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN"]) {
     it(`${role}: the roll in the details is ignored; the other fields still save`, async () => {
       h.session = { collegeId: "c1", uid: "x1", role };

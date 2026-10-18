@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 
-// The signed-in student's Roll No - what the sidebar / drawer user card shows under their name instead of the generated
+// The signed-in student's Regd. No - what the sidebar / drawer user card shows under their name instead of the generated
 // internal login email. Read-only, resolved from session.uid only (like every other student/me/* route), one lookup.
 export async function GET() {
   try {

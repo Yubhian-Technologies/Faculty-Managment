@@ -27,6 +27,7 @@ import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { toDate } from "@/lib/utils";
 import { allPreviousExperienceEntries, experienceBreakdown } from "@/lib/faculty/experienceCalc";
+import { compareDefaultFacultyOrder } from "@/lib/faculty/listOrder";
 import type { FacultyMember, CollegeType, Department } from "@/types";
 import { DESIGNATION_LABELS } from "@/types";
 import { useListUrlSync } from "@/hooks/useListUrlSync";
@@ -67,7 +68,7 @@ function matchesStatus(f: FacultyRow, key: string): boolean {
   const status = f.status as string | undefined;
   if (key === "INACTIVE") return status === "RESIGNED" || status === "RETIRED";
   if (key === "RATIFIED") return f.ratificationStatus === "Ratified";
-  if (key === "NOT_RATIFIED") return ["Not Ratified", "Not Yet Ratified", "Attended", "Not Yet Attended"].includes(f.ratificationStatus as string);
+  if (key === "NOT_RATIFIED") return ["Not Ratified", "Attended", "Not Yet Attended"].includes(f.ratificationStatus as string);
   return status === key;
 }
 
@@ -159,7 +160,7 @@ function HODFacultyContent() {
   const [designationFilter, setDesignationFilter] = useState("");
   // "desc" = up arrow: most senior first (earliest joining / most experience), "asc" = down arrow: the reverse.
   // Only what the person picked with the arrows. null = nothing picked: the list is then
-  // quietly ordered by most experience first (see effectiveSort), without lighting any arrow.
+  // quietly ordered HOD, then Principal, then internal experience (see visibleFaculty), without lighting any arrow.
   const [sort, setSort] = useState<SortState>(null);
   // "" = every department in the roster; otherwise one department's faculty.
   const [deptFilter, setDeptFilter] = useState<string>(restored.department);
@@ -418,23 +419,21 @@ function HODFacultyContent() {
   }, [filteredFaculty]);
   const activeDeptFilter = departmentChips.some((c) => c.name === deptFilter) ? deptFilter : "";
   const filtersApplied = !!statusFilter || !!genderFilter || !!activeQualFilter || !!activeDesignationFilter;
-  const effectiveSort = useMemo<NonNullable<SortState>>(
-    () => (sort ?? { key: "experience", dir: "desc" }),
-    [sort]
-  );
   const visibleFaculty = useMemo(() => {
     const rows = activeDeptFilter ? filteredFaculty.filter((f) => (f.department as string | undefined)?.trim() === activeDeptFilter) : filteredFaculty;
-    const value = effectiveSort.key === "joining" ? joiningMillis : experienceYears;
+    // Nothing picked: HOD, then Principal, then internal experience (lib/faculty/listOrder.ts).
+    if (!sort) return [...rows].sort(compareDefaultFacultyOrder);
+    const value = sort.key === "joining" ? joiningMillis : experienceYears;
     // Up arrow ("desc") = the most senior first for both columns: the most experience, and so the
     // earliest Date of Joining. Down arrow ("asc") is the reverse.
-    const sign = (effectiveSort.dir === "desc" ? -1 : 1) * (effectiveSort.key === "joining" ? -1 : 1);
+    const sign = (sort.dir === "desc" ? -1 : 1) * (sort.key === "joining" ? -1 : 1);
     // A person with no value (no joining date / no experience) always goes last, in either direction.
     return [...rows].sort((a, b) => {
       const va = value(a), vb = value(b);
       if (!va || !vb) return (va ? 0 : 1) - (vb ? 0 : 1);
       return sign * (va - vb);
     });
-  }, [filteredFaculty, activeDeptFilter, effectiveSort]);
+  }, [filteredFaculty, activeDeptFilter, sort]);
 
   const noFilters = !filtersApplied && !sort;
 
@@ -507,7 +506,7 @@ function HODFacultyContent() {
     },
     {
       key: "totalYearsOfExperience",
-      header: "Total Experience",
+      header: "Experience",
       hideOnMobile: true,
       render: (row) => <FacultyExperienceCell row={row} />,
     },
@@ -587,7 +586,9 @@ function HODFacultyContent() {
     <div className="space-y-6">
       <PageHeader
         title="Staff Profiles"
-        description="Staff records of the Department"
+        // "Department of Information Technology" - the department chosen in "Working as" (all of them, joined,
+        // for a head of several with none picked). The old generic line only when no department is known.
+        description={myDepartments.length > 0 ? myDepartments.map((d) => `Department of ${d}`).join(" · ") : "Staff records of the Department"}
         actions={
           <div className="flex items-center gap-2">
             {selectedIds.size > 0 && (
