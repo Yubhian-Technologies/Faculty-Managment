@@ -44,6 +44,13 @@ describe.skipIf(!file)("real VIT + VWU records through the Ratification edit/sav
     expect([...seen].sort()).toEqual(["", "Not Ratified", "Ratified"]);
   });
 
+  it("every status on file is one of the flow's own values - none falls back to the as-is display", () => {
+    for (const { path, doc } of entries) {
+      const s = str(doc.ratificationStatus);
+      if (s) expect((RATIFICATION_STATUS_STORED as readonly string[]).includes(s), `${path} ${s}`).toBe(true);
+    }
+  });
+
   it("Edit-and-save with no change keeps every stored status exactly, for all records", () => {
     for (const { path, doc, history } of entries) {
       const stored = str(doc.ratificationStatus);
@@ -72,11 +79,11 @@ describe.skipIf(!file)("real VIT + VWU records through the Ratification edit/sav
     }
   });
 
-  it("every stored status maps to a defined step pair - older ones are shown as they are, never changed", () => {
+  it("every stored status maps to a defined step pair - the stored value itself is never changed", () => {
     for (const { doc } of entries) {
       const s = str(doc.ratificationStatus);
       if (s === "Ratified") expect([ratificationStatusStep(s), ratificationResultStep(s)]).toEqual(["Attended", "Ratified"]);
-      if (s === "Not Ratified") expect([ratificationStatusStep(s), ratificationResultStep(s)]).toEqual(["Not Ratified", ""]);
+      if (s === "Not Ratified") expect([ratificationStatusStep(s), ratificationResultStep(s)]).toEqual(["Attended", "Not Ratified"]);
     }
   });
 
@@ -84,7 +91,7 @@ describe.skipIf(!file)("real VIT + VWU records through the Ratification edit/sav
     const picks: ["status" | "result", string, string][] = [
       ["status", "Not Yet Attended", "Not Yet Attended"],
       ["status", "Attended", "Attended"],            // from a not-yet-Attended start; from Ratified it keeps Ratified (checked below)
-      ["result", "Not Yet Ratified", "Not Yet Ratified"],
+      ["result", "Not Ratified", "Not Ratified"],
       ["result", "Ratified", "Ratified"],
     ];
     for (const { path, doc, history } of entries.filter((e) => e.history)) {
@@ -92,14 +99,14 @@ describe.skipIf(!file)("real VIT + VWU records through the Ratification edit/sav
       for (const [level, pick, expected] of picks) {
         const out = save(doc, history, (s) => Object.assign(s, ratificationStatusPatch(s.ratificationStatus as string, pick, level, history)));
         expect(out.ratifications, `${path} ${pick}`).toEqual(baseline); // rows never deleted by a pick
-        // "Attended" picked while already Ratified keeps Ratified (result not lost)
-        const wasRatified = doc.ratificationStatus === "Ratified";
-        expect(out.ratificationStatus, `${path} ${pick}`).toBe(level === "status" && pick === "Attended" && wasRatified ? "Ratified" : expected);
+        // "Attended" picked on a record that already holds a Decision (Ratified / Not Ratified) keeps that Decision
+        const hasDecision = doc.ratificationStatus === "Ratified" || doc.ratificationStatus === "Not Ratified";
+        expect(out.ratificationStatus, `${path} ${pick}`).toBe(level === "status" && pick === "Attended" && hasDecision ? doc.ratificationStatus : expected);
       }
     }
   });
 
   it("every stored value the new flow can write is one of the four known ones", () => {
-    expect([...RATIFICATION_STATUS_STORED]).toEqual(["Not Yet Attended", "Attended", "Not Yet Ratified", "Ratified"]);
+    expect([...RATIFICATION_STATUS_STORED]).toEqual(["Not Yet Attended", "Attended", "Not Ratified", "Ratified"]);
   });
 });

@@ -19,19 +19,20 @@ const str = (v: unknown): string => (typeof v === "string" ? v : "");
 
 // Ratification is a two-step choice in the forms, kept in the ONE existing
 // `ratificationStatus` field so no stored record needs rewriting:
-//   Ratification Status  : Not Yet Attended | Attended
-//   Ratification Decision  : Ratified | Not Yet Ratified   (only once Attended)
+//   Ratification Status    : Attended | Not Yet Attended
+//   Ratification Decision  : Ratified | Not Ratified   (only once Attended)
 // Stored value, by what the faculty member picked:
 //   "Not Yet Attended"  -> Status = Not Yet Attended
-//   "Attended"          -> Status = Attended, Result not chosen yet
-//   "Not Yet Ratified"  -> Status = Attended, Result = Not Yet Ratified
-//   "Ratified"          -> Status = Attended, Result = Ratified  (the value every
-//                          already-ratified record holds - unchanged)
-// Any other stored text (the older "Not Ratified", a stray "Not Applicable") is
-// not guessed at: it is shown as it is, until the person picks a new status.
+//   "Attended"          -> Status = Attended, Decision not chosen yet
+//   "Not Ratified"      -> Status = Attended, Decision = Not Ratified
+//   "Ratified"          -> Status = Attended, Decision = Ratified
+// "Ratified" and "Not Ratified" are the two values every record already on file
+// holds (VIT, VWU), so they keep their meaning and are never rewritten. Any other
+// stored text (e.g. a stray "Not Applicable") is not guessed at: it is shown as
+// it is, until the person picks a new status.
 export const RATIFICATION_STATUS_CHOICES = ["Attended", "Not Yet Attended"] as const;
-export const RATIFICATION_RESULT_CHOICES = ["Ratified", "Not Yet Ratified"] as const;
-export const RATIFICATION_STATUS_STORED = ["Not Yet Attended", "Attended", "Not Yet Ratified", "Ratified"] as const;
+export const RATIFICATION_RESULT_CHOICES = ["Ratified", "Not Ratified"] as const;
+export const RATIFICATION_STATUS_STORED = ["Not Yet Attended", "Attended", "Not Ratified", "Ratified"] as const;
 
 export const isRatified = (status: string | undefined | null): boolean => status === "Ratified";
 
@@ -39,13 +40,13 @@ export const isRatified = (status: string | undefined | null): boolean => status
 // stored text itself when it is an older value (the picker lists it as-is).
 export function ratificationStatusStep(status: string | undefined | null): string {
   const v = status ?? "";
-  if (v === "Attended" || v === "Not Yet Ratified" || v === "Ratified") return "Attended";
+  if (v === "Attended" || v === "Not Ratified" || v === "Ratified") return "Attended";
   return v;
 }
 
 // Step 2's value: only meaningful once Attended ("" = not chosen yet).
 export function ratificationResultStep(status: string | undefined | null): string {
-  return status === "Ratified" || status === "Not Yet Ratified" ? status : "";
+  return status === "Ratified" || status === "Not Ratified" ? status : "";
 }
 
 // True for an older stored status the two-step picker does not offer.
@@ -77,7 +78,7 @@ export function ratificationStatusPatch(
 // until one is chosen; an older value is shown as the Status as it is).
 export function ratificationDisplay(status: string | undefined | null): { status?: string; result?: string } {
   if (!status) return {};
-  if (status === "Ratified" || status === "Not Yet Ratified") return { status: "Attended", result: status };
+  if (status === "Ratified" || status === "Not Ratified") return { status: "Attended", result: status };
   return { status };
 }
 

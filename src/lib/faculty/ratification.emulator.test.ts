@@ -119,7 +119,7 @@ describe.skipIf(!EMULATOR || !file)("Ratification save/load on real Firestore wi
     const combos: ["status" | "result", string][] = [
       ["status", "Not Yet Attended"],
       ["status", "Attended"],
-      ["result", "Not Yet Ratified"],
+      ["result", "Not Ratified"],
       ["result", "Ratified"],
     ];
     for (const { path } of picked.values()) {
@@ -128,7 +128,7 @@ describe.skipIf(!EMULATOR || !file)("Ratification save/load on real Firestore wi
         await saveBack(path, true, (s) => Object.assign(s, ratificationStatusPatch(s.ratificationStatus as string, pick, level, true)));
         const after = await load(path) as Doc;
         // picking Attended while already Ratified keeps Ratified; the status step is stored as Attended otherwise
-        expect(["Not Yet Attended", "Attended", "Not Yet Ratified", "Ratified"], `${path} ${pick}`).toContain(after.ratificationStatus);
+        expect(["Not Yet Attended", "Attended", "Not Ratified", "Ratified"], `${path} ${pick}`).toContain(after.ratificationStatus);
         if (level === "result" || pick === "Not Yet Attended") expect(after.ratificationStatus, `${path} ${pick}`).toBe(pick);
         expect(after.ratifications, `${path} ${pick}`).toEqual(rows ?? []);
       }

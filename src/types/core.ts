@@ -475,7 +475,7 @@ export interface FMSUser {
   emergencyContactName?: string;
   emergencyContactRelation?: string; // relation of the emergency contact to this person
   emergencyContactMobileNo?: string;
-  ratificationStatus?: "Ratified" | "Not Yet Ratified" | "Attended" | "Not Yet Attended" | "Not Ratified"; // see lib/faculty/ratificationHistory.ts; "Not Ratified" = older records only
+  ratificationStatus?: "Ratified" | "Not Ratified" | "Attended" | "Not Yet Attended"; // see lib/faculty/ratificationHistory.ts
   ratificationProceedingsNumber?: string;
   ratificationDate?: Timestamp; // Ratification Proceedings Date
   maritalStatus?: "Single" | "Married";
@@ -1263,7 +1263,7 @@ export interface FacultyMember {
   emergencyContactRelation?: string; // relation of the emergency contact to this person
   emergencyContactMobileNo?: string;
   collegeEmail: string; // required — this is the faculty member's login username
-  ratificationStatus?: "Ratified" | "Not Yet Ratified" | "Attended" | "Not Yet Attended" | "Not Ratified"; // see lib/faculty/ratificationHistory.ts; "Not Ratified" = older records only
+  ratificationStatus?: "Ratified" | "Not Ratified" | "Attended" | "Not Yet Attended"; // see lib/faculty/ratificationHistory.ts
   // Historical ratification record(s) - see RatificationRecord's own doc-comment
   // below. A doc saved before this existed may still only carry the legacy flat
   // fields right below with no `ratifications` array; ratificationRecordsFromDoc()

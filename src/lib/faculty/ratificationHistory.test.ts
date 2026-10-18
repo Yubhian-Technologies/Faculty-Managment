@@ -35,16 +35,16 @@ describe("Ratified Designation choices", () => {
 });
 
 describe("Ratification Status flow", () => {
-  it("Status offers Attended first, then Not Yet Attended; Result offers Ratified / Not Yet Ratified", () => {
+  it("Status offers Attended first, then Not Yet Attended; Decision offers Ratified / Not Ratified", () => {
     expect([...RATIFICATION_STATUS_CHOICES]).toEqual(["Attended", "Not Yet Attended"]);
-    expect([...RATIFICATION_RESULT_CHOICES]).toEqual(["Ratified", "Not Yet Ratified"]);
+    expect([...RATIFICATION_RESULT_CHOICES]).toEqual(["Ratified", "Not Ratified"]);
   });
 
   // Every combination the two dropdowns can produce -> what is stored, and what each dropdown shows back.
   it.each([
     ["Not Yet Attended", "Not Yet Attended", "",                 false],
     ["Attended",         "Attended",         "",                 false],
-    ["Not Yet Ratified", "Attended",         "Not Yet Ratified", false],
+    ["Not Ratified",      "Attended",         "Not Ratified",     false],
     ["Ratified",         "Attended",         "Ratified",         true],
   ])("stored %s -> Status %s, Result '%s', details shown: %s", (stored, step, result, details) => {
     expect(ratificationStatusStep(stored)).toBe(step);
@@ -53,8 +53,8 @@ describe("Ratification Status flow", () => {
     expect(isLegacyRatificationStatus(stored)).toBe(false);
   });
 
-  it("an older status is never guessed into the new two: shown as it is, flagged legacy", () => {
-    for (const old of ["Not Ratified", "Not Applicable"]) {
+  it("any other stored text is never guessed into the new flow: shown as it is, flagged legacy", () => {
+    for (const old of ["Not Applicable", "Pending"]) {
       expect(ratificationStatusStep(old)).toBe(old);
       expect(ratificationResultStep(old)).toBe("");
       expect(isRatified(old)).toBe(false);
@@ -66,17 +66,17 @@ describe("Ratification Status flow", () => {
 
   it("displays Status and Result for the view", () => {
     expect(ratificationDisplay("Ratified")).toEqual({ status: "Attended", result: "Ratified" });
-    expect(ratificationDisplay("Not Yet Ratified")).toEqual({ status: "Attended", result: "Not Yet Ratified" });
+    expect(ratificationDisplay("Not Ratified")).toEqual({ status: "Attended", result: "Not Ratified" });
     expect(ratificationDisplay("Attended")).toEqual({ status: "Attended" });
     expect(ratificationDisplay("Not Yet Attended")).toEqual({ status: "Not Yet Attended" });
-    expect(ratificationDisplay("Not Ratified")).toEqual({ status: "Not Ratified" });
+    expect(ratificationDisplay("Not Applicable")).toEqual({ status: "Not Applicable" });
     expect(ratificationDisplay("")).toEqual({});
   });
 
   it("import understands the new statuses and still the older ones", () => {
     expect(normalizeRatificationStatus("attended")).toBe("Attended");
     expect(normalizeRatificationStatus("Not Yet Attended")).toBe("Not Yet Attended");
-    expect(normalizeRatificationStatus("not  yet ratified")).toBe("Not Yet Ratified");
+    expect(normalizeRatificationStatus("not  yet attended")).toBe("Not Yet Attended");
     expect(normalizeRatificationStatus("Ratified")).toBe("Ratified");
     expect(normalizeRatificationStatus("Not Ratified")).toBe("Not Ratified");
     expect(normalizeRatificationStatus("pending")).toBe("Not Ratified");
@@ -91,9 +91,9 @@ describe("Ratification Status flow", () => {
     expect(out.ratifications).toEqual([{ designation: "ASSISTANT_PROFESSOR", proceedingsNumber: "RP-1", date: "2019-01-01" }]);
   });
 
-  it("switching to Not Yet Attended / Not Yet Ratified with the rows still sent keeps them (hidden, not deleted)", () => {
+  it("switching to Not Yet Attended / Not Ratified with the rows still sent keeps them (hidden, not deleted)", () => {
     const rows = [{ designation: "Professor", proceedingsNumber: "RP-2", date: "2020-02-02" }];
-    for (const status of ["Not Yet Attended", "Not Yet Ratified", "Attended"]) {
+    for (const status of ["Not Yet Attended", "Not Ratified", "Attended"]) {
       expect(buildPersonalDetailsUpdate({ ratificationStatus: status, ratifications: rows }).ratifications).toEqual(rows);
     }
   });
@@ -107,7 +107,7 @@ describe("Ratification Status flow", () => {
   });
 
   it("the single Proceedings Number/Date pair (staff / user records) is cleared for every not-ratified status, and left for Ratified", () => {
-    for (const status of ["Not Yet Attended", "Attended", "Not Yet Ratified", "Not Ratified"]) {
+    for (const status of ["Not Yet Attended", "Attended", "Not Ratified"]) {
       const out = buildPersonalDetailsUpdate({ ratificationStatus: status });
       expect(out.ratificationProceedingsNumber).toBe("");
       expect(out.ratificationDate).toBe("");
