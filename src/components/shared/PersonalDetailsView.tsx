@@ -236,7 +236,7 @@ export function PersonalDetailsView({ value, hideLegalName = false, hiddenFields
                   {ratificationRecords.map((r: RatificationRecord, i) => (
                     <div key={i} className="@container">
                       <div className={`grid gap-4 rounded-md bg-background/60 p-2 ${FACT_GRID_COLS_4}`}>
-                        <Field label="Designation" value={r.designation ? designationLabel(r.designation) : undefined} />
+                        <Field label="Ratified Designation" value={r.designation ? designationLabel(r.designation) : undefined} />
                         <Field label="Ratification Proceedings Number" value={r.proceedingsNumber} />
                         <Field label="Ratification Date" value={r.date ? formatRatificationDate(r.date) : undefined} />
                       </div>

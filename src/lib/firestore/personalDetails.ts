@@ -77,9 +77,13 @@ const STRING_FIELDS = [
 const NOT_RATIFIED_WORDS = new Set(["not ratified", "pending", "no", "awaiting", "in progress", "rejected"]);
 const RATIFIED_WORDS = new Set(["ratified", "approved", "yes", "done", "complete", "completed"]);
 
-export function normalizeRatificationStatus(raw: string | undefined): "Ratified" | "Not Ratified" | undefined {
+// "Attended" is the status the forms now offer in place of "Not Ratified";
+// "Not Ratified" (and its synonyms) is still understood so an older spreadsheet
+// keeps importing exactly as before.
+export function normalizeRatificationStatus(raw: string | undefined): "Ratified" | "Attended" | "Not Ratified" | undefined {
   const v = raw?.trim().toLowerCase();
   if (!v) return undefined;
+  if (v === "attended") return "Attended";
   // Check the "not ratified" family first - "not approved" contains "approved"
   // and must resolve to Not Ratified, not Ratified.
   if (v.includes("not") || NOT_RATIFIED_WORDS.has(v)) return "Not Ratified";
@@ -127,7 +131,7 @@ export function buildPersonalDetailsUpdate(rawBody: PersonalDetailsInput): Recor
     updates.ratifications = normalizeRatificationRecords(body.ratifications);
     updates.ratificationProceedingsNumber = "";
     updates.ratificationDate = "";
-  } else if (body.ratificationStatus === "Not Ratified") {
+  } else if (body.ratificationStatus === "Not Ratified" || body.ratificationStatus === "Attended") {
     updates.ratificationProceedingsNumber = "";
     updates.ratificationDate = "";
   } else if (body.ratificationDate !== undefined) {

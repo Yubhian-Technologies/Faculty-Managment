@@ -1,5 +1,68 @@
 import { describe, expect, it } from "vitest";
-import { normalizeRatificationRecords, ratificationRecordsFromDoc } from "./ratificationHistory";
+import {
+  normalizeRatificationRecords, ratificationRecordsFromDoc, ratifiedDesignationChoices, matchRatifiedDesignation,
+  RATIFICATION_STATUS_CHOICES,
+} from "./ratificationHistory";
+import { buildPersonalDetailsUpdate, normalizeRatificationStatus } from "@/lib/firestore/personalDetails";
+
+describe("Ratified Designation choices", () => {
+  const labels = (names: string[]) => ratifiedDesignationChoices(names).map((c) => c.label);
+
+  it("shows the catalogue's three cadre designations by full name and adds Principal after them", () => {
+    expect(labels(["Professor", "Assistant Professor", "Associate Professor", "Lecturer", "HOD"]))
+      .toEqual(["Professor", "Assistant Professor", "Associate Professor", "Principal"]);
+    expect(ratifiedDesignationChoices(["Professor"]).at(-1)).toEqual({ value: "Principal", label: "Principal" });
+  });
+
+  it("stores the catalogue's own spelling (legacy codes included) and shows its full name, Principal once", () => {
+    const c = ratifiedDesignationChoices(["PROFESSOR", "ASSISTANT_PROFESSOR", "ASSOCIATE_PROFESSOR", "Principal"]);
+    expect(c.map((x) => x.value)).toEqual(["PROFESSOR", "ASSISTANT_PROFESSOR", "ASSOCIATE_PROFESSOR", "Principal"]);
+    expect(c.map((x) => x.label)).toEqual(["Professor", "Assistant Professor", "Associate Professor", "Principal"]);
+  });
+
+  it("always offers Principal, even while the catalogue is loading or fails", () => {
+    expect(labels([])).toEqual(["Principal"]);
+  });
+
+  it("matches a stored value to its choice by meaning, not spelling", () => {
+    const c = ratifiedDesignationChoices(["PROFESSOR", "ASSISTANT_PROFESSOR"]);
+    expect(matchRatifiedDesignation("Assistant Professor", c)).toBe("ASSISTANT_PROFESSOR");
+    expect(matchRatifiedDesignation("principal", c)).toBe("Principal");
+    expect(matchRatifiedDesignation("Lecturer", c)).toBeUndefined();
+    expect(matchRatifiedDesignation("", c)).toBeUndefined();
+  });
+});
+
+describe("Ratification Status", () => {
+  it("offers Attended and Ratified", () => {
+    expect([...RATIFICATION_STATUS_CHOICES]).toEqual(["Attended", "Ratified"]);
+  });
+
+  it("normalizes Attended, and still understands the older Not Ratified", () => {
+    expect(normalizeRatificationStatus("attended")).toBe("Attended");
+    expect(normalizeRatificationStatus("Ratified")).toBe("Ratified");
+    expect(normalizeRatificationStatus("Not Ratified")).toBe("Not Ratified");
+  });
+
+  it("saving a record that already holds an array with Ratified keeps its rows untouched", () => {
+    const out = buildPersonalDetailsUpdate({
+      ratificationStatus: "Ratified",
+      ratifications: [{ designation: "ASSISTANT_PROFESSOR", proceedingsNumber: "RP-1", date: "2019-01-01" }],
+    });
+    expect(out.ratificationStatus).toBe("Ratified");
+    // The stored designation text is not rewritten just because the picker shows a short label.
+    expect(out.ratifications).toEqual([{ designation: "ASSISTANT_PROFESSOR", proceedingsNumber: "RP-1", date: "2019-01-01" }]);
+  });
+
+  it("an untouched default blank row is not stored", () => {
+    const out = buildPersonalDetailsUpdate({ ratificationStatus: "Ratified", ratifications: [{ designation: "", proceedingsNumber: "", date: "" }] });
+    expect(out.ratifications).toEqual([]);
+  });
+
+  it("a status save without the history array never touches stored ratification rows", () => {
+    expect(buildPersonalDetailsUpdate({ ratificationStatus: "Ratified" })).not.toHaveProperty("ratifications");
+  });
+});
 
 describe("ratificationRecordsFromDoc", () => {
   it("returns the array as-is once a record has been migrated", () => {

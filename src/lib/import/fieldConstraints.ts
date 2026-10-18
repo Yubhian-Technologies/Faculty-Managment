@@ -113,7 +113,8 @@ export { HIGHEST_QUALIFICATION_OPTIONS } from "@/lib/faculty/highestQualificatio
 export const GENDER_OPTIONS = ["Male", "Female", "Other"] as const;
 export const BLOOD_GROUP_OPTIONS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] as const;
 export const MARITAL_STATUS_OPTIONS = ["Single", "Married"] as const;
-export const RATIFICATION_STATUS_OPTIONS = ["Ratified", "Not Ratified"] as const;
+// "Not Ratified" is the older value - still accepted so existing sheets import unchanged.
+export const RATIFICATION_STATUS_OPTIONS = ["Ratified", "Attended", "Not Ratified"] as const;
 export const RELIGION_OPTIONS = [
   "Hindu", "Muslim", "Christian", "Sikh", "Jain", "Parsi", "Buddhist", "Other",
 ] as const;
