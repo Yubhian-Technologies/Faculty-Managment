@@ -191,8 +191,8 @@ export function getMissingRequiredPersonalFields(
       return !!format && !format.test(v);
     })
     .map((key) => PERSONAL_FIELD_LABELS[key] ?? key);
-  // "Attended" on its own means the Ratification Result hasn't been chosen yet.
-  if (requiredFields.includes("ratificationStatus") && value.ratificationStatus === "Attended") missing.push("Ratification Result");
+  // "Attended" on its own means the Ratification Decision hasn't been chosen yet.
+  if (requiredFields.includes("ratificationStatus") && value.ratificationStatus === "Attended") missing.push("Ratification Decision");
   return missing;
 }
 
@@ -646,7 +646,7 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
             </div>
             {ratificationStatusStep(value.ratificationStatus) === "Attended" && (
               <div className="space-y-2">
-                <Label>Ratification Result{mark("ratificationStatus")}</Label>
+                <Label>Ratification Decision{mark("ratificationStatus")}</Label>
                 <Select value={ratificationResultStep(value.ratificationStatus)} onValueChange={(v) => onChange({ ...value, ...ratificationStatusPatch(value.ratificationStatus, v, "result", ratificationHistory) })}>
                   <SelectTrigger><SelectValue placeholder="Select result" /></SelectTrigger>
                   <SelectContent>

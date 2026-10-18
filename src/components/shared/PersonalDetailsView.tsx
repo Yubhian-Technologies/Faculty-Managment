@@ -227,7 +227,7 @@ export function PersonalDetailsView({ value, hideLegalName = false, hiddenFields
           <div className="@container">
             <div className={`grid gap-4 ${FACT_GRID_COLS_4}`}>
               <Field label="Ratification Status" value={ratificationDisplay(p.ratificationStatus).status} />
-              {ratificationDisplay(p.ratificationStatus).result && <Field label="Ratification Result" value={ratificationDisplay(p.ratificationStatus).result} />}
+              {ratificationDisplay(p.ratificationStatus).result && <Field label="Ratification Decision" value={ratificationDisplay(p.ratificationStatus).result} />}
             </div>
           </div>
           {isRatified(p.ratificationStatus) && (

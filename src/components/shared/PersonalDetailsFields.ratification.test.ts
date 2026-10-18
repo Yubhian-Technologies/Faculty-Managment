@@ -8,7 +8,7 @@ import { PersonalDetailsFields, getMissingRequiredPersonalFields, type PersonalD
 const render = (value: PersonalDetailsValue, ratificationHistory = true) =>
   renderToStaticMarkup(createElement(PersonalDetailsFields, { value, onChange: () => {}, ratificationHistory }));
 const shows = (html: string) => ({
-  result: html.includes("Ratification Result"),
+  result: html.includes("Ratification Decision"),
   designation: html.includes("Ratified Designation"),
   proceedings: html.includes("Ratification Proceedings Number"),
   date: html.includes("Ratification Date"),
@@ -52,6 +52,6 @@ describe("Ratification validation", () => {
   const base = { legalName: "A", gender: "Male", dateOfBirth: "1990-01-01", aadharNo: "123456789012", panNo: "ABCDE1234F" };
   const missing = (ratificationStatus: string) => getMissingRequiredPersonalFields({ ...base, ratificationStatus });
   it("blank status is missing", () => expect(missing("")).toEqual(["Ratification Status"]));
-  it("Attended without a result is missing the Result", () => expect(missing("Attended")).toEqual(["Ratification Result"]));
+  it("Attended without a result is missing the Result", () => expect(missing("Attended")).toEqual(["Ratification Decision"]));
   it.each(["Not Yet Attended", "Not Yet Ratified", "Ratified", "Not Ratified"])("%s is complete", (s) => expect(missing(s)).toEqual([]));
 });

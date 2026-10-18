@@ -20,7 +20,7 @@ const str = (v: unknown): string => (typeof v === "string" ? v : "");
 // Ratification is a two-step choice in the forms, kept in the ONE existing
 // `ratificationStatus` field so no stored record needs rewriting:
 //   Ratification Status  : Not Yet Attended | Attended
-//   Ratification Result  : Ratified | Not Yet Ratified   (only once Attended)
+//   Ratification Decision  : Ratified | Not Yet Ratified   (only once Attended)
 // Stored value, by what the faculty member picked:
 //   "Not Yet Attended"  -> Status = Not Yet Attended
 //   "Attended"          -> Status = Attended, Result not chosen yet
@@ -53,7 +53,7 @@ export const isLegacyRatificationStatus = (status: string | undefined | null): b
   !!status && !(RATIFICATION_STATUS_STORED as readonly string[]).includes(status);
 
 // The form-state change for picking `pick` in the Ratification Status dropdown
-// (level "status") or the Ratification Result dropdown (level "result").
+// (level "status") or the Ratification Decision dropdown (level "result").
 // - Picking Attended again keeps a result already chosen; otherwise the stored
 //   value is "Attended" until a result is picked.
 // - Without the faculty history list (Staff / user records) the single
