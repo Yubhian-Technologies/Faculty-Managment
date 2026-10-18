@@ -11,7 +11,7 @@ import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { gradeTableFor } from "@/lib/examResults/rules";
 import { batchTitle, completeFromTarget, examHeldLabel, normalizeBatchMeta, type ResultBatchMeta, type TargetExam } from "@/lib/examResults/sheet";
 import {
-  applyPriorResults, applyRevaluationTargets, groupByBranch, rollKey, validateResultRows,
+  applyPriorResults, applyRevaluationTargets, groupByBranch, rollKey, validateResultRows, wrongBatchFile,
   type AcceptedStudentResult, type DepartmentRef, type FailedResultRow, type PriorResult, type RawResultRow,
 } from "@/lib/examResults/importRows";
 import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
@@ -31,6 +31,10 @@ import type { ExamResultBatch } from "@/types/examResults";
 // own, a 1st year under Basic Science goes to their core department), and one
 // draft is created per branch. Those drafts share an `uploadId`, which the next
 // part of the same file passes back so its students join the same sheets.
+//
+// The batch is a note, never a refusal: each result goes to its Roll No's student, filed under
+// the exam picked, whatever batch they are in now (a detained student). They are listed back
+// as `otherBatch`; only a file that is MOSTLY another batch is stopped (wrongBatchFile).
 //
 // Every row is checked before anything is written; a refused row is reported
 // with its sheet row number and the rest of the part is still saved.
@@ -111,11 +115,13 @@ export async function POST(request: Request) {
       allowedDepartments = meta.subDepartmentId ? [meta.subDepartment ?? ""] : [meta.department, ...children.map((c) => c.name)];
     }
 
-    const [{ rules }, students, subjects, priorSnap] = await Promise.all([
+    const [{ rules }, students, subjects, priorSnap, batchSnap] = await Promise.all([
       loadResultRules(db, collegeId),
       loadStudentsByRoll(db, collegeId, rows.map((r) => String(r.rollNumber ?? ""))),
       loadSubjectsByCode(db, collegeId, rows.map((r) => String(r.subjectCode ?? ""))),
       recordsCol(db, collegeId).where("courseKey", "==", meta.courseKey).where("semester", "==", meta.semester).get(),
+      // Who has results filed under this batch in ANY semester (a detained student now in a later batch).
+      meta.batch ? recordsCol(db, collegeId).where("courseKey", "==", meta.courseKey).where("batch", "==", meta.batch).select("studentId").get() : null,
     ]);
     const gradeTable = gradeTableFor(rules, meta.regulation);
     if (gradeTable.length === 0) return NextResponse.json({ error: "Set up the grade table under Result Rules first" }, { status: 400 });
@@ -133,8 +139,9 @@ export async function POST(request: Request) {
     }
     const ownSheets = new Set<string>(batchId ? [batchId] : [...uploadSheets.values()]);
 
-    // Students with results already filed under this batch (a detained student now in a later batch).
-    const batchHistory = new Set(priorSnap.docs.filter((d) => d.get("batch") === meta.batch).map((d) => String(d.get("studentId"))));
+    // Students with results already filed under this batch, any semester (a detained student
+    // now in a later batch, included once - later uploads of this batch accept them as they are).
+    const batchHistory = new Set((batchSnap?.docs ?? []).map((d) => String(d.get("studentId"))));
     const checked = validateResultRows(rows, {
       students, subjects, gradeTable,
       courseIds: meta.courseIds, courseName: meta.courseName, department: everyBranch ? "" : meta.department, allowedDepartments,
@@ -143,6 +150,9 @@ export async function POST(request: Request) {
       // For a student with no batch stored: their year of study gives it.
       currentStartYear: Number((await resolveCollegeAcademicYear(db, collegeId)).slice(0, 4)),
     });
+    // A file that is mostly another batch: the batch picked is probably wrong - nothing is saved.
+    const wrongBatch = meta.batch ? wrongBatchFile(checked.accepted, meta.batch) : null;
+    if (wrongBatch) return NextResponse.json({ error: wrongBatch }, { status: 400 });
 
     // A student already in THESE draft(s) (an earlier part, or an earlier upload to it).
     const alreadyIn = new Set<string>();
@@ -213,9 +223,11 @@ export async function POST(request: Request) {
     // Subjects with no credits: allowed (a mandatory / audit course), but worth a look.
     const zeroCreditCodes = [...new Set(accepted.flatMap((a) => a.subjects.filter((s) => s.credits <= 0).map((s) => s.subjectCode)))];
     const groupSummary = groups.map((g) => ({ department: g.department, subDepartment: g.subDepartment ?? "", students: g.students.length }));
+    // Students included as detained (now in a later batch) - listed back so the Exam Cell sees who.
+    const otherBatch = accepted.filter((a) => a.otherBatch !== undefined).map((a) => ({ rollNumber: a.student.rollNumber, batch: a.otherBatch! }));
 
     if (dryRun || accepted.length === 0) {
-      return NextResponse.json({ dryRun, batchId, uploadId: body.uploadId ?? null, students: accepted.length, subjectRows, failed, zeroCreditCodes, groups: groupSummary });
+      return NextResponse.json({ dryRun, batchId, uploadId: body.uploadId ?? null, students: accepted.length, subjectRows, failed, zeroCreditCodes, groups: groupSummary, otherBatch });
     }
 
     const now = new Date();
@@ -268,7 +280,7 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({
       dryRun: false, batchId: sheetIds[0], batchIds: sheetIds, uploadId: uploadId ?? null,
-      students: accepted.length, subjectRows, failed, zeroCreditCodes, groups: groupSummary,
+      students: accepted.length, subjectRows, failed, zeroCreditCodes, groups: groupSummary, otherBatch,
     }, { status: 201 });
   } catch (err) {
     const badBody = badBodyResponse(err);
