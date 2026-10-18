@@ -56,6 +56,7 @@ describe("matchOption", () => {
     expect(matchOption("ratified", RATIFICATION_STATUS_OPTIONS)).toBe("Ratified");
     expect(matchOption("NOT RATIFIED", RATIFICATION_STATUS_OPTIONS)).toBe("Not Ratified");
     expect(matchOption("not-ratified", RATIFICATION_STATUS_OPTIONS)).toBe("Not Ratified");
+    expect(matchOption("ATTENDED", RATIFICATION_STATUS_OPTIONS)).toBe("Attended");
   });
 
   it("rejects a value outside the stated set rather than guessing", () => {

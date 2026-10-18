@@ -475,7 +475,7 @@ export interface FMSUser {
   emergencyContactName?: string;
   emergencyContactRelation?: string; // relation of the emergency contact to this person
   emergencyContactMobileNo?: string;
-  ratificationStatus?: "Ratified" | "Not Ratified";
+  ratificationStatus?: "Ratified" | "Attended" | "Not Ratified"; // "Not Ratified" = older records only
   ratificationProceedingsNumber?: string;
   ratificationDate?: Timestamp; // Ratification Proceedings Date
   maritalStatus?: "Single" | "Married";
@@ -1263,7 +1263,7 @@ export interface FacultyMember {
   emergencyContactRelation?: string; // relation of the emergency contact to this person
   emergencyContactMobileNo?: string;
   collegeEmail: string; // required — this is the faculty member's login username
-  ratificationStatus?: "Ratified" | "Not Ratified";
+  ratificationStatus?: "Ratified" | "Attended" | "Not Ratified"; // "Not Ratified" = older records only
   // Historical ratification record(s) - see RatificationRecord's own doc-comment
   // below. A doc saved before this existed may still only carry the legacy flat
   // fields right below with no `ratifications` array; ratificationRecordsFromDoc()
@@ -1340,11 +1340,15 @@ export interface DegreeDetail {
   // (Fitter, Electrician ...). A value typed under one course stays stored if the course is changed later.
   subject?: string;
   trade?: string;
-  // UG/PG only - whether institutionName below names a University or an
-  // Institute; an Institute is typically affiliated to a University, which
-  // affiliatedUniversity records separately.
+  // UG/PG/Doctoral/Post-Doctoral. The stored value "INSTITUTE" is shown as "Affiliated College" (the label changed, the
+  // stored value did not, so every earlier record reads as before).
   institutionType?: "UNIVERSITY" | "INSTITUTE";
-  affiliatedUniversity?: string; // UG/PG only, when institutionType === "INSTITUTE"
+  affiliatedUniversity?: string; // when institutionType === "INSTITUTE"
+  // All optional, absent on every record saved before they existed (see lib/faculty/institutionType.ts):
+  collegeType?: "AUTONOMOUS" | "NON_AUTONOMOUS"; // only when institutionType === "INSTITUTE" (Affiliated College)
+  universityType?: "STATE" | "DEEMED" | "IIT" | "NIT" | "IIIT" | "OTHERS"; // only when institutionType === "UNIVERSITY"
+  universityTypeOther?: string; // only when universityType === "OTHERS" - what the person typed
+  additionalInformation?: string; // "Additional Information (if any)", right after Hall Ticket Number
   institutionName: string;
   // Doctoral (Ph.D.) only - UI label "Name of the Department": the department
   // of the university/institute the doctorate was pursued in. Optional, so
@@ -1481,6 +1485,8 @@ export interface PromotionRecord {
 // not a Firestore Timestamp, so array entries need no per-element Timestamp
 // conversion on read - see lib/faculty/ratificationHistory.ts.
 export interface RatificationRecord {
+  // The "Ratified Designation" - stored as the full name (Professor, Assistant
+  // Professor, Associate Professor, Principal); older records may hold a legacy code.
   designation: string;
   proceedingsNumber?: string;
   date?: string; // "YYYY-MM-DD"

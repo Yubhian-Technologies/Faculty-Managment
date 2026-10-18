@@ -115,7 +115,7 @@ export function FacultyStatusCell({ row }: { row: FacultyListRow }) {
         // stray stored value (one live record holds "Not Applicable") is shown
         // as-is but neutral, rather than styled as a pending ratification.
         <p className={`text-[10px] font-medium ${
-          ratification === "Ratified" ? "text-green-600" : ratification === "Not Ratified" ? "text-amber-600" : "text-muted-foreground"
+          ratification === "Ratified" ? "text-green-600" : ratification === "Attended" || ratification === "Not Ratified" ? "text-amber-600" : "text-muted-foreground"
         }`}>
           {ratification}
         </p>
