@@ -1,3 +1,4 @@
+import { subjectAbbreviation } from "@/lib/timetable/subjectAbbreviation";
 import type { Department, DayOfWeek, PeriodTiming, TeachingAssignment, TimetableSlot } from "@/types";
 import { DAY_LABELS } from "@/types";
 import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
@@ -21,10 +22,6 @@ import { collegeHeading, departmentHeading, facultyClassLabel, facultyTimetableT
 // PDF never does - a colour picked for the screen means nothing to someone
 // reading a printed page days later, and dropping it keeps every faculty
 // member's PDF reading the same plain black-and-white way.
-
-// A custom subject's generated code ("CUS-AB12C") reads as its typed name instead.
-const readable = (code: string | undefined, name: string | undefined) =>
-  code && /^CUS-[A-Z0-9]{5}$/.test(code) ? (name || code) : code;
 
 /** "09:00" -> "9:00 AM" - display only. */
 export function formatTime12h(hhmm: string): string {
@@ -157,7 +154,7 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
         const subline = [courseCode ?? assignment?.courseName, assignment?.year ? romanYear(assignment.year) : null, sectionLabel]
           .filter(Boolean)
           .join(" · ");
-        const subjectDisplay = readable(assignment?.shortCode, assignment?.subjectName) || readable(assignment?.subjectCode, assignment?.subjectName) || slot.subjectName || "—";
+        const subjectDisplay = subjectAbbreviation(assignment?.subjectName || slot.subjectName, assignment?.shortCode) || "—";
         const room = slot.classroom ? `Room: ${slot.classroom}` : null;
         const sub = slot.substituteFacultyName ? `Sub: ${slot.substituteFacultyName}` : null;
         const time = periodTimeFor(slot.courseId, slot.year, period);
@@ -189,7 +186,7 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
   for (const a of uniqueAssignments) {
     const semester = slots.find((sl) => sl.assignmentId === a.id)?.semester ?? a.semester;
     const cls = facultyClassLabel({ courseName: a.courseName, year: a.year, semester, sectionName: a.sectionName });
-    const acr = readable(a.shortCode, a.subjectName) ?? readable(a.subjectCode, a.subjectName) ?? "—";
+    const acr = subjectAbbreviation(a.subjectName, a.shortCode) || "—";
     const name = a.subjectName ?? "—";
     classRows.set(`${cls}|${acr}|${name}`, { cls, acr, name });
   }

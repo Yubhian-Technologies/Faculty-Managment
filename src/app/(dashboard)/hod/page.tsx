@@ -51,7 +51,7 @@ const HOD_MODULES = [
 
 const PERSONAL_MODULES = [
   { label: "My Attendance", description: "Attendance records", href: "/hod/attendance", icon: ClipboardCheck, color: "bg-violet-50 text-violet-600" },
-  { label: "Teaching Load", description: "Subjects & timetable", href: "/hod/teaching", icon: BookOpen, color: "bg-orange-50 text-orange-600" },
+  { label: "My Time Table", description: "Subjects & timetable", href: "/hod/teaching", icon: BookOpen, color: "bg-orange-50 text-orange-600" },
   { label: "My Leave", description: "Leave requests & balance", href: "/hod/leave", icon: CalendarClock, color: "bg-pink-50 text-pink-600" },
   { label: "My Profile", description: "Profile details", href: "/hod/profile", icon: UserCircle, color: "bg-slate-50 text-slate-600" },
 ];
@@ -126,7 +126,7 @@ export default function HODDashboard() {
     <div className="space-y-6">
       <PageHeader
         title={`Welcome, ${user?.name ?? "HOD"}`}
-        description={`${departmentLabel} - Head Of Department`}
+        description={`Head of the Department - ${departmentLabel.replace(/ and /gi, " & ")}`}
         actions={
           !isHiringHidden && (
             <Button asChild>
