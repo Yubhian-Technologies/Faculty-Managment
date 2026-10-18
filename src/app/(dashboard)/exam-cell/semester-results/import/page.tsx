@@ -34,6 +34,8 @@ type Summary = {
   students: number; subjectRows: number; failed: FailedResultRow[]; zeroCreditCodes: string[];
   /** Students per sheet - one per branch, and per sub-department (from each student's own department). */
   groups: { department: string; subDepartment: string; students: number }[];
+  /** Students whose batch on record is not the one picked (e.g. detained) - a note; their results still go to them. */
+  otherBatch: { rollNumber: string; batch: string }[];
 };
 
 function partsOf(rows: RawResultRow[]): RawResultRow[][] {
@@ -258,7 +260,7 @@ function ImportSemesterResults() {
         "Grade must be one of the grades in Result Rules (e.g. S, A, B ... F, AB).",
         "Zero-credit subjects (mandatory / audit courses) are Pass / Fail only: any grade given is a Pass, except a failing one (F, AB, MP, WH - as marked in Result Rules), which is a Fail.",
         "Students of every branch can be in one file - each student's own department decides their sheet (a sub-department gets its own; a 1st year under Basic Science goes to their core department).",
-        "Every student must belong to the batch picked on the import page.",
+        "Results go to each Roll No's student, filed under the batch picked - a student in another batch on record (e.g. detained) is only noted.",
         "University SGPA is optional - the university's SGPA for the student (on any one of their rows, \"-\" if withheld). It is only compared with the system's, never used to calculate.",
         "A Supplementary template lists every subject still not passed; a Revaluation template lists every subject of the exam - delete the rows that were not revalued.",
         "Credits are taken from each subject's own record - not from this file. No marks are imported.",
@@ -322,7 +324,7 @@ function ImportSemesterResults() {
     if (!meta || rows.length === 0) return;
     setBusy(dryRun ? "check" : "save");
     const parts = partsOf(rows);
-    const total: Summary = { students: 0, subjectRows: 0, failed: [], zeroCreditCodes: [], groups: [] };
+    const total: Summary = { students: 0, subjectRows: 0, failed: [], zeroCreditCodes: [], groups: [], otherBatch: [] };
     // Adding to one draft: its id. A new upload: the id the first saved part returns, so the
     // next parts join the same sheets.
     const batchId: string | null = draft?.id ?? null;
@@ -334,7 +336,10 @@ function ImportSemesterResults() {
         const res: Response = await fetch("/api/college/exam-results/import", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ dryRun, rows: parts[i], ...(batchId ? { batchId } : { meta, ...(uploadId ? { uploadId } : {}) }) }),
+          body: JSON.stringify({
+            dryRun, rows: parts[i],
+            ...(batchId ? { batchId } : { meta, ...(uploadId ? { uploadId } : {}) }),
+          }),
         });
         const json = (await res.json().catch(() => ({}))) as Partial<Summary> & { batchId?: string | null; batchIds?: string[]; uploadId?: string | null; error?: string };
         if (!res.ok) {
@@ -346,6 +351,7 @@ function ImportSemesterResults() {
         total.students += json.students ?? 0;
         total.subjectRows += json.subjectRows ?? 0;
         total.failed.push(...(json.failed ?? []));
+        total.otherBatch.push(...(json.otherBatch ?? []));
         total.zeroCreditCodes = [...new Set([...total.zeroCreditCodes, ...(json.zeroCreditCodes ?? [])])];
         for (const g of json.groups ?? []) {
           const same = total.groups.find((x) => x.department === g.department && x.subDepartment === g.subDepartment);
@@ -537,6 +543,13 @@ function ImportSemesterResults() {
                     ))}
                   </div>
                 </div>
+              )}
+              {summary.otherBatch.length > 0 && (
+                <p className="text-xs text-amber-700 dark:text-amber-400">
+                  {summary.otherBatch.length} student(s) are in another batch on record (e.g. detained) - their results still go to them, filed under batch {draft?.batch || batch}:{" "}
+                  {summary.otherBatch.slice(0, 40).map((x) => `${x.rollNumber} (${x.batch || "no batch on record"})`).join(", ")}
+                  {summary.otherBatch.length > 40 ? " …" : ""}
+                </p>
               )}
               {summary.zeroCreditCodes.length > 0 && (
                 <p className="text-xs text-amber-700 dark:text-amber-400">
