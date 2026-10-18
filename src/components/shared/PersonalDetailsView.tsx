@@ -3,7 +3,7 @@ import { RELIGION_LABELS, CASTE_LABELS } from "@/types";
 import type { Religion, Caste, RatificationRecord } from "@/types";
 import type { Timestamp } from "firebase/firestore";
 import { migratePersonalFlat } from "@/lib/faculty/fieldRenames";
-import { ratificationRecordsFromDoc } from "@/lib/faculty/ratificationHistory";
+import { ratificationRecordsFromDoc, ratificationDisplay, isRatified } from "@/lib/faculty/ratificationHistory";
 import { designationLabel } from "@/lib/designations/config";
 import { OptionalField as Field, hasAnyValue } from "@/components/shared/ProfileFieldPrimitives";
 import { FACT_GRID_COLS_2, FACT_GRID_COLS_4 } from "@/components/shared/factGrid";
@@ -226,10 +226,11 @@ export function PersonalDetailsView({ value, hideLegalName = false, hiddenFields
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Ratification</p>
           <div className="@container">
             <div className={`grid gap-4 ${FACT_GRID_COLS_4}`}>
-              <Field label="Ratification Status" value={p.ratificationStatus} />
+              <Field label="Ratification Status" value={ratificationDisplay(p.ratificationStatus).status} />
+              {ratificationDisplay(p.ratificationStatus).result && <Field label="Ratification Decision" value={ratificationDisplay(p.ratificationStatus).result} />}
             </div>
           </div>
-          {p.ratificationStatus === "Ratified" && (
+          {isRatified(p.ratificationStatus) && (
             ratificationHistory ? (
               ratificationRecords.length > 0 && (
                 <div className="mt-3 space-y-2">

@@ -102,6 +102,8 @@ export function FacultyExperienceCell({ row }: { row: FacultyListRow }) {
   );
 }
 
+const PENDING_RATIFICATION = new Set(["Not Yet Attended", "Attended", "Not Yet Ratified", "Not Ratified"]);
+
 /** Status badge with the ratification status under it. */
 export function FacultyStatusCell({ row }: { row: FacultyListRow }) {
   const ratification = row.ratificationStatus as string | undefined;
@@ -111,11 +113,12 @@ export function FacultyStatusCell({ row }: { row: FacultyListRow }) {
         {FACULTY_STATUS_LABELS[row.status as FacultyStatus] ?? (row.status as string)}
       </Badge>
       {ratification && (
-        // "Ratified" / "Not Ratified" are the two statuses the app writes. A
-        // stray stored value (one live record holds "Not Applicable") is shown
-        // as-is but neutral, rather than styled as a pending ratification.
+        // "Ratified" is green; the not-yet-ratified ones (Not Yet Attended / Attended /
+        // Not Yet Ratified, and the older "Not Ratified") are amber. A stray stored
+        // value (one live record holds "Not Applicable") is shown as-is but neutral,
+        // rather than styled as a pending ratification.
         <p className={`text-[10px] font-medium ${
-          ratification === "Ratified" ? "text-green-600" : ratification === "Attended" || ratification === "Not Ratified" ? "text-amber-600" : "text-muted-foreground"
+          ratification === "Ratified" ? "text-green-600" : PENDING_RATIFICATION.has(ratification) ? "text-amber-600" : "text-muted-foreground"
         }`}>
           {ratification}
         </p>

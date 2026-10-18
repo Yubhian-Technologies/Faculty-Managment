@@ -96,9 +96,9 @@ describe("FacultyStatusCell", () => {
     expect(out).toContain("Not Ratified");
     expect(out).toContain("text-amber-600");
   });
-  it("shows Attended in amber", () => {
-    const out = html(createElement(FacultyStatusCell, { row: row({ ratificationStatus: "Attended" }) }));
-    expect(out).toContain("Attended");
+  it.each(["Attended", "Not Yet Attended", "Not Yet Ratified"])("shows %s in amber", (status) => {
+    const out = html(createElement(FacultyStatusCell, { row: row({ ratificationStatus: status }) }));
+    expect(out).toContain(status);
     expect(out).toContain("text-amber-600");
   });
   it("shows a stray stored value ('Not Applicable' exists on one live record) neutrally, not as pending", () => {

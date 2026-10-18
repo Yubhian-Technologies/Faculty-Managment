@@ -77,13 +77,20 @@ const STRING_FIELDS = [
 const NOT_RATIFIED_WORDS = new Set(["not ratified", "pending", "no", "awaiting", "in progress", "rejected"]);
 const RATIFIED_WORDS = new Set(["ratified", "approved", "yes", "done", "complete", "completed"]);
 
-// "Attended" is the status the forms now offer in place of "Not Ratified";
-// "Not Ratified" (and its synonyms) is still understood so an older spreadsheet
-// keeps importing exactly as before.
-export function normalizeRatificationStatus(raw: string | undefined): "Ratified" | "Attended" | "Not Ratified" | undefined {
-  const v = raw?.trim().toLowerCase();
+// Every stored status that is not (yet) "Ratified" - the single Proceedings
+// Number/Date pair is cleared when one of these is saved.
+const NOT_RATIFIED_STATUSES = new Set(["Not Ratified", "Not Yet Ratified", "Attended", "Not Yet Attended"]);
+
+// The forms now use Not Yet Attended / Attended and, once Attended, Ratified /
+// Not Yet Ratified (see lib/faculty/ratificationHistory.ts); "Not Ratified" (and
+// its synonyms) is still understood so an older spreadsheet keeps importing as before.
+export function normalizeRatificationStatus(raw: string | undefined): "Ratified" | "Attended" | "Not Yet Attended" | "Not Yet Ratified" | "Not Ratified" | undefined {
+  const v = raw?.trim().toLowerCase().replace(/\s+/g, " ");
   if (!v) return undefined;
+  // Checked before the generic "not" rule below - "not yet attended" contains "not".
   if (v === "attended") return "Attended";
+  if (v === "not yet attended") return "Not Yet Attended";
+  if (v === "not yet ratified") return "Not Yet Ratified";
   // Check the "not ratified" family first - "not approved" contains "approved"
   // and must resolve to Not Ratified, not Ratified.
   if (v.includes("not") || NOT_RATIFIED_WORDS.has(v)) return "Not Ratified";
@@ -131,7 +138,7 @@ export function buildPersonalDetailsUpdate(rawBody: PersonalDetailsInput): Recor
     updates.ratifications = normalizeRatificationRecords(body.ratifications);
     updates.ratificationProceedingsNumber = "";
     updates.ratificationDate = "";
-  } else if (body.ratificationStatus === "Not Ratified" || body.ratificationStatus === "Attended") {
+  } else if (body.ratificationStatus && body.ratificationStatus !== "Ratified" && NOT_RATIFIED_STATUSES.has(body.ratificationStatus)) {
     updates.ratificationProceedingsNumber = "";
     updates.ratificationDate = "";
   } else if (body.ratificationDate !== undefined) {

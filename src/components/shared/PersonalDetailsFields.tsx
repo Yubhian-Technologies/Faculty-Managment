@@ -11,8 +11,8 @@ import { PHONE_REGEX, AADHAR_REGEX, PAN_REGEX, HEIGHT_REGEX } from "@/lib/valida
 import { StringListInput, RepeatingGroup } from "@/components/shared/ProfileFieldPrimitives";
 import { migratePersonalFlat } from "@/lib/faculty/fieldRenames";
 import {
-  RATIFICATION_STATUS_CHOICES, LEGACY_NOT_RATIFIED, ratifiedDesignationChoices,
-  matchRatifiedDesignation, blankRatificationRecord,
+  RATIFICATION_STATUS_CHOICES, RATIFICATION_RESULT_CHOICES, ratificationStatusStep, ratificationResultStep, ratificationStatusPatch,
+  isLegacyRatificationStatus, isRatified, ratifiedDesignationChoices, matchRatifiedDesignation, blankRatificationRecord,
 } from "@/lib/faculty/ratificationHistory";
 import { toDateInputValue } from "@/lib/utils";
 import type { DesignationCatalogItem } from "@/types";
@@ -183,7 +183,7 @@ export function getMissingRequiredPersonalFields(
   value: PersonalDetailsValue,
   requiredFields: (keyof PersonalDetailsValue)[] = STAFF_REQUIRED_PERSONAL_FIELDS
 ): string[] {
-  return requiredFields
+  const missing = requiredFields
     .filter((key) => {
       const v = String(value[key] ?? "").trim();
       if (!v) return true;
@@ -191,6 +191,9 @@ export function getMissingRequiredPersonalFields(
       return !!format && !format.test(v);
     })
     .map((key) => PERSONAL_FIELD_LABELS[key] ?? key);
+  // "Attended" on its own means the Ratification Decision hasn't been chosen yet.
+  if (requiredFields.includes("ratificationStatus") && value.ratificationStatus === "Attended") missing.push("Ratification Decision");
+  return missing;
 }
 
 export function PersonalDetailsFields({ value: rawValue, onChange, requiredFields = STAFF_REQUIRED_PERSONAL_FIELDS, hiddenFields = [], showNameAsPerPan = false, ratificationHistory = false }: Props) {
@@ -626,29 +629,33 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
             <div className="space-y-2">
               <Label>Ratification Status{mark("ratificationStatus")}</Label>
               <Select
-                value={value.ratificationStatus ?? ""}
-                onValueChange={(v) => {
-                  // Proceedings Number/Date (or the ratification history list)
-                  // only make sense once Ratified - cleared the moment status
-                  // moves away from it, so a later Save can never resend (and
-                  // re-persist) a stale value from before this switch.
-                  if (v !== "Ratified") {
-                    onChange({ ...value, ratificationStatus: v, ratificationProceedingsNumber: "", ratificationDate: "", ratifications: [] });
-                  } else {
-                    set("ratificationStatus", v);
-                  }
-                }}
+                value={ratificationStatusStep(value.ratificationStatus)}
+                onValueChange={(v) => onChange({ ...value, ...ratificationStatusPatch(value.ratificationStatus, v, "status", ratificationHistory) })}
               >
                 <SelectTrigger onClear={canClear("ratificationStatus", value.ratificationStatus) ? () => set("ratificationStatus", "") : undefined}><SelectValue placeholder="Select status" /></SelectTrigger>
                 <SelectContent>
                   {RATIFICATION_STATUS_CHOICES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                  {/* A record saved before "Attended" existed may hold "Not Ratified";
-                      listed only while it does, so the picker shows it instead of blank. */}
-                  {value.ratificationStatus === LEGACY_NOT_RATIFIED && <SelectItem value={LEGACY_NOT_RATIFIED}>{LEGACY_NOT_RATIFIED}</SelectItem>}
+                  {/* An older stored status ("Not Ratified", ...) is not guessed into one
+                      of the two; it is listed only while the record holds it, so the picker
+                      shows it instead of blank. Picking Attended / Not Yet Attended replaces it. */}
+                  {isLegacyRatificationStatus(value.ratificationStatus) && (
+                    <SelectItem value={value.ratificationStatus as string}>{value.ratificationStatus}</SelectItem>
+                  )}
                 </SelectContent>
               </Select>
             </div>
-            {value.ratificationStatus === "Ratified" && !ratificationHistory && (
+            {ratificationStatusStep(value.ratificationStatus) === "Attended" && (
+              <div className="space-y-2">
+                <Label>Ratification Decision{mark("ratificationStatus")}</Label>
+                <Select value={ratificationResultStep(value.ratificationStatus)} onValueChange={(v) => onChange({ ...value, ...ratificationStatusPatch(value.ratificationStatus, v, "result", ratificationHistory) })}>
+                  <SelectTrigger><SelectValue placeholder="Select result" /></SelectTrigger>
+                  <SelectContent>
+                    {RATIFICATION_RESULT_CHOICES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {isRatified(value.ratificationStatus) && !ratificationHistory && (
               <>
                 <div className="space-y-2">
                   <Label>Ratification Proceedings Number</Label>
@@ -661,7 +668,7 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
               </>
             )}
           </div>
-          {value.ratificationStatus === "Ratified" && ratificationHistory && (
+          {isRatified(value.ratificationStatus) && ratificationHistory && (
             <RepeatingGroup
               title="Ratification Records"
               // One record is always on screen once Ratified (a blank one is never
