@@ -74,7 +74,7 @@ const MENTOR_FILTERS: { key: MentorFilter; label: string }[] = [
 
 interface AssignSection { id: string; name: string; year: number; department: string; courseId: string; courseName: string }
 
-// Course -> Year -> Section, then the mentor, then tick the students (search by name or roll number).
+// Course -> Year -> Section, then the mentor, then tick the students (search by name or Regd. No).
 // Only sections whose year this HOD runs are offered (a year another department runs is that HOD's to
 // assign). The mentor list puts the faculty who teach the chosen class first. A student who already has
 // a mentor shows only when the filter asks for them, and cannot be ticked: remove that mentor first
@@ -282,7 +282,7 @@ function AssignView({ onChanged }: { onChanged: () => void }) {
           <div className="flex flex-wrap items-end gap-3">
             <div className="w-64">
               <p className="text-xs text-muted-foreground mb-1">Search</p>
-              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name or roll number" />
+              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name or Regd. No" />
             </div>
             <div>
               <p className="text-xs text-muted-foreground mb-1">Mentor status</p>
@@ -311,7 +311,7 @@ function AssignView({ onChanged }: { onChanged: () => void }) {
                     <th className="py-2 pr-3 w-8">
                       <Checkbox checked={allTicked} disabled={pickable.length === 0} onCheckedChange={toggleAll} aria-label="Select all shown without a mentor" />
                     </th>
-                    <th className="py-2 pr-3 font-medium">Roll No</th>
+                    <th className="py-2 pr-3 font-medium">Regd. No</th>
                     <th className="py-2 pr-3 font-medium">Name</th>
                     <th className="py-2 font-medium">Mentor</th>
                   </tr></thead>
@@ -347,7 +347,7 @@ function AssignView({ onChanged }: { onChanged: () => void }) {
 }
 
 // One place to look students and mentors up: filter by course, year, section and mentor (all optional),
-// by assigned / not assigned, or just search a name or roll number. Every row opens the student's
+// by assigned / not assigned, or just search a name or Regd. No. Every row opens the student's
 // mentoring details. Shows any student the HOD may view (the shared first year included).
 function BrowseView({ mentors }: { mentors: MentorOption[] }) {
   const [sections, setSections] = useState<AssignSection[]>([]);
@@ -377,7 +377,7 @@ function BrowseView({ mentors }: { mentors: MentorOption[] }) {
   const q = search.trim();
   const narrowed = courseKey !== "all" || yearKey !== "all" || sectionId !== "all";
   // What to ask the server for: the chosen section(s) when the class is narrowed, else the mentor's
-  // mentees, else a name / roll number search. Everything else is a filter over what comes back.
+  // mentees, else a name / Regd. No search. Everything else is a filter over what comes back.
   const plan = useMemo(() => {
     const classUrl = (id: string) => `/api/college/mentoring/students?for=view&sectionId=${encodeURIComponent(id)}`;
     if (sectionId !== "all") return { key: `s:${sectionId}`, urls: [classUrl(sectionId)] };
@@ -464,7 +464,7 @@ function BrowseView({ mentors }: { mentors: MentorOption[] }) {
           <div className="flex flex-wrap items-end gap-3">
             <div className="w-64">
               <p className="text-xs text-muted-foreground mb-1">Search</p>
-              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name or roll number" />
+              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name or Regd. No" />
             </div>
             <div>
               <p className="text-xs text-muted-foreground mb-1">Mentor status</p>
@@ -479,9 +479,9 @@ function BrowseView({ mentors }: { mentors: MentorOption[] }) {
       </Card>
 
       {sectionsLoaded && sections.length === 0 && (
-        <p className="text-sm text-amber-700">No classes were found for your department, so the Course, Year and Section lists are empty. Search by name or roll number meanwhile.</p>
+        <p className="text-sm text-amber-700">No classes were found for your department, so the Course, Year and Section lists are empty. Search by name or Regd. No meanwhile.</p>
       )}
-      {!plan && <p className="text-sm text-muted-foreground">Pick a course, year, section or mentor - or type at least 3 characters of a name or roll number.</p>}
+      {!plan && <p className="text-sm text-muted-foreground">Pick a course, year, section or mentor - or type at least 3 characters of a name or Regd. No.</p>}
       {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
       {plan && !loading && (
         <div className="space-y-2">
@@ -493,7 +493,7 @@ function BrowseView({ mentors }: { mentors: MentorOption[] }) {
               <CardContent className="pt-2 overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead><tr className="text-left text-muted-foreground border-b">
-                    <th className="py-2 pr-3 font-medium">Roll No</th>
+                    <th className="py-2 pr-3 font-medium">Regd. No</th>
                     <th className="py-2 pr-3 font-medium">Name</th>
                     <th className="py-2 pr-3 font-medium">Branch</th>
                     <th className="py-2 pr-3 font-medium">Year</th>

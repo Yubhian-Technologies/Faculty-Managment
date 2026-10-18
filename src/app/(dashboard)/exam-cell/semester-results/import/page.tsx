@@ -244,7 +244,7 @@ function ImportSemesterResults() {
       const ExcelJS = (await import("exceljs")).default;
       const wb = new ExcelJS.Workbook();
       const sheet = wb.addWorksheet("Results");
-      sheet.addRow(["Roll No", "Subject Code", "Grade", "University SGPA"]);
+      sheet.addRow(["Regd. No", "Subject Code", "Grade", "University SGPA"]);
       sheet.getRow(1).font = { bold: true };
       sheet.columns = [{ width: 16 }, { width: 16 }, { width: 10 }, { width: 16 }];
       if (prefilled) for (const r of prefilled) sheet.addRow([r.rollNumber, r.subjectCode, "", ""]);
@@ -255,12 +255,12 @@ function ImportSemesterResults() {
 
       const help = wb.addWorksheet("How to fill");
       [
-        "One row per student per subject: Roll No, Subject Code and Grade - all three required.",
+        "One row per student per subject: Regd. No, Subject Code and Grade - all three required.",
         "Subject Code may be the college's code (UGBS1T0523) or the university's code (R232101) once that is set on the subject under Academics > Subjects.",
         "Grade must be one of the grades in Result Rules (e.g. S, A, B ... F, AB).",
         "Zero-credit subjects (mandatory / audit courses) are Pass / Fail only: any grade given is a Pass, except a failing one (F, AB, MP, WH - as marked in Result Rules), which is a Fail.",
         "Students of every branch can be in one file - each student's own department decides their sheet (a sub-department gets its own; a 1st year under Basic Science goes to their core department).",
-        "Results go to each Roll No's student, filed under the batch picked - a student in another batch on record (e.g. detained) is only noted.",
+        "Results go to each Regd. No's student, filed under the batch picked - a student in another batch on record (e.g. detained) is only noted.",
         "University SGPA is optional - the university's SGPA for the student (on any one of their rows, \"-\" if withheld). It is only compared with the system's, never used to calculate.",
         "A Supplementary template lists every subject still not passed; a Revaluation template lists every subject of the exam - delete the rows that were not revalued.",
         "Credits are taken from each subject's own record - not from this file. No marks are imported.",
@@ -487,7 +487,7 @@ function ImportSemesterResults() {
         <CardHeader>
           <CardTitle className="text-base">2. Template</CardTitle>
           <CardDescription>
-            One row per student per subject: Roll No, Subject Code, Grade. The code must be the subject&rsquo;s college code. Your own results sheet works too if its headings are close
+            One row per student per subject: Regd. No, Subject Code, Grade. The code must be the subject&rsquo;s college code. Your own results sheet works too if its headings are close
             (e.g. HTNO, Sub Code, Grade Secured); other columns such as Name, Credits or marks are ignored - only grades are imported.
           </CardDescription>
         </CardHeader>
@@ -560,7 +560,7 @@ function ImportSemesterResults() {
                 <div className="max-h-80 overflow-auto rounded-md border">
                   <table className="w-full text-xs">
                     <thead className="sticky top-0 bg-muted">
-                      <tr><th className="p-2 text-left">Row</th><th className="p-2 text-left">Roll No</th><th className="p-2 text-left">Subject</th><th className="p-2 text-left">Why it was refused</th></tr>
+                      <tr><th className="p-2 text-left">Row</th><th className="p-2 text-left">Regd. No</th><th className="p-2 text-left">Subject</th><th className="p-2 text-left">Why it was refused</th></tr>
                     </thead>
                     <tbody>
                       {summary.failed.map((f, i) => (

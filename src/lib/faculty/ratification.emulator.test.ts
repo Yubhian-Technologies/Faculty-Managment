@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { initializeApp, getApps, getApp } from "firebase-admin/app";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { personalRecordFromDoc, personalPatchBody } from "./personalRecord";
-import { ratificationStatusPatch, ratificationRecordsFromDoc, normalizeRatificationRecords } from "./ratificationHistory";
+import { ratificationStatusPatch, ratificationRecordsFromDoc, normalizeRatificationRecords, ratificationStatusStep, ratificationResultStep } from "./ratificationHistory";
 import { buildPersonalDetailsUpdate } from "@/lib/firestore/personalDetails";
 
 // Firebase save + load of the Ratification flow on a REAL Firestore (the local emulator - never the live project),
@@ -74,6 +74,7 @@ describe.skipIf(!EMULATOR || !file)("Ratification save/load on real Firestore wi
       const after = await load(path) as Doc;
 
       expect(after.ratificationStatus ?? "", path).toBe(before.ratificationStatus ?? "");
+      expect(after.ratificationAttended, `${path} must not gain the attended marker from a no-change save`).toBeUndefined();
       if (history) {
         const was = normalizeRatificationRecords(ratificationRecordsFromDoc(doc));
         expect(after.ratifications, path).toEqual(was); // every row, exactly
@@ -125,7 +126,7 @@ describe.skipIf(!EMULATOR || !file)("Ratification save/load on real Firestore wi
     for (const { path } of picked.values()) {
       const rows = (await load(path) as Doc).ratifications;
       for (const [level, pick] of combos) {
-        await saveBack(path, true, (s) => Object.assign(s, ratificationStatusPatch(s.ratificationStatus as string, pick, level, true)));
+        await saveBack(path, true, (s) => Object.assign(s, ratificationStatusPatch(s.ratificationStatus as string, s.ratificationAttended as boolean, pick, level, true)));
         const after = await load(path) as Doc;
         // picking Attended while already Ratified keeps Ratified; the status step is stored as Attended otherwise
         expect(["Not Yet Attended", "Attended", "Not Ratified", "Ratified"], `${path} ${pick}`).toContain(after.ratificationStatus);
@@ -150,9 +151,32 @@ describe.skipIf(!EMULATOR || !file)("Ratification save/load on real Firestore wi
     expect(after[1]).toEqual(added);
   }, 60_000);
 
+  it("an older Not Ratified faculty: shown as before; Attended then Decision Not Ratified saves, reloads as Attended + Not Ratified", async () => {
+    const e = entries.find((x) => x.history && x.doc.ratificationStatus === "Not Ratified" && ratificationRecordsFromDoc(x.doc).length > 0)
+      ?? entries.find((x) => x.history && x.doc.ratificationStatus === "Not Ratified")!;
+    await db().doc(e.path).set(e.doc); // back to its backed-up state (earlier tests in this file changed the copy)
+    const rows = (await load(e.path) as Doc).ratifications;
+    const stepsOf = async () => {
+      const d = (await db().doc(e.path).get()).data() as Doc;
+      return [ratificationStatusStep(d.ratificationStatus as string, d.ratificationAttended as boolean), ratificationResultStep(d.ratificationStatus as string, d.ratificationAttended as boolean), d.ratificationStatus, d.ratificationAttended];
+    };
+    expect(await stepsOf()).toEqual(["Not Ratified", "", "Not Ratified", undefined]);   // as on main: Status box says Not Ratified, no Decision
+    // picks Attended: stored "Attended", Decision still to choose
+    await saveBack(e.path, true, (st) => Object.assign(st, ratificationStatusPatch(st.ratificationStatus as string, st.ratificationAttended as boolean, "Attended", "status", true)));
+    expect(await stepsOf()).toEqual(["Attended", "", "Attended", undefined]);
+    // then the Decision Not Ratified: stored "Not Ratified" + marker, and it reloads as Attended + Not Ratified
+    await saveBack(e.path, true, (st) => Object.assign(st, ratificationStatusPatch(st.ratificationStatus as string, st.ratificationAttended as boolean, "Not Ratified", "result", true)));
+    expect(await stepsOf()).toEqual(["Attended", "Not Ratified", "Not Ratified", true]);
+    // a later no-change save keeps exactly that
+    await saveBack(e.path, true);
+    expect(await stepsOf()).toEqual(["Attended", "Not Ratified", "Not Ratified", true]);
+    // ratification rows were never touched by any of it
+    expect((await load(e.path) as Doc).ratifications).toEqual(rows ?? []);
+  }, 60_000);
+
   it("Ratified picked on a record, the default blank row left untouched, stores no empty row", async () => {
     const e = entries.find((x) => x.history && x.doc.ratificationStatus === "Not Ratified" && ratificationRecordsFromDoc(x.doc).length === 0)!;
-    await saveBack(e.path, true, (s) => Object.assign(s, ratificationStatusPatch("Attended", "Ratified", "result", true)));
+    await saveBack(e.path, true, (s) => Object.assign(s, ratificationStatusPatch("Attended", undefined, "Ratified", "result", true)));
     const after = await load(e.path) as Doc;
     expect(after.ratificationStatus).toBe("Ratified");
     expect(after.ratifications).toEqual([]);

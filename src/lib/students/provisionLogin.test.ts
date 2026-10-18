@@ -63,7 +63,7 @@ describe("provisionStudentLogin - global identity, password chosen by the office
     expect(auth.users.size).toBe(0);
   });
 
-  it("the same roll in ANOTHER college is refused: roll numbers are globally unique, so there is one account per roll", async () => {
+  it("the same roll in ANOTHER college is refused: Regd. Nos are globally unique, so there is one account per roll", async () => {
     const fs = fakeFs({
       "colleges/c1/students/s1": { name: "A", rollNumber: "R1", status: "REGULAR" },
       "colleges/c2/students/s2": { name: "B", rollNumber: "r-1", status: "REGULAR" },
@@ -209,7 +209,7 @@ describe("setStudentLoginActive", () => {
     await setStudentLoginActive(firestore, adminAuth, "c1", u.uid, false);
     expect(auth.users.get(u.uid)?.disabled).toBe(true);
     expect(db.get(`colleges/c1/users/${u.uid}`)?.isActive).toBe(false);
-    // A graduate still holds their roll number: the registry entry is NOT retired.
+    // A graduate still holds their Regd. No: the registry entry is NOT retired.
     expect(db.get("studentUsernames/R1")?.active).toBe(true);
 
     await setStudentLoginActive(firestore, adminAuth, "c1", u.uid, true);

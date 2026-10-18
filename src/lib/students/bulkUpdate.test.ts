@@ -17,7 +17,7 @@ const run = (rows: BulkUpdateRow[], students: BulkStudent[], fields: string[], f
   classifyBulkUpdate({ rows, studentsByMobile: index(...students), fields, fillOnly, otherCollegeMobiles: other });
 
 describe("allow-list", () => {
-  it("never offers the key, Roll No or the identity / academic placement fields", () => {
+  it("never offers the key, Regd. No or the identity / academic placement fields", () => {
     for (const k of ["mobileNo", "rollNumber", "name", "department", "year", "course", "section", "status", "secondaryDepartment", "studentType"]) {
       expect(BULK_UPDATE_FIELDS).not.toContain(k);
     }

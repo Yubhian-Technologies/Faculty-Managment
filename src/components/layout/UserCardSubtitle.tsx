@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import type { FMSUser } from "@/types";
 
 // The line under the name in the sidebar / mobile-drawer user card. A student's login email is generated from their Roll
-// No (<roll>@students.internal) and means nothing to them, so they see their Roll No instead; every other role keeps
-// their email exactly as before. A student with no Roll No yet (or while it loads) shows nothing rather than the
+// No (<roll>@students.internal) and means nothing to them, so they see their Regd. No instead; every other role keeps
+// their email exactly as before. A student with no Regd. No yet (or while it loads) shows nothing rather than the
 // internal address. Display only - nothing about sign-in or roles is read or changed here.
 
 // One lookup per signed-in student per page load, shared by the sidebar and the drawer (both mount together).

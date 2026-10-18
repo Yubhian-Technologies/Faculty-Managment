@@ -97,6 +97,8 @@ export interface PersonalDetailsValue {
   emergencyContactRelation?: string;
   emergencyContactMobileNo?: string;
   ratificationStatus?: string;
+  // true once the Decision "Not Ratified" was picked after Attended - see lib/faculty/ratificationHistory.ts.
+  ratificationAttended?: boolean;
   ratificationProceedingsNumber?: string; // ignored when `ratificationHistory` is true - see `ratifications` below
   ratificationDate?: string;   // yyyy-mm-dd; ignored when `ratificationHistory` is true
   // Faculty-only multi-entry ratification history (see lib/faculty/ratificationHistory.ts).
@@ -629,25 +631,26 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
             <div className="space-y-2">
               <Label>Ratification Status{mark("ratificationStatus")}</Label>
               <Select
-                value={ratificationStatusStep(value.ratificationStatus)}
-                onValueChange={(v) => onChange({ ...value, ...ratificationStatusPatch(value.ratificationStatus, v, "status", ratificationHistory) })}
+                value={ratificationStatusStep(value.ratificationStatus, value.ratificationAttended)}
+                onValueChange={(v) => onChange({ ...value, ...ratificationStatusPatch(value.ratificationStatus, value.ratificationAttended, v, "status", ratificationHistory) })}
               >
                 <SelectTrigger onClear={canClear("ratificationStatus", value.ratificationStatus) ? () => set("ratificationStatus", "") : undefined}><SelectValue placeholder="Select status" /></SelectTrigger>
                 <SelectContent>
                   {RATIFICATION_STATUS_CHOICES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                  {/* An older stored status ("Not Ratified", ...) is not guessed into one
-                      of the two; it is listed only while the record holds it, so the picker
-                      shows it instead of blank. Picking Attended / Not Yet Attended replaces it. */}
-                  {isLegacyRatificationStatus(value.ratificationStatus) && (
+                  {/* An older "Not Ratified" (nobody has said whether they attended) or any other
+                      stored text is not guessed into one of the two; it is listed only while the
+                      record holds it, so the picker shows it as before instead of blank.
+                      Picking Attended / Not Yet Attended replaces it. */}
+                  {isLegacyRatificationStatus(value.ratificationStatus, value.ratificationAttended) && (
                     <SelectItem value={value.ratificationStatus as string}>{value.ratificationStatus}</SelectItem>
                   )}
                 </SelectContent>
               </Select>
             </div>
-            {ratificationStatusStep(value.ratificationStatus) === "Attended" && (
+            {ratificationStatusStep(value.ratificationStatus, value.ratificationAttended) === "Attended" && (
               <div className="space-y-2">
                 <Label>Ratification Decision{mark("ratificationStatus")}</Label>
-                <Select value={ratificationResultStep(value.ratificationStatus)} onValueChange={(v) => onChange({ ...value, ...ratificationStatusPatch(value.ratificationStatus, v, "result", ratificationHistory) })}>
+                <Select value={ratificationResultStep(value.ratificationStatus, value.ratificationAttended)} onValueChange={(v) => onChange({ ...value, ...ratificationStatusPatch(value.ratificationStatus, value.ratificationAttended, v, "result", ratificationHistory) })}>
                   <SelectTrigger><SelectValue placeholder="Select result" /></SelectTrigger>
                   <SelectContent>
                     {RATIFICATION_RESULT_CHOICES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}

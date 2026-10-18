@@ -22,7 +22,7 @@ const RUN_ID = /^[A-Za-z0-9_-]{8,64}$/;
 //  - Each student is ONE transaction: re-read, re-classify against what is stored right now, then write ONLY the changed
 //    fields and the backup row (old and new value of every field it changed) together. A crash cannot leave a change
 //    without its backup. A value someone changed since the preview is judged against the current value.
-//  - Only the allow-listed detail fields are ever written - never Student Mobile No, Roll No, name, department, year,
+//  - Only the allow-listed detail fields are ever written - never Student Mobile No, Regd. No, name, department, year,
 //    section, status, the mobile/roll registries or the login.
 //  - One student failing is reported and the rest continue.
 export async function POST(request: Request) {

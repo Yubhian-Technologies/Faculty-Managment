@@ -54,6 +54,8 @@ export function personalRecordFromDoc(m: Doc, opts: { ratificationHistory?: bool
     emergencyContactRelation: str(m.emergencyContactRelation),
     emergencyContactMobileNo: str(m.emergencyContactMobileNo),
     ratificationStatus: str(m.ratificationStatus),
+    // only ever true on a record where the Decision "Not Ratified" was picked; absent otherwise (never added to other records)
+    ...(m.ratificationAttended === true ? { ratificationAttended: true } : {}),
     ...(ratificationHistory
       ? { ratifications: ratificationRecordsFromDoc(m) }
       : {
@@ -92,7 +94,7 @@ export function personalPatchBody(record: FacultyEditRecord, opts: { ratificatio
     bankAccountNumber: record.bankAccountNumber, ifscCode: record.ifscCode,
     bankName: record.bankName, bankBranch: record.bankBranch, bankOtherDetails: record.bankOtherDetails,
     emergencyContactName: record.emergencyContactName, emergencyContactRelation: record.emergencyContactRelation,
-    emergencyContactMobileNo: record.emergencyContactMobileNo, ratificationStatus: record.ratificationStatus,
+    emergencyContactMobileNo: record.emergencyContactMobileNo, ratificationStatus: record.ratificationStatus, ratificationAttended: record.ratificationAttended,
     ...(ratificationHistory
       ? { ratifications: normalizeRatificationRecords(record.ratifications) }
       : { ratificationProceedingsNumber: record.ratificationProceedingsNumber, ratificationDate: record.ratificationDate }),

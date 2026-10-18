@@ -894,15 +894,19 @@ export function StringListInput({ label, values, onChange, placeholder }: {
 
 // ── Read-only primitives ────────────────────────────────────────────────────
 
-export function Section({ number, title, children }: { number: number; title: string; children: React.ReactNode }) {
+// `hideHeader` drops the numbered title row only (a per-module page already names the module in its own page
+// title); the content is rendered exactly as before. Off by default.
+export function Section({ number, title, children, hideHeader = false }: { number: number; title: string; children: React.ReactNode; hideHeader?: boolean }) {
   return (
-    <div className="space-y-3 pt-5 border-t first:border-t-0 first:pt-0">
-      <div className="flex items-center gap-2.5">
-        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-          {number}
-        </span>
-        <p className="text-sm font-semibold">{title}</p>
-      </div>
+    <div className={hideHeader ? "space-y-3" : "space-y-3 pt-5 border-t first:border-t-0 first:pt-0"}>
+      {!hideHeader && (
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+            {number}
+          </span>
+          <p className="text-sm font-semibold">{title}</p>
+        </div>
+      )}
       {children}
     </div>
   );

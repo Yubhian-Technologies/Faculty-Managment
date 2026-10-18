@@ -102,7 +102,7 @@ export function MenteeProgress({ studentId, backHref }: { studentId: string; bac
           <div className="min-w-0">
             <h1 className="text-2xl font-bold tracking-tight truncate">{s.name}</h1>
             <p className="text-sm text-muted-foreground">
-              {s.rollNumber || "No roll number"} · {s.secondaryDepartment || s.department} · Year {s.year}{s.section ? ` · Section ${s.section}` : ""}
+              {s.rollNumber || "No Regd. No"} · {s.secondaryDepartment || s.department} · Year {s.year}{s.section ? ` · Section ${s.section}` : ""}
               {s.batch ? ` · Batch ${s.batch}` : ""}
             </p>
             {s.status && s.status !== "REGULAR" && <Badge variant="outline" className="mt-1">{s.status}</Badge>}

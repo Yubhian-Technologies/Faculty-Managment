@@ -144,7 +144,7 @@ describe("roll registry: peekRollHolder and the message", () => {
 
   it("the message names another college only when given its name, and never a student of that college", () => {
     const other = { collegeId: "c9", name: "Zed", sameCollege: false };
-    expect(rollTakenMessage("Z9", other)).toBe("Roll number Z9 is already registered to a student in another college. Roll numbers must be unique across all colleges.");
+    expect(rollTakenMessage("Z9", other)).toBe("Regd. No Z9 is already registered to a student in another college. Regd. Nos must be unique across all colleges.");
     const named = rollTakenMessage("Z9", other, "Other College");
     expect(named).toContain("(Other College)");
     expect(named).not.toContain("Zed");

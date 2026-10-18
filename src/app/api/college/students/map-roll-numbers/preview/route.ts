@@ -8,7 +8,7 @@ import { resolveRollMapping } from "@/lib/students/rollMappingResolve";
 import { summarizeRollMapping } from "@/lib/students/rollMapping";
 import { MAX_ROLL_MAP_ROWS, parseRollMapRows } from "@/lib/students/rollMappingRows";
 
-// Classifies an "Import Roll Nos" file WITHOUT writing anything, so the Office
+// Classifies an "Import Regd. Nos" file WITHOUT writing anything, so the Office
 // sees exactly what would happen before committing to it. The apply endpoint
 // runs the same resolver again at write time - this is a preview, not a
 // promise, and a roll can be claimed by somebody else in between.

@@ -29,7 +29,7 @@ function isAuthError(err: unknown, code: string): boolean {
 // colleges/{collegeId}/users/{uid} profile doc every other COLLEGE-scoped role
 // resolves a session against (see api/auth/session/route.ts).
 //
-// Identity (see loginDefaults.ts): the normalised Roll Number alone - roll numbers
+// Identity (see loginDefaults.ts): the normalised Regd. No alone - Regd. Nos
 // are globally unique, so there is no college in it and case/format variants of a
 // roll can never become two accounts. The password is the one the college office
 // supplies; it is handed to Firebase Auth and goes nowhere else (never stored,
@@ -53,14 +53,14 @@ export async function provisionStudentLogin(
     return { uid: student.uid, loginEmail: student.loginEmail, alreadyExisted: true };
   }
   if (!student.rollNumber?.trim()) {
-    throw new StudentLoginError("Student has no Roll Number on file - set one before creating a login", 400);
+    throw new StudentLoginError("Student has no Regd. No on file - set one before creating a login", 400);
   }
   if (student.status !== "REGULAR") {
     throw new StudentLoginError("Only REGULAR students can be issued a login", 400);
   }
   const key = studentRollKey(student.rollNumber);
   if (!key) {
-    throw new StudentLoginError("This Roll Number has no letters or digits - correct it before creating a login", 400);
+    throw new StudentLoginError("This Regd. No has no letters or digits - correct it before creating a login", 400);
   }
   const passwordProblem = studentPasswordError(password);
   if (passwordProblem) throw new StudentLoginError(passwordProblem, 400);
@@ -72,7 +72,7 @@ export async function provisionStudentLogin(
   // (data from before roll uniqueness was enforced) - refuse a second login.
   const dupSnap = await collegeRef.collection("students").where("rollNumberUpper", "==", rollNumberUpper).get();
   if (dupSnap.docs.some((doc) => doc.id !== studentDocId && Boolean(doc.data().uid))) {
-    throw new StudentLoginError("Another student with this Roll Number already has a login - set a unique Roll Number first", 400);
+    throw new StudentLoginError("Another student with this Regd. No already has a login - set a unique Regd. No first", 400);
   }
 
   // The global registry: this roll must be this student's. (A student written
@@ -80,7 +80,7 @@ export async function provisionStudentLogin(
   const claim = await claimStudentRoll(db, { roll: student.rollNumber, collegeId, studentDocId, name: student.name });
   if (!claim.ok) {
     throw new StudentLoginError(
-      claim.code === "TAKEN" ? rollTakenMessage(student.rollNumber, claim.holder) : "This Roll Number has no letters or digits",
+      claim.code === "TAKEN" ? rollTakenMessage(student.rollNumber, claim.holder) : "This Regd. No has no letters or digits",
       claim.code === "TAKEN" ? 409 : 400
     );
   }
@@ -198,7 +198,7 @@ export async function clearMustChangePassword(
 // Enables or disables a student's login without removing anything: Firebase
 // Auth's `disabled` flag blocks sign-in and the profile is only flagged. Used when
 // a student graduates (off) or a graduation is undone (on). The student still
-// holds their roll number either way, so the registry is not touched.
+// holds their Regd. No either way, so the registry is not touched.
 export async function setStudentLoginActive(
   db: Firestore,
   adminAuth: Auth,
@@ -215,7 +215,7 @@ export async function setStudentLoginActive(
   if ((await userRef.get()).exists) await userRef.update({ isActive: active });
 }
 
-// A changed roll number keeps the login in step: the student keeps their Auth
+// A changed Regd. No keeps the login in step: the student keeps their Auth
 // account but its email moves to the new roll's address, the NEW roll now
 // resolves to it, the OLD roll's registry entry is retired (so another student can
 // have that number, with no stale email left in Auth), and the student document's
@@ -251,11 +251,11 @@ export async function syncStudentRollChange(
     return;
   }
   const newKey = studentRollKey(roll);
-  if (!newKey) throw new StudentLoginError("This Roll Number has no letters or digits", 400);
+  if (!newKey) throw new StudentLoginError("This Regd. No has no letters or digits", 400);
 
   const claim = await claimStudentRoll(db, { roll, collegeId, studentDocId, name: newName ?? before.name, uid: before.uid });
   if (!claim.ok) {
-    throw new StudentLoginError(claim.code === "TAKEN" ? rollTakenMessage(roll, claim.holder) : "This Roll Number has no letters or digits", 400);
+    throw new StudentLoginError(claim.code === "TAKEN" ? rollTakenMessage(roll, claim.holder) : "This Regd. No has no letters or digits", 400);
   }
   const undoClaim = async () => {
     if (!claim.created) return;

@@ -33,7 +33,7 @@ export interface AllocatorRoom {
 }
 
 // Fills rooms in walking order. Within a room, sections are drawn on in the
-// order given (roll number 1 first, a section may spill into the next room),
+// order given (Regd. No 1 first, a section may spill into the next room),
 // restricted to the sections Exam Cell handpicked for that room when it named
 // any. Anyone who fits nowhere comes back in `unplaced` for Exam Cell to
 // resolve in review.

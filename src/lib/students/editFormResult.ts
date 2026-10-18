@@ -18,7 +18,7 @@ export interface EditSaveResponse {
   error?: string;
   saved?: string[];
   rejected?: EditProblem[];
-  /** Sent but left out on purpose (e.g. a Roll No from a role that may not change it); the rest still saved. */
+  /** Sent but left out on purpose (e.g. a Regd. No from a role that may not change it); the rest still saved. */
   ignored?: EditProblem[];
   fieldErrors?: Record<string, string>;
 }

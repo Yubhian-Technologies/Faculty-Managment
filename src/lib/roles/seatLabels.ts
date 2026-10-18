@@ -27,3 +27,20 @@ export async function loadSeatPhrasesByHolder(db: Firestore, collegeId: string):
   }
   return byHolder;
 }
+
+/**
+ * Login uid -> the seats they hold, as both the short phrases AND the role codes ("HOD", "PRINCIPAL" ...), from ONE read of the
+ * seats collection. The codes let a list put the HOD and the Principal first without parsing display text.
+ */
+export async function loadSeatsByHolder(db: Firestore, collegeId: string): Promise<Map<string, { phrases: string[]; roles: string[] }>> {
+  const seats = await listSeats(db, collegeId);
+  const byHolder = new Map<string, { phrases: string[]; roles: string[] }>();
+  for (const seat of seats) {
+    if (!seat.holderUid) continue;
+    const entry = byHolder.get(seat.holderUid) ?? { phrases: [], roles: [] };
+    entry.phrases.push(seatPhrase(seat));
+    entry.roles.push(String(seat.role));
+    byHolder.set(seat.holderUid, entry);
+  }
+  return byHolder;
+}

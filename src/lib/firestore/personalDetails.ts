@@ -30,6 +30,7 @@ export interface PersonalDetailsInput {
   emergencyContactRelation?: string;
   emergencyContactMobileNo?: string;
   ratificationStatus?: string;
+  ratificationAttended?: boolean; // see lib/faculty/ratificationHistory.ts - written only when sent
   ratificationProceedingsNumber?: string;
   ratificationDate?: string;   // yyyy-mm-dd
   // Faculty-only multi-entry shape (see lib/faculty/ratificationHistory.ts) -
@@ -112,6 +113,7 @@ export function buildPersonalDetailsUpdate(rawBody: PersonalDetailsInput): Recor
   for (const key of STRING_FIELDS) {
     if (body[key] !== undefined) updates[key] = body[key];
   }
+  if (typeof body.ratificationAttended === "boolean") updates.ratificationAttended = body.ratificationAttended;
   if (body.panNo !== undefined) updates.panNo = body.panNo.toUpperCase();
   if (body.ifscCode !== undefined) updates.ifscCode = body.ifscCode.toUpperCase();
   if (body.dateOfBirth) updates.dateOfBirth = new Date(body.dateOfBirth);

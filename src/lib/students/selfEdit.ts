@@ -5,7 +5,7 @@ import type { StudentRecord } from "@/types";
 
 // What a student may change about THEIR OWN record (PATCH /api/college/student/me/profile), and the rules for it.
 //
-// The College Office (and, for placement, the department) owns identity and academic data - Roll No, name, course /
+// The College Office (and, for placement, the department) owns identity and academic data - Regd. No, name, course /
 // department / year / section, admission and entrance details, caste / religion, Aadhar, remarks. A student owns their
 // own contact, family, address and bank details. Anything not listed here is refused (403), never silently dropped, so
 // a bad client cannot appear to save something it did not.
@@ -33,7 +33,7 @@ export const STUDENT_SELF_EDIT_GROUPS = ROSTER_DETAIL_GROUPS
   .filter((g) => g.keys.length > 0);
 
 export const MOBILE_LOCKED_UNTIL_ROLL_MESSAGE =
-  "Your Student Mobile No can be changed once your Roll No has been assigned (until then the college uses it to match your Roll No to you)";
+  "Your Student Mobile No can be changed once your Regd. No has been assigned (until then the college uses it to match your Regd. No to you)";
 
 /** True once the student may change their own Student Mobile No. */
 export function studentMobileSelfEditable(student: Partial<Pick<StudentRecord, "rollNumber">>): boolean {

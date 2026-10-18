@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FakeAuth, FakeFirestore } from "@/lib/testing/fakeFirestore.testutil";
 
-// "Import Roll Nos": set Roll No on students who already exist, matched on
+// "Import Regd. Nos": set Regd. No on students who already exist, matched on
 // Student Mobile No. Real routes against in-memory fakes only.
 
 const h = vi.hoisted(() => ({

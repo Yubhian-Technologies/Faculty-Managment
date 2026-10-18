@@ -4,7 +4,7 @@
  *
  *   node scripts/backup-faculty-records.mjs --list
  *        -> prints every college id + name
- *   node scripts/backup-faculty-records.mjs --colleges=<id>,<id>
+ *   node scripts/backup-faculty-records.mjs --colleges=<id>,<id> [--subs=students]
  *        -> writes backups/faculty-records-<timestamp>.json (kept out of git), re-reads Firestore, and checks the file
  *           against the live data document by document (count + sha256 of each canonical document)
  *   node scripts/backup-faculty-records.mjs --colleges=<id>,<id> --compare=<file.json>
@@ -48,13 +48,15 @@ if (flag("list")) {
 }
 
 const colleges = (arg("colleges") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+// Collections under each college to capture. Default (faculty work) unchanged; e.g. --subs=students for the student records.
+const subs = (arg("subs") ?? "facultyMembers,users").split(",").map((s) => s.trim()).filter(Boolean);
 if (!colleges.length) { console.error("usage: --list | --colleges=<id>,<id> [--compare=<file>]"); process.exit(1); }
 
 async function capture() {
   const docs = {};
   for (const c of colleges) {
     const col = db.collection("colleges").doc(c);
-    for (const sub of ["facultyMembers", "users"]) {
+    for (const sub of subs) {
       for (const d of (await col.collection(sub).get()).docs) {
         const data = d.data();
         // users: only the logins that hold an academicProfile mirror (everything else is not touched by this feature)
@@ -85,7 +87,7 @@ const compareFile = arg("compare");
 if (!compareFile) {
   const docs = await capture();
   const takenAt = new Date().toISOString();
-  const file = join(here, "..", "backups", `faculty-records-${takenAt.replace(/[:.]/g, "-")}.json`);
+  const file = join(here, "..", "backups", `${arg("subs") ? "records-" + subs.join("+") : "faculty-records"}-${takenAt.replace(/[:.]/g, "-")}.json`);
   mkdirSync(dirname(file), { recursive: true });
   const hashes = Object.fromEntries(Object.entries(docs).map(([p, v]) => [p, sha(v)]));
   writeFileSync(file, JSON.stringify({ takenAt, colleges, count: Object.keys(docs).length, hashes, docs }, null, 1));

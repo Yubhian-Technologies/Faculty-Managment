@@ -25,8 +25,8 @@ describe("Ratification form - which fields show", () => {
   it("Attended (result not chosen yet): Status + Result, no details", () => {
     expect(shows(render({ ratificationStatus: "Attended" }))).toEqual({ result: true, designation: false, proceedings: false, date: false, records: false });
   });
-  it("Attended + Not Ratified: Status + Decision, details hidden", () => {
-    expect(shows(render({ ratificationStatus: "Not Ratified" }))).toEqual({ result: true, designation: false, proceedings: false, date: false, records: false });
+  it("Attended + Not Ratified (marker set): Status + Decision, details hidden", () => {
+    expect(shows(render({ ratificationStatus: "Not Ratified", ratificationAttended: true }))).toEqual({ result: true, designation: false, proceedings: false, date: false, records: false });
   });
   it("Attended + Ratified: Result and the details - one record is on screen by default, even with none on file", () => {
     expect(shows(render({ ratificationStatus: "Ratified", ratifications: [] }))).toEqual({ result: true, designation: true, proceedings: true, date: true, records: true });
@@ -37,6 +37,9 @@ describe("Ratification form - which fields show", () => {
     const html = render({ ratificationStatus: "Ratified", ratifications: rows });
     expect(html.match(/Ratified Designation/g)).toHaveLength(3);
     for (const n of [1, 2, 3]) expect(html).toContain(`P-${n}`);
+  });
+  it("an OLDER Not Ratified record (no marker): exactly as before - no Decision box, no details", () => {
+    expect(shows(render({ ratificationStatus: "Not Ratified" }))).toEqual({ result: false, designation: false, proceedings: false, date: false, records: false });
   });
   it("a stray stored value ('Not Applicable'): no Decision, no details (shown as it is, not guessed)", () => {
     expect(shows(render({ ratificationStatus: "Not Applicable" }))).toEqual({ result: false, designation: false, proceedings: false, date: false, records: false });

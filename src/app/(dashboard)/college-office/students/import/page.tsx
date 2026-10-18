@@ -10,7 +10,7 @@ import { StudentDataUpdateImport } from "@/components/students/StudentDataUpdate
 // Three import modes on one page:
 //
 //   Add students      - the original flow, creating students from a file.
-//   Map roll numbers  - fills Roll No in on students who already exist,
+//   Map Regd. Nos  - fills Regd. No in on students who already exist,
 //                       matched on Student Mobile No.
 //   Update student data - changes the detail fields the Office picks on students
 //                       who already exist, matched on Student Mobile No.
@@ -22,7 +22,7 @@ type Mode = "add" | "map" | "update";
 
 const TABS = [
   { key: "add", label: "Add students" },
-  { key: "map", label: "Map roll numbers" },
+  { key: "map", label: "Map Regd. Nos" },
   { key: "update", label: "Update student data" },
 ];
 

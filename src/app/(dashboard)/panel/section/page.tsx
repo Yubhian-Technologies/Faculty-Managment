@@ -153,7 +153,7 @@ export default function MySectionPage() {
               {students.length > 0 && (
                 <div className="relative w-full sm:w-64">
                   <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input className="pl-8 h-9 text-sm" placeholder="Search roll no, name..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
+                  <Input className="pl-8 h-9 text-sm" placeholder="Search Regd. No, name..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
                 </div>
               )}
             </div>
@@ -166,7 +166,7 @@ export default function MySectionPage() {
                     <table className="w-full text-sm">
                       <thead className="bg-muted/50">
                         <tr>
-                          <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Roll No.</th>
+                          <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Regd. No.</th>
                           <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Name</th>
                           <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Status</th>
                           <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Gender</th>

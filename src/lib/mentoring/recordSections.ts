@@ -70,7 +70,7 @@ export const ENTRY_SECTIONS: EntrySection[] = [
     columns: [
       { key: "collegeName", label: "College", kind: "text", required: true },
       { key: "siblingName", label: "Name of the sibling", kind: "text", required: true },
-      { key: "rollNumber", label: "Roll No", kind: "text" },
+      { key: "rollNumber", label: "Regd. No", kind: "text" },
       { key: "branch", label: "Branch", kind: "text" },
       { key: "academicYear", label: "Academic year", kind: "text", placeholder: "2024-25" },
     ],

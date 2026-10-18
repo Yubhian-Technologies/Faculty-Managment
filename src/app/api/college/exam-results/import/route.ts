@@ -32,7 +32,7 @@ import type { ExamResultBatch } from "@/types/examResults";
 // draft is created per branch. Those drafts share an `uploadId`, which the next
 // part of the same file passes back so its students join the same sheets.
 //
-// The batch is a note, never a refusal: each result goes to its Roll No's student, filed under
+// The batch is a note, never a refusal: each result goes to its Regd. No's student, filed under
 // the exam picked, whatever batch they are in now (a detained student). They are listed back
 // as `otherBatch`; only a file that is MOSTLY another batch is stopped (wrongBatchFile).
 //

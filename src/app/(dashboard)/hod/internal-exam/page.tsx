@@ -210,7 +210,7 @@ export default function HodInternalExamPage() {
                   <thead className="bg-muted/50 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     <tr>
                       <th className="px-4 py-3">S.No</th>
-                      <th className="px-4 py-3">Roll No.</th>
+                      <th className="px-4 py-3">Regd. No.</th>
                       <th className="px-4 py-3">Student Name</th>
                       {activeComponents.map((c) => (
                         <th key={c.id} className="px-4 py-3">{c.name} (Max {c.maxMarks})</th>
