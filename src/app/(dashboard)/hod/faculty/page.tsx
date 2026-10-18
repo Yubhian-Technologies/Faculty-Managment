@@ -66,7 +66,7 @@ function matchesStatus(f: FacultyRow, key: string): boolean {
   const status = f.status as string | undefined;
   if (key === "INACTIVE") return status === "RESIGNED" || status === "RETIRED";
   if (key === "RATIFIED") return f.ratificationStatus === "Ratified";
-  if (key === "NOT_RATIFIED") return f.ratificationStatus === "Not Ratified" || f.ratificationStatus === "Attended";
+  if (key === "NOT_RATIFIED") return ["Not Ratified", "Not Yet Ratified", "Attended", "Not Yet Attended"].includes(f.ratificationStatus as string);
   return status === key;
 }
 

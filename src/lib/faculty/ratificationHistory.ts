@@ -17,11 +17,69 @@ type Doc = Record<string, unknown>;
 
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
 
-// The only Ratification Status values the forms offer. "Not Ratified" is the
-// older value: it is still read, shown and kept on records that hold it (it is
-// never rewritten), it just isn't offered for a new pick any more.
-export const RATIFICATION_STATUS_CHOICES = ["Attended", "Ratified"] as const;
-export const LEGACY_NOT_RATIFIED = "Not Ratified";
+// Ratification is a two-step choice in the forms, kept in the ONE existing
+// `ratificationStatus` field so no stored record needs rewriting:
+//   Ratification Status  : Not Yet Attended | Attended
+//   Ratification Result  : Ratified | Not Yet Ratified   (only once Attended)
+// Stored value, by what the faculty member picked:
+//   "Not Yet Attended"  -> Status = Not Yet Attended
+//   "Attended"          -> Status = Attended, Result not chosen yet
+//   "Not Yet Ratified"  -> Status = Attended, Result = Not Yet Ratified
+//   "Ratified"          -> Status = Attended, Result = Ratified  (the value every
+//                          already-ratified record holds - unchanged)
+// Any other stored text (the older "Not Ratified", a stray "Not Applicable") is
+// not guessed at: it is shown as it is, until the person picks a new status.
+export const RATIFICATION_STATUS_CHOICES = ["Attended", "Not Yet Attended"] as const;
+export const RATIFICATION_RESULT_CHOICES = ["Ratified", "Not Yet Ratified"] as const;
+export const RATIFICATION_STATUS_STORED = ["Not Yet Attended", "Attended", "Not Yet Ratified", "Ratified"] as const;
+
+export const isRatified = (status: string | undefined | null): boolean => status === "Ratified";
+
+// Step 1's value for a stored status: "Not Yet Attended" / "Attended", or the
+// stored text itself when it is an older value (the picker lists it as-is).
+export function ratificationStatusStep(status: string | undefined | null): string {
+  const v = status ?? "";
+  if (v === "Attended" || v === "Not Yet Ratified" || v === "Ratified") return "Attended";
+  return v;
+}
+
+// Step 2's value: only meaningful once Attended ("" = not chosen yet).
+export function ratificationResultStep(status: string | undefined | null): string {
+  return status === "Ratified" || status === "Not Yet Ratified" ? status : "";
+}
+
+// True for an older stored status the two-step picker does not offer.
+export const isLegacyRatificationStatus = (status: string | undefined | null): boolean =>
+  !!status && !(RATIFICATION_STATUS_STORED as readonly string[]).includes(status);
+
+// The form-state change for picking `pick` in the Ratification Status dropdown
+// (level "status") or the Ratification Result dropdown (level "result").
+// - Picking Attended again keeps a result already chosen; otherwise the stored
+//   value is "Attended" until a result is picked.
+// - Without the faculty history list (Staff / user records) the single
+//   Proceedings Number/Date pair is cleared once the value is not Ratified, so a
+//   later Save can't resend a stale one. WITH the history list nothing is
+//   cleared: its rows are only hidden while not Ratified and are still there if
+//   Ratified is picked again - nothing already on file is deleted by a pick.
+export function ratificationStatusPatch(
+  current: string | undefined | null,
+  pick: string,
+  level: "status" | "result",
+  history: boolean,
+): { ratificationStatus: string; ratificationProceedingsNumber?: string; ratificationDate?: string } {
+  const next = level === "status" && pick === "Attended" ? (ratificationResultStep(current) || "Attended") : pick;
+  return !history && next !== "Ratified"
+    ? { ratificationStatus: next, ratificationProceedingsNumber: "", ratificationDate: "" }
+    : { ratificationStatus: next };
+}
+
+// What the view shows as Status / Result for a stored value (Result is omitted
+// until one is chosen; an older value is shown as the Status as it is).
+export function ratificationDisplay(status: string | undefined | null): { status?: string; result?: string } {
+  if (!status) return {};
+  if (status === "Ratified" || status === "Not Yet Ratified") return { status: "Attended", result: status };
+  return { status };
+}
 
 // "Ratified Designation" choices. They come from the college's Designation
 // Catalogue (value = the catalogue's own name, so what is stored matches what
