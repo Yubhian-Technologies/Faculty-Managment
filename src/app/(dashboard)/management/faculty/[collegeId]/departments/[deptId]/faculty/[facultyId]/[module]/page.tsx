@@ -45,6 +45,7 @@ export default function ManagementFacultyModulePage() {
       <PageHeader
         title={moduleDef.label}
         description={facultyDisplayName(faculty)}
+        note={moduleDef.description}
         actions={
           <Button variant="outline" asChild>
             <Link href={`/management/faculty/${collegeId}/departments/${deptId}/faculty/${facultyId}`}>

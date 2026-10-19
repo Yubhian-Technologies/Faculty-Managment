@@ -32,7 +32,7 @@ describe("studentMobileProblem - the number is REQUIRED", () => {
 
 describe("studentMobileTakenMessage", () => {
   it("names the holder when they are in the caller's own college", () => {
-    expect(studentMobileTakenMessage("9876543210", { name: "A KUMAR", rollNumber: "24A01", sameCollege: true })).toBe("Student Mobile No 9876543210 is already used by another student (A KUMAR, Roll No 24A01)");
+    expect(studentMobileTakenMessage("9876543210", { name: "A KUMAR", rollNumber: "24A01", sameCollege: true })).toBe("Student Mobile No 9876543210 is already used by another student (A KUMAR, Regd. No 24A01)");
     expect(studentMobileTakenMessage("9876543210", { name: "A KUMAR" })).toContain("(A KUMAR)");
     expect(studentMobileTakenMessage("9876543210", {})).toBe("Student Mobile No 9876543210 is already used by another student");
   });

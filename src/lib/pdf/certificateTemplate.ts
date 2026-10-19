@@ -63,7 +63,7 @@ function renderHalf(data: CertificateTemplateData, copyTag: string): string {
 
     <table class="facts">
       <tr><td class="label">Student Name</td><td>${data.studentName}</td></tr>
-      <tr><td class="label">Roll Number</td><td>${data.studentRollNumber}</td></tr>
+      <tr><td class="label">Regd. No</td><td>${data.studentRollNumber}</td></tr>
       <tr><td class="label">Department</td><td>${data.studentDepartment}</td></tr>
       <tr><td class="label">Year / Section</td><td>${data.studentYear} / ${data.studentSection}</td></tr>
     </table>

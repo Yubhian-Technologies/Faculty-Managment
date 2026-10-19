@@ -58,19 +58,23 @@ export default function HodFacultyModulePage() {
     return <p className="text-sm text-muted-foreground">Unknown section.</p>;
   }
 
+  // Same rule as the Edit button in the header: the empty-tab message offers an edit only when the header does.
+  const editHref = moduleKey !== "research" && moduleKey !== "financial" ? withListBack(`/hod/faculty/${facultyId}/${moduleKey}/edit`, listHref, "/hod/faculty") : undefined;
+
   return (
     <div className="space-y-6">
       <PageHeader
         title={moduleDef.label}
         description={facultyDisplayName(faculty)}
+        note={moduleDef.description}
         actions={
           <div className="flex gap-2">
             <Button variant="outline" asChild>
               <Link href={withListBack(`/hod/faculty/${facultyId}`, listHref, "/hod/faculty")}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
             </Button>
-            {moduleKey !== "research" && moduleKey !== "financial" && (
+            {editHref && (
               <Button asChild>
-                <Link href={withListBack(`/hod/faculty/${facultyId}/${moduleKey}/edit`, listHref, "/hod/faculty")}><Pencil className="h-4 w-4 mr-2" />Edit</Link>
+                <Link href={editHref}><Pencil className="h-4 w-4 mr-2" />Edit</Link>
               </Button>
             )}
           </div>
@@ -80,7 +84,7 @@ export default function HodFacultyModulePage() {
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : faculty ? (
-        <FacultyProfileModuleContent moduleKey={moduleKey} faculty={faculty} teachingAssignments={teachingAssignments} collegeType={collegeType} hideLegalName showNameAsPerPan ratificationHistory />
+        <FacultyProfileModuleContent editHref={editHref} moduleKey={moduleKey} faculty={faculty} teachingAssignments={teachingAssignments} collegeType={collegeType} hideLegalName showNameAsPerPan ratificationHistory />
       ) : null}
     </div>
   );

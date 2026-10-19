@@ -2,7 +2,7 @@ import { normalizeStudentMobile, studentMobileProblem } from "./studentMobile";
 import { studentRollKey } from "./loginDefaults";
 
 /**
- * Classifies every row of a "Import Roll Nos" file against the students that
+ * Classifies every row of a "Import Regd. Nos" file against the students that
  * already exist, matching on Student Mobile No.
  *
  * Deliberately pure - no Firestore, no I/O. The preview endpoint and the apply
@@ -12,8 +12,8 @@ import { studentRollKey } from "./loginDefaults";
  * another Office user may claim a roll in between.
  *
  * Mobile is the match key because it is the one field the admission sheet and
- * the student record reliably share before roll numbers exist - see
- * rosterFields.ts, where Student Mobile No is documented as "how roll numbers
+ * the student record reliably share before Regd. Nos exist - see
+ * rosterFields.ts, where Student Mobile No is documented as "how Regd. Nos
  * are matched to students later". It is NOT enforced unique on write today,
  * so a shared mobile is a real state this has to refuse rather than guess at.
  */
@@ -33,7 +33,7 @@ export type RollMapOutcome =
   | "ROLL_TAKEN"
   /** The same roll appears on more than one row of the file. Both are skipped. */
   | "DUPLICATE_IN_FILE"
-  /** The Roll No cell is empty or has no letters or digits. */
+  /** The Regd. No cell is empty or has no letters or digits. */
   | "BAD_ROLL"
   /** The Student Mobile No cell is not a usable 10-digit number. */
   | "BAD_MOBILE";
@@ -91,14 +91,14 @@ export interface RollMapResult extends RollMapRow {
 }
 
 const MESSAGES: Record<RollMapOutcome, string> = {
-  WILL_SET: "Roll number will be set",
-  ALREADY_SET: "Already has this roll number",
-  DIFFERENT_ROLL: "Already has a different roll number",
+  WILL_SET: "Regd. No will be set",
+  ALREADY_SET: "Already has this Regd. No",
+  DIFFERENT_ROLL: "Already has a different Regd. No",
   NO_MATCH: "No student in this college has that mobile number",
   MOBILE_SHARED: "More than one student has that mobile number",
-  ROLL_TAKEN: "Another student already holds that roll number",
-  DUPLICATE_IN_FILE: "That roll number appears more than once in this file",
-  BAD_ROLL: "Roll No is empty or has no letters or digits",
+  ROLL_TAKEN: "Another student already holds that Regd. No",
+  DUPLICATE_IN_FILE: "That Regd. No appears more than once in this file",
+  BAD_ROLL: "Regd. No is empty or has no letters or digits",
   BAD_MOBILE: "Student Mobile No is not a usable 10-digit number",
 };
 
@@ -173,10 +173,10 @@ export function classifyRollMapping(input: ClassifyInput): RollMapResult[] {
       return out("ROLL_TAKEN", {
         ...matched,
         message: holder.sameCollege && holder.name
-          ? `Roll number already held by ${holder.name}`
+          ? `Regd. No already held by ${holder.name}`
           : holder.sameCollege
             ? MESSAGES.ROLL_TAKEN
-            : "Roll number already held by a student in another college",
+            : "Regd. No already held by a student in another college",
       });
     }
 

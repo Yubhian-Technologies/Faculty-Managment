@@ -14,7 +14,7 @@ export function MenteeList({ students, basePath, empty }: { students: MenteeSumm
       <CardContent className="pt-2 overflow-x-auto">
         <table className="w-full text-sm">
           <thead><tr className="text-left text-muted-foreground border-b">
-            <th className="py-2 pr-3 font-medium">Roll No</th>
+            <th className="py-2 pr-3 font-medium">Regd. No</th>
             <th className="py-2 pr-3 font-medium">Name</th>
             <th className="py-2 pr-3 font-medium">Branch</th>
             <th className="py-2 pr-3 font-medium">Year</th>

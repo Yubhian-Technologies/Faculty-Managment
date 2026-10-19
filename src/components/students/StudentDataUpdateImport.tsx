@@ -20,7 +20,7 @@ import {
 import { MAX_BULK_APPLY_ROWS, MAX_BULK_UPDATE_ROWS } from "@/lib/students/bulkUpdateRows";
 
 // Updates DETAIL fields on students already on the roster, matched on Student Mobile No - the same key the "Map roll
-// numbers" tab uses, and a sibling of it: Roll No is deliberately NOT a choice here.
+// numbers" tab uses, and a sibling of it: Regd. No is deliberately NOT a choice here.
 //
 // The Office picks the fields -> downloads a template with Student Mobile No + those columns -> uploads it -> checks
 // the preview (every Fill / Overwrite shown as old -> new) -> applies. A blank cell never changes anything; a value
@@ -29,7 +29,7 @@ import { MAX_BULK_APPLY_ROWS, MAX_BULK_UPDATE_ROWS } from "@/lib/students/bulkUp
 
 const MOBILE_HEADER = "Student Mobile No";
 const MOBILE_ALIASES = ["Mobile No", "Mobile", "Phone", "Student Mobile", "Mobile Number"];
-// Header matching runs against EVERY roster column so a file with Roll No / Name / Course gets a pointed message instead of
+// Header matching runs against EVERY roster column so a file with Regd. No / Name / Course gets a pointed message instead of
 // "unknown column".
 const COLUMNS = ROSTER_FIELDS.map((f) => ({ key: f.key, label: f.label, aliases: f.key === "mobileNo" ? MOBILE_ALIASES : f.aliases }));
 const FIELD_BY_KEY = new Map(ROSTER_FIELDS.map((f) => [f.key, f]));
@@ -39,7 +39,7 @@ const HINTS = [
   "Only the columns you pick are in the template. A blank cell never changes or clears anything.",
   "If the student already has the same value it is left alone. If it is different, it is overwritten - the preview shows old -> new first.",
   "The old value of everything changed is saved with the run and can be downloaded after applying.",
-  "Roll No is not part of this - use the Map roll numbers tab for that.",
+  "Regd. No is not part of this - use the Map Regd. Nos tab for that.",
   "Nothing is written until you press Apply.",
 ];
 
@@ -192,7 +192,7 @@ export function StudentDataUpdateImport() {
         const key = keyMap[i];
         if (!key) { noteList.push(`"${h}" is not a column this import knows - ignored`); return; }
         if (key === "mobileNo") return;
-        if (key === "rollNumber") { noteList.push(`"${h}" ignored - Roll No is set from the Map roll numbers tab`); return; }
+        if (key === "rollNumber") { noteList.push(`"${h}" ignored - Regd. No is set from the Map Regd. Nos tab`); return; }
         if (!isBulkUpdateField(key)) { noteList.push(`"${h}" ignored - ${bulkFieldLabel(key)} can't be changed with this import`); return; }
         if (used.some((u) => u.key === key)) { noteList.push(`"${h}" ignored - ${bulkFieldLabel(key)} is already in another column`); return; }
         used.push({ at: i, key });
@@ -293,7 +293,7 @@ export function StudentDataUpdateImport() {
     ].sort((a, b) => a.r.rowNumber - b.r.rowNumber);
     downloadCSV(
       toCSV([
-        ["Row", "Student Mobile No", "Student", "Roll No", "Status", "Outcome", "Reason", "Changes"],
+        ["Row", "Student Mobile No", "Student", "Regd. No", "Status", "Outcome", "Reason", "Changes"],
         ...all.map(({ r, status, error }) => [String(r.rowNumber), r.mobile, r.studentName ?? "", r.rollNumber ?? "", status, r.outcome, error || r.message, changeText(r)]),
       ]),
       `update-student-data-results-${stamp}.csv`
@@ -303,7 +303,7 @@ export function StudentDataUpdateImport() {
   function downloadBackup() {
     downloadCSV(
       toCSV([
-        ["Row", "Student Mobile No", "Student", "Roll No", "Field", "Old value", "New value", "Run"],
+        ["Row", "Student Mobile No", "Student", "Regd. No", "Field", "Old value", "New value", "Run"],
         ...(applyResult?.applied ?? []).flatMap((r) =>
           r.changes.map((c) => [String(r.rowNumber), r.mobile, r.studentName ?? "", r.rollNumber ?? "", c.label, c.before, c.after, runId])
         ),

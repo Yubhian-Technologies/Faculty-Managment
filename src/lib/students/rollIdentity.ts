@@ -4,7 +4,7 @@ import { rollNumberUpperOf, studentRollDocId, studentRollKey } from "@/lib/stude
 // The GLOBAL roll-number registry: studentUsernames/{KEY}, one document per
 // normalised roll (see loginDefaults.ts), shared by every college.
 //
-// Roll numbers are unique across all colleges. A scan of every college's students
+// Regd. Nos are unique across all colleges. A scan of every college's students
 // can't enforce that (and Firestore has no collection-group index on the roll),
 // so uniqueness is enforced where Firestore can do it atomically - on a document
 // id. A roll is CLAIMED, in a transaction, whenever a student is added, imported
@@ -142,12 +142,12 @@ export async function claimStudentRoll(db: Firestore, claim: RollClaim, now: Dat
  */
 export function rollTakenMessage(roll: string, holder: RollHolder, otherCollegeName?: string): string {
   if (holder.sameCollege) {
-    return `Roll number ${roll} is already assigned to ${holder.name?.trim() || "another student"}. Roll numbers must be unique.`;
+    return `Regd. No ${roll} is already assigned to ${holder.name?.trim() || "another student"}. Regd. Nos must be unique.`;
   }
   if (otherCollegeName?.trim()) {
-    return `Roll number ${roll} is already registered to a student in another college (${otherCollegeName.trim()}). Roll numbers must be unique across all colleges.`;
+    return `Regd. No ${roll} is already registered to a student in another college (${otherCollegeName.trim()}). Regd. Nos must be unique across all colleges.`;
   }
-  return `Roll number ${roll} is already registered to a student in another college. Roll numbers must be unique across all colleges.`;
+  return `Regd. No ${roll} is already registered to a student in another college. Regd. Nos must be unique across all colleges.`;
 }
 
 /**

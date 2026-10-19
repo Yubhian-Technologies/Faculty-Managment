@@ -19,11 +19,16 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAdminColleges } from "@/hooks/useAdminColleges";
 import { toast } from "@/hooks/useToast";
 import { exportFacultyProfileCompletionExcel } from "@/lib/faculty/profileCompletionExport";
 import type { CompletionModuleKey } from "@/lib/faculty/profileCompletion";
+import {
+  NO_COMPLETION_FILTERS, completionDesignationOptions, filterCompletionRows, hasActiveCompletionFilters, isPercentRangeBackwards,
+  type CompletionFilters,
+} from "@/lib/faculty/profileCompletionFilters";
 import type { College, Department } from "@/types";
 
 const ALL_DEPTS = "__ALL__";
@@ -132,6 +137,8 @@ export function FacultyProfileCompletionView({ role }: { role: "HOD" | "PRINCIPA
   const [isLoading, setIsLoading] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [detailRow, setDetailRow] = useState<FacultyCompletionRow | null>(null);
+  // Designation + Completion % filters: applied in the browser to the rows already loaded (nothing is re-fetched).
+  const [filters, setFilters] = useState<CompletionFilters>(NO_COMPLETION_FILTERS);
   const abortRef = useRef<AbortController | null>(null);
   useEffect(() => () => abortRef.current?.abort(), []);
 
@@ -161,6 +168,15 @@ export function FacultyProfileCompletionView({ role }: { role: "HOD" | "PRINCIPA
   }, [role, selectedCollegeId]);
 
   const departmentOptions = useMemo(() => buildDepartmentOptions(departments), [departments]);
+
+  // Only designations present in what was loaded are offered; a pick that a new Load no longer contains counts as "all".
+  const designationOptions = useMemo(() => completionDesignationOptions(rows), [rows]);
+  const activeFilters = useMemo<CompletionFilters>(
+    () => ({ ...filters, designation: designationOptions.some((o) => o.value === filters.designation) ? filters.designation : "" }),
+    [filters, designationOptions],
+  );
+  const filteredRows = useMemo(() => filterCompletionRows(rows, activeFilters), [rows, activeFilters]);
+  const filtersActive = hasActiveCompletionFilters(activeFilters);
 
   const handleLoad = useCallback(async (dept = selectedDept) => {
     if (role === "SUPER_ADMIN" && !selectedCollegeId) {
@@ -196,7 +212,8 @@ export function FacultyProfileCompletionView({ role }: { role: "HOD" | "PRINCIPA
   }, [role]);
 
   async function handleExport() {
-    await exportFacultyProfileCompletionExcel(rows, sectionDefs, new Date().toISOString().slice(0, 10));
+    // What the filters leave (everything, when none is set).
+    await exportFacultyProfileCompletionExcel(filteredRows, sectionDefs, new Date().toISOString().slice(0, 10));
   }
 
   const columns: Column<FacultyCompletionRow>[] = [
@@ -214,7 +231,7 @@ export function FacultyProfileCompletionView({ role }: { role: "HOD" | "PRINCIPA
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Faculty Profile Completion"
+        title="Staff Profile Completion Statistics"
         description="How much of each faculty member's own profile is filled in, section by section. Click a row to see the breakdown."
         actions={
           hasLoaded && rows.length > 0 ? (
@@ -257,8 +274,50 @@ export function FacultyProfileCompletionView({ role }: { role: "HOD" | "PRINCIPA
         </Card>
       )}
 
+      {hasLoaded && rows.length > 0 && (
+        <Card>
+          <CardContent className="p-4 flex flex-wrap items-end gap-4">
+            <div className="space-y-1.5 min-w-55">
+              <Label>Designation</Label>
+              <Select
+                value={activeFilters.designation || "__ALL__"}
+                onValueChange={(v) => setFilters((f) => ({ ...f, designation: v === "__ALL__" ? "" : v }))}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__ALL__">All Designations</SelectItem>
+                  {designationOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Profile Completion (%)</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number" inputMode="numeric" min={0} max={100} className="w-24" placeholder="Min" aria-label="Minimum completion percent"
+                  value={filters.minPercent} onChange={(e) => setFilters((f) => ({ ...f, minPercent: e.target.value }))}
+                />
+                <span className="text-sm text-muted-foreground">to</span>
+                <Input
+                  type="number" inputMode="numeric" min={0} max={100} className="w-24" placeholder="Max" aria-label="Maximum completion percent"
+                  value={filters.maxPercent} onChange={(e) => setFilters((f) => ({ ...f, maxPercent: e.target.value }))}
+                />
+              </div>
+            </div>
+            {filtersActive && (
+              <Button variant="ghost" onClick={() => setFilters(NO_COMPLETION_FILTERS)}>Clear filters</Button>
+            )}
+            <p className="text-sm text-muted-foreground ml-auto">
+              {isPercentRangeBackwards(activeFilters)
+                ? "Min is higher than Max - nothing can match."
+                : filtersActive ? `Showing ${filteredRows.length} of ${rows.length}` : `${rows.length} faculty`}
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       <DataTable
-        data={rows as unknown as Record<string, unknown>[] as FacultyCompletionRow[]}
+        data={filteredRows}
         columns={columns}
         isLoading={isLoading}
         keyExtractor={(r) => r.id}
@@ -266,7 +325,7 @@ export function FacultyProfileCompletionView({ role }: { role: "HOD" | "PRINCIPA
         searchKeys={["name", "employeeId", "department"] as (keyof FacultyCompletionRow)[]}
         searchPlaceholder="Search by name, employee ID or department..."
         emptyTitle={hasLoaded ? "No faculty found" : needsFilters ? "Not loaded yet" : "No faculty found"}
-        emptyDescription={!hasLoaded && needsFilters ? "Pick a department and click Load to view profile completion." : undefined}
+        emptyDescription={!hasLoaded && needsFilters ? "Pick a department and click Load to view profile completion." : filtersActive ? "No one matches the Designation / Profile Completion filters - change or clear them." : undefined}
       />
 
       <DepartmentBreakdownDialog row={detailRow} onClose={() => setDetailRow(null)} />

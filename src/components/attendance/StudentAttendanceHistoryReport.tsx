@@ -310,7 +310,7 @@ export function StudentAttendanceHistoryReport({
             </p>
             {student && (
               <div className="grid grid-cols-2 gap-x-6 gap-y-1 border-b bg-muted/30 p-4 text-sm sm:grid-cols-4">
-                <div><span className="text-muted-foreground">Roll No.</span> <span className="font-medium">{student.rollNumber || "—"}</span></div>
+                <div><span className="text-muted-foreground">Regd. No.</span> <span className="font-medium">{student.rollNumber || "—"}</span></div>
                 <div><span className="text-muted-foreground">Name</span> <span className="font-medium">{student.name}</span></div>
                 <div><span className="text-muted-foreground">Course</span> <span className="font-medium">{student.course || "—"}</span></div>
                 <div><span className="text-muted-foreground">Branch</span> <span className="font-medium">{student.department}</span></div>

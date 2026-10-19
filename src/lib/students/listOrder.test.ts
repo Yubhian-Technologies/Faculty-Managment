@@ -5,7 +5,7 @@ const S = (id: string, name: string, rollNumber?: string) => ({ id, name, rollNu
 const names = (list: { name: string }[]) => list.map((s) => s.name);
 
 describe("compareStudentsForList", () => {
-  it("orders by roll number", () => {
+  it("orders by Regd. No", () => {
     const list = [S("1", "Zed", "24PA1A0503"), S("2", "Amy", "24PA1A0501"), S("3", "Bob", "24PA1A0502")];
     expect(names(sortStudentsForList(list))).toEqual(["Amy", "Bob", "Zed"]);
   });
@@ -20,7 +20,7 @@ describe("compareStudentsForList", () => {
     expect(names(sortStudentsForList(list))).toEqual(["A", "B"]);
   });
 
-  it("puts students with no roll number after numbered ones, ordered by name", () => {
+  it("puts students with no Regd. No after numbered ones, ordered by name", () => {
     const list = [
       S("1", "Ravi Teja"),
       S("2", "Patel Pranav", "3241"),

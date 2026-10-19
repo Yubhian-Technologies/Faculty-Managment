@@ -368,7 +368,7 @@ export async function GET(request: Request) {
           return { id: stu.id, rollNumber: stu.rollNumber, name: stu.name, bySubject, overall };
         })
         // compareStudentsForList, not rollNumber.localeCompare: a student with no
-        // roll number sorts last by name instead of throwing.
+        // Regd. No sorts last by name instead of throwing.
         .sort(compareStudentsForList);
 
       // Apply absentOnly / shortage / subjectFilter / consolidated filters

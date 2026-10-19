@@ -14,7 +14,7 @@ import type { StudentRecord } from "@/types";
 const MIN_QUERY = 3;
 const MAX_RESULTS = 30;
 
-// Find a student by name or roll number to open their mentoring details. The HOD sees every student
+// Find a student by name or Regd. No to open their mentoring details. The HOD sees every student
 // they may view (their departments' students, including a year another department runs for them) -
 // never another department's.
 export async function GET(request: Request) {

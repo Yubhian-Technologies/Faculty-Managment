@@ -8,7 +8,7 @@ import { ADMISSION_SHEET_TEXT_KEYS } from "@/lib/students/rosterFields";
 import type { Section, StudentStatus } from "@/types";
 
 export interface StudentImportRow extends Partial<Record<(typeof ADMISSION_SHEET_TEXT_KEYS)[number], string>> {
-  // Optional: the Office often enrols students before roll numbers exist (stored as "" until one is set).
+  // Optional: the Office often enrols students before Regd. Nos exist (stored as "" until one is set).
   rollNumber?: string;
   name: string;
   studentType?: string;

@@ -86,7 +86,7 @@ export interface AcceptedStudentResult {
 }
 
 export interface ResultImportContext {
-  /** Students of this college, by upper-case roll number. */
+  /** Students of this college, by upper-case Regd. No. */
   students: Map<string, ResultStudent>;
   /** Subjects of this college, by upper-case college code (a key may have several entries). */
   subjects: Map<string, ResultSubjectOption[]>;
@@ -122,7 +122,7 @@ export function batchMatches(studentBatch: string | undefined, sheetBatch: strin
 }
 
 /**
- * The batch is a NOTE, never a refusal: a result goes to the Roll No's student whatever
+ * The batch is a NOTE, never a refusal: a result goes to the Regd. No's student whatever
  * batch they are in now (a detained student moved to a junior batch, or one detained but
  * not moved yet). The one stop is a file that is mostly another batch - then the batch
  * picked is probably wrong. Small files (Add rows of a few students) are never stopped.
@@ -171,13 +171,13 @@ export function validateResultRows(
     const subjectCode = String(raw.subjectCode ?? "").trim();
     const fail = (error: string) => failed.push({ row: raw.row, rollNumber: rollNumber || "-", subjectCode: subjectCode || "-", error });
 
-    if (!rollNumber) { fail("Roll No is required"); continue; }
+    if (!rollNumber) { fail("Regd. No is required"); continue; }
     if (!subjectCode) { fail("Subject Code is required"); continue; }
     const gradeText = normalizeGrade(raw.grade);
     if (!gradeText) { fail("Grade is required"); continue; }
 
     const student = ctx.students.get(rollKey(rollNumber));
-    if (!student) { fail(`No student with Roll No "${rollNumber}" in this college`); continue; }
+    if (!student) { fail(`No student with Regd. No "${rollNumber}" in this college`); continue; }
     if (ctx.courseIds.length > 0 && student.courseId && !ctx.courseIds.includes(student.courseId)) {
       fail(`${rollNumber} is not a ${ctx.courseName} student`);
       continue;

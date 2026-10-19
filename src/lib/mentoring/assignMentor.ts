@@ -7,7 +7,7 @@ import { notify } from "@/lib/notify";
 import { AVAILABLE_FACULTY_STATUSES } from "@/types";
 import { resolveSelfMentor } from "./selfMentor";
 
-// The two steps every way of giving students a mentor shares (by picking students, by roll numbers):
+// The two steps every way of giving students a mentor shares (by picking students, by Regd. Nos):
 // who may be the mentor, and the audit entry + notification afterwards.
 
 export type MentorCheck = { ok: true; name: string } | { ok: false; status: 400 | 403 | 404; error: string };

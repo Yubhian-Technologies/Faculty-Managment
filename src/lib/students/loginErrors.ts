@@ -13,7 +13,7 @@ export function describeLoginFailure(err: unknown): LoginFailure {
   const text = `${code} ${e?.message ?? ""}`.toLowerCase();
 
   if (code === "auth/invalid-email" || code === "auth/invalid-uid") {
-    return { code, status: 400, message: "This Roll Number can't be turned into a valid login ID - correct the Roll Number first" };
+    return { code, status: 400, message: "This Regd. No can't be turned into a valid login ID - correct the Regd. No first" };
   }
   if (code === "auth/invalid-password") {
     return { code, status: 500, message: "The default student password is rejected by Firebase Authentication - contact support" };

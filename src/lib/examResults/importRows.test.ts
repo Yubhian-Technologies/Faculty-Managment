@@ -47,7 +47,7 @@ describe("validateResultRows", () => {
   it("rejects a row with a blank roll, subject or grade", () => {
     const { accepted, failed } = validateResultRows([row(2, "", "MA101", "S"), row(3, "24A91A0501", " ", "S"), row(4, "24A91A0501", "MA101", "")], ctx());
     expect(accepted).toEqual([]);
-    expect(failed.map((f) => [f.row, f.error])).toEqual([[2, "Roll No is required"], [3, "Subject Code is required"], [4, "Grade is required"]]);
+    expect(failed.map((f) => [f.row, f.error])).toEqual([[2, "Regd. No is required"], [3, "Subject Code is required"], [4, "Grade is required"]]);
   });
 
   it("rejects an unknown roll, a student of another course, an unknown subject and an unknown grade", () => {
@@ -56,7 +56,7 @@ describe("validateResultRows", () => {
       ctx()
     );
     expect(accepted).toEqual([]);
-    expect(failed[0].error).toBe('No student with Roll No "99X" in this college');
+    expect(failed[0].error).toBe('No student with Regd. No "99X" in this college');
     expect(failed[1].error).toBe("24MBA001 is not a Bachelor of Technology student");
     expect(failed[2].error).toBe('Subject Code "ZZ999" is not a subject of this college');
     expect(failed[3].error).toContain('Grade "Z" is not in the grade table');
@@ -288,7 +288,7 @@ describe("batch membership", () => {
     expect(r.failed).toEqual([]);
   });
 
-  it("another batch, or none on record, is a note - the result still goes to the Roll No's student", () => {
+  it("another batch, or none on record, is a note - the result still goes to the Regd. No's student", () => {
     const r = validateResultRows([row(2, "24A91A0501", "MA101", "A"), row(3, "24A91A0502", "MA101", "A")],
       withBatch([{ ...anil, batch: "2023-2027" }, { ...bina, batch: undefined }]));
     expect(r.failed).toEqual([]);

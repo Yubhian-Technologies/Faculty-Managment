@@ -170,7 +170,7 @@ describe("GET /api/college/student-strength", () => {
     expect(p.integrity).toEqual({ databaseCount: 6, scannedRecords: 6 }); // 6 seeded + 1 added - 1 deleted
   });
 
-  it("flags a duplicated roll number without merging the two students", async () => {
+  it("flags a duplicated Regd. No without merging the two students", async () => {
     store[`${C}/students`].a2.rollNumber = "1";
     const p = await fetchPayload();
     expect(p.health.duplicateRolls).toHaveLength(1);
