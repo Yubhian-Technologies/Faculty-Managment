@@ -140,9 +140,15 @@ export function monthPickerYears(batch: string | null | undefined, currentYear: 
   return years;
 }
 
-/** The semester `today` falls in, else the latest one that has started (e.g. between two semesters). */
+/**
+ * The semester `today` falls in, else the latest one that has started (e.g. between two semesters).
+ * A course-year's timing is one set of dates for the current academic year, so a 3rd-year student's
+ * Year 1, 2 and 3 semesters can all contain today: the latest (their own year's) is the running one.
+ */
 export function currentSemesterOf(options: SemesterRange[], today: string): SemesterRange | null {
-  const within = options.find((s) => s.startDate <= today && today <= s.endDate);
+  const within = options
+    .filter((s) => s.startDate <= today && today <= s.endDate)
+    .reduce<SemesterRange | null>((best, s) => (!best || (s.year ?? 0) > (best.year ?? 0) || ((s.year ?? 0) === (best.year ?? 0) && s.semester > best.semester) ? s : best), null);
   if (within) return within;
   return options.length > 0 ? options[options.length - 1] : null;
 }
