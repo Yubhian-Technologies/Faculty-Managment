@@ -693,6 +693,47 @@ export interface Department {
   // an inactive one - those are structural invariants, not inferences, so
   // ticking this box can never make one of them a freshman department.
   isFreshman?: boolean;
+  // Advisory-only classification into the Principal-facing vocabulary PARENT
+  // (owns students/sections/subjects, may have children) / CHILD (owns its
+  // own students/sections, sits under a parent) / GHOST (hasSubDepartments
+  // with parentRunsOwnSections===false and no feeder-shaped child - owns
+  // nothing itself, full control flows to its children already via
+  // childDepartmentNames in scope.ts) / NEIGHBOUR / NEIGHBOUR_SUB (owns no
+  // students of its own; uses managedDepartments/secondaryDepartments to
+  // teach another department's assigned years). This is a NAME for what
+  // the fields above already mean - never a new source of truth. Every
+  // real authorization/visibility decision keeps reading
+  // hasSubDepartments/parentRunsOwnSections/managedDepartments/
+  // secondaryDepartments/parentDepartmentId directly via scope.ts,
+  // academicStructure.ts, managedBranches.ts and taughtYears.ts, exactly as
+  // before this field existed - nothing branches on departmentRole.
+  // Computed by deriveDepartmentRole() (src/lib/departments/departmentRole.ts);
+  // UI badges call that function LIVE rather than trust this stored copy, so
+  // a stale value here can never display something no longer true. Stored
+  // only for the one-shot backfill audit trail and a future Principal
+  // override, same unset-means-derive convention as isFreshman above.
+  departmentRole?: "PARENT" | "CHILD" | "GHOST" | "NEIGHBOUR" | "NEIGHBOUR_SUB";
+  departmentRoleSource?: "DERIVED" | "PRINCIPAL_SET";
+  // Explicit, stored mirror of "which neighbour teaches this department's fed
+  // years" - a denormalized REVERSE of managedDepartments (set on the
+  // neighbour, not here), so a parent/child department's own record can show
+  // "Taught by: X" directly instead of reverse-scanning every other
+  // department for a name match. Computed by resolveNeighbourLinks()
+  // (src/lib/departments/neighbourLinks.ts), which wraps the SAME
+  // findBranchManager() scope.ts's canHodEditDepartmentYear uses for real
+  // teaching-assignment authority - so this can never show a neighbour that
+  // doesn't actually have it, or miss one that does. Display/navigation ONLY:
+  // no authorization path reads this field; a missed write-path sync at worst
+  // shows a stale neighbour in a UI panel, never changes who can do what.
+  // Typed as an array for forward compatibility, but the enforced
+  // one-owner-per-branch rule (findBranchClaimConflicts) means this holds 0
+  // or 1 entries today - never multiple neighbours feeding the same
+  // department at once.
+  neighbourLinks?: Array<{
+    neighbourDepartmentId: string;
+    neighbourDepartmentName: string;
+    years: number[];
+  }>;
   createdAt: Timestamp;
   updatedAt?: Timestamp;
 }
