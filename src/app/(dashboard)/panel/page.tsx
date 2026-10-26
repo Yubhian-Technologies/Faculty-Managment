@@ -34,7 +34,7 @@ import type { HiringBatch } from "@/types";
 
 const FACULTY_MODULES = [
   {
-    label: "Teaching Load",
+    label: "My Time Table",
     description: "Subjects & timetable",
     href: "/panel/teaching",
     icon: BookOpen,

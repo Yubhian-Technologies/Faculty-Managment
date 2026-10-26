@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { FacultySearchSelect } from "@/components/timetable/FacultySearchSelect";
 import { toast } from "@/hooks/useToast";
 import { MAX_FACULTY_PER_SUBJECT } from "@/lib/teaching/facultyCap";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
@@ -1178,7 +1179,7 @@ const effectiveSemester = semesterOptions.length === 0
     <div className="space-y-6">
       <PageHeader
         title="Teaching Assignments"
-        description="Find staffing gaps and assign faculty to subjects, course &amp; year wise"
+        description="Review subject staffing requirements and assign faculty by course, year, semester, and department."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" variant="outline" onClick={handleExportPdf} disabled={isExportingPdf}>
@@ -1296,7 +1297,7 @@ const effectiveSemester = semesterOptions.length === 0
           <CardHeader className="pb-3"><CardTitle className="text-base">Unstaffed Subjects</CardTitle></CardHeader>
           <CardContent>
             {!applied ? (
-              <p className="text-sm text-muted-foreground text-center py-6">Select the course, year, semester and sub-department, then press Load to see staffing gaps.</p>
+              <p className="text-sm text-muted-foreground text-center py-6">Select a course, year, semester, and department to identify subjects that require faculty assignments.</p>
             ) : !subjectsSemesterReady ? (
               <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-14 bg-muted animate-pulse rounded-lg" />)}</div>
             ) : subjects.length === 0 ? (
@@ -1341,7 +1342,7 @@ const effectiveSemester = semesterOptions.length === 0
           <CardHeader className="pb-3"><CardTitle className="text-base">Assign Faculty</CardTitle></CardHeader>
           <CardContent>
             {!applied ? (
-              <p className="text-sm text-muted-foreground text-center py-6">Select the course, year, semester and sub-department, then press Load to assign faculty.</p>
+              <p className="text-sm text-muted-foreground text-center py-6">Select the required academic details to assign faculty members to subjects.</p>
             ) : sections.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-6">No sections created yet for {course?.name} · {ordinalYear(Number(year))}.</p>
             ) : (
@@ -1399,20 +1400,14 @@ const effectiveSemester = semesterOptions.length === 0
                 </div>
                 <div className="space-y-2">
                   <Label>Faculty</Label>
-                  <Select
+                  <FacultySearchSelect
+                    faculty={availableFacultyForAssign}
                     value={assignForm.facultyId}
                     onValueChange={(v) => { setAssignForm((f) => ({ ...f, facultyId: v })); setExtraFacultyIds((ids) => ids.filter((id) => id !== v)); }}
                     disabled={!assignForm.subjectId}
-                  >
-                    <SelectTrigger><SelectValue placeholder={availableFacultyForAssign.length ? "Select faculty" : "No faculty in your department"} /></SelectTrigger>
-                    <SelectContent>
-                      {availableFacultyForAssign.map((f) => (
-                        <SelectItem key={f.id} value={f.id}>
-                          {f.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder={availableFacultyForAssign.length ? "Select faculty" : "No faculty in your department"}
+                    className="w-full"
+                  />
 
                   {/* More faculty for the same subject in this section - each picks from
                       whoever is not already chosen here or assigned to it. */}
@@ -1420,14 +1415,13 @@ const effectiveSemester = semesterOptions.length === 0
                     const chosenElsewhere = new Set([assignForm.facultyId, ...extraFacultyIds.filter((_, j) => j !== i)]);
                     return (
                       <div key={i} className="flex items-center gap-2">
-                        <Select value={id} onValueChange={(v) => setExtraFacultyIds((ids) => ids.map((x, j) => (j === i ? v : x)))}>
-                          <SelectTrigger><SelectValue placeholder="Select faculty" /></SelectTrigger>
-                          <SelectContent>
-                            {availableFacultyForAssign.filter((f) => !chosenElsewhere.has(f.id)).map((f) => (
-                              <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <FacultySearchSelect
+                          faculty={availableFacultyForAssign.filter((f) => !chosenElsewhere.has(f.id))}
+                          value={id}
+                          onValueChange={(v) => setExtraFacultyIds((ids) => ids.map((x, j) => (j === i ? v : x)))}
+                          placeholder="Select faculty"
+                          className="w-full"
+                        />
                         <Button type="button" size="icon" variant="ghost" title="Remove this faculty" onClick={() => setExtraFacultyIds((ids) => ids.filter((_, j) => j !== i))}>
                           <X className="h-4 w-4" />
                         </Button>

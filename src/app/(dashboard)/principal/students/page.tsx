@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Search, Users } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -12,13 +12,17 @@ import { Pagination } from "@/components/shared/Pagination";
 import { toast } from "@/hooks/useToast";
 import { departmentsOfferingCourse, yearOptionsForDepartment, yearOptionsForCourse } from "@/components/students/RosterFieldInputs";
 import { LIST_ROSTER_FIELDS, rosterFieldDisplay } from "@/lib/students/rosterFields";
+import { StudentDepartmentCell } from "@/components/students/StudentDepartmentCell";
 import { StudentPromotionsPanel } from "@/components/students/StudentPromotionsPanel";
 import { StudentStrengthDashboard } from "@/components/students/StudentStrengthDashboard";
 import { StudentsViewTabs } from "@/components/students/StudentsViewTabs";
 import { GraduatedStudentsView } from "@/components/students/GraduatedStudentsView";
 import type { StudentListItem, Department, AcademicYear, Course } from "@/types";
 import { selectableYears } from "@/lib/college/courseYears";
-import { coreDepartmentOptions as buildCoreDepartmentOptions, departmentFilterOptions as buildDepartmentFilterOptions } from "@/lib/departments/departmentTree";
+import { DepartmentPickSelect } from "@/components/shared/DepartmentPickSelect";
+import {
+  buildDepartmentPickOptions, DEPARTMENT_PICK_ALL, departmentPickValue, isDepartmentPickOffered, parseDepartmentPick,
+} from "@/lib/departments/departmentPickTree";
 import { useSectionDepartments } from "@/hooks/useSectionDepartments";
 import { useListUrlSync } from "@/hooks/useListUrlSync";
 import { buildListUrl, readListChoice, readListInt, readListString, withListBack } from "@/lib/listReturn";
@@ -80,16 +84,26 @@ function PrincipalStudentsContent() {
   // A restored list loads itself on arrival (once the filter options are in), so
   // it starts out loading rather than flashing the empty state.
   const [isFetching, setIsFetching] = useState(restored.load);
-  const [hasLoaded, setHasLoaded] = useState(restored.load);
 
+  // The pickers below are a DRAFT: nothing is read until Load. `applied` is what the last Load
+  // asked for (and what the URL and the table show); `nonce` makes a repeat Load re-read.
   const [search, setSearch] = useState(restored.search);
-  const [debouncedSearch, setDebouncedSearch] = useState(restored.search.trim().toLowerCase());
-  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const [deptFilter, setDeptFilter] = useState(restored.department);
-  const [coreDeptFilter, setCoreDeptFilter] = useState(restored.coreDepartment);
+  // One Department pick: sub-departments and core branches sit under their department.
+  const [deptPick, setDeptPick] = useState(
+    departmentPickValue(restored.department === "all" ? "" : restored.department, restored.coreDepartment === "all" ? "" : restored.coreDepartment)
+  );
+  const { department: pickedDept, coreDepartment: pickedCore } = parseDepartmentPick(deptPick);
+  const deptFilter = pickedDept || "all";
+  const coreDeptFilter = pickedCore || "all";
   const [yearFilter, setYearFilter] = useState<string>(restored.year);
   const [courseFilter, setCourseFilter] = useState<string>(restored.course);
+  type Applied = { search: string; dept: string; core: string; course: string; year: string; nonce: number };
+  const [applied, setApplied] = useState<Applied | null>(() =>
+    restored.load
+      ? { search: restored.search.trim().toLowerCase(), dept: restored.department, core: restored.coreDepartment, course: restored.course, year: restored.year, nonce: 0 }
+      : null
+  );
+  const hasLoaded = applied !== null;
   const [page, setPage] = useState(restored.page);
   const [pageSize, setPageSize] = useState(restored.pageSize);
 
@@ -122,16 +136,17 @@ function PrincipalStudentsContent() {
       const params = new URLSearchParams();
       params.set("page", String(targetPage));
       params.set("pageSize", String(targetPageSize));
-      if (debouncedSearch) params.set("search", debouncedSearch);
-      if (deptFilter !== "all") params.set("department", deptFilter);
-      if (coreDeptFilter !== "all") params.set("coreDepartment", coreDeptFilter);
-      if (courseFilter !== "all") params.set("course", courseFilter);
-      if (yearFilter !== "all") params.set("year", yearFilter);
+      if (!applied) return;
+      if (applied.search) params.set("search", applied.search);
+      if (applied.dept !== "all") params.set("department", applied.dept);
+      if (applied.core !== "all") params.set("coreDepartment", applied.core);
+      if (applied.course !== "all") params.set("course", applied.course);
+      if (applied.year !== "all") params.set("year", applied.year);
       // "All years" for a department means the years it actually teaches - a
       // department filter matches Core Department too, so without this a branch
       // teaching years 2-4 also returned its feeder's 1st years.
-      else if (deptFilter !== "all") {
-        const configured = yearOptionsForDepartment(departments, courses, deptFilter, courseFilter === "all" ? "" : courseFilter, years);
+      else if (applied.dept !== "all") {
+        const configured = yearOptionsForDepartment(departments, courses, applied.dept, applied.course === "all" ? "" : applied.course, years);
         if (configured.length > 0) params.set("years", configured.join(","));
       }
 
@@ -150,26 +165,25 @@ function PrincipalStudentsContent() {
       }
       setStudents(data);
       setTotal(grandTotal);
-      setHasLoaded(true);
     } catch {
       toast({ variant: "destructive", title: "Failed to load students" });
     } finally {
       setIsFetching(false);
     }
-  }, [page, pageSize, debouncedSearch, deptFilter, coreDeptFilter, courseFilter, yearFilter, departments, courses, years]);
+  }, [page, pageSize, applied, departments, courses, years]);
 
   // Load filter metadata once on mount
   useEffect(() => {
     void (async () => { await loadMetadata(); })();
   }, [loadMetadata]);
 
-  // Once loaded, automatically re-fetch when page, pageSize, search or any filter changes.
+  // Re-reads on Load (a new `applied`) and on page / page size - never on a filter edit.
   // Waits for the filter options (a restored list is "loaded" before they arrive):
   // the department's configured years, part of the query, come from them.
   useEffect(() => {
     if (!hasLoaded || isMetadataLoading) return;
     void executeLoad(page, pageSize);
-  }, [hasLoaded, isMetadataLoading, page, pageSize, debouncedSearch, deptFilter, coreDeptFilter, courseFilter, yearFilter, executeLoad]);
+  }, [hasLoaded, isMetadataLoading, page, pageSize, applied, executeLoad]);
 
   // The list's own URL: tab, what is loaded, filters, search, page and page size.
   // Kept in the address bar so a refresh or the browser's Back button restores the
@@ -178,12 +192,12 @@ function PrincipalStudentsContent() {
     () => buildListUrl(
       LIST_PATH,
       {
-        tab: activeTab, load: hasLoaded, department: deptFilter, coreDepartment: coreDeptFilter, course: courseFilter,
-        year: yearFilter, q: debouncedSearch, page, pageSize,
+        tab: activeTab, load: hasLoaded, department: applied?.dept ?? "all", coreDepartment: applied?.core ?? "all", course: applied?.course ?? "all",
+        year: applied?.year ?? "all", q: applied?.search ?? "", page, pageSize,
       },
       { tab: "roster", department: "all", coreDepartment: "all", course: "all", year: "all", page: 1, pageSize: DEFAULT_PAGE_SIZE }
     ),
-    [activeTab, hasLoaded, deptFilter, coreDeptFilter, courseFilter, yearFilter, debouncedSearch, page, pageSize]
+    [activeTab, hasLoaded, applied, page, pageSize]
   );
   useListUrlSync(listUrl, LIST_PATH);
 
@@ -196,28 +210,18 @@ function PrincipalStudentsContent() {
     [departments]
   );
 
-  // Only the departments that resolve to sections - their own, or those of a
-  // branch they manage - plus a parent that organises sub-departments (picking
-  // it means "all of them"), with each sub-department listed beneath its
-  // parent. The same rule every Students screen applies; see
-  // lib/departments/departmentTree.ts.
-  const departmentFilterOptions = useMemo(() => {
+  // Only the departments that resolve to sections - their own, or those of a branch they manage - plus a
+  // parent that organises sub-departments; each sub-department and each core branch is listed beneath the
+  // department that owns it (one field, no separate Core department). See lib/departments/departmentPickTree.ts.
+  const departmentPickOptions = useMemo(() => {
     const offered = courseFilter === "all"
       ? activeDepartments
       : (() => {
         const offeringIds = new Set(departmentsOfferingCourse(departments, courses, courseFilter).map((d) => d.id));
         return activeDepartments.filter((d) => offeringIds.has(d.id));
       })();
-    return buildDepartmentFilterOptions(offered, departments, sectionDepartments);
+    return buildDepartmentPickOptions(offered, departments, sectionDepartments);
   }, [courseFilter, activeDepartments, departments, courses, sectionDepartments]);
-
-  // The branches the picked department (or, for a parent, its sub-departments)
-  // teaches the shared first year for - the students' Core Department. Offered
-  // only when there are any.
-  const coreDepartmentOptions = useMemo(
-    () => buildCoreDepartmentOptions(departments, deptFilter === "all" ? [] : [deptFilter], sectionDepartments),
-    [deptFilter, departments, sectionDepartments]
-  );
 
   const yearFilterOptions = useMemo(() => {
     if (deptFilter !== "all") {
@@ -228,46 +232,34 @@ function PrincipalStudentsContent() {
 
   function onSearchChange(value: string) {
     setSearch(value);
-    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-    searchDebounceRef.current = setTimeout(() => {
-      setDebouncedSearch(value.trim().toLowerCase());
-      setPage(1);
-    }, 350);
   }
 
   function onCourseFilterChange(value: string) {
-    const nextDeptOptions = value === "all"
+    const nextOptions = value === "all"
       ? activeDepartments
       : activeDepartments.filter((d) => new Set(departmentsOfferingCourse(departments, courses, value).map((o) => o.id)).has(d.id));
-    const deptStillValid = deptFilter === "all" || nextDeptOptions.some((d) => d.name === deptFilter);
-    if (!deptStillValid) { setDeptFilter("all"); setCoreDeptFilter("all"); }
-    const nextDept = deptStillValid ? deptFilter : "all";
+    const nextPickOptions = buildDepartmentPickOptions(nextOptions, departments, sectionDepartments);
+    const pickStillValid = isDepartmentPickOffered(nextPickOptions, deptPick);
+    if (!pickStillValid) setDeptPick(DEPARTMENT_PICK_ALL);
+    const nextDept = pickStillValid ? deptFilter : "all";
     const nextYearOptions = nextDept === "all"
       ? yearOptionsForCourse(courses, value === "all" ? undefined : value, years)
       : yearOptionsForDepartment(departments, courses, nextDept, value === "all" ? "" : value, years);
     if (yearFilter !== "all" && !nextYearOptions.includes(Number(yearFilter))) setYearFilter("all");
     setCourseFilter(value);
-    setPage(1);
   }
 
-  function onDeptFilterChange(value: string) {
-    const nextYearOptions = value === "all"
+  function onDeptPickChange(value: string) {
+    const { department } = parseDepartmentPick(value);
+    const nextYearOptions = !department
       ? yearOptionsForCourse(courses, courseFilter === "all" ? undefined : courseFilter, years)
-      : yearOptionsForDepartment(departments, courses, value, courseFilter === "all" ? "" : courseFilter, years);
+      : yearOptionsForDepartment(departments, courses, department, courseFilter === "all" ? "" : courseFilter, years);
     if (yearFilter !== "all" && !nextYearOptions.includes(Number(yearFilter))) setYearFilter("all");
-    setCoreDeptFilter("all");
-    setDeptFilter(value);
-    setPage(1);
-  }
-
-  function onCoreDeptFilterChange(value: string) {
-    setCoreDeptFilter(value);
-    setPage(1);
+    setDeptPick(value);
   }
 
   function onYearFilterChange(value: string) {
     setYearFilter(value);
-    setPage(1);
   }
 
   function handlePageChange(newPage: number) {
@@ -279,14 +271,18 @@ function PrincipalStudentsContent() {
     setPage(1);
   }
 
+  const filtersChanged = applied !== null && (
+    applied.search !== search.trim().toLowerCase() || applied.dept !== deptFilter || applied.core !== coreDeptFilter
+    || applied.course !== courseFilter || applied.year !== yearFilter
+  );
+
+  // The only thing that reads: freeze the pickers as `applied`; the effect above fetches.
   function handleLoad() {
-    setDebouncedSearch(search.trim().toLowerCase());
     setPage(1);
-    if (!hasLoaded) {
-      setHasLoaded(true);
-    } else {
-      void executeLoad(1, pageSize);
-    }
+    setApplied((prev) => ({
+      search: search.trim().toLowerCase(), dept: deptFilter, core: coreDeptFilter, course: courseFilter, year: yearFilter,
+      nonce: (prev?.nonce ?? 0) + 1,
+    }));
   }
 
   return (
@@ -333,7 +329,7 @@ function PrincipalStudentsContent() {
                     handleLoad();
                   }
                 }}
-                placeholder="Search by name, roll number or email"
+                placeholder="Search by name, Regd. No or email"
                 className="pl-9"
               />
             </div>
@@ -344,26 +340,7 @@ function PrincipalStudentsContent() {
                 {courseNames.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
               </SelectContent>
             </Select>
-            <Select value={deptFilter} onValueChange={onDeptFilterChange}>
-              <SelectTrigger className="sm:w-48"><SelectValue placeholder="All departments" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All departments</SelectItem>
-                {departmentFilterOptions.map((o) => (
-                  <SelectItem key={o.department.id} value={o.department.name} className={o.depth === 1 ? "pl-8" : undefined}>
-                    {o.department.name}{o.container ? " (all sub-departments)" : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {coreDepartmentOptions.length > 0 && (
-              <Select value={coreDeptFilter} onValueChange={onCoreDeptFilterChange}>
-                <SelectTrigger className="sm:w-48"><SelectValue placeholder="All core departments" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All core departments</SelectItem>
-                  {coreDepartmentOptions.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            )}
+            <DepartmentPickSelect value={deptPick} onChange={onDeptPickChange} options={departmentPickOptions} className="sm:w-56" />
             <Select value={yearFilter} onValueChange={onYearFilterChange}>
               <SelectTrigger className="sm:w-36"><SelectValue placeholder="All years" /></SelectTrigger>
               <SelectContent>
@@ -377,7 +354,7 @@ function PrincipalStudentsContent() {
               disabled={isFetching || isMetadataLoading}
               className="whitespace-nowrap"
             >
-              {isFetching ? "Loading…" : hasLoaded ? "Refresh" : "Load"}
+              {isFetching ? "Loading…" : filtersChanged ? "Apply filters" : hasLoaded ? "Refresh" : "Load"}
             </Button>
           </div>
 
@@ -426,7 +403,9 @@ function PrincipalStudentsContent() {
                             const value = rosterFieldDisplay(f, s);
                             return (
                               <td key={f.key} className={`p-3 whitespace-nowrap ${f.key === "name" ? "font-medium" : ""}`}>
-                                {value || <span className="text-muted-foreground/50">—</span>}
+                                {f.key === "department"
+                              ? <StudentDepartmentCell department={value} coreDepartment={s.secondaryDepartment} />
+                              : value || <span className="text-muted-foreground/50">—</span>}
                               </td>
                             );
                           })}

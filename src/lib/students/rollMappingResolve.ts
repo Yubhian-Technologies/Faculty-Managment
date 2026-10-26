@@ -36,7 +36,7 @@ export async function resolveRollMapping(
     return { id: d.id, name: x.name, rollNumber: x.rollNumber, mobileNo: x.mobileNo == null ? undefined : String(x.mobileNo) };
   });
 
-  // The GLOBAL roll registry, for just the rolls in this file. Roll numbers are
+  // The GLOBAL roll registry, for just the rolls in this file. Regd. Nos are
   // unique across every college (see rollIdentity.ts), and a collection-group
   // query on the roll does not exist - the registry is keyed by document id, so
   // these are direct reads.

@@ -93,7 +93,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "All Users", href: "/super-admin/users", iconName: "Users", roles: ["SUPER_ADMIN"], section: "Users" },
   { label: "Add User", href: "/super-admin/users/new", iconName: "UserPlus", roles: ["SUPER_ADMIN"] },
   { label: "Role Assignments", href: "/super-admin/role-assignments", iconName: "UserCog", roles: ["SUPER_ADMIN"] },
-  { label: "Faculty Profile Completion", href: "/super-admin/faculty-profile-completion", iconName: "ClipboardCheck", roles: ["SUPER_ADMIN"], section: "Reports" },
+  { label: "Staff Profile Completion Statistics", href: "/super-admin/faculty-profile-completion", iconName: "ClipboardCheck", roles: ["SUPER_ADMIN"], section: "Reports" },
   { label: "Audit Logs", href: "/super-admin/audit-logs", iconName: "ScrollText", roles: ["SUPER_ADMIN"], section: "System" },
   { label: "Settings", href: "/super-admin/settings", iconName: "Settings2", roles: ["SUPER_ADMIN"] },
 
@@ -219,7 +219,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Internal Marks", href: "/principal/internal-marks", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
   { label: "Results Analysis", href: "/principal/results-analysis", iconName: "BarChart3", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
   { label: "Faculty", href: "/principal/faculty", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Staff & HR", legacyModule: "Staff & HR Management" },
-  { label: "Profile Completion", href: "/principal/faculty/profile-completion", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Staff & HR Management" },
+  { label: "Profile Completion Statistics", href: "/principal/faculty/profile-completion", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Staff & HR Management" },
   { label: "Staff", href: "/principal/staff", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Staff & HR Management" },
   { label: "Circulars", href: "/principal/circulars", iconName: "Megaphone", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Staff & HR Management" },
   // Deciding a leave request is Principal/VP authority, not College Admin's -
@@ -282,7 +282,7 @@ export const NAV_ITEMS: NavItem[] = [
   // visible per college via the Nav Visibility settings (filterVisibleNavItems).
   { label: "Dashboard", href: "/hod", iconName: "LayoutDashboard", roles: ["HOD"] },
   { label: "Faculty", href: "/hod/faculty", iconName: "UsersRound", roles: ["HOD"], section: "Department" },
-  { label: "Profile Completion", href: "/hod/faculty/profile-completion", iconName: "ClipboardCheck", roles: ["HOD"] },
+  { label: "Profile Completion Statistics", href: "/hod/faculty/profile-completion", iconName: "ClipboardCheck", roles: ["HOD"] },
   // No separate "Supporting Staff" item: it is a tab on the Faculty page
   // (hod/faculty/page.tsx), and isNavItemActive keeps Faculty highlighted there.
   { label: "Sections", href: "/hod/sections", iconName: "BookMarked", roles: ["HOD"] },
@@ -290,6 +290,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Mentoring", href: "/hod/mentoring", iconName: "UserCheck", roles: ["HOD"], module: "students" },
   { label: "Sub-Departments", href: "/hod/settings/sub-departments", iconName: "Settings2", roles: ["HOD"] },
   { label: "Designations", href: "/hod/settings/designations", iconName: "Tags", roles: ["HOD"] },
+  { label: "Settings", href: "/hod/settings", iconName: "Settings2", roles: ["HOD"] },
   // Hidden from a Department Office head, whose `role` also reads "HOD": they
   // hold the same authority everywhere else, but appointing their own successor
   // stays with the actual HOD. The API enforces that too - this only keeps a
@@ -332,7 +333,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "My Attendance", href: "/hod/attendance", iconName: "ClipboardCheck", roles: ["HOD"], section: "My Work" },
   { label: "My Leave", href: "/hod/leave", iconName: "CalendarClock", roles: ["HOD"] },
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["HOD"] },
-  { label: "Teaching Load", href: "/hod/teaching", iconName: "BookOpen", roles: ["HOD"], module: "teaching-load" },
+  { label: "My Time Table", href: "/hod/teaching", iconName: "BookOpen", roles: ["HOD"], module: "teaching-load" },
   { label: "My Profile", href: "/hod/profile", iconName: "UserCircle", roles: ["HOD"], section: "Personal" },
 
   // College Office
@@ -436,7 +437,7 @@ export const NAV_ITEMS: NavItem[] = [
   // Full module set — Super Admin controls which modules/items are actually
   // visible per college via the Nav Visibility settings (filterVisibleNavItems).
   { label: "Dashboard", href: "/panel", iconName: "LayoutDashboard", roles: ["PANEL_MEMBER"] },
-  { label: "Teaching Load", href: "/panel/teaching", iconName: "BookOpen", roles: ["PANEL_MEMBER"], section: "My Work", module: "teaching-load" },
+  { label: "My Time Table", href: "/panel/teaching", iconName: "BookOpen", roles: ["PANEL_MEMBER"], section: "My Work", module: "teaching-load" },
   { label: "Faculty Timetable", href: "/panel/faculty-timetable", iconName: "CalendarSearch", roles: ["PANEL_MEMBER"], module: "assignment-requests" },
   { label: "Internal Exam", href: "/panel/internal-exam", iconName: "ClipboardList", roles: ["PANEL_MEMBER"] },
   { label: "Add Mid Bank", href: "/panel/mid-bank", iconName: "BookOpen", roles: ["PANEL_MEMBER"] },
@@ -445,6 +446,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Attendance Report", href: "/panel/monthly-records", iconName: "CalendarRange", roles: ["PANEL_MEMBER"], module: "attendance", legacyModule: "My Work" },
   { label: "Topics Covered", href: "/panel/topics-covered", iconName: "BookOpenCheck", roles: ["PANEL_MEMBER"], module: "attendance" },
   { label: "Student Permissions", href: "/panel/student-permissions", iconName: "ShieldCheck", roles: ["PANEL_MEMBER"], legacyModule: "My Work" },
+  { label: "My Section", href: "/panel/section", iconName: "Users", roles: ["PANEL_MEMBER"], module: "students", legacyModule: "My Work" },
   { label: "Students", href: "/panel/students", iconName: "GraduationCap", roles: ["PANEL_MEMBER"], module: "students", legacyModule: "My Work" },
   // Students the HOD assigned to this login for mentoring (empty state otherwise).
   { label: "My Mentees", href: "/panel/mentoring", iconName: "UserCheck", roles: ["PANEL_MEMBER"], module: "students", legacyModule: "My Work" },
@@ -455,6 +457,7 @@ export const NAV_ITEMS: NavItem[] = [
   // by design elsewhere (hod/students' per-student Edit dialog) - this is the
   // Faculty Incharge's own equivalent, not offered to HOD here.
   { label: "Lab Batches", href: "/panel/students/batches", iconName: "Layers", roles: ["PANEL_MEMBER"], module: "lab-batches", legacyModule: "My Work" },
+  { label: "Section Settings", href: "/panel/students/class-representatives", iconName: "Settings2", roles: ["PANEL_MEMBER"], module: "lab-batches", legacyModule: "My Work" },
   // Shown to every PANEL_MEMBER regardless of whether an HOD has actually
   // delegated anything to them yet - the page itself shows an empty state
   // when it's empty, same convention as Leave/Attendance always showing
@@ -650,6 +653,11 @@ function seatRolesOf(primary: UserRole, roles: readonly UserRole[]): UserRole[] 
 // e.g. a College-Admin-and-HOD's Faculty Register call hit no HOD branch at
 // all and came back with the WHOLE college's roster instead of just their
 // department's.
+
+// How the HOD seat reads in the "Working as" switcher. Display text only - ROLE_LABELS.HOD ("Head of Department")
+// is still what every other screen shows, and the context key (HOD:<dept>) is what the logic uses.
+const HOD_CONTEXT_LABEL = "Head of the Department";
+
 export function getWorkContexts(primary: UserRole, roles: readonly UserRole[] = [], hodDepartments: readonly string[] = []): WorkContext[] {
   const seats = seatRolesOf(primary, roles);
   if (seats.length === 0) return [];
@@ -658,7 +666,7 @@ export function getWorkContexts(primary: UserRole, roles: readonly UserRole[] = 
       r === "HOD" && hodDepartments.length > 0
         ? hodDepartments.map((d) => ({
             key: hodContextKey(d) as WorkContextKey,
-            label: hodDepartments.length > 1 ? `${ROLE_LABELS.HOD} - ${d}` : ROLE_LABELS.HOD,
+            label: hodDepartments.length > 1 ? `${HOD_CONTEXT_LABEL} - ${d}` : HOD_CONTEXT_LABEL,
           }))
         : [{ key: r as WorkContextKey, label: ROLE_LABELS[r] }]
     ),

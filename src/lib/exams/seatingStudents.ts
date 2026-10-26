@@ -3,7 +3,7 @@ import { sectionLabel } from "@/lib/exams/seatingSections";
 import type { Section, StudentRecord } from "@/types";
 import type { SeatingStudent } from "@/types/examSeating";
 
-// A section's current students (not graduated, with a roll number) shaped for
+// A section's current students (not graduated, with a Regd. No) shaped for
 // a seating plan.
 export async function loadSectionStudents(
   db: Firestore,

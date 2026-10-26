@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { initializeApp, getApps, getApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 
-// Student Mobile No REQUIRED and unique across ALL colleges, Roll No optional (but unique when given), through the REAL
+// Student Mobile No REQUIRED and unique across ALL colleges, Regd. No optional (but unique when given), through the REAL
 // routes on a real Firestore (the local emulator): the bulk import, adding one student, and editing one. Skipped unless
 // the emulator is running:
 //   firebase emulators:exec --config <cfg> --only firestore --project demo-sm "npx vitest run src/lib/students/studentMobile.emulator.test.ts"
@@ -26,7 +26,7 @@ const C = "c1";
 const OTHER = "c2";
 const COURSE = "Bachelor of Technology";
 
-describe.skipIf(!EMULATOR)("Student Mobile No required + globally unique, Roll No optional (real Firestore)", () => {
+describe.skipIf(!EMULATOR)("Student Mobile No required + globally unique, Regd. No optional (real Firestore)", () => {
   const db = () => getFirestore(getApps().length ? getApp() : initializeApp({ projectId: "demo-sm" }));
   const col = (n: string, college = C) => db().collection("colleges").doc(college).collection(n);
   const students = async () => (await col("students").get()).docs.map((d) => ({ id: d.id, ...d.data() })) as (Record<string, unknown> & { id: string })[];
@@ -71,7 +71,7 @@ describe.skipIf(!EMULATOR)("Student Mobile No required + globally unique, Roll N
   });
 
   describe("bulk import", () => {
-    it("imports students with NO roll number (stored as '', no roll claim, no roll key)", async () => {
+    it("imports students with NO Regd. No (stored as '', no roll claim, no roll key)", async () => {
       const r = await importRows([unassigned({ name: "ASHA", mobileNo: "9876500001" }), unassigned({ name: "BHAVYA", mobileNo: "9876500002" })]);
       expect(r.status).toBe(201);
       expect(r.json.created).toBe(2);
@@ -88,12 +88,22 @@ describe.skipIf(!EMULATOR)("Student Mobile No required + globally unique, Roll N
       expect(await byName("CHARAN")).toMatchObject({ rollNumber: "", section: "A", mobileNo: "9876500003" });
     });
 
-    it("REJECTS a row with no Student Mobile No (blank, spaces or missing) - nothing is saved for it", async () => {
+    it("REJECTS a row with neither a Regd. No nor a Student Mobile No (blank, spaces or missing) - nothing is saved for it", async () => {
       const r = await importRows([unassigned({ name: "NOMOB1" }), unassigned({ name: "NOMOB2", mobileNo: "" }), unassigned({ name: "NOMOB3", mobileNo: "   " }), unassigned({ name: "OKAY", mobileNo: "9876500040" })]);
       expect(r.json.created).toBe(1);
       expect(r.json.failed.map((f) => f.row)).toEqual([2, 3, 4]);
-      expect(r.json.failed.every((f) => f.error === "Student Mobile No is required")).toBe(true);
+      expect(r.json.failed.every((f) => f.error === "Regd. No or Student Mobile No is required - give at least one")).toBe(true);
       expect((await students()).map((s) => s.name)).toEqual(["OKAY"]);
+    });
+
+    it("ACCEPTS a row with a Regd. No but no Student Mobile No, and a row with a mobile but no roll - either one is enough", async () => {
+      const r = await importRows([unassigned({ name: "ROLLONLY", rollNumber: "24R001", mobileNo: "" }), unassigned({ name: "MOBONLY", mobileNo: "9876500060" }), unassigned({ name: "BOTH", rollNumber: "24R002", mobileNo: "9876500061" })]);
+      expect(r.json.created).toBe(3);
+      expect(r.json.failed).toEqual([]);
+      expect(await byName("ROLLONLY")).toMatchObject({ rollNumber: "24R001" });
+      expect((await byName("ROLLONLY"))?.mobileNo).toBeUndefined();
+      expect(await byName("MOBONLY")).toMatchObject({ rollNumber: "", mobileNo: "9876500060" });
+      expect((await claims()).map((c) => c.id).sort()).toEqual(["9876500060", "9876500061"]);
     });
 
     it("stores the 10-digit form however the number was typed, and claims it globally", async () => {
@@ -117,7 +127,7 @@ describe.skipIf(!EMULATOR)("Student Mobile No required + globally unique, Roll N
       await col("students").add({ collegeId: C, name: "GOWRI", rollNumber: "R1", rollNumberUpper: "R1", mobileNo: "9876500006", department: "CSE", section: "", year: 2, status: "REGULAR" });
       const r = await importRows([unassigned({ name: "HARI", mobileNo: "+919876500006" })]);
       expect(r.json.created).toBe(0);
-      expect(r.json.failed[0].error).toMatch(/9876500006 is already used by another student \(GOWRI, Roll No R1\)/);
+      expect(r.json.failed[0].error).toMatch(/9876500006 is already used by another student \(GOWRI, Regd. No R1\)/);
     });
 
     it("rejects a mobile number held by a student of ANOTHER college - without naming them - and saves nothing", async () => {
@@ -148,7 +158,7 @@ describe.skipIf(!EMULATOR)("Student Mobile No required + globally unique, Roll N
       expect((await students()).length).toBe(2);
     });
 
-    it("roll numbers keep working: a row with a roll is imported, a repeated roll is still refused (and its mobile given back)", async () => {
+    it("Regd. Nos keep working: a row with a roll is imported, a repeated roll is still refused (and its mobile given back)", async () => {
       const r = await importRows([unassigned({ name: "NIKHIL", rollNumber: "24A001", mobileNo: "9876500009" }), unassigned({ name: "OMKAR", rollNumber: "24a001", mobileNo: "9876500010" })]);
       expect(r.json.created).toBe(1);
       expect(r.json.failed[0].error).toMatch(/24a001/i);
@@ -161,7 +171,7 @@ describe.skipIf(!EMULATOR)("Student Mobile No required + globally unique, Roll N
       const r = await importRows([unassigned({ name: "PRIYA", mobileNo: "9876500011", loginPassword: "Passw0rd!x" })]);
       expect(r.json.created).toBe(1);
       expect(r.json.loginsCreated).toBe(0);
-      expect(r.json.loginFailed?.[0].error).toMatch(/Roll Number/i);
+      expect(r.json.loginFailed?.[0].error).toMatch(/Regd. No/i);
       expect(await byName("PRIYA")).toBeDefined();
     });
 
@@ -195,7 +205,7 @@ describe.skipIf(!EMULATOR)("Student Mobile No required + globally unique, Roll N
   });
 
   describe("adding one student", () => {
-    it("works without a roll number and claims the mobile", async () => {
+    it("works without a Regd. No and claims the mobile", async () => {
       const r = await addOne({ name: "WAHEEDA", mobileNo: "9876500020" });
       expect(r.status).toBe(201);
       expect(await byName("WAHEEDA")).toMatchObject({ rollNumber: "", mobileNo: "9876500020" });
@@ -236,7 +246,7 @@ describe.skipIf(!EMULATOR)("Student Mobile No required + globally unique, Roll N
   });
 
   describe("editing a student (the later update)", () => {
-    it("the Office can add the roll number to a student who has none; the mobile stays", async () => {
+    it("the Office can add the Regd. No to a student who has none; the mobile stays", async () => {
       await addOne({ name: "CHITRA", mobileNo: "9876500030" });
       const s = await byName("CHITRA");
       const r = await edit(s!.id, { rollNumber: "24A900" });

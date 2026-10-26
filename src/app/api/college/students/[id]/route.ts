@@ -4,9 +4,11 @@ import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { invalidateSectionCountCache } from "@/lib/students/sectionCounts";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
+import { holdsRole } from "@/lib/roles/seatRoles";
 import { getAdminDb, getAdminAuth } from "@/lib/firebase/admin";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
-import { normalizeRosterDetails } from "@/lib/students/rosterFields";
+import { checkRosterDetails, ROSTER_FIELDS } from "@/lib/students/rosterFields";
+import { resolveStudentCourse, type CourseRow, type DepartmentRow } from "@/lib/students/courseForStudent";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
 import { canHodEditDepartmentYear, resolveFreshmanLandingDepartment, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { isConfiguredSecondaryDepartmentOrChild } from "@/lib/departments/codeOrNameResolver";
@@ -14,10 +16,11 @@ import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
 import { getAcademicStructure, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { findCurrentSectionDoc } from "@/lib/students/findCurrentSectionDoc";
 import { findRollNumberConflict, rollNumberTakenMessage } from "@/lib/students/rollNumberUniqueness";
-import { rollNumberUpperOf } from "@/lib/students/loginDefaults";
+import { rollNumberUpperOf, studentRollKey } from "@/lib/students/loginDefaults";
+import { peekRollHolder, rollTakenMessage } from "@/lib/students/rollIdentity";
 import { normalizeStudentMobile, studentMobileProblem, reserveStudentMobile, isStudentMobileTaken, STUDENT_MOBILE_CLEAR_MESSAGE } from "@/lib/students/studentMobile";
 import { deleteStudentsCompletely } from "@/lib/students/deleteStudent";
-import { StudentLoginError, setStudentLoginActive, syncStudentRollChange } from "@/lib/students/provisionLogin";
+import { StudentLoginError, setStudentLoginActive, syncStudentNameChange, syncStudentRollChange } from "@/lib/students/provisionLogin";
 import { FieldValue } from "firebase-admin/firestore";
 import { actorOf } from "@/lib/audit/actorOf";
 import { writeAuditLog } from "@/lib/audit/writeAuditLog";
@@ -82,6 +85,32 @@ async function catalogIdForStudent(
   const sectionDoc = await findCurrentSectionDoc(db, collegeId, student);
   const courseId = sectionDoc ? (sectionDoc.data() as { courseId?: string }).courseId : undefined;
   return catalogIdForCourseId(db, collegeId, courseId);
+}
+
+// One thing the Edit form sent that could not be saved, and why. The whole save is refused while any are left, and
+// the answer lists every one so they can all be fixed in a single go (and shown under the right field).
+interface DetailProblem {
+  field: string;
+  label: string;
+  message: string;
+}
+
+const FIELD_LABELS = new Map(ROSTER_FIELDS.map((f) => [f.key, f.label]));
+
+function detailProblemsResponse(problems: DetailProblem[], status = 400) {
+  const error =
+    problems.length === 1
+      ? problems[0].message
+      : `${problems.length} fields could not be saved (${problems.map((p) => p.label).join(", ")}). Nothing was changed.`;
+  return NextResponse.json(
+    {
+      error,
+      saved: [] as string[],
+      rejected: problems,
+      fieldErrors: Object.fromEntries(problems.map((p) => [p.field, p.message])),
+    },
+    { status }
+  );
 }
 
 // One audit entry per roster change. Never fails the request (see writeAuditLog).
@@ -166,7 +195,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     // (targetSectionId from empty) and Move (targetSectionId to a different
     // section) below. Same role tier as the roll-number/status path (this is
     // just as much a department-structural decision), so Office and Panel
-    // Member stay excluded. Every other field - roll number, department,
+    // Member stay excluded. Every other field - Regd. No, department,
     // secondaryDepartment, courseId/course - is left untouched: courseId in
     // particular is deliberately NOT cleared, since it's still the student's
     // correct, best-effort intended course (StudentRecord.courseId's
@@ -264,6 +293,23 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     // the same information the Office already enters when it imports or adds
     // the student in the first place.
     //
+    // How a save runs (the same for every role):
+    //   1. load the student and check the caller may edit them;
+    //   2. check EVERYTHING that was sent - values that cannot be used, the name, a changed course, a changed Roll
+    //      No., Mobile No. and Core Department - and collect every problem found;
+    //   3. while any problem is left NOTHING is written; the answer is a 400 that names each field and why
+    //      (`fieldErrors`, `rejected`), so they can all be fixed in one go and shown under the right box;
+    //   4. otherwise everything is written together and the answer says which fields actually changed (`saved`).
+    // A value the form merely re-sends unchanged is never a problem (see checkRosterDetails).
+    //
+    // Name: written to the student AND every copy of it that belongs to the student - the login (Auth display name,
+    // profile, systemUsers) and the roll registry entry - see syncStudentNameChange.
+    // Course: must be a course the student's department offers. `courseId` (what sections, timetable and attendance
+    // actually use) moves with it for a student who is not in a section; a student in a section keeps the course of
+    // that section (their course follows their section), so a different one is refused with the reason.
+    // Department / Year are never changed here (sectioning and promotion do that); sending a different one is now
+    // refused instead of being dropped without a word.
+    //
     // rollNumber: for every role EXCEPT the College Office it is deliberately NOT
     // reachable here even though it's a template column - it stays on the path
     // below, which is the department's and is the only one that checks
@@ -272,20 +318,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     // (can't be blanked, unique - also across colleges, the login and its roll
     // registry entry follow it), see officeRollChange.
     if (!body.targetSectionId && body.details) {
-      const updates = normalizeRosterDetails(body.details);
-      delete updates.rollNumber;
-      const officeSentRoll = session.role === "COLLEGE_OFFICE" && body.details.rollNumber !== undefined;
-      if (Object.keys(updates).length === 0 && !officeSentRoll) {
-        return NextResponse.json({ error: "No editable fields provided" }, { status: 400 });
-      }
-      // Course is required (ROSTER_FIELDS) the same as Name/Department/Year -
-      // an edit can change it to another real course, but can't clear it back
-      // to blank the way an optional field's null (rosterFormToPayload's
-      // writeBlanksAsNull) is otherwise allowed to.
-      if (updates.course === null) {
-        return NextResponse.json({ error: "Course is required" }, { status: 400 });
-      }
-
+      const details = body.details;
       const db = getAdminDb();
       const collegeRef = db.collection("colleges").doc(session.collegeId);
       const studentRef = collegeRef.collection("students").doc(id);
@@ -303,55 +336,115 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         return NextResponse.json({ error: "Not allowed to edit student details" }, { status: 403 });
       }
 
-      // College Office only: a changed Roll No. The same checks as the roll-number
-      // path below - never removable, and refused when another student holds it -
-      // made before anything is written. The unchanged roll the form re-sends with
-      // every save is a no-op (so a legacy student sharing a roll stays editable).
-      let officeRollChange: { from: string; to: string } | null = null;
-      if (officeSentRoll) {
-        const sent = body.details.rollNumber;
-        const roll = typeof sent === "string" ? sent.trim() : "";
-        const currentRoll = (student.rollNumber ?? "").trim();
-        if (!roll && currentRoll) {
-          return NextResponse.json({ error: "A student's roll number can't be removed - change it to the correct number instead" }, { status: 400 });
-        }
-        if (roll && roll !== currentRoll) {
-          const clash = await findRollNumberConflict(collegeRef.collection("students"), roll, id);
-          if (clash) {
-            return NextResponse.json({ error: rollNumberTakenMessage(roll, clash.name) }, { status: 400 });
-          }
-          officeRollChange = { from: currentRoll, to: roll };
-        }
-      }
-      if (Object.keys(updates).length === 0 && !officeRollChange) {
-        return NextResponse.json({ error: "No editable fields provided" }, { status: 400 });
+      // "The College Office" = anyone who holds the Office role, not only a request that was evaluated AS Office. A
+      // College Admin's login is a College Office account with the College Admin seat on top, and requireRole puts a
+      // request in the MOST SENIOR hat an endpoint allows - here PRINCIPAL - so `session.role === "COLLEGE_OFFICE"`
+      // was never true for them and their Regd. No change was dropped while every other field saved. `roles` is the
+      // live list of roles the login really holds (lib/auth/liveRoles.ts), so this cannot widen access: a Principal
+      // who does not hold the Office role is still not the Office.
+      const isOffice = holdsRole(session, "COLLEGE_OFFICE");
+      const problems: DetailProblem[] = [];
+      const addProblem = (field: string, message: string) => {
+        if (!problems.some((p) => p.field === field)) problems.push({ field, label: FIELD_LABELS.get(field) ?? field, message });
+      };
+
+      // 1. The values themselves: ones that cannot be used are reported, not dropped.
+      const checked = checkRosterDetails(details, student, { strict: true });
+      for (const r of checked.rejected) addProblem(r.field, `${r.label} ${r.reason}`);
+      const updates = checked.values;
+      delete updates.rollNumber; // handled on its own below
+
+      // 2. Name.
+      let newName: string | undefined;
+      if ("name" in details) {
+        const sent = typeof details.name === "string" ? details.name.trim() : "";
+        if (!sent) addProblem("name", "Name is required");
+        else if (sent.length > 200) addProblem("name", "Name must be 200 characters or fewer");
+        else if (sent !== (student.name ?? "").trim()) newName = sent;
       }
 
-      // Student Mobile No is required: it can be CHANGED to a real 10-digit number that no other student - in this or any
+      // 3. Department / Year are not changed here.
+      const sentDepartment = typeof details.department === "string" ? details.department.trim() : "";
+      if (sentDepartment && sentDepartment !== (student.department ?? "").trim()) {
+        addProblem("department", "Department can't be changed here - moving a student between departments is done through sectioning and promotion");
+      }
+      const sentYear = details.year === null || details.year === undefined || details.year === "" ? null : Number(details.year);
+      if (sentYear !== null && sentYear !== Number(student.year)) {
+        addProblem("year", "Year can't be changed here - moving a student between years is done through promotion");
+      }
+
+      // 4. Regd. No.: Office only; a change goes through the same rules as the department's roll path.
+      const officeSentRoll = isOffice && details.rollNumber !== undefined;
+      const sentRoll = typeof details.rollNumber === "string" ? details.rollNumber.trim() : "";
+      const currentRoll = (student.rollNumber ?? "").trim();
+      // Every other role's roll is left out of this save (their other fields still save - the long-standing rule),
+      // and the answer says so, rather than the roll quietly vanishing.
+      const ignored: DetailProblem[] = [];
+      if (!isOffice && sentRoll && sentRoll !== currentRoll) {
+        ignored.push({ field: "rollNumber", label: FIELD_LABELS.get("rollNumber") ?? "rollNumber", message: "Only the College Office can change the Regd. No. from this form - it was left as it is" });
+      }
+      let officeRollChange: { from: string; to: string } | null = null;
+      if (officeSentRoll) {
+        if (!sentRoll && currentRoll) {
+          addProblem("rollNumber", "A student's Regd. No can't be removed - change it to the correct number instead");
+        } else if (sentRoll && sentRoll !== currentRoll) {
+          if (!studentRollKey(sentRoll)) {
+            addProblem("rollNumber", "This Regd. No has no letters or digits");
+          } else {
+            const clash = await findRollNumberConflict(collegeRef.collection("students"), sentRoll, id);
+            if (clash) {
+              addProblem("rollNumber", rollNumberTakenMessage(sentRoll, clash.name));
+            } else {
+              // Free in this college - the global registry decides across colleges. The College Office is told WHICH
+              // college holds it (never whose student) so it knows where to look.
+              const holder = await peekRollHolder(db, { roll: sentRoll, collegeId: session.collegeId, studentDocId: id, name: student.name, uid: student.uid });
+              if (holder) {
+                let otherCollege: string | undefined;
+                if (!holder.sameCollege && holder.collegeId) {
+                  otherCollege = ((await db.collection("colleges").doc(holder.collegeId).get()).data() as { name?: string } | undefined)?.name;
+                }
+                addProblem("rollNumber", rollTakenMessage(sentRoll, holder, otherCollege));
+              } else {
+                officeRollChange = { from: currentRoll, to: sentRoll };
+              }
+            }
+          }
+        }
+      }
+
+      // Course is required the same as Name/Department/Year - an edit can change it to another real course, but
+      // can't clear it back to blank the way an optional field's null (rosterFormToPayload's writeBlanksAsNull) is
+      // otherwise allowed to.
+      if (updates.course === null) addProblem("course", "Course is required");
+
+      // 5. Student Mobile No is required: it can be CHANGED to a real 10-digit number that no other student - in this or any
       // other college - holds (stored in that 10-digit form, claimed atomically - lib/students/studentMobile.ts), but
       // never CLEARED. The value the edit form re-sends unchanged is left alone, and a legacy student saved with no number
       // yet may still be saved without one (like a legacy roll-less student) until one is entered. A claim left behind by
       // a later failure goes stale by itself.
+      let mobileToReserve: string | null = null;
       if ("mobileNo" in updates && updates.mobileNo === null && (student.mobileNo ?? "").toString().trim()) {
-        return NextResponse.json({ error: STUDENT_MOBILE_CLEAR_MESSAGE }, { status: 400 });
+        addProblem("mobileNo", STUDENT_MOBILE_CLEAR_MESSAGE);
       }
       if ("mobileNo" in updates && typeof updates.mobileNo === "string") {
         const typed = updates.mobileNo.trim();
         if (typed !== (student.mobileNo ?? "").toString().trim()) {
           const mobileProblem = studentMobileProblem(typed);
-          if (mobileProblem) return NextResponse.json({ error: mobileProblem }, { status: 400 });
-          const mobile10 = normalizeStudentMobile(typed);
-          try {
-            await reserveStudentMobile(db, session.collegeId, mobile10, id);
-          } catch (mobileErr) {
-            if (isStudentMobileTaken(mobileErr)) return NextResponse.json({ error: mobileErr.userMessage }, { status: 409 });
-            throw mobileErr;
-          }
-          updates.mobileNo = mobile10;
+          if (mobileProblem) addProblem("mobileNo", mobileProblem);
+          else mobileToReserve = normalizeStudentMobile(typed);
         }
       }
 
-      // Secondary Department, when being set to a real value (not cleared -
+      // Every department, read at most once for the checks below.
+      let departmentRows: DepartmentWithId[] | null = null;
+      const loadDepartments = async () => {
+        if (!departmentRows) {
+          departmentRows = (await collegeRef.collection("departments").get()).docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentWithId[];
+        }
+        return departmentRows;
+      };
+
+      // 6. Secondary Department, when being set to a real value (not cleared -
       // see rosterFormToPayload's writeBlanksAsNull), must actually be one
       // student.department cross-lists to - not just any real, differently-
       // named department. Same rule the bulk importer's unassigned rows and
@@ -360,98 +453,169 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       // branch the department never configured, which then surfaces as a
       // bogus option wherever Secondary Department values get read back
       // (e.g. the Distribute Unassigned dialog's branch picker).
+      let remappedDepartment: string | null = null;
       if (typeof updates.secondaryDepartment === "string" && updates.secondaryDepartment.trim()) {
         const secondaryDept = updates.secondaryDepartment.trim();
         if (secondaryDept === student.department) {
-          return NextResponse.json({ error: "Core Department must differ from Department" }, { status: 400 });
-        }
-        const deptSnap = await collegeRef.collection("departments").where("name", "==", student.department).limit(1).get();
-        const deptDoc = deptSnap.docs[0];
-        const deptData = deptDoc?.data() as
-          | { secondaryDepartments?: string[]; courseScopes?: Record<string, { secondaryDepartments?: string[] }>; managedDepartments?: string[] }
-          | undefined;
-        // `secondaryDept` may itself be a sub-department of one of the
-        // owner's configured branches (e.g. "ECE-VLSI" under "Electronics and
-        // Communication Engineering") - the branch being configured is
-        // enough, its own sub-departments don't need to be separately,
-        // individually configured too (isConfiguredSecondaryDepartmentOrChild's
-        // doc-comment).
-        const secondaryDeptSnap = await collegeRef.collection("departments").where("name", "==", secondaryDept).limit(1).get();
-        let secondaryParentName: string | undefined;
-        if (!secondaryDeptSnap.empty) {
-          const secondaryParentId = (secondaryDeptSnap.docs[0].data() as { parentDepartmentId?: string }).parentDepartmentId;
-          if (secondaryParentId) {
-            const parentSnap = await collegeRef.collection("departments").doc(secondaryParentId).get();
-            secondaryParentName = (parentSnap.data() as { name?: string } | undefined)?.name;
-          }
-        }
-        // The owner department's own sub-departments (if it's a parent) also
-        // count via THEIR managedDepartments - same fold-in the client's
-        // dropdown already does (secondaryDepartmentOptions, RosterFieldInputs.tsx).
-        const childDepts = deptDoc
-          ? (await collegeRef.collection("departments").where("parentDepartmentId", "==", deptDoc.id).get())
-              .docs.map((d) => d.data() as { managedDepartments?: string[] })
-          : [];
-        if (!deptData || !isConfiguredSecondaryDepartmentOrChild(deptData, secondaryDept, secondaryParentName, childDepts)) {
-          return NextResponse.json({ error: `"${student.department}" does not cross-list to "${secondaryDept}"` }, { status: 400 });
-        }
-
-        // A "no own sections" shared-first-year parent (e.g. VISHNU
-        // INSTITUTE OF TECHNOLOGY's "BASIC SCIENCE") never itself houses a
-        // student - if student.department is one, remap it too, to whichever
-        // child actually manages the newly-set Core Department, or this edit
-        // would leave the student filed under the wrong sibling forever. A
-        // no-op for every other department (see
-        // resolveFreshmanLandingDepartment's own doc-comment).
-        const allDeptsSnap = await collegeRef.collection("departments").get();
-        const allDepts = allDeptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentWithId[];
-        const remappedDepartment = resolveFreshmanLandingDepartment(allDepts, student.department, secondaryDept);
-        if (remappedDepartment !== student.department) {
-          updates.department = remappedDepartment;
-          const now = new Date();
-          const history = departmentHistoryEntry(db, session.collegeId, id, remappedDepartment, student.section ?? "", student.year, now);
-          if (officeRollChange) {
-            // The roll change and the detail updates are ONE write (syncStudentRollChange);
-            // the history entry follows it.
-            try {
-              await syncStudentRollChange(db, await getAdminAuth(), session.collegeId, id, student, officeRollChange.to, { ...updates, updatedAt: now });
-            } catch (err) {
-              if (err instanceof StudentLoginError) return NextResponse.json({ error: err.message }, { status: err.status });
-              throw err;
+          addProblem("secondaryDepartment", "Core Department must differ from Department");
+        } else {
+          const deptSnap = await collegeRef.collection("departments").where("name", "==", student.department).limit(1).get();
+          const deptDoc = deptSnap.docs[0];
+          const deptData = deptDoc?.data() as
+            | { secondaryDepartments?: string[]; courseScopes?: Record<string, { secondaryDepartments?: string[] }>; managedDepartments?: string[] }
+            | undefined;
+          // `secondaryDept` may itself be a sub-department of one of the
+          // owner's configured branches (e.g. "ECE-VLSI" under "Electronics and
+          // Communication Engineering") - the branch being configured is
+          // enough, its own sub-departments don't need to be separately,
+          // individually configured too (isConfiguredSecondaryDepartmentOrChild's
+          // doc-comment).
+          const secondaryDeptSnap = await collegeRef.collection("departments").where("name", "==", secondaryDept).limit(1).get();
+          let secondaryParentName: string | undefined;
+          if (!secondaryDeptSnap.empty) {
+            const secondaryParentId = (secondaryDeptSnap.docs[0].data() as { parentDepartmentId?: string }).parentDepartmentId;
+            if (secondaryParentId) {
+              const parentSnap = await collegeRef.collection("departments").doc(secondaryParentId).get();
+              secondaryParentName = (parentSnap.data() as { name?: string } | undefined)?.name;
             }
-            await history.ref.set(history.data);
-            await auditStudentChange(db, session, "STUDENT_ROLL_CHANGED", student, id, { from: officeRollChange.from, to: officeRollChange.to });
-          } else {
-            const batch = db.batch();
-            batch.update(studentRef, { ...updates, updatedAt: now });
-            batch.set(history.ref, history.data);
-            await batch.commit();
           }
-          await auditStudentChange(db, session, "STUDENT_DETAILS_UPDATED", student, id, { fields: Object.keys(updates), remappedDepartment });
-          return NextResponse.json({ ok: true });
+          // The owner department's own sub-departments (if it's a parent) also
+          // count via THEIR managedDepartments - same fold-in the client's
+          // dropdown already does (secondaryDepartmentOptions, RosterFieldInputs.tsx).
+          const childDepts = deptDoc
+            ? (await collegeRef.collection("departments").where("parentDepartmentId", "==", deptDoc.id).get())
+                .docs.map((d) => d.data() as { managedDepartments?: string[] })
+            : [];
+          if (!deptData || !isConfiguredSecondaryDepartmentOrChild(deptData, secondaryDept, secondaryParentName, childDepts)) {
+            addProblem("secondaryDepartment", `"${student.department}" does not cross-list to "${secondaryDept}"`);
+          } else {
+            // A "no own sections" shared-first-year parent (e.g. VISHNU
+            // INSTITUTE OF TECHNOLOGY's "BASIC SCIENCE") never itself houses a
+            // student - if student.department is one, remap it too, to whichever
+            // child actually manages the newly-set Core Department, or this edit
+            // would leave the student filed under the wrong sibling forever. A
+            // no-op for every other department (see
+            // resolveFreshmanLandingDepartment's own doc-comment).
+            const remapped = resolveFreshmanLandingDepartment(await loadDepartments(), student.department, secondaryDept);
+            if (remapped !== student.department) remappedDepartment = remapped;
+          }
         }
       }
+
+      // 7. Course. Only a CHANGED course is looked at; the unchanged one the form re-sends is left exactly as it is.
+      let courseChanged = false;
+      if (typeof updates.course === "string") {
+        const typed = updates.course.trim();
+        if (typed.toLowerCase() !== (student.course ?? "").trim().toLowerCase()) {
+          const courses = (await collegeRef.collection("courses").get()).docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as CourseRow[];
+          if (student.section) {
+            // In a section: the section decides the course. Naming that same course just repairs the pair.
+            let sectionCourseId = student.courseId;
+            if (!sectionCourseId) {
+              const sectionDoc = await findCurrentSectionDoc(db, session.collegeId, student);
+              sectionCourseId = sectionDoc ? (sectionDoc.data() as { courseId?: string }).courseId : undefined;
+            }
+            const sectionCourse = courses.find((c) => c.id === sectionCourseId);
+            const needle = typed.toLowerCase();
+            const names = sectionCourse ? [sectionCourse.name, sectionCourse.code].map((v) => (v ?? "").trim().toLowerCase()) : [];
+            if (sectionCourse && names.includes(needle)) {
+              updates.course = (sectionCourse.name ?? typed).trim();
+              updates.courseId = sectionCourse.id;
+              courseChanged = true;
+            } else {
+              addProblem(
+                "course",
+                `${student.name} is in section ${student.section}${sectionCourse?.name ? `, which belongs to ${sectionCourse.name}` : ""}. A student's course follows their section, so it can't be changed here - move them to a section of ${typed} first.`
+              );
+            }
+          } else {
+            const resolved = resolveStudentCourse({
+              departments: (await loadDepartments()) as DepartmentRow[],
+              courses,
+              departmentName: student.department,
+              year: Number(student.year),
+              input: typed,
+            });
+            if (resolved.ok) {
+              updates.course = resolved.name;
+              updates.courseId = resolved.courseId;
+              courseChanged = true;
+            } else {
+              addProblem("course", resolved.reason);
+            }
+          }
+        }
+      }
+
+      if (problems.length > 0) return detailProblemsResponse(problems);
+      if (Object.keys(updates).length === 0 && !officeRollChange && newName === undefined) {
+        return NextResponse.json({ error: "No editable fields provided" }, { status: 400 });
+      }
+
+      // Everything checked - only now is the mobile number claimed (the one write that happens before the save).
+      if (mobileToReserve) {
+        try {
+          await reserveStudentMobile(db, session.collegeId, mobileToReserve, id);
+        } catch (mobileErr) {
+          if (isStudentMobileTaken(mobileErr)) {
+            return detailProblemsResponse([{ field: "mobileNo", label: FIELD_LABELS.get("mobileNo") ?? "mobileNo", message: mobileErr.userMessage }], 409);
+          }
+          throw mobileErr;
+        }
+        updates.mobileNo = mobileToReserve;
+      }
+
+      const now = new Date();
+      const write = { ...updates, ...(remappedDepartment ? { department: remappedDepartment } : {}), updatedAt: now };
+      const history = remappedDepartment
+        ? departmentHistoryEntry(db, session.collegeId, id, remappedDepartment, student.section ?? "", student.year, now)
+        : null;
 
       if (officeRollChange) {
         // The roll is the student's login name and is unique across ALL colleges:
         // claimed globally, the login's email and lookup follow it, the old roll is
-        // retired - together with this edit's other fields, in one write.
+        // retired - together with this edit's other fields (and the name, when it changed too), in one write.
         try {
-          await syncStudentRollChange(db, await getAdminAuth(), session.collegeId, id, student, officeRollChange.to, { ...updates, updatedAt: new Date() });
+          await syncStudentRollChange(db, await getAdminAuth(), session.collegeId, id, student, officeRollChange.to, write, newName !== undefined ? { newName } : {});
         } catch (err) {
-          if (err instanceof StudentLoginError) return NextResponse.json({ error: err.message }, { status: err.status });
+          if (err instanceof StudentLoginError) {
+            return detailProblemsResponse([{ field: "rollNumber", label: FIELD_LABELS.get("rollNumber") ?? "rollNumber", message: err.message }], err.status);
+          }
           throw err;
         }
+        if (history) await history.ref.set(history.data);
         await auditStudentChange(db, session, "STUDENT_ROLL_CHANGED", student, id, { from: officeRollChange.from, to: officeRollChange.to });
+      } else if (newName !== undefined) {
+        await syncStudentNameChange(db, await getAdminAuth(), session.collegeId, id, student, newName, write);
+        if (history) await history.ref.set(history.data);
+      } else if (history) {
+        const batch = db.batch();
+        batch.update(studentRef, write);
+        batch.set(history.ref, history.data);
+        await batch.commit();
       } else {
-        await studentRef.update({ ...updates, updatedAt: new Date() });
+        await studentRef.update(write);
       }
-      await auditStudentChange(db, session, "STUDENT_DETAILS_UPDATED", student, id, { fields: Object.keys(updates) });
-      return NextResponse.json({ ok: true });
+
+      // What actually changed, for the answer and the audit entry.
+      const before = student as unknown as Record<string, unknown>;
+      const saved = Object.entries({ ...updates, ...(remappedDepartment ? { department: remappedDepartment } : {}) })
+        .filter(([key, value]) => key !== "courseId" && String(value ?? "") !== String(before[key] ?? ""))
+        .map(([key]) => key);
+      if (newName !== undefined) saved.push("name");
+      if (officeRollChange) saved.push("rollNumber");
+
+      await auditStudentChange(db, session, "STUDENT_DETAILS_UPDATED", student, id, {
+        fields: [...Object.keys(updates), ...(newName !== undefined ? ["name"] : [])],
+        ...(newName !== undefined ? { nameFrom: student.name, nameTo: newName } : {}),
+        ...(courseChanged ? { courseFrom: student.course ?? "", courseTo: updates.course } : {}),
+        ...(remappedDepartment ? { remappedDepartment } : {}),
+      });
+      return NextResponse.json({ ok: true, saved, rejected: [], ignored });
     }
 
-    // Field-only edit (no section move): assign/correct a student's roll number,
-    // status, or lab batch. Roll number and status are the department's
+    // Field-only edit (no section move): assign/correct a student's Regd. No,
+    // status, or lab batch. Regd. No and status are the department's
     // responsibility - the assigned HOD (years 2-4) or sub-HOD (year 1) fills
     // them in after sectioning - so those two stay closed to the College
     // Office and faculty. Lab Batch (see StudentRecord.labBatch's own
@@ -471,7 +635,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         && !(session.role === "PANEL_MEMBER" && isLabBatchOnly)
       ) {
         return NextResponse.json(
-          { error: "Only the department's HOD can set a student's roll number or status" },
+          { error: "Only the department's HOD can set a student's Regd. No or status" },
           { status: 403 }
         );
       }
@@ -534,15 +698,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (body.rollNumber !== undefined) {
         const roll = body.rollNumber.trim();
         const currentRoll = (student.rollNumber ?? "").trim();
-        // The roll number is the student's unique identity - it can be
+        // The Regd. No is the student's unique identity - it can be
         // corrected to another free number but never removed. A student who
         // has none yet (legacy import) may be saved with it still blank: the
         // edit dialog re-sends the empty value along with a status / lab-batch
         // change, and that must not be blocked.
         if (!roll && currentRoll) {
-          return NextResponse.json({ error: "A student's roll number can't be removed - change it to the correct number instead" }, { status: 400 });
+          return NextResponse.json({ error: "A student's Regd. No can't be removed - change it to the correct number instead" }, { status: 400 });
         }
-        // Roll numbers are unique across the whole college (like a faculty
+        // Regd. Nos are unique across the whole college (like a faculty
         // member's employee id), compared case-insensitively. Only checked when
         // the roll is actually CHANGING: the edit dialog re-sends the current
         // roll along with a status / lab-batch change, and a student who
@@ -653,7 +817,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       );
     }
 
-    // Only a real roll number can clash - roll-less students (Office imports
+    // Only a real Regd. No can clash - roll-less students (Office imports
     // before the department assigns numbers) can share a section freely.
     // Scoped by department + courseId too, not just section name + year - a
     // section name alone isn't unique (see StudentRecord.courseId's
@@ -670,7 +834,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         .where("year", "==", targetSection.year)
         .get();
       if (dupSnap.docs.some((d) => d.id !== id)) {
-        return NextResponse.json({ error: "Roll number already exists in the target section" }, { status: 400 });
+        return NextResponse.json({ error: "Regd. No already exists in the target section" }, { status: 400 });
       }
     }
 
@@ -740,7 +904,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 }
 
 // Deleting a student is permanent and complete (see lib/students/deleteStudent.ts):
-// the record, its department history, their login and their roll number's registry
+// the record, its department history, their login and their Regd. No's registry
 // entry are all removed - nothing is archived. Whoever could delete before still can:
 // the HOD of the student's department, the Principal/Vice Principal/Office, and the
 // faculty member in charge of the student's section.

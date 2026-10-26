@@ -170,7 +170,7 @@ export default function HODCandidatesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Candidates"
-        description="Manage candidates and attach them to hiring requests they're applying for"
+        description="Manage candidate profiles and associate applicants with their respective recruitment requests."
         actions={
           <Button asChild>
             <Link href="/hod/candidates/new">
@@ -188,8 +188,8 @@ export default function HODCandidatesPage() {
         keyExtractor={(r) => r.id as string}
         searchPlaceholder="Search candidates..."
         searchKeys={["name", "email"] as (keyof CandidateRow)[]}
-        emptyTitle="No candidates yet"
-        emptyDescription="Add a candidate to the pool, or they will appear automatically from the careers page"
+        emptyTitle="No Candidates Found"
+        emptyDescription="Add a candidate to your recruitment pool, or wait for applications submitted through the Careers page."
         csvFilename="candidates"
         onRowClick={(row) => router.push(`/hod/candidates/${row.id as string}`)}
       />

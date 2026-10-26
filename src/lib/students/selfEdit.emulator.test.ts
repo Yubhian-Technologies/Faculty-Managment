@@ -90,7 +90,7 @@ describe.skipIf(!EMULATOR)("student self-service edit (real Firestore)", () => {
       who.uid = "stu3";
       const r = await getProfile();
       expect(r.json.editable.mobileEditable).toBe(false);
-      expect(r.json.editable.mobileLockedReason).toMatch(/Roll No/);
+      expect(r.json.editable.mobileLockedReason).toMatch(/Regd. No/);
     });
   });
 
@@ -175,7 +175,7 @@ describe.skipIf(!EMULATOR)("student self-service edit (real Firestore)", () => {
   });
 
   describe("Student Mobile No", () => {
-    it("can be changed once a Roll No exists: stored as 10 digits, claimed, the old number freed", async () => {
+    it("can be changed once a Regd. No exists: stored as 10 digits, claimed, the old number freed", async () => {
       const r = await patch({ mobileNo: "+91 90000-00009" });
       expect(r.status).toBe(200);
       expect((await stu()).mobileNo).toBe("9000000009");
@@ -195,7 +195,7 @@ describe.skipIf(!EMULATOR)("student self-service edit (real Firestore)", () => {
       expect(r.json.error).toBe("Student Mobile No 9111111111 is already used by a student of another college");
       expect((await stu()).mobileNo).toBe("9876500001");
     });
-    it("is locked while the student has no Roll No (403), and can never be cleared (400)", async () => {
+    it("is locked while the student has no Regd. No (403), and can never be cleared (400)", async () => {
       who.uid = "stu3";
       const locked = await patch({ mobileNo: "9000000008" });
       expect(locked.status).toBe(403);

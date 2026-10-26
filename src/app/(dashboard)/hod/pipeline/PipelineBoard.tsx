@@ -548,12 +548,12 @@ export function PipelineBoard({ scope }: { scope: "active" | "closed" }) {
       <div className="rounded-xl border border-dashed p-14 text-center">
         <GitBranch className="h-10 w-10 mx-auto text-muted-foreground/30 mb-3" />
         <p className="font-semibold text-muted-foreground">
-          {scope === "closed" ? "No past hirings yet" : "No hiring requests yet"}
+          {scope === "closed" ? "No past hirings yet" : "No Active Hiring Requests"}
         </p>
         <p className="text-sm text-muted-foreground/60 mt-1">
           {scope === "closed"
             ? "Completed and rejected requests will show up here."
-            : "Create a hiring request to start the process"}
+            : "Create a recruitment request to begin the hiring process."}
         </p>
         {scope === "active" && (
           <Button className="mt-4" asChild>

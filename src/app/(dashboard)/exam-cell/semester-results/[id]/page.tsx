@@ -184,7 +184,7 @@ export default function SemesterResultBatchPage({ params }: { params: Promise<{ 
         </div>
       )}
 
-      <Input placeholder="Search by Roll No or name" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-sm" />
+      <Input placeholder="Search by Regd. No or name" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-sm" />
 
       {isLoading ? (
         <div className="h-96 rounded-lg border bg-muted/30 animate-pulse" />
@@ -195,7 +195,7 @@ export default function SemesterResultBatchPage({ params }: { params: Promise<{ 
           <table className="w-full text-xs">
             <thead className="bg-muted/50 text-left text-muted-foreground">
               <tr>
-                <th className="p-2">Roll No</th><th className="p-2">Name</th><th className="p-2">Department</th>
+                <th className="p-2">Regd. No</th><th className="p-2">Name</th><th className="p-2">Department</th>
                 {codes.map(([code, name]) => <th key={code} className="p-2 text-center" title={name}>{code}</th>)}
                 <th className="p-2 text-right">SGPA</th>
                 {hasUniversitySgpa && <th className="p-2 text-right">University SGPA</th>}

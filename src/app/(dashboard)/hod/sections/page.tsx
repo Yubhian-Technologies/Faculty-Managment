@@ -601,7 +601,7 @@ function HODSectionsContent() {
     <div className="space-y-6">
       <PageHeader
         title="Sections"
-        description="Manage class sections, assign faculty incharge, and track student count"
+        description="Manage class sections, assign faculty in-charge, and monitor student enrollment."
         actions={
           <Button onClick={openCreate} disabled={courses.length === 0}>
             <Plus className="h-4 w-4 mr-2" />Add Section
@@ -619,18 +619,18 @@ function HODSectionsContent() {
       <div className="flex flex-wrap gap-4 text-sm">
         <div className="flex items-center gap-1.5 text-muted-foreground">
           <GraduationCap className="h-4 w-4" />
-          <span><strong className="text-foreground">{yearScopedSections.length}</strong> sections</span>
+          <span>Total Sections: <strong className="text-foreground">{yearScopedSections.length}</strong></span>
         </div>
         <div className="flex items-center gap-1.5 text-muted-foreground">
           <Users className="h-4 w-4" />
-          <span><strong className="text-foreground">{totalStudents}</strong> students total</span>
+          <span>Total Students: <strong className="text-foreground">{totalStudents}</strong></span>
         </div>
         {totalStudents > 0 && (
           <div className="flex items-center gap-1.5 text-muted-foreground">
             <UserCog className="h-4 w-4" />
             <span>
-              <strong className="text-foreground">{Math.ceil(totalStudents / STUDENT_FACULTY_RATIO)}</strong> faculty needed
-              <span className="ml-1 text-xs">(1:{STUDENT_FACULTY_RATIO} ratio)</span>
+              Faculty Required <span className="text-xs">(1:{STUDENT_FACULTY_RATIO} Student–Faculty Ratio)</span>:{" "}
+              <strong className="text-foreground">{Math.ceil(totalStudents / STUDENT_FACULTY_RATIO)}</strong>
             </span>
           </div>
         )}

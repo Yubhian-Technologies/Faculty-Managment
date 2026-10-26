@@ -1,5 +1,6 @@
 "use client";
 
+import { Children, cloneElement, isValidElement, type ReactNode } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -333,14 +334,42 @@ interface FormProps {
   /** Academic years offered by the Year select. */
   years: number[];
   /**
-   * Rendered read-only with a note. Used for Roll No on Edit: it's a template
+   * Rendered read-only with a note. Used for Regd. No on Edit: it's a template
    * column the Office can set at intake, but correcting it afterwards belongs
    * to the department (see students/[id] PATCH).
    */
   readOnlyKeys?: string[];
+  /** Replaces the note under a read-only box (by field key) - e.g. why Course is locked for a student in a section. */
+  readOnlyCaptions?: Record<string, string>;
+  /**
+   * What the last save refused, by field key. The message is shown under that field and stays until the person edits
+   * the field again (unlike a toast, which disappears on its own).
+   */
+  errors?: Record<string, string>;
 }
 
-function FieldInput({ field, values, onChange, departments, courseNames, courses, years, readOnlyKeys }: FormProps & { field: RosterField }) {
+/**
+ * One roster field's input. When the last save refused this field, the reason is shown under it (and the box is
+ * marked) without touching what the field itself renders - so every branch below, the Add form, the bulk-import Fix
+ * dialog and the student's own profile edit keep working exactly as before when no error is passed.
+ */
+function FieldInput(props: FormProps & { field: RosterField }) {
+  const node = FieldInputBody(props);
+  const message = props.errors?.[props.field.key];
+  if (!message || !isValidElement<{ className?: string; children?: ReactNode }>(node)) return node;
+  return cloneElement(
+    node,
+    {
+      className: `${node.props.className ?? ""} [&_input]:border-destructive [&_textarea]:border-destructive [&_button]:border-destructive`.trim(),
+      ...({ "data-field-error": props.field.key } as object),
+    },
+    ...Children.toArray(node.props.children),
+    <p key="field-error" role="alert" className="text-xs font-medium text-destructive">{message}</p>
+  );
+}
+
+// Plain function (no hooks), called directly by FieldInput above.
+function FieldInputBody({ field, values, onChange, departments, courseNames, courses, years, readOnlyKeys, readOnlyCaptions }: FormProps & { field: RosterField }) {
   const value = values[field.key] ?? "";
   const id = `roster-${field.key}`;
   const label = `${field.label}${field.required ? " *" : ""}`;
@@ -350,9 +379,9 @@ function FieldInput({ field, values, onChange, departments, courseNames, courses
     // the Year select and the detail view do, so the read-only rendering
     // doesn't look like a different, unformatted field.
     const displayValue = field.key === "year" && value ? ordinalYear(Number(value)) : value;
-    const caption = field.key === "rollNumber"
-      ? "The student's unique Roll No. Corrections are made by the department (Students page)."
-      : "Set when the student was added - use Sectioning/Promotion to move them, not this form.";
+    const caption = readOnlyCaptions?.[field.key] ?? (field.key === "rollNumber"
+      ? "The student's unique Regd. No. Corrections are made by the department (Students page)."
+      : "Set when the student was added - use Sectioning/Promotion to move them, not this form.");
     return (
       <div className="space-y-2">
         <Label htmlFor={id}>{field.label}</Label>

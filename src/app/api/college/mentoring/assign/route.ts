@@ -31,7 +31,7 @@ export async function POST(request: Request) {
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
-    const { scope, canManage } = await loadHodStudentScope(db, session.collegeId, session.uid);
+    const { scope, canAssign } = await loadHodStudentScope(db, session.collegeId, session.uid);
 
     let mentorName = "";
     if (mentorUid) {
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
       if (!snap.exists) { skipped.push({ id: snap.id, reason: "Student not found" }); continue; }
       const student = snap.data() as StudentRecord;
       if (student.status === "GRADUATED") { skipped.push({ id: snap.id, reason: "Graduated" }); continue; }
-      if (!(await canManage(student))) { skipped.push({ id: snap.id, reason: "Outside your department" }); continue; }
+      if (!(await canAssign(student))) { skipped.push({ id: snap.id, reason: "Outside your department" }); continue; }
       if ((student.mentorUid ?? null) === mentorUid) { assigned.push(snap.id); continue; }
       // A student who already has a mentor is not offered to another one: the mentor is removed
       // first, then the new one assigned. Removing only clears the mentor fields - the record

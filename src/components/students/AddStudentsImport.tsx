@@ -34,9 +34,8 @@ import { selectableYears } from "@/lib/college/courseYears";
 // The Office only knows a fresh student's basic details and which branch
 // (department) they're admitted into - section is still assigned later by the
 // department (the sub-HOD divides students into sections), so it's
-// deliberately NOT a column here. Roll Number is REQUIRED in this import and
-// unique across all colleges (it stays optional on the single Add Student
-// form); Student Mobile No is REQUIRED and unique across all colleges.
+// deliberately NOT a column here. A row needs a Regd. No OR a Student Mobile
+// No - either one is enough; both are unique across all colleges when given.
 //
 // The file may be the downloaded template OR the college's own admission
 // sheet (Sl.No, Roll.No, Admission.No, Student Name ...) - see
@@ -57,12 +56,15 @@ import { selectableYears } from "@/lib/college/courseYears";
 // Derived from the shared roster field spec (src/lib/students/rosterFields.ts)
 // so the template, the Office students page's detail view, and its Add/Edit
 // forms can never drift apart - adding a column there adds it here.
-const ROLL_SAMPLE = "Required; the student's unique roll / registration number - must not be used by any other student";
+const ROLL_SAMPLE = "Regd. No or Student Mobile No is required (either one is enough); the student's unique Regd. No - must not be used by any other student";
+const MOBILE_SAMPLE = "Regd. No or Student Mobile No is required (either one is enough); 10-digit mobile starting 6-9 - must be different for every student in every college (it is how a Regd. No can be matched to a student later)";
+// Regd. No and Student Mobile No are not individually required here: a row needs at least ONE of them (see rowNeedsRollOrMobile).
+const EITHER_KEYS = new Set(["rollNumber", "mobileNo"]);
 const COLUMNS = ROSTER_FIELDS.map((f) => ({
   key: f.key,
   label: f.label,
-  required: !!f.required || f.key === "rollNumber",
-  sample: f.key === "rollNumber" ? ROLL_SAMPLE : f.sample ?? "",
+  required: EITHER_KEYS.has(f.key) ? false : !!f.required,
+  sample: f.key === "rollNumber" ? ROLL_SAMPLE : f.key === "mobileNo" ? MOBILE_SAMPLE : f.sample ?? "",
   ...(f.aliases ? { aliases: f.aliases } : {}),
 }));
 
@@ -115,11 +117,12 @@ const LOCKED_KEY_SET = new Set(["department", "year", "secondaryDepartment"]);
 const LOCKED_TEMPLATE_COLUMNS = [...COLUMNS.filter((c) => !LOCKED_KEY_SET.has(c.key)), PASSWORD_COLUMN];
 
 const HINTS = [
-  "Course, Department and Current year of Study are selected once above — they are not columns in the file. Roll No, Name and Student Mobile No are the required fields in the file.",
+  "Course, Department and Current year of Study are selected once above — they are not columns in the file. Name and at least one of Regd. No or Student Mobile No are the required fields in the file.",
   "You can upload the downloaded template or your college's own admission sheet (Sl.No, Roll.No, Admission.No, Student Name ... Mother Mobile.No) as it is - its columns are recognised, Sl.No is ignored, Category is read as Caste and its Caste as Sub Caste, and dates typed as DD-MM-YYYY are accepted.",
-  "Roll No (Reg No) is required and must not be used by any other student in ANY college (or by another row in the same file) - upper/lower case, spaces and dashes don't make a roll different. It is the student's login username. A row with a missing or already-used Roll No is skipped.",
-  "Student Mobile No is required: a 10-digit number (starting 6-9) that no other student in ANY college has - \"+91\", spaces and dashes are ignored. A row with a missing, invalid or already-used Student Mobile No is skipped.",
-  "Login Password (optional): when a row has one, that student's login is created with exactly this password (at least 8 characters, no leading/trailing space) and they sign in with their Roll No and it. It is never saved anywhere readable; students can change it, and you can reset it later. Leave it blank to create logins afterwards from the Students list.",
+  "Each row needs a Regd. No (Reg No) OR a Student Mobile No - either one is enough. A row with neither is skipped.",
+  "Regd. No (Reg No), when given, must not be used by any other student in ANY college (or by another row in the same file) - upper/lower case, spaces and dashes don't make a Regd. No different. It is the student's login username, so a student with no Regd. No can't get a login until one is added. A row with an already-used Regd. No is skipped.",
+  "Student Mobile No, when given, is a 10-digit number (starting 6-9) that no other student in ANY college has - \"+91\", spaces and dashes are ignored. A row with an invalid or already-used Student Mobile No is skipped. Leave it blank only if the row has a Regd. No.",
+  "Login Password (optional): when a row has one, that student's login is created with exactly this password (at least 8 characters, no leading/trailing space) and they sign in with their Regd. No and it. It is never saved anywhere readable; students can change it, and you can reset it later. Leave it blank to create logins afterwards from the Students list.",
   "Name (as per SSC): enter the name exactly as it appears on the student's SSC (10th) certificate - this is the name used on statutory/academic paperwork.",
   "Section is NOT collected here - the department assigns it later (the sub-HOD divides students into sections). Every student is imported as \"unassigned\" until then.",
   "Core Department (the real branch a 1st-year is pre-registered to while under a shared/Basic Science department) isn't a column in the file either - it's picked once above, for the whole file, the same way Department itself is.",
@@ -156,7 +159,7 @@ type FailedRow = { row: number; rollNumber: string; error: string; data: ParsedR
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 // Moved here verbatim from college-office/students/import/page.tsx when that
-// page gained a second mode ("Map roll numbers"). Only the declaration line
+// page gained a second mode ("Map Regd. Nos"). Only the declaration line
 // changed - default export to a named one - so this flow, the one in daily use,
 // is provably the same code.
 export function AddStudentsImport() {
@@ -283,9 +286,10 @@ export function AddStudentsImport() {
   async function handleFixSave() {
     if (!fixTarget) return;
     const form = fixTarget.form;
-    if (!form.rollNumber?.trim()) { setFixError("Roll No is required"); return; }
     if (!form.name?.trim()) { setFixError("Name is required"); return; }
-    if (!form.mobileNo?.trim()) { setFixError("Student Mobile No is required"); return; }
+    // This dialog saves through the single Add Student route, which (unlike the bulk import) still needs a Student Mobile No;
+    // the Regd. No stays optional there.
+    if (!form.mobileNo?.trim()) { setFixError("Student Mobile No is required to save a row from here - or correct the file and import it again"); return; }
     if (!form.course) { setFixError("Course is required"); return; }
     if (!form.department) { setFixError("Department is required"); return; }
     if (!form.year) { setFixError("Current year of Study is required"); return; }
@@ -505,8 +509,11 @@ export function AddStudentsImport() {
   }
 
   const requiredKeys = columns.filter((c) => c.required).map((c) => c.key);
+  // A row needs a Regd. No OR a Student Mobile No (either is enough).
+  const rowNeedsRollOrMobile = (r: Record<string, string | undefined>) => !r.rollNumber?.trim() && !r.mobileNo?.trim();
+  const rowIsIncomplete = (r: Record<string, string | undefined>) => requiredKeys.some((k) => !r[k]?.trim()) || rowNeedsRollOrMobile(r);
   const missingRequired = rows.length > 0
-    ? rows.some((r) => requiredKeys.some((k) => !r[k]?.trim()))
+    ? rows.some((r) => rowIsIncomplete(r))
     : false;
 
   // Step numbering shifts by one whenever the dropdown picker card (step 1)
@@ -642,12 +649,13 @@ export function AddStudentsImport() {
                 </thead>
                 <tbody>
                   {rows.slice(0, 20).map((row, i) => {
-                    const missing = requiredKeys.some((k) => !row[k]?.trim());
+                    const missing = rowIsIncomplete(row);
+                    const needsRollOrMobile = rowNeedsRollOrMobile(row);
                     return (
                       <tr key={i} className={`border-b ${missing ? "bg-red-50" : i % 2 === 0 ? "" : "bg-muted/20"}`}>
                         <td className="p-2 text-muted-foreground">{i + 2}</td>
                         {columns.filter((c) => rows.some((r) => r[c.key])).map((c) => (
-                          <td key={c.key} className={`p-2 whitespace-nowrap ${c.required && !row[c.key]?.trim() ? "text-red-600 font-medium" : ""}`}>
+                          <td key={c.key} className={`p-2 whitespace-nowrap ${(c.required || (needsRollOrMobile && EITHER_KEYS.has(c.key))) && !row[c.key]?.trim() ? "text-red-600 font-medium" : ""}`}>
                             {row[c.key]
                               ? (c.key === "loginPassword" ? "••••••••" : row[c.key])
                               : <span className="text-muted-foreground/40">-</span>}
@@ -675,7 +683,7 @@ export function AddStudentsImport() {
             {missingRequired && (
               <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
                 <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-                Some rows have missing required fields (highlighted in red above). Those rows will be skipped during import.
+                Some rows have missing required fields (highlighted in red above; every row needs a Name and a Regd. No or a Student Mobile No). Those rows will be skipped during import.
               </div>
             )}
             <div className="flex gap-3">

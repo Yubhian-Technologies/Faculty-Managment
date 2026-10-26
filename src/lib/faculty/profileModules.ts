@@ -15,19 +15,47 @@ export type ProfileModuleKey =
 
 export interface ProfileModuleDef {
   key: ProfileModuleKey;
+  // What the tab is called everywhere a person reads it (tile, page title, "Edit ..." title, export and completion
+  // sections). Display text only: the key above is what URLs and stored/exported data use, and no faculty record
+  // stores a tab name - renaming a tab here never touches a stored value.
   label: string;
   icon: LucideIcon;
+  // The line shown under the tab's heading, saying what belongs in it. Absent = no line.
+  description?: string;
+  // What to call the tab's details in a sentence ("Please enter the academic details here"). Display text only.
+  emptyNoun: string;
 }
 
 export const PROFILE_MODULES: Record<ProfileModuleKey, ProfileModuleDef> = {
-  personal: { key: "personal", label: "Personal Details", icon: IdCard },
-  qualification: { key: "qualification", label: "Academic Qualification", icon: GraduationCap },
-  experience: { key: "experience", label: "Professional Experience", icon: Briefcase },
-  research: { key: "research", label: "Research & Innovation", icon: FlaskConical },
-  mentorship: { key: "mentorship", label: "Professional Development", icon: Users },
-  financial: { key: "financial", label: "Financial Standing", icon: Wallet },
-  others: { key: "others", label: "Others", icon: FileQuestion },
-  "teaching-load": { key: "teaching-load", label: "Teaching Load", icon: BookOpen },
+  personal: {
+    key: "personal", label: "Personal & Contact Information", icon: IdCard, emptyNoun: "personal & contact",
+    description: "Personal information, contact details, address, emergency contact and all personal details.",
+  },
+  qualification: {
+    key: "qualification", label: "Academic Qualification", icon: GraduationCap, emptyNoun: "academic",
+    description: "Degrees, specializations, institutions, year of passing, certifications, and additional qualifications.",
+  },
+  experience: {
+    key: "experience", label: "Professional Experience & Employment", icon: Briefcase, emptyNoun: "professional experience",
+    description: "Previous employment, teaching and academic, industry and research experience, service history, and years of experience.",
+  },
+  research: {
+    key: "research", label: "Research, Innovation & Publications", icon: FlaskConical, emptyNoun: "research",
+    description: "Research projects, publications, patents, consultancy, funded projects, copyrights, and innovation activities.",
+  },
+  mentorship: {
+    key: "mentorship", label: "Professional Development & Certifications", icon: Users, emptyNoun: "professional development",
+    description: "FDPs, workshops, conferences, training programmes, certifications, and professional memberships.",
+  },
+  financial: {
+    key: "financial", label: "Compensation & Benefits", icon: Wallet, emptyNoun: "compensation",
+    description: "Salary structure, increments, promotions, financial rewards, incentives, gratuity, and other employment benefits. Access is restricted to authorized personnel.",
+  },
+  others: { key: "others", label: "Additional Information & Institutional Contributions", icon: FileQuestion, emptyNoun: "additional information" },
+  "teaching-load": {
+    key: "teaching-load", label: "Teaching & Academic Responsibilities", icon: BookOpen, emptyNoun: "teaching",
+    description: "Courses handled, subjects, timetable, teaching hours, workload allocation, mentoring responsibilities, and academic duties.",
+  },
 };
 
 // Self-profile modules a person never edits themselves - financial standing

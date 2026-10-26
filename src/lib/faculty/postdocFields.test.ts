@@ -42,7 +42,7 @@ const PLACEHOLDER_ONLY = d({ yearOfAward: 2026 });
 describe("Postdoctoral form (Add / Edit)", () => {
   it("has exactly the Ph.D. fields in the Ph.D. order, with the Postdoc thesis label", () => {
     const l = labels(form("POST_DOCTORAL", FULL_PURSUING));
-    const want = ["Status", "Mode", "Domain", "Specialization", "Institution Name", "Name of the Department", "Title of the Postdoc Thesis", "Place", "Percentage / CGPA", "Year of Registration", "Name of the Guide / Supervisor", "Hall Ticket Number"];
+    const want = ["Status", "Mode", "Field of Study", "Specialization", "Institution Name", "Name of the Department", "Title of the Postdoc Thesis", "Place", "Percentage / CGPA", "Year of Registration", "Name of the Guide / Supervisor", "Hall Ticket Number"];
     expect(l.filter((x) => want.includes(x))).toEqual(want);
     expect(l).not.toContain("Course");
     expect(l).not.toContain("Branch");

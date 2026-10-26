@@ -63,11 +63,11 @@ export interface RosterField {
 }
 
 export const ROSTER_FIELDS: RosterField[] = [
-  // Roll No leads - it's what a physical roster/attendance sheet is
-  // organised by. OPTIONAL: the Office often enrols students before roll numbers exist and sets them later (matched
+  // Regd. No leads - it's what a physical roster/attendance sheet is
+  // organised by. OPTIONAL: the Office often enrols students before Regd. Nos exist and sets them later (matched
   // by Student Mobile No). When given it is unique across the whole college (like a faculty member's employee id)
   // - see lib/students/rollNumberUniqueness.ts. A login needs one.
-  { key: "rollNumber", label: "Roll No", kind: "text", sample: "Optional; the student's unique roll / registration number - must not be used by any other student. Leave blank if not issued yet (needed before a login can be created)", primary: true, aliases: ["Roll Number", "Reg No", "Regd No", "Regno", "Register No", "Register Number", "Registration No", "Registration Number"], placeholder: "24A91A0501" },
+  { key: "rollNumber", label: "Regd. No", kind: "text", sample: "Optional; the student's unique Regd. No - must not be used by any other student. Leave blank if not issued yet (needed before a login can be created)", primary: true, aliases: ["Roll No", "Roll Number", "Roll.No", "Reg No", "Regd No", "Regno", "Register No", "Register Number", "Registration No", "Registration Number"], placeholder: "24A91A0501" },
   { key: "name", label: "Name (as per SSC)", kind: "text", sample: "Required; full name exactly as on SSC (10th) certificate", required: true, primary: true, aliases: ["Name", "Student Name", "Full Name"], placeholder: "P. Sai Kumar" },
   { key: "studentType", label: "Student Type", kind: "select", sample: "Optional: Regular / Lateral - defaults to Regular when left blank", primary: true, options: ["Regular", "Lateral"] },
   // Course/Department/Academic Year are always primary identity fields (the
@@ -81,13 +81,13 @@ export const ROSTER_FIELDS: RosterField[] = [
   // picked once, the same way as Department, via that same Step 1 picker
   // (college-office/students/import/page.tsx's STEP1_FIELDS), or set
   // per-student via the Add/Edit form.
-  { key: "secondaryDepartment", label: "Core Department", kind: "select", sample: "Optional; same name/Code rules as Department - only for a 1st-year pre-registered to a core branch while enrolled under a shared/Basic Science department", primary: true,
+  { key: "secondaryDepartment", label: "Core Department", hideInList: true, kind: "select", sample: "Optional; same name/Code rules as Department - only for a 1st-year pre-registered to a core branch while enrolled under a shared/Basic Science department", primary: true,
     aliases: ["Secondary Department", "Secondary Dept", "Core Branch"] },
   { key: "year", label: "Current year of Study", kind: "select", sample: "Required; the current year of study (1-4)", required: true, primary: true, aliases: ["Year", "Academic Year"] },
 
   { key: "admissionNo", label: "Admission No", kind: "text", sample: "Optional; text", aliases: ["Admission Number"] },
   { key: "hallTicketNo", label: "Hall Ticket No", kind: "text", sample: "Optional; text", aliases: ["Hallticket Number", "Hall Ticket Number", "Hallticket No"] },
-  { key: "mobileNo", label: "Student Mobile No", kind: "text", sample: "Required; 10-digit mobile starting 6-9 - must be different for every student in every college (it is how roll numbers are matched to students later)", required: true, showInList: true, aliases: ["Mobile No", "Mobile Number", "Student Mobile"], placeholder: "9876543210" },
+  { key: "mobileNo", label: "Student Mobile No", kind: "text", sample: "Required; 10-digit mobile starting 6-9 - must be different for every student in every college (it is how Regd. Nos are matched to students later)", required: true, showInList: true, aliases: ["Mobile No", "Mobile Number", "Student Mobile"], placeholder: "9876543210" },
   { key: "dateOfAdmission", label: "Date of Admission (YYYY-MM-DD)", kind: "date", sample: "Optional; YYYY-MM-DD" },
   { key: "dateOfJoining", label: "Date of Joining (YYYY-MM-DD)", kind: "date", sample: "Optional; YYYY-MM-DD - the day the student joined classes; attendance is counted from this date (falls back to Date of Admission when blank)", aliases: ["Joining Date", "DOJ"] },
   { key: "admissionType", label: "Admission Type", kind: "text", sample: "Optional; e.g. Spot Admission, Management, Convenor", placeholder: "Spot Admission" },
@@ -369,7 +369,50 @@ const ROSTER_FIELD_BY_KEY = new Map(ROSTER_FIELDS.map((f) => [f.key, f]));
  * hand-wrote a handful of these fields and ignored the rest.
  */
 export function normalizeRosterDetails(input: Record<string, unknown>): Record<string, unknown> {
+  return checkRosterDetails(input).values;
+}
+
+/** One value the server could not use, with the reason - what an edit reports instead of dropping it silently. */
+export interface RosterRejection {
+  field: string;
+  label: string;
+  /** Short reason, e.g. "must be Yes or No". */
+  reason: string;
+}
+
+/** Select fields whose form box offers ONLY the listed options. */
+const CLOSED_LIST_KEYS = new Set(["studentType", "gender"]);
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+function isRealIsoDate(s: string): boolean {
+  if (!ISO_DATE.test(s)) return false;
+  const d = new Date(`${s}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+}
+
+/**
+ * The same cleaning as normalizeRosterDetails, but it also says which values it could not use and why, instead of
+ * leaving them out without a word (a Yes/No that is neither, a number that is not one, a handicapped type that is not
+ * H/V/O).
+ *
+ * `strict` (the Edit form's save) additionally holds a CHANGED date, email and list choice to their rules - a real
+ * YYYY-MM-DD date, an address with an @, one of the listed options (matched ignoring case, stored as listed). Left
+ * off, those are stored as typed exactly as before, which is what the Add Student form and the student's own profile
+ * edit still rely on.
+ *
+ * `current` is the student as stored. A value the form simply re-sends UNCHANGED is never rejected - the Edit form
+ * sends every field on every save, and an older record may hold something (a date typed another way, a lower-case
+ * gender) that would not pass today. Only a value the person actually changed is held to the rules; an unchanged one
+ * is treated exactly as before. Without `current` every value counts as changed.
+ */
+export function checkRosterDetails(
+  input: Record<string, unknown>,
+  current?: Partial<StudentRecord>,
+  options: { strict?: boolean } = {}
+): { values: Record<string, unknown>; rejected: RosterRejection[] } {
+  const strict = options.strict === true;
   const out: Record<string, unknown> = {};
+  const rejected: RosterRejection[] = [];
   for (const key of ROSTER_DETAIL_KEYS) {
     if (!(key in input)) continue;
     const field = ROSTER_FIELD_BY_KEY.get(key);
@@ -381,31 +424,61 @@ export function normalizeRosterDetails(input: Record<string, unknown>): Record<s
     if (raw === null) { out[key] = null; continue; }
     if (raw === undefined) continue;
 
+    const label = field?.label ?? key;
+    // True when the person changed this field (so a bad value is their mistake to be told about).
+    const changed = (() => {
+      if (!current || !field) return true;
+      const sent = typeof raw === "boolean" ? (raw ? "Yes" : "No") : String(raw).trim();
+      return sent !== rosterFieldFormValue(field, current);
+    })();
+    const reject = (reason: string) => { if (changed) rejected.push({ field: key, label, reason }); };
+
     if (field?.kind === "yesno") {
       if (typeof raw === "boolean") { out[key] = raw; continue; }
       const t = String(raw).trim().toUpperCase();
       if (t === "YES" || t === "Y" || t === "TRUE") out[key] = true;
       else if (t === "NO" || t === "N" || t === "FALSE") out[key] = false;
+      else if (t) reject("must be Yes or No");
       continue;
     }
 
     if (field?.kind === "number") {
       const m = typeof raw === "number" ? raw : Number(String(raw).match(/\d+(\.\d+)?/)?.[0]);
       if (Number.isFinite(m)) out[key] = m;
+      else if (String(raw).trim()) reject("must be a number");
       continue;
     }
 
     if (key === "handicappedType") {
       const t = String(raw).trim().toUpperCase();
       if (t === "H" || t === "V" || t === "O") out[key] = t;
+      else if (t) reject("must be H, V or O");
       continue;
     }
 
     const s = String(raw).trim();
     if (!s) continue;
+
+    if (strict) {
+      if (field?.kind === "date" && !isRealIsoDate(s)) {
+        if (changed) { reject("must be a real date in YYYY-MM-DD form"); continue; }
+      }
+      if (key === "email" && !/^\S+@\S+$/.test(s)) {
+        if (changed) { reject("must be an email address (it needs an @)"); continue; }
+      }
+      // Only the plain closed lists. Caste is a "select" too but its form box also takes a typed value (Other / a
+      // value from before the dropdown), so it must not be held to its list.
+      if (field?.kind === "select" && CLOSED_LIST_KEYS.has(key) && field.options && field.options.length > 0) {
+        const match = field.options.find((o) => o.toLowerCase() === s.toLowerCase());
+        // Listed (any case): stored as listed. Not listed: kept only when it is the value already stored (an older
+        // record the form just re-sent), otherwise refused.
+        if (match && changed) { out[key] = match; continue; }
+        if (!match && changed) { reject(`must be one of: ${field.options.join(", ")}`); continue; }
+      }
+    }
     out[key] = key === "email" ? s.toLowerCase() : s;
   }
-  return out;
+  return { values: out, rejected };
 }
 
 function ordinalYear(year: number) {

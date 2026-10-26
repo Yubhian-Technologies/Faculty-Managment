@@ -15,6 +15,9 @@ export interface TeachingLoadRow {
   section?: string;
   semester?: string | number;
   subject?: string;
+  /** Bare subject name and acronym, for the download's bottom list (`subject` keeps the code in brackets). */
+  subjectName?: string;
+  shortCode?: string;
   hoursPerWeek?: number;
   passPercentage?: number;
   studentFeedback?: number;
@@ -50,6 +53,7 @@ interface CurrentAssignmentLike {
   sectionName?: string;
   subjectName?: string;
   subjectCode?: string;
+  shortCode?: string;
   hoursPerWeek?: number;
   // Set on assignments of a hand-typed (custom) or non-teaching subject - kept off the resume/teaching load.
   excludeFromResume?: boolean;
@@ -80,6 +84,8 @@ function toRow(a: CurrentAssignmentLike, department?: string): TeachingLoadRow {
     year: a.year,
     section: a.sectionName,
     semester: a.assignmentSemester,
+    subjectName: a.subjectName,
+    shortCode: a.shortCode || a.subjectCode,
     subject: a.subjectCode ? `${a.subjectName ?? ""} (${a.subjectCode})`.trim() : a.subjectName,
     hoursPerWeek: a.hoursPerWeek,
     passPercentage: a.isPast ? a.passPercentage : undefined,

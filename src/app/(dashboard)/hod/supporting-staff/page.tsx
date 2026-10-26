@@ -183,8 +183,8 @@ export default function HODSupportingStaffPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Supporting Staff"
-        description="Technical staff records for your department and the branches you manage"
+        title="Staff Profiles"
+        description="Manage teaching and supporting staff records for your department."
         actions={
           <div className="flex gap-2">
             <Button
@@ -207,7 +207,7 @@ export default function HODSupportingStaffPage() {
       <SegmentedTabs
         value={pathname?.startsWith("/hod/supporting-staff") ? "supporting" : "faculty"}
         options={[
-          { key: "faculty", label: "Teaching Faculty", href: "/hod/faculty" },
+          { key: "faculty", label: "Teaching Staff", href: "/hod/faculty" },
           { key: "supporting", label: "Supporting Staff", href: "/hod/supporting-staff" },
         ]}
       />
@@ -221,8 +221,8 @@ export default function HODSupportingStaffPage() {
         onRowClick={(row) => router.push(`/hod/supporting-staff/${row.id}`)}
         searchPlaceholder="Search by name, email, employee ID..."
         searchKeys={["legalName", "nameAsPerPan", "email", "employeeId"] as (keyof StaffRow)[]}
-        emptyTitle="No Supporting Staff records yet"
-        emptyDescription="Add Technical staff to build your department's Supporting Staff register"
+        emptyTitle="No Supporting Staff Records"
+        emptyDescription="Add supporting staff members to maintain your department's staff records."
         emptyAction={<Button onClick={() => router.push("/hod/supporting-staff/new")}><UserPlus className="h-4 w-4 mr-2" />Add Staff</Button>}
       />
 

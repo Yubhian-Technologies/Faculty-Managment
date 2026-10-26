@@ -1,5 +1,5 @@
 import type { Firestore } from "firebase-admin/firestore";
-import { editableDepartmentNames } from "@/lib/departments/scope";
+import { facultyManageableDepartmentNames } from "@/lib/departments/scope";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { actorOf } from "@/lib/audit/actorOf";
@@ -7,17 +7,17 @@ import { notify } from "@/lib/notify";
 import { AVAILABLE_FACULTY_STATUSES } from "@/types";
 import { resolveSelfMentor } from "./selfMentor";
 
-// The two steps every way of giving students a mentor shares (by picking students, by roll numbers):
+// The two steps every way of giving students a mentor shares (by picking students, by Regd. Nos):
 // who may be the mentor, and the audit entry + notification afterwards.
 
 export type MentorCheck = { ok: true; name: string } | { ok: false; status: 400 | 403 | 404; error: string };
 
-/** The mentor must be an available faculty member of the HOD's departments with a login - or the HOD themselves. */
+/** The mentor must be an available faculty member of the HOD's own (and sub-) departments - never a managed branch's - with a login - or the HOD themselves. */
 export async function resolveMentorForHod(
   db: Firestore,
   collegeId: string,
   hodUid: string,
-  scope: Parameters<typeof editableDepartmentNames>[0],
+  scope: Parameters<typeof facultyManageableDepartmentNames>[0],
   mentorUid: string
 ): Promise<MentorCheck> {
   if (mentorUid === hodUid) {
@@ -31,7 +31,7 @@ export async function resolveMentorForHod(
   if (!(AVAILABLE_FACULTY_STATUSES as string[]).includes(fac.status ?? "")) {
     return { ok: false, status: 400, error: "This faculty member is no longer available to mentor" };
   }
-  if (!editableDepartmentNames(scope).includes(fac.department ?? "")) {
+  if (!facultyManageableDepartmentNames(scope).includes(fac.department ?? "")) {
     return { ok: false, status: 403, error: "Mentor is outside your department" };
   }
   return { ok: true, name: facultyDisplayName(fac) };

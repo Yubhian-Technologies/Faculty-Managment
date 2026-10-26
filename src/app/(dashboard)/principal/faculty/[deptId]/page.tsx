@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, BookOpen, ChevronRight, Eye, FileDown, LogIn, Pencil, Trash2, Upload, UserPlus, UsersRound, History } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -17,6 +17,7 @@ import { ExportFacultyDialog } from "@/components/faculty/ExportFacultyDialog";
 import { ResumeSectionsDialog } from "@/components/faculty/ResumeSectionsDialog";
 import { FacultyDesignationCell, FacultyExperienceCell, FacultyStatusCell, JoiningLine, type FacultyListRow } from "@/components/faculty/facultyListCells";
 import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
+import { useFacultyListFilters } from "@/components/faculty/FacultyListFilters";
 import { toast } from "@/hooks/useToast";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { downloadFacultyResume } from "@/lib/faculty/downloadFacultyResume";
@@ -26,7 +27,6 @@ import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import type { CollegeType, Department, FMSUser } from "@/types";
 import { withReturnTo } from "@/lib/faculty/returnTo";
 import { useListUrlSync } from "@/hooks/useListUrlSync";
-import { buildListUrl, readListChoice } from "@/lib/listReturn";
 
 // Selection checkboxes on this list (header "select all" + every row) - same
 // sizing as the HOD Faculty Register's own export selection so both read
@@ -38,31 +38,14 @@ const SELECT_CHECKBOX_CLASS =
 
 type FacultyRow = FacultyListRow;
 
-const STATUS_TABS = [
-  { key: "", label: "All" },
-  { key: "INTERVIEW_DONE", label: "Interview Done" },
-  { key: "ACTIVE", label: "Active" },
-  { key: "RETAINERSHIP", label: "Retainership" },
-  { key: "ON_LEAVE", label: "On Leave" },
-  { key: "RESIGNED", label: "Resigned" },
-  { key: "RETIRED", label: "Retired" },
-];
 
 function PrincipalDepartmentFacultyContent() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { deptId } = useParams<{ deptId: string }>();
-  // The status tab this list was showing when a profile was opened from it, or
-  // when the page was refreshed - read once, on arrival; the page then mirrors it
-  // back into the URL (listUrl below), and carries that URL to the profile pages
-  // in `?from=` (the same mechanism the main Faculty Register already uses) so
-  // their Back button returns to the same tab.
-  const searchParams = useSearchParams();
-  const [statusFilter, setStatusFilter] = useState(() =>
-    readListChoice(searchParams, "status", STATUS_TABS.map((t) => t.key).filter(Boolean), "")
-  );
+  // The page's own URL, carried to the profile pages in `?from=` so their Back button returns here.
   const listPath = `/principal/faculty/${deptId}`;
-  const listUrl = buildListUrl(listPath, { status: statusFilter });
+  const listUrl = listPath;
   useListUrlSync(listUrl, listPath);
   const [removingHod, setRemovingHod] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
@@ -126,10 +109,10 @@ function PrincipalDepartmentFacultyContent() {
   // import), and gating the fetch itself on that picker rule silently hid
   // them with no way to ever see or export them again.
   const { data: faculty = [], isLoading } = useQuery({
-    queryKey: ["principal-dept-faculty", department?.name, statusFilter],
+    queryKey: ["principal-dept-faculty", department?.name],
     queryFn: () =>
       fetch(
-        `/api/college/faculty?department=${encodeURIComponent(department!.name)}${statusFilter ? `&status=${statusFilter}` : ""}&withSeats=1`
+        `/api/college/faculty?department=${encodeURIComponent(department!.name)}&withSeats=1`
       )
         .then((r) => r.json() as Promise<{ faculty: FacultyRow[] }>)
         .then((d) => d.faculty ?? []),
@@ -168,10 +151,13 @@ function PrincipalDepartmentFacultyContent() {
     // effect body (react-hooks/set-state-in-effect) - same pattern as
     // hod/faculty/page.tsx's own tab-switch selection reset.
     void Promise.resolve().then(() => setSelectedIds(new Set()));
-  }, [statusFilter, deptId]);
+  }, [deptId]);
 
-  const allSelected = faculty.length > 0 && faculty.every((f) => selectedIds.has(f.id as string));
-  const someSelected = faculty.some((f) => selectedIds.has(f.id as string)) && !allSelected;
+  // Gender / Qualification / Designation filters and the joining / experience sorts, as on the HOD register
+  const { rows: shownFaculty, bar: filterBar } = useFacultyListFilters(faculty);
+
+  const allSelected = shownFaculty.length > 0 && shownFaculty.every((f) => selectedIds.has(f.id as string));
+  const someSelected = shownFaculty.some((f) => selectedIds.has(f.id as string)) && !allSelected;
 
   // Clears the department's HOD assignment. Deliberately NOT a delete of the
   // person: the same PATCH the Assign HOD dropdown already uses (hodUid: "")
@@ -252,7 +238,7 @@ function PrincipalDepartmentFacultyContent() {
       header: (
         <Checkbox
           checked={allSelected ? true : someSelected ? "indeterminate" : false}
-          onCheckedChange={(checked) => setSelectedIds(checked ? new Set(faculty.map((f) => f.id as string)) : new Set())}
+          onCheckedChange={(checked) => setSelectedIds(checked ? new Set(shownFaculty.map((f) => f.id as string)) : new Set())}
           aria-label="Select all faculty"
           className={SELECT_CHECKBOX_CLASS}
         />
@@ -308,7 +294,7 @@ function PrincipalDepartmentFacultyContent() {
     },
     {
       key: "totalYearsOfExperience",
-      header: "Total Experience",
+      header: "Experience",
       hideOnMobile: true,
       render: (row) => <FacultyExperienceCell row={row} />,
     },
@@ -391,8 +377,8 @@ function PrincipalDepartmentFacultyContent() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={department?.name ?? "Faculty"}
-        description="Faculty members in this department"
+        title="Staff Profiles"
+        description={department?.name ? `Staff records of ${department.name}` : "Staff records of the Department"}
         actions={
           <div className="flex items-center gap-2">
             {selectedIds.size > 0 && (
@@ -407,7 +393,7 @@ function PrincipalDepartmentFacultyContent() {
               <Upload className="h-4 w-4 mr-2" />Import
             </Button>
             <ExportFacultyDialog
-              faculty={selectedIds.size > 0 ? faculty.filter((f) => selectedIds.has(f.id as string)) : faculty}
+              faculty={selectedIds.size > 0 ? shownFaculty.filter((f) => selectedIds.has(f.id as string)) : shownFaculty}
               isSelection={selectedIds.size > 0}
             />
             <Button onClick={() => router.push("/principal/faculty/new")}>
@@ -424,7 +410,7 @@ function PrincipalDepartmentFacultyContent() {
         <SegmentedTabs
           value="faculty"
           options={[
-            { key: "faculty", label: "Teaching Faculty", href: "/principal/faculty" },
+            { key: "faculty", label: "Teaching Staff", href: "/principal/faculty" },
             { key: "supporting", label: "Supporting Staff", href: "/principal/faculty/supporting-staff" },
           ]}
         />
@@ -526,23 +512,11 @@ function PrincipalDepartmentFacultyContent() {
           under a since-reorganised parent department would stay invisible. */}
       {(departmentIsFacultyDestination || isLoading || faculty.length > 0) && (
         <>
-          <div className="flex gap-2 flex-wrap">
-            {STATUS_TABS.map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setStatusFilter(tab.key)}
-                className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-                  statusFilter === tab.key ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border hover:bg-muted"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
+          {filterBar}
 
           <DataTable
             paginate
-            data={faculty}
+            data={shownFaculty}
             columns={columns}
             isLoading={isLoading}
             keyExtractor={(f) => f.id}

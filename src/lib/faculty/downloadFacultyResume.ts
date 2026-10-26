@@ -1,4 +1,4 @@
-import { downloadResumePdf } from "@/lib/pdf/downloadResume";
+import { downloadResumePdf, fetchResumeHtml } from "@/lib/pdf/downloadResume";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { ResumeSectionKey } from "@/lib/pdf/resumeSections";
 
@@ -10,11 +10,9 @@ import type { ResumeSectionKey } from "@/lib/pdf/resumeSections";
  * Two enrichments are fetched alongside the row itself; both are non-critical
  * (the resume still generates without them), so a failed lookup is swallowed.
  */
-export async function downloadFacultyResume(
-  row: Record<string, unknown> & { id?: string; legalName?: string },
-  collegeName: string,
-  sections: ResumeSectionKey[]
-): Promise<void> {
+type ResumeRow = Record<string, unknown> & { id?: string; legalName?: string };
+
+async function buildResumeRecord(row: ResumeRow, collegeName: string, sections: ResumeSectionKey[]) {
   let teachingAssignments: unknown[] = [];
   try {
     // Without the record's id the API would answer with the VIEWER's own load.
@@ -35,10 +33,19 @@ export async function downloadFacultyResume(
 
   const currentAcademicYear = await fetchCurrentAcademicYear();
 
+  return { ...row, teachingAssignments, researchPublications, collegeName, currentAcademicYear, sections };
+}
+
+export async function downloadFacultyResume(row: ResumeRow, collegeName: string, sections: ResumeSectionKey[]): Promise<void> {
   await downloadResumePdf(
-    { ...row, teachingAssignments, researchPublications, collegeName, currentAcademicYear, sections },
+    await buildResumeRecord(row, collegeName, sections),
     (row.employeeId as string) || facultyDisplayName(row)
   );
+}
+
+/** The same resume as `downloadFacultyResume` builds, as HTML for an on-screen preview. */
+export async function previewFacultyResumeHtml(row: ResumeRow, collegeName: string, sections: ResumeSectionKey[]): Promise<string> {
+  return fetchResumeHtml(await buildResumeRecord(row, collegeName, sections));
 }
 
 /** The college's current academic year ("2026-27"), printed against a current

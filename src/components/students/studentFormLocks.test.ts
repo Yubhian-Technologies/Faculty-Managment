@@ -10,13 +10,20 @@ describe("student form: which fields are read-only", () => {
     expect(lockedFieldKeys(false, true)).toEqual([]);
   });
 
-  it("Edit for every role except the College Office: Roll No, Department and Year stay locked (unchanged)", () => {
+  it("Edit for every role except the College Office: Regd. No, Department and Year stay locked (unchanged)", () => {
     expect(lockedFieldKeys(true, false)).toEqual(["rollNumber", "department", "year"]);
   });
 
-  it("Edit for the College Office: Roll No is editable; Department and Year stay locked", () => {
+  it("Edit for the College Office: Regd. No is editable; Department and Year stay locked", () => {
     const locked = lockedFieldKeys(true, true);
     expect(locked).not.toContain("rollNumber");
     expect(locked).toEqual(["department", "year"]);
+  });
+
+  it("Edit of a student already in a section: Course is locked too (their course follows the section)", () => {
+    expect(lockedFieldKeys(true, true, true)).toEqual(["department", "year", "course"]);
+    expect(lockedFieldKeys(true, false, true)).toEqual(["rollNumber", "department", "year", "course"]);
+    expect(lockedFieldKeys(true, true, false)).toEqual(["department", "year"]);
+    expect(lockedFieldKeys(false, true, true)).toEqual([]);
   });
 });

@@ -20,7 +20,7 @@ import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 import { validateYearForCourseDuration } from "@/lib/students/rosterValidation";
 import { ChunkedBatch, ChunkedBatchError } from "@/lib/firestore/chunkedBatch";
 import { createRollRegistry, rollNumberTakenMessage } from "@/lib/students/rollNumberUniqueness";
-import { normalizeStudentMobile, studentMobileProblem, studentMobileTakenMessage, reserveStudentMobile, releaseStudentMobile, isStudentMobileTaken } from "@/lib/students/studentMobile";
+import { normalizeStudentMobile, ROLL_OR_MOBILE_REQUIRED_MESSAGE, studentMobileProblem, studentMobileTakenMessage, reserveStudentMobile, releaseStudentMobile, isStudentMobileTaken } from "@/lib/students/studentMobile";
 import type { Section, StudentRecord } from "@/types";
 
 // Bulk, multi-section roster upload (College Office only - the route guard below) - unlike college/students/import (single sectionId for the
@@ -52,7 +52,7 @@ interface AcceptedRow {
   chunkIndex: number;
 }
 
-// Roll numbers are only unique within one (department, course, section,
+// Regd. Nos are only unique within one (department, course, section,
 // year) - a bare section name alone is NOT unique college-wide (two
 // departments can each have an "A") nor even within one department (two
 // different courses can each have a same-named section - see
@@ -287,18 +287,18 @@ export async function POST(request: Request) {
     // different departments, or two different courses in the SAME
     // department, can each have their own "A"/"PHYSICS-IT-A"), so this key
     // includes `department` and `courseId` alongside the bare section name -
-    // name+year alone previously false-matched roll numbers across genuinely
+    // name+year alone previously false-matched Regd. Nos across genuinely
     // unrelated sections. A pre-backfill student doc with no courseId yet
     // keys with "" for it - an imperfect (but no worse than before) fallback
     // until the backfill migration runs.
     const existingRolls = new Set<string>();
-    // Unassigned roll dedupe is its own, separate key space: roll numbers are
+    // Unassigned roll dedupe is its own, separate key space: Regd. Nos are
     // documented elsewhere as unique within a department+year (not
     // per-course - the Office issues them before a student is even sectioned,
     // let alone assigned a course), so this deliberately does NOT include
     // courseId or section (always "" for an unassigned student anyway).
     const existingUnassignedRolls = new Set<string>();
-    // Office-imported students have no roll number yet, so they can't always
+    // Office-imported students have no Regd. No yet, so they can't always
     // be de-duped by roll - candidates (the roll-less ones) are keyed by
     // name+dept+year instead, so re-running the same file doesn't create
     // duplicates. Indexed by BOTH department and secondaryDepartment: the
@@ -356,7 +356,7 @@ export async function POST(request: Request) {
     const existingHallTicketNos = new Set<string>();
     const existingEmails = new Set<string>();
     // Student Mobile No (10 digits) -> who holds it in THIS college (other colleges are covered by the global claim below).
-    // Required and unique per student: the Office enrols students before roll numbers exist and later maps Roll Nos onto
+    // Required and unique per student: the Office enrols students before Regd. Nos exist and later maps Regd. Nos onto
     // students by this number.
     const existingMobiles = new Map<string, { name?: string; rollNumber?: string }>();
     for (const d of existingDocs) {
@@ -413,7 +413,7 @@ export async function POST(request: Request) {
         if (passwordProblem) { failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: passwordProblem }); continue; }
       }
 
-      // Roll Number is required on every imported row (checked per path below).
+      // A row needs a Regd. No OR a Student Mobile No (either one is enough) - checked with the mobile rules below.
       if (!row.name?.trim()) { failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: "Name is required" }); continue; }
       // Section may be blank for an "unassigned" import (a whole branch cohort
       // loaded before its sections exist); such rows must instead name a
@@ -424,14 +424,16 @@ export async function POST(request: Request) {
       const identityDuplicateError = findIdentityDuplicate(row);
       if (identityDuplicateError) { failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: identityDuplicateError }); continue; }
 
-      // Student Mobile No is normally REQUIRED (it's how a roll-less row gets mapped to a Roll No later) - but a row
-      // that already carries its Roll No/Regd No doesn't need that mapping, so it may import with mobile left blank.
-      // When given, it's still a real 10-digit number that no other student - in this or any other college - holds
-      // (nor an earlier row of this file). Checked here against this college's students and this file; claimed atomically
-      // (which also covers every other college) before the write below.
+      // A row needs a Regd. No OR a Student Mobile No - either one is enough, and a row with neither is refused. A row
+      // with a Regd. No may leave the mobile blank; a row with a mobile may leave the roll blank (the roll can be mapped
+      // onto it later by its mobile). Whichever is given must still be valid and unique: a mobile is a real 10-digit
+      // number that no other student - in this or any other college - holds (nor an earlier row of this file). Checked
+      // here against this college's students and this file; claimed atomically (which also covers every other college)
+      // before the write below. A roll is claimed the same way.
       const typedMobile = row.mobileNo === undefined || row.mobileNo === null ? "" : String(row.mobileNo).trim();
       const rowHasRoll = row.rollNumber != null && String(row.rollNumber).trim() !== "";
-      const mobileProblem = typedMobile || !rowHasRoll ? studentMobileProblem(typedMobile) : null;
+      if (!rowHasRoll && !typedMobile) { failed.push({ row: rowNum, rollNumber: "-", error: ROLL_OR_MOBILE_REQUIRED_MESSAGE }); continue; }
+      const mobileProblem = typedMobile ? studentMobileProblem(typedMobile) : null;
       if (mobileProblem) { failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: mobileProblem }); continue; }
       const mobile10 = typedMobile ? normalizeStudentMobile(typedMobile) : "";
       if (mobile10) {
@@ -592,14 +594,9 @@ export async function POST(request: Request) {
         const yearDurationError = validateYearForCourseDuration(Number(row.year), resolvedCourseDoc?.durationYears, resolvedCourse);
         if (yearDurationError) { failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: yearDurationError }); continue; }
 
-        // De-dupe by roll (unique across all colleges - see below). Roll Number is REQUIRED in the bulk import: the
-        // file is the college's own admission sheet, which always carries it. (It stays optional on the single Add
-        // Student form, so the roll-less handling further down is still what that path's records look like.)
+        // De-dupe by roll (unique across all colleges - see below). The roll is optional here: a row with none is
+        // identified by its Student Mobile No (required for it above) and de-duped by name + a matching detail.
         const roll = row.rollNumber == null ? "" : String(row.rollNumber).trim();
-        if (!roll) {
-          failed.push({ row: rowNum, rollNumber: "-", error: "Roll No is required" });
-          continue;
-        }
         const nameLower = row.name.trim().toLowerCase();
         const year = Number(row.year);
         const nameKey = `${nameLower}::${departmentName!.toLowerCase()}::${year}`;
@@ -610,7 +607,7 @@ export async function POST(request: Request) {
         // falsely collided), fixed alongside the courseId gap since both are
         // the same "roll dedupe key was too loose" family of bug.
         const rollKey = `${roll}::${departmentName}::${year}`;
-        // A roll number is unique across the whole college - held by ANY
+        // A Regd. No is unique across the whole college - held by ANY
         // student already saved, or by an earlier row of this same file.
         const unassignedRollHolder = roll ? rollRegistry.holder(roll) : undefined;
         if (unassignedRollHolder) {
@@ -618,7 +615,7 @@ export async function POST(request: Request) {
           continue;
         }
         if (roll && existingUnassignedRolls.has(rollKey)) {
-          failed.push({ row: rowNum, rollNumber: roll, error: `An unassigned student with this Roll Number already exists for ${departmentName} Year ${row.year}` });
+          failed.push({ row: rowNum, rollNumber: roll, error: `An unassigned student with this Regd. No already exists for ${departmentName} Year ${row.year}` });
           continue;
         }
         if (!roll) {
@@ -663,7 +660,7 @@ export async function POST(request: Request) {
         continue;
       }
 
-      // Roll Number is optional for a placed row too (see the unassigned path above) - when present it is the per-section
+      // Regd. No is optional for a placed row too (see the unassigned path above) - when present it is the per-section
       // identity/de-dupe key; when absent the row is identified by its Student Mobile No.
 
       // Resolved early (before section lookup) because it's also used to
@@ -773,11 +770,8 @@ export async function POST(request: Request) {
         continue;
       }
 
+      // Regd. No is optional for a placed row too: a row with none is identified by its Student Mobile No.
       const roll = row.rollNumber == null ? "" : String(row.rollNumber).trim();
-      if (!roll) {
-        failed.push({ row: rowNum, rollNumber: "-", error: "Roll No is required" });
-        continue;
-      }
       // Unique across the whole college, not just this section - held by any
       // saved student or an earlier row of this same file.
       const placedRollHolder = roll ? rollRegistry.holder(roll) : undefined;
@@ -787,7 +781,7 @@ export async function POST(request: Request) {
       }
       const dedupeKey = rollDedupeKey(roll, section.department, section.courseId, section.name, section.year);
       if (roll && existingRolls.has(dedupeKey)) {
-        failed.push({ row: rowNum, rollNumber: roll, error: "Roll number already exists in this section" });
+        failed.push({ row: rowNum, rollNumber: roll, error: "Regd. No already exists in this section" });
         continue;
       }
 
@@ -836,7 +830,7 @@ export async function POST(request: Request) {
       registerIdentityValues(row);
     }
 
-    // Student Mobile Nos and Roll Numbers are both unique across ALL colleges. Each accepted row claims its mobile and
+    // Student Mobile Nos and Regd. Nos are both unique across ALL colleges. Each accepted row claims its mobile and
     // its roll (when it has one) atomically, a few rows at a time; a row whose number is held by someone else is
     // rejected here and nothing of it is written (a mobile claimed first is given back).
     const claimed: AcceptedRow[] = [];
@@ -864,7 +858,7 @@ export async function POST(request: Request) {
                 failed.push({
                   row: a.rowNum,
                   rollNumber: a.roll,
-                  error: claim.code === "TAKEN" ? rollTakenMessage(a.roll, claim.holder) : "Roll Number must contain letters or digits",
+                  error: claim.code === "TAKEN" ? rollTakenMessage(a.roll, claim.holder) : "Regd. No must contain letters or digits",
                 });
                 return;
               }
@@ -907,7 +901,7 @@ export async function POST(request: Request) {
           ...lost.filter((a) => a.mobileClaimed).map((a) => releaseStudentMobile(db, collegeId, a.mobile, a.docRef.id)),
         ]);
         if (!failedChunks) throw commitErr;
-        for (const a of lost) failed.push({ row: a.rowNum, rollNumber: a.roll, error: "Could not be saved - please import this row again" });
+        for (const a of lost) failed.push({ row: a.rowNum, rollNumber: a.roll || "-", error: "Could not be saved - please import this row again" });
         saved = claimed.filter((a) => !failedChunks.has(a.chunkIndex));
       }
     }
@@ -934,7 +928,7 @@ export async function POST(request: Request) {
               if (!(loginErr instanceof StudentLoginError)) console.error("[students/import-excel] login creation failed", a.roll, loginErr);
               loginFailed.push({
                 row: a.rowNum,
-                rollNumber: a.roll,
+                rollNumber: a.roll || "-",
                 error: loginErr instanceof StudentLoginError ? loginErr.message : "Imported, but the login could not be created - use Create login to retry",
               });
             }

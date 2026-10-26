@@ -206,6 +206,7 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint, sectionScoped
       <div className="space-y-6">
         <PageHeader
           title={`Edit ${moduleDef.label}`}
+          note={moduleDef.description}
           actions={
             <Button variant="outline" asChild>
               <Link href={`${basePath}/${moduleKey}`}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
@@ -221,6 +222,7 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint, sectionScoped
     <div className="space-y-6">
       <PageHeader
         title={`Edit ${moduleDef.label}`}
+        note={moduleDef.description}
         actions={
           <Button variant="outline" asChild>
             <Link href={`${basePath}/${moduleKey}`}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>

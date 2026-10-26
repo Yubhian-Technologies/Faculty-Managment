@@ -75,9 +75,9 @@ export interface StudentListQuery {
    * Inclusive roll-number range, compared upper-cased as strings (the same rule
    * as the HOD page's range - hodPagedList.fetchHodStudentsMatching). Either end
    * may be left blank for an open-ended range; both given in the wrong order are
-   * swapped. A student with no roll number never matches an active range.
+   * swapped. A student with no Regd. No never matches an active range.
    * Applied in memory over the candidate set like the other non-structural
-   * filters: roll numbers are stored in mixed case ("24pa1a1222" next to
+   * filters: Regd. Nos are stored in mixed case ("24pa1a1222" next to
    * "24PA1A1241"), so a Firestore range query on `rollNumber` would miss rows.
    */
   rollFrom?: string;
@@ -127,7 +127,7 @@ function matchesRemaining(
 
 /** Dedupes by id (a shared-first-year student's department/secondaryDepartment
  *  queries can both match the same doc) and sorts in the standard student list
- *  order - roll number, with roll-less students after them by name (see
+ *  order - Regd. No, with roll-less students after them by name (see
  *  lib/students/listOrder.ts). */
 function dedupeAndSortByName(docs: Doc[]): Doc[] {
   const seen = new Set<string>();
@@ -237,7 +237,7 @@ export async function fetchMatchingStudentIds(
 export interface GraduatesQuery {
   page: number;
   pageSize: number;
-  /** Trimmed, lower-cased. "" means no search. Matches name, roll number or department. */
+  /** Trimmed, lower-cased. "" means no search. Matches name, Regd. No or department. */
   search: string;
   /** A course label as in graduateFacets(). "" means every course. */
   course: string;

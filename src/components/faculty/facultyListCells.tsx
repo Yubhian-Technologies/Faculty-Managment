@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
-import { allPreviousExperienceEntries, totalYearsOfExperience } from "@/lib/faculty/experienceCalc";
+import { allPreviousExperienceEntries, formatDurationList, totalYearsOfExperience } from "@/lib/faculty/experienceCalc";
+import { researchAreaList } from "@/lib/faculty/researchAreas";
 import { DESIGNATION_LABELS, FACULTY_STATUS_LABELS } from "@/types";
 import type { Designation, FacultyMember, FacultyStatus } from "@/types";
 
@@ -44,10 +45,10 @@ export function fmtDate(val: unknown): string {
 // INTERVIEW_DONE faculty haven't actually joined yet - their joiningDate is the
 // proposed date from the offer letter, so it reads as an expectation, not a fact.
 export function joiningLabel(status: unknown): string {
-  return status === "INTERVIEW_DONE" ? "Expected to join" : "Joined";
+  return status === "INTERVIEW_DONE" ? "Expected to join" : "DOJ";
 }
 
-/** "Joined: 02 Apr 2026" / "Expected to join: 01 Jul 2026". */
+/** "DOJ: 02 Apr 2026" / "Expected to join: 01 Jul 2026". */
 export function JoiningLine({ row, className = "text-xs text-muted-foreground" }: { row: FacultyListRow; className?: string }) {
   return <p className={className}>{joiningLabel(row.status)}: {fmtDate(row.joiningDate)}</p>;
 }
@@ -65,6 +66,31 @@ export function SeatBadges({ row }: { row: FacultyListRow }) {
   );
 }
 
+/** Under a faculty member's designation: their research areas, the ones the filter matched highlighted. Shown only while the filter is on. */
+export function ResearchMatchChips({ row }: { row: FacultyListRow }) {
+  const matched = Array.isArray(row.researchMatches) ? (row.researchMatches as string[]) : [];
+  if (matched.length === 0) return null;
+  const all = researchAreaList(row);
+  const rest = all.filter((a) => !matched.includes(a));
+  const shown = [...matched, ...rest].slice(0, 6);
+  return (
+    <div className="flex flex-wrap items-center gap-1 pt-1" data-testid="research-chips">
+      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Research:</span>
+      {shown.map((a) => (
+        <span
+          key={a}
+          className={matched.includes(a)
+            ? "inline-flex items-center rounded-full border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900"
+            : "inline-flex items-center rounded-full border border-border bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"}
+        >
+          {a}
+        </span>
+      ))}
+      {all.length > shown.length && <span className="text-[10px] text-muted-foreground">+{all.length - shown.length} more</span>}
+    </div>
+  );
+}
+
 /** Designation, highest qualification, specialization and the Ph.D (awarded) badge. */
 export function FacultyDesignationCell({ row }: { row: FacultyListRow }) {
   return (
@@ -75,6 +101,7 @@ export function FacultyDesignationCell({ row }: { row: FacultyListRow }) {
         <p className="text-xs text-muted-foreground italic">{row.specialization as string}</p>
       )}
       <SeatBadges row={row} />
+      <ResearchMatchChips row={row} />
       {row.academicProfile?.phdDetails?.status === "AWARDED" && (
         <span className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-700">Ph.D</span>
       )}
@@ -82,25 +109,39 @@ export function FacultyDesignationCell({ row }: { row: FacultyListRow }) {
   );
 }
 
-/** Total / internal / external years of experience, computed live. */
+/**
+ * Total / Internal / External experience as three colour-coded lines, each "x yrs, y mos, z days" with zero units left out,
+ * computed live. Same three numbers, from the same calculation, as the Experience facts on the faculty profile page.
+ */
 export function FacultyExperienceCell({ row }: { row: FacultyListRow }) {
   // Computed live from Date of Joining + the Academic/Industry/Research
   // Experience entries - the same canonical calc as the Faculty Details page
   // (FacultyProfileHub), not the stored (and only periodically re-saved)
   // totalYearsOfExperience field.
   const previousExperienceEntries = allPreviousExperienceEntries(row.academicProfile);
-  const totalYears = totalYearsOfExperience(previousExperienceEntries, row.joiningDate).years;
-  const internalYears = totalYearsOfExperience(undefined, row.joiningDate).years;
-  const externalYears = totalYearsOfExperience(previousExperienceEntries, undefined).years;
+  const total = totalYearsOfExperience(previousExperienceEntries, row.joiningDate);
+  const internal = row.joiningDate != null ? totalYearsOfExperience(undefined, row.joiningDate) : null; // unknown without a joining date
+  const external = totalYearsOfExperience(previousExperienceEntries, undefined);
+  const none = (d: { years: number; months: number; days: number } | null) => !d || (d.years === 0 && d.months === 0 && d.days === 0);
+  const lines = [
+    { label: "Total:", value: formatDurationList(total), dot: "bg-primary", strong: true },
+    { label: "Internal:", value: internal ? formatDurationList(internal) : "0", dot: "bg-emerald-500", strong: false, empty: none(internal) },
+    { label: "External:", value: formatDurationList(external), dot: "bg-amber-500", strong: false, empty: none(external) },
+  ];
   return (
-    <div className="space-y-0.5">
-      <p className="text-sm font-medium">{totalYears} yrs</p>
-      {row.joiningDate != null && (
-        <p className="text-xs text-muted-foreground">Int: {internalYears} · Ext: {externalYears}</p>
-      )}
-    </div>
+    <dl className="grid grid-cols-[auto_auto_1fr] items-center gap-x-2 gap-y-1.5 whitespace-nowrap tabular-nums" data-testid="experience-cell">
+      {lines.map((l) => (
+        <div key={l.label} className="contents">
+          <span className={`h-2 w-2 rounded-full ${l.dot}`} aria-hidden="true" />
+          <dt className="text-[11px] font-medium text-muted-foreground">{l.label}</dt>
+          <dd className={l.strong ? "text-sm font-semibold text-foreground" : `text-xs ${l.empty ? "text-muted-foreground" : "text-foreground/90"}`}>{l.value}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
+
+const PENDING_RATIFICATION = new Set(["Not Yet Attended", "Attended", "Not Ratified"]);
 
 /** Status badge with the ratification status under it. */
 export function FacultyStatusCell({ row }: { row: FacultyListRow }) {
@@ -111,11 +152,11 @@ export function FacultyStatusCell({ row }: { row: FacultyListRow }) {
         {FACULTY_STATUS_LABELS[row.status as FacultyStatus] ?? (row.status as string)}
       </Badge>
       {ratification && (
-        // "Ratified" / "Not Ratified" are the two statuses the app writes. A
-        // stray stored value (one live record holds "Not Applicable") is shown
+        // "Ratified" is green; the not-ratified ones (Not Yet Attended / Attended / Not Ratified)
+        // are amber. A stray stored value (one live record holds "Not Applicable") is shown
         // as-is but neutral, rather than styled as a pending ratification.
         <p className={`text-[10px] font-medium ${
-          ratification === "Ratified" ? "text-green-600" : ratification === "Not Ratified" ? "text-amber-600" : "text-muted-foreground"
+          ratification === "Ratified" ? "text-green-600" : PENDING_RATIFICATION.has(ratification) ? "text-amber-600" : "text-muted-foreground"
         }`}>
           {ratification}
         </p>

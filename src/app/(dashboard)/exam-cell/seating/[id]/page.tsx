@@ -87,7 +87,7 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
   }
 
   function downloadCsv() {
-    const lines = [["Room", "Block", "Floor", layered ? "Bench" : "Seat", "Roll Number", "Name", "Section"]];
+    const lines = [["Room", "Block", "Floor", layered ? "Bench" : "Seat", "Regd. No", "Name", "Section"]];
     for (const r of plan!.rooms) {
       if (layered) {
         benchRows(r).forEach((row, b) => row.forEach((s, l) => {
@@ -202,7 +202,7 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
             ) : (
             <table className="w-full text-sm">
               <thead className="text-left text-xs text-muted-foreground border-b">
-                <tr><th className="py-1.5 w-12">Seat</th><th>Roll No.</th><th>Name</th><th>Section</th><th className="print:hidden text-right">Move to</th></tr>
+                <tr><th className="py-1.5 w-12">Seat</th><th>Regd. No.</th><th>Name</th><th>Section</th><th className="print:hidden text-right">Move to</th></tr>
               </thead>
               <tbody>
                 {room.students.map((s, i) => (

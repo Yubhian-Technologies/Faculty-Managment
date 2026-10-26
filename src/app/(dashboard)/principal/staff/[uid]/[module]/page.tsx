@@ -43,19 +43,23 @@ export default function PrincipalStaffModulePage() {
     return <p className="text-sm text-muted-foreground">Unknown section.</p>;
   }
 
+  // Same rule as the Edit button in the header: the empty-tab message offers an edit only when the header does.
+  const editHref = moduleKey !== "research" && moduleKey !== "financial" ? `/principal/staff/${uid}/${moduleKey}/edit` : undefined;
+
   return (
     <div className="space-y-6">
       <PageHeader
         title={moduleDef.label}
         description={staff?.name}
+        note={moduleDef.description}
         actions={
           <div className="flex gap-2">
             <Button variant="outline" asChild>
               <Link href={`/principal/staff/${uid}`}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
             </Button>
-            {moduleKey !== "research" && moduleKey !== "financial" && (
+            {editHref && (
               <Button asChild>
-                <Link href={`/principal/staff/${uid}/${moduleKey}/edit`}><Pencil className="h-4 w-4 mr-2" />Edit</Link>
+                <Link href={editHref}><Pencil className="h-4 w-4 mr-2" />Edit</Link>
               </Button>
             )}
           </div>
@@ -65,7 +69,7 @@ export default function PrincipalStaffModulePage() {
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : staff ? (
-        <FacultyProfileModuleContent moduleKey={moduleKey} faculty={staff} includeTeachingAssignment={false} collegeType={collegeType} />
+        <FacultyProfileModuleContent editHref={editHref} moduleKey={moduleKey} faculty={staff} includeTeachingAssignment={false} collegeType={collegeType} />
       ) : null}
     </div>
   );

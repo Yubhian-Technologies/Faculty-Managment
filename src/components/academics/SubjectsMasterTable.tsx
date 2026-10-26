@@ -9,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
-import { Download, Pencil, Trash2 } from "lucide-react";
+import { Download, Pencil, Search, Trash2 } from "lucide-react";
 import type { Subject, SubjectCategory, SubjectType } from "@/types";
 import { CategoryField } from "@/components/academics/CategoryField";
 import { downloadCSV, toCSV } from "@/lib/utils/csv";
@@ -50,6 +50,7 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [page, setPage] = useState(0);
+  const [search, setSearch] = useState("");
   const [editForm, setEditForm] = useState<EditForm | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [editError, setEditError] = useState("");
@@ -72,8 +73,17 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
 
   useEffect(() => { void load(); }, [courseId, catalogId, regulation]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const pageCount = Math.max(1, Math.ceil(subjects.length / PAGE_SIZE));
-  const pageRows = useMemo(() => subjects.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE), [subjects, page]);
+  // Search by Category, Subject Code or Subject Name (case-insensitive substring) over the already-loaded list.
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return subjects;
+    return subjects.filter((s) => {
+      const category = s.category === "OTHER" ? (s.customCategory || "Other") : (s.category ?? "");
+      return [category, s.category ?? "", s.code, s.name].some((v) => String(v ?? "").toLowerCase().includes(q));
+    });
+  }, [subjects, search]);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pageRows = useMemo(() => filtered.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE), [filtered, page]);
 
   async function handleSave() {
     if (!editForm) return;
@@ -140,10 +150,23 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
           </Button>
         </div>
 
+        <div className="relative max-w-sm">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="pl-8"
+            placeholder="Search by category, subject code or name"
+            aria-label="Search subjects by category, code or name"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+          />
+        </div>
+
         {isLoading ? (
           <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-10 rounded-md border bg-muted/30 animate-pulse" />)}</div>
         ) : subjects.length === 0 ? (
           <p className="text-sm text-muted-foreground py-6 text-center">No subjects yet for this course and regulation. Import a file or add one.</p>
+        ) : filtered.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-6 text-center">No subjects match &ldquo;{search.trim()}&rdquo;.</p>
         ) : (
           <>
             <div className="overflow-x-auto">

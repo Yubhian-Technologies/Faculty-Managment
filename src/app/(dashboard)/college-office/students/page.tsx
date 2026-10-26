@@ -23,6 +23,7 @@ import { departmentsOfferingCourse, yearOptionsForDepartment, yearOptionsForCour
 import { StudentFormDialog } from "@/components/students/StudentFormDialog";
 import { StudentPasswordDialog } from "@/components/students/StudentPasswordDialog";
 import { EDITABLE_ROSTER_FIELDS, LIST_ROSTER_FIELDS, rosterFieldDisplay } from "@/lib/students/rosterFields";
+import { StudentDepartmentCell } from "@/components/students/StudentDepartmentCell";
 import { toCSV, downloadCSV } from "@/lib/utils/csv";
 import { GraduatedStudentsView } from "@/components/students/GraduatedStudentsView";
 import { StudentPromotionsPanel } from "@/components/students/StudentPromotionsPanel";
@@ -30,7 +31,10 @@ import { StudentStrengthDashboard } from "@/components/students/StudentStrengthD
 import { StudentsViewTabs } from "@/components/students/StudentsViewTabs";
 import type { StudentListItem, Department, AcademicYear, Course } from "@/types";
 import { selectableYears } from "@/lib/college/courseYears";
-import { coreDepartmentOptions as buildCoreDepartmentOptions, departmentFilterOptions as buildDepartmentFilterOptions } from "@/lib/departments/departmentTree";
+import { DepartmentPickSelect } from "@/components/shared/DepartmentPickSelect";
+import {
+  buildDepartmentPickOptions, DEPARTMENT_PICK_ALL, departmentPickValue, isDepartmentPickOffered, parseDepartmentPick,
+} from "@/lib/departments/departmentPickTree";
 import { useSectionDepartments } from "@/hooks/useSectionDepartments";
 import { useListUrlSync } from "@/hooks/useListUrlSync";
 import { buildListUrl, readListChoice, readListInt, readListString, withListBack } from "@/lib/listReturn";
@@ -41,7 +45,7 @@ import { buildListUrl, readListChoice, readListInt, readListString, withListBack
 // added student silently carried less than an imported one.
 //
 // Section is still not collected: like the import, every manual add is
-// "unassigned" and the department (sub-)HOD sections the student later. Roll No
+// "unassigned" and the department (sub-)HOD sections the student later. Regd. No
 // IS offered at intake (it's a template column, provisional only), but is
 // read-only when editing - correcting it afterwards is the department's, and
 // theirs is the only path that checks it for uniqueness.
@@ -169,8 +173,13 @@ function OfficeStudentsContent() {
   // applied snapshot - never with a half-edited draft.
   // A restored list starts with the draft equal to the snapshot it was showing.
   const [search, setSearch] = useState(restored.filters.search);
-  const [deptFilter, setDeptFilter] = useState(restored.filters.department);
-  const [coreDeptFilter, setCoreDeptFilter] = useState(restored.filters.coreDepartment);
+  // One Department pick: sub-departments and core branches are listed under their department.
+  const [deptPick, setDeptPick] = useState(
+    departmentPickValue(restored.filters.department === "all" ? "" : restored.filters.department, restored.filters.coreDepartment === "all" ? "" : restored.filters.coreDepartment)
+  );
+  const { department: pickedDept, coreDepartment: pickedCore } = parseDepartmentPick(deptPick);
+  const deptFilter = pickedDept || "all";
+  const coreDeptValue = pickedCore || "all";
   const [yearFilter, setYearFilter] = useState<string>(restored.filters.year);
   const [courseFilter, setCourseFilter] = useState<string>(restored.filters.course);
   const [studentTypeFilter, setStudentTypeFilter] = useState<string>(restored.filters.studentType);
@@ -340,26 +349,15 @@ function OfficeStudentsContent() {
   // their own, or those of a branch they manage - plus a parent that organises
   // sub-departments (picking it means "all of them"), with each sub-department
   // listed beneath its parent. See lib/departments/departmentTree.ts.
-  const departmentFilterOptions = useMemo(() => {
+  const departmentPickOptions = useMemo(() => {
     const offered = courseFilter === "all"
       ? activeDepartments
       : (() => {
         const offeringIds = new Set(departmentsOfferingCourse(departments, courses, courseFilter).map((d) => d.id));
         return activeDepartments.filter((d) => offeringIds.has(d.id));
       })();
-    return buildDepartmentFilterOptions(offered, departments, sectionDepartments);
+    return buildDepartmentPickOptions(offered, departments, sectionDepartments);
   }, [courseFilter, activeDepartments, departments, courses, sectionDepartments]);
-
-  // A feeder department teaches the shared first year for several branches at
-  // once (Basic Science - Chemistry runs CSE and CSBS). Those are its Core
-  // Departments - for a parent, the ones its sub-departments run - and picking
-  // one narrows the list to the students filed under it. Offered only when
-  // there are any.
-  const coreDepartmentOptions = useMemo(
-    () => buildCoreDepartmentOptions(departments, deptFilter === "all" ? [] : [deptFilter], sectionDepartments),
-    [deptFilter, departments, sectionDepartments]
-  );
-  const coreDeptValue = coreDepartmentOptions.includes(coreDeptFilter) ? coreDeptFilter : "all";
 
   const yearFilterOptions = useMemo(() => {
     if (deptFilter !== "all") {
@@ -461,9 +459,9 @@ function OfficeStudentsContent() {
     const nextDeptOptions = value === "all"
       ? activeDepartments
       : activeDepartments.filter((d) => new Set(departmentsOfferingCourse(departments, courses, value).map((o) => o.id)).has(d.id));
-    const deptStillValid = deptFilter === "all" || nextDeptOptions.some((d) => d.name === deptFilter);
+    const deptStillValid = isDepartmentPickOffered(buildDepartmentPickOptions(nextDeptOptions, departments, sectionDepartments), deptPick);
     const nextDept = deptStillValid ? deptFilter : "all";
-    if (!deptStillValid) { setDeptFilter("all"); setCoreDeptFilter("all"); }
+    if (!deptStillValid) setDeptPick(DEPARTMENT_PICK_ALL);
     const nextYearOptions = nextDept === "all"
       ? yearOptionsForCourse(courses, value === "all" ? undefined : value, years)
       : yearOptionsForDepartment(departments, courses, nextDept, value === "all" ? "" : value, years);
@@ -471,13 +469,13 @@ function OfficeStudentsContent() {
     setCourseFilter(value);
   }
 
-  function onDeptFilterChange(value: string) {
-    const nextYearOptions = value === "all"
+  function onDeptPickChange(value: string) {
+    const { department } = parseDepartmentPick(value);
+    const nextYearOptions = !department
       ? yearOptionsForCourse(courses, courseFilter === "all" ? undefined : courseFilter, years)
-      : yearOptionsForDepartment(departments, courses, value, courseFilter === "all" ? "" : courseFilter, years);
+      : yearOptionsForDepartment(departments, courses, department, courseFilter === "all" ? "" : courseFilter, years);
     if (yearFilter !== "all" && !nextYearOptions.includes(Number(yearFilter))) setYearFilter("all");
-    setCoreDeptFilter("all");
-    setDeptFilter(value);
+    setDeptPick(value);
   }
 
   function onYearFilterChange(value: string) {
@@ -804,7 +802,7 @@ function OfficeStudentsContent() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") handleLoad(); }}
-            placeholder="Search by name, roll number or email"
+            placeholder="Search by name, Regd. No or email"
             className="pl-9"
           />
         </div>
@@ -815,26 +813,7 @@ function OfficeStudentsContent() {
             {courseNames.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Select value={deptFilter} onValueChange={onDeptFilterChange}>
-          <SelectTrigger className="sm:w-56"><SelectValue placeholder="All departments" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All departments</SelectItem>
-            {departmentFilterOptions.map((o) => (
-              <SelectItem key={o.department.id} value={o.department.name} className={o.depth === 1 ? "pl-8" : undefined}>
-                {o.department.name}{o.container ? " (all sub-departments)" : ""}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {coreDepartmentOptions.length > 0 && (
-          <Select value={coreDeptValue} onValueChange={setCoreDeptFilter}>
-            <SelectTrigger className="sm:w-56"><SelectValue placeholder="All core departments" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All core departments</SelectItem>
-              {coreDepartmentOptions.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        )}
+        <DepartmentPickSelect value={deptPick} onChange={onDeptPickChange} options={departmentPickOptions} className="sm:w-56" />
         <Select value={yearFilter} onValueChange={onYearFilterChange}>
           <SelectTrigger className="sm:w-40"><SelectValue placeholder="All years" /></SelectTrigger>
           <SelectContent>
@@ -856,13 +835,13 @@ function OfficeStudentsContent() {
         </Button>
       </div>
 
-      {/* Roll number range - one more filter, applied by Load like the rest.
+      {/* Regd. No range - one more filter, applied by Load like the rest.
           Inclusive, compared upper-cased; leave one end blank for "from here
           on" / "up to here". */}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs text-muted-foreground shrink-0">Roll no. range:</span>
+        <span className="text-xs text-muted-foreground shrink-0">Regd. No. range:</span>
         <Input
-          placeholder="From roll no."
+          placeholder="From Regd. No."
           value={rollFrom}
           onChange={(e) => setRollFrom(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") handleLoad(); }}
@@ -871,7 +850,7 @@ function OfficeStudentsContent() {
         />
         <span className="text-xs text-muted-foreground">to</span>
         <Input
-          placeholder="To roll no."
+          placeholder="To Regd. No."
           value={rollTo}
           onChange={(e) => setRollTo(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") handleLoad(); }}
@@ -985,7 +964,9 @@ function OfficeStudentsContent() {
                         const value = rosterFieldDisplay(f, s);
                         return (
                           <td key={f.key} className={`p-3 whitespace-nowrap ${f.key === "name" ? "font-medium" : ""}`}>
-                            {value || <span className="text-muted-foreground/50">—</span>}
+                            {f.key === "department"
+                              ? <StudentDepartmentCell department={value} coreDepartment={s.secondaryDepartment} />
+                              : value || <span className="text-muted-foreground/50">—</span>}
                           </td>
                         );
                       })}
@@ -1130,9 +1111,9 @@ function OfficeStudentsContent() {
         description={
           passwordDialog?.kind === "single"
             ? (passwordDialog.student.uid
-                ? "Set the password this student will sign in with, together with their Roll Number. The old password stops working."
-                : "Choose the password this student will sign in with, together with their Roll Number.")
-            : "Every selected student gets a login with this same password, signing in with their own Roll Number. They can change it after signing in, or you can reset any one of them later."
+                ? "Set the password this student will sign in with, together with their Regd. No. The old password stops working."
+                : "Choose the password this student will sign in with, together with their Regd. No.")
+            : "Every selected student gets a login with this same password, signing in with their own Regd. No. They can change it after signing in, or you can reset any one of them later."
         }
         submitLabel={passwordDialog?.kind === "single" && passwordDialog.student.uid ? "Set password" : "Create login"}
         onSubmit={(password) =>

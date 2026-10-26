@@ -14,7 +14,7 @@ const MAX_STUDENTS_PER_CALL = 400; // same cap as students/bulk-delete
 // bulk-select toolbar - same per-student idempotent provisioning, just
 // looped and capped like every other bulk roster action (see
 // students/bulk-delete/route.ts). Continues past a single student's failure
-// (e.g. missing Roll Number, duplicate Roll Number) rather than aborting the
+// (e.g. missing Regd. No, duplicate Regd. No) rather than aborting the
 // whole batch - each student's own outcome is reported back individually so
 // Office can fix just the ones that failed.
 //

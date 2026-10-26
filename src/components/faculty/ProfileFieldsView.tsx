@@ -9,7 +9,7 @@ import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { PublicationsSection } from "@/components/faculty/PublicationsModuleView";
 import { normalizeResourcePersonsDetails, trainingEntryHidesBeneficiaries, trainingEntryUsesWeeks } from "@/components/faculty/TrainingEntryFields";
 import { awardYear } from "@/lib/faculty/awardYear";
-import { totalYearsOfExperience, formatDuration, durationBetween, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
+import { totalYearsOfExperience, formatDuration, durationBetween, allPreviousExperienceEntries, sortExperienceLatestFirst } from "@/lib/faculty/experienceCalc";
 import { toDate } from "@/lib/utils";
 import {
   TRAINING_ENTRY_TYPE_LABELS, TRAINING_PARTICIPATION_ROLE_LABELS, CERTIFICATION_TYPE_LABELS, PROFESSIONAL_BODY_LABELS, MEMBERSHIP_VALIDITY_LABELS,
@@ -18,6 +18,7 @@ import {
 } from "@/types";
 import type { FacultyProfileFields, CollegeType, ResearchPublication, TrainingEntry, PreviousInstitution } from "@/types";
 import { FACT_GRID_COLS_2, FACT_GRID_COLS_3, FACT_GRID_COLS_4 } from "@/components/shared/factGrid";
+import { PROFILE_MODULES } from "@/lib/faculty/profileModules";
 
 // "Beneficiaries" value for the read-only view: who this program served (the
 // edit form, TrainingEntryFields, captures the detailed breakdown). The counts
@@ -61,12 +62,12 @@ interface Props {
 // FacultyProfileModuleContent) can render exactly one, instead of the whole
 // scrolling ProfileFieldsView below.
 
-export function QualificationModule({ profile, collegeType }: { profile: Partial<FacultyProfileFields> | undefined; collegeType?: CollegeType }) {
+export function QualificationModule({ profile, collegeType, hideHeader = false }: { profile: Partial<FacultyProfileFields> | undefined; collegeType?: CollegeType; hideHeader?: boolean }) {
   // Lift legacy key names on un-migrated docs (see academicProfileCompat.ts).
   const p = normalizeAcademicProfile(profile) ?? {};
   if (collegeType === "SCHOOL") {
     return (
-      <Section number={1} title="General & Academic Profile">
+      <Section number={1} title="General & Academic Profile" hideHeader={hideHeader}>
         <OptionalField label="Highest Qualification" value={p.highestQualification} />
         <OptionalField label="Research Areas/Interests" value={(p.researchAreasInterests ?? []).join(", ")} />
         <QualificationsView items={p.educationalQualifications} hideEmpty />
@@ -74,7 +75,7 @@ export function QualificationModule({ profile, collegeType }: { profile: Partial
     );
   }
   return (
-    <Section number={1} title="General & Academic Profile">
+    <Section number={1} title="General & Academic Profile" hideHeader={hideHeader}>
       <OptionalField label="Highest Qualification" value={p.highestQualification} />
       <OptionalField label="Research Areas/Interests" value={(p.researchAreasInterests ?? []).join(", ")} />
       {hasValue(p.netSletSetGateOthers) && (
@@ -120,10 +121,11 @@ export function QualificationModule({ profile, collegeType }: { profile: Partial
 }
 
 export function ExperienceModule({
-  profile, includeTeachingAssignment = true, joiningDate,
+  profile, includeTeachingAssignment = true, joiningDate, hideHeader = false,
 }: {
   profile: Partial<FacultyProfileFields> | undefined;
   includeTeachingAssignment?: boolean;
+  hideHeader?: boolean;
   // Optional - when the caller has it (FacultyProfileModuleContent does),
   // shows the live "Total Years of Experience" fact (Previous Experience
   // rows + time served since joining, ticking up day by day - see
@@ -139,12 +141,12 @@ export function ExperienceModule({
   // entry (nothing to hold it, or the latest entry already has different text) - shown
   // read-only so it never silently disappears.
   const experienceGroups: { label: string; entries: PreviousInstitution[]; roleLabel: string; unplacedRole: string | undefined }[] = [
-    { label: "Academic Experience", entries: p.academicExperience ?? [], roleLabel: "Academic Roles/Responsibilities", unplacedRole: p.teachingRolesResponsibilities },
-    { label: "Industry Experience", entries: p.industryExperience ?? [], roleLabel: "Industry Roles/Responsibilities", unplacedRole: p.industryRolesResponsibilities },
-    { label: "Research Experience", entries: p.researchExperience ?? [], roleLabel: "Research Roles/Responsibilities", unplacedRole: p.researchRolesResponsibilities },
+    { label: "Academic Experience", entries: sortExperienceLatestFirst(p.academicExperience ?? []), roleLabel: "Academic Roles/Responsibilities", unplacedRole: p.teachingRolesResponsibilities },
+    { label: "Industry Experience", entries: sortExperienceLatestFirst(p.industryExperience ?? []), roleLabel: "Industry Roles/Responsibilities", unplacedRole: p.industryRolesResponsibilities },
+    { label: "Research Experience", entries: sortExperienceLatestFirst(p.researchExperience ?? []), roleLabel: "Research Roles/Responsibilities", unplacedRole: p.researchRolesResponsibilities },
   ];
   return (
-    <Section number={2} title="Previous Experience">
+    <Section number={2} title="Previous Experience" hideHeader={hideHeader}>
       {hasExperienceData && (
         <OptionalField label="Total Years of Experience" value={formatDuration(totalYearsOfExperience(allExperienceEntries, joiningDate))} />
       )}
@@ -251,9 +253,10 @@ export function ResearchProfilesModule({ profile }: { profile: Partial<FacultyPr
 }
 
 export function MentorshipModule({
-  profile, ownerName,
+  profile, ownerName, hideHeader = false,
 }: {
   profile: Partial<FacultyProfileFields> | undefined;
+  hideHeader?: boolean;
   // This profile's own display name - fallback for entry #1 in a "Conducted"
   // training entry's Name of the Faculty / Coordinator when its stored value
   // is blank (a record saved before TrainingEntryFields started keeping that
@@ -264,7 +267,7 @@ export function MentorshipModule({
   // Lift legacy key names on un-migrated docs (see academicProfileCompat.ts).
   const p = normalizeAcademicProfile(profile) ?? {};
   return (
-    <Section number={5} title="Professional Development">
+    <Section number={5} title={PROFILE_MODULES.mentorship.label} hideHeader={hideHeader}>
       {(p.newLabsEstablished ?? []).length > 0 && (
         <div className="space-y-2">
           <SubLabel>New Labs Established</SubLabel>
@@ -416,11 +419,11 @@ export function MentorshipModule({
   );
 }
 
-export function FinancialModule({ profile }: { profile: Partial<FacultyProfileFields> | undefined }) {
+export function FinancialModule({ profile, hideHeader = false }: { profile: Partial<FacultyProfileFields> | undefined; hideHeader?: boolean }) {
   // Lift legacy key names on un-migrated docs (see academicProfileCompat.ts).
   const p = normalizeAcademicProfile(profile) ?? {};
   return (
-    <Section number={6} title="Financial Standing & Budgetary Impact">
+    <Section number={6} title={PROFILE_MODULES.financial.label} hideHeader={hideHeader}>
       {hasValue(p.monthlySalary) && (
         <div className="rounded-lg border bg-muted/20 shadow-sm p-3">
           <SubLabel>Current Financial Standing</SubLabel>
@@ -448,7 +451,7 @@ export function FinancialModule({ profile }: { profile: Partial<FacultyProfileFi
 export function OthersModule({ profile }: { profile: Partial<FacultyProfileFields> | undefined }) {
   const p = profile ?? {};
   return (
-    <Section number={7} title="Others">
+    <Section number={7} title={PROFILE_MODULES.others.label}>
       {hasValue(p.otherInformation) && <p className="text-sm whitespace-pre-wrap">{p.otherInformation}</p>}
     </Section>
   );

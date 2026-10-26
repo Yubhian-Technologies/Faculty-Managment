@@ -9,12 +9,13 @@ import { ProfileModuleTiles } from "@/components/faculty/FacultyProfileHub";
 import { ProfileIdentitySummary } from "@/components/shared/ProfileIdentitySummary";
 import { useAuth } from "@/hooks/useAuth";
 import { MyResumeDownloadButton } from "@/components/faculty/MyResumeDownloadButton";
+import { FacultyProfileRedirect } from "@/components/faculty/FacultyProfileRedirect";
 
 // College Admin has no nav entry into this page at all (see navConfig.ts's
 // My Profile item) - it's a role-login, not one continuous employee, so its
 // Name/Phone/password live in CollegeAdminAccountMenu off the sidebar's
 // account row instead. This page is Principal/VP only.
-export default function PrincipalProfilePage() {
+function PrincipalProfilePageContent() {
   const { user } = useAuth();
   if (!user) return null;
 
@@ -45,4 +46,9 @@ export default function PrincipalProfilePage() {
       />
     </div>
   );
+}
+
+// A login that has a faculty record is taken to the one faculty profile (the avatar's); anyone else keeps this page.
+export default function PrincipalProfilePage() {
+  return <FacultyProfileRedirect><PrincipalProfilePageContent /></FacultyProfileRedirect>;
 }

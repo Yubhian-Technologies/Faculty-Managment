@@ -69,7 +69,7 @@ describe("POST /students/[id]/create-login", () => {
     expect(h.auth.calls).toHaveLength(0);
   });
 
-  it("the same roll in ANOTHER college is refused (409) - roll numbers are globally unique - and the first account is untouched", async () => {
+  it("the same roll in ANOTHER college is refused (409) - Regd. Nos are globally unique - and the first account is untouched", async () => {
     const first = await (await createLogin(req({ password: PW }), params("s1"))).json();
     h.db.docs.set("colleges/c2/students/x1", { name: "Other College", rollNumber: "24-pa1a0501", status: "REGULAR" });
     h.session = { collegeId: "c2", uid: "office2", role: "COLLEGE_OFFICE" };

@@ -119,12 +119,12 @@ export default function CollegeDepartmentBrowsePage() {
             isLoading={loadingStudents}
             paginate
             defaultPageSize={10}
-            searchPlaceholder="Search students by name or roll number..."
+            searchPlaceholder="Search students by name or Regd. No..."
             searchKeys={["name", "rollNumber", "email"]}
             emptyTitle="No students in this department"
             columns={[
               { key: "name", header: "Name" },
-              { key: "rollNumber", header: "Roll Number" },
+              { key: "rollNumber", header: "Regd. No" },
               { key: "year", header: "Year", render: (r) => (r as unknown as BrowseStudent).year ?? "-" },
               { key: "section", header: "Section" },
               {

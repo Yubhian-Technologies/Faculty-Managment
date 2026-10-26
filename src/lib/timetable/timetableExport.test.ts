@@ -42,7 +42,7 @@ describe("timetable Excel export", () => {
       slot({ day: "TUE", periodNumber: 4, subjectId: "lab", subjectName: "CN Lab", assignmentId: "lab1" }),
     ]);
     // Day is column 1, Period 3 is column 4: the block fills columns 4-5 of the Tuesday row.
-    const tuesday = (() => { let found = 0; sheet.eachRow((row, n) => { if (row.getCell(1).value === "Tuesday") found = n; }); return found; })();
+    const tuesday = (() => { let found = 0; sheet.eachRow((row, n) => { if (row.getCell(1).value === "TUE") found = n; }); return found; })();
     expect(tuesday).toBeGreaterThan(0);
     expect(sheet.getCell(tuesday, 4).isMerged).toBe(true);
     expect(sheet.getCell(tuesday, 5).isMerged).toBe(true);
@@ -55,7 +55,7 @@ describe("timetable Excel export", () => {
       slot({ day: "MON", periodNumber: 2 }),
     ]);
     let monday = 0;
-    sheet.eachRow((row, n) => { if (row.getCell(1).value === "Monday") monday = n; });
+    sheet.eachRow((row, n) => { if (row.getCell(1).value === "MON") monday = n; });
     expect(sheet.getCell(monday, 2).isMerged).toBe(false);
   });
 
@@ -65,7 +65,7 @@ describe("timetable Excel export", () => {
       slot({ day: "MON", periodNumber: 1, subjectId: "l2", subjectName: "Chem Lab", assignmentId: "x2", labBatch: "Batch 2" }),
     ]);
     let monday = 0;
-    sheet.eachRow((row, n) => { if (row.getCell(1).value === "Monday") monday = n; });
+    sheet.eachRow((row, n) => { if (row.getCell(1).value === "MON") monday = n; });
     const text = textOf(sheet.getCell(monday, 2).value);
     expect(text).toContain("- - - -");
     expect(text).toContain("Batch 1");

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, FileCheck2, Pencil, Plus, Trash2, X } from "lucide-react";
+import { BookOpen, Briefcase, Check, FileCheck2, HeartHandshake, Home, Pencil, Plus, Target, Trash2, Users, X, type LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,7 +18,8 @@ import { sendJson } from "./recordApi";
 // drawn from its definition in lib/mentoring/recordSections.ts: rows are added, corrected and
 // removed in place, and saved one at a time.
 
-type Values = Record<string, string | boolean>;
+type Value = string | boolean | string[];
+type Values = Record<string, Value>;
 
 export interface EntryEditor {
   add: (entry: MentoringEntry) => void;
@@ -26,14 +27,32 @@ export interface EntryEditor {
   remove: (id: string) => void;
 }
 
-function cellText(col: EntryColumn, v: string | boolean | undefined): string {
+// An icon per meeting discussion category (by its stored value) for the choice cards.
+const CHOICE_ICONS: Record<string, LucideIcon> = {
+  ACADEMIC: BookOpen,
+  WELLBEING: HeartHandshake,
+  CAREER: Briefcase,
+  ENGAGEMENT: Users,
+  CAMPUS_FAMILY: Home,
+  GOALS: Target,
+};
+
+// The meeting form is lettered like the booklet; other sections show their columns in one block.
+const MEETING_GROUPS: { title: string; keys: string[] }[] = [
+  { title: "A. Meeting details", keys: ["date"] },
+  { title: "B. Discussion categories", keys: ["categories"] },
+  { title: "C. Action and follow-up", keys: ["purpose", "outcome", "studentSigned"] },
+];
+
+function cellText(col: EntryColumn, v: Value | undefined): string {
+  if (Array.isArray(v)) return v.map((x) => col.choices?.find((c) => c.value === x)?.label ?? x).join(", ");
   if (typeof v !== "string" || !v) return "";
   if (col.kind === "date") return formatEntryDate(v);
   if (col.kind === "month") return formatEntryMonth(v);
   return v;
 }
 
-function ColumnInput({ col, value, onChange, autoFocus }: { col: EntryColumn; value: string | boolean | undefined; onChange: (v: string | boolean) => void; autoFocus?: boolean }) {
+function ColumnInput({ col, value, onChange, autoFocus }: { col: EntryColumn; value: Value | undefined; onChange: (v: Value) => void; autoFocus?: boolean }) {
   const text = typeof value === "string" ? value : "";
   switch (col.kind) {
     case "textarea":
@@ -49,6 +68,30 @@ function ColumnInput({ col, value, onChange, autoFocus }: { col: EntryColumn; va
           <SelectContent>{(col.options ?? []).map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
         </Select>
       );
+    case "multiselect": {
+      const chosen = Array.isArray(value) ? value : [];
+      return (
+        <div className="grid gap-2.5 sm:grid-cols-2">
+          {(col.choices ?? []).map((c) => {
+            const on = chosen.includes(c.value);
+            const Icon = CHOICE_ICONS[c.value];
+            return (
+              <label
+                key={c.value}
+                className={`relative flex flex-col gap-1.5 rounded-lg border p-3 text-sm cursor-pointer transition-colors hover:bg-muted/50 ${on ? "border-primary bg-primary/5 ring-1 ring-primary" : "bg-background"}`}
+              >
+                <span className="flex items-center justify-between">
+                  {Icon ? <Icon className={`h-5 w-5 ${on ? "text-primary" : "text-muted-foreground"}`} /> : <span />}
+                  <Checkbox checked={on} onCheckedChange={(v) => onChange(v === true ? [...chosen, c.value] : chosen.filter((x) => x !== c.value))} />
+                </span>
+                <span className="font-medium">{c.label}</span>
+                {c.hint && <span className="text-xs text-muted-foreground">{c.hint}</span>}
+              </label>
+            );
+          })}
+        </div>
+      );
+    }
     case "check":
       return (
         <label className="flex items-center gap-2 text-sm h-9">
@@ -65,20 +108,37 @@ function EntryForm({
   section, initial, saving, onSave, onCancel,
 }: { section: Section; initial: Values; saving: boolean; onSave: (v: Values) => void; onCancel: () => void }) {
   const [values, setValues] = useState<Values>(initial);
-  const missingRequired = section.columns.some((c) => c.required && !(typeof values[c.key] === "string" && (values[c.key] as string).trim()));
+  const missingRequired = section.columns.some((c) => {
+    if (!c.required) return false;
+    const v = values[c.key];
+    return Array.isArray(v) ? v.length === 0 : !(typeof v === "string" && v.trim());
+  });
   return (
     <form
       className="rounded-lg border bg-muted/30 p-3 space-y-3 print:hidden"
       onSubmit={(e) => { e.preventDefault(); if (!missingRequired) onSave(values); }}
     >
-      <div className="grid gap-3 sm:grid-cols-2">
-        {section.columns.map((c, i) => (
-          <div key={c.key} className={c.kind === "textarea" ? "sm:col-span-2" : ""}>
-            <label className="text-xs text-muted-foreground mb-1 block">{c.label}{c.required ? " *" : ""}</label>
-            <ColumnInput col={c} value={values[c.key]} autoFocus={i === 0} onChange={(v) => setValues((prev) => ({ ...prev, [c.key]: v }))} />
+      {(section.key === "meetings"
+        ? MEETING_GROUPS.map((g) => ({ title: g.title, columns: g.keys.map((k) => section.columns.find((c) => c.key === k)).filter((c): c is EntryColumn => !!c) }))
+        : [{ title: "", columns: section.columns }]
+      ).map((group) => (
+        <div key={group.title} className="space-y-2">
+          {group.title && (
+            <div>
+              <h4 className="text-sm font-semibold">{group.title}</h4>
+              {group.columns.some((c) => c.kind === "multiselect") && <p className="text-xs text-muted-foreground">Select all categories discussed during the meeting.</p>}
+            </div>
+          )}
+          <div className="grid gap-3 sm:grid-cols-2">
+            {group.columns.map((c) => (
+              <div key={c.key} className={c.kind === "textarea" || c.kind === "multiselect" ? "sm:col-span-2" : ""}>
+                {c.kind !== "multiselect" && <label className="text-xs text-muted-foreground mb-1 block">{c.label}{c.required ? " *" : ""}</label>}
+                <ColumnInput col={c} value={values[c.key]} autoFocus={c === section.columns[0]} onChange={(v) => setValues((prev) => ({ ...prev, [c.key]: v }))} />
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </div>
+      ))}
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={saving}><X className="h-4 w-4 mr-1" /> Cancel</Button>
         <Button type="submit" size="sm" disabled={saving || missingRequired}><Check className="h-4 w-4 mr-1" /> {saving ? "Saving…" : "Save"}</Button>
@@ -218,6 +278,8 @@ export function EntrySectionView({
                       <td key={c.key} className="py-2 pr-3 whitespace-pre-wrap break-words">
                         {c.kind === "check"
                           ? (r.values[c.key] === true ? <Check className="h-4 w-4 text-emerald-600" aria-label="Yes" /> : <span className="text-muted-foreground">—</span>)
+                          : c.kind === "multiselect" && Array.isArray(r.values[c.key])
+                          ? <div className="flex flex-wrap gap-1">{(r.values[c.key] as string[]).map((x) => <Badge key={x} variant="secondary" className="font-normal">{cellText(c, [x])}</Badge>)}</div>
                           : (cellText(c, r.values[c.key]) || <span className="text-muted-foreground">—</span>)}
                       </td>
                     ))}

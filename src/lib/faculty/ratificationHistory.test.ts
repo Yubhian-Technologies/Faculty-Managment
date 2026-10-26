@@ -1,5 +1,157 @@
 import { describe, expect, it } from "vitest";
-import { normalizeRatificationRecords, ratificationRecordsFromDoc } from "./ratificationHistory";
+import {
+  normalizeRatificationRecords, ratificationRecordsFromDoc, ratifiedDesignationChoices, matchRatifiedDesignation,
+  RATIFICATION_STATUS_CHOICES, RATIFICATION_RESULT_CHOICES, ratificationStatusStep, ratificationResultStep,
+  isLegacyRatificationStatus, isRatified, ratificationDisplay, ratificationStatusPatch, blankRatificationRecord,
+} from "./ratificationHistory";
+import { buildPersonalDetailsUpdate, normalizeRatificationStatus } from "@/lib/firestore/personalDetails";
+
+describe("Ratified Designation choices", () => {
+  const labels = (names: string[]) => ratifiedDesignationChoices(names).map((c) => c.label);
+
+  it("shows the catalogue's three cadre designations by full name and adds Principal after them", () => {
+    expect(labels(["Professor", "Assistant Professor", "Associate Professor", "Lecturer", "HOD"]))
+      .toEqual(["Professor", "Assistant Professor", "Associate Professor", "Principal"]);
+    expect(ratifiedDesignationChoices(["Professor"]).at(-1)).toEqual({ value: "Principal", label: "Principal" });
+  });
+
+  it("stores the catalogue's own spelling (legacy codes included) and shows its full name, Principal once", () => {
+    const c = ratifiedDesignationChoices(["PROFESSOR", "ASSISTANT_PROFESSOR", "ASSOCIATE_PROFESSOR", "Principal"]);
+    expect(c.map((x) => x.value)).toEqual(["PROFESSOR", "ASSISTANT_PROFESSOR", "ASSOCIATE_PROFESSOR", "Principal"]);
+    expect(c.map((x) => x.label)).toEqual(["Professor", "Assistant Professor", "Associate Professor", "Principal"]);
+  });
+
+  it("always offers Principal, even while the catalogue is loading or fails", () => {
+    expect(labels([])).toEqual(["Principal"]);
+  });
+
+  it("matches a stored value to its choice by meaning, not spelling", () => {
+    const c = ratifiedDesignationChoices(["PROFESSOR", "ASSISTANT_PROFESSOR"]);
+    expect(matchRatifiedDesignation("Assistant Professor", c)).toBe("ASSISTANT_PROFESSOR");
+    expect(matchRatifiedDesignation("principal", c)).toBe("Principal");
+    expect(matchRatifiedDesignation("Lecturer", c)).toBeUndefined();
+    expect(matchRatifiedDesignation("", c)).toBeUndefined();
+  });
+});
+
+describe("Ratification Status flow", () => {
+  it("Status offers Attended first, then Not Yet Attended; Decision offers Ratified / Not Ratified", () => {
+    expect([...RATIFICATION_STATUS_CHOICES]).toEqual(["Attended", "Not Yet Attended"]);
+    expect([...RATIFICATION_RESULT_CHOICES]).toEqual(["Ratified", "Not Ratified"]);
+  });
+
+  // Every combination the two dropdowns can produce -> what is stored, and what each dropdown shows back.
+  // [stored status, ratificationAttended marker, Status box, Decision box, details shown, shown as-is (legacy)]
+  it.each([
+    ["Not Yet Attended", undefined, "Not Yet Attended", "",           false, false],
+    ["Attended",         undefined, "Attended",         "",           false, false],
+    ["Ratified",         undefined, "Attended",         "Ratified",   true,  false],
+    ["Not Ratified",     true,      "Attended",         "Not Ratified", false, false],
+    // an OLDER "Not Ratified" (no marker): shown exactly as before - in the Status box, no Decision
+    ["Not Ratified",     undefined, "Not Ratified",     "",           false, true],
+    ["Not Ratified",     false,     "Not Ratified",     "",           false, true],
+  ])("stored %s (marker %s) -> Status '%s', Decision '%s', details shown %s, as-is %s", (stored, marker, step, result, details, legacy) => {
+    expect(ratificationStatusStep(stored, marker)).toBe(step);
+    expect(ratificationResultStep(stored, marker)).toBe(result);
+    expect(isRatified(stored)).toBe(details);
+    expect(isLegacyRatificationStatus(stored, marker)).toBe(legacy);
+  });
+
+  it("any other stored text is never guessed into the new flow: shown as it is, flagged legacy", () => {
+    for (const old of ["Not Applicable", "Pending"]) {
+      expect(ratificationStatusStep(old)).toBe(old);
+      expect(ratificationResultStep(old)).toBe("");
+      expect(isRatified(old)).toBe(false);
+      expect(isLegacyRatificationStatus(old)).toBe(true);
+    }
+    expect(isLegacyRatificationStatus("")).toBe(false);
+    expect(isLegacyRatificationStatus(undefined)).toBe(false);
+  });
+
+  it("displays Status and Decision for the view", () => {
+    expect(ratificationDisplay("Ratified")).toEqual({ status: "Attended", result: "Ratified" });
+    expect(ratificationDisplay("Not Ratified", true)).toEqual({ status: "Attended", result: "Not Ratified" });
+    expect(ratificationDisplay("Not Ratified")).toEqual({ status: "Not Ratified" }); // older record, as before
+    expect(ratificationDisplay("Attended")).toEqual({ status: "Attended" });
+    expect(ratificationDisplay("Not Yet Attended")).toEqual({ status: "Not Yet Attended" });
+    expect(ratificationDisplay("Not Applicable")).toEqual({ status: "Not Applicable" });
+    expect(ratificationDisplay("")).toEqual({});
+  });
+
+  describe("ratificationStatusPatch (what a dropdown pick changes)", () => {
+    it("picking the Decision Not Ratified stores 'Not Ratified' and sets the attended marker", () => {
+      expect(ratificationStatusPatch("Attended", undefined, "Not Ratified", "result", true)).toEqual({ ratificationStatus: "Not Ratified", ratificationAttended: true });
+    });
+    it("picking Ratified / Attended / Not Yet Attended never adds the marker to an unmarked record", () => {
+      for (const [pick, level] of [["Ratified", "result"], ["Attended", "status"], ["Not Yet Attended", "status"]] as const) {
+        expect(ratificationStatusPatch("Attended", undefined, pick, level, true)).not.toHaveProperty("ratificationAttended");
+      }
+    });
+    it("an OLDER Not Ratified record: picking Attended stores 'Attended' (decision still to choose); nothing is assumed", () => {
+      expect(ratificationStatusPatch("Not Ratified", undefined, "Attended", "status", true)).toEqual({ ratificationStatus: "Attended" });
+    });
+    it("an older Not Ratified record picking Not Yet Attended stores that, with no marker", () => {
+      expect(ratificationStatusPatch("Not Ratified", undefined, "Not Yet Attended", "status", true)).toEqual({ ratificationStatus: "Not Yet Attended" });
+    });
+    it("Attended picked again on a decided Not Ratified keeps it (and its marker is left alone)", () => {
+      expect(ratificationStatusPatch("Not Ratified", true, "Attended", "status", true)).toEqual({ ratificationStatus: "Not Ratified" });
+    });
+    it("moving a marked record away from Not Ratified switches the marker off", () => {
+      expect(ratificationStatusPatch("Not Ratified", true, "Ratified", "result", true)).toEqual({ ratificationStatus: "Ratified", ratificationAttended: false });
+      expect(ratificationStatusPatch("Not Ratified", true, "Not Yet Attended", "status", true)).toEqual({ ratificationStatus: "Not Yet Attended", ratificationAttended: false });
+    });
+    it("staff / user records (no history list) still clear the single proceedings pair when not Ratified", () => {
+      expect(ratificationStatusPatch("Ratified", undefined, "Not Ratified", "result", false))
+        .toEqual({ ratificationStatus: "Not Ratified", ratificationAttended: true, ratificationProceedingsNumber: "", ratificationDate: "" });
+    });
+    it("the saved update carries the marker only when it was sent", () => {
+      expect(buildPersonalDetailsUpdate({ ratificationStatus: "Not Ratified", ratificationAttended: true })).toMatchObject({ ratificationStatus: "Not Ratified", ratificationAttended: true });
+      expect(buildPersonalDetailsUpdate({ ratificationStatus: "Not Ratified" })).not.toHaveProperty("ratificationAttended");
+    });
+  });
+
+  it("import understands the new statuses and still the older ones", () => {
+    expect(normalizeRatificationStatus("attended")).toBe("Attended");
+    expect(normalizeRatificationStatus("Not Yet Attended")).toBe("Not Yet Attended");
+    expect(normalizeRatificationStatus("not  yet attended")).toBe("Not Yet Attended");
+    expect(normalizeRatificationStatus("Ratified")).toBe("Ratified");
+    expect(normalizeRatificationStatus("Not Ratified")).toBe("Not Ratified");
+    expect(normalizeRatificationStatus("pending")).toBe("Not Ratified");
+  });
+
+  it("saving Ratified keeps the rows as stored - the designation text is not rewritten", () => {
+    const out = buildPersonalDetailsUpdate({
+      ratificationStatus: "Ratified",
+      ratifications: [{ designation: "ASSISTANT_PROFESSOR", proceedingsNumber: "RP-1", date: "2019-01-01" }],
+    });
+    expect(out.ratificationStatus).toBe("Ratified");
+    expect(out.ratifications).toEqual([{ designation: "ASSISTANT_PROFESSOR", proceedingsNumber: "RP-1", date: "2019-01-01" }]);
+  });
+
+  it("switching to Not Yet Attended / Not Ratified with the rows still sent keeps them (hidden, not deleted)", () => {
+    const rows = [{ designation: "Professor", proceedingsNumber: "RP-2", date: "2020-02-02" }];
+    for (const status of ["Not Yet Attended", "Not Ratified", "Attended"]) {
+      expect(buildPersonalDetailsUpdate({ ratificationStatus: status, ratifications: rows }).ratifications).toEqual(rows);
+    }
+  });
+
+  it("an untouched default blank row is not stored", () => {
+    expect(buildPersonalDetailsUpdate({ ratificationStatus: "Ratified", ratifications: [blankRatificationRecord()] }).ratifications).toEqual([]);
+  });
+
+  it("a status save without the history array never touches stored ratification rows", () => {
+    expect(buildPersonalDetailsUpdate({ ratificationStatus: "Ratified" })).not.toHaveProperty("ratifications");
+  });
+
+  it("the single Proceedings Number/Date pair (staff / user records) is cleared for every not-ratified status, and left for Ratified", () => {
+    for (const status of ["Not Yet Attended", "Attended", "Not Ratified"]) {
+      const out = buildPersonalDetailsUpdate({ ratificationStatus: status });
+      expect(out.ratificationProceedingsNumber).toBe("");
+      expect(out.ratificationDate).toBe("");
+    }
+    expect(buildPersonalDetailsUpdate({ ratificationStatus: "Ratified", ratificationProceedingsNumber: "P-1" }).ratificationProceedingsNumber).toBe("P-1");
+  });
+});
 
 describe("ratificationRecordsFromDoc", () => {
   it("returns the array as-is once a record has been migrated", () => {

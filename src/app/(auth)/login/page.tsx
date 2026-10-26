@@ -166,7 +166,7 @@ function loginFailureMessage(err: unknown): string {
 }
 
 // Single, plain-looking form for both staff and students - no mode switch,
-// no college picker, and nothing on screen names "Roll Number" specifically.
+// no college picker, and nothing on screen names "Regd. No" specifically.
 // The identifier field auto-routes purely on its own shape: containing "@"
 // signs in directly as a staff email; anything else is resolved server-side
 // (across every college - see resolve-student-login/route.ts) to a student's
@@ -201,7 +201,7 @@ function LoginForm() {
         credential = await signInWithEmailAndPassword(auth, identifier.trim(), password);
       } else {
         try {
-        // Student Roll Number sign-in:
+        // Student Regd. No sign-in:
         // 1. Try the deterministic Auth email: <rollNumber>@students.internal
         //    (no database read) - the identity for any plain roll (letters/digits).
         const directEmail = studentLoginEmail(identifier.trim());
@@ -210,7 +210,7 @@ function LoginForm() {
         } catch (directErr: unknown) {
           // 2. Otherwise ask the backend which email(s) this roll belongs to
           //    (rolls with punctuation or different formatting, changed rolls) and
-          //    try each with the password typed. Roll numbers are globally unique,
+          //    try each with the password typed. Regd. Nos are globally unique,
           //    so this is at most the roll's normalised and legacy emails.
           const errCode = (directErr as { code?: string })?.code;
           if (errCode !== "auth/user-not-found" && errCode !== "auth/invalid-credential") throw directErr;
@@ -290,7 +290,7 @@ function LoginForm() {
         <Card className="shadow-xl border-0">
           <CardHeader className="space-y-1 pb-4">
             <CardTitle className="text-xl">Welcome back</CardTitle>
-            <CardDescription>Enter your email, employee ID or roll number to sign in</CardDescription>
+            <CardDescription>Enter your email, employee ID or Regd. No to sign in</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={onSubmit} className="space-y-4" noValidate>
@@ -299,7 +299,7 @@ function LoginForm() {
                 <Input
                   id="identifier"
                   type="text"
-                  placeholder="Email or Roll Number"
+                  placeholder="Email or Regd. No"
                   autoComplete="username"
                   autoFocus
                   value={identifier}
