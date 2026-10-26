@@ -1234,7 +1234,7 @@ function HodStudentsContent() {
   const studentsHeader = (
     <PageHeader
       title="Students"
-      description="Your department's students, plus every branch grouped under it."
+      description="View and manage student records across your department and its associated branches."
       actions={<StudentsViewTabs tabs={HOD_VIEWS} value={view} onChange={setView} />}
     />
   );
@@ -1460,7 +1460,7 @@ function HodStudentsContent() {
           ) : (
             <>
               <span className="text-xs text-muted-foreground">
-                Tick students below to move or assign several to a section at once.
+                Select students to move or assign multiple records to a section at once.
               </span>
               {hasLoaded && unassignedTotal > 0 && (
                 <Button size="sm" variant="outline" className="ml-auto" onClick={() => void selectAllUnassigned()} disabled={isSelecting}>
@@ -1536,9 +1536,9 @@ function HodStudentsContent() {
         {!hasLoaded ? (
           <div className="flex flex-col items-center justify-center py-20 text-center border rounded-lg bg-card">
             <Users className="h-10 w-10 text-muted-foreground mb-3" />
-            <p className="font-medium text-base">Click Load to view students</p>
+            <p className="font-medium text-base">No Student Records Loaded</p>
             <p className="text-sm text-muted-foreground mt-1 max-w-sm">
-              Pick a course, department or year above (or leave them as all) and click Load. Students come in pages, so only the ones you look at are fetched.
+              Select the required filters and click Load to view student records.
             </p>
           </div>
         ) : isFetching && students.length === 0 ? (

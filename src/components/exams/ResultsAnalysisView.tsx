@@ -294,7 +294,12 @@ export function ResultsAnalysisView({ title = "Results Analysis", description }:
 
       {!picked ? (
         <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
-          {isLoadingClasses ? "Loading…" : "No published results yet. They appear here once the Exam Cell publishes a results sheet."}
+          {isLoadingClasses ? "Loading…" : (
+            <>
+              <p className="font-medium text-foreground">No Published Results Available</p>
+              <p className="mt-1">Results will appear here once the Examination Cell publishes the relevant results.</p>
+            </>
+          )}
         </div>
       ) : !applied ? (
         <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">

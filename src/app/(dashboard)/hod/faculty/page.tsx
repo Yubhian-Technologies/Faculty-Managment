@@ -591,9 +591,9 @@ function HODFacultyContent() {
     <div className="space-y-6">
       <PageHeader
         title="Staff Profiles"
-        // "Department of Information Technology" - the department chosen in "Working as" (all of them, joined,
-        // for a head of several with none picked). The old generic line only when no department is known.
-        description={myDepartments.length > 0 ? myDepartments.map((d) => `Department of ${d}`).join(" · ") : "Staff records of the Department"}
+        // Names the department chosen in "Working as" (all of them, joined, for a head of several
+        // with none picked); "your department" only when no department is known.
+        description={myDepartments.length > 0 ? `Manage teaching and supporting staff records for the ${myDepartments.map((d) => `Department of ${d}`).join(" · ")}.` : "Manage teaching and supporting staff records for your department."}
         actions={
           <div className="flex items-center gap-2">
             {selectedIds.size > 0 && (
