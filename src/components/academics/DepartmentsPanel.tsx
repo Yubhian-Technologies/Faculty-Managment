@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { FreshmanDepartmentBadge } from "@/components/shared/FreshmanDepartmentBadge";
+import { DepartmentRoleBadge } from "@/components/shared/DepartmentRoleBadge";
 import { toast } from "@/hooks/useToast";
 import { yearOrdinalLabel } from "@/lib/college/academicYears";
 import { resolveDepartmentCourseScope, type DepartmentWithId } from "@/lib/college/academicStructure";
@@ -917,6 +918,7 @@ export function DepartmentsPanel() {
                         {dept.code}
                       </span>
                       <FreshmanDepartmentBadge departmentId={dept.id} allDepartments={departments as DepartmentWithId[]} />
+                      <DepartmentRoleBadge departmentId={dept.id} allDepartments={departments as DepartmentWithId[]} />
                       {!dept.isActive && <span className="text-[10px] font-medium text-orange-500 uppercase tracking-wide">Inactive</span>}
                     </div>
                     <div className="flex gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>

@@ -20,6 +20,29 @@ import { assignSeat, ensureHodSeatForDepartment, hodSeatHoldersByDepartment, ren
 import { canAssignSeat } from "@/lib/roles/seatRoles";
 import { forgetHeldRoles } from "@/lib/auth/liveRoles";
 import { resolveDepartmentCourseSelections, type DepartmentCourseSelection, type ResolvedDepartmentCourse } from "@/lib/departments/courseSelections";
+import { syncNeighbourLinksForCollege } from "@/lib/departments/neighbourLinks";
+import { deriveDepartmentRole, type RoleInput } from "@/lib/departments/departmentRole";
+
+// Phase 2: purely informative. Re-derives the department's role/contradiction
+// flags (deriveDepartmentRole) from the FRESH post-write state and returns a
+// human-readable warning string when one of Phase 0's known contradictions
+// (e.g. a GHOST that also claims its own Years Taught) would newly apply.
+// Never blocks, never rejects, never changes the write that already
+// committed - see Department.departmentRole's own doc-comment (src/types/
+// core.ts) for why this field is advisory-only everywhere it's consumed.
+async function departmentRoleWarning(
+  db: FirebaseFirestore.Firestore,
+  collegeId: string,
+  deptId: string
+): Promise<string | undefined> {
+  const snap = await db.collection("colleges").doc(collegeId).collection("departments").get();
+  const all = snap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as ({ id: string } & RoleInput)[];
+  const dept = all.find((d) => d.id === deptId);
+  if (!dept) return undefined;
+  const { flags } = deriveDepartmentRole(dept, all);
+  if (flags.length === 0) return undefined;
+  return `This department may be misconfigured (${flags.join(", ")}) - run scripts/audit-department-roles.mjs for details. Nothing was blocked; review when convenient.`;
+}
 
 // yyyy-mm-dd, the same shape StudentRecord.dateOfBirth already uses.
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -371,6 +394,15 @@ export async function POST(request: Request) {
     await ensureHodSeatForDepartment(db, collegeId, { id: ref.id, name: trimmedName }, { uid: session.uid, name: session.role === "HOD" ? "HOD" : "Principal" })
       .catch((e) => console.error("[college/departments POST] HOD seat creation failed:", e));
 
+    // A new department can arrive with managedDepartments already set -
+    // resync the advisory neighbourLinks mirror (src/lib/departments/
+    // neighbourLinks.ts) for the whole college. Best-effort, same pattern as
+    // the HOD seat creation above - never blocks or undoes the create.
+    if (managedDepartments.length > 0) {
+      await syncNeighbourLinksForCollege(db, collegeId)
+        .catch((e) => console.error("[college/departments POST] neighbourLinks resync failed:", e));
+    }
+
     await db
       .collection("colleges")
       .doc(collegeId)
@@ -390,7 +422,8 @@ export async function POST(request: Request) {
         timestamp: now,
       });
 
-    return NextResponse.json({ deptId: ref.id }, { status: 201 });
+    const roleWarning = await departmentRoleWarning(db, collegeId, ref.id).catch(() => undefined);
+    return NextResponse.json({ deptId: ref.id, ...(roleWarning ? { warning: roleWarning } : {}) }, { status: 201 });
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
@@ -582,6 +615,14 @@ export async function DELETE(request: Request) {
     // a new id and reattaches nothing).
     releaseDepartmentKeys(batch as unknown as { delete(ref: never): unknown }, db.collection("colleges").doc(collegeId).collection("departmentKeys"), { name: dept.name, code: dept.code });
     await batch.commit();
+
+    // The deleted department may have been managing branches (its own
+    // managedDepartments, already stripped from THIS doc by the delete
+    // above) - resync the advisory neighbourLinks mirror for the whole
+    // college so those branches' records stop pointing at a manager that no
+    // longer exists. Best-effort, never blocks or undoes the delete.
+    await syncNeighbourLinksForCollege(db, collegeId)
+      .catch((e) => console.error("[college/departments DELETE] neighbourLinks resync failed:", e));
 
     return NextResponse.json({ ok: true });
   } catch (err) {
@@ -1129,6 +1170,19 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "isFreshman must be a boolean" }, { status: 400 });
     }
 
+    // Any field findBranchManager()/resolveNeighbourLinks() reads for SOME
+    // department in the college - a change here can shift who manages whom,
+    // so the advisory Department.neighbourLinks mirror (src/lib/departments/
+    // neighbourLinks.ts) needs resyncing after the real write below commits.
+    // Advisory/display only - this never gates or changes the write itself.
+    const neighbourLinksMightHaveChanged =
+      updates.managedDepartments !== undefined ||
+      updates.secondaryDepartments !== undefined ||
+      updates.name !== undefined ||
+      updates.assignedYears !== undefined ||
+      Boolean(courseScope) ||
+      clearParentDepartmentId;
+
     const now = new Date();
 
     const fullUpdate = {
@@ -1202,7 +1256,13 @@ export async function PATCH(request: Request) {
       }
     }
 
-    return NextResponse.json({ ok: true, ...(cascade ? { cascade } : {}) });
+    if (neighbourLinksMightHaveChanged) {
+      await syncNeighbourLinksForCollege(db, session.collegeId)
+        .catch((e) => console.error("[college/departments PATCH] neighbourLinks resync failed:", e));
+    }
+
+    const roleWarning = await departmentRoleWarning(db, session.collegeId, deptId).catch(() => undefined);
+    return NextResponse.json({ ok: true, ...(cascade ? { cascade } : {}), ...(roleWarning ? { warning: roleWarning } : {}) });
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
