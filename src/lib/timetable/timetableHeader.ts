@@ -7,7 +7,8 @@
 //
 // Kept in one place so the two downloads can't drift apart.
 
-import { SUBJECT_TYPE_LABELS, type SubjectType } from "@/types";
+import { SUBJECT_TYPE_LABELS, type SubjectType, type TeachingAssignment, type TimetableSlot } from "@/types";
+import { subjectAbbreviation } from "./subjectAbbreviation";
 import { toRoman, type AllocationEntry } from "./gridModel";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -184,4 +185,25 @@ export function facultyClassLabel(parts: { courseName?: string; year?: number; s
   const sem = parts.semester != null ? `${parts.semester % 2 === 1 ? "I" : "II"} Sem` : "";
   const base = [yearCourse, sem].filter(Boolean).join(" ");
   return parts.sectionName?.trim() ? `${base} - ${parts.sectionName.trim()}` : base;
+}
+
+/**
+ * The bottom list of a faculty timetable - one row per class + subject the grid shows:
+ * "IV B.Tech I Sem - CSE-A" | acronym | subject name. Scoped to the assignments the given slots use.
+ */
+export function buildFacultyClassRows(
+  slots: Pick<TimetableSlot, "assignmentId" | "semester">[],
+  assignments: Iterable<TeachingAssignment>
+): { cls: string; acr: string; name: string }[] {
+  const inGrid = new Set(slots.map((s) => s.assignmentId));
+  const rows = new Map<string, { cls: string; acr: string; name: string }>();
+  for (const a of assignments) {
+    if (!inGrid.has(a.id)) continue;
+    const semester = slots.find((sl) => sl.assignmentId === a.id)?.semester ?? a.semester;
+    const cls = facultyClassLabel({ courseName: a.courseName, year: a.year, semester, sectionName: a.sectionName });
+    const acr = subjectAbbreviation(a.subjectName, a.shortCode) || "—";
+    const name = a.subjectName ?? "—";
+    rows.set(`${cls}|${acr}|${name}`, { cls, acr, name });
+  }
+  return Array.from(rows.values());
 }

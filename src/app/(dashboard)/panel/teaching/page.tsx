@@ -18,6 +18,7 @@ import { renderHtmlToPdf } from "@/lib/pdf/htmlToPdf";
 import { buildFacultyTimetablePdfHtml, formatTime12h } from "@/lib/timetable/facultyTimetablePdf";
 import { downloadFacultyTimetableXlsx } from "@/lib/timetable/timetableExport";
 import { WeekNavigator } from "@/components/timetable/WeekNavigator";
+import { FacultyTimetableFooter, FacultyTimetableLetterhead, facultyTimetableDepartment } from "@/components/timetable/FacultyTimetableSheet";
 import type { TeachingAssignment, TimetableSlot, DayOfWeek, CourseYearTiming, PeriodTiming, Course, Department } from "@/types";
 import { DAY_LABELS } from "@/types";
 
@@ -153,6 +154,12 @@ export default function TeachingLoadPage() {
   const maxPeriod = filteredSlots.reduce((max, s) => Math.max(max, s.periodNumber), timingPeriodCount);
   const periods = Array.from({ length: maxPeriod }, (_, i) => i + 1);
   const displaySlots = typeFilter === "ALL" ? filteredSlots : filteredSlots.filter((s) => s.subjectType === typeFilter);
+  // What the letterhead and the bottom list describe: the same standing slots the downloads use.
+  const sheetSlots = displaySlots.filter((s) => !s.id.startsWith("substitute_"));
+  const sheetSemesterLabel = (() => {
+    const nums = Array.from(new Set(sheetSlots.map((sl) => sl.semester).filter((n): n is number => n != null))).sort((a, b) => a - b);
+    return nums.length > 0 ? nums.join(", ") : "—";
+  })();
 
 
     // Each course-year's own period-by-period breakdown, resolved once up
@@ -348,6 +355,13 @@ export default function TeachingLoadPage() {
             </Button>
           </div>
         </div>
+        <FacultyTimetableLetterhead
+          college={collegeInfo ?? undefined}
+          facultyName={user?.name ?? ""}
+          departmentName={facultyTimetableDepartment(user?.department, sheetSlots, assignmentById)}
+          academicYear={sheetSlots.find((s) => s.academicYear)?.academicYear}
+          semesterLabel={sheetSemesterLabel}
+        />
         <div className="overflow-x-auto md:overflow-x-visible rounded-lg border">
           <table className="w-full text-xs md:table-fixed border-collapse">
             <colgroup>
@@ -450,6 +464,12 @@ export default function TeachingLoadPage() {
             </tbody>
           </table>
         </div>
+        <FacultyTimetableFooter
+          college={collegeInfo ?? undefined}
+          departmentName={facultyTimetableDepartment(user?.department, sheetSlots, assignmentById)}
+          slots={sheetSlots}
+          assignmentById={assignmentById}
+        />
         </>
       )}
     </div>
