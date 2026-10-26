@@ -214,10 +214,15 @@ export function StudentInfoPage({ api, entries, editor }: { api: string; entries
       {data.missingCount > 0 ? (
         <div className="flex items-start gap-2 rounded-lg border border-amber-300/60 bg-amber-50 dark:bg-amber-950/20 px-3 py-2 text-sm print:hidden">
           <Info className="h-4 w-4 mt-0.5 shrink-0 text-amber-600" />
-          <p>
-            <strong>{data.missingCount} detail{data.missingCount === 1 ? " is" : "s are"} missing</strong> on the student&apos;s record. Fill them in below as the student tells you.
-            Details already on the student&apos;s record (<Lock className="inline h-3 w-3 -mt-0.5" />) are changed from their profile, not here.
-          </p>
+          <div className="space-y-1">
+            <p>
+              <strong>{data.missingCount} detail{data.missingCount === 1 ? " is" : "s are"} missing</strong>{" "}
+              on the student&apos;s record. Fill them in below as the student tells you.
+            </p>
+            <p>
+              Details already on the student&apos;s record (<Lock className="inline h-3 w-3 -mt-0.5" />) are changed from their profile, not here.
+            </p>
+          </div>
         </div>
       ) : (
         <p className="text-xs text-muted-foreground print:hidden"><Lock className="inline h-3 w-3 -mt-0.5" /> Details are read from the student&apos;s own record.</p>
