@@ -43,7 +43,7 @@ export default function HodMentoringPage() {
     <div>
       <PageHeader
         title="Mentoring"
-        description="Assign students to a faculty member who follows their progress - profile, attendance, results and internal marks."
+        description="Assign faculty mentors to students and monitor their academic progress, attendance, results, and internal assessment performance."
       />
       <div className="flex flex-wrap gap-1 border-b mb-4">
         {VIEWS.map((v) => (
@@ -274,7 +274,7 @@ function AssignView({ onChanged }: { onChanged: () => void }) {
         </CardContent>
       </Card>
 
-      {!sectionId && <p className="text-sm text-muted-foreground">{sections.length === 0 ? "No sections of yours to assign." : "Pick a course, year and section to see its students."}</p>}
+      {!sectionId && <p className="text-sm text-muted-foreground">{sections.length === 0 ? "No sections of yours to assign." : <><span className="font-medium text-foreground">No Section Selected.</span> Select a course, year, and section to view students and assign faculty mentors.</>}</p>}
       {sectionId && !students && <p className="text-sm text-muted-foreground">Loading…</p>}
 
       {sectionId && students && (

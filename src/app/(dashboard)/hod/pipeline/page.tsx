@@ -16,7 +16,7 @@ export default function HiringPipelinePage() {
         title="Hiring Pipeline"
         description={
           scope === "active"
-            ? "Active positions — from request to hiring results in one view"
+            ? "Track active recruitment requests and monitor hiring progress from initiation to completion."
             : "Completed and rejected hiring requests"
         }
         actions={

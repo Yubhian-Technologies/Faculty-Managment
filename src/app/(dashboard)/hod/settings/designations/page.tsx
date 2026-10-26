@@ -8,7 +8,7 @@ export default function HodDesignationsSettingsPage() {
     <div className="max-w-2xl space-y-6">
       <PageHeader
         title="Supporting Staff Designations"
-        description="The job titles your department's Supporting Staff can be added under"
+        description="Manage supporting staff designations available for assignment within your department."
       />
       <DesignationCatalogCard category="TECHNICAL" />
     </div>

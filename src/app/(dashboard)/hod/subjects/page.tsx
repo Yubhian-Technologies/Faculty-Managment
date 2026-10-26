@@ -385,7 +385,7 @@ export default function HODSubjectsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Subjects"
-        description="Subjects assigned to your department for a semester, and their hours/credits"
+        description="View department subjects, weekly teaching hours, and credit details by course, year, and semester."
       />
 
       {isLoading ? (

@@ -232,7 +232,9 @@ export function FacultyProfileCompletionView({ role }: { role: "HOD" | "PRINCIPA
     <div className="space-y-6">
       <PageHeader
         title="Staff Profile Completion Statistics"
-        description="How much of each faculty member's own profile is filled in, section by section. Click a row to see the breakdown."
+        description={role === "HOD"
+          ? "Monitor faculty profile completion across your department. Select a faculty member to view detailed completion statistics."
+          : "How much of each faculty member's own profile is filled in, section by section. Select a faculty record to view a detailed breakdown of profile completion."}
         actions={
           hasLoaded && rows.length > 0 ? (
             <Button variant="outline" onClick={handleExport}>
