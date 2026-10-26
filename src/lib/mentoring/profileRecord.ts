@@ -99,7 +99,7 @@ const GROUPS: { id: RecordProfileGroup["id"]; title: string; fields: FieldDef[] 
       f("entranceType", "Entrance exam", "text", { rosterKey: "entranceType" }),
       f("entranceHallTicket", "Hall ticket number", "text"),
       f("entranceYear", "Year of exam", "text"),
-      f("entranceRank", "Rank", "text", { rosterKey: "entranceRank", required: true }),
+      f("entranceRank", "Rank", "text", { rosterKey: "entranceRank" }),
     ],
   },
 ];
@@ -224,6 +224,18 @@ function studentValue(def: FieldDef, student: Source): string {
 
 function viewOf(def: FieldDef, student: Source, overrides: Record<string, string>, isHod: boolean): RecordFieldView {
   const base = { key: def.key, label: def.label, kind: def.kind };
+  if (def.rosterKey) {
+    // The student's own record is the only source: shown as it is, never asked again here (a blank is
+    // filled on the student's record by the College Office / the student). An entry a mentor or HOD
+    // made in earlier versions is still shown while the record has nothing.
+    const own = studentValue(def, student);
+    if (own) return { ...base, value: own, source: "STUDENT", editable: false };
+    const hod = text(overrides[`${HOD_PREFIX}${def.key}`]);
+    if (hod) return { ...base, value: hod, source: "HOD", editable: false };
+    const added = text(overrides[def.key]);
+    if (added) return { ...base, value: added, source: "MENTOR", editable: false };
+    return { ...base, value: "", source: null, editable: false };
+  }
   const hodEdit = text(overrides[`${HOD_PREFIX}${def.key}`]);
   if (hodEdit) return { ...base, value: hodEdit, source: "HOD", editable: isHod && !def.locked };
   const own = studentValue(def, student);
@@ -250,7 +262,12 @@ export function buildRecordProfile(student: Source, overrides: Record<string, st
   const all = [...groups.flatMap((g) => g.fields), ...qualifying.flatMap((q) => [q.institution, q.yearOfPass, q.board, q.percentage])];
   // Hostel name / room only count as missing for a hosteller.
   const missing = all.filter((x) => x.editable && !x.value && (hosteller || !HOSTEL_DETAIL_KEYS.includes(x.key)) && (hasEntrance || !ENTRANCE_DETAIL_KEYS.includes(x.key)));
-  const otherGroups = buildOwnProfileGroups(student as Partial<StudentRecord>, { includeEmpty: true, exclude: coveredRosterKeys(student) });
+  const otherGroups = buildOwnProfileGroups(student as Partial<StudentRecord>, { includeEmpty: true, exclude: coveredRosterKeys(student) })
+    // The qualifying table above is where Class X / XII / Diploma are filled in; its leftover columns
+    // (hall ticket, marks, grade points, degree) are listed here only when the record holds a value, so
+    // an empty copy of what was just filled in above never reappears.
+    .map((g) => (g.title === "Previous Education" ? { ...g, rows: g.rows.filter((r) => r.value) } : g))
+    .filter((g) => g.rows.length > 0);
   const legacy = LEGACY_OVERRIDE_LABELS.filter(([k]) => text(overrides[k])).map(([k, label]) => ({ label, value: text(overrides[k]) }));
   if (legacy.length > 0) otherGroups.push({ title: "Earlier entries by the mentor (no longer asked)", rows: legacy });
   return { groups, qualifying, otherGroups, missingCount: missing.length };
@@ -278,6 +295,7 @@ export function cleanProfileOverrides(student: Source, overrides: Record<string,
   for (const key of keys) {
     const def = FIELD_DEFS.get(key);
     if (!def || def.locked) return { ok: false, status: 400, error: `${key} cannot be filled in here` };
+    if (def.rosterKey) return { ok: false, status: 409, error: `${def.label} comes from the student's own record - it is changed there, not here` };
     const own = studentValue(def, student);
     const hodKey = `${HOD_PREFIX}${key}`;
     // The HOD's correction of a detail is kept apart (hod_<key>) and wins over the student's own value.
@@ -355,12 +373,10 @@ export function cleanProfileOverrides(student: Source, overrides: Record<string,
   if (keys.some((k) => k === "entranceType" || k === "previousQualification" || ENTRANCE_DETAIL_KEYS.includes(k))) {
     const merged: Record<string, string> = { ...overrides };
     for (const [k, v] of Object.entries(out)) merged[k] = v;
-    const rank = text(merged.hod_entranceRank) || text(student.entranceRank) || text(merged.entranceRank);
     const route = qualification(student, merged);
     const chosen = entranceType(student, merged).toUpperCase();
     if (route === DIPLOMA && chosen === "EAPCET") return { ok: false, status: 400, error: "EAPCET follows Class XII; this student came through a Diploma, so the entrance exam is ECET" };
     if (route === INTERMEDIATE && chosen === "ECET") return { ok: false, status: 400, error: "ECET follows a Diploma; this student came through Intermediate, so the entrance exam is EAPCET" };
-    if (chosen && !rank) return { ok: false, status: 400, error: "Rank is required for the entrance exam" };
   }
   // Only entries that change something are worth a write.
   const changed: Record<string, string> = {};
