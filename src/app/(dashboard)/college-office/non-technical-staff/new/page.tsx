@@ -49,7 +49,7 @@ interface WizardStep extends ChromeStep {
 // field renderer the View/Edit hub uses (SUPPORTING_STAFF_MODULES) - so the
 // wizard's modules match what Edit later shows, 1:1.
 //
-// College Office (whole-college Non-Technical staff) or Library (its own
+// College Office (whole-college Supporting staff) or Library (its own
 // unit only, department locked to "Library" - see the LIBRARY branches in
 // api/college/supporting-staff/route.ts) - also mounted at
 // /library/staff/new (re-exported from there), same isLibrary pattern as
@@ -172,7 +172,7 @@ export default function NewNonTechnicalStaffPage() {
         return;
       }
 
-      toast({ variant: "success", title: isLibrary ? "Library staff added" : "Non-Technical staff added", description: `${record.legalName || "The staff member"} has been added.` });
+      toast({ variant: "success", title: isLibrary ? "Library staff added" : "Supporting staff added", description: `${record.legalName || "The staff member"} has been added.` });
       router.push(listPath);
     } catch {
       toast({ variant: "destructive", title: "Network error", description: "Please try again." });
@@ -185,8 +185,8 @@ export default function NewNonTechnicalStaffPage() {
     <WizardPage>
       <WizardHero
         icon={UserPlus}
-        title={isLibrary ? "Add Library Staff" : "Add Non-Technical Staff"}
-        description={isLibrary ? "Add a staff member to your Library unit" : "Add a Non-Technical staff member for your college"}
+        title={isLibrary ? "Add Library Staff" : "Add Supporting Staff"}
+        description={isLibrary ? "Add a staff member to your Library unit" : "Add a Supporting staff member for your college"}
         badge={`Step ${stepIndex + 1} of ${steps.length}`}
       />
       <WizardStepper steps={steps} currentKey={step.key} onSelect={setStepIndex} errored={erroredSteps} completedBefore={stepIndex} />

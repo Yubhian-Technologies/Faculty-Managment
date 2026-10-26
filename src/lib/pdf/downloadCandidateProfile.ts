@@ -1,4 +1,5 @@
 import { auth } from "@/lib/firebase/client";
+import { fetchCollegeLogoUrl } from "@/lib/pdf/logo";
 import { renderHtmlToPdf } from "@/lib/pdf/htmlToPdf";
 import type { CandidateProfileData } from "@/lib/pdf/candidateProfileTemplate";
 
@@ -11,7 +12,7 @@ export async function downloadCandidateProfilePdf(data: CandidateProfileData, fi
   const res = await fetch("/api/pdf/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ type: "CANDIDATE_PROFILE", data }),
+    body: JSON.stringify({ type: "CANDIDATE_PROFILE", data: { ...data, logoUrl: data.logoUrl ?? (await fetchCollegeLogoUrl()) } }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => null) as { error?: string } | null;

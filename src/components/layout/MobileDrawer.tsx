@@ -1,5 +1,6 @@
 "use client";
 
+import { CollegeLogo } from "@/components/shared/CollegeLogo";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -147,7 +148,7 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
       >
         <div className="flex items-center justify-between h-16 px-4 border-b shrink-0">
           <div className="flex items-center gap-3">
-            <img src="https://res.cloudinary.com/dl88qtudz/image/upload/v1781675822/vishnulogo_r2jsjl.png" alt="Vishnu Logo" className="h-9 w-9 rounded-md object-contain shrink-0" />
+            <CollegeLogo className="h-9 w-9 rounded-md object-contain shrink-0" />
             <div className="min-w-0">
               <p className="text-sm font-bold">Vishnu People</p>
               <p className="text-xs text-muted-foreground">{ROLE_LABELS[user.realRole ?? user.role]}</p>

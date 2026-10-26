@@ -1,4 +1,4 @@
-import { VISHNU_LOGO_URL } from "@/lib/pdf/logo";
+import { logoSrc } from "@/lib/pdf/logo";
 
 const BASE_STYLE = `
   body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 0; color: #111; }
@@ -32,6 +32,7 @@ export function getDocumentAcknowledgementHTML({
   verifiedByName,
   verifiedByRole,
   verifiedAt,
+  logoUrl,
 }: {
   collegeName: string;
   candidateName: string;
@@ -41,6 +42,7 @@ export function getDocumentAcknowledgementHTML({
   verifiedByName: string;
   verifiedByRole?: string;
   verifiedAt: string;
+  logoUrl?: string;
 }): string {
   const rows = Object.entries(checkedDocs)
     .map(
@@ -60,7 +62,7 @@ export function getDocumentAcknowledgementHTML({
 <body>
 <div class="page">
   <div class="header">
-    <img src="${VISHNU_LOGO_URL}" alt="Vishnu Logo" />
+    <img src="${logoSrc(logoUrl)}" alt="College Logo" />
     <p class="college-name">${collegeName}</p>
   </div>
   <div class="title">DOCUMENT VERIFICATION ACKNOWLEDGEMENT</div>

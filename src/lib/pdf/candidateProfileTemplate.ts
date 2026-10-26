@@ -4,7 +4,7 @@ import type { CandidateStage } from "@/types";
 import {
   esc, entry, bullets, detail, detailTable, docLinkRow, renderSection, DOCUMENT_STYLES,
 } from "@/lib/pdf/resumeTemplate";
-import { VISHNU_LOGO_URL } from "@/lib/pdf/logo";
+import { logoSrc } from "@/lib/pdf/logo";
 
 interface QualificationLike {
   degree?: string;
@@ -40,6 +40,7 @@ interface ApplicationLike {
 }
 
 export interface CandidateProfileData {
+  logoUrl?: string;
   name: string;
   email?: string;
   phone?: string;
@@ -242,7 +243,7 @@ export function getCandidateProfileHTML(data: CandidateProfileData): string {
 <body>
 <div class="page">
   <div class="cp-header">
-    <img src="${VISHNU_LOGO_URL}" alt="Vishnu Logo">
+    <img src="${logoSrc(data.logoUrl)}" alt="College Logo">
     <p class="cp-college-name">${esc(data.collegeName || "")}</p>
     <div class="cp-title">Candidate Profile — ${esc(data.name)}</div>
     ${subtitle ? `<div class="cp-subtitle">${esc(subtitle)}</div>` : ""}

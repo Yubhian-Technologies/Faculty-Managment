@@ -1,5 +1,6 @@
 "use client";
 
+import { CollegeLogo } from "@/components/shared/CollegeLogo";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -147,7 +148,7 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
 
       {/* Logo */}
       <div className={cn("h-16 flex items-center gap-3 border-b shrink-0 overflow-hidden", collapsed ? "justify-center px-0" : "px-4")}>
-        <img src="https://res.cloudinary.com/dl88qtudz/image/upload/v1781675822/vishnulogo_r2jsjl.png" alt="Vishnu Logo" className="h-9 w-9 rounded-md object-contain shrink-0" />
+        <CollegeLogo className="h-9 w-9 rounded-md object-contain shrink-0" />
         {!collapsed && (
           <div className="flex-1 min-w-0">
             <p className="text-sm font-bold truncate">Vishnu People</p>

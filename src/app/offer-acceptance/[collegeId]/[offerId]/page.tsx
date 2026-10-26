@@ -20,6 +20,7 @@ interface OfferSummary {
   ctcAnnual: number;
   offeredTerms: string[];
   collegeName: string;
+  collegeLogoUrl?: string;
   status: "SENT" | "ACCEPTED" | "REJECTED";
   alreadyResponded: boolean;
 }
@@ -102,7 +103,7 @@ export default function OfferAcceptancePage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
         <div className="max-w-sm w-full space-y-4">
-          <PublicFormHeader collegeName={offer.collegeName} />
+          <PublicFormHeader collegeName={offer.collegeName} logoUrl={offer.collegeLogoUrl} />
           <Card>
             <CardContent className="pt-6 text-center space-y-3">
               {finalDecision === "ACCEPTED" ? (
@@ -128,7 +129,7 @@ export default function OfferAcceptancePage() {
   return (
     <div className="min-h-screen bg-muted/30 py-8 px-4">
       <div className="max-w-xl mx-auto space-y-5">
-        <PublicFormHeader collegeName={offer.collegeName} />
+        <PublicFormHeader collegeName={offer.collegeName} logoUrl={offer.collegeLogoUrl} />
         <div className="text-center space-y-1">
           <h1 className="text-xl font-bold">Offer Letter</h1>
           <p className="text-sm text-muted-foreground">Please review your offer and respond below</p>

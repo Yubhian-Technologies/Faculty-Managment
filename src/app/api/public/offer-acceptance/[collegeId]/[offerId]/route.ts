@@ -27,6 +27,7 @@ export async function GET(
 
     const letter = letterSnap.data() as OfferLetter;
     const collegeName = (infoSnap.data() as { name?: string } | undefined)?.name ?? "";
+    const collegeLogoUrl = (infoSnap.data() as { logoUrl?: string } | undefined)?.logoUrl?.trim() ?? "";
 
     return NextResponse.json({
       offer: {
@@ -37,6 +38,7 @@ export async function GET(
         ctcAnnual: letter.ctcAnnual,
         offeredTerms: letter.offeredTerms ?? [],
         collegeName,
+        collegeLogoUrl,
         status: letter.status,
         alreadyResponded: letter.status !== "SENT",
       },

@@ -156,8 +156,8 @@ export default function CollegeOfficeNonTechnicalStaffPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Non-Technical Staff"
-        description="Non-Technical staff records for your college"
+        title="Supporting Staff"
+        description="Supporting staff records for your college"
         actions={
           <div className="flex gap-2">
             <Button
@@ -185,7 +185,7 @@ export default function CollegeOfficeNonTechnicalStaffPage() {
         searchPlaceholder="Search by name, email, employee ID..."
         searchKeys={["legalName", "nameAsPerPan", "email", "employeeId"] as (keyof StaffRow)[]}
         emptyTitle="No non-technical staff records yet"
-        emptyDescription="Add Non-Technical staff to build your college's records"
+        emptyDescription="Add Supporting staff to build your college's records"
         emptyAction={<Button onClick={() => router.push("/college-office/non-technical-staff/new")}><UserPlus className="h-4 w-4 mr-2" />Add Staff</Button>}
       />
 

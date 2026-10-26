@@ -159,6 +159,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/exam-cell", iconName: "LayoutDashboard", roles: ["EXAM_CELL"] },
   { label: "Exam Configuration", href: "/exam-cell/configure", iconName: "ClipboardList", roles: ["EXAM_CELL"] },
   { label: "Exam Seating", href: "/exam-cell/seating", iconName: "Armchair", roles: ["EXAM_CELL"] },
+  { label: "Exam Rooms", href: "/exam-cell/exam-rooms", iconName: "DoorOpen", roles: ["EXAM_CELL"] },
   { label: "Semester Results", href: "/exam-cell/semester-results", iconName: "GraduationCap", roles: ["EXAM_CELL"] },
   { label: "Result Rules", href: "/exam-cell/result-rules", iconName: "Settings2", roles: ["EXAM_CELL"] },
   { label: "Results Analysis", href: "/exam-cell/results-analysis", iconName: "BarChart3", roles: ["EXAM_CELL"] },
@@ -342,22 +343,21 @@ export const NAV_ITEMS: NavItem[] = [
   // route for any existing bookmarks/links.
   { label: "Students", href: "/college-office/students", iconName: "GraduationCap", roles: ["COLLEGE_OFFICE"], section: "Students" },
   { label: "Semester Timings", href: "/college-office/timings", iconName: "Clock", roles: ["COLLEGE_OFFICE"] },
-  { label: "Non-Technical Staff", href: "/college-office/non-technical-staff", iconName: "UsersRound", roles: ["COLLEGE_OFFICE"], section: "Staff" },
+  { label: "Supporting Staff", href: "/college-office/non-technical-staff", iconName: "UsersRound", roles: ["COLLEGE_OFFICE"], section: "Staff" },
   // Only the first item of a group carries `section` - the sidebar renders a
   // header for every item that sets one, so repeating it printed "STAFF" three
   // times over.
   { label: "Pay & Promotions", href: "/college-office/staff", iconName: "Wallet", roles: ["COLLEGE_OFFICE"] },
   { label: "Hiring Pipeline", href: "/college-office/pipeline", iconName: "GitBranch", roles: ["COLLEGE_OFFICE"], section: "Hiring" },
   { label: "Candidates", href: "/college-office/candidates", iconName: "UserCog", roles: ["COLLEGE_OFFICE"] },
-  { label: "Leave History", href: "/college-office/leave-history", iconName: "History", roles: ["COLLEGE_OFFICE"], section: "Leave & Attendance" },
+  // Student attendance reports with filters, view-only for the whole college.
+  { label: "Attendance Reports", href: "/college-office/attendance-reports", iconName: "CalendarRange", roles: ["COLLEGE_OFFICE"], section: "Leave & Attendance" },
+  { label: "Leave History", href: "/college-office/leave-history", iconName: "History", roles: ["COLLEGE_OFFICE"] },
   { label: "Leave Profiles", href: "/college-office/leave/profiles", iconName: "ClipboardList", roles: ["COLLEGE_OFFICE"] },
   // Arrange cover for supporting staff who have other work on a date or range.
   { label: "Holidays", href: "/college-office/holidays", iconName: "CalendarDays", roles: ["COLLEGE_OFFICE"] },
-  { label: "Exam Rooms", href: "/college-office/exam-rooms", iconName: "DoorOpen", roles: ["COLLEGE_OFFICE"] },
   { label: "Staff Attendance", href: "/college-office/staff-attendance", iconName: "ClipboardCheck", roles: ["COLLEGE_OFFICE"] },
   { label: "Import Attendance", href: "/college-office/attendance-import", iconName: "Upload", roles: ["COLLEGE_OFFICE"] },
-  // Student attendance reports with filters, view-only for the whole college.
-  { label: "Attendance Reports", href: "/college-office/attendance-reports", iconName: "CalendarRange", roles: ["COLLEGE_OFFICE"] },
   { label: "Certificate Issuance", href: "/college-office/certificates", iconName: "FileCheck", roles: ["COLLEGE_OFFICE"], section: "Certificates" },
   // College Admin's login has COLLEGE_OFFICE as its primary role (the seat is
   // layered on top - see api/administration/college-people), so it inherits
@@ -1012,7 +1012,7 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: "Home", href: "/college-office", iconName: "LayoutDashboard", roles: ["COLLEGE_OFFICE"] },
     { label: "Students", href: "/college-office/students", iconName: "GraduationCap", roles: ["COLLEGE_OFFICE"] },
     { label: "Import Students", href: "/college-office/students/import", iconName: "Upload", roles: ["COLLEGE_OFFICE"] },
-    { label: "Non-Technical Staff", href: "/college-office/non-technical-staff", iconName: "UsersRound", roles: ["COLLEGE_OFFICE"] },
+    { label: "Supporting Staff", href: "/college-office/non-technical-staff", iconName: "UsersRound", roles: ["COLLEGE_OFFICE"] },
     { label: "Pay & Promotions", href: "/college-office/staff", iconName: "Wallet", roles: ["COLLEGE_OFFICE"] },
     { label: "Hiring Pipeline", href: "/college-office/pipeline", iconName: "GitBranch", roles: ["COLLEGE_OFFICE"] },
     { label: "Candidates", href: "/college-office/candidates", iconName: "UserCog", roles: ["COLLEGE_OFFICE"] },

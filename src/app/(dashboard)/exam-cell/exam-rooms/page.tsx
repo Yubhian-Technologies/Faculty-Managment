@@ -44,7 +44,7 @@ function rowsToRooms(rows: string[][]): RoomForm[] {
   }));
 }
 
-// College Office keeps the college's classroom list (block, floor, capacity);
+// The Exam Cell keeps the college's classroom list (block, floor, capacity);
 // Exam Cell seats students into these when building an exam's seating plan.
 export default function ExamRoomsPage() {
   const [rooms, setRooms] = useState<ExamRoom[]>([]);
