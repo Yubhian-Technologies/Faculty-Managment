@@ -215,22 +215,27 @@ export default function PrincipalStaffPage() {
                                 <Button size="sm" variant="outline" asChild>
                                   <Link href={`/principal/staff/${u.uid}`}><Eye className="h-3.5 w-3.5 mr-1" />View</Link>
                                 </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  loading={togglingUid === u.uid}
-                                  onClick={() => (u.isActive === false ? void toggleActive(u) : setDeactivateTarget(u))}
-                                >
-                                  {u.isActive === false ? "Activate" : "Deactivate"}
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="text-destructive hover:text-destructive"
-                                  onClick={() => setDeleteTarget(u)}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5 mr-1" />Delete
-                                </Button>
+                                {/* The College Office login is the college's own admin account: the Principal views it but cannot deactivate or delete it from here. */}
+                                {g.role !== "COLLEGE_OFFICE" && g.role !== "COLLEGE_ADMIN" && (
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      loading={togglingUid === u.uid}
+                                      onClick={() => (u.isActive === false ? void toggleActive(u) : setDeactivateTarget(u))}
+                                    >
+                                      {u.isActive === false ? "Activate" : "Deactivate"}
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="text-destructive hover:text-destructive"
+                                      onClick={() => setDeleteTarget(u)}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5 mr-1" />Delete
+                                    </Button>
+                                  </>
+                                )}
                               </div>
                             </td>
                           </tr>
