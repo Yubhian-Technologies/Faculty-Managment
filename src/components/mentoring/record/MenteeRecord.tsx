@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Award, BookOpen, Briefcase, GraduationCap, Printer, Users, UserRound } from "lucide-react";
+import { Award, BookOpen, Briefcase, GraduationCap, ListChecks, Printer, Users, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { entrySection } from "@/lib/mentoring/recordSections";
 import type { MentoringEntry, MentoringSemesterOption } from "@/types/mentoring";
@@ -15,12 +15,13 @@ import { getJson } from "./recordApi";
 // semester, progress & placements, activities & discipline, and the mentor meetings. Everything the
 // system already knows is filled in; the mentor adds what it cannot know.
 
-type View = "info" | "previous" | "progress" | "activities" | "meetings" | `sem:${number}`;
+type View = "info" | "previous" | "progress" | "activities" | "meetings" | "followup" | `sem:${number}`;
 
 const PREVIOUS = ["previousAwards", "previousCoCurricular", "previousExtraCurricular", "healthRecord", "otherInfo"] as const;
 const PREVIOUS_NUMBER: Record<string, string> = { previousAwards: "7.2", previousCoCurricular: "7.3", previousExtraCurricular: "7.4", healthRecord: "7.5", otherInfo: "8" };
 const PROGRESS = ["scholarships", "internships", "placements", "competitiveExams", "higherStudies"] as const;
 const ACTIVITIES = ["achievements", "disciplinary"] as const;
+const FOLLOW_UP = ["actionItems", "weeklyAttendance", "escalations"] as const;
 
 const NAV: { view: View; label: string; icon: typeof UserRound; hint: string }[] = [
   { view: "info", label: "Student information", icon: UserRound, hint: "Page 1 · 7.1" },
@@ -30,6 +31,7 @@ const NAV_AFTER: { view: View; label: string; icon: typeof UserRound; hint: stri
   { view: "progress", label: "Progress & placements", icon: Briefcase, hint: "Scholarships, internships, jobs" },
   { view: "activities", label: "Activities & discipline", icon: Award, hint: "Achievements, issues" },
   { view: "meetings", label: "Mentor meetings", icon: Users, hint: "6–8 a semester" },
+  { view: "followup", label: "Follow-up", icon: ListChecks, hint: "Actions, weekly check-ins, referrals" },
 ];
 
 export function MenteeRecord({ studentId, studentName, rollNumber }: { studentId: string; studentName: string; rollNumber: string }) {
@@ -122,6 +124,7 @@ export function MenteeRecord({ studentId, studentName, rollNumber }: { studentId
         {view.startsWith("sem:") && <SemesterPage api={api} semester={Number(view.slice(4))} onOpenMeetings={openMeetings} />}
         {view === "progress" && renderSections(PROGRESS)}
         {view === "activities" && renderSections(ACTIVITIES)}
+        {view === "followup" && renderSections(FOLLOW_UP)}
         {view === "meetings" && (
           <MeetingsPage api={api} entries={list} editor={editor} semesters={semesters} semester={meetingSemester ?? current} onPickSemester={setMeetingSemester} />
         )}

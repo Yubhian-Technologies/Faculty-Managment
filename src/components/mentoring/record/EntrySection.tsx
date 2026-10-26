@@ -18,7 +18,8 @@ import { sendJson } from "./recordApi";
 // drawn from its definition in lib/mentoring/recordSections.ts: rows are added, corrected and
 // removed in place, and saved one at a time.
 
-type Values = Record<string, string | boolean>;
+type Value = string | boolean | string[];
+type Values = Record<string, Value>;
 
 export interface EntryEditor {
   add: (entry: MentoringEntry) => void;
@@ -26,14 +27,15 @@ export interface EntryEditor {
   remove: (id: string) => void;
 }
 
-function cellText(col: EntryColumn, v: string | boolean | undefined): string {
+function cellText(col: EntryColumn, v: Value | undefined): string {
+  if (Array.isArray(v)) return v.map((x) => col.choices?.find((c) => c.value === x)?.label ?? x).join(", ");
   if (typeof v !== "string" || !v) return "";
   if (col.kind === "date") return formatEntryDate(v);
   if (col.kind === "month") return formatEntryMonth(v);
   return v;
 }
 
-function ColumnInput({ col, value, onChange, autoFocus }: { col: EntryColumn; value: string | boolean | undefined; onChange: (v: string | boolean) => void; autoFocus?: boolean }) {
+function ColumnInput({ col, value, onChange, autoFocus }: { col: EntryColumn; value: Value | undefined; onChange: (v: Value) => void; autoFocus?: boolean }) {
   const text = typeof value === "string" ? value : "";
   switch (col.kind) {
     case "textarea":
@@ -49,6 +51,26 @@ function ColumnInput({ col, value, onChange, autoFocus }: { col: EntryColumn; va
           <SelectContent>{(col.options ?? []).map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
         </Select>
       );
+    case "multiselect": {
+      const chosen = Array.isArray(value) ? value : [];
+      return (
+        <div className="grid gap-2 sm:grid-cols-2">
+          {(col.choices ?? []).map((c) => (
+            <label key={c.value} className="flex items-start gap-2 rounded-md border bg-background p-2.5 text-sm cursor-pointer hover:bg-muted/50">
+              <Checkbox
+                className="mt-0.5"
+                checked={chosen.includes(c.value)}
+                onCheckedChange={(on) => onChange(on === true ? [...chosen, c.value] : chosen.filter((x) => x !== c.value))}
+              />
+              <span className="min-w-0">
+                <span className="font-medium block">{c.label}</span>
+                {c.hint && <span className="text-xs text-muted-foreground block">{c.hint}</span>}
+              </span>
+            </label>
+          ))}
+        </div>
+      );
+    }
     case "check":
       return (
         <label className="flex items-center gap-2 text-sm h-9">
@@ -65,7 +87,11 @@ function EntryForm({
   section, initial, saving, onSave, onCancel,
 }: { section: Section; initial: Values; saving: boolean; onSave: (v: Values) => void; onCancel: () => void }) {
   const [values, setValues] = useState<Values>(initial);
-  const missingRequired = section.columns.some((c) => c.required && !(typeof values[c.key] === "string" && (values[c.key] as string).trim()));
+  const missingRequired = section.columns.some((c) => {
+    if (!c.required) return false;
+    const v = values[c.key];
+    return Array.isArray(v) ? v.length === 0 : !(typeof v === "string" && v.trim());
+  });
   return (
     <form
       className="rounded-lg border bg-muted/30 p-3 space-y-3 print:hidden"
@@ -73,7 +99,7 @@ function EntryForm({
     >
       <div className="grid gap-3 sm:grid-cols-2">
         {section.columns.map((c, i) => (
-          <div key={c.key} className={c.kind === "textarea" ? "sm:col-span-2" : ""}>
+          <div key={c.key} className={c.kind === "textarea" || c.kind === "multiselect" ? "sm:col-span-2" : ""}>
             <label className="text-xs text-muted-foreground mb-1 block">{c.label}{c.required ? " *" : ""}</label>
             <ColumnInput col={c} value={values[c.key]} autoFocus={i === 0} onChange={(v) => setValues((prev) => ({ ...prev, [c.key]: v }))} />
           </div>
@@ -218,6 +244,8 @@ export function EntrySectionView({
                       <td key={c.key} className="py-2 pr-3 whitespace-pre-wrap break-words">
                         {c.kind === "check"
                           ? (r.values[c.key] === true ? <Check className="h-4 w-4 text-emerald-600" aria-label="Yes" /> : <span className="text-muted-foreground">—</span>)
+                          : c.kind === "multiselect" && Array.isArray(r.values[c.key])
+                          ? <div className="flex flex-wrap gap-1">{(r.values[c.key] as string[]).map((x) => <Badge key={x} variant="secondary" className="font-normal">{cellText(c, [x])}</Badge>)}</div>
                           : (cellText(c, r.values[c.key]) || <span className="text-muted-foreground">—</span>)}
                       </td>
                     ))}

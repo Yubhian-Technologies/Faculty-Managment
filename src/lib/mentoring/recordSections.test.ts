@@ -26,11 +26,20 @@ describe("cleanEntryValues", () => {
     expect(r.ok).toBe(false);
   });
   it("checks dates, months and choices", () => {
-    expect(cleanEntryValues(section("meetings"), { date: "2025-02-30", purpose: "x" }).ok).toBe(false);
-    expect(cleanEntryValues(section("meetings"), { date: "2025-02-27", purpose: "Attendance shortage" }).ok).toBe(true);
+    expect(cleanEntryValues(section("meetings"), { date: "2025-02-30", categories: ["ACADEMIC"], purpose: "x" }).ok).toBe(false);
+    expect(cleanEntryValues(section("meetings"), { date: "2025-02-27", categories: ["ACADEMIC"], purpose: "Attendance shortage" }).ok).toBe(true);
     expect(cleanEntryValues(section("scholarships"), { name: "NSP", monthYear: "2025-13" }).ok).toBe(false);
     expect(cleanEntryValues(section("achievements"), { category: "Sports", responsibility: "x" }).ok).toBe(false);
     expect(cleanEntryValues(section("achievements"), { category: "Extra-curricular", responsibility: "NSS volunteer" }).ok).toBe(true);
+  });
+  it("takes the meeting's discussion categories as a list of known choices", () => {
+    const m = section("meetings");
+    const base = { date: "2025-02-27", purpose: "Check-in" };
+    expect(cleanEntryValues(m, base)).toEqual({ ok: false, error: "Discussion categories is required" });
+    expect(cleanEntryValues(m, { ...base, categories: [] }).ok).toBe(false);
+    expect(cleanEntryValues(m, { ...base, categories: ["NOPE"] }).ok).toBe(false);
+    const r = cleanEntryValues(m, { ...base, categories: ["GOALS", "ACADEMIC", "GOALS"] });
+    expect(r).toEqual({ ok: true, values: { ...base, categories: ["ACADEMIC", "GOALS"] } });
   });
   it("refuses a row with nothing written", () => {
     expect(cleanEntryValues(section("meetings"), { studentSigned: true }).ok).toBe(false);

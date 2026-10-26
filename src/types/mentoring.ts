@@ -99,7 +99,7 @@ export interface MentoringEntry {
   id: string;
   section: string;
   semester: number | null;
-  values: Record<string, string | boolean>;
+  values: Record<string, string | boolean | string[]>;
   createdByName: string;
   createdAt: string | null;
   updatedAt: string | null;
@@ -165,4 +165,38 @@ export interface MentoringSemesterOption {
   /** "I Year · Semester I" - the booklet's own wording. */
   label: string;
   isCurrent: boolean;
+}
+
+/** One row of the college-wide mentoring summary (a department or a mentor). Counts only - never a note. */
+export interface MentoringOverviewRow {
+  key: string;
+  label: string;
+  students: number;
+  /** Of those, the ones who have a mentor. */
+  mentored: number;
+  /** Mentored students with a meeting in the last `recentDays` days. */
+  metRecently: number;
+  openActions: number;
+  openEscalations: number;
+}
+
+/** The Principal's / Vice-Principal's summary of mentoring in their own college. */
+export interface MentoringOverview {
+  recentDays: number;
+  totals: {
+    students: number;
+    mentored: number;
+    unmentored: number;
+    metRecently: number;
+    neverMet: number;
+    meetings: number;
+  };
+  /** Meetings that ticked each discussion category (a meeting can tick several). */
+  categories: { value: string; label: string; meetings: number }[];
+  actions: { open: number; inProgress: number; done: number; overdue: number };
+  escalations: { open: number; underReview: number; resolved: number };
+  /** Weekly check-ins of the last four weeks. */
+  weekly: { present: number; absent: number; excused: number };
+  byDepartment: MentoringOverviewRow[];
+  byMentor: MentoringOverviewRow[];
 }
