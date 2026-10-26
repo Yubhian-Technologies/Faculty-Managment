@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { designationLabel } from "@/lib/designations/config";
 import { Badge } from "@/components/ui/badge";
 import { useAuthStore } from "@/store/authStore";
+import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { toast } from "@/hooks/useToast";
 import { Plus, Trash2 } from "lucide-react";
 import type { FacultyRequirementResult } from "@/app/api/college/faculty-requirement/route";
@@ -108,6 +109,10 @@ function getFirstValidationError(entries: PositionEntry[]): string | null {
 export default function NewVacancyPage() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
+  // The department this person is working in right now: the one picked in "Working as" for a head of several departments,
+  // otherwise their one department. Not simply `user.department`, which is only the first of them.
+  const myDepartments = useMyDepartments();
+  const department = myDepartments[0] ?? user?.department ?? "";
 
   const [requirement, setRequirement] = useState<FacultyRequirementResult | null>(null);
   const [reqLoading, setReqLoading] = useState(true);
@@ -116,19 +121,34 @@ export default function NewVacancyPage() {
   const [hiringMode, setHiringMode] = useState<"OFFLINE" | "ONLINE">("OFFLINE");
   const [designations, setDesignations] = useState<DesignationCatalogItem[]>([]);
 
+  // Switching department in "Working as" keeps this page mounted, so the form is started over for the new department
+  // (its requirement summary and the figures typed into the justification belong to one department only).
+  const [formDepartment, setFormDepartment] = useState(department);
+  if (formDepartment !== department) {
+    setFormDepartment(department);
+    setRequirement(null);
+    setReqLoading(true);
+    setEntries([newEntry()]);
+  }
+
   useEffect(() => {
-    // reqLoading already starts true, so nothing is set synchronously here -
-    // a setState in the effect body triggers a cascading render.
+    if (!department) return;
+    let cancelled = false;
     void (async () => {
       try {
-        const r = await fetch("/api/college/faculty-requirement");
-        setRequirement(r.ok ? ((await r.json()) as FacultyRequirementResult) : null);
+        const r = await fetch(`/api/college/faculty-requirement?department=${encodeURIComponent(department)}`);
+        const data = r.ok ? ((await r.json()) as FacultyRequirementResult) : null;
+        if (!cancelled) setRequirement(data);
       } catch {
         // Non-fatal: the form renders without the requirement summary.
       } finally {
-        setReqLoading(false);
+        if (!cancelled) setReqLoading(false);
       }
     })();
+    return () => { cancelled = true; };
+  }, [department]);
+
+  useEffect(() => {
     void (async () => {
       try {
         const r = await fetch("/api/college/designations");
@@ -202,7 +222,7 @@ export default function NewVacancyPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            department: user?.department ?? "",
+            department,
             position: entry.designation,
             positionCategory: entry.category,
             hiringMode,
@@ -265,7 +285,7 @@ export default function NewVacancyPage() {
           <CardContent className="p-4 flex items-center gap-3">
             <div className="flex-1 space-y-1">
               <Label className="text-xs text-muted-foreground">Department</Label>
-              <p className="text-sm font-medium">{user?.department ?? "-"}</p>
+              <p className="text-sm font-medium">{department || "-"}</p>
             </div>
             <Badge variant="secondary" className="text-xs shrink-0">Auto-filled</Badge>
           </CardContent>

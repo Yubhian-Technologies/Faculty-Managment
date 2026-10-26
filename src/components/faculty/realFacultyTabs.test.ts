@@ -7,7 +7,8 @@ import { FacultyProfileModuleContent } from "./FacultyProfileModuleContent";
 import { PROFILE_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileModules";
 import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { isModuleEmpty } from "@/lib/faculty/moduleEmpty";
-import { FacultyExperienceCell } from "./facultyListCells";
+import { FacultyExperienceCell, FacultyDesignationCell } from "./facultyListCells";
+import { filterByResearchArea, researchAreaList, researchAreaOptions } from "@/lib/faculty/researchAreas";
 
 // OFFLINE, READ-ONLY. Renders every tab of every real faculty record in a snapshot taken by
 // scripts/backup-faculty-records.mjs (VIT + VWU) with the new tab names, and checks that nothing broke and that the
@@ -102,9 +103,9 @@ describe.skipIf(!FILE)("every tab of every real VIT + VWU faculty record, with t
       const out = renderToStaticMarkup(createElement(FacultyExperienceCell, { row: doc as never }));
       const text = out.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
       const unit = String.raw`\d+ (?:yrs?|mos?|days?)(?:, \d+ (?:yrs?|mos?|days?))*`;
-      const m = new RegExp(`^Total: (${unit}) Internal: (-|${unit}) External: (-|${unit})$`).exec(text);
+      const m = new RegExp(`^Total: (${unit}) Internal: (0|${unit}) External: (0|${unit})$`).exec(text);
       if (!m) bad.push(`${path}: ${text}`);
-      else if (m[3] !== "-") withPrevious++;
+      else if (m[3] !== "0") withPrevious++;
       if (/NaN|undefined|Invalid/.test(text)) bad.push(`${path}: bad value -> ${text}`);
       if (/(?<!\d)0 (?:yrs?|mos?)/.test(text)) bad.push(`${path}: a zero unit is shown -> ${text}`);
     }
@@ -133,4 +134,28 @@ describe.skipIf(!FILE)("every tab of every real VIT + VWU faculty record, with t
     expect(checked).toBeGreaterThan(500); // the check really looked at real data
     expect(missing.slice(0, 10)).toEqual([]);
   }, 300_000);
+  it("the Research area filter finds people by their research areas only, never by name, and the list shows why", () => {
+    const rows = load().map(({ doc }) => doc);
+    const withAreas = rows.filter((r) => researchAreaList(r).length > 0);
+    expect(withAreas.length).toBeGreaterThan(50);
+    expect(researchAreaOptions(rows).length).toBeGreaterThan(20);
+    for (const q of ["ml/ds", "ml", "ds", "iot", "learning", "image"]) {
+      const out = filterByResearchArea(rows, q);
+      for (const r of out) {
+        expect(r.researchMatches?.length).toBeGreaterThan(0);
+        for (const m of r.researchMatches ?? []) expect(researchAreaList(r)).toContain(m);
+      }
+      console.log(`[research filter "${q}"]`, out.length, "of", rows.length);
+    }
+    // a name that merely contains the letters is not enough
+    const byNameOnly = rows.filter((r) => /ml|ds/i.test(String(r.legalName ?? "")) && filterByResearchArea([r], "ml/ds").length === 0);
+    const found = new Set(filterByResearchArea(rows, "ml/ds").map((r) => r.id));
+    for (const r of byNameOnly) expect(found.has(r.id)).toBe(false);
+    // the chips render only for matched rows and carry the matched area
+    const hit = filterByResearchArea(rows, "learning")[0];
+    const html = renderToStaticMarkup(createElement(FacultyDesignationCell, { row: hit as never }));
+    expect(html).toContain("research-chips");
+    expect(html).toContain(hit.researchMatches?.[0] ?? "NONE");
+    expect(renderToStaticMarkup(createElement(FacultyDesignationCell, { row: rows[0] as never }))).not.toContain("research-chips");
+  });
 });

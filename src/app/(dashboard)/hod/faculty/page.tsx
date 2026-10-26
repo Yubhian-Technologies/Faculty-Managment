@@ -21,6 +21,8 @@ import { downloadFacultyResume, previewFacultyResumeHtml } from "@/lib/faculty/d
 import { ResumePreviewDialog } from "@/components/faculty/ResumePreviewDialog";
 import { DEFAULT_RESUME_SECTIONS } from "@/lib/pdf/resumeSections";
 import { ResumeSectionsDialog } from "@/components/faculty/ResumeSectionsDialog";
+import { ResearchAreaFilter } from "@/components/faculty/ResearchAreaFilter";
+import { filterByResearchArea, researchQueryActive } from "@/lib/faculty/researchAreas";
 import { FacultyDesignationCell, FacultyExperienceCell, FacultyStatusCell, JoiningLine } from "@/components/faculty/facultyListCells";
 import type { ResumeSectionKey } from "@/lib/pdf/resumeSections";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
@@ -158,6 +160,7 @@ function HODFacultyContent() {
   const [genderFilter, setGenderFilter] = useState("");
   const [qualFilter, setQualFilter] = useState("");
   const [designationFilter, setDesignationFilter] = useState("");
+  const [researchFilter, setResearchFilter] = useState("");
   // "desc" = up arrow: most senior first (earliest joining / most experience), "asc" = down arrow: the reverse.
   // Only what the person picked with the arrows. null = nothing picked: the list is then
   // quietly ordered HOD, then Principal, then internal experience (see visibleFaculty), without lighting any arrow.
@@ -315,14 +318,16 @@ function HODFacultyContent() {
     setGenderFilter("");
     setQualFilter("");
     setDesignationFilter("");
+    setResearchFilter("");
     setSort(null);
   }
 
-  function changeFilter(kind: "status" | "gender" | "qual" | "designation" | "sort", value: string | SortState) {
+  function changeFilter(kind: "status" | "gender" | "qual" | "designation" | "research" | "sort", value: string | SortState) {
     if (kind === "status") setStatusFilter(value as string);
     else if (kind === "gender") setGenderFilter(value as string);
     else if (kind === "qual") setQualFilter(value as string);
     else if (kind === "designation") setDesignationFilter(value as string);
+    else if (kind === "research") setResearchFilter(value as string);
     else setSort(value as SortState);
     setSelectedIds(new Set());
   }
@@ -399,13 +404,13 @@ function HODFacultyContent() {
   const activeDesignationFilter = designationOptions.some((o) => o.key === designationFilter) ? designationFilter : "";
 
   const filteredFaculty = useMemo(
-    () => faculty.filter((f) =>
+    () => filterByResearchArea(faculty.filter((f) =>
       matchesStatus(f, statusFilter) &&
       (!genderFilter || f.gender === genderFilter) &&
       (!activeQualFilter || (f.highestQualification as string | undefined)?.trim().toLowerCase() === activeQualFilter.toLowerCase()) &&
       (!activeDesignationFilter || (f.designation as string | undefined)?.trim() === activeDesignationFilter)
-    ),
-    [faculty, statusFilter, genderFilter, activeQualFilter, activeDesignationFilter]
+    ), researchFilter),
+    [faculty, statusFilter, genderFilter, activeQualFilter, activeDesignationFilter, researchFilter]
   );
 
   const departmentChips = useMemo(() => {
@@ -418,7 +423,7 @@ function HODFacultyContent() {
     return names.map((name) => ({ name, count: counts.get(name) ?? 0 }));
   }, [filteredFaculty]);
   const activeDeptFilter = departmentChips.some((c) => c.name === deptFilter) ? deptFilter : "";
-  const filtersApplied = !!statusFilter || !!genderFilter || !!activeQualFilter || !!activeDesignationFilter;
+  const filtersApplied = !!statusFilter || !!genderFilter || !!activeQualFilter || !!activeDesignationFilter || researchQueryActive(researchFilter);
   const visibleFaculty = useMemo(() => {
     const rows = activeDeptFilter ? filteredFaculty.filter((f) => (f.department as string | undefined)?.trim() === activeDeptFilter) : filteredFaculty;
     // Nothing picked: HOD, then Principal, then internal experience (lib/faculty/listOrder.ts).
@@ -650,6 +655,7 @@ function HODFacultyContent() {
           options={designationOptions}
           onChange={(v) => changeFilter("designation", v)}
         />
+        <ResearchAreaFilter faculty={faculty} value={researchFilter} onChange={(v) => changeFilter("research", v)} />
         <SortPill label="Date of Joining" active={sort?.key === "joining" ? sort.dir : null} onChange={(dir) => changeFilter("sort", dir ? { key: "joining", dir } : null)} />
         <SortPill label="Experience" active={sort?.key === "experience" ? sort.dir : null} onChange={(dir) => changeFilter("sort", dir ? { key: "experience", dir } : null)} />
         <FilterSelect
