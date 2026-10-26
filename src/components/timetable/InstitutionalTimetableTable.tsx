@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { FileDown, FileSpreadsheet, Printer, Loader2, FlaskConical, LayoutGrid, CalendarDays, ListFilter, Info, MapPin, User, UserCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,12 +15,8 @@ import { yearSemesterLabelIn } from "@/lib/academic/format";
 import { SUBJECT_COLORS, isSubjectColor } from "@/lib/timetable/subjectColors";
 import {
   buildAllocationList,
-  buildClassTimetableSubtitle,
   buildTimetableColumns,
-  formatYearSemBranch,
-  formatRoomNo,
   latestEffectiveDate,
-  ordinalYear,
   periodTimeRange,
   readableCode,
   resolveTimetableDays,
@@ -43,6 +39,7 @@ import { DAY_LABELS } from "@/types";
 
 import { useCollegeInfo } from "@/hooks/useCollegeInfo";
 import { resolveSignatureRows } from "@/lib/timetable/signatureAuthority";
+import { buildTimetableHeaderLines, collegeHeading, departmentHeading, facultyInitials, groupAllocationByType, timetableTitle } from "@/lib/timetable/timetableHeader";
 
 export interface InstitutionalTimetableTableProps {
   section?: Section | null;
@@ -215,6 +212,22 @@ export function InstitutionalTimetableTable({
     ]
   );
 
+  // The same header lines the PDF / print / Excel print.
+  const headerLines = useMemo(
+    () =>
+      buildTimetableHeaderLines({
+        courseName: courseName || section?.courseName,
+        year: section?.year ?? (timing.year != null ? Number(timing.year) : undefined),
+        semesterLabel,
+        sectionName: section?.name,
+        departmentName: departmentName || section?.department,
+        classroom: exportMeta.classroom || section?.classroomNumber || (section as { classroom?: string } | null)?.classroom,
+        classInchargeName: exportMeta.classInchargeName,
+        effectiveDate: exportMeta.effectiveDate,
+      }),
+    [courseName, section, timing.year, semesterLabel, departmentName, exportMeta.classroom, exportMeta.classInchargeName, exportMeta.effectiveDate]
+  );
+
   const fileBase = useMemo(() => {
     const parts = [courseName || section?.courseName || "Timetable", section?.name ? `Sec_${section.name}` : null, semesterLabel ?? null];
     return parts.filter(Boolean).join("_").replace(/\s+/g, "_");
@@ -355,67 +368,37 @@ export function InstitutionalTimetableTable({
 
       {/* ── Institutional Card Header ───────────────────────────────────────── */}
       <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
-        <div className="border-b bg-muted/20 px-4 py-3 text-center sm:text-left flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            {/* Same logo the PDF / spreadsheet letterhead uses: the college's own, else the Vishnu logo. */}
+        {/* Same letterhead + class lines the PDF / print / Excel carry. */}
+        <div className="border-b bg-muted/20 px-4 py-3">
+          <div className="flex items-center gap-3">
             <img
               src={resolveLogoUrl(logoUrl ?? collegeInfo?.logoUrl)}
               alt=""
-              className="h-10 w-10 shrink-0 object-contain rounded border bg-background p-0.5"
+              className="h-12 w-12 shrink-0 object-contain"
             />
-            <div className="min-w-0">
-              <h3 className="text-sm font-bold tracking-wide uppercase text-foreground break-words">
-                {activeCollegeName || (collegeLoading ? "Loading college…" : collegeFailed ? "College" : "Time Table")}
-                {activeCollegeCode ? ` (Code: ${activeCollegeCode})` : ""}
+            <div className="min-w-0 flex-1 text-center">
+              <h3 className="text-sm sm:text-base font-bold text-foreground break-words">
+                {collegeHeading(activeCollegeName, collegeInfo?.city) || (collegeLoading ? "Loading college…" : collegeFailed ? "College" : "Time Table")}
               </h3>
-              {activeAffiliation && (
-                <p className="text-[11px] text-muted-foreground font-medium break-words">{activeAffiliation}</p>
+              {activeAffiliation && <p className="text-xs font-bold text-foreground break-words">{activeAffiliation}</p>}
+              {departmentHeading(departmentName || section?.department) && (
+                <p className="text-xs font-bold text-foreground break-words">{departmentHeading(departmentName || section?.department)}</p>
               )}
-              <p className="text-xs text-muted-foreground break-words">
-                {[
-                  departmentName || section?.department,
-                  courseName || section?.courseName,
-                  timing.year != null ? ordinalYear(timing.year) : undefined,
-                  section ? `Section ${section.name}` : undefined,
-                  classInchargeName && classInchargeName !== "—" ? `Incharge: ${classInchargeName}` : undefined,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </p>
-              <p className="text-[11px] font-semibold text-primary/90 mt-0.5">
-                {buildClassTimetableSubtitle({
-                  academicYear,
-                  semesterLabel,
-                  effectiveDate: effectiveDateProp ?? latestEffectiveDate(filteredSlots),
-                })}
-              </p>
-              <div className="mt-2 pt-2 border-t flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-foreground">
-                <div>
-                  {formatYearSemBranch({
-                    courseName: courseName || section?.courseName,
-                    year: timing.year,
-                    semesterLabel,
-                    sectionName: section?.name,
-                    departmentName: departmentName || section?.department,
-                  })}
-                </div>
-                {(classroom || section?.classroomNumber || (section as { classroom?: string })?.classroom) && (
-                  <div className="text-muted-foreground font-bold">
-                    {formatRoomNo(classroom || section?.classroomNumber || (section as { classroom?: string })?.classroom)}
-                  </div>
-                )}
-              </div>
-              {(classInchargeName && classInchargeName !== "—" || section?.facultyInchargeName) && (
-                <div className="mt-0.5 text-xs font-semibold text-foreground/90">
-                  Class In-charge: {classInchargeName && classInchargeName !== "—" ? classInchargeName : section?.facultyInchargeName}
-                </div>
-              )}
+              <p className="text-xs font-bold text-foreground">{timetableTitle(academicYear)}</p>
             </div>
+            <div className="hidden sm:block h-12 w-12 shrink-0" aria-hidden />
           </div>
-          <div className="shrink-0">
-            <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-              {semesterLabel || "Time Table"}
-            </p>
+          <div className="mt-3 flex flex-wrap items-start justify-between gap-x-6 gap-y-1 text-xs font-bold text-foreground">
+            <div className="space-y-0.5 min-w-0">
+              {[headerLines.yearLine, headerLines.branchLine, headerLines.inchargeLine].filter(Boolean).map((l) => (
+                <div key={l} className="break-words">{l}</div>
+              ))}
+            </div>
+            <div className="space-y-0.5">
+              {[headerLines.wefLine, headerLines.roomLine].filter(Boolean).map((l) => (
+                <div key={l}>{l}</div>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -825,9 +808,9 @@ export function InstitutionalTimetableTable({
                                     {s.labBatch && (
                                       <div className="text-[8.5px] font-semibold text-muted-foreground truncate">{s.labBatch}</div>
                                     )}
-                                    {faculty && (
-                                      <div className="text-[9px] font-medium text-muted-foreground truncate max-w-full mx-auto mt-0.5">
-                                        {faculty}
+                                    {facultyInitials(faculty) && (
+                                      <div className="font-extrabold text-[10px] sm:text-[11px] tracking-wide text-foreground uppercase truncate">
+                                        ({facultyInitials(faculty)})
                                       </div>
                                     )}
                                     {isSub && (
@@ -850,31 +833,38 @@ export function InstitutionalTimetableTable({
           </div>
         </div>
 
-        {/* ── Allocation of Subjects ─────────────────────────────────────────── */}
+        {/* ── Subject list: S.No | Subject Name | Sub Acr | Faculty (as printed) ── */}
         {allocationList.length > 0 && (
-          <div className="border-t px-4 py-3 bg-card">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-foreground mb-1">
-              Allocation of Subjects
-            </h4>
-            <ul className="divide-y divide-border">
-              {allocationList.map((item, idx) => (
-                <li key={idx} className="flex items-baseline gap-3 py-2 text-xs">
-                  <span className="w-16 shrink-0 font-mono font-bold text-foreground text-[11px]">
-                    {item.code}
-                  </span>
-                  <span className="min-w-0 flex-1 text-foreground">
-                    {item.name}
-                    {item.labBatches.length > 0 && (
-                      <span className="text-muted-foreground"> ({item.labBatches.join(", ")})</span>
-                    )}
-                    <span className="text-muted-foreground"> · {item.faculty}</span>
-                  </span>
-                  <span className="shrink-0 font-mono text-muted-foreground text-[11px]">
-                    {item.hoursPerWeek ?? "—"} hrs/wk
-                  </span>
-                </li>
-              ))}
-            </ul>
+          <div className="border-t px-4 py-3 bg-card overflow-x-auto">
+            <table className="w-full table-fixed text-xs">
+              <colgroup><col style={{ width: "9%" }} /><col style={{ width: "44%" }} /><col style={{ width: "15%" }} /><col style={{ width: "32%" }} /></colgroup>
+              <thead>
+                <tr className="text-left font-bold text-foreground">
+                  <th className="px-1 py-1 text-center">S.No</th>
+                  <th className="px-1 py-1">Subject Name</th>
+                  <th className="px-1 py-1">Sub Acr</th>
+                  <th className="px-1 py-1">Faculty</th>
+                </tr>
+              </thead>
+              <tbody>
+                {groupAllocationByType(allocationList).map((g) => (
+                  <Fragment key={g.label}>
+                    <tr><td colSpan={4} className="px-1 pt-2 pb-0.5 font-bold text-foreground">{g.label}</td></tr>
+                    {g.entries.map((item, i) => (
+                      <tr key={`${g.label}-${i}`} className="text-foreground">
+                        <td className="px-1 py-0.5 text-center">{i + 1}</td>
+                        <td className="px-1 py-0.5 break-words">
+                          {item.name}
+                          {item.labBatches.length > 0 && <span> ({item.labBatches.join(", ")})</span>}
+                        </td>
+                        <td className="px-1 py-0.5 break-words">{item.shortCode}</td>
+                        <td className="px-1 py-0.5 break-words">{item.faculty}</td>
+                      </tr>
+                    ))}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
 

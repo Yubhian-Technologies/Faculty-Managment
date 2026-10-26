@@ -5,7 +5,7 @@ import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
 import { resolveLogoUrl } from "./logoAsset";
 import { facultySpans } from "./facultySpans";
 import { resolveSignatureRows } from "./signatureAuthority";
-import { collegeHeading, departmentHeading, facultyClassLabel, facultyTimetableTitle } from "./timetableHeader";
+import { collegeHeading, departmentHeading, buildFacultyClassRows, facultyTimetableTitle } from "./timetableHeader";
 
 // Shared by hod/teaching and panel/teaching's own "Download"/"Print" buttons -
 // both pages lay a faculty member's own slots out identically and, until this
@@ -182,22 +182,15 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
   </table>`;
 
   // ── Bottom: subject list (S.No | Class | Sub Acronym | Subject Name), then the signatures ──
-  const classRows = new Map<string, { cls: string; acr: string; name: string }>();
-  for (const a of uniqueAssignments) {
-    const semester = slots.find((sl) => sl.assignmentId === a.id)?.semester ?? a.semester;
-    const cls = facultyClassLabel({ courseName: a.courseName, year: a.year, semester, sectionName: a.sectionName });
-    const acr = subjectAbbreviation(a.subjectName, a.shortCode) || "—";
-    const name = a.subjectName ?? "—";
-    classRows.set(`${cls}|${acr}|${name}`, { cls, acr, name });
-  }
-  const workloadHtml = classRows.size > 0 ? `
+  const classRows = buildFacultyClassRows(slots, assignmentById.values());
+  const workloadHtml = classRows.length > 0 ? `
   <table class="allocation workload" cellspacing="0" cellpadding="0">
     <colgroup><col style="width:8%"><col style="width:28%"><col style="width:16%"><col style="width:48%"></colgroup>
     <thead>
       <tr><th class="num">S.No</th><th>Class</th><th>Sub Acronym</th><th>Subject Name</th></tr>
     </thead>
     <tbody>
-      ${Array.from(classRows.values())
+      ${classRows
         .map((r, i) => `<tr><td class="num">${i + 1}</td><td>${escapeHtml(r.cls)}</td><td>${escapeHtml(r.acr)}</td><td>${escapeHtml(r.name)}</td></tr>`)
         .join("")}
     </tbody>
