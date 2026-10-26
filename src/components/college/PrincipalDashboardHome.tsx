@@ -18,7 +18,6 @@ import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { formatDate } from "@/lib/utils";
 import type { VacancyRequest, HiringBatch, Department } from "@/types";
 
-import { CollegeBrandingDashboardCard } from "@/components/college/CollegeBrandingDashboardCard";
 
 // Shared home dashboard for /principal and /vice-principal - the two roles
 // carry equal authority and already share every /principal/* page (see
@@ -64,11 +63,10 @@ export function PrincipalDashboardHome({ fallbackName }: { fallbackName: string 
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Hello, ${user?.name?.split(" ")[0] ?? fallbackName}`}
+        title={`Welcome, ${user?.name ?? fallbackName}`}
         description="Pending approvals and hiring status"
       />
 
-      <CollegeBrandingDashboardCard />
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         {[
