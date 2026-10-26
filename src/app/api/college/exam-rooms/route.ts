@@ -33,7 +33,7 @@ export async function GET() {
 // One room or a whole uploaded sheet: { rooms: [{ name, block, floor, capacity }] }.
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("COLLEGE_OFFICE");
+    const session = await requireCollegeMember("EXAM_CELL");
     const body = (await readJsonBody(request)) as {
       rooms?: { name?: string; block?: string; floor?: number | string; benches?: number | string; studentsPerBench?: number | string; capacity?: number | string }[];
     };

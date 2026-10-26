@@ -1,4 +1,5 @@
 import { getOfferLetterHTML, type OfferLetterData } from "@/lib/pdf/offerLetterTemplate";
+import { fetchCollegeLogoUrl } from "@/lib/pdf/logo";
 import { renderHtmlToPdf, renderHtmlToPdfBlob } from "@/lib/pdf/htmlToPdf";
 
 export async function downloadOfferLetterPdf(
@@ -6,13 +7,13 @@ export async function downloadOfferLetterPdf(
   filenameHint: string
 ): Promise<void> {
   const safeHint = filenameHint.replace(/[^a-zA-Z0-9-_]+/g, "-").replace(/^-+|-+$/g, "") || "offer-letter";
-  await renderHtmlToPdf(getOfferLetterHTML(data), `offer-letter-${safeHint}.pdf`);
+  await renderHtmlToPdf(getOfferLetterHTML({ ...data, logoUrl: data.logoUrl ?? (await fetchCollegeLogoUrl()) }), `offer-letter-${safeHint}.pdf`);
 }
 
 /** Renders the offer letter to a real PDF and returns it as base64 — for
  *  attaching to the outgoing offer-letter email (see /api/email/send). */
 export async function getOfferLetterPdfBase64(data: OfferLetterData): Promise<string> {
-  const blob = await renderHtmlToPdfBlob(getOfferLetterHTML(data));
+  const blob = await renderHtmlToPdfBlob(getOfferLetterHTML({ ...data, logoUrl: data.logoUrl ?? (await fetchCollegeLogoUrl()) }));
   const buffer = await blob.arrayBuffer();
   let binary = "";
   const bytes = new Uint8Array(buffer);

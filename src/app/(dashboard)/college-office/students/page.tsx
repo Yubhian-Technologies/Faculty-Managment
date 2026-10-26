@@ -72,6 +72,7 @@ interface StudentListFilters {
   years: string;
   course: string;
   year: string;
+  /** "Regular" / "Lateral" filter studentType; "Detained" filters status instead. */
   studentType: string;
   rollFrom: string;
   rollTo: string;
@@ -85,7 +86,8 @@ function filtersToParams(f: StudentListFilters): URLSearchParams {
   if (f.year === "all" && f.years) params.set("years", f.years);
   if (f.course !== "all") params.set("course", f.course);
   if (f.year !== "all") params.set("year", f.year);
-  if (f.studentType !== "all") params.set("studentType", f.studentType);
+  if (f.studentType === "Detained") params.set("status", "DETAINED");
+  else if (f.studentType !== "all") params.set("studentType", f.studentType);
   if (f.rollFrom) params.set("rollFrom", f.rollFrom);
   if (f.rollTo) params.set("rollTo", f.rollTo);
   return params;
@@ -138,7 +140,7 @@ function OfficeStudentsContent() {
       years: /^\d+(,\d+)*$/.test(yearsParam) ? yearsParam : "",
       course: readListString(searchParams, "course", "all"),
       year: /^\d+$/.test(yearParam) ? yearParam : "all",
-      studentType: readListChoice<string>(searchParams, "studentType", ["Regular", "Lateral"], "all"),
+      studentType: readListChoice<string>(searchParams, "studentType", ["Regular", "Lateral", "Detained"], "all"),
       rollFrom: readListString(searchParams, "rollFrom", ""),
       rollTo: readListString(searchParams, "rollTo", ""),
     };
@@ -825,6 +827,7 @@ function OfficeStudentsContent() {
             <SelectItem value="all">All types</SelectItem>
             <SelectItem value="Regular">Regular</SelectItem>
             <SelectItem value="Lateral">Lateral</SelectItem>
+            <SelectItem value="Detained">Detained</SelectItem>
           </SelectContent>
         </Select>
         <Button onClick={handleLoad} loading={isFetching}>

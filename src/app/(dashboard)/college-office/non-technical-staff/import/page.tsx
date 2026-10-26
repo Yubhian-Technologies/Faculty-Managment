@@ -259,11 +259,11 @@ export default function CollegeOfficeNonTechnicalStaffImportPage() {
   return (
     <div className="max-w-5xl space-y-6">
       <PageHeader
-        title="Import Non-Technical Staff"
-        description="Bulk upload Non-Technical staff records from a CSV file"
+        title="Import Supporting Staff"
+        description="Bulk upload Supporting staff records from a CSV file"
         actions={
           <Button variant="outline" asChild>
-            <Link href="/college-office/non-technical-staff"><ArrowLeft className="h-4 w-4 mr-1" />Back to Non-Technical Staff</Link>
+            <Link href="/college-office/non-technical-staff"><ArrowLeft className="h-4 w-4 mr-1" />Back to Supporting Staff</Link>
           </Button>
         }
       />
@@ -465,7 +465,7 @@ export default function CollegeOfficeNonTechnicalStaffImportPage() {
               )}
               {(result.created > 0 || fixed.length > 0) && (
                 <Button asChild variant="outline" size="sm">
-                  <Link href="/college-office/non-technical-staff">View Non-Technical Staff List</Link>
+                  <Link href="/college-office/non-technical-staff">View Supporting Staff List</Link>
                 </Button>
               )}
             </CardContent>

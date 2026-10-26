@@ -1,6 +1,6 @@
-import { VISHNU_LOGO_URL } from "@/lib/pdf/logo";
+import { logoSrc } from "@/lib/pdf/logo";
 
-const LETTERHEAD = `<div class="letterhead"><img src="${VISHNU_LOGO_URL}" alt="Vishnu Logo" /></div>`;
+const letterhead = (logoUrl?: string) => `<div class="letterhead"><img src="${logoSrc(logoUrl)}" alt="College Logo" /></div>`;
 
 export interface OfferLetterData {
   candidateName: string;
@@ -13,6 +13,8 @@ export interface OfferLetterData {
   joiningDate: string;
   letterDate: string;
   termsAndConditions?: string;
+  /** College's own logo; the default Vishnu logo when absent. */
+  logoUrl?: string;
 }
 
 export function getOfferLetterHTML({
@@ -26,6 +28,7 @@ export function getOfferLetterHTML({
   joiningDate,
   letterDate,
   termsAndConditions,
+  logoUrl,
 }: OfferLetterData): string {
   const collegeFull = collegeAddress ? `${collegeName}, ${collegeAddress}` : collegeName;
   const interviewClause = interviewDate
@@ -50,7 +53,7 @@ export function getOfferLetterHTML({
 </head>
 <body>
 <div class="page">
-  ${LETTERHEAD}
+  ${letterhead(logoUrl)}
   <p class="date">Dt. ${letterDate}</p>
 
   <p>Dear Sir/Madam,</p>
@@ -109,6 +112,8 @@ export interface AppointmentLetterData {
   letterDate: string;
   ctcAnnual?: number;
   termsAndConditions?: string;
+  /** College's own logo; the default Vishnu logo when absent. */
+  logoUrl?: string;
 }
 
 export function getAppointmentLetterHTML({
@@ -122,6 +127,7 @@ export function getAppointmentLetterHTML({
   letterDate,
   ctcAnnual,
   termsAndConditions,
+  logoUrl,
 }: AppointmentLetterData): string {
   const collegeFull = collegeAddress ? `${collegeName}, ${collegeAddress}` : collegeName;
 
@@ -146,7 +152,7 @@ export function getAppointmentLetterHTML({
 </head>
 <body>
 <div class="page">
-  ${LETTERHEAD}
+  ${letterhead(logoUrl)}
   <p class="date">Dt. ${letterDate}</p>
 
   <div class="to-block">

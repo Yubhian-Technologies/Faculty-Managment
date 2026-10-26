@@ -1,4 +1,5 @@
 import { getAppointmentLetterHTML } from "@/lib/pdf/offerLetterTemplate";
+import { fetchCollegeLogoUrl } from "@/lib/pdf/logo";
 import { renderHtmlToPdf, renderHtmlToPdfBlob } from "@/lib/pdf/htmlToPdf";
 
 type AppointmentLetterData = Parameters<typeof getAppointmentLetterHTML>[0];
@@ -8,13 +9,13 @@ export async function downloadAppointmentLetterPdf(
   filenameHint: string
 ): Promise<void> {
   const safeHint = filenameHint.replace(/[^a-zA-Z0-9-_]+/g, "-").replace(/^-+|-+$/g, "") || "appointment-letter";
-  await renderHtmlToPdf(getAppointmentLetterHTML(data), `appointment-letter-${safeHint}.pdf`);
+  await renderHtmlToPdf(getAppointmentLetterHTML({ ...data, logoUrl: data.logoUrl ?? (await fetchCollegeLogoUrl()) }), `appointment-letter-${safeHint}.pdf`);
 }
 
 /** Renders the appointment letter to a real PDF and returns it as base64 — for
  *  attaching to the outgoing appointment-letter email (see /api/email/send). */
 export async function getAppointmentLetterPdfBase64(data: AppointmentLetterData): Promise<string> {
-  const blob = await renderHtmlToPdfBlob(getAppointmentLetterHTML(data));
+  const blob = await renderHtmlToPdfBlob(getAppointmentLetterHTML({ ...data, logoUrl: data.logoUrl ?? (await fetchCollegeLogoUrl()) }));
   const buffer = await blob.arrayBuffer();
   let binary = "";
   const bytes = new Uint8Array(buffer);

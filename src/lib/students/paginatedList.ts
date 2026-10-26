@@ -69,6 +69,8 @@ export interface StudentListQuery {
   years?: number[];
   /** Exact studentType ("Regular"/"Lateral"). "" means no filter. */
   studentType: string;
+  /** Exact status (e.g. "DETAINED"). ""/absent means no filter. */
+  status?: string;
   /**
    * Inclusive roll-number range, compared upper-cased as strings (the same rule
    * as the HOD page's range - hodPagedList.fetchHodStudentsMatching). Either end
@@ -105,8 +107,9 @@ export function rollInRange(roll: unknown, range: RollRange): boolean {
 
 function matchesRemaining(
   data: FirebaseFirestore.DocumentData,
-  opts: Pick<StudentListQuery, "search" | "course" | "year" | "years" | "studentType" | "rollFrom" | "rollTo" | "coreDepartment">
+  opts: Pick<StudentListQuery, "search" | "course" | "year" | "years" | "studentType" | "status" | "rollFrom" | "rollTo" | "coreDepartment">
 ): boolean {
+  if (opts.status && data.status !== opts.status) return false;
   if (opts.year !== null && Number(data.year) !== opts.year) return false;
   if (opts.years && opts.years.length > 0 && !opts.years.includes(Number(data.year))) return false;
   if (opts.coreDepartment && data.secondaryDepartment !== opts.coreDepartment) return false;
@@ -143,7 +146,7 @@ function dedupeAndSortByName(docs: Doc[]): Doc[] {
 
 async function resolveCandidates(
   studentsColl: FirebaseFirestore.CollectionReference,
-  params: Pick<StudentListQuery, "departments" | "year" | "course">
+  params: Pick<StudentListQuery, "departments" | "year" | "course" | "status">
 ): Promise<Doc[]> {
   if (params.departments.length > 0) {
     // "in" only when there's more than one name to match (the rollup case) -
@@ -168,6 +171,9 @@ async function resolveCandidates(
   if (params.course) {
     return dedupeAndSortByName((await studentsColl.where("course", "==", params.course).get()).docs);
   }
+  if (params.status) {
+    return dedupeAndSortByName((await studentsColl.where("status", "==", params.status).get()).docs);
+  }
   // Search-only, no structural filter - the one case Firestore genuinely
   // can't narrow server-side (no field to key an equality filter off).
   return dedupeAndSortByName((await studentsColl.get()).docs);
@@ -181,7 +187,7 @@ export async function fetchStudentsPage(
   studentsColl: FirebaseFirestore.CollectionReference,
   params: StudentListQuery
 ): Promise<{ students: StudentListItem[]; total: number }> {
-  const hasFilter = params.departments.length > 0 || params.year !== null || !!params.course || !!params.search || !!params.studentType || !!params.coreDepartment || (params.years?.length ?? 0) > 0 || hasRollRange(params);
+  const hasFilter = params.departments.length > 0 || params.year !== null || !!params.course || !!params.search || !!params.studentType || !!params.status || !!params.coreDepartment || (params.years?.length ?? 0) > 0 || hasRollRange(params);
 
   if (!hasFilter) {
     const [countSnap, pageSnap] = await Promise.all([
@@ -206,7 +212,7 @@ export async function fetchStudentsPage(
  */
 export async function fetchMatchingStudentIds(
   studentsColl: FirebaseFirestore.CollectionReference,
-  params: Pick<StudentListQuery, "departments" | "year" | "years" | "course" | "search" | "studentType" | "rollFrom" | "rollTo" | "coreDepartment">
+  params: Pick<StudentListQuery, "departments" | "year" | "years" | "course" | "search" | "studentType" | "status" | "rollFrom" | "rollTo" | "coreDepartment">
 ): Promise<string[]> {
   const candidates = await resolveCandidates(studentsColl, params);
   return candidates.filter((d) => matchesRemaining(d.data(), params)).map((d) => d.id);

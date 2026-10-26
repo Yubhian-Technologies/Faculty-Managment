@@ -155,6 +155,7 @@ export async function GET(request: Request) {
       // configured to teach, sent by the page from its own Year dropdown.
       const years = (searchParams.get("years") ?? "").split(",").map(Number).filter((n) => Number.isFinite(n) && n > 0);
       const studentType = (searchParams.get("studentType") ?? "").trim();
+      const status = (searchParams.get("status") ?? "").trim();
       const rollFrom = (searchParams.get("rollFrom") ?? "").trim();
       const rollTo = (searchParams.get("rollTo") ?? "").trim();
 
@@ -166,14 +167,14 @@ export async function GET(request: Request) {
       }
 
       if (searchParams.get("idsOnly") === "1") {
-        const ids = await fetchMatchingStudentIds(studentsColl, { departments, coreDepartment, course, year, years, search, studentType, rollFrom, rollTo });
+        const ids = await fetchMatchingStudentIds(studentsColl, { departments, coreDepartment, course, year, years, search, studentType, status, rollFrom, rollTo });
         return NextResponse.json({ ids, total: ids.length });
       }
 
       const page = Math.max(1, Number(searchParams.get("page")) || 1);
       const pageSizeRaw = Number(searchParams.get("pageSize"));
       const pageSize = PAGE_SIZES.includes(pageSizeRaw) ? pageSizeRaw : 20;
-      const { students, total } = await fetchStudentsPage(studentsColl, { page, pageSize, search, departments, coreDepartment, course, year, years, studentType, rollFrom, rollTo });
+      const { students, total } = await fetchStudentsPage(studentsColl, { page, pageSize, search, departments, coreDepartment, course, year, years, studentType, status, rollFrom, rollTo });
       return NextResponse.json({ students: projectStudentsForRole(session.role, students), total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) });
     }
 
