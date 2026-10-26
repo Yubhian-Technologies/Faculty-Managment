@@ -49,18 +49,22 @@ export function MyProfileModulePage({ basePath, hideLegalName = false, ratificat
 
   if (!moduleDef) return <p className="text-sm text-muted-foreground">Unknown section.</p>;
 
+  // Same rule as the Edit button in the header: the empty-tab message offers an edit only when the header does.
+  const editHref = !readOnly && !isSelfEditDisabled(moduleKey, hasFacultyRecord) ? `${basePath}/${moduleKey}/edit` : undefined;
+
   return (
     <div className="space-y-6">
       <PageHeader
         title={moduleDef.label}
+        note={moduleDef.description}
         actions={
           <div className="flex gap-2">
             <Button variant="outline" asChild>
               <Link href={basePath}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
             </Button>
-            {!readOnly && !isSelfEditDisabled(moduleKey, hasFacultyRecord) && (
+            {editHref && (
               <Button asChild>
-                <Link href={`${basePath}/${moduleKey}/edit`}><Pencil className="h-4 w-4 mr-2" />Edit</Link>
+                <Link href={editHref}><Pencil className="h-4 w-4 mr-2" />Edit</Link>
               </Button>
             )}
           </div>
@@ -70,7 +74,7 @@ export function MyProfileModulePage({ basePath, hideLegalName = false, ratificat
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : faculty ? (
-        <FacultyProfileModuleContent moduleKey={moduleKey} faculty={faculty} teachingAssignments={teachingAssignments} collegeType={collegeType} isOwnProfile hideLegalName={hideLegalName} showNameAsPerPan ratificationHistory={ratificationHistory} />
+        <FacultyProfileModuleContent editHref={editHref} moduleKey={moduleKey} faculty={faculty} teachingAssignments={teachingAssignments} collegeType={collegeType} isOwnProfile hideLegalName={hideLegalName} showNameAsPerPan ratificationHistory={ratificationHistory} />
       ) : (
         <p className="text-sm text-muted-foreground">{noRecordMessage ?? "No profile record found."}</p>
       )}

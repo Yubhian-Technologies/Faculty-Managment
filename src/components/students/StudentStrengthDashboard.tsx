@@ -612,7 +612,7 @@ function DataChecks({ health }: { health: StrengthPayload["health"] }) {
   const issues: { label: string; detail?: string }[] = [];
   if (health.duplicateRolls.length > 0) {
     issues.push({
-      label: `${health.duplicateRolls.length} roll number${health.duplicateRolls.length === 1 ? " is" : "s are"} shared by more than one student`,
+      label: `${health.duplicateRolls.length} Regd. No${health.duplicateRolls.length === 1 ? " is" : "s are"} shared by more than one student`,
       detail: health.duplicateRolls
         .slice(0, 8)
         .map((d) => `${d.roll} (${d.holders.map((h) => h.name || "unnamed").join(", ")})`)
@@ -631,7 +631,7 @@ function DataChecks({ health }: { health: StrengthPayload["health"] }) {
         <h2 className="text-sm font-semibold">Data checks</h2>
         {issues.length === 0 ? (
           <p className="flex items-center gap-1.5 text-sm text-emerald-700 dark:text-emerald-400">
-            <CheckCircle2 className="h-4 w-4" /> Every student is assigned to a course, department, year and section, and every roll number is unique.
+            <CheckCircle2 className="h-4 w-4" /> Every student is assigned to a course, department, year and section, and every Regd. No is unique.
           </p>
         ) : (
           <ul className="space-y-1.5">

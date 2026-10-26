@@ -80,10 +80,13 @@ export interface AcceptedStudentResult {
   revaluesBatchId?: string;
   /** The University SGPA column, when the file has one: a number, or null for "-" (withheld). */
   universitySgpa?: number | null;
+  /** The student's batch on record when it is not the sheet's (e.g. detained, or not yet
+   *  moved): a note only - the result still goes to them, filed under the sheet's exam. */
+  otherBatch?: string;
 }
 
 export interface ResultImportContext {
-  /** Students of this college, by upper-case roll number. */
+  /** Students of this college, by upper-case Regd. No. */
   students: Map<string, ResultStudent>;
   /** Subjects of this college, by upper-case college code (a key may have several entries). */
   subjects: Map<string, ResultSubjectOption[]>;
@@ -100,8 +103,8 @@ export interface ResultImportContext {
   academicYear: string;
   /** The sheet's batch ("2024-2028"). Empty = not checked. */
   batch?: string;
-  /** Students with results already filed under `batch` - a detained student
-   *  now in a later batch still belongs to this one for those exams. */
+  /** Students with results already filed under `batch` (any semester) - a detained
+   *  student now in a later batch still belongs to this one for those exams (no note). */
   batchHistory?: Set<string>;
   /** The college's current academic year's start ("2026" for 2026-27) - for a student with no batch stored. */
   currentStartYear?: number;
@@ -116,6 +119,22 @@ export function batchMatches(studentBatch: string | undefined, sheetBatch: strin
   if (own.endsWith("-")) return own.slice(0, 4) === sheetBatch.slice(0, 4);
   const end = (b: string) => (/(\d{4})$/.exec(b) ?? [])[1];
   return !!end(own) && end(own) === end(sheetBatch);
+}
+
+/**
+ * The batch is a NOTE, never a refusal: a result goes to the Regd. No's student whatever
+ * batch they are in now (a detained student moved to a junior batch, or one detained but
+ * not moved yet). The one stop is a file that is mostly another batch - then the batch
+ * picked is probably wrong. Small files (Add rows of a few students) are never stopped.
+ */
+export function wrongBatchFile(accepted: AcceptedStudentResult[], sheetBatch: string): string | null {
+  const others = accepted.filter((a) => a.otherBatch !== undefined);
+  if (others.length < 5 || others.length * 2 <= accepted.length) return null;
+  const count = new Map<string, number>();
+  for (const a of others) count.set(a.otherBatch!, (count.get(a.otherBatch!) ?? 0) + 1);
+  const [top] = [...count.entries()].sort((x, y) => y[1] - x[1]);
+  return `${others.length} of ${accepted.length} students are not in batch ${sheetBatch} on record` +
+    (top[0] ? ` (most are ${top[0]})` : "") + ` - check the batch picked for this file`;
 }
 
 export const rollKey = (v: unknown) => String(v ?? "").trim().toUpperCase();
@@ -152,26 +171,23 @@ export function validateResultRows(
     const subjectCode = String(raw.subjectCode ?? "").trim();
     const fail = (error: string) => failed.push({ row: raw.row, rollNumber: rollNumber || "-", subjectCode: subjectCode || "-", error });
 
-    if (!rollNumber) { fail("Roll No is required"); continue; }
+    if (!rollNumber) { fail("Regd. No is required"); continue; }
     if (!subjectCode) { fail("Subject Code is required"); continue; }
     const gradeText = normalizeGrade(raw.grade);
     if (!gradeText) { fail("Grade is required"); continue; }
 
     const student = ctx.students.get(rollKey(rollNumber));
-    if (!student) { fail(`No student with Roll No "${rollNumber}" in this college`); continue; }
+    if (!student) { fail(`No student with Regd. No "${rollNumber}" in this college`); continue; }
     if (ctx.courseIds.length > 0 && student.courseId && !ctx.courseIds.includes(student.courseId)) {
       fail(`${rollNumber} is not a ${ctx.courseName} student`);
       continue;
     }
+    // Batch: noted, never refused (see wrongBatchFile).
+    let otherBatch: string | undefined;
     if (ctx.batch && !ctx.batchHistory?.has(student.id)) {
       const eff = effectiveBatch(student, ctx.currentStartYear);
-      if (!eff) { fail(`${rollNumber} has no batch or year of study on record - set it on the student first`); continue; }
-      if (!batchMatches(eff.batch, ctx.batch)) {
-        fail(eff.derived && !student.sectionBatch
-          ? `${rollNumber} is in Year ${student.year} now, so batch ${eff.batch.slice(0, 4)}-, not ${ctx.batch}`
-          : `${rollNumber} is in batch ${eff.batch}, not ${ctx.batch}`);
-        continue;
-      }
+      if (!eff) otherBatch = "";
+      else if (!batchMatches(eff.batch, ctx.batch)) otherBatch = eff.derived && !student.sectionBatch ? `Year ${student.year} now (${eff.batch.slice(0, 4)}-)` : eff.batch;
     }
     const allowed = (ctx.allowedDepartments ?? (ctx.department ? [ctx.department] : [])).map((d) => d.trim().toLowerCase()).filter(Boolean);
     if (allowed.length > 0 && ![student.department, student.secondaryDepartment].some((d) => allowed.includes((d ?? "").trim().toLowerCase()))) {
@@ -216,6 +232,7 @@ export function validateResultRows(
     seen.add(dupKey);
     const entry: AcceptedStudentResult = byStudent.get(student.id) ?? { student, subjects: [], rows: [] };
     entry.rows.push(raw.row);
+    if (otherBatch !== undefined) entry.otherBatch = otherBatch;
     // The university's SGPA: the first row of the student that carries one.
     const uni = String(raw.universitySgpa ?? "").trim();
     if (uni && entry.universitySgpa === undefined) {

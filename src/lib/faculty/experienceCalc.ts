@@ -61,6 +61,17 @@ export function formatDuration(d: DateDuration): string {
   return parts.length > 0 ? parts.join(" ") : "Less than a day";
 }
 
+// "18 yrs, 2 mos, 17 days" - comma separated, and any unit that is zero is left out ("2 yrs, 4 mos", never "2 yrs, 4 mos,
+// 0 days"). Singular where it is 1 ("1 yr, 1 mo, 1 day"). When all three are zero it is just "0". formatDuration above is the older
+// space-separated form ("Less than a day" for nothing).
+export function formatDurationList(d: DateDuration): string {
+  const parts: string[] = [];
+  if (d.years > 0) parts.push(`${d.years} ${d.years === 1 ? "yr" : "yrs"}`);
+  if (d.months > 0) parts.push(`${d.months} ${d.months === 1 ? "mo" : "mos"}`);
+  if (d.days > 0) parts.push(`${d.days} ${d.days === 1 ? "day" : "days"}`);
+  return parts.length > 0 ? parts.join(", ") : "0";
+}
+
 export interface PreviousInstitutionLike {
   fromDate?: string;
   toDate?: string;
@@ -98,6 +109,21 @@ export function allPreviousExperienceEntries(p: ExperienceEntriesSource | undefi
     ...(p.industryExperience ?? p.industryExperienceEntries ?? []),
     ...(p.researchExperience ?? p.researchExperienceEntries ?? []),
   ];
+}
+
+// Latest first: ordered by the end date (a blank/open end = still running, so it
+// leads), then the start date; rows with no dates keep their order at the end.
+// Returns a new array - never mutates the stored list.
+export function sortExperienceLatestFirst<T extends PreviousInstitutionLike>(rows: T[]): T[] {
+  const key = (r: T) => {
+    const from = r.fromDate ?? (r.fromYear ? `${r.fromYear}-01-01` : "");
+    const to = r.toDate ?? (r.toYear ? `${r.toYear}-01-01` : "");
+    return { from, to: to || (from ? "9999-12-31" : "") };
+  };
+  return rows
+    .map((r, i) => ({ r, i, k: key(r) }))
+    .sort((a, b) => b.k.to.localeCompare(a.k.to) || b.k.from.localeCompare(a.k.from) || a.i - b.i)
+    .map((x) => x.r);
 }
 
 // Legacy rows that only have fromYear/toYear (pre-dating the From/To Date

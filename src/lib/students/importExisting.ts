@@ -7,7 +7,7 @@ import { normalizeStudentMobile } from "@/lib/students/studentMobile";
 // one billed read per student) on every call, so importing a 3,000-student
 // college in six 500-row files read the whole roster six times. What it
 // actually compares a row with is small and known from the rows themselves:
-//   - anyone already holding one of the roll numbers in the file,
+//   - anyone already holding one of the Regd. Nos in the file,
 //   - anyone already holding one of the file's Admission / Hall Ticket numbers,
 //     emails or Student Mobile Nos,
 //   - the still-UNASSIGNED students of the departments and years the file names

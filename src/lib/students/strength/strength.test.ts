@@ -68,7 +68,7 @@ describe("buildStrengthCube - counting rules", () => {
     expect(cells.reduce((n, c) => n + c.count, 0)).toBe(rows.length);
   });
 
-  it("never merges students who share a name - or even a roll number", () => {
+  it("never merges students who share a name - or even a Regd. No", () => {
     const rows = [
       student({ name: "Ravi Kumar", rollNumber: "21A01", section: "A" }),
       student({ name: "Ravi Kumar", rollNumber: "21A02", section: "A" }),
@@ -83,7 +83,7 @@ describe("buildStrengthCube - counting rules", () => {
     expect(health.duplicateRolls[0]).toMatchObject({ roll: "21A02", count: 2 });
   });
 
-  it("detects duplicate roll numbers case- and space-insensitively", () => {
+  it("detects duplicate Regd. Nos case- and space-insensitively", () => {
     const rows = [student({ rollNumber: "21a01 " }), student({ rollNumber: "21A01" })];
     expect(buildStrengthCube(rows, EMPTY_CATALOG).health.duplicateRolls).toHaveLength(1);
   });

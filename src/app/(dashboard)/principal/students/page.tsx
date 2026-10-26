@@ -12,6 +12,7 @@ import { Pagination } from "@/components/shared/Pagination";
 import { toast } from "@/hooks/useToast";
 import { departmentsOfferingCourse, yearOptionsForDepartment, yearOptionsForCourse } from "@/components/students/RosterFieldInputs";
 import { LIST_ROSTER_FIELDS, rosterFieldDisplay } from "@/lib/students/rosterFields";
+import { StudentDepartmentCell } from "@/components/students/StudentDepartmentCell";
 import { StudentPromotionsPanel } from "@/components/students/StudentPromotionsPanel";
 import { StudentStrengthDashboard } from "@/components/students/StudentStrengthDashboard";
 import { StudentsViewTabs } from "@/components/students/StudentsViewTabs";
@@ -328,7 +329,7 @@ function PrincipalStudentsContent() {
                     handleLoad();
                   }
                 }}
-                placeholder="Search by name, roll number or email"
+                placeholder="Search by name, Regd. No or email"
                 className="pl-9"
               />
             </div>
@@ -402,7 +403,9 @@ function PrincipalStudentsContent() {
                             const value = rosterFieldDisplay(f, s);
                             return (
                               <td key={f.key} className={`p-3 whitespace-nowrap ${f.key === "name" ? "font-medium" : ""}`}>
-                                {value || <span className="text-muted-foreground/50">—</span>}
+                                {f.key === "department"
+                              ? <StudentDepartmentCell department={value} coreDepartment={s.secondaryDepartment} />
+                              : value || <span className="text-muted-foreground/50">—</span>}
                               </td>
                             );
                           })}

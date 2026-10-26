@@ -320,7 +320,7 @@ describe("POST /students/promote (S6)", () => {
     expect(h.db.get(`${C}/students/s4`)).toMatchObject({ status: "GRADUATED", graduationBatch: "2022-26", graduationCourseId: "course1" });
     expect(h.auth.users.get("u4")?.disabled).toBe(true);
     expect(h.db.get(`${C}/users/u4`)?.isActive).toBe(false);
-    // A graduate still holds their roll number: the registry entry stays active.
+    // A graduate still holds their Regd. No: the registry entry stays active.
     expect(h.db.get("studentUsernames/R4")?.active).toBe(true);
     expect(h.auth.calls.some((c) => c.fn === "deleteUser")).toBe(false);
   });

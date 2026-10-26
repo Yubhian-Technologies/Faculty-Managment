@@ -11,7 +11,7 @@ import { currentTimetableAcademicYear } from "@/lib/college/academicSession";
 import { buildTeachingLoadRows, formatClassColumn, type TeachingLoadRow } from "@/lib/teaching/buildTeachingLoadRows";
 import { readPreviousTeachingAssignments, formatPassPercentage } from "@/lib/faculty/previousTeaching";
 import type { PreviousTeachingAssignment } from "@/types";
-import { allPreviousExperienceEntries, totalYearsOfExperience, experienceBreakdown, formatDuration, durationBetween } from "@/lib/faculty/experienceCalc";
+import { allPreviousExperienceEntries, sortExperienceLatestFirst, totalYearsOfExperience, experienceBreakdown, formatDuration, durationBetween } from "@/lib/faculty/experienceCalc";
 
 type TimestampLike = { toDate?: () => Date; seconds?: number; _seconds?: number } | string | null | undefined;
 
@@ -290,11 +290,13 @@ function renderTeachingLoadGroups(groups: { current: TeachingLoadRow[]; past: Te
   const currentRows = groups.current.map(
     (r) => `<tr><td>${esc(r.academicYear)}</td><td>${esc(formatClassColumn(r))}</td><td>${esc(r.subject)}</td></tr>`
   );
+  // Lab subjects ("... Lab", "CDS-LAB", "... Laboratory") are left out of the past internal table.
+  const isLab = (subject?: string) => /\blabs?\b|\blaboratory\b/i.test(subject ?? "");
   const pastInternalRows = [
-    ...groups.past.map(
+    ...groups.past.filter((r) => !isLab(r.subject)).map(
       (r) => `<tr><td>${esc(r.academicYear)}</td><td>${esc(formatClassColumn(r))}</td><td>${esc(r.subject)}</td><td>${pct(r.passPercentage)}</td>${showFeedback ? `<td>${pct(r.studentFeedback)}</td>` : ""}</tr>`
     ),
-    ...previous.filter((r) => r.source !== "EXTERNAL").map(
+    ...previous.filter((r) => r.source !== "EXTERNAL" && !isLab(r.subject)).map(
       (r) => `<tr><td>${esc(r.academicYear)}</td><td>${esc(classOf(r))}</td><td>${esc(r.subject)}</td><td>${esc(formatPassPercentage(r.passPercentage))}</td>${showFeedback ? "<td></td>" : ""}</tr>`
     ),
   ];
@@ -451,7 +453,7 @@ export function getResumeHTML(rawData: ResumeData): string {
   // Each experience entry's own Roles/Responsibilities, plus any legacy shared text no entry
   // could hold (see FacultyProfileFields.teachingRolesResponsibilities).
   const roleBullets = (label: string, entries: PreviousInstitution[] | undefined, unplaced: string | undefined) => [
-    ...(entries ?? [])
+    ...sortExperienceLatestFirst(entries ?? [])
       .filter((e) => e.rolesResponsibilities?.trim())
       .map((e) => `${label} Roles/Responsibilities${e.institutionName ? ` (${esc(e.institutionName)})` : ""}: ${esc(e.rolesResponsibilities)}`),
     unplaced?.trim() && `${label} Roles/Responsibilities: ${esc(unplaced)}`,
@@ -461,14 +463,14 @@ export function getResumeHTML(rawData: ResumeData): string {
     ...roleBullets("Industry", ap?.industryExperience, ap?.industryRolesResponsibilities),
     ...roleBullets("Research", ap?.researchExperience, ap?.researchRolesResponsibilities),
   ]);
+  // External, Internal and Total on ONE line (each only when there is data for it).
+  const experienceTotalsLine = `<span style="white-space:nowrap">` + [
+    hasPreviousExperience && `External: ${formatDuration(externalExperienceDuration)}`,
+    hasJoiningDate && `Internal: ${formatDuration(internalExperienceDuration)}`,
+    (hasJoiningDate || hasPreviousExperience) && `Total Experience: ${esc(totalExperienceYears)} years`,
+  ].filter(Boolean).join(" &nbsp;|&nbsp; ") + `</span>`;
   const experienceOverviewBullets = bullets([
-    (hasJoiningDate || hasPreviousExperience) &&
-      `Total Professional Experience: ${esc(totalExperienceYears)} years`,
-    // Only worth a line of its own with several previous institutions (it
-    // counts overlapping stints once). With one, that institution's own
-    // "External Experience" line below already says exactly this.
-    previousExperienceEntries.length > 1 &&
-      `Total External Experience: ${formatDuration(externalExperienceDuration)}`,
+    (hasJoiningDate || hasPreviousExperience) && experienceTotalsLine,
     data.specialization && `Specialization: ${esc(data.specialization)}`,
   ]);
 
@@ -493,7 +495,7 @@ export function getResumeHTML(rawData: ResumeData): string {
   const internalSection = `<div class="subheading">${esc(internalHeading)}</div>${internalContent}`;
 
   const externalEntries = previousExperienceEntries.length
-    ? previousExperienceEntries
+    ? sortExperienceLatestFirst(previousExperienceEntries)
         .map((pi) => {
           // Prefers the real dates; falls back to the legacy year-only value
           // for a record that hasn't been re-saved under the new shape yet.
@@ -695,12 +697,12 @@ export const DOCUMENT_STYLES = `
   .entry { margin-bottom: 6px; break-inside: avoid-page; }
   .entry-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; font-weight: bold; font-size: 12.5px; color: #000000; }
   .entry-row .l { flex: 1 1 auto; min-width: 0; }
-  .entry-row .r { flex: 0 1 auto; max-width: 45%; text-align: right; }
+  .entry-row .r { flex: 0 0 auto; white-space: nowrap; text-align: right; }
   .exp-summary { margin-top: 12px; padding-top: 8px; border-top: 1px solid #d1d5db; }
   .entry-row .r.plain, .entry-sub .r.plain { font-weight: normal; font-style: normal; font-size: 12px; color: #374151; }
   .entry-sub { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; font-size: 12px; font-style: italic; color: #374151; }
   .entry-sub .l { flex: 1 1 auto; min-width: 0; }
-  .entry-sub .r { flex: 0 1 auto; max-width: 45%; text-align: right; font-weight: bold; font-style: normal; }
+  .entry-sub .r { flex: 0 0 auto; white-space: nowrap; text-align: right; font-weight: bold; font-style: normal; }
 
   /* Academic Details: no rule under the heading - Highest Qualification sits right under it, then its own rule. */
   .section.academic .section-title { border-bottom: none; margin-bottom: 0; padding-bottom: 6px; }

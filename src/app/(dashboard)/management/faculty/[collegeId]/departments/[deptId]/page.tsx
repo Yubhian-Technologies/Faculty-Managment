@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ProfileFieldsView } from "@/components/faculty/ProfileFieldsView";
 import { PersonalDetailsView } from "@/components/shared/PersonalDetailsView";
 import { Avatar } from "@/components/shared/Avatar";
+import { useFacultyListFilters } from "@/components/faculty/FacultyListFilters";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { FacultyMember, FMSUser, FacultyProfileFields, College, ResearchPublication } from "@/types";
 
@@ -43,6 +44,7 @@ export default function ManagementDepartmentFacultyPage() {
   });
 
   const faculty = data?.faculty ?? [];
+  const { rows: shownFaculty, bar: filterBar } = useFacultyListFilters(faculty);
   const collegeName = data?.collegeName ?? "";
   const hod = data?.hod ?? null;
   const hodPublications = data?.hodPublications;
@@ -73,8 +75,8 @@ export default function ManagementDepartmentFacultyPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Faculty"
-        description="Faculty members in this department"
+        title="Staff Profiles"
+        description="Staff records of the Department"
         actions={
           <Button variant="outline" onClick={() => router.push(`/management/faculty/${collegeId}/departments`)}>
             <ArrowLeft className="h-4 w-4 mr-2" />Back
@@ -145,8 +147,10 @@ export default function ManagementDepartmentFacultyPage() {
         </Card>
       )}
 
+      {filterBar}
+
       <DataTable
-        data={faculty}
+        data={shownFaculty}
         columns={columns}
         isLoading={isLoading}
         keyExtractor={(f) => f.id}

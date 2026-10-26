@@ -309,7 +309,7 @@ describe("HOD paged list", () => {
     expect(page.students.map((s) => s.id)).not.toContain("i1");
   });
 
-  it("searches roll number and name, and pages", async () => {
+  it("searches Regd. No and name, and pages", async () => {
     const { collection } = fakeStudentsCollection(roster);
     expect((await fetchHodStudentsPage(collection, ctx, primaryFilters, { ...opts, search: "r3" })).students.map((s) => s.id)).toEqual(["s3"]);
     expect((await fetchHodStudentsPage(collection, ctx, primaryFilters, { ...opts, search: "anu" })).students.map((s) => s.id)).toEqual(["s2"]);

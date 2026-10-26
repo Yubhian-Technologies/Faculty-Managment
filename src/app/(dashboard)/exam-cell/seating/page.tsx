@@ -23,7 +23,7 @@ interface PlanRow {
 
 // Exam Cell: name an exam, pick the sections (in seating order) and rooms,
 // optionally handpick which sections may sit in a given room, then let the
-// system place students by roll number and review the result.
+// system place students by Regd. No and review the result.
 export default function ExamSeatingPage() {
   const router = useRouter();
   const [plans, setPlans] = useState<PlanRow[]>([]);

@@ -3,7 +3,7 @@ import { FakeAuth, FakeFirestore } from "@/lib/testing/fakeFirestore.testutil";
 
 // Drives the real route handlers (import, single add, roll edit) against an
 // in-memory Firestore, to prove the roll-number rules end to end:
-//   - OPTIONAL on every add / import row (the Office enrols students before roll numbers exist and sets them later)
+//   - OPTIONAL on every add / import row (the Office enrols students before Regd. Nos exist and sets them later)
 //   - unique across the whole college AND across every other college, after
 //     normalisation (case / spacing / punctuation variants are one roll)
 //   - a legacy duplicate / roll-less student stays editable
@@ -34,7 +34,7 @@ function seed() {
   });
 }
 
-// Student Mobile No is required (and unique), but these tests are about roll numbers - so a request that does not
+// Student Mobile No is required (and unique), but these tests are about Regd. Nos - so a request that does not
 // mention one gets its own unique number. A test that cares passes `mobileNo` explicitly (even "").
 let mobileSeq = 0;
 const nextMobile = () => `98000${String(++mobileSeq).padStart(5, "0")}`;
@@ -63,8 +63,8 @@ beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
-describe("bulk import - roll number rules", () => {
-  it("accepts a row with no roll number when it has its own Student Mobile No - the roll is mapped on later", async () => {
+describe("bulk import - Regd. No rules", () => {
+  it("accepts a row with no Regd. No when it has its own Student Mobile No - the roll is mapped on later", async () => {
     const { POST } = await import("@/app/api/college/students/import-excel/route");
     const res = await POST(post("/import", { records: [importRow("", "No Roll Row"), importRow("   ", "Blank Roll Row")] }));
     const json = await res.json() as { created: number; failed: { error: string }[] };
@@ -97,10 +97,10 @@ describe("bulk import - roll number rules", () => {
 
   it("still rejects a row with neither a roll nor a Student Mobile No - one of the two is needed to identify the row", async () => {
     const { POST } = await import("@/app/api/college/students/import-excel/route");
-    const res = await POST(post("/import", { records: [importRow("", "No Roll No Mobile", { mobileNo: "" })] }));
+    const res = await POST(post("/import", { records: [importRow("", "No Regd. No Mobile", { mobileNo: "" })] }));
     const json = await res.json() as { created: number; failed: { error: string }[] };
     expect(json.created).toBe(0);
-    expect(json.failed[0].error).toBe("Roll No or Student Mobile No is required - give at least one");
+    expect(json.failed[0].error).toBe("Regd. No or Student Mobile No is required - give at least one");
   });
 
   it("accepts new rolls, and rejects a repeat within the same file (even with different formatting)", async () => {
@@ -208,10 +208,10 @@ describe("bulk import - login passwords (S1)", () => {
   });
 });
 
-describe("single add - roll number rules", () => {
+describe("single add - Regd. No rules", () => {
   const body = { name: "New Student", year: 2, department: "Computer Science and Engineering", course: "Bachelor of Technology" };
 
-  it("does not require a roll number - the student is saved roll-less and can be given one later", async () => {
+  it("does not require a Regd. No - the student is saved roll-less and can be given one later", async () => {
     const { POST } = await import("@/app/api/college/students/route");
     for (const rollNumber of [undefined, "", "   "]) {
       const res = await POST(post("/api/college/students", { ...body, rollNumber }));
@@ -336,7 +336,7 @@ describe("roll edit (HOD / Principal) - PATCH", () => {
     expect(h.db.get("studentUsernames/26A91A0999")).toMatchObject({ collegeId: "c1", studentDocId: "s4", active: true });
   });
 
-  it("refuses to remove an existing roll number", async () => {
+  it("refuses to remove an existing Regd. No", async () => {
     const res = await run("s1", { rollNumber: "" });
     expect(res.status).toBe(400);
     expect((await res.json() as { error: string }).error).toContain("can't be removed");

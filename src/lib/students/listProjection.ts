@@ -4,7 +4,7 @@
 // that can call it - including Aadhaar and ration-card numbers, bank account
 // details, caste and religion - to a Library clerk filling a dropdown, to every
 // faculty member in charge of a section, and to an HOD whose own list shows a
-// roll number and a name. Lists now carry only what the role's screens use:
+// Regd. No and a name. Lists now carry only what the role's screens use:
 //
 //  - the office tier (College Office, Principal, Vice Principal, Super Admin)
 //    keeps the full record - they own admission data and the Edit form needs it;

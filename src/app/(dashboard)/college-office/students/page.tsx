@@ -23,6 +23,7 @@ import { departmentsOfferingCourse, yearOptionsForDepartment, yearOptionsForCour
 import { StudentFormDialog } from "@/components/students/StudentFormDialog";
 import { StudentPasswordDialog } from "@/components/students/StudentPasswordDialog";
 import { EDITABLE_ROSTER_FIELDS, LIST_ROSTER_FIELDS, rosterFieldDisplay } from "@/lib/students/rosterFields";
+import { StudentDepartmentCell } from "@/components/students/StudentDepartmentCell";
 import { toCSV, downloadCSV } from "@/lib/utils/csv";
 import { GraduatedStudentsView } from "@/components/students/GraduatedStudentsView";
 import { StudentPromotionsPanel } from "@/components/students/StudentPromotionsPanel";
@@ -44,7 +45,7 @@ import { buildListUrl, readListChoice, readListInt, readListString, withListBack
 // added student silently carried less than an imported one.
 //
 // Section is still not collected: like the import, every manual add is
-// "unassigned" and the department (sub-)HOD sections the student later. Roll No
+// "unassigned" and the department (sub-)HOD sections the student later. Regd. No
 // IS offered at intake (it's a template column, provisional only), but is
 // read-only when editing - correcting it afterwards is the department's, and
 // theirs is the only path that checks it for uniqueness.
@@ -799,7 +800,7 @@ function OfficeStudentsContent() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") handleLoad(); }}
-            placeholder="Search by name, roll number or email"
+            placeholder="Search by name, Regd. No or email"
             className="pl-9"
           />
         </div>
@@ -831,13 +832,13 @@ function OfficeStudentsContent() {
         </Button>
       </div>
 
-      {/* Roll number range - one more filter, applied by Load like the rest.
+      {/* Regd. No range - one more filter, applied by Load like the rest.
           Inclusive, compared upper-cased; leave one end blank for "from here
           on" / "up to here". */}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs text-muted-foreground shrink-0">Roll no. range:</span>
+        <span className="text-xs text-muted-foreground shrink-0">Regd. No. range:</span>
         <Input
-          placeholder="From roll no."
+          placeholder="From Regd. No."
           value={rollFrom}
           onChange={(e) => setRollFrom(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") handleLoad(); }}
@@ -846,7 +847,7 @@ function OfficeStudentsContent() {
         />
         <span className="text-xs text-muted-foreground">to</span>
         <Input
-          placeholder="To roll no."
+          placeholder="To Regd. No."
           value={rollTo}
           onChange={(e) => setRollTo(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") handleLoad(); }}
@@ -960,7 +961,9 @@ function OfficeStudentsContent() {
                         const value = rosterFieldDisplay(f, s);
                         return (
                           <td key={f.key} className={`p-3 whitespace-nowrap ${f.key === "name" ? "font-medium" : ""}`}>
-                            {value || <span className="text-muted-foreground/50">—</span>}
+                            {f.key === "department"
+                              ? <StudentDepartmentCell department={value} coreDepartment={s.secondaryDepartment} />
+                              : value || <span className="text-muted-foreground/50">—</span>}
                           </td>
                         );
                       })}
@@ -1105,9 +1108,9 @@ function OfficeStudentsContent() {
         description={
           passwordDialog?.kind === "single"
             ? (passwordDialog.student.uid
-                ? "Set the password this student will sign in with, together with their Roll Number. The old password stops working."
-                : "Choose the password this student will sign in with, together with their Roll Number.")
-            : "Every selected student gets a login with this same password, signing in with their own Roll Number. They can change it after signing in, or you can reset any one of them later."
+                ? "Set the password this student will sign in with, together with their Regd. No. The old password stops working."
+                : "Choose the password this student will sign in with, together with their Regd. No.")
+            : "Every selected student gets a login with this same password, signing in with their own Regd. No. They can change it after signing in, or you can reset any one of them later."
         }
         submitLabel={passwordDialog?.kind === "single" && passwordDialog.student.uid ? "Set password" : "Create login"}
         onSubmit={(password) =>

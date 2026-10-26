@@ -105,7 +105,7 @@ function SectionCombobox({
 // Allotment-file columns - a counseling/branch-allotment export can drive the
 // same per-student target selection the manual table below sets by hand.
 const ALLOTMENT_COLUMNS = [
-  { key: "rollNumber", label: "Roll Number", required: true, aliases: ["Roll No", "Roll No.", "Roll Num"] },
+  { key: "rollNumber", label: "Regd. No", required: true, aliases: ["Roll Number", "Roll No", "Roll No.", "Roll Num"] },
   { key: "department", label: "Department", required: true, aliases: ["Dept", "Branch", "Target Department", "Allotted Branch", "Allotted Department"] },
   { key: "section", label: "Section", required: true, aliases: ["Target Section"] },
 ];
@@ -296,7 +296,7 @@ export function StudentPromotionsPanel({ showHeader = true }: { showHeader?: boo
       const headers = parsed[0].map((h) => h.trim());
       const keyMap = matchHeaders(headers, ALLOTMENT_COLUMNS);
       if (Object.keys(keyMap).length < 2) {
-        setAllotmentError('Couldn\'t match the header row - make sure it has "Roll Number", "Department", and "Section" columns.');
+        setAllotmentError('Couldn\'t match the header row - make sure it has "Regd. No", "Department", and "Section" columns.');
         return;
       }
       const unmatchedHeaders = getUnmatchedHeaders(headers, keyMap);
@@ -331,7 +331,7 @@ export function StudentPromotionsPanel({ showHeader = true }: { showHeader?: boo
         if (!roll) continue;
 
         const student = rosterByRoll.get(roll.toLowerCase());
-        if (!student) { unmatched.push({ rollNumber: roll, reason: "Roll number not found in this section's roster" }); continue; }
+        if (!student) { unmatched.push({ rollNumber: roll, reason: "Regd. No not found in this section's roster" }); continue; }
         if (student.status !== "REGULAR") { unmatched.push({ rollNumber: roll, reason: "Student is not REGULAR status" }); continue; }
 
         const targetKey = `${(row.department ?? "").trim().toLowerCase()}::${(row.section ?? "").trim().toLowerCase()}`;
@@ -493,7 +493,7 @@ export function StudentPromotionsPanel({ showHeader = true }: { showHeader?: boo
                   <div>
                     <p className="text-sm font-medium">Or upload an allotment file</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      A file with Roll Number, Department, and Section columns (e.g. a counseling/branch-allotment
+                      A file with Regd. No, Department, and Section columns (e.g. a counseling/branch-allotment
                       export) fills in the per-student targets below automatically - for cohorts splitting into
                       several departments at once, like 1st year students under a Freshman&apos;s Department (e.g.
                       Basic Sciences) moving into their allotted branch.
@@ -561,7 +561,7 @@ export function StudentPromotionsPanel({ showHeader = true }: { showHeader?: boo
                     <thead className="bg-muted/50">
                       <tr>
                         <th className="px-3 py-2 text-left w-10" />
-                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">Roll No.</th>
+                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">Regd. No.</th>
                         <th className="px-3 py-2 text-left font-medium text-muted-foreground">Name</th>
                         <th className="px-3 py-2 text-left font-medium text-muted-foreground">Status</th>
                         <th className="px-3 py-2 text-left font-medium text-muted-foreground">Target</th>

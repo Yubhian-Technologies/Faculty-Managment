@@ -9,6 +9,7 @@ const TEXT_KEYS = [
   "course", "branch", "specialization", "institutionName", "place", "percentageCgpa",
   "hallTicketNumber", "certificateUrl", "domain", "board", "institutionType",
   "affiliatedUniversity", "status", "mode", "degreeType", "subject", "trade",
+  "collegeType", "universityType", "universityTypeOther", "additionalInformation",
 ] as const;
 
 function hasText(v: unknown): boolean {

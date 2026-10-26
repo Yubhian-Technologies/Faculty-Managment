@@ -8,7 +8,7 @@ import { provisionStudentLogin, StudentLoginError } from "@/lib/students/provisi
 import { studentPasswordError } from "@/lib/students/passwordPolicy";
 import type { StudentRecord } from "@/types";
 
-// Issues one student a real login: Roll Number (username) + the password the
+// Issues one student a real login: Regd. No (username) + the password the
 // College Office types in the request. College Office only, per product decision.
 // The password goes to Firebase Auth and nowhere else - it is not stored, logged,
 // audited or returned. Safely re-runnable: calling this again for an already-linked

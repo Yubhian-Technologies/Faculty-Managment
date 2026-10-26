@@ -7,6 +7,7 @@
 // Same shared grid/column derivation as the on-screen table and the PDF
 // (lib/timetable/gridModel.ts), so the three renderings can't drift.
 
+import { subjectAbbreviation } from "@/lib/timetable/subjectAbbreviation";
 import ExcelJS from "exceljs";
 import type { CourseYearTiming, DayOfWeek, Department, PeriodTiming, Subject, TeachingAssignment, TimetableSlot } from "@/types";
 import { DAY_LABELS } from "@/types";
@@ -583,7 +584,7 @@ export async function downloadFacultyTimetableXlsx(opts: FacultyTimetableXlsxOpt
           const assignment = assignmentById.get(slot.assignmentId);
           const courseCode = assignment?.courseId ? courseCodeById.get(assignment.courseId) : undefined;
           const classStr = [courseCode ?? assignment?.courseName, assignment?.year ? `Yr ${assignment.year}` : null, assignment?.sectionName ? `Sec ${assignment.sectionName}` : null].filter(Boolean).join(" ");
-          const subjStr = assignment?.shortCode || assignment?.subjectName || slot.subjectName;
+          const subjStr = subjectAbbreviation(assignment?.subjectName || slot.subjectName, assignment?.shortCode);
           const roomStr = slot.classroom ? (/^room/i.test(slot.classroom.trim()) ? slot.classroom.trim() : `ROOM NO: ${slot.classroom.trim()}`) : "";
           return [classStr, subjStr, roomStr].filter(Boolean).join("\n");
         });
@@ -602,7 +603,7 @@ export async function downloadFacultyTimetableXlsx(opts: FacultyTimetableXlsxOpt
   for (const a of shownAssignments) {
     const semester = slots.find((sl) => sl.assignmentId === a.id)?.semester ?? a.semester;
     const cls = facultyClassLabel({ courseName: a.courseName, year: a.year, semester, sectionName: a.sectionName });
-    const acr = a.shortCode ?? a.subjectCode ?? "—";
+    const acr = subjectAbbreviation(a.subjectName, a.shortCode) || "—";
     const name = a.subjectName ?? "—";
     classRows.set(`${cls}|${acr}|${name}`, { cls, acr, name });
   }

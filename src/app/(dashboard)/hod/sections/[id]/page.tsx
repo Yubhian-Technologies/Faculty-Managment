@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { resolveListBack, withListBack } from "@/lib/listReturn";
 import Link from "next/link";
-import { ArrowLeft, Users, UserCog, BookOpen, Search, Pencil, UserCheck } from "lucide-react";
+import { ArrowLeft, Users, UserCog, BookOpen, Search, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +14,8 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { Pagination } from "@/components/shared/Pagination";
 import { toast } from "@/hooks/useToast";
+import { classRepresentativeCountOf } from "@/lib/sections/classRepresentatives";
+import { sectionTitle, shortCourseName } from "@/lib/sections/sectionTitle";
 import type { Course, CourseYearTiming, Department, SectionListItem, StudentRecord, Subject, SubjectSemesterAssignment, TeachingAssignment } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
 
@@ -84,12 +86,13 @@ export default function SectionRosterPage() {
         // SubjectSemesterAssignment's own doc-comment in types/teaching.ts),
         // so there's nothing to scope by there and the master-subject list
         // stays the only source, same as before this fix.
-        const hasSemesters = sec.courseId
+        const yearTiming = sec.courseId
           ? await fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(sec.courseId)}`)
               .then((r) => r.json() as Promise<{ timings?: CourseYearTiming[] }>)
-              .then((d) => (d.timings ?? []).some((t) => t.year === sec.year && (t.semesters?.length ?? 0) > 0))
-              .catch(() => false)
-          : false;
+              .then((d) => (d.timings ?? []).find((t) => t.year === sec.year))
+              .catch(() => undefined)
+          : undefined;
+        const hasSemesters = (yearTiming?.semesters?.length ?? 0) > 0;
 
         await Promise.all([
           // Students API scopes by section NAME + year, not id - section names
@@ -187,8 +190,7 @@ export default function SectionRosterPage() {
         s.rollNumber.toLowerCase().includes(q) ||
         (s.email && s.email.toLowerCase().includes(q)) ||
         (s.secondaryDepartment && s.secondaryDepartment.toLowerCase().includes(q)) ||
-        (s.gender && s.gender.toLowerCase().includes(q)) ||
-        (s.guardianContact && s.guardianContact.includes(q))
+        (s.gender && s.gender.toLowerCase().includes(q))
     );
   }, [students, search]);
 
@@ -224,8 +226,8 @@ export default function SectionRosterPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Section ${section.name}`}
-        description={`${section.department ?? ""}${section.department && section.courseName ? " · " : ""}${section.courseName ?? ""}${section.secondaryDepartments && section.secondaryDepartments.length > 0 ? ` → ${section.secondaryDepartments.join(", ")}` : ""} · ${ordinalYear(section.year)} · ${section.batch}${section.regulation ? ` · ${section.regulation}` : ""}`}
+        title={sectionTitle({ courseName: section.courseName, year: section.year, sectionName: section.name })}
+        description={`${shortCourseName(section.courseName)}${shortCourseName(section.courseName) && section.department ? " · " : ""}${section.department ?? ""}${section.secondaryDepartments && section.secondaryDepartments.length > 0 ? ` → ${section.secondaryDepartments.join(", ")}` : ""} · ${ordinalYear(section.year)} · ${section.batch}${section.regulation ? ` · ${section.regulation}` : ""}`}
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" asChild>
@@ -236,7 +238,7 @@ export default function SectionRosterPage() {
             {section.accessLevel !== "secondary" && (
               <Button asChild>
                 <Link href={withListBack(`/hod/sections/${id}/edit`, listHref, "/hod/sections")}>
-                  <Pencil className="h-4 w-4 mr-1.5" />Edit Section & CR
+                  <Pencil className="h-4 w-4 mr-1.5" />Edit Section
                 </Link>
               </Button>
             )}
@@ -244,28 +246,19 @@ export default function SectionRosterPage() {
         }
       />
 
-      <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-        <div className="flex items-center gap-1.5">
-          <Users className="h-4 w-4" />
-          <span><strong className="text-foreground">{students.length}</strong> student{students.length !== 1 ? "s" : ""} enrolled</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <UserCheck className="h-4 w-4" />
-          <span>
-            Class Leader (CR):{" "}
-            {section.classLeaderUid ? (
-              <Badge variant="outline" className="text-xs bg-emerald-50 text-emerald-700 border-emerald-200">
-                Active
-              </Badge>
-            ) : (
-              <span className="text-muted-foreground">Not created</span>
-            )}
-          </span>
-        </div>
+      <dl className="space-y-1.5 text-sm">
+        <div className="flex gap-2"><dt className="text-muted-foreground">Total No of students enrolled -</dt><dd className="font-medium">{students.length}</dd></div>
+        <div className="flex gap-2"><dt className="text-muted-foreground">Class I/c -</dt><dd className="font-medium">{section.facultyInchargeName || "Not assigned"}</dd></div>
+        {Array.from({ length: classRepresentativeCountOf(section) }, (_, i) => (
+          <div key={i} className="flex gap-2">
+            <dt className="text-muted-foreground">Class representative-{i + 1} -</dt>
+            <dd className="font-medium">{section.classRepresentatives?.[i]?.name || <span className="font-normal text-muted-foreground">Not selected</span>}</dd>
+          </div>
+        ))}
         {section.accessLevel === "secondary" && (
-          <Badge variant="secondary" className="text-xs">View only</Badge>
+          <div><Badge variant="secondary" className="text-xs">View only</Badge></div>
         )}
-      </div>
+      </dl>
 
       {section.courseId && (
         <div className="space-y-2">
@@ -335,7 +328,7 @@ export default function SectionRosterPage() {
             <div className="relative w-full sm:w-64">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search roll no, name..."
+                placeholder="Search Regd. No, name..."
                 value={search}
                 onChange={(e) => {
                   setSearch(e.target.value);
@@ -374,14 +367,13 @@ export default function SectionRosterPage() {
                 <table className="w-full text-sm">
                   <thead className="bg-muted/50">
                     <tr>
-                      <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Roll No.</th>
+                      <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Regd. No.</th>
                       <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Name</th>
                       {students.some((s) => s.secondaryDepartment) && (
                         <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Registered Branch</th>
                       )}
                       <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Status</th>
                       <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Gender</th>
-                      <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Guardian Contact</th>
                       <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Email</th>
                     </tr>
                   </thead>
@@ -407,7 +399,6 @@ export default function SectionRosterPage() {
                           </Badge>
                         </td>
                         <td className="px-4 py-2.5 text-muted-foreground">{s.gender || "-"}</td>
-                        <td className="px-4 py-2.5 text-muted-foreground">{s.guardianContact || "-"}</td>
                         <td className="px-4 py-2.5 text-muted-foreground">{s.email || "-"}</td>
                       </tr>
                     ))}

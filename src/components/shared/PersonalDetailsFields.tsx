@@ -1,16 +1,21 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RELIGION_LABELS, CASTE_LABELS, SUB_CASTES_BY_CASTE } from "@/types";
 import { PHONE_REGEX, AADHAR_REGEX, PAN_REGEX, HEIGHT_REGEX } from "@/lib/validations";
 import { StringListInput, RepeatingGroup } from "@/components/shared/ProfileFieldPrimitives";
 import { migratePersonalFlat } from "@/lib/faculty/fieldRenames";
-import { DesignationSelect } from "@/components/faculty/DesignationOptions";
+import {
+  RATIFICATION_STATUS_CHOICES, RATIFICATION_RESULT_CHOICES, ratificationStatusStep, ratificationResultStep, ratificationStatusPatch,
+  isLegacyRatificationStatus, isRatified, ratifiedDesignationChoices, matchRatifiedDesignation, blankRatificationRecord,
+} from "@/lib/faculty/ratificationHistory";
 import { toDateInputValue } from "@/lib/utils";
+import type { DesignationCatalogItem } from "@/types";
 import type { Religion, Caste } from "@/types";
 import type { RatificationRecord } from "@/types";
 
@@ -27,10 +32,45 @@ function latestDobForAge18(): string {
   return d.toISOString().slice(0, 10);
 }
 
-// Ratification Records only ever apply to these four - never the full
-// admin-curated Teaching designation catalogue (Lecturer, Visiting Faculty,
-// HOD, etc).
-const RATIFICATION_DESIGNATIONS = ["Assistant Professor", "Associate Professor", "Professor", "Principal"];
+// Ratified Designation: the college's Designation Catalogue entries for
+// Professor / Asst Prof / Assoc. Prof, plus Principal (always offered, whichever
+// category the catalogue files it under - see ratifiedDesignationChoices).
+// A stored value outside those (e.g. "Lecturer") stays visible and selected,
+// so an old record is never blanked just by opening it.
+function RatifiedDesignationSelect({ value, onChange }: { value: string | undefined; onChange: (v: string) => void }) {
+  const [catalogNames, setCatalogNames] = useState<string[]>([]);
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch("/api/college/designations");
+        const data = await res.json() as { items?: DesignationCatalogItem[] };
+        setCatalogNames((data.items ?? []).filter((d) => d.isActive).map((d) => d.name));
+      } catch {
+        // Non-fatal - Principal is still offered and a stored value still shows.
+      }
+    })();
+  }, []);
+  const choices = ratifiedDesignationChoices(catalogNames);
+  const match = matchRatifiedDesignation(value, choices);
+  const legacy = value && !match ? value : undefined;
+  return (
+    <div className="space-y-2">
+      <Label>Ratified Designation</Label>
+      <Select value={match ?? legacy ?? ""} onValueChange={onChange}>
+        <SelectTrigger onClear={value ? () => onChange("") : undefined}><SelectValue placeholder="Select designation" /></SelectTrigger>
+        <SelectContent>
+          {choices.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+          {legacy && (
+            <>
+              <SelectSeparator />
+              <SelectItem value={legacy}>{legacy}</SelectItem>
+            </>
+          )}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
 
 export interface PersonalDetailsValue {
   nameAsPerAadhar?: string;
@@ -57,6 +97,8 @@ export interface PersonalDetailsValue {
   emergencyContactRelation?: string;
   emergencyContactMobileNo?: string;
   ratificationStatus?: string;
+  // true once the Decision "Not Ratified" was picked after Attended - see lib/faculty/ratificationHistory.ts.
+  ratificationAttended?: boolean;
   ratificationProceedingsNumber?: string; // ignored when `ratificationHistory` is true - see `ratifications` below
   ratificationDate?: string;   // yyyy-mm-dd; ignored when `ratificationHistory` is true
   // Faculty-only multi-entry ratification history (see lib/faculty/ratificationHistory.ts).
@@ -111,7 +153,7 @@ export const STAFF_REQUIRED_PERSONAL_FIELDS: (keyof PersonalDetailsValue)[] = [
   "legalName", "gender", "dateOfBirth", "aadharNo", "panNo", "ratificationStatus",
 ];
 export const FACULTY_REQUIRED_PERSONAL_FIELDS: (keyof PersonalDetailsValue)[] = STAFF_REQUIRED_PERSONAL_FIELDS;
-// Ratification is a Teaching Faculty concept only (see RATIFICATION_DESIGNATIONS
+// Ratification is a Teaching Faculty concept only (see RatifiedDesignationSelect
 // above) - Supporting/Non-Technical Staff have no such field at all, so their
 // callers use this set (and pass the matching hiddenFields, see below) instead
 // of STAFF_REQUIRED_PERSONAL_FIELDS.
@@ -143,7 +185,7 @@ export function getMissingRequiredPersonalFields(
   value: PersonalDetailsValue,
   requiredFields: (keyof PersonalDetailsValue)[] = STAFF_REQUIRED_PERSONAL_FIELDS
 ): string[] {
-  return requiredFields
+  const missing = requiredFields
     .filter((key) => {
       const v = String(value[key] ?? "").trim();
       if (!v) return true;
@@ -151,6 +193,9 @@ export function getMissingRequiredPersonalFields(
       return !!format && !format.test(v);
     })
     .map((key) => PERSONAL_FIELD_LABELS[key] ?? key);
+  // "Attended" on its own means the Ratification Decision hasn't been chosen yet.
+  if (requiredFields.includes("ratificationStatus") && value.ratificationStatus === "Attended") missing.push("Ratification Decision");
+  return missing;
 }
 
 export function PersonalDetailsFields({ value: rawValue, onChange, requiredFields = STAFF_REQUIRED_PERSONAL_FIELDS, hiddenFields = [], showNameAsPerPan = false, ratificationHistory = false }: Props) {
@@ -586,27 +631,34 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
             <div className="space-y-2">
               <Label>Ratification Status{mark("ratificationStatus")}</Label>
               <Select
-                value={value.ratificationStatus ?? ""}
-                onValueChange={(v) => {
-                  // Proceedings Number/Date (or the ratification history list)
-                  // only make sense once Ratified - cleared the moment status
-                  // moves away from it, so a later Save can never resend (and
-                  // re-persist) a stale value from before this switch.
-                  if (v !== "Ratified") {
-                    onChange({ ...value, ratificationStatus: v, ratificationProceedingsNumber: "", ratificationDate: "", ratifications: [] });
-                  } else {
-                    set("ratificationStatus", v);
-                  }
-                }}
+                value={ratificationStatusStep(value.ratificationStatus, value.ratificationAttended)}
+                onValueChange={(v) => onChange({ ...value, ...ratificationStatusPatch(value.ratificationStatus, value.ratificationAttended, v, "status", ratificationHistory) })}
               >
                 <SelectTrigger onClear={canClear("ratificationStatus", value.ratificationStatus) ? () => set("ratificationStatus", "") : undefined}><SelectValue placeholder="Select status" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Ratified">Ratified</SelectItem>
-                  <SelectItem value="Not Ratified">Not Ratified</SelectItem>
+                  {RATIFICATION_STATUS_CHOICES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  {/* An older "Not Ratified" (nobody has said whether they attended) or any other
+                      stored text is not guessed into one of the two; it is listed only while the
+                      record holds it, so the picker shows it as before instead of blank.
+                      Picking Attended / Not Yet Attended replaces it. */}
+                  {isLegacyRatificationStatus(value.ratificationStatus, value.ratificationAttended) && (
+                    <SelectItem value={value.ratificationStatus as string}>{value.ratificationStatus}</SelectItem>
+                  )}
                 </SelectContent>
               </Select>
             </div>
-            {value.ratificationStatus === "Ratified" && !ratificationHistory && (
+            {ratificationStatusStep(value.ratificationStatus, value.ratificationAttended) === "Attended" && (
+              <div className="space-y-2">
+                <Label>Ratification Decision{mark("ratificationStatus")}</Label>
+                <Select value={ratificationResultStep(value.ratificationStatus, value.ratificationAttended)} onValueChange={(v) => onChange({ ...value, ...ratificationStatusPatch(value.ratificationStatus, value.ratificationAttended, v, "result", ratificationHistory) })}>
+                  <SelectTrigger><SelectValue placeholder="Select result" /></SelectTrigger>
+                  <SelectContent>
+                    {RATIFICATION_RESULT_CHOICES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {isRatified(value.ratificationStatus) && !ratificationHistory && (
               <>
                 <div className="space-y-2">
                   <Label>Ratification Proceedings Number</Label>
@@ -619,26 +671,20 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
               </>
             )}
           </div>
-          {value.ratificationStatus === "Ratified" && ratificationHistory && (
+          {isRatified(value.ratificationStatus) && ratificationHistory && (
             <RepeatingGroup
               title="Ratification Records"
-              items={value.ratifications}
-              empty={() => ({ designation: "", proceedingsNumber: "", date: "" })}
+              // One record is always on screen once Ratified (a blank one is never
+              // saved - normalizeRatificationRecords drops it); "Add More" adds more.
+              items={value.ratifications?.length ? value.ratifications : [blankRatificationRecord()]}
+              empty={blankRatificationRecord}
               onChange={(v) => set("ratifications", v)}
               renderRow={(item, update) => (
                 <>
                   {/* The designation this ratification was granted at - a purely
                       historical fact, independent of (and never synced with) this
-                      record's own current Designation field above. Drawn from the
-                      same teaching designation catalogue, with "Other" allowed so
-                      a designation the catalogue no longer lists isn't lost. */}
-                  <DesignationSelect
-                    label="Designation"
-                    value={item.designation}
-                    onChange={(v) => update({ designation: v })}
-                    kind="teaching"
-                    allowedNames={RATIFICATION_DESIGNATIONS}
-                  />
+                      record's own current Designation field above. */}
+                  <RatifiedDesignationSelect value={item.designation} onChange={(v) => update({ designation: v })} />
                   <div className="space-y-2">
                     <Label>Ratification Proceedings Number</Label>
                     <Input value={item.proceedingsNumber ?? ""} onChange={(e) => update({ proceedingsNumber: e.target.value })} placeholder="Proceedings number" />

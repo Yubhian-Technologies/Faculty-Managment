@@ -13,7 +13,7 @@ export interface ParsedBulkRequest {
 
 /**
  * Validates the envelope of what the page posted. Strict about WHICH fields may be touched (only the allow-listed
- * detail fields - never Student Mobile No, Roll No, name, department, year...), lenient about the cells (a bad cell is
+ * detail fields - never Student Mobile No, Regd. No, name, department, year...), lenient about the cells (a bad cell is
  * the classifier's job to report per row).
  */
 export function parseBulkUpdateRequest(body: { rows?: unknown; fields?: unknown; fillOnly?: unknown }, maxRows: number): ParsedBulkRequest | { error: string } {

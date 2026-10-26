@@ -73,7 +73,7 @@ describe("buildStudentSelfUpdate", () => {
 });
 
 describe("Student Mobile No (self-edit)", () => {
-  it("is locked until a Roll No exists (it is the key the Office matches the roll on)", () => {
+  it("is locked until a Regd. No exists (it is the key the Office matches the roll on)", () => {
     expect(studentMobileSelfEditable({ rollNumber: "" })).toBe(false);
     expect(studentMobileSelfEditable({ rollNumber: "  " })).toBe(false);
     expect(studentMobileSelfEditable({ rollNumber: "24A1" })).toBe(true);

@@ -184,7 +184,7 @@ export async function POST(request: Request) {
     // the stored entries, and the shape below also maps over it, so both have
     // to see it outside the transaction (tx.get cannot query).
     // sortStudentsForList, not rollNumber.localeCompare: a student imported
-    // without a roll number sorts last by name instead of throwing here and
+    // without a Regd. No sorts last by name instead of throwing here and
     // making the whole class impossible to take attendance for.
     // Roster, academic year and the on-duty day are independent reads: fetched
     // together (the roster is the long pole, the other two ride along for free).

@@ -475,7 +475,8 @@ export interface FMSUser {
   emergencyContactName?: string;
   emergencyContactRelation?: string; // relation of the emergency contact to this person
   emergencyContactMobileNo?: string;
-  ratificationStatus?: "Ratified" | "Not Ratified";
+  ratificationStatus?: "Ratified" | "Not Ratified" | "Attended" | "Not Yet Attended"; // see lib/faculty/ratificationHistory.ts
+  ratificationAttended?: boolean; // true = a "Not Ratified" the person confirmed as Attended + Not Ratified; absent on older records
   ratificationProceedingsNumber?: string;
   ratificationDate?: Timestamp; // Ratification Proceedings Date
   maritalStatus?: "Single" | "Married";
@@ -1263,7 +1264,8 @@ export interface FacultyMember {
   emergencyContactRelation?: string; // relation of the emergency contact to this person
   emergencyContactMobileNo?: string;
   collegeEmail: string; // required — this is the faculty member's login username
-  ratificationStatus?: "Ratified" | "Not Ratified";
+  ratificationStatus?: "Ratified" | "Not Ratified" | "Attended" | "Not Yet Attended"; // see lib/faculty/ratificationHistory.ts
+  ratificationAttended?: boolean; // true = a "Not Ratified" the person confirmed as Attended + Not Ratified; absent on older records
   // Historical ratification record(s) - see RatificationRecord's own doc-comment
   // below. A doc saved before this existed may still only carry the legacy flat
   // fields right below with no `ratifications` array; ratificationRecordsFromDoc()
@@ -1340,11 +1342,15 @@ export interface DegreeDetail {
   // (Fitter, Electrician ...). A value typed under one course stays stored if the course is changed later.
   subject?: string;
   trade?: string;
-  // UG/PG only - whether institutionName below names a University or an
-  // Institute; an Institute is typically affiliated to a University, which
-  // affiliatedUniversity records separately.
+  // UG/PG/Doctoral/Post-Doctoral. The stored value "INSTITUTE" is shown as "Affiliated College" (the label changed, the
+  // stored value did not, so every earlier record reads as before).
   institutionType?: "UNIVERSITY" | "INSTITUTE";
-  affiliatedUniversity?: string; // UG/PG only, when institutionType === "INSTITUTE"
+  affiliatedUniversity?: string; // when institutionType === "INSTITUTE"
+  // All optional, absent on every record saved before they existed (see lib/faculty/institutionType.ts):
+  collegeType?: "AUTONOMOUS" | "NON_AUTONOMOUS"; // only when institutionType === "INSTITUTE" (Affiliated College)
+  universityType?: "STATE" | "DEEMED" | "IIT" | "NIT" | "IIIT" | "OTHERS"; // only when institutionType === "UNIVERSITY"
+  universityTypeOther?: string; // only when universityType === "OTHERS" - what the person typed
+  additionalInformation?: string; // "Additional Information (if any)", right after Hall Ticket Number
   institutionName: string;
   // Doctoral (Ph.D.) only - UI label "Name of the Department": the department
   // of the university/institute the doctorate was pursued in. Optional, so
@@ -1481,6 +1487,8 @@ export interface PromotionRecord {
 // not a Firestore Timestamp, so array entries need no per-element Timestamp
 // conversion on read - see lib/faculty/ratificationHistory.ts.
 export interface RatificationRecord {
+  // The "Ratified Designation" - stored as the full name (Professor, Assistant
+  // Professor, Associate Professor, Principal); older records may hold a legacy code.
   designation: string;
   proceedingsNumber?: string;
   date?: string; // "YYYY-MM-DD"
@@ -2825,6 +2833,11 @@ export interface Section {
   labBatches?: string[];
   classLeaderUid?: string;
   classLeaderName?: string;
+  // Class Representatives (CR-1 / CR-2) - a record on the section, apart from the Class Leader login above.
+  // The HOD sets how many the section has (0-2; absent = 2); the faculty incharge (or HOD) then picks
+  // that many students from the section's roster. Name / roll are copied so the header needs no lookup.
+  classRepresentativeCount?: number;
+  classRepresentatives?: { studentId: string; name: string; rollNumber?: string }[];
   studentCount: number;
   // Secondary — the branch this section feeds, e.g. a shared first-year Basic
   // Science section whose cohort promotes into CSE. Chosen per section from the
@@ -3349,6 +3362,7 @@ export type AuditAction =
   | "LAB_ATTENDANCE_ALLOCATED"
   | "LAB_BATCH_MODE_SET"
   | "SECTION_LAB_BATCHES_SET"
+  | "SECTION_CLASS_REPS_SET"
   // Supporting Staff module
   | "SUPPORTING_STAFF_CREATED"
   | "SUPPORTING_STAFF_UPDATED"

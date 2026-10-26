@@ -12,7 +12,7 @@ import { toast } from "@/hooks/useToast";
 import { lookupRoster, lookupSearch, lookupSections, type PickerSection, type PickerStudent } from "./api";
 
 // Faculty pick the students a request covers: browse a section's roster and tick
-// people, or find someone by roll number - from any department. The selection is
+// people, or find someone by Regd. No - from any department. The selection is
 // kept as a map so it survives switching section or searching.
 
 export function StudentPicker({ selected, onChange, max }: { selected: PickerStudent[]; onChange: (s: PickerStudent[]) => void; max: number }) {
@@ -38,7 +38,7 @@ export function StudentPicker({ selected, onChange, max }: { selected: PickerStu
   }
 
   async function search() {
-    if (query.trim().length < 3) { toast({ title: "Type at least 3 characters of the roll number" }); return; }
+    if (query.trim().length < 3) { toast({ title: "Type at least 3 characters of the Regd. No" }); return; }
     try { setResults(await lookupSearch(query.trim())); }
     catch { toast({ variant: "destructive", title: "Search failed" }); }
   }
@@ -72,7 +72,7 @@ export function StudentPicker({ selected, onChange, max }: { selected: PickerStu
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="roll-search">Or find by roll number</Label>
+          <Label htmlFor="roll-search">Or find by Regd. No</Label>
           <div className="flex gap-2">
             <Input id="roll-search" value={query} placeholder="e.g. 23YEC" onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void search(); }} />
             <Button type="button" variant="outline" onClick={() => void search()} aria-label="Search"><Search className="h-4 w-4" /></Button>

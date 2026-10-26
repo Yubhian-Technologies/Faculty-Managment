@@ -44,11 +44,15 @@ function PrincipalFacultyModuleContent() {
 
   if (!moduleDef) return <p className="text-sm text-muted-foreground">Unknown section.</p>;
 
+  // Same rule as the Edit button in the header: the empty-tab message offers an edit only when the header does.
+  const editHref = moduleKey !== "research" && moduleKey !== "financial" ? withReturnTo(`/principal/faculty/${deptId}/${facultyId}/${moduleKey}/edit`, returnTo) : undefined;
+
   return (
     <div className="space-y-6">
       <PageHeader
         title={moduleDef.label}
         description={facultyDisplayName(faculty)}
+        note={moduleDef.description}
         actions={
           <div className="flex gap-2">
             <Button variant="outline" asChild>
@@ -56,9 +60,9 @@ function PrincipalFacultyModuleContent() {
             </Button>
             {/* Same modules the HOD can edit - Research and Financial stay read-only
                 (Research is the faculty's own publications; Financial is College Office's). */}
-            {moduleKey !== "research" && moduleKey !== "financial" && (
+            {editHref && (
               <Button asChild>
-                <Link href={withReturnTo(`/principal/faculty/${deptId}/${facultyId}/${moduleKey}/edit`, returnTo)}><Pencil className="h-4 w-4 mr-2" />Edit</Link>
+                <Link href={editHref}><Pencil className="h-4 w-4 mr-2" />Edit</Link>
               </Button>
             )}
           </div>
@@ -68,7 +72,7 @@ function PrincipalFacultyModuleContent() {
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : faculty ? (
-        <FacultyProfileModuleContent moduleKey={moduleKey} faculty={faculty} teachingAssignments={teachingAssignments} collegeType={collegeType} hideLegalName showNameAsPerPan ratificationHistory />
+        <FacultyProfileModuleContent editHref={editHref} moduleKey={moduleKey} faculty={faculty} teachingAssignments={teachingAssignments} collegeType={collegeType} hideLegalName showNameAsPerPan ratificationHistory />
       ) : null}
     </div>
   );

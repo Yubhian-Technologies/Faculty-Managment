@@ -27,7 +27,9 @@ import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { toDate } from "@/lib/utils";
 import { allPreviousExperienceEntries, experienceBreakdown } from "@/lib/faculty/experienceCalc";
+import { compareDefaultFacultyOrder } from "@/lib/faculty/listOrder";
 import type { FacultyMember, CollegeType, Department } from "@/types";
+import { DESIGNATION_LABELS } from "@/types";
 import { useListUrlSync } from "@/hooks/useListUrlSync";
 import { buildListUrl, readListChoice, readListString, withListBack } from "@/lib/listReturn";
 
@@ -66,7 +68,7 @@ function matchesStatus(f: FacultyRow, key: string): boolean {
   const status = f.status as string | undefined;
   if (key === "INACTIVE") return status === "RESIGNED" || status === "RETIRED";
   if (key === "RATIFIED") return f.ratificationStatus === "Ratified";
-  if (key === "NOT_RATIFIED") return f.ratificationStatus === "Not Ratified";
+  if (key === "NOT_RATIFIED") return ["Not Ratified", "Attended", "Not Yet Attended"].includes(f.ratificationStatus as string);
   return status === key;
 }
 
@@ -155,9 +157,10 @@ function HODFacultyContent() {
   const [statusFilter, setStatusFilter] = useState<string>(restored.status);
   const [genderFilter, setGenderFilter] = useState("");
   const [qualFilter, setQualFilter] = useState("");
+  const [designationFilter, setDesignationFilter] = useState("");
   // "desc" = up arrow: most senior first (earliest joining / most experience), "asc" = down arrow: the reverse.
   // Only what the person picked with the arrows. null = nothing picked: the list is then
-  // quietly ordered by most experience first (see effectiveSort), without lighting any arrow.
+  // quietly ordered HOD, then Principal, then internal experience (see visibleFaculty), without lighting any arrow.
   const [sort, setSort] = useState<SortState>(null);
   // "" = every department in the roster; otherwise one department's faculty.
   const [deptFilter, setDeptFilter] = useState<string>(restored.department);
@@ -311,13 +314,15 @@ function HODFacultyContent() {
     setStatusFilter("");
     setGenderFilter("");
     setQualFilter("");
+    setDesignationFilter("");
     setSort(null);
   }
 
-  function changeFilter(kind: "status" | "gender" | "qual" | "sort", value: string | SortState) {
+  function changeFilter(kind: "status" | "gender" | "qual" | "designation" | "sort", value: string | SortState) {
     if (kind === "status") setStatusFilter(value as string);
     else if (kind === "gender") setGenderFilter(value as string);
     else if (kind === "qual") setQualFilter(value as string);
+    else if (kind === "designation") setDesignationFilter(value as string);
     else setSort(value as SortState);
     setSelectedIds(new Set());
   }
@@ -382,13 +387,25 @@ function HODFacultyContent() {
   }, [faculty]);
   const activeQualFilter = qualificationOptions.some((q) => q.toLowerCase() === qualFilter.toLowerCase()) ? qualFilter : "";
 
+  // Only the designations the roster actually holds (stored value -> display label).
+  const designationOptions = useMemo(() => {
+    const byKey = new Map<string, string>();
+    for (const f of faculty) {
+      const d = (f.designation as string | undefined)?.trim();
+      if (d && !byKey.has(d)) byKey.set(d, DESIGNATION_LABELS[d] ?? d);
+    }
+    return Array.from(byKey, ([key, label]) => ({ key, label })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [faculty]);
+  const activeDesignationFilter = designationOptions.some((o) => o.key === designationFilter) ? designationFilter : "";
+
   const filteredFaculty = useMemo(
     () => faculty.filter((f) =>
       matchesStatus(f, statusFilter) &&
       (!genderFilter || f.gender === genderFilter) &&
-      (!activeQualFilter || (f.highestQualification as string | undefined)?.trim().toLowerCase() === activeQualFilter.toLowerCase())
+      (!activeQualFilter || (f.highestQualification as string | undefined)?.trim().toLowerCase() === activeQualFilter.toLowerCase()) &&
+      (!activeDesignationFilter || (f.designation as string | undefined)?.trim() === activeDesignationFilter)
     ),
-    [faculty, statusFilter, genderFilter, activeQualFilter]
+    [faculty, statusFilter, genderFilter, activeQualFilter, activeDesignationFilter]
   );
 
   const departmentChips = useMemo(() => {
@@ -401,24 +418,22 @@ function HODFacultyContent() {
     return names.map((name) => ({ name, count: counts.get(name) ?? 0 }));
   }, [filteredFaculty]);
   const activeDeptFilter = departmentChips.some((c) => c.name === deptFilter) ? deptFilter : "";
-  const filtersApplied = !!statusFilter || !!genderFilter || !!activeQualFilter;
-  const effectiveSort = useMemo<NonNullable<SortState>>(
-    () => (sort ?? { key: "experience", dir: "desc" }),
-    [sort]
-  );
+  const filtersApplied = !!statusFilter || !!genderFilter || !!activeQualFilter || !!activeDesignationFilter;
   const visibleFaculty = useMemo(() => {
     const rows = activeDeptFilter ? filteredFaculty.filter((f) => (f.department as string | undefined)?.trim() === activeDeptFilter) : filteredFaculty;
-    const value = effectiveSort.key === "joining" ? joiningMillis : experienceYears;
+    // Nothing picked: HOD, then Principal, then internal experience (lib/faculty/listOrder.ts).
+    if (!sort) return [...rows].sort(compareDefaultFacultyOrder);
+    const value = sort.key === "joining" ? joiningMillis : experienceYears;
     // Up arrow ("desc") = the most senior first for both columns: the most experience, and so the
     // earliest Date of Joining. Down arrow ("asc") is the reverse.
-    const sign = (effectiveSort.dir === "desc" ? -1 : 1) * (effectiveSort.key === "joining" ? -1 : 1);
+    const sign = (sort.dir === "desc" ? -1 : 1) * (sort.key === "joining" ? -1 : 1);
     // A person with no value (no joining date / no experience) always goes last, in either direction.
     return [...rows].sort((a, b) => {
       const va = value(a), vb = value(b);
       if (!va || !vb) return (va ? 0 : 1) - (vb ? 0 : 1);
       return sign * (va - vb);
     });
-  }, [filteredFaculty, activeDeptFilter, effectiveSort]);
+  }, [filteredFaculty, activeDeptFilter, sort]);
 
   const noFilters = !filtersApplied && !sort;
 
@@ -491,7 +506,7 @@ function HODFacultyContent() {
     },
     {
       key: "totalYearsOfExperience",
-      header: "Total Experience",
+      header: "Experience",
       hideOnMobile: true,
       render: (row) => <FacultyExperienceCell row={row} />,
     },
@@ -571,7 +586,9 @@ function HODFacultyContent() {
     <div className="space-y-6">
       <PageHeader
         title="Staff Profiles"
-        description="Staff records of the Department"
+        // Names the department chosen in "Working as" (all of them, joined, for a head of several
+        // with none picked); "your department" only when no department is known.
+        description={myDepartments.length > 0 ? `Manage teaching and supporting staff records for the ${myDepartments.map((d) => `Department of ${d}`).join(" · ")}.` : "Manage teaching and supporting staff records for your department."}
         actions={
           <div className="flex items-center gap-2">
             {selectedIds.size > 0 && (
@@ -625,6 +642,13 @@ function HODFacultyContent() {
           value={activeQualFilter}
           options={qualificationOptions.map((q) => ({ key: q, label: q }))}
           onChange={(v) => changeFilter("qual", v)}
+        />
+        <FilterSelect
+          label="Designation"
+          allLabel="All Designations"
+          value={activeDesignationFilter}
+          options={designationOptions}
+          onChange={(v) => changeFilter("designation", v)}
         />
         <SortPill label="Date of Joining" active={sort?.key === "joining" ? sort.dir : null} onChange={(dir) => changeFilter("sort", dir ? { key: "joining", dir } : null)} />
         <SortPill label="Experience" active={sort?.key === "experience" ? sort.dir : null} onChange={(dir) => changeFilter("sort", dir ? { key: "experience", dir } : null)} />

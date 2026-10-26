@@ -318,7 +318,7 @@ export async function GET(request: Request) {
       return true;
     });
     // compareStudentsForList (not a bare rollNumber.localeCompare): a student
-    // imported without a roll number must sort last by name, not crash the report.
+    // imported without a Regd. No must sort last by name, not crash the report.
     const byRoll = (a: (typeof filtered)[number], b: (typeof filtered)[number]) =>
       compareStudentsForList({ id: a.studentId, rollNumber: a.rollNumber, name: a.name }, { id: b.studentId, rollNumber: b.rollNumber, name: b.name });
     filtered.sort((a, b) => {

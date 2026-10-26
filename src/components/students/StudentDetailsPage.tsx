@@ -29,7 +29,7 @@ interface StudentDetailsPageProps {
   // Shows an Edit button that opens the shared Add/Edit dialog
   // (StudentFormDialog) - only the College Office route passes this. HOD and
   // Principal have no full roster-edit capability for a student (HOD edits
-  // only roll number/status/lab batch via its own small dialog on the list
+  // only Regd. No/status/lab batch via its own small dialog on the list
   // page; Principal's view is read-only throughout - see GraduatedStudentsView's
   // own doc-comment), so this defaults to false rather than every caller
   // having to say "no" explicitly.
@@ -276,7 +276,7 @@ export function StudentDetailsPage({ studentId, backHref, editable = false, life
           </div>
           <div className="@container">
             <div className={`grid gap-x-4 gap-y-4 ${FACT_GRID_COLS_4}`}>
-              <Fact label="Roll No" value={student.rollNumber} />
+              <Fact label="Regd. No" value={student.rollNumber} />
               <Fact label="Course" value={student.course} />
               <Fact label="Department" value={student.department} />
               <Fact label="Core Department" value={student.secondaryDepartment} />
@@ -306,7 +306,7 @@ export function StudentDetailsPage({ studentId, backHref, editable = false, life
           onOpenChange={setEditOpen}
           student={student}
           // `editable` is only ever passed by the College Office route, whose Edit
-          // form may also change the Roll No (the server enforces it by role).
+          // form may also change the Regd. No (the server enforces it by role).
           rollEditable
           onSaved={() => { setEditOpen(false); void loadStudent(); }}
         />

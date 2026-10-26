@@ -654,7 +654,7 @@ export default function PrincipalInternalMarksPage() {
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by student name or roll number"
+                placeholder="Search by student name or Regd. No"
                 className="pl-9"
               />
             </div>
@@ -667,7 +667,7 @@ export default function PrincipalInternalMarksPage() {
                   <table className="w-full text-sm">
                     <thead className="bg-muted/50 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
                       <tr>
-                        <th className="px-4 py-3">Roll No.</th>
+                        <th className="px-4 py-3">Regd. No.</th>
                         <th className="px-4 py-3">Student</th>
                         {activeComponents.map((c) => (
                           <th key={c.id} className="px-4 py-3 whitespace-nowrap">{c.name} (Max {c.maxMarks})</th>
@@ -731,7 +731,7 @@ export default function PrincipalInternalMarksPage() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by student name or roll number"
+              placeholder="Search by student name or Regd. No"
               className="pl-9"
             />
           </div>
@@ -818,7 +818,7 @@ export default function PrincipalInternalMarksPage() {
               </DialogHeader>
               <div className="space-y-4 text-sm">
                 <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-                  <div><p className="text-xs text-muted-foreground">Roll Number</p><p className="font-medium">{viewTarget.entry.rollNumber}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Regd. No</p><p className="font-medium">{viewTarget.entry.rollNumber}</p></div>
                   <div><p className="text-xs text-muted-foreground">Course</p><p className="font-medium">{viewTarget.batch.courseName ?? courseName} · {ordinalYear(viewTarget.batch.year)}</p></div>
                   <div><p className="text-xs text-muted-foreground">Branch</p><p className="font-medium">{viewTarget.batch.department}</p></div>
                   <div><p className="text-xs text-muted-foreground">Section</p><p className="font-medium">{viewTarget.batch.sectionName}</p></div>

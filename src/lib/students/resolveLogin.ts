@@ -1,8 +1,8 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { rollNumberUpperOf, studentLoginEmail, studentRollDocId, studentRollKey } from "@/lib/students/loginDefaults";
 
-// Maps what a student typed (a Roll Number) to the Firebase Auth email(s) that
-// could belong to them. Roll numbers are globally unique, so this is a plain
+// Maps what a student typed (a Regd. No) to the Firebase Auth email(s) that
+// could belong to them. Regd. Nos are globally unique, so this is a plain
 // lookup by document id - no query, no index, no college involved:
 //  1. the global registry document for the normalised roll (studentUsernames/{KEY}) -
 //     how every account created since the registry existed, and every renamed
@@ -48,7 +48,7 @@ export async function findStudentLoginEmails(db: Firestore, roll: string): Promi
 /**
  * What to answer for a roll nobody has a login for. Never a "not found": a
  * guessable-looking email that simply fails to sign in, exactly like a wrong
- * password, so this endpoint cannot be used to learn which roll numbers exist.
+ * password, so this endpoint cannot be used to learn which Regd. Nos exist.
  */
 export function placeholderLoginEmail(roll: string): string {
   return studentLoginEmail(roll);

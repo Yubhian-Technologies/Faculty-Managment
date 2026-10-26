@@ -5,8 +5,8 @@ import { normalizeStudentMobile, studentMobileProblem } from "./studentMobile";
 
 // "Update student data": the College Office picks WHICH detail fields to change, downloads a template holding Student
 // Mobile No + those columns, fills it in and uploads it. Each row finds its student by Student Mobile No (the same key
-// the Roll No mapping uses) and updates only the picked fields. This file is the pure rules; the server resolves the
-// students (bulkUpdateResolve.ts) and writes (api/college/students/bulk-update). It does not touch the Roll No mapping.
+// the Regd. No mapping uses) and updates only the picked fields. This file is the pure rules; the server resolves the
+// students (bulkUpdateResolve.ts) and writes (api/college/students/bulk-update). It does not touch the Regd. No mapping.
 //
 // Per field, for a non-blank cell (a blank cell NEVER changes anything):
 //   student blank        -> FILL
@@ -17,7 +17,7 @@ import { normalizeStudentMobile, studentMobileProblem } from "./studentMobile";
 // Not copied from the student self-edit rules, on purpose: self-edit clears dependent details when an answer flips
 // (Handicapped Type when "No") and mirrors Permanent Address. Both erase data, so here they only raise a WARNING.
 
-/** Mobile is the key; Roll No lives in the Map roll numbers tab; identity/academic fields have their own flows. */
+/** Mobile is the key; Regd. No lives in the Map Regd. Nos tab; identity/academic fields have their own flows. */
 export const BULK_UPDATE_FIELDS: string[] = ROSTER_DETAIL_GROUPS.flatMap((g) => g.keys).filter((k) => k !== "mobileNo");
 const ALLOWED = new Set(BULK_UPDATE_FIELDS);
 

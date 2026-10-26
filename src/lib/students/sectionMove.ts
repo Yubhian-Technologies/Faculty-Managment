@@ -48,7 +48,7 @@ export function sectionsAcceptingAll<S extends Pick<Section, "year" | "departmen
 export interface PlanSectionMoveOptions {
   /** True for the college's common / freshman department (or one of its sub-departments). */
   isSharedDept: (name: string) => boolean;
-  /** Lower-cased roll numbers of students already sitting in the target section. */
+  /** Lower-cased Regd. Nos of students already sitting in the target section. */
   targetRolls?: ReadonlySet<string>;
 }
 
@@ -86,7 +86,7 @@ export function planSectionMove(
 
   const roll = (student.rollNumber ?? "").trim().toLowerCase();
   if (roll && opts.targetRolls?.has(roll)) {
-    return { ok: false, reason: `Roll number ${student.rollNumber} already exists in section ${target.name}` };
+    return { ok: false, reason: `Regd. No ${student.rollNumber} already exists in section ${target.name}` };
   }
 
   // A shared-first-year student keeps their common department for the whole

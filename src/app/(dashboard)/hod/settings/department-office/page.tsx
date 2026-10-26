@@ -161,7 +161,7 @@ export default function DepartmentOfficePage() {
     <div className="space-y-6">
       <PageHeader
         title="Department Office"
-        description="Appoint one office head for your department, with the same access you have"
+        description="Assign a Department Office Head and manage departmental administrative access."
         actions={
           !holder && !isLoading ? (
             <Button onClick={() => setShowCreate(true)}>
@@ -202,11 +202,11 @@ export default function DepartmentOfficePage() {
           ) : (
             <div className="py-8 text-center">
               <UserCog className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-              <p className="text-sm font-medium">No Department Office head yet</p>
+              <p className="text-sm font-medium">No Department Office Head Assigned</p>
               <p className="text-xs text-muted-foreground mt-1">
                 {currentUser?.department
-                  ? `Appoint one for ${currentUser.department} — they get the same dashboard and the same access you have.`
-                  : "Appoint one for your department — they get the same dashboard and the same access you have."}
+                  ? `Assign a Department Office Head for ${currentUser.department} with the required departmental access.`
+                  : "Assign a Department Office Head to provide administrative access for your department."}
               </p>
             </div>
           )}
@@ -217,12 +217,12 @@ export default function DepartmentOfficePage() {
         <CardContent className="p-4 text-xs text-muted-foreground space-y-1">
           <p className="font-medium text-foreground">What they can do</p>
           <p>
-            Everything you can, for this department: faculty and supporting staff, sections, students, subjects,
-            teaching assignments, timetable, leave approvals, attendance, budget, indents and hiring.
+            Manage faculty and supporting staff, sections, students, subjects, teaching assignments, timetables,
+            leave approvals, attendance, budgets, indents, and recruitment for your department.
           </p>
           <p className="pt-1">
-            <span className="font-medium text-foreground">What they can&rsquo;t:</span> appoint or remove a Department
-            Office head, or assign and remove Sub-HODs. Those stay with you.
+            <span className="font-medium text-foreground">Restricted actions:</span> Only the Head of the Department can
+            appoint or remove the Department Office Head and assign or remove Sub-HODs.
           </p>
         </CardContent>
       </Card>

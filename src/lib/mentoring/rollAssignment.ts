@@ -1,11 +1,11 @@
 import { rollNumberUpperOf } from "@/lib/students/loginDefaults";
 
-// Giving students a mentor by typing roll numbers (like assigning subjects by code): paste them, check
+// Giving students a mentor by typing Regd. Nos (like assigning subjects by code): paste them, check
 // them, then assign. Pure - the route reads the students and hands them in.
 
 export const ROLL_ASSIGN_MAX = 200;
 
-/** Roll numbers from pasted text (one per line, or separated by commas / spaces), upper-cased, repeats dropped. */
+/** Regd. Nos from pasted text (one per line, or separated by commas / spaces), upper-cased, repeats dropped. */
 export function parseRollNumbers(text: string): { rolls: string[]; repeated: number } {
   const seen = new Set<string>();
   const rolls: string[] = [];
@@ -45,9 +45,9 @@ export interface RollStudent {
   mentorName?: string;
 }
 
-/** What one roll number comes to, for the mentor being assigned. `manageable` = the HOD manages this student. */
+/** What one Regd. No comes to, for the mentor being assigned. `manageable` = the HOD manages this student. */
 export function classifyRoll(roll: string, student: RollStudent | undefined, mentorUid: string, manageable: boolean): RollPlanItem {
-  if (!student) return { roll, status: "NOT_FOUND", message: "No student with this roll number in the college." };
+  if (!student) return { roll, status: "NOT_FOUND", message: "No student with this Regd. No in the college." };
   const base = { roll, studentId: student.id, name: student.name ?? "", section: student.section ?? "", year: student.year };
   // A student of another department is not named - the HOD only learns that the roll is not theirs.
   if (!manageable) return { roll, status: "OUTSIDE_DEPARTMENT", message: "Not a student of your department." };

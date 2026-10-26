@@ -153,9 +153,9 @@ describe("denominatorNumbers - both definitions side by side", () => {
   });
 });
 
-describe("student roster sorting never crashes on a missing roll number (AT3)", () => {
+describe("student roster sorting never crashes on a missing Regd. No (AT3)", () => {
   // The crash is position-dependent: it only throws when the student with no
-  // roll number lands on the left of a comparison, i.e. anywhere but first.
+  // Regd. No lands on the left of a comparison, i.e. anywhere but first.
   const roster = [
     { id: "s2", name: "Amy", rollNumber: "24PA1A0510" },
     { id: "s1", name: "Bob", rollNumber: "24PA1A0502" },
@@ -163,7 +163,7 @@ describe("student roster sorting never crashes on a missing roll number (AT3)", 
     { id: "s4", name: "Cat", rollNumber: "" },
   ];
 
-  it("control: the bare comparator the routes used throws on a student with no roll number", () => {
+  it("control: the bare comparator the routes used throws on a student with no Regd. No", () => {
     expect(() => [...roster].sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true }))).toThrow(TypeError);
   });
 

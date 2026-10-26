@@ -135,7 +135,7 @@ export interface DuplicateRoll {
 export interface StrengthHealth {
   /** Students scanned (before status rules). */
   totalRecords: number;
-  /** Roll numbers shared by more than one student (case-insensitive). */
+  /** Regd. Nos shared by more than one student (case-insensitive). */
   duplicateRolls: DuplicateRoll[];
   /** Enrolled students with no section. */
   enrolledWithoutSection: number;

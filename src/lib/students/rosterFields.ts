@@ -63,11 +63,11 @@ export interface RosterField {
 }
 
 export const ROSTER_FIELDS: RosterField[] = [
-  // Roll No leads - it's what a physical roster/attendance sheet is
-  // organised by. OPTIONAL: the Office often enrols students before roll numbers exist and sets them later (matched
+  // Regd. No leads - it's what a physical roster/attendance sheet is
+  // organised by. OPTIONAL: the Office often enrols students before Regd. Nos exist and sets them later (matched
   // by Student Mobile No). When given it is unique across the whole college (like a faculty member's employee id)
   // - see lib/students/rollNumberUniqueness.ts. A login needs one.
-  { key: "rollNumber", label: "Roll No", kind: "text", sample: "Optional; the student's unique roll / registration number - must not be used by any other student. Leave blank if not issued yet (needed before a login can be created)", primary: true, aliases: ["Roll Number", "Reg No", "Regd No", "Regno", "Register No", "Register Number", "Registration No", "Registration Number"], placeholder: "24A91A0501" },
+  { key: "rollNumber", label: "Regd. No", kind: "text", sample: "Optional; the student's unique Regd. No - must not be used by any other student. Leave blank if not issued yet (needed before a login can be created)", primary: true, aliases: ["Roll No", "Roll Number", "Roll.No", "Reg No", "Regd No", "Regno", "Register No", "Register Number", "Registration No", "Registration Number"], placeholder: "24A91A0501" },
   { key: "name", label: "Name (as per SSC)", kind: "text", sample: "Required; full name exactly as on SSC (10th) certificate", required: true, primary: true, aliases: ["Name", "Student Name", "Full Name"], placeholder: "P. Sai Kumar" },
   { key: "studentType", label: "Student Type", kind: "select", sample: "Optional: Regular / Lateral - defaults to Regular when left blank", primary: true, options: ["Regular", "Lateral"] },
   // Course/Department/Academic Year are always primary identity fields (the
@@ -81,13 +81,13 @@ export const ROSTER_FIELDS: RosterField[] = [
   // picked once, the same way as Department, via that same Step 1 picker
   // (college-office/students/import/page.tsx's STEP1_FIELDS), or set
   // per-student via the Add/Edit form.
-  { key: "secondaryDepartment", label: "Core Department", kind: "select", sample: "Optional; same name/Code rules as Department - only for a 1st-year pre-registered to a core branch while enrolled under a shared/Basic Science department", primary: true,
+  { key: "secondaryDepartment", label: "Core Department", hideInList: true, kind: "select", sample: "Optional; same name/Code rules as Department - only for a 1st-year pre-registered to a core branch while enrolled under a shared/Basic Science department", primary: true,
     aliases: ["Secondary Department", "Secondary Dept", "Core Branch"] },
   { key: "year", label: "Current year of Study", kind: "select", sample: "Required; the current year of study (1-4)", required: true, primary: true, aliases: ["Year", "Academic Year"] },
 
   { key: "admissionNo", label: "Admission No", kind: "text", sample: "Optional; text", aliases: ["Admission Number"] },
   { key: "hallTicketNo", label: "Hall Ticket No", kind: "text", sample: "Optional; text", aliases: ["Hallticket Number", "Hall Ticket Number", "Hallticket No"] },
-  { key: "mobileNo", label: "Student Mobile No", kind: "text", sample: "Required; 10-digit mobile starting 6-9 - must be different for every student in every college (it is how roll numbers are matched to students later)", required: true, showInList: true, aliases: ["Mobile No", "Mobile Number", "Student Mobile"], placeholder: "9876543210" },
+  { key: "mobileNo", label: "Student Mobile No", kind: "text", sample: "Required; 10-digit mobile starting 6-9 - must be different for every student in every college (it is how Regd. Nos are matched to students later)", required: true, showInList: true, aliases: ["Mobile No", "Mobile Number", "Student Mobile"], placeholder: "9876543210" },
   { key: "dateOfAdmission", label: "Date of Admission (YYYY-MM-DD)", kind: "date", sample: "Optional; YYYY-MM-DD" },
   { key: "dateOfJoining", label: "Date of Joining (YYYY-MM-DD)", kind: "date", sample: "Optional; YYYY-MM-DD - the day the student joined classes; attendance is counted from this date (falls back to Date of Admission when blank)", aliases: ["Joining Date", "DOJ"] },
   { key: "admissionType", label: "Admission Type", kind: "text", sample: "Optional; e.g. Spot Admission, Management, Convenor", placeholder: "Spot Admission" },

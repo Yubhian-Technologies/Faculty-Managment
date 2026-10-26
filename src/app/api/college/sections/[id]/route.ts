@@ -479,7 +479,7 @@ export async function PATCH(
     // department (or renaming it / moving it to a different year or course)
     // would otherwise strand its already-enrolled students under the *old*
     // identity: invisible on the new roster (mismatch), yet still blocking
-    // re-import as "duplicate roll number" since that check isn't scoped that
+    // re-import as "duplicate Regd. No" since that check isn't scoped that
     // way either. Carry them along whenever any part of that identity
     // actually changes - courseId included, since a department can run a
     // same-named section under more than one course (StudentRecord.courseId's

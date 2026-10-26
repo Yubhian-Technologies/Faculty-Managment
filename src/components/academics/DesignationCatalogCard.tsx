@@ -30,7 +30,7 @@ const TITLE_BY_CATEGORY: Record<DesignationCategory, string> = {
 };
 const DESCRIPTION_BY_CATEGORY: Record<DesignationCategory, string> = {
   FACULTY: "The job titles Faculty can be added/hired under - departments only select from these. Tag one as a Professor/Associate/Assistant Professor cadre to keep AICTE cadre-ratio reporting working even with a custom title.",
-  TECHNICAL: "The job titles Supporting Staff can be added under - departments only select from these.",
+  TECHNICAL: "Define the designations available for supporting staff. Departments can select from these predefined options.",
   NON_TECHNICAL: "The job titles Non-Technical Staff can be added under.",
 };
 
@@ -209,7 +209,11 @@ export function DesignationCatalogCard({ category }: DesignationCatalogCardProps
           </div>
         ) : items.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-4">
-            No designations yet. Add them above so they can be selected elsewhere.
+            {category === "TECHNICAL" ? (
+              <><span className="font-medium text-foreground">No Designations Available.</span> Add a designation to make it available for supporting staff assignments.</>
+            ) : (
+              "No designations yet. Add them above so they can be selected elsewhere."
+            )}
           </p>
         ) : (
           <ul className="divide-y rounded-lg border">
