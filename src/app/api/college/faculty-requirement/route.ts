@@ -40,8 +40,14 @@ export async function GET(request: Request) {
 
     const db = getAdminDb();
 
-    // Resolve department
+    // Resolve department. An HOD asking without naming one gets the department they are working in (the "Working as"
+    // pick, via the narrowed scope) - not simply the department stored on their login, which for a head of several
+    // departments is only the first.
     let dept = deptParam ?? "";
+    if (!dept && session.role === "HOD") {
+      const working = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      dept = working.departmentName;
+    }
     if (!dept && session.role === "HOD") {
       const userSnap = await db
         .collection("colleges").doc(session.collegeId)
@@ -55,9 +61,11 @@ export async function GET(request: Request) {
     }
 
     // An HOD may only look at a department inside their own scope - the
-    // `department` param must not open another department's student strength.
+    // `department` param must not open another department's student strength. The department is named explicitly
+    // here, so this is the "do I have authority" question: it checks every department the HOD heads, not only the
+    // one currently picked in "Working as".
     if (session.role === "HOD") {
-      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid, { activeOnly: false });
       if (!editableDepartmentNames(scope).includes(dept)) {
         return NextResponse.json({ error: "Outside your department" }, { status: 403 });
       }

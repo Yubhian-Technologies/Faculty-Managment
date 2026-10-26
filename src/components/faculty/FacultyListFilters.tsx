@@ -7,6 +7,8 @@ import { toDate } from "@/lib/utils";
 import { allPreviousExperienceEntries, experienceBreakdown } from "@/lib/faculty/experienceCalc";
 import { compareDefaultFacultyOrder } from "@/lib/faculty/listOrder";
 import { DESIGNATION_LABELS } from "@/types";
+import { filterByResearchArea, researchQueryActive } from "@/lib/faculty/researchAreas";
+import { ResearchAreaFilter } from "./ResearchAreaFilter";
 
 // The HOD Faculty register's filter row (Gender / Qualification / Designation / Status pills and the
 // Date of Joining / Experience sort arrows), as one reusable piece for the Principal, Vice Principal
@@ -127,6 +129,7 @@ export function useFacultyListFilters<T extends Row>(
   const [genderFilter, setGenderFilter] = useState("");
   const [qualFilter, setQualFilter] = useState("");
   const [designationFilter, setDesignationFilter] = useState("");
+  const [researchFilter, setResearchFilter] = useState("");
   const [sort, setSort] = useState<SortState>(null);
 
   const qualificationOptions = useMemo(() => {
@@ -151,12 +154,12 @@ export function useFacultyListFilters<T extends Row>(
   const activeDesignation = designationOptions.some((o) => o.key === designationFilter) ? designationFilter : "";
 
   const rows = useMemo(() => {
-    const filtered = faculty.filter((f) =>
+    const filtered = filterByResearchArea(faculty.filter((f) =>
       (!showStatus || matchesStatus(f, statusFilter)) &&
       (!genderFilter || f.gender === genderFilter) &&
       (!activeQual || (f.highestQualification as string | undefined)?.trim().toLowerCase() === activeQual.toLowerCase()) &&
       (!activeDesignation || (f.designation as string | undefined)?.trim() === activeDesignation)
-    );
+    ), researchFilter);
     if (!sort && keepOrderWhenUnsorted) return filtered;
     // Nothing picked: HOD, then Principal, then internal experience, highest first (lib/faculty/listOrder.ts).
     if (!sort) return [...filtered].sort(compareDefaultFacultyOrder);
@@ -171,16 +174,16 @@ export function useFacultyListFilters<T extends Row>(
       if (!va || !vb) return (va ? 0 : 1) - (vb ? 0 : 1);
       return sign * (va - vb);
     });
-  }, [faculty, showStatus, statusFilter, genderFilter, activeQual, activeDesignation, sort, keepOrderWhenUnsorted]);
+  }, [faculty, showStatus, statusFilter, genderFilter, activeQual, activeDesignation, researchFilter, sort, keepOrderWhenUnsorted]);
 
-  const filtersApplied = (showStatus && !!statusFilter) || !!genderFilter || !!activeQual || !!activeDesignation || !!sort;
+  const filtersApplied = (showStatus && !!statusFilter) || !!genderFilter || !!activeQual || !!activeDesignation || researchQueryActive(researchFilter) || !!sort;
 
   const bar = (
     <div className="flex gap-2 flex-wrap items-center">
       {leading}
       <button
         type="button"
-        onClick={() => { setStatusFilter(""); setGenderFilter(""); setQualFilter(""); setDesignationFilter(""); setSort(null); }}
+        onClick={() => { setStatusFilter(""); setGenderFilter(""); setQualFilter(""); setDesignationFilter(""); setResearchFilter(""); setSort(null); }}
         className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${!filtersApplied ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border hover:bg-muted"}`}
       >
         All
@@ -188,6 +191,7 @@ export function useFacultyListFilters<T extends Row>(
       <FilterSelect label="Gender" allLabel="All Genders" value={genderFilter} options={GENDER_OPTIONS.map((g) => ({ key: g, label: g }))} onChange={setGenderFilter} />
       <FilterSelect label="Qualification" allLabel="All Qualifications" value={activeQual} options={qualificationOptions} onChange={setQualFilter} />
       <FilterSelect label="Designation" allLabel="All Designations" value={activeDesignation} options={designationOptions} onChange={setDesignationFilter} />
+      <ResearchAreaFilter faculty={faculty} value={researchFilter} onChange={setResearchFilter} />
       <SortPill label="Date of Joining" active={sort?.key === "joining" ? sort.dir : null} onChange={(dir) => setSort(dir ? { key: "joining", dir } : null)} />
       <SortPill label="Experience" active={sort?.key === "experience" ? sort.dir : null} onChange={(dir) => setSort(dir ? { key: "experience", dir } : null)} />
       {showStatus && (

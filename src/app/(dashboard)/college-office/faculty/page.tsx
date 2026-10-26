@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Wallet, Share2, Mail, Upload } from "lucide-react";
@@ -14,7 +14,9 @@ import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { DESIGNATION_LABELS } from "@/types";
 import type { FacultyMember, Designation } from "@/types";
 
-import { SeatBadges } from "@/components/faculty/facultyListCells";
+import { ResearchMatchChips, SeatBadges } from "@/components/faculty/facultyListCells";
+import { ResearchAreaFilter } from "@/components/faculty/ResearchAreaFilter";
+import { filterByResearchArea } from "@/lib/faculty/researchAreas";
 
 type FacultyRow = Record<string, unknown> & FacultyMember;
 
@@ -26,6 +28,7 @@ export default function CollegeOfficeFacultyPage() {
   const router = useRouter();
   const [faculty, setFaculty] = useState<FacultyRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [researchFilter, setResearchFilter] = useState("");
   const [emailTarget, setEmailTarget] = useState<{ id: string; employeeId: string; name: string } | null>(null);
 
   useEffect(() => {
@@ -41,6 +44,8 @@ export default function CollegeOfficeFacultyPage() {
     void navigator.clipboard.writeText(`${window.location.origin}/faculty-public/facultyid=${encodeURIComponent(row.employeeId)}`);
     toast({ variant: "success", title: "Public profile link copied" });
   }
+
+  const shownFaculty = useMemo(() => filterByResearchArea(faculty, researchFilter), [faculty, researchFilter]);
 
   const columns: Column<FacultyRow>[] = [
     {
@@ -63,6 +68,7 @@ export default function CollegeOfficeFacultyPage() {
         <div className="space-y-0.5">
           <p className="text-sm">{DESIGNATION_LABELS[row.designation as Designation] ?? (row.designation as string)}</p>
           <SeatBadges row={row} />
+          <ResearchMatchChips row={row} />
         </div>
       ),
     },
@@ -107,7 +113,8 @@ export default function CollegeOfficeFacultyPage() {
       />
 
       <DataTable
-        data={faculty}
+        data={shownFaculty}
+        filterComponent={<ResearchAreaFilter faculty={faculty} value={researchFilter} onChange={setResearchFilter} />}
         columns={columns}
         isLoading={isLoading}
         keyExtractor={(r) => r.id as string}

@@ -1164,18 +1164,6 @@ function HodStudentsContent() {
         : <span className="text-sm text-muted-foreground/40">—</span>,
     },
     {
-      key: "secondaryDepartment",
-      header: "Core Dept",
-      hideOnMobile: true,
-      // Only ever set for a shared-first-year student pre-registered to their
-      // real branch (e.g. "cse" under "BS-Mathematics") - a plain department's
-      // students, and a first-year already sectioned into their branch, carry
-      // none, so this reads as a blank dash for them.
-      render: (r) => r.secondaryDepartment
-        ? <span className="text-sm text-muted-foreground">{r.secondaryDepartment}</span>
-        : <span className="text-sm text-muted-foreground/40">—</span>,
-    },
-    {
       key: "section",
       header: "Section",
       render: (r) =>

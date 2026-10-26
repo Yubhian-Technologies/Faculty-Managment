@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { allPreviousExperienceEntries, formatDurationList, totalYearsOfExperience } from "@/lib/faculty/experienceCalc";
+import { researchAreaList } from "@/lib/faculty/researchAreas";
 import { DESIGNATION_LABELS, FACULTY_STATUS_LABELS } from "@/types";
 import type { Designation, FacultyMember, FacultyStatus } from "@/types";
 
@@ -65,6 +66,31 @@ export function SeatBadges({ row }: { row: FacultyListRow }) {
   );
 }
 
+/** Under a faculty member's designation: their research areas, the ones the filter matched highlighted. Shown only while the filter is on. */
+export function ResearchMatchChips({ row }: { row: FacultyListRow }) {
+  const matched = Array.isArray(row.researchMatches) ? (row.researchMatches as string[]) : [];
+  if (matched.length === 0) return null;
+  const all = researchAreaList(row);
+  const rest = all.filter((a) => !matched.includes(a));
+  const shown = [...matched, ...rest].slice(0, 6);
+  return (
+    <div className="flex flex-wrap items-center gap-1 pt-1" data-testid="research-chips">
+      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Research:</span>
+      {shown.map((a) => (
+        <span
+          key={a}
+          className={matched.includes(a)
+            ? "inline-flex items-center rounded-full border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900"
+            : "inline-flex items-center rounded-full border border-border bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"}
+        >
+          {a}
+        </span>
+      ))}
+      {all.length > shown.length && <span className="text-[10px] text-muted-foreground">+{all.length - shown.length} more</span>}
+    </div>
+  );
+}
+
 /** Designation, highest qualification, specialization and the Ph.D (awarded) badge. */
 export function FacultyDesignationCell({ row }: { row: FacultyListRow }) {
   return (
@@ -75,6 +101,7 @@ export function FacultyDesignationCell({ row }: { row: FacultyListRow }) {
         <p className="text-xs text-muted-foreground italic">{row.specialization as string}</p>
       )}
       <SeatBadges row={row} />
+      <ResearchMatchChips row={row} />
       {row.academicProfile?.phdDetails?.status === "AWARDED" && (
         <span className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-700">Ph.D</span>
       )}
@@ -98,8 +125,8 @@ export function FacultyExperienceCell({ row }: { row: FacultyListRow }) {
   const none = (d: { years: number; months: number; days: number } | null) => !d || (d.years === 0 && d.months === 0 && d.days === 0);
   const lines = [
     { label: "Total:", value: formatDurationList(total), dot: "bg-primary", strong: true },
-    { label: "Internal:", value: internal ? formatDurationList(internal) : "-", dot: "bg-emerald-500", strong: false, empty: none(internal) },
-    { label: "External:", value: none(external) ? "-" : formatDurationList(external), dot: "bg-amber-500", strong: false, empty: none(external) },
+    { label: "Internal:", value: internal ? formatDurationList(internal) : "0", dot: "bg-emerald-500", strong: false, empty: none(internal) },
+    { label: "External:", value: formatDurationList(external), dot: "bg-amber-500", strong: false, empty: none(external) },
   ];
   return (
     <dl className="grid grid-cols-[auto_auto_1fr] items-center gap-x-2 gap-y-1.5 whitespace-nowrap tabular-nums" data-testid="experience-cell">

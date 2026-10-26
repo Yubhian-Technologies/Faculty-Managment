@@ -88,25 +88,25 @@ describe("FacultyExperienceCell", () => {
     expect(text(createElement(FacultyExperienceCell, { row: row({ joiningDate: ts("2008-08-01T06:00:00Z") }) }))).toContain("Internal: 18 yrs, 2 mos, 17 days");
   });
 
-  it("leaves out zero units, uses the singular for 1, and shows a dash where there is nothing", () => {
+  it("leaves out zero units, uses the singular for 1, and shows 0 where there is nothing", () => {
     expect(text(createElement(FacultyExperienceCell, { row: row({ joiningDate: ts("2025-09-17T06:00:00Z") }) }))).toContain("Internal: 1 yr, 1 mo, 1 day");
     const none = text(createElement(FacultyExperienceCell, { row: row({ joiningDate: ts("2026-10-18T06:00:00Z"), academicProfile: undefined }) }));
     expect(none).toContain("Internal: 0");
-    expect(none).toContain("External: -");
+    expect(none).toContain("External: 0");
     expect(text(createElement(FacultyExperienceCell, { row: row({ joiningDate: ts("2024-04-18T06:00:00Z") }) }))).toContain("Internal: 2 yrs, 6 mos");
   });
 
   it("works for a record with no academicProfile at all (353 of 398 live records)", () => {
     const out = text(createElement(FacultyExperienceCell, { row: row({ academicProfile: undefined }) }));
     expect(out).not.toMatch(/NaN|undefined/);
-    expect(out).toContain("External: -");
+    expect(out).toContain("External: 0");
   });
 
-  it("with no joining date, Internal is a dash and the rest is still shown", () => {
+  it("with no joining date, Internal is 0 and the rest is still shown", () => {
     const out = text(createElement(FacultyExperienceCell, {
       row: row({ joiningDate: undefined, academicProfile: { academicExperience: [{ institutionName: "ABC", fromDate: "2021-01-01", toDate: "2023-01-01" }] } }),
     }));
-    expect(out).toContain("Internal: -");
+    expect(out).toContain("Internal: 0");
     expect(out).toContain("External: 2 yrs");
     expect(out).toContain("Total: 2 yrs");
   });
