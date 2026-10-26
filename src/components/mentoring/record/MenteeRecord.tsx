@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Award, BookOpen, Briefcase, GraduationCap, ListChecks, Printer, Users, UserRound } from "lucide-react";
+import { Briefcase, GraduationCap, Printer, Users, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { entrySection } from "@/lib/mentoring/recordSections";
 import type { MentoringEntry, MentoringSemesterOption } from "@/types/mentoring";
@@ -11,11 +11,14 @@ import { SemesterPage } from "./SemesterPage";
 import { StudentInfoPage } from "./StudentInfoPage";
 import { getJson } from "./recordApi";
 
-// The college's Student Mentoring Record as pages: student information, previous record, one page per
-// semester, progress & placements, activities & discipline, and the mentor meetings. Everything the
-// system already knows is filled in; the mentor adds what it cannot know.
+// The college's Student Mentoring Record, grouped into four pages so the menu stays short and nothing is dropped:
+//   Student profile      = student information (p.1, 7.1) + previous record (7.2 - 8)
+//   Semesters            = one semester sheet at a time, picked on the page
+//   Progress & activities = progress & placements (p.11) + activities & discipline (p.12)
+//   Meetings & follow-up = mentor meetings (p.13-16) + follow-up (actions, weekly check-ins, referrals)
+// Everything the system already knows is filled in; the mentor adds what it cannot know.
 
-type View = "info" | "previous" | "progress" | "activities" | "meetings" | "followup" | `sem:${number}`;
+type View = "profile" | "semesters" | "progress" | "meetings";
 
 const PREVIOUS = ["previousAwards", "previousCoCurricular", "previousExtraCurricular", "healthRecord", "otherInfo"] as const;
 const PREVIOUS_NUMBER: Record<string, string> = { previousAwards: "7.2", previousCoCurricular: "7.3", previousExtraCurricular: "7.4", healthRecord: "7.5", otherInfo: "8" };
@@ -24,20 +27,21 @@ const ACTIVITIES = ["achievements", "disciplinary"] as const;
 const FOLLOW_UP = ["actionItems", "weeklyAttendance", "escalations"] as const;
 
 const NAV: { view: View; label: string; icon: typeof UserRound; hint: string }[] = [
-  { view: "info", label: "Student information", icon: UserRound, hint: "Page 1 · 7.1" },
-  { view: "previous", label: "Previous record", icon: BookOpen, hint: "7.2 – 8" },
+  { view: "profile", label: "Student profile", icon: UserRound, hint: "Details and previous record" },
+  { view: "semesters", label: "Semesters", icon: GraduationCap, hint: "Attendance, marks, grades" },
+  { view: "progress", label: "Progress & activities", icon: Briefcase, hint: "Scholarships, jobs, achievements" },
+  { view: "meetings", label: "Meetings & follow-up", icon: Users, hint: "Meetings, actions, referrals" },
 ];
-const NAV_AFTER: { view: View; label: string; icon: typeof UserRound; hint: string }[] = [
-  { view: "progress", label: "Progress & placements", icon: Briefcase, hint: "Scholarships, internships, jobs" },
-  { view: "activities", label: "Activities & discipline", icon: Award, hint: "Achievements, issues" },
-  { view: "meetings", label: "Mentor meetings", icon: Users, hint: "6–8 a semester" },
-  { view: "followup", label: "Follow-up", icon: ListChecks, hint: "Actions, weekly check-ins, referrals" },
-];
+
+function PartHeading({ children }: { children: React.ReactNode }) {
+  return <h2 className="text-lg font-semibold pt-2 border-t first:border-t-0 first:pt-0">{children}</h2>;
+}
 
 export function MenteeRecord({ studentId, studentName, rollNumber }: { studentId: string; studentName: string; rollNumber: string }) {
   const api = `/api/college/mentoring/students/${studentId}`;
-  const [view, setView] = useState<View>("info");
+  const [view, setView] = useState<View>("profile");
   const [meetingSemester, setMeetingSemester] = useState<number | null>(null);
+  const [semesterPick, setSemesterPick] = useState<number | null>(null);
   const [semesters, setSemesters] = useState<MentoringSemesterOption[]>([]);
   const [entries, setEntries] = useState<MentoringEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -61,6 +65,7 @@ export function MenteeRecord({ studentId, studentName, rollNumber }: { studentId
 
   const current = semesters.find((s) => s.isCurrent)?.semester ?? semesters[semesters.length - 1]?.semester ?? null;
   const openMeetings = useCallback((n: number) => { setMeetingSemester(n); setView("meetings"); }, []);
+  const shownSemester = semesterPick ?? current;
   const list = entries ?? [];
 
   const renderSections = (keys: readonly string[], numbered?: Record<string, string>) => (
@@ -101,13 +106,6 @@ export function MenteeRecord({ studentId, studentName, rollNumber }: { studentId
       <nav aria-label="Record pages" className="print:hidden md:sticky md:top-4 flex md:flex-col gap-1 overflow-x-auto md:overflow-visible pb-1 md:pb-0 -mx-1 px-1">
         {NAV.map(navButton)}
 
-        <div className="hidden md:block px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/70">Semesters</div>
-        {semesters.length === 0 && <p className="hidden md:block px-3 text-xs text-muted-foreground">No semester has started yet.</p>}
-        {semesters.map((s) => navButton({ view: `sem:${s.semester}`, label: s.label, icon: GraduationCap, hint: s.isCurrent ? "Running now" : undefined }))}
-
-        <div className="hidden md:block px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/70">More</div>
-        {NAV_AFTER.map(navButton)}
-
         <Button variant="outline" size="sm" className="hidden md:inline-flex mt-3 mx-2" onClick={() => window.print()}>
           <Printer className="h-4 w-4 mr-1.5" /> Print this page
         </Button>
@@ -119,14 +117,51 @@ export function MenteeRecord({ studentId, studentName, rollNumber }: { studentId
           <p className="text-sm">{studentName}{rollNumber ? ` · ${rollNumber}` : ""}</p>
         </div>
 
-        {view === "info" && <StudentInfoPage api={api} entries={list} editor={editor} />}
-        {view === "previous" && renderSections(PREVIOUS, PREVIOUS_NUMBER)}
-        {view.startsWith("sem:") && <SemesterPage api={api} semester={Number(view.slice(4))} onOpenMeetings={openMeetings} />}
-        {view === "progress" && renderSections(PROGRESS)}
-        {view === "activities" && renderSections(ACTIVITIES)}
-        {view === "followup" && renderSections(FOLLOW_UP)}
+        {view === "profile" && (
+          <>
+            <StudentInfoPage api={api} entries={list} editor={editor} />
+            <PartHeading>Previous record</PartHeading>
+            {renderSections(PREVIOUS, PREVIOUS_NUMBER)}
+          </>
+        )}
+        {view === "semesters" && (
+          semesters.length === 0 || shownSemester == null
+            ? <p className="text-sm text-muted-foreground py-6">No semester has started for this student yet.</p>
+            : (
+              <>
+                <div className="flex flex-wrap gap-1.5 print:hidden" role="tablist" aria-label="Semester">
+                  {semesters.map((s) => (
+                    <button
+                      key={s.semester}
+                      type="button"
+                      role="tab"
+                      aria-selected={s.semester === shownSemester}
+                      onClick={() => setSemesterPick(s.semester)}
+                      className={`rounded-full border px-3 py-1 text-xs transition-colors ${s.semester === shownSemester ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted"}`}
+                    >
+                      {s.label}{s.isCurrent && <span className="opacity-70"> · running now</span>}
+                    </button>
+                  ))}
+                </div>
+                <SemesterPage key={shownSemester} api={api} semester={shownSemester} onOpenMeetings={openMeetings} />
+              </>
+            )
+        )}
+        {view === "progress" && (
+          <>
+            <PartHeading>Progress & placements</PartHeading>
+            {renderSections(PROGRESS)}
+            <PartHeading>Activities & discipline</PartHeading>
+            {renderSections(ACTIVITIES)}
+          </>
+        )}
         {view === "meetings" && (
-          <MeetingsPage api={api} entries={list} editor={editor} semesters={semesters} semester={meetingSemester ?? current} onPickSemester={setMeetingSemester} />
+          <>
+            <PartHeading>Mentor meetings</PartHeading>
+            <MeetingsPage api={api} entries={list} editor={editor} semesters={semesters} semester={meetingSemester ?? current} onPickSemester={setMeetingSemester} />
+            <PartHeading>Follow-up</PartHeading>
+            {renderSections(FOLLOW_UP)}
+          </>
         )}
       </div>
     </div>
