@@ -4,7 +4,8 @@ import { getInChunks } from "@/lib/firestore/inQuery";
 import { sectionAssignmentScope } from "@/lib/departments/sectionAssignmentScope";
 import type { Course, Department, StudentRecord, SubjectSemesterAssignment } from "@/types";
 import type { SubjectsSource } from "@/types/mentoring";
-import { academicYearOfStudentYear } from "./semesterWindows";
+import { regulationsForBatchStartYear } from "@/lib/college/academicSession";
+import { academicYearOfStudentYear, batchStartYearOf } from "./semesterWindows";
 
 // Which subjects (code, name, credits) were THIS student's for a semester.
 //
@@ -52,11 +53,41 @@ interface StoredSemester {
 const sameSubjects = (a: SnapshotSubject[], b: SnapshotSubject[]) =>
   a.length === b.length && a.every((s, i) => s.subjectId === b[i].subjectId && s.code === b[i].code && s.name === b[i].name && s.credits === b[i].credits);
 
-/** The subjects the curriculum assigns to this student's course / year / semester right now. */
+/**
+ * The regulation this student follows: the one saved on their record, else the one their admission
+ * batch falls under in the Course Catalog (regulationBatches). "" when neither is known.
+ */
+export async function resolveStudentRegulation(
+  db: Firestore,
+  collegeId: string,
+  student: Pick<StudentRecord, "courseId" | "regulation" | "batch">,
+  courseDocs: { id: string; data: () => unknown }[]
+): Promise<string> {
+  if (student.regulation) return student.regulation;
+  const startYear = batchStartYearOf(student.batch);
+  const catalogId = (courseDocs.find((c) => c.id === student.courseId)?.data() as { catalogId?: string } | undefined)?.catalogId;
+  if (startYear == null || !catalogId) return "";
+  try {
+    const snap = await db.collection("colleges").doc(collegeId).collection("courseCatalog").doc(catalogId).get();
+    const catalog = snap.data() as { regulations?: string[]; regulationBatches?: Record<string, string> } | undefined;
+    const found = regulationsForBatchStartYear(catalog?.regulationBatches ?? {}, startYear, catalog?.regulations);
+    return found.length === 1 ? found[0] : "";
+  } catch (err) {
+    console.error("[mentoring/semesterSnapshot regulation]", err);
+    return "";
+  }
+}
+
+/**
+ * The subjects the curriculum assigns to this student's course / year / semester right now, for THEIR
+ * regulation (from their record, else their batch): a subject of another regulation is never listed.
+ * When the regulation cannot be told and the curriculum holds several, only subjects open to every
+ * regulation are listed rather than a mix of all of them.
+ */
 export async function loadLiveSemesterSubjects(
   db: Firestore,
   collegeId: string,
-  student: Pick<StudentRecord, "department" | "secondaryDepartment" | "courseId" | "regulation">,
+  student: Pick<StudentRecord, "department" | "secondaryDepartment" | "courseId" | "regulation" | "batch">,
   year: number,
   semester: number
 ): Promise<{ subjects: SnapshotSubject[]; regulation: string }> {
@@ -76,16 +107,20 @@ export async function loadLiveSemesterSubjects(
   );
   const courseSet = new Set(scope.courseIds);
   const branch = student.secondaryDepartment || student.department;
+  const regulation = await resolveStudentRegulation(db, collegeId, student, courseDocs);
 
-  const rows = docs
-    .map((d) => d.data() as SubjectSemesterAssignment)
+  const all = docs.map((d) => d.data() as SubjectSemesterAssignment);
+  // Regulation unknown but only one is in use: that one is theirs.
+  const inUse = new Set(all.filter((a) => a.semester === semester && a.isActive !== false && a.regulation).map((a) => a.regulation));
+  const effective = regulation || (inUse.size === 1 ? [...inUse][0] ?? "" : "");
+  const rows = all
     .filter((a) =>
       a.semester === semester &&
       a.isActive !== false &&
       (a.courseId == null || courseSet.has(a.courseId)) &&
       (a.year == null || a.year === year) &&
       // A batch follows its own regulation; a row with none is open to every regulation.
-      !(student.regulation && a.regulation && a.regulation !== student.regulation) &&
+      (effective ? !a.regulation || a.regulation === effective : !a.regulation) &&
       // A row narrowed to specific core branches counts only for those.
       (!a.secondaryDepartmentNames?.length || a.secondaryDepartmentNames.includes(branch))
     )
@@ -106,7 +141,7 @@ export async function loadLiveSemesterSubjects(
       ...(a.serialNumber != null ? { serial: a.serialNumber } : {}),
     });
   }
-  return { subjects, regulation: rows.find((r) => r.regulation)?.regulation ?? "" };
+  return { subjects, regulation: effective || (rows.find((r) => r.regulation)?.regulation ?? "") };
 }
 
 export interface ResolveSemesterArgs {
@@ -185,7 +220,19 @@ export async function resolveSemesterSubjects(args: ResolveSemesterArgs): Promis
     };
   }
 
-  // 5. Last resort: the subjects attendance was marked for.
+  // 5. A finished semester nothing was kept for: what the curriculum lists for that semester now. Shown,
+  //    not saved or frozen - an earlier batch may have studied a different list, and the note says so.
+  if (isPast) {
+    const live = await loadLiveSemesterSubjects(db, collegeId, student, year, semester);
+    if (live.subjects.length > 0) {
+      return {
+        subjects: live.subjects, source: "LIVE", regulation: live.regulation || regulation, academicYear,
+        note: "No copy was kept while this semester ran and no results are published yet, so these are the subjects the curriculum lists for this semester now. An earlier batch may have studied a different list.",
+      };
+    }
+  }
+
+  // 6. Last resort: the subjects attendance was marked for.
   const fromAttendance = await args.attendanceSubjects();
   if (fromAttendance.length > 0) {
     return {

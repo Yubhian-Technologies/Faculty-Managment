@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
-import { StudentFinder, type FinderPick } from "@/components/mentoring/StudentFinder";
-import type { MentoringOverview, MentoringOverviewRow } from "@/types/mentoring";
+import { StudentFinder } from "@/components/mentoring/StudentFinder";
+import type { MentoringOverview } from "@/types/mentoring";
 
 // Principal and Vice-Principal: how mentoring is going in their college. Counts only - the
 // students' notes, concerns and referrals are never shown here.
@@ -21,59 +21,9 @@ function Tile({ label, value, hint }: { label: string; value: number | string; h
   );
 }
 
-function RowsTable({ title, firstColumn, rows, onOpen }: { title: string; firstColumn: string; rows: MentoringOverviewRow[]; onOpen: (row: MentoringOverviewRow) => void }) {
-  return (
-    <Card>
-      <CardContent className="pt-5 space-y-3">
-        <h2 className="text-base font-semibold">{title}</h2>
-        {rows.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nothing to show yet.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-muted-foreground border-b">
-                  <th className="py-2 pr-3 font-medium">{firstColumn}</th>
-                  <th className="py-2 pr-3 font-medium text-right">Students</th>
-                  <th className="py-2 pr-3 font-medium text-right">With a mentor</th>
-                  <th className="py-2 pr-3 font-medium text-right">Met recently</th>
-                  <th className="py-2 pr-3 font-medium text-right">Open actions</th>
-                  <th className="py-2 pr-3 font-medium text-right">Open referrals</th>
-                  <th className="py-2 print:hidden" />
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.key} className="border-b last:border-0">
-                    <td className="py-2 pr-3">{r.label}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums">{r.students}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums">{r.mentored}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums">{r.metRecently}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums">{r.openActions}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums">{r.openEscalations}</td>
-                    <td className="py-2 text-right print:hidden">
-                      <button type="button" className="text-xs text-primary hover:underline whitespace-nowrap" onClick={() => onOpen(r)}>View students →</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
 export default function PrincipalMentoringPage() {
   const [data, setData] = useState<MentoringOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [pick, setPick] = useState<FinderPick>({ n: 0 });
-  const openFinder = (next: Omit<FinderPick, "n">) => {
-    setPick((prev) => ({ ...next, n: prev.n + 1 }));
-    document.getElementById("student-finder")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-
   useEffect(() => {
     let cancelled = false;
     fetch("/api/college/mentoring/overview")
@@ -97,7 +47,7 @@ export default function PrincipalMentoringPage() {
     <div className="space-y-5">
       <PageHeader title="Student Mentoring" description="Mentoring in your college: the numbers below, and any student's Mentoring Record (read-only) from the search." />
 
-      <div id="student-finder" className="scroll-mt-4"><StudentFinder pick={pick} mentors={data.byMentor.map((m) => ({ uid: m.key, name: m.label })).sort((a, b) => a.name.localeCompare(b.name))} /></div>
+      <StudentFinder byDepartment={data.byDepartment} byMentor={data.byMentor} />
 
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
         <Tile label="Students" value={totals.students} />
@@ -148,8 +98,6 @@ export default function PrincipalMentoringPage() {
         </CardContent>
       </Card>
 
-      <RowsTable title="By department" firstColumn="Department" rows={data.byDepartment} onOpen={(r) => openFinder({ department: r.key === "-" ? undefined : r.key })} />
-      <RowsTable title="By mentor" firstColumn="Mentor" rows={data.byMentor} onOpen={(r) => openFinder({ mentorUid: r.key })} />
     </div>
   );
 }
