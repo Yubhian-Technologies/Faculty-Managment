@@ -450,7 +450,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "My Time Table", href: "/panel/teaching", iconName: "BookOpen", roles: ["PANEL_MEMBER"], section: "My Work", module: "teaching-load" },
   { label: "Faculty Timetable", href: "/panel/faculty-timetable", iconName: "CalendarSearch", roles: ["PANEL_MEMBER"], module: "assignment-requests" },
   { label: "Internal Exam", href: "/panel/internal-exam", iconName: "ClipboardList", roles: ["PANEL_MEMBER"] },
-  { label: "Add Mid Bank", href: "/panel/mid-bank", iconName: "BookOpen", roles: ["PANEL_MEMBER"] },
+  { label: "Question Bank", href: "/panel/mid-bank", iconName: "BookOpen", roles: ["PANEL_MEMBER"] },
   { label: "My Feedback", href: "/panel/feedback", iconName: "MessageSquare", roles: ["PANEL_MEMBER"] },
   { label: "Student Attendance", href: "/panel/mark-attendance", iconName: "CalendarCheck", roles: ["PANEL_MEMBER"], section: "Students & Attendance", module: "attendance", legacyModule: "My Work" },
   { label: "Attendance Report", href: "/panel/monthly-records", iconName: "CalendarRange", roles: ["PANEL_MEMBER"], module: "attendance", legacyModule: "My Work" },

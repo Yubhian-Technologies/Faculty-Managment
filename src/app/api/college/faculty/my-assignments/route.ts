@@ -7,7 +7,7 @@ import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 
 // Which delegated duties the caller actually holds, in ONE round trip, so the
 // sidebar can show the tabs that only make sense for an assigned person
-// (Timetable Incharge, Add Mid Bank, section Students / Lab Batches) instead of
+// (Timetable Incharge, Question Bank, section Students / Lab Batches) instead of
 // listing them for every faculty member. Each check is a single-document
 // existence query (limit 1) and they run in parallel, so the cost is a handful
 // of index reads however large the college is. Navigation only - the pages'
