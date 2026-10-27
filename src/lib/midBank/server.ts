@@ -2,7 +2,7 @@ import { canHodEditDepartment, getHodDepartmentScope } from "@/lib/departments/s
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import type { Course, MidBankDeadline, MidBankRules, MidQuestion, MidQuestionBank, Section, Subject, SubjectOutcomes, SubjectSemesterAssignment, TeachingAssignment } from "@/types";
 import { isDeadlineLocked } from "./deadline";
-import type { TeachingRow } from "./sections";
+import { isMidBankSubject, type TeachingRow } from "./sections";
 
 // Server side of the Mid Question Bank: collection refs, who teaches what for a
 // deadline, who may read / write a bank, and which Exam Cell rules apply.
@@ -66,6 +66,11 @@ export async function teachingFor(db: Db, collegeId: string, d: Pick<MidBankDead
   for (const i of instanceDocs) {
     const a = i.data() as SubjectSemesterAssignment;
     if (a.semester === d.semester && a.subjectId) subjects.set(a.subjectId, { name: a.subjectName, code: a.subjectCode });
+  }
+  // Theory subjects only (the master subject's type; the semester copy's snapshot may be stale).
+  if (subjects.size > 0) {
+    const masters = await db.getAll(...[...subjects.keys()].map((id) => refs.college.collection("subjects").doc(id)));
+    for (const m of masters) if (!m.exists || !isMidBankSubject((m.data() as Subject).type)) subjects.delete(m.id);
   }
   if (sections.size === 0 || subjects.size === 0) return [];
   const teachDocs = await inChunks([...sections.keys()], async (ids) => (await refs.college.collection("teachingAssignments").where("sectionId", "in", ids).get()).docs);

@@ -105,6 +105,12 @@ describe.skipIf(!EMULATOR)("Mid Question Bank (real Firestore)", () => {
     expect((await save("1_1", "draft", [part("x", "")])).status).toBe(403);
   });
 
+  it("a practical (non-theory) subject has no question bank", async () => {
+    await col("subjects").doc("sub1").update({ type: "PRACTICAL" });
+    await putOutcomes(outcomes);
+    expect((await startBank(["sA"])).status).not.toBe(201);
+  });
+
   it("refuses a bank without one of my own sections", async () => {
     await putOutcomes(outcomes);
     expect((await startBank(["sB"])).json.error).toBe("Include at least one section you teach");

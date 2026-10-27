@@ -15,6 +15,10 @@ export interface TeachingRow {
   facultyName: string;
 }
 
+/** Mid question banks are for theory subjects only - not practicals, tutorials, projects or non-teaching
+ * slots. The master subject's own type decides; a legacy subject with no type counts as theory. */
+export const isMidBankSubject = (type: string | undefined | null) => !type || type === "THEORY";
+
 export const branchKey = (branch: string) => branch.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "branch";
 export const outcomesIdFor = (subjectId: string, branch: string) => `${subjectId}__${branchKey(branch)}`;
 export const bankIdFor = (deadlineId: string, subjectId: string, branch: string, ownerFacultyId: string) =>

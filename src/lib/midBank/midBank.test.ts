@@ -163,7 +163,7 @@ describe("setup issues", () => {
 });
 
 import { deadlineError, isDeadlineLocked } from "./deadline";
-import { bankIdFor, branchKey, checkSectionPick, sectionsOf, type TeachingRow } from "./sections";
+import { bankIdFor, branchKey, checkSectionPick, isMidBankSubject, sectionsOf, type TeachingRow } from "./sections";
 
 describe("deadline", () => {
   it("is open through the deadline day and locked from the next day", () => {
@@ -179,6 +179,9 @@ describe("deadline", () => {
 });
 
 describe("sections of a bank", () => {
+  it("only theory subjects get a mid question bank", () => {
+    expect(["THEORY", undefined, "PRACTICAL", "TUTORIAL", "PROJECT", "NON_TEACHING"].map(isMidBankSubject)).toEqual([true, true, false, false, false, false]);
+  });
   const row = (sectionId: string, facultyId: string, branch = "Information Technology", subjectId = "dm"): TeachingRow =>
     ({ subjectId, subjectName: "Discrete Maths", subjectCode: "DM101", branch, sectionId, sectionName: sectionId.toUpperCase(), facultyId, facultyName: `Dr ${facultyId}` });
   const rows = [row("a", "f1"), row("b", "f2"), row("c", "f1", "CSE"), row("b", "f3")];
