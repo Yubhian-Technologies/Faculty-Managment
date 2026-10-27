@@ -34,6 +34,7 @@ const EXPECTED: Record<string, string[]> = {
     "/leave/adjustments",
     "/principal/audit-logs",
     "/principal/role-assignments",
+    "/principal/incident-record",
     "/principal/settings"
   ],
   "PRINCIPAL": [
@@ -61,6 +62,7 @@ const EXPECTED: Record<string, string[]> = {
     "/principal/leave",
     "/principal/audit-logs",
     "/principal/role-assignments",
+    "/principal/incident-record",
     "/principal/settings"
   ],
   "HOD": [
@@ -69,6 +71,7 @@ const EXPECTED: Record<string, string[]> = {
     "/hod/sections",
     "/hod/mentoring",
     "/hod/certificate-requests",
+    "/hod/incident-record",
     "/hod/students",
     "/hod/settings/sub-departments",
     "/hod/settings/designations",
