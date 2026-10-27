@@ -11,7 +11,7 @@ import { QUESTIONS_PER_UNIT } from "@/lib/midBank/constants";
 import { findDuplicates } from "@/lib/midBank/duplicates";
 import { derivePoPso } from "@/lib/midBank/outcomes";
 import { bloomNeeds } from "@/lib/midBank/rules";
-import { questionErrors } from "@/lib/midBank/validateQuestion";
+import { formatOf, partMarks, questionErrors } from "@/lib/midBank/validateQuestion";
 import { downloadMidQuestionBankPdf } from "@/lib/pdf/downloadMidQuestionBank";
 import type { MidBankDetail } from "@/lib/midBank/clientTypes";
 import { MathText } from "./MathText";
@@ -54,7 +54,7 @@ export function BankReview({ id, editHref, autoDownload }: { id: string; editHre
     }
     for (const q of [...qs].sort((a, b2) => a.unit - b2.unit || a.slot - b2.slot)) {
       if (q.state === "DRAFT") {
-        const errs = Object.values(questionErrors(q.parts, b.format));
+        const errs = Object.values(questionErrors(q.parts, formatOf(q, b.format), b.marks));
         out.push({ level: "error", qid: q.id, text: `Unit ${q.unit} Q${q.slot} is a draft${errs.length ? ` - ${errs[0]}` : ""}` });
       }
       const others = qs.filter((o) => o.id > q.id);
@@ -92,7 +92,6 @@ export function BankReview({ id, editHref, autoDownload }: { id: string; editHre
 
   const drafts = detail.questions.filter((q) => q.state === "DRAFT").length;
   const unitsDone = bank.units.filter((u) => bank.unitStatus[String(u)]?.complete).length;
-  const marksEach = bank.format === "PARTS_AB" ? bank.marks / 2 : bank.marks;
   const byId = new Map(detail.questions.map((q) => [q.id, q]));
   const errors = issues.filter((i) => i.level === "error");
   const warns = issues.filter((i) => i.level === "warn");
@@ -159,12 +158,12 @@ export function BankReview({ id, editHref, autoDownload }: { id: string; editHre
                       <div className="min-w-0 flex-1 space-y-2">
                         {!q ? <span className="text-sm text-muted-foreground">Empty</span> : q.parts.map((p, i) => (
                           <div key={i} className="text-sm">
-                            {bank.format === "PARTS_AB" && <span className="mr-1 font-medium">({i === 0 ? "a" : "b"})</span>}
+                            {q.parts.length > 1 && <span className="mr-1 font-medium">({i === 0 ? "a" : "b"})</span>}
                             <MathText text={p.text || "-"} className="inline" />
                             {/* eslint-disable-next-line @next/next/no-img-element -- Storage URL with a token */}
                             {p.imageUrl && <figure className="mt-2"><img src={p.imageUrl} alt={p.imageCaption || ""} className="max-h-40 rounded border" />{p.imageCaption && <figcaption className="text-xs text-muted-foreground">{p.imageCaption}</figcaption>}</figure>}
                             <p className="mt-1 text-xs text-muted-foreground">
-                              [{marksEach} M] · {p.cos.join(", ") || "No CO"} · {derivePoPso(p.cos, detail.outcomes!.mapping).map((x) => x.id).join(", ") || "-"} · {p.bloom || "No level"}
+                              [{partMarks(p, i, formatOf(q, bank.format), bank.marks)} M] · {p.cos.join(", ") || "No CO"} · {derivePoPso(p.cos, detail.outcomes!.mapping).map((x) => x.id).join(", ") || "-"} · {p.bloom || "No level"}
                             </p>
                           </div>
                         ))}

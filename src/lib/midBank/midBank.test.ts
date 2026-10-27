@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { BloomLevel, MidQuestion } from "@/types/midQuestionBank";
 import { cleanOutcomes, derivePoPso, outcomeConflicts } from "./outcomes";
 import { findDuplicates, similarity, textKey } from "./duplicates";
-import { cleanParts, questionErrors } from "./validateQuestion";
+import { cleanParts, defaultSplit, formatOf, partMarks, questionErrors, questionFormat } from "./validateQuestion";
 import { bankTotals, bloomNeeds, breaksCompletedUnit, lockReason, unitStatus, unitStatuses, unlockedUnits } from "./rules";
 
 const q = (unit: number, state: MidQuestion["state"], ...blooms: BloomLevel[]) =>
@@ -72,19 +72,36 @@ describe("duplicates", () => {
 describe("question validation", () => {
   const cos = new Set(["CO1", "CO2"]);
 
-  it("shapes parts to the bank format and drops unknown COs and foreign image URLs", () => {
-    const parts = cleanParts([{ text: "a", cos: ["CO2", "CO9", "CO1"], bloom: "L3", imageUrl: "https://evil.example/x.png" }, { text: "b", bloom: "L9" }, { text: "c" }], "PARTS_AB", cos);
-    expect(parts).toEqual([{ text: "a", cos: ["CO1", "CO2"], bloom: "L3" }, { text: "b", cos: [], bloom: "" }]);
+  it("shapes parts to the question's format, keeps whole-number part marks, drops unknown COs and foreign image URLs", () => {
+    const parts = cleanParts([{ text: "a", cos: ["CO2", "CO9", "CO1"], bloom: "L3", marks: 6, imageUrl: "https://evil.example/x.png" }, { text: "b", bloom: "L9", marks: 4.5 }, { text: "c" }], "PARTS_AB", cos, 10);
+    expect(parts).toEqual([{ text: "a", cos: ["CO1", "CO2"], bloom: "L3", marks: 6 }, { text: "b", cos: [], bloom: "", marks: 5 }]);
+    expect(cleanParts([{ text: "a", marks: 3 }], "SINGLE", cos, 10)[0].marks).toBe(10); // one question carries all the marks
   });
 
   it("a complete question needs text, a CO and one Bloom level in every part", () => {
-    const parts = cleanParts([{ text: "Define a set", cos: ["CO1"], bloom: "L2" }, { text: "  ", cos: [], bloom: "" }], "PARTS_AB", cos);
-    expect(questionErrors(parts, "PARTS_AB")).toEqual({
+    const parts = cleanParts([{ text: "Define a set", cos: ["CO1"], bloom: "L2", marks: 5 }, { text: "  ", cos: [], bloom: "", marks: 5 }], "PARTS_AB", cos, 10);
+    expect(questionErrors(parts, "PARTS_AB", 10)).toEqual({
       "parts.1.text": "Part (b): write the question (text or a formula)",
       "parts.1.cos": "Part (b): pick at least one Course Outcome",
       "parts.1.bloom": "Part (b): pick one Bloom's level (L2, L3 or L4)",
     });
-    expect(questionErrors(cleanParts([{ text: "$x^2$", cos: ["CO1"], bloom: "L3" }], "SINGLE", cos), "SINGLE")).toEqual({});
+    expect(questionErrors(cleanParts([{ text: "$x^2$", cos: ["CO1"], bloom: "L3" }], "SINGLE", cos, 10), "SINGLE", 10)).toEqual({});
+  });
+
+  it("part marks are the faculty's split, but must add up to the question's marks", () => {
+    const p = (marks: number) => ({ text: "x", cos: ["CO1"], bloom: "L2" as const, marks });
+    expect(questionErrors([p(6), p(4)], "PARTS_AB", 10)).toEqual({});
+    expect(questionErrors([p(6), p(3)], "PARTS_AB", 10)).toEqual({ marks: "Parts (a) and (b) must add up to 10 marks (now 9)" });
+    expect(questionErrors([p(10), p(0)], "PARTS_AB", 10)["parts.1.marks"]).toBe("Part (b): give it at least 1 mark");
+  });
+
+  it("the format: the bank's own, or the question's when the bank allows either", () => {
+    expect(questionFormat("PARTS_AB", "SINGLE")).toBe("PARTS_AB");
+    expect(questionFormat("EITHER", "PARTS_AB")).toBe("PARTS_AB");
+    expect(questionFormat("EITHER", "bogus")).toBe("SINGLE");
+    expect(formatOf({ parts: [{ text: "", cos: [], bloom: "" }, { text: "", cos: [], bloom: "" }] }, "EITHER")).toBe("PARTS_AB"); // older doc without format
+    expect(defaultSplit("PARTS_AB", 9)).toEqual([5, 4]);
+    expect(partMarks({ text: "", cos: [], bloom: "" }, 1, "PARTS_AB", 10)).toBe(5);
   });
 });
 

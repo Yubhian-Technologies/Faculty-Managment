@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/useToast";
 import { PROGRAM_OUTCOMES } from "@/lib/midBank/constants";
+import { bankFormatText } from "@/lib/midBank/validateQuestion";
 import type { MidBankDetail } from "@/lib/midBank/clientTypes";
 import type { CorrelationLevel, OutcomeMapping } from "@/types";
 
@@ -130,7 +131,7 @@ export function BankSetup({ detail, onChanged }: { detail: MidBankDetail; onChan
           ) : rules ? (
             <div className="flex flex-wrap gap-2">
               <Badge variant="outline">Mid {assignment.midNumber}: Units {setup.units.join(", ")}</Badge>
-              <Badge variant="outline">{rules.format === "PARTS_AB" ? `Parts (a) + (b), ${rules.marks / 2} marks each` : `One question, ${rules.marks} marks`}</Badge>
+              <Badge variant="outline">{bankFormatText(rules.format, rules.marks)}</Badge>
               <Badge variant="outline">10 questions per unit</Badge>
               <Badge variant="outline">L2, L3, L4 at least 3 each per unit</Badge>
             </div>

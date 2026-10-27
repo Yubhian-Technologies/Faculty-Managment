@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Search, UserPlus } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -13,26 +13,40 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Pagination } from "@/components/shared/Pagination";
 import { usePagination } from "@/hooks/usePagination";
 import { toast } from "@/hooks/useToast";
-import type { Course, MidNumber, MidPaperAssignment, Subject } from "@/types";
+import type { Course, CourseCatalogItem, CourseYearTiming, Department, MidNumber, MidPaperAssignment, Subject, SubjectSemesterAssignment } from "@/types";
 import type { MidBankListItem } from "@/lib/midBank/clientTypes";
-import { useCourseSemesterPlan } from "@/hooks/useCourseSemesterPlan";
-import { semesterLabel } from "@/lib/college/courseYears";
+import { useMyDepartments } from "@/hooks/useMyDepartments";
+import { fedYears, regulationsForCourseYearByBatch } from "@/lib/college/academicStructure";
+import { managerEffectiveYears, mergeOwnDepartmentOptions } from "@/lib/departments/hodScope";
+import { parseAcademicYearStart } from "@/lib/college/academicSession";
+import { ordinalYearLabel } from "@/lib/college/courseYears";
+import { semesterInYearLabel } from "@/lib/academic/format";
 
 interface FacultyOption { id: string; name: string }
 
-// Subjects/rosters are only ever tracked per academic Year, not per true
-// semester - see attendance-percentage-report/route.ts's own note. Picking
-// any semester of a year (e.g. 3 or 4) resolves to the same Year and
-// shows the same subject list, same convention as the Attendance Reports
-// page's own Semester picker. Which semesters a course has, and the year each
-// belongs to, come from its own semester setup (useCourseSemesterPlan).
+// Filters work like HOD > Subjects: Course, Department (optional here - all of
+// the HOD's departments by default), Year (the years this HOD's departments
+// teach), Semester (from the course-year timings) and Regulation (optional, from
+// the Course Catalog). The Subject list is the semester's assigned subjects
+// (Academics > Curriculum > Assign) - never every subject of the course.
+const ALL = "__all__"; // Radix Select items can't use an empty string value
 
 export default function MidPaperSetterPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [isLoadingCourses, setIsLoadingCourses] = useState(true);
 
-  const [courseName, setCourseName] = useState("");
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [catalogItems, setCatalogItems] = useState<CourseCatalogItem[]>([]);
+  const [currentSessionStart, setCurrentSessionStart] = useState<number | null>(null);
+  const [timings, setTimings] = useState<CourseYearTiming[]>([]);
+  const myDepartments = useMyDepartments();
+
+  const [courseKey, setCourseKey] = useState("");
+  const [deptId, setDeptId] = useState(""); // "" = all of the HOD's departments
+  const [year, setYear] = useState("");
   const [semester, setSemester] = useState("");
+  const [regulation, setRegulation] = useState(""); // "" = all regulations
+  const [instances, setInstances] = useState<SubjectSemesterAssignment[]>([]);
   const [subjectId, setSubjectId] = useState("");
   const [midNumber, setMidNumber] = useState<MidNumber>(1);
   const [facultyId, setFacultyId] = useState("");
@@ -41,7 +55,6 @@ export default function MidPaperSetterPage() {
   // teaching faculty were loaded. Faculty + Assign only appear for it, and any
   // filter change clears it.
   const [facultyLoadedFor, setFacultyLoadedFor] = useState("");
-  const [subjects, setSubjects] = useState<Subject[]>([]);
   const [isLoadingSubjects, setIsLoadingSubjects] = useState(false);
   const [facultyOptions, setFacultyOptions] = useState<FacultyOption[]>([]);
   const [isLoadingFaculty, setIsLoadingFaculty] = useState(false);
@@ -57,9 +70,11 @@ export default function MidPaperSetterPage() {
     void (async () => {
       setIsLoadingCourses(true);
       try {
-        const res = await fetch("/api/college/courses");
-        const data = (await res.json()) as { courses?: Course[] };
-        setCourses(data.courses ?? []);
+        const [cRes, dRes] = await Promise.all([fetch("/api/college/courses"), fetch("/api/college/departments")]);
+        const data = (await cRes.json()) as { courses?: Course[] };
+        const depts = (await dRes.json()) as { departments?: Department[] };
+        setCourses((data.courses ?? []).sort((a, b) => a.name.localeCompare(b.name)));
+        setDepartments(depts.departments ?? []);
       } catch {
         toast({ variant: "destructive", title: "Failed to load courses" });
       } finally {
@@ -88,46 +103,113 @@ export default function MidPaperSetterPage() {
 
   useEffect(() => { void (async () => { await loadAssignments(); })(); }, []);
 
-  const courseNameOptions = useMemo(() => [...new Set(courses.map((c) => c.name))].sort(), [courses]);
-  const resolvedCourse = useMemo(() => courses.find((c) => c.name === courseName) ?? null, [courses, courseName]);
-  const semesterPlan = useCourseSemesterPlan(resolvedCourse);
-  const semesterOptions = semesterPlan.semesters;
-  const yearForSemester = useCallback((semester: number): number => semesterPlan.yearOf(semester) ?? 0, [semesterPlan]);
+  useEffect(() => {
+    fetch("/api/college/course-catalog")
+      .then((r) => r.json() as Promise<{ items?: CourseCatalogItem[] }>)
+      .then((d) => setCatalogItems(d.items ?? []))
+      .catch(() => undefined);
+    fetch("/api/college/academic-sessions")
+      .then((r) => r.json() as Promise<{ academicSessions?: { label: string; isCurrent: boolean }[] }>)
+      .then((d) => {
+        const current = (d.academicSessions ?? []).find((x) => x.isCurrent);
+        setCurrentSessionStart(current ? parseAcademicYearStart(current.label) ?? null : null);
+      })
+      .catch(() => undefined);
+  }, []);
 
-  function resetDownstream(from: "course" | "semester" | "subject") {
+  // One Course entry per programme (each department owns its own Course doc of it).
+  const courseGroups = useMemo(() => {
+    const groups = new Map<string, Course[]>();
+    for (const c of courses) {
+      const k = c.catalogId ?? `name:${c.name}`;
+      groups.set(k, [...(groups.get(k) ?? []), c]);
+    }
+    return [...groups.entries()].map(([key, rows]) => ({ key, name: rows[0].name, rows }));
+  }, [courses]);
+  const group = courseGroups.find((g) => g.key === courseKey) ?? null;
+  const groupCourseIds = useMemo(() => (group ? [...new Set(group.rows.map((c) => c.id))] : []), [group]);
+
+  // The HOD's own department, its sub-departments and managed branches (as HOD > Subjects).
+  const deptOptions = useMemo(() => mergeOwnDepartmentOptions(departments, myDepartments), [departments, myDepartments]);
+  const course = group ? (group.rows.find((c) => c.departmentId === deptId) ?? group.rows[0]) : null;
+  // Only the years this HOD's departments teach for the course - never every year.
+  const yearOptions = useMemo(() => {
+    if (!course) return [];
+    const scope = deptId ? deptOptions.filter((d) => d.id === deptId) : deptOptions;
+    const years = new Set<number>();
+    for (const d of scope) {
+      const fed = new Set(fedYears(d, departments, course.catalogId));
+      for (const y of managerEffectiveYears(d, departments, course.catalogId)) if (!fed.has(y)) years.add(y);
+    }
+    return Array.from({ length: course.durationYears }, (_, k) => k + 1).filter((y) => years.has(y));
+  }, [course, deptId, deptOptions, departments]);
+
+  // Semesters of the chosen year, from the course-year timings of any of the programme's Course docs.
+  useEffect(() => {
+    if (!year || groupCourseIds.length === 0) { setTimings([]); return; }
+    let cancelled = false;
+    void Promise.all(groupCourseIds.map((id) =>
+      fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(id)}`)
+        .then((r) => r.json() as Promise<{ timings?: CourseYearTiming[] }>)
+        .then((d) => (d.timings ?? []).filter((t) => t.year === Number(year)))
+        .catch(() => [] as CourseYearTiming[])
+    )).then((lists) => { if (!cancelled) setTimings(lists.flat()); });
+    return () => { cancelled = true; };
+  }, [year, groupCourseIds]);
+  const semesterOptions = useMemo(() => {
+    const nums = new Set<number>();
+    for (const t of timings) for (const x of t.semesters ?? []) nums.add(x.semester);
+    return [...nums].sort((a, b) => a - b);
+  }, [timings]);
+
+  const catalogItem = catalogItems.find((c) => c.id === course?.catalogId) ?? null;
+  const regulationOptions = useMemo(() => {
+    const fromCatalog = course?.catalogId && year
+      ? regulationsForCourseYearByBatch(catalogItem?.regulationBatches ?? {}, Number(year), currentSessionStart ?? undefined, catalogItem?.regulations)
+      : [];
+    return [...new Set([...fromCatalog, ...instances.map((a) => a.regulation).filter((r): r is string => !!r)])].sort();
+  }, [course, year, catalogItem, currentSessionStart, instances]);
+
+  function resetDownstream(from: "course" | "dept" | "year" | "semester" | "regulation" | "subject") {
     setFacultyLoadedFor("");
     setFacultyOptions([]);
-    if (from === "course") { setSemester(""); setSubjectId(""); setFacultyId(""); }
-    if (from === "semester") { setSubjectId(""); setFacultyId(""); }
-    if (from === "subject") setFacultyId("");
+    setFacultyId("");
+    if (from === "subject") return;
+    setSubjectId("");
+    if (from === "course") { setDeptId(""); setYear(""); setSemester(""); setRegulation(""); }
+    if (from === "dept") { setYear(""); setSemester(""); }
+    if (from === "year") setSemester("");
   }
 
+  // The semester's assigned subjects (Academics > Curriculum > Assign): one Subject
+  // Instance per department + semester, filed under each department's own Course doc,
+  // so every Course doc of the programme is asked; the API keeps an HOD to their own departments.
   useEffect(() => {
-    void (async () => {
-      // Option lookup: fills the Subject dropdown as soon as Course + Semester
-      // are picked (the report-style fetch is Load, further down).
-      if (!resolvedCourse || !semester) { setSubjects([]); return; }
-      setIsLoadingSubjects(true);
-      try {
-        // catalogId when available, not courseId alone - a master subject is
-        // department-independent (see /api/college/subjects GET's own
-        // doc-comment), physically filed under whichever ONE department's
-        // Course doc created it, which need not be `resolvedCourse.id` (the
-        // first course matching this name in this HOD's own scope) even
-        // when the subject legitimately belongs to this course's programme.
-        const params = resolvedCourse.catalogId
-          ? new URLSearchParams({ catalogId: resolvedCourse.catalogId })
-          : new URLSearchParams({ courseId: resolvedCourse.id, year: String(yearForSemester(Number(semester))) });
-        const res = await fetch(`/api/college/subjects?${params}`);
-        const data = (await res.json()) as { subjects?: Subject[] };
-        setSubjects(data.subjects ?? []);
-      } catch {
-        toast({ variant: "destructive", title: "Failed to load subjects" });
-      } finally {
-        setIsLoadingSubjects(false);
-      }
-    })();
-  }, [resolvedCourse, semester, yearForSemester]);
+    if (groupCourseIds.length === 0 || !year || !semester) { setInstances([]); return; }
+    let cancelled = false;
+    setIsLoadingSubjects(true);
+    void Promise.all(groupCourseIds.map(async (id) => {
+      const params = new URLSearchParams({ courseId: id, semester, year, ...(deptId ? { departmentId: deptId } : {}) });
+      const res = await fetch(`/api/college/subject-semester-assignments?${params}`);
+      if (!res.ok) return [];
+      return ((await res.json()) as { assignments?: SubjectSemesterAssignment[] }).assignments ?? [];
+    }))
+      .then((lists) => { if (!cancelled) setInstances(lists.flat()); })
+      .catch(() => { if (!cancelled) toast({ variant: "destructive", title: "Failed to load subjects" }); })
+      .finally(() => { if (!cancelled) setIsLoadingSubjects(false); });
+    return () => { cancelled = true; };
+  }, [groupCourseIds, year, semester, deptId]);
+
+  // One entry per master subject (what a Mid assignment is keyed by), in curriculum order.
+  const subjects = useMemo<Subject[]>(() => {
+    const bySubject = new Map<string, SubjectSemesterAssignment>();
+    for (const a of instances) {
+      if (regulation && a.regulation && a.regulation !== regulation) continue;
+      if (a.subjectId && !bySubject.has(a.subjectId)) bySubject.set(a.subjectId, a);
+    }
+    const ordered = [...bySubject.values()].sort((a, b) => (a.serialNumber ?? 999) - (b.serialNumber ?? 999) || a.subjectCode.localeCompare(b.subjectCode));
+    return ordered.map((a) => ({ id: a.subjectId, name: a.subjectName, code: a.subjectCode }) as Subject);
+  }, [instances, regulation]);
 
   async function loadFaculty() {
     if (!subjectId) return;
@@ -171,43 +253,81 @@ export default function MidPaperSetterPage() {
   const selectedSubject = subjects.find((s) => s.id === subjectId);
 
   return (
-    <div className="max-w-4xl space-y-6">
+    <div className="max-w-6xl space-y-6">
       <PageHeader
         title="Mid Paper Setter"
         description="Pick a subject and hand its Mid question-bank to one of the faculty currently teaching it. They'll see it on their own dashboard once assigned."
       />
 
       <Card>
-        <CardContent className="pt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <CardContent className="pt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-2">
             <Label>Course</Label>
-            <Select value={courseName} onValueChange={(v) => { setCourseName(v); resetDownstream("course"); }} disabled={isLoadingCourses}>
+            <Select value={courseKey} onValueChange={(v) => { setCourseKey(v); resetDownstream("course"); }} disabled={isLoadingCourses}>
               <SelectTrigger><SelectValue placeholder={isLoadingCourses ? "Loading…" : "Select course"} /></SelectTrigger>
               <SelectContent>
-                {courseNameOptions.map((n) => <SelectItem key={n} value={n}>{n}</SelectItem>)}
+                {courseGroups.map((g) => <SelectItem key={g.key} value={g.key}>{g.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Department <span className="font-normal text-muted-foreground">(optional)</span></Label>
+            <Select value={deptId || ALL} onValueChange={(v) => { setDeptId(v === ALL ? "" : v); resetDownstream("dept"); }} disabled={!group}>
+              <SelectTrigger><SelectValue placeholder="All departments" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>All departments</SelectItem>
+                {deptOptions.map((d) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Year</Label>
+            <Select value={year} onValueChange={(v) => { setYear(v); resetDownstream("year"); }} disabled={!group || yearOptions.length === 0}>
+              <SelectTrigger><SelectValue placeholder={group && yearOptions.length === 0 ? "No years taught" : "Select year"} /></SelectTrigger>
+              <SelectContent>
+                {yearOptions.map((y) => <SelectItem key={y} value={String(y)}>{ordinalYearLabel(y)}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
 
           <div className="space-y-2">
             <Label>Semester</Label>
-            <Select value={semester} onValueChange={(v) => { setSemester(v); resetDownstream("semester"); }} disabled={!resolvedCourse}>
-              <SelectTrigger><SelectValue placeholder="Select semester" /></SelectTrigger>
+            {year && semesterOptions.length === 0 ? (
+              <div className="flex h-9 items-center rounded-md border bg-muted/30 px-3">
+                <span className="text-xs text-muted-foreground">Not configured for this year</span>
+              </div>
+            ) : (
+              <Select value={semester} onValueChange={(v) => { setSemester(v); resetDownstream("semester"); }} disabled={!year}>
+                <SelectTrigger><SelectValue placeholder="Select semester" /></SelectTrigger>
+                <SelectContent>
+                  {semesterOptions.map((x) => <SelectItem key={x} value={String(x)}>{semesterInYearLabel(semesterOptions, x, { format: "short" })}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label>Regulation</Label>
+            <Select value={regulation || ALL} onValueChange={(v) => { setRegulation(v === ALL ? "" : v); resetDownstream("regulation"); }} disabled={!year}>
+              <SelectTrigger><SelectValue placeholder="All regulations" /></SelectTrigger>
               <SelectContent>
-                {semesterOptions.map((s) => <SelectItem key={s} value={String(s)}>{semesterLabel(semesterPlan, s)}</SelectItem>)}
+                <SelectItem value={ALL}>All regulations</SelectItem>
+                {regulationOptions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
 
-          <div className="space-y-2 sm:col-span-2">
+          <div className="space-y-2 sm:col-span-2 lg:col-span-3">
             <Label>Subject</Label>
             <Select value={subjectId} onValueChange={(v) => { setSubjectId(v); resetDownstream("subject"); }} disabled={!semester || isLoadingSubjects}>
               <SelectTrigger><SelectValue placeholder={isLoadingSubjects ? "Loading…" : "Select subject"} /></SelectTrigger>
               <SelectContent>
                 {subjects.length === 0 && (
-                  <div className="px-2 py-1.5 text-xs text-muted-foreground">No subjects for this course/semester</div>
+                  <div className="px-2 py-1.5 text-xs text-muted-foreground">No subjects assigned to this semester</div>
                 )}
-                {subjects.map((s) => <SelectItem key={s.id} value={s.id}>{s.name} ({s.code})</SelectItem>)}
+                {subjects.map((x) => <SelectItem key={x.id} value={x.id}>{x.name} ({x.code})</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -228,12 +348,12 @@ export default function MidPaperSetterPage() {
 
           {/* Load is LAST: it needs every filter above (course, semester,
               subject, mid), then fetches who is teaching that subject. */}
-          <div className="sm:col-span-2 flex justify-start">
+          <div className="sm:col-span-2 lg:col-span-4 flex justify-start">
             <Button
               variant="outline"
               onClick={() => void loadFaculty()}
               loading={isLoadingFaculty}
-              disabled={!courseName || !semester || !subjectId}
+              disabled={!courseKey || !semester || !subjectId}
             >
               <Search className="h-4 w-4 mr-2" />{facultyLoadedFor === subjectId && subjectId ? "Reload Faculty" : "Load Faculty"}
             </Button>
@@ -241,7 +361,7 @@ export default function MidPaperSetterPage() {
 
           {facultyLoadedFor === subjectId && subjectId ? (
             <>
-              <div className="space-y-2 sm:col-span-2">
+              <div className="space-y-2 sm:col-span-2 lg:col-span-4">
                 <Label>Faculty <span className="font-normal text-muted-foreground">(currently teaching this subject)</span></Label>
                 <Select value={facultyId} onValueChange={setFacultyId} disabled={isLoadingFaculty}>
                   <SelectTrigger><SelectValue placeholder="Select faculty" /></SelectTrigger>
@@ -254,7 +374,7 @@ export default function MidPaperSetterPage() {
                 </Select>
               </div>
 
-              <div className="sm:col-span-2 flex justify-end">
+              <div className="sm:col-span-2 lg:col-span-4 flex justify-end">
                 <Button onClick={() => void assign()} loading={isAssigning} disabled={!subjectId || !facultyId}>
                   <UserPlus className="h-4 w-4 mr-2" />
                   Assign Mid {midNumber}{selectedSubject ? ` - ${selectedSubject.name}` : ""}
@@ -262,8 +382,8 @@ export default function MidPaperSetterPage() {
               </div>
             </>
           ) : (
-            <p className="sm:col-span-2 text-sm text-muted-foreground">
-              Select the course, semester, subject and mid, then press Load Faculty to choose who sets the paper.
+            <p className="sm:col-span-2 lg:col-span-4 text-sm text-muted-foreground">
+              Select the course, year, semester, subject and mid, then press Load Faculty to choose who sets the paper.
             </p>
           )}
         </CardContent>

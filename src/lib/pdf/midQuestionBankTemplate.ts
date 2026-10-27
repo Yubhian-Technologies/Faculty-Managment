@@ -2,6 +2,7 @@ import { logoSrc } from "@/lib/pdf/logo";
 import { renderMathHtml } from "@/lib/midBank/renderMath";
 import { derivePoPso } from "@/lib/midBank/outcomes";
 import { QUESTIONS_PER_UNIT } from "@/lib/midBank/constants";
+import { formatOf, partMarks } from "@/lib/midBank/validateQuestion";
 import type { MidQuestion, MidQuestionBank, SubjectOutcomes } from "@/types";
 
 // The Mid Question Bank as a print-ready A4 document (rendered to PDF in the
@@ -48,7 +49,6 @@ export interface MidBankPdfData {
 }
 
 export function getMidQuestionBankHTML(d: MidBankPdfData): string {
-  const marksEach = d.bank.format === "PARTS_AB" ? d.bank.marks / 2 : d.bank.marks;
   const byId = new Map(d.questions.map((q) => [q.id, q]));
   const unitTitle = (u: number) => d.outcomes.units.find((x) => x.no === u)?.title ?? "";
 
@@ -56,11 +56,12 @@ export function getMidQuestionBankHTML(d: MidBankPdfData): string {
     const rows = Array.from({ length: QUESTIONS_PER_UNIT }, (_, i) => i + 1).map((slot) => {
       const q = byId.get(`${u}_${slot}`);
       if (!q) return "";
+      const f = formatOf(q, d.bank.format);
       const cell = (fn: (p: MidQuestion["parts"][number], i: number) => string) => q.parts.map((p, i) => `<div class="part">${fn(p, i)}</div>`).join("");
       return `<tr>
         <td class="num">${slot}</td>
-        <td>${cell((p, i) => `${d.bank.format === "PARTS_AB" ? `<b>(${i === 0 ? "a" : "b"})</b> ` : ""}${renderMathHtml(p.text)}${p.imageUrl ? `<img class="img" src="${esc(p.imageUrl)}" alt="" />${p.imageCaption ? `<div class="cap">${esc(p.imageCaption)}</div>` : ""}` : ""}`)}</td>
-        <td class="narrow">${cell(() => String(marksEach))}</td>
+        <td>${cell((p, i) => `${f === "PARTS_AB" ? `<b>(${i === 0 ? "a" : "b"})</b> ` : ""}${renderMathHtml(p.text)}${p.imageUrl ? `<img class="img" src="${esc(p.imageUrl)}" alt="" />${p.imageCaption ? `<div class="cap">${esc(p.imageCaption)}</div>` : ""}` : ""}`)}</td>
+        <td class="narrow">${cell((p, i) => String(partMarks(p, i, f, d.bank.marks)))}</td>
         <td class="narrow">${cell((p) => esc(p.cos.join(", ")))}</td>
         <td class="po">${cell((p) => esc(derivePoPso(p.cos, d.outcomes.mapping).map((x) => x.id).join(", ")))}</td>
         <td class="narrow">${cell((p) => esc(p.bloom))}</td>

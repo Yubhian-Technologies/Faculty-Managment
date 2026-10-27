@@ -12,9 +12,9 @@ import { cn } from "@/lib/utils";
 import { BLOOM_LABELS, BLOOM_LEVELS, PROGRAM_OUTCOMES, QUESTIONS_PER_UNIT } from "@/lib/midBank/constants";
 import { derivePoPso } from "@/lib/midBank/outcomes";
 import { bloomNeeds, lockReason } from "@/lib/midBank/rules";
-import { isBlankPart, partLabel, partsFor, questionErrors } from "@/lib/midBank/validateQuestion";
+import { defaultSplit, formatOf, isBlankPart, partLabel, partMarks, questionErrors, questionFormat } from "@/lib/midBank/validateQuestion";
 import type { MidBankDetail } from "@/lib/midBank/clientTypes";
-import type { BloomLevel, MidQuestion, MidQuestionBank, MidQuestionPart, MidUnitStatus } from "@/types";
+import type { BloomLevel, MidQuestion, MidQuestionBank, MidQuestionFormat, MidQuestionPart, MidUnitStatus } from "@/types";
 import { FormulaTextarea, MathText } from "./MathText";
 
 // Stage 3 + 4: write the bank. Left - units and their 10 slots; centre - the
@@ -27,7 +27,8 @@ type SaveState = "idle" | "saving" | "saved" | "failed" | "conflict";
 type Tab = "nav" | "editor" | "info";
 const AUTOSAVE_MS = 1500;
 
-const emptyParts = (n: number): MidQuestionPart[] => Array.from({ length: n }, () => ({ text: "", cos: [], bloom: "" }));
+const emptyParts = (format: MidQuestionFormat, total: number): MidQuestionPart[] =>
+  defaultSplit(format, total).map((marks) => ({ text: "", cos: [], bloom: "", marks }));
 const qidOf = (unit: number, slot: number) => `${unit}_${slot}`;
 
 function slotState(q: MidQuestion | undefined, attention: boolean): { label: string; cls: string } {
@@ -51,8 +52,11 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
     return { unit, slot };
   });
   const qid = qidOf(cur.unit, cur.slot);
-  const nParts = partsFor(bank.format);
-  const [parts, setParts] = useState<MidQuestionPart[]>(() => questions[qid]?.parts ?? emptyParts(nParts));
+  // A bank that allows EITHER lets each question pick; a new question starts as one question.
+  const defaultFormat = questionFormat(bank.format);
+  const fmtOf = (q: MidQuestion | undefined | null): MidQuestionFormat => (q ? formatOf(q, bank.format) : defaultFormat);
+  const [qFormat, setQFormat] = useState<MidQuestionFormat>(() => fmtOf(questions[qid]));
+  const [parts, setParts] = useState<MidQuestionPart[]>(() => questions[qid]?.parts ?? emptyParts(fmtOf(questions[qid]), bank.marks));
   const [rev, setRev] = useState(questions[qid]?.rev ?? 0);
   const [dirty, setDirty] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("idle");
@@ -66,8 +70,8 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
   // Serialise saves: one request at a time, edits made meanwhile are saved after it.
   const inFlight = useRef<Promise<boolean> | null>(null);
   const editSeq = useRef(0);
-  const latest = useRef({ parts, rev, qid, dirty });
-  useEffect(() => { latest.current = { parts, rev, qid, dirty }; }, [parts, rev, qid, dirty]);
+  const latest = useRef({ parts, rev, qid, dirty, qFormat });
+  useEffect(() => { latest.current = { parts, rev, qid, dirty, qFormat }; }, [parts, rev, qid, dirty, qFormat]);
 
   const current = questions[qid];
   const isComplete = current?.state === "COMPLETE";
@@ -88,7 +92,7 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
       try {
         const res = await fetch(`/api/college/mid-question-banks/${encodeURIComponent(bank.id)}/questions/${sent.qid}`, {
           method: "PATCH", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action, parts: sent.parts, baseRev: sent.rev }),
+          body: JSON.stringify({ action, format: sent.qFormat, parts: sent.parts, baseRev: sent.rev }),
         });
         const data = (await res.json()) as {
           error?: string; errors?: Record<string, string>; warnings?: string[]; question?: MidQuestion | null;
@@ -155,7 +159,8 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
     const id = qidOf(unit, slot);
     const q = questions[id];
     setCur({ unit, slot });
-    setParts(q?.parts ?? emptyParts(nParts));
+    setQFormat(fmtOf(q));
+    setParts(q?.parts ?? emptyParts(fmtOf(q), bank.marks));
     setRev(q?.rev ?? 0);
     setDirty(false);
     setFieldErrors({});
@@ -213,15 +218,32 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
     const src = questions[id];
     if (!src) return;
     editSeq.current++;
-    setParts(src.parts.map((p) => ({ ...p, cos: [...p.cos] })).slice(0, nParts).concat(emptyParts(Math.max(0, nParts - src.parts.length))));
+    // The copy keeps its format where the bank allows either; otherwise it is fitted to the bank's.
+    const f = bank.format === "EITHER" ? fmtOf(src) : bank.format;
+    const blank = emptyParts(f, bank.marks);
+    setQFormat(f);
+    setParts(blank.map((b, i) => (src.parts[i] ? { ...src.parts[i], cos: [...src.parts[i].cos], marks: f === "SINGLE" ? bank.marks : src.parts[i].marks ?? b.marks } : b)));
     setDirty(true);
     toast({ title: `Copied Unit ${src.unit} Q${src.slot}`, description: "Edit it - an identical question can't be saved as complete." });
   }
 
-  const liveErrors = useMemo(() => questionErrors(parts, bank.format), [parts, bank.format]);
+  const liveErrors = useMemo(() => questionErrors(parts, qFormat, bank.marks), [parts, qFormat, bank.marks]);
+
+  /** Switch this question between one question and parts (a) + (b). Part (b) must be empty to drop it. */
+  function changeFormat(f: MidQuestionFormat) {
+    if (f === qFormat) return;
+    if (f === "SINGLE" && parts[1] && !isBlankPart(parts[1])) {
+      toast({ variant: "destructive", title: "Clear part (b) first", description: "Its text, COs and level would be lost." });
+      return;
+    }
+    const split = defaultSplit(f, bank.marks);
+    editSeq.current++;
+    setParts(f === "SINGLE" ? [{ ...parts[0], marks: bank.marks }] : [{ ...parts[0], marks: split[0] }, { text: "", cos: [], bloom: "", marks: split[1] }]);
+    setQFormat(f);
+    setDirty(true);
+  }
   const allCos = [...new Set(parts.flatMap((p) => p.cos))];
   const poPso = derivePoPso(allCos, outcomes.mapping);
-  const marksEach = bank.format === "PARTS_AB" ? bank.marks / 2 : bank.marks;
   const lockedHere = lockReason(bank.units, bank.unitStatus, cur.unit);
   const others = Object.values(questions).filter((q) => q.id !== qid && q.parts.some((p) => p.text.trim())).sort((a, b) => a.unit - b.unit || a.slot - b.slot);
   const pct = bank.totalCount ? Math.round((bank.completeCount / bank.totalCount) * 100) : 0;
@@ -313,7 +335,7 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
               <span className="flex-1">This question was changed in another tab or window. Your edits here were not saved.</span>
               <Button size="sm" variant="outline" onClick={() => {
                 if (conflict) setQuestions((qs) => ({ ...qs, [qid]: conflict })); else setQuestions((qs) => { const n = { ...qs }; delete n[qid]; return n; });
-                setParts(conflict?.parts ?? emptyParts(nParts)); setRev(conflict?.rev ?? 0); setDirty(false); setConflict(null); setSaveState("idle");
+                setQFormat(fmtOf(conflict)); setParts(conflict?.parts ?? emptyParts(fmtOf(conflict), bank.marks)); setRev(conflict?.rev ?? 0); setDirty(false); setConflict(null); setSaveState("idle");
               }}>Load the saved version</Button>
             </div>
           )}
@@ -330,12 +352,37 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
             </div>
           )}
 
+          {bank.format === "EITHER" && !lockedHere && (
+            <fieldset className="flex flex-wrap items-center gap-4 text-sm">
+              <legend className="sr-only">Question format</legend>
+              {(["SINGLE", "PARTS_AB"] as MidQuestionFormat[]).map((f) => (
+                <label key={f} className="flex items-center gap-1.5">
+                  <input type="radio" name="q-format" checked={qFormat === f} onChange={() => changeFormat(f)} className="h-4 w-4 accent-[hsl(var(--primary))]" />
+                  {f === "SINGLE" ? `One question (${bank.marks} marks)` : "Parts (a) and (b)"}
+                </label>
+              ))}
+            </fieldset>
+          )}
+          {qFormat === "PARTS_AB" && (fieldErrors.marks || (dirty && liveErrors.marks)) && (
+            <p className="text-xs text-destructive">{fieldErrors.marks || liveErrors.marks}</p>
+          )}
+
           {parts.map((p, i) => {
             const pre = `p${i}`;
             const err = (f: string) => fieldErrors[`parts.${i}.${f}`];
             return (
               <fieldset key={i} disabled={Boolean(lockedHere)} className="space-y-3 rounded-lg border p-4">
-                <legend className="px-1 text-sm font-semibold">{partLabel(bank.format, i)} <span className="font-normal text-muted-foreground">· {marksEach} marks</span></legend>
+                <legend className="px-1 text-sm font-semibold">
+                  {partLabel(qFormat, i)}{" "}
+                  {qFormat === "SINGLE" ? <span className="font-normal text-muted-foreground">· {bank.marks} marks</span> : (
+                    <span className="font-normal text-muted-foreground">
+                      ·{" "}
+                      <input type="number" min={1} max={bank.marks - 1} aria-label={`Marks for ${partLabel(qFormat, i)}`}
+                        value={p.marks ?? ""} onChange={(e) => edit(i, { marks: e.target.value === "" ? 0 : Number(e.target.value) })}
+                        className="h-7 w-14 rounded border border-input bg-background px-1 text-center text-sm" /> marks
+                    </span>
+                  )}
+                </legend>
 
                 <div className="space-y-1.5">
                   <Label htmlFor={`${pre}-text`}>Question text</Label>
@@ -349,7 +396,7 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
                   {p.imageUrl ? (
                     <div className="flex flex-wrap items-start gap-3">
                       {/* eslint-disable-next-line @next/next/no-img-element -- Storage URL with a token, not an optimisable asset */}
-                      <img src={p.imageUrl} alt={p.imageCaption || `Image for ${partLabel(bank.format, i)}`} className="max-h-40 rounded border" />
+                      <img src={p.imageUrl} alt={p.imageCaption || `Image for ${partLabel(qFormat, i)}`} className="max-h-40 rounded border" />
                       <div className="flex flex-col gap-2">
                         <label className="inline-flex cursor-pointer items-center text-xs underline">
                           Replace<input type="file" accept="image/png,image/jpeg" className="sr-only" onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(i, f); e.target.value = ""; }} />
@@ -450,11 +497,11 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
             <div className="space-y-3">
               {parts.map((p, i) => (
                 <div key={i}>
-                  {bank.format === "PARTS_AB" && <span className="mr-1 font-medium">({i === 0 ? "a" : "b"})</span>}
+                  {qFormat === "PARTS_AB" && <span className="mr-1 font-medium">({i === 0 ? "a" : "b"})</span>}
                   {p.text.trim() ? <MathText text={p.text} className="inline" /> : <span className="text-muted-foreground">Nothing written yet</span>}
                   {/* eslint-disable-next-line @next/next/no-img-element -- Storage URL with a token */}
                   {p.imageUrl && <figure className="mt-2"><img src={p.imageUrl} alt={p.imageCaption || ""} className="max-h-32 rounded border" />{p.imageCaption && <figcaption className="text-xs text-muted-foreground">{p.imageCaption}</figcaption>}</figure>}
-                  <p className="mt-1 text-xs text-muted-foreground">[{marksEach} M] {p.cos.join(", ") || "No CO"} · {p.bloom || "No level"}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">[{partMarks(p, i, qFormat, bank.marks)} M] {p.cos.join(", ") || "No CO"} · {p.bloom || "No level"}</p>
                 </div>
               ))}
             </div>

@@ -79,6 +79,23 @@ describe.skipIf(!EMULATOR)("Mid Question Bank (real Firestore)", () => {
     expect((await start()).json.bank.marks).toBe(10); // started bank keeps its copy
   });
 
+  it("a bank allowing either format: each question picks; part marks must add up", async () => {
+    await col("midBankRules").doc("btech__ALL").set({ courseKey: "btech", courseName: "B.Tech", regulation: "ALL", mids: { "1": [1, 2] }, format: "EITHER", marks: 10 });
+    await putOutcomes({ ...outcomes, baseVersion: 0 });
+    await start();
+    const { PATCH } = await import("@/app/api/college/mid-question-banks/[id]/questions/[qid]/route");
+    const send = async (qid: string, format: string, parts: unknown[]) => {
+      const res = await PATCH(new Request("http://x", { method: "PATCH", body: JSON.stringify({ action: "complete", format, parts, baseRev: 0 }) }), { params: Promise.resolve({ id: A, qid }) });
+      return { status: res.status, json: (await res.json()) as Json };
+    };
+    expect((await send("1_1", "SINGLE", [part("Define a set", "L2")])).json.question).toMatchObject({ format: "SINGLE", parts: [{ marks: 10 }] });
+    const off = await send("1_2", "PARTS_AB", [{ ...part("State Ohm's law", "L2"), marks: 6 }, { ...part("Find the current in the circuit", "L3"), marks: 3 }]);
+    expect(off.json.errors.marks).toBe("Parts (a) and (b) must add up to 10 marks (now 9)");
+    const ok = await send("1_2", "PARTS_AB", [{ ...part("State Ohm's law", "L2"), marks: 6 }, { ...part("Find the current in the circuit", "L3"), marks: 4 }]);
+    expect(ok.json.question).toMatchObject({ format: "PARTS_AB", parts: [{ marks: 6 }, { marks: 4 }] });
+    expect((await col("midQuestionBanks").doc(A).get()).data()?.unitStatus["1"].bloom).toEqual({ L2: 2, L3: 1, L4: 0 });
+  });
+
   describe("writing questions", () => {
     beforeEach(async () => {
       await col("midBankRules").doc("btech__ALL").set({ courseKey: "btech", courseName: "B.Tech", regulation: "ALL", mids: { "1": [1, 2] }, format: "SINGLE", marks: 10 });

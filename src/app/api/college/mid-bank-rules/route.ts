@@ -18,11 +18,19 @@ const READ_ROLES = ["EXAM_CELL", "HOD", "PANEL_MEMBER", "PRINCIPAL", "VICE_PRINC
 export async function GET() {
   try {
     const session = await requireCollegeMember(...READ_ROLES);
-    const snap = await midBankRefs(getAdminDb(), session.collegeId).rules.get();
+    const refs = midBankRefs(getAdminDb(), session.collegeId);
+    const [snap, catalog] = await Promise.all([refs.rules.get(), refs.college.collection("courseCatalog").get()]);
+    // The regulations Academics set up per catalog course (Academics > Regulation) - the
+    // only ones a rule may be set for; keyed like the course groups (catalog id).
+    const regulationsByCourse: Record<string, string[]> = {};
+    for (const d of catalog.docs) {
+      const regs = (d.get("regulations") as string[] | undefined) ?? [];
+      regulationsByCourse[d.id] = [...new Set(regs.map((r) => String(r).trim().toUpperCase()).filter(Boolean))].sort();
+    }
     const rules = snap.docs
       .map((d) => ({ id: d.id, ...(d.data() as Omit<MidBankRules, "id">) }))
       .sort((a, b) => a.courseName.localeCompare(b.courseName) || a.regulation.localeCompare(b.regulation));
-    return NextResponse.json({ rules });
+    return NextResponse.json({ rules, regulationsByCourse });
   } catch (err) {
     return guardError(err, "[college/mid-bank-rules GET]");
   }
@@ -38,9 +46,9 @@ export async function PUT(request: Request) {
     const format = body.format as MidBankFormat;
     const marks = Number(body.marks);
     if (!courseKey || !courseName) return NextResponse.json({ error: "Pick a course" }, { status: 400 });
-    if (format !== "SINGLE" && format !== "PARTS_AB") return NextResponse.json({ error: "Pick the question format" }, { status: 400 });
+    if (format !== "SINGLE" && format !== "PARTS_AB" && format !== "EITHER") return NextResponse.json({ error: "Pick the question format" }, { status: 400 });
     if (!Number.isInteger(marks) || marks < 1 || marks > 100) return NextResponse.json({ error: "Marks per question must be a whole number from 1 to 100" }, { status: 400 });
-    if (format === "PARTS_AB" && marks % 2 !== 0) return NextResponse.json({ error: "Parts (a) and (b) split the marks evenly - use an even number" }, { status: 400 });
+    if (format !== "SINGLE" && marks < 2) return NextResponse.json({ error: "A question with parts (a) and (b) needs at least 2 marks" }, { status: 400 });
 
     const mids: Record<string, number[]> = {};
     for (const [mid, list] of Object.entries(body.mids ?? {})) {
@@ -55,6 +63,12 @@ export async function PUT(request: Request) {
     if (Object.keys(mids).length === 0) return NextResponse.json({ error: "Set the units for at least one Mid" }, { status: 400 });
 
     const db = getAdminDb();
+    // Only a regulation Academics set up for the course (Course Catalog), or ALL.
+    if (regulation !== "ALL") {
+      const cat = courseKey.startsWith("name:") ? null : await midBankRefs(db, session.collegeId).college.collection("courseCatalog").doc(courseKey).get();
+      const regs = ((cat?.get("regulations") as string[] | undefined) ?? []).map((r) => String(r).trim().toUpperCase());
+      if (!regs.includes(regulation)) return NextResponse.json({ error: `${regulation} is not a regulation of ${courseName} in Academics` }, { status: 400 });
+    }
     const id = rulesDocId(courseKey, regulation);
     const data = {
       courseKey, courseName, regulation, mids, format, marks,

@@ -49,8 +49,10 @@ export interface SubjectOutcomes {
   updatedAt: Timestamp;
 }
 
-/** SINGLE = one question per slot; PARTS_AB = parts (a) and (b), marks split evenly. */
-export type MidBankFormat = "SINGLE" | "PARTS_AB";
+/** How one question is set: one question, or parts (a) and (b) with the marks split by the faculty. */
+export type MidQuestionFormat = "SINGLE" | "PARTS_AB";
+/** What the Exam Cell allows in a bank: always one, always parts, or EITHER (faculty picks per question). */
+export type MidBankFormat = MidQuestionFormat | "EITHER";
 
 export interface MidBankRules {
   id: string;
@@ -62,7 +64,7 @@ export interface MidBankRules {
   /** Mid number -> the unit numbers it covers, in unlock order. */
   mids: Record<string, number[]>;
   format: MidBankFormat;
-  marks: number; // per question
+  marks: number; // per question (parts split it - see MidQuestionPart.marks)
   updatedBy: string;
   updatedByName: string;
   updatedAt: Timestamp;
@@ -75,6 +77,8 @@ export interface MidQuestionPart {
   imageCaption?: string;
   cos: string[];
   bloom: BloomLevel | "";
+  /** This part's marks. One-part questions carry the bank's marks; parts must add up to them. */
+  marks?: number;
 }
 
 export type MidQuestionState = "DRAFT" | "COMPLETE";
@@ -83,6 +87,8 @@ export interface MidQuestion {
   id: string; // `${unit}_${slot}`
   unit: number;
   slot: number; // 1..QUESTIONS_PER_UNIT
+  /** This question's format (absent on older docs = the bank's own format). */
+  format?: MidQuestionFormat;
   parts: MidQuestionPart[];
   state: MidQuestionState;
   /** Optimistic-concurrency counter: a save must name the rev it edited. */

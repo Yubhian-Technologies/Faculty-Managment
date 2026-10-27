@@ -5,7 +5,7 @@ import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { actorName, bankAccess, guardError, loadOutcomes, MID_BANK_WRITE_ROLES, midBankRefs } from "@/lib/midBank/server";
-import { cleanParts, isBlankPart, partLabel, questionErrors } from "@/lib/midBank/validateQuestion";
+import { cleanParts, isBlankPart, partLabel, questionErrors, questionFormat } from "@/lib/midBank/validateQuestion";
 import { findDuplicates, textKey } from "@/lib/midBank/duplicates";
 import { bankTotals, breaksCompletedUnit, lockReason, unitStatus } from "@/lib/midBank/rules";
 import { QUESTIONS_PER_UNIT } from "@/lib/midBank/constants";
@@ -14,6 +14,7 @@ import type { MidQuestion, MidQuestionBank } from "@/types";
 // Saves one question slot of a bank (qid = `${unit}_${slot}`).
 //   { action: "draft",    parts, baseRev }  keeps whatever is written, unchecked
 //   { action: "complete", parts, baseRev }  must pass every academic check
+// `format` (SINGLE | PARTS_AB) is the question's own when the bank allows EITHER.
 // In one transaction: the unit must be open (units go in order), `baseRev`
 // must be the question's current rev (else 409 - it changed elsewhere and is
 // never overwritten), an exact duplicate is refused, and a complete unit may
@@ -26,7 +27,7 @@ export async function PATCH(request: Request, { params }: Params) {
   try {
     const session = await requireCollegeMember(...MID_BANK_WRITE_ROLES);
     const { id, qid } = await params;
-    const body = (await readJsonBody(request)) as { action?: string; parts?: unknown; baseRev?: number };
+    const body = (await readJsonBody(request)) as { action?: string; format?: string; parts?: unknown; baseRev?: number };
     const action = body.action === "complete" ? "complete" : body.action === "draft" ? "draft" : null;
     if (!action) return NextResponse.json({ error: "action must be draft or complete" }, { status: 400 });
     const m = /^(\d{1,2})_(\d{1,2})$/.exec(qid);
@@ -64,18 +65,19 @@ export async function PATCH(request: Request, { params }: Params) {
         return { status: 409, body: { error: "This question was changed in another tab or window - reload it before saving", question: current } };
       }
 
-      const parts = cleanParts(body.parts, bank.format, coIds);
+      const format = questionFormat(bank.format, body.format);
+      const parts = cleanParts(body.parts, format, coIds, bank.marks);
       const keys = parts.map((p) => textKey(p.text));
       const others = all.filter((q) => q.id !== qid);
       const dup = findDuplicates(keys, others);
-      const warnings = dup.similar.map((h) => `${partLabel(bank.format, h.part)} looks similar to Unit ${h.unit} Q${h.slot}`);
+      const warnings = dup.similar.map((h) => `${partLabel(format, h.part)} looks similar to Unit ${h.unit} Q${h.slot}`);
 
       let state: MidQuestion["state"];
       if (action === "complete") {
-        const errors = questionErrors(parts, bank.format);
+        const errors = questionErrors(parts, format, bank.marks);
         for (const h of dup.exact) {
           errors[`parts.${h.part}.text`] = h.id
-            ? `${partLabel(bank.format, h.part)} is the same as Unit ${h.unit} Q${h.slot}`
+            ? `${partLabel(format, h.part)} is the same as Unit ${h.unit} Q${h.slot}`
             : "Parts (a) and (b) are the same question";
         }
         if (Object.keys(errors).length > 0) return { status: 400, body: { error: Object.values(errors)[0], errors } };
@@ -99,7 +101,7 @@ export async function PATCH(request: Request, { params }: Params) {
       }
 
       const next: Omit<MidQuestion, "id"> = {
-        unit, slot, parts, state, rev: rev + 1, textKeys: keys,
+        unit, slot, format, parts, state, rev: rev + 1, textKeys: keys,
         updatedBy: session.uid, updatedByName: name, updatedAt: new Date() as unknown as MidQuestion["updatedAt"],
       };
       const after = unitStatus([...others, { ...next, id: qid }], unit);

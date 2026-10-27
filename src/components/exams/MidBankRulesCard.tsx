@@ -18,28 +18,38 @@ import type { Course, MidBankFormat, MidBankRules } from "@/types";
 // not yet started.
 
 const selectClass = "h-9 w-full rounded-md border border-input bg-background px-3 text-sm";
-const FORMAT_LABEL: Record<MidBankFormat, string> = { SINGLE: "One question per slot", PARTS_AB: "Parts (a) and (b)" };
+const FORMAT_LABEL: Record<MidBankFormat, string> = {
+  SINGLE: "One question per slot",
+  PARTS_AB: "Parts (a) and (b)",
+  EITHER: "Either - faculty picks per question",
+};
 
 const parseUnits = (s: string) => [...new Set(s.split(/[\s,]+/).map(Number).filter((n) => Number.isInteger(n) && n > 0))];
 
 export function MidBankRulesCard({ midCount }: { midCount: number }) {
   const [rules, setRules] = useState<MidBankRules[]>([]);
+  const [regulationsByCourse, setRegulationsByCourse] = useState<Record<string, string[]>>({});
   const [courses, setCourses] = useState<Course[]>([]);
   const [courseKey, setCourseKey] = useState("");
   const [regulation, setRegulation] = useState("");
   const [midUnits, setMidUnits] = useState<Record<string, string>>({});
-  const [format, setFormat] = useState<MidBankFormat>("PARTS_AB");
+  const [format, setFormat] = useState<MidBankFormat>("EITHER");
   const [marks, setMarks] = useState("10");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<MidBankRules | null>(null);
 
   const groups = useMemo(() => buildCourseGroups(courses), [courses]);
+  // The course's regulations from Academics (Course Catalog); a saved rule's own regulation stays listed.
+  const regulationOptions = useMemo(() => {
+    const regs = regulationsByCourse[courseKey] ?? [];
+    return regulation && !regs.includes(regulation) ? [...regs, regulation] : regs;
+  }, [regulationsByCourse, courseKey, regulation]);
   const mids = Array.from({ length: Math.max(1, Math.min(midCount || 2, 9)) }, (_, i) => String(i + 1));
 
   function load() {
     fetch("/api/college/mid-bank-rules")
-      .then((r) => r.json() as Promise<{ rules?: MidBankRules[] }>)
-      .then((d) => setRules(d.rules ?? []))
+      .then((r) => r.json() as Promise<{ rules?: MidBankRules[]; regulationsByCourse?: Record<string, string[]> }>)
+      .then((d) => { setRules(d.rules ?? []); setRegulationsByCourse(d.regulationsByCourse ?? {}); })
       .catch(() => toast({ variant: "destructive", title: "Failed to load the question bank rules" }));
   }
   useEffect(() => {
@@ -129,14 +139,20 @@ export function MidBankRulesCard({ midCount }: { midCount: number }) {
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="mbr-course">Course</Label>
-            <select id="mbr-course" className={selectClass} value={courseKey} onChange={(e) => setCourseKey(e.target.value)}>
+            <select id="mbr-course" className={selectClass} value={courseKey} onChange={(e) => { setCourseKey(e.target.value); setRegulation(""); }}>
               <option value="">Select a course</option>
               {groups.map((g) => <option key={g.key} value={g.key}>{g.name}</option>)}
             </select>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="mbr-reg">Regulation</Label>
-            <Input id="mbr-reg" value={regulation} placeholder="All regulations" onChange={(e) => setRegulation(e.target.value.toUpperCase())} />
+            <select id="mbr-reg" className={selectClass} value={regulation} onChange={(e) => setRegulation(e.target.value)} disabled={!courseKey}>
+              <option value="">All regulations</option>
+              {regulationOptions.map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
+            {courseKey && regulationOptions.length === 0 && (
+              <p className="text-xs text-muted-foreground">No regulations set for this course in Academics &gt; Regulation - the rule applies to all.</p>
+            )}
           </div>
           {mids.map((m) => (
             <div key={m} className="space-y-1.5">
@@ -147,6 +163,7 @@ export function MidBankRulesCard({ midCount }: { midCount: number }) {
           <div className="space-y-1.5">
             <Label htmlFor="mbr-format">Question format</Label>
             <select id="mbr-format" className={selectClass} value={format} onChange={(e) => setFormat(e.target.value as MidBankFormat)}>
+              <option value="EITHER">{FORMAT_LABEL.EITHER}</option>
               <option value="PARTS_AB">{FORMAT_LABEL.PARTS_AB}</option>
               <option value="SINGLE">{FORMAT_LABEL.SINGLE}</option>
             </select>
@@ -154,7 +171,7 @@ export function MidBankRulesCard({ midCount }: { midCount: number }) {
           <div className="space-y-1.5">
             <Label htmlFor="mbr-marks">Marks per question</Label>
             <Input id="mbr-marks" type="number" min={1} max={100} value={marks} onChange={(e) => setMarks(e.target.value)} />
-            {format === "PARTS_AB" && Number(marks) > 0 && <p className="text-xs text-muted-foreground">{Number(marks) / 2} marks each for (a) and (b)</p>}
+            {format !== "SINGLE" && Number(marks) > 0 && <p className="text-xs text-muted-foreground">With parts, the faculty splits the {Number(marks)} marks between (a) and (b)</p>}
           </div>
         </div>
         <div className="flex justify-end">

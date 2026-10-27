@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { BankSetup } from "@/components/midBank/BankSetup";
 import { BankWorkspace } from "@/components/midBank/BankWorkspace";
 import type { MidBankDetail } from "@/lib/midBank/clientTypes";
+import { bankFormatText } from "@/lib/midBank/validateQuestion";
 
 // One Mid question bank: the setup until it is started, then the workspace.
 // Someone who only reads it (the HOD) is sent to the review screen.
@@ -57,7 +58,7 @@ export default function MidBankPage({ params, searchParams }: { params: Promise<
       <PageHeader
         title={title}
         description={detail.bank
-          ? `${detail.subject.code} · Units ${detail.bank.units.join(", ")} · ${detail.bank.format === "PARTS_AB" ? `(a) + (b), ${detail.bank.marks / 2} marks each` : `${detail.bank.marks} marks per question`}`
+          ? `${detail.subject.code} · Units ${detail.bank.units.join(", ")} · ${bankFormatText(detail.bank.format, detail.bank.marks)}`
           : `${detail.subject.code} · Review the subject setup, then start writing questions.`}
         actions={back}
       />
