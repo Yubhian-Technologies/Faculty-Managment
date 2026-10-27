@@ -341,64 +341,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return NextResponse.json({ ok: true, teachingAssignmentId: target.teachingAssignmentId });
     }
 
-      // new faculty member gets a fresh one for this section and subject, the same
-      // as Allocate, and the slots move onto it.
-      const taSnap = await taRefExisting.get();
-      let teachingAssignmentId = old.teachingAssignmentId;
-      if (taSnap.exists) {
-        batch.update(taRefExisting, { facultyId: body.facultyId, facultyName: newName, updatedAt: now });
-      } else {
-        const freshRef = collegeRef.collection("teachingAssignments").doc();
-        teachingAssignmentId = freshRef.id;
-        batch.set(freshRef, {
-          collegeId: session.collegeId,
-          facultyId: body.facultyId,
-          facultyName: newName,
-          department: reqData.requestingDepartment,
-          departmentId: course?.departmentId ?? "",
-          courseId: reqData.courseId,
-          courseName: reqData.courseName,
-          year: reqData.year,
-          sectionId: reqData.sectionId,
-          sectionName: reqData.sectionName,
-          subjectId: reqData.subjectId,
-          subjectName: reqData.subjectName,
-          subjectCode: reqData.subjectCode,
-          hoursPerWeek: reqData.hoursPerWeek,
-          assignedBy: session.uid,
-          assignedByName: session.role,
-          createdAt: now,
-          updatedAt: now,
-          assignmentAcademicYear: "",
-          assignmentSemester: "",
-        });
-      }
-      for (const s of slotSnaps.docs) {
-        batch.update(s.ref, {
-          facultyId: body.facultyId, facultyName: newName, updatedAt: now,
-          ...(taSnap.exists ? {} : { assignmentId: teachingAssignmentId }),
-        });
-      }
-      batch.update(reqRef, { ...allocationFields(nextAllocations.map((a) => a.facultyId === body.facultyId ? { ...a, teachingAssignmentId } : a)), updatedAt: now });
-      await batch.commit();
-      await collegeRef.collection("auditLogs").add({
-        collegeId: session.collegeId,
-        action: "FACULTY_ASSIGNMENT_REALLOCATED",
-        performedBy: session.uid,
-        performedByName: session.role,
-        targetId: id,
-        details: { subjectName: reqData.subjectName, sectionName: reqData.sectionName, replacedFacultyId: body.fromFacultyId, facultyName: newName },
-        timestamp: now,
-      });
-      await notify(
-        db, session.collegeId, reqData.requestedBy, "FACULTY_ASSIGNMENT_ALLOCATED",
-        "Faculty for your requested subject changed",
-        `${reqData.targetDepartmentName} changed the faculty member for ${reqData.subjectName} (Section ${reqData.sectionName}) to ${newName || "a new faculty member"}`,
-        requesterRequestsLink(requesterRole)
-      );
-      return NextResponse.json({ ok: true, teachingAssignmentId });
-    }
-
     const taRef = collegeRef.collection("teachingAssignments").doc();
     await taRef.set({
       collegeId: session.collegeId,
