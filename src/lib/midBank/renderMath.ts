@@ -6,7 +6,7 @@ import katex from "katex";
 // show a formula the same way. A formula KaTeX can't read is shown in red
 // rather than throwing.
 
-const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+export const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
 /** A question's text cut into plain text and formulas, with each piece's place in the text. */
 export type MathSegment =
