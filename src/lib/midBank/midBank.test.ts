@@ -160,3 +160,41 @@ describe("setup issues", () => {
     expect(setupIssues(subject, 1, rules, { units: [1, 2, 3].map((no) => ({ no, title: "t" })) }).issues).toEqual([]);
   });
 });
+
+import { deadlineError, isDeadlineLocked } from "./deadline";
+import { bankIdFor, branchKey, checkSectionPick, sectionsOf, type TeachingRow } from "./sections";
+
+describe("deadline", () => {
+  it("is open through the deadline day and locked from the next day", () => {
+    expect(isDeadlineLocked("2026-11-20", "2026-11-20")).toBe(false);
+    expect(isDeadlineLocked("2026-11-20", "2026-11-21")).toBe(true);
+  });
+  it("must be a date, not past, and before the Mid starts", () => {
+    expect(deadlineError("2026-11-20", "2026-11-01", "2026-11-25")).toBe("");
+    expect(deadlineError("2026-10-30", "2026-11-01", null)).toBe("The deadline can't be in the past");
+    expect(deadlineError("2026-11-25", "2026-11-01", "2026-11-25")).toBe("The deadline must be before the Mid starts (2026-11-25)");
+    expect(deadlineError("", "2026-11-01", null)).toBe("Pick the deadline date");
+  });
+});
+
+describe("sections of a bank", () => {
+  const row = (sectionId: string, facultyId: string, branch = "Information Technology", subjectId = "dm"): TeachingRow =>
+    ({ subjectId, subjectName: "Discrete Maths", subjectCode: "DM101", branch, sectionId, sectionName: sectionId.toUpperCase(), facultyId, facultyName: `Dr ${facultyId}` });
+  const rows = [row("a", "f1"), row("b", "f2"), row("c", "f1", "CSE"), row("b", "f3")];
+  const available = sectionsOf(rows, "dm", "Information Technology");
+
+  it("lists the subject's sections in the branch with everyone teaching each", () => {
+    expect(available.map((s) => [s.sectionId, s.facultyIds])).toEqual([["a", ["f1"]], ["b", ["f2", "f3"]]]);
+  });
+  it("accepts own + a colleague's section; refuses none of mine, a held section, a foreign section", () => {
+    expect(checkSectionPick(available, ["a", "b"], "f1", new Map()).error).toBe("");
+    expect(checkSectionPick(available, ["b"], "f1", new Map()).error).toBe("Include at least one section you teach");
+    expect(checkSectionPick(available, ["a", "b"], "f1", new Map([["b", "Dr f2"]])).error).toBe("Section B is already in Dr f2's question bank");
+    expect(checkSectionPick(available, ["c"], "f1", new Map()).error).toBe("A picked section doesn't have this subject in this branch");
+    expect(checkSectionPick(available, [], "f1", new Map()).error).toBe("Pick at least one section");
+  });
+  it("ids are stable per branch + subject + owner", () => {
+    expect(branchKey(" Information Technology ")).toBe("information-technology");
+    expect(bankIdFor("d1", "dm", "Information Technology", "f1")).toBe("d1__dm__information-technology__f1");
+  });
+});

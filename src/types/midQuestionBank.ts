@@ -1,16 +1,19 @@
 import type { Timestamp } from "firebase/firestore";
 
 // ─── Mid Question Bank ──────────────────────────────────────────────────────
-// Built on top of the HOD's Mid Paper Setter assignment (midPaper.ts): the
-// assigned faculty writes the question bank for that subject + Mid.
+// The Exam Cell sets a deadline per Course + Year + Semester + Mid; every faculty
+// member teaching a subject of that semester can then prepare a bank for it,
+// per branch + subject, covering the sections they pick (theirs, and colleagues'
+// sections of the same subject in that branch, who then see it read-only).
 //
-//  colleges/{c}/subjectOutcomes/{subjectId}   units, Course Outcomes, PSOs and
-//      the CO -> PO/PSO mapping. Entered once by the assigned faculty (or the
-//      subject's HOD) in the bank setup; shared by both Mids of the subject.
-//  colleges/{c}/midBankRules/{id}             Exam Cell: which units each Mid
-//      covers, the question format and marks, per course (+ regulation).
-//  colleges/{c}/midQuestionBanks/{assignmentId}   one bank per assignment
-//      (same id), with a snapshot of the rules taken when it was started.
+//  colleges/{c}/midBankDeadlines/{id}          Exam Cell deadline (opens the module).
+//  colleges/{c}/midBankRules/{id}              Exam Cell: units per Mid, format, marks.
+//  colleges/{c}/subjectOutcomes/{subjectId}__{branchKey}   units, COs, PSOs and the
+//      CO -> PO/PSO mapping of a subject in a branch; the first preparer enters
+//      them and Mid 2 reuses them.
+//  colleges/{c}/midQuestionBanks/{id}           one bank (see MidQuestionBank.id).
+//  colleges/{c}/midBankSectionClaims/{deadlineId}__{subjectId}__{sectionId}
+//      a section belongs to one bank only.
 //  .../midQuestionBanks/{id}/questions/{unit}_{slot}   one doc per slot.
 
 export type BloomLevel = "L2" | "L3" | "L4";
@@ -36,6 +39,7 @@ export type OutcomeMapping = Record<string, Record<string, CorrelationLevel>>;
 
 export interface SubjectOutcomes {
   subjectId: string;
+  branch: string;
   subjectName: string;
   subjectCode: string;
   units: SyllabusUnit[];
@@ -109,14 +113,56 @@ export interface MidUnitStatus {
 
 export type MidQuestionBankStatus = "IN_PROGRESS" | "COMPLETE";
 
+/**
+ * Exam Cell: the question bank deadline for one Course + Year + Semester + Mid.
+ * Publishing it opens the Question Bank module for every faculty member teaching
+ * a subject of that semester; banks lock when the deadline day ends (IST).
+ */
+export interface MidBankDeadline {
+  id: string;
+  courseKey: string; // course group key (buildCourseGroups)
+  courseName: string;
+  courseIds: string[]; // every Course doc of the programme (one per department)
+  year: number;
+  semester: number; // absolute, as Mid Timings store it (3 = 2nd year Sem 1)
+  midNumber: number;
+  deadline: string; // "YYYY-MM-DD", last day to write; locked from the next day
+  extensions: { from: string; to: string; byName: string; at: string }[];
+  createdBy: string;
+  createdByName: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+export interface MidBankSection {
+  sectionId: string;
+  sectionName: string;
+  /** Who teaches the subject in this section (FacultyMember ids / names; usually one). */
+  facultyIds: string[];
+  facultyNames: string[];
+}
+
 export interface MidQuestionBank {
-  id: string; // = MidPaperAssignment id
+  id: string; // `${deadlineId}__${subjectId}__${branchKey}__${ownerFacultyId}`
+  deadlineId: string;
+  courseName: string;
+  year: number;
+  semester: number;
+  midNumber: number;
   subjectId: string;
   subjectName: string;
   subjectCode: string;
-  midNumber: number;
-  facultyId: string;
-  department: string;
+  /** The branch (the sections' department) - banks are per branch + subject + Mid. */
+  branch: string;
+  /** subjectOutcomes doc id (subject + branch). */
+  outcomesId: string;
+  /** Sections this bank covers - its own and possibly colleagues'; each is claimed by one bank only. */
+  sections: MidBankSection[];
+  ownerFacultyId: string;
+  ownerName: string;
+  ownerUid: string;
+  /** Everyone teaching a covered section (owner included) - they may read the bank. */
+  viewerFacultyIds: string[];
   // Snapshot of the Exam Cell rules when the bank was started.
   units: number[];
   format: MidBankFormat;
@@ -125,8 +171,6 @@ export interface MidQuestionBank {
   status: MidQuestionBankStatus;
   completeCount: number;
   totalCount: number;
-  startedBy: string;
-  startedByName: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

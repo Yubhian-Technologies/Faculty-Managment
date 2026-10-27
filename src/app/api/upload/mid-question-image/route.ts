@@ -24,8 +24,8 @@ export async function POST(request: Request) {
     if (!file || typeof file === "string") return NextResponse.json({ error: "No image provided" }, { status: 400 });
 
     const access = await bankAccess(getAdminDb(), session, bankId);
-    if (!access) return NextResponse.json({ error: "Assignment not found" }, { status: 404 });
-    if (!access.isHolder) return NextResponse.json({ error: "Only the faculty assigned this question bank can add images" }, { status: 403 });
+    if (!access) return NextResponse.json({ error: "Question bank not found" }, { status: 404 });
+    if (!access.canWrite) return NextResponse.json({ error: access.isOwner ? "The deadline has passed - this question bank is locked" : "Only the faculty preparing this question bank can add images" }, { status: 403 });
 
     const buffer = Buffer.from(await file.arrayBuffer());
     if (buffer.byteLength === 0) return NextResponse.json({ error: "The image is empty" }, { status: 400 });

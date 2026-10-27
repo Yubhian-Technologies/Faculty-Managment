@@ -2,46 +2,36 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, BookOpen, CheckCircle2, Clock, FileDown } from "lucide-react";
+import { BookOpen, CheckCircle2, Eye, Lock } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/hooks/useToast";
+import { deadlineLabel } from "@/lib/midBank/deadline";
+import { ordinalYearLabel } from "@/lib/college/courseYears";
 import type { MidBankListItem } from "@/lib/midBank/clientTypes";
 
-// Faculty > Add Mid Bank: every Mid question bank this faculty member has been
-// assigned (by the HOD's Mid Paper Setter), with its progress and the one thing
-// to do next. Banks that need attention come first.
+// Faculty > Question Bank: once the Exam Cell sets a Mid's question bank
+// deadline, every subject this faculty member teaches in that semester shows
+// here, per branch + subject: their sections and colleagues', who holds each,
+// their own bank's progress, and colleagues' banks that cover their sections
+// (read-only). Banks lock when the deadline passes.
 
-const STATUS: Record<MidBankListItem["status"], { label: string; variant: "secondary" | "outline" | "default" }> = {
-  NOT_STARTED: { label: "Not started", variant: "outline" },
-  IN_PROGRESS: { label: "In progress", variant: "secondary" },
-  COMPLETE: { label: "Complete", variant: "default" },
-};
-const ORDER = { IN_PROGRESS: 0, NOT_STARTED: 1, COMPLETE: 2 };
-const selectClass = "h-9 rounded-md border border-input bg-background px-3 text-sm";
+const prepareHref = (i: MidBankListItem) =>
+  `/panel/mid-bank/prepare?${new URLSearchParams({ deadlineId: i.deadline.id, subjectId: i.subject.id, branch: i.branch })}`;
 
-function nextAction(b: MidBankListItem): { label: string; href: string; icon?: typeof FileDown } {
-  const base = `/panel/mid-bank/${encodeURIComponent(b.id)}`;
-  if (b.status === "COMPLETE") return { label: "Review bank", href: `${base}/review` };
-  if (b.status === "IN_PROGRESS") return { label: "Continue bank", href: base };
-  return { label: "Start bank", href: base };
-}
-
-export default function FacultyMidBankPage() {
-  const [banks, setBanks] = useState<MidBankListItem[]>([]);
+export default function FacultyQuestionBankPage() {
+  const [items, setItems] = useState<MidBankListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [mid, setMid] = useState("");
-  const [status, setStatus] = useState("");
 
   useEffect(() => {
     void (async () => {
       try {
         const res = await fetch("/api/college/mid-question-banks");
-        const data = (await res.json()) as { banks?: MidBankListItem[]; error?: string };
+        const data = (await res.json()) as { items?: MidBankListItem[]; error?: string };
         if (!res.ok) throw new Error(data.error ?? "Failed to load");
-        setBanks(data.banks ?? []);
+        setItems(data.items ?? []);
       } catch (e) {
         toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to load your question banks" });
       } finally {
@@ -50,113 +40,103 @@ export default function FacultyMidBankPage() {
     })();
   }, []);
 
-  const shown = useMemo(
-    () => banks
-      .filter((b) => (!mid || String(b.midNumber) === mid) && (!status || b.status === status))
-      .sort((a, b) => ORDER[a.status] - ORDER[b.status] || a.subjectName.localeCompare(b.subjectName)),
-    [banks, mid, status]
-  );
-  const mids = [...new Set(banks.map((b) => b.midNumber))].sort();
+  // One group per deadline (course + year + semester + Mid), open ones first.
+  const groups = useMemo(() => {
+    const m = new Map<string, MidBankListItem[]>();
+    for (const i of items) m.set(i.deadline.id, [...(m.get(i.deadline.id) ?? []), i]);
+    return [...m.values()];
+  }, [items]);
 
   return (
-    <div className="max-w-5xl space-y-6">
+    <div className="max-w-5xl space-y-8">
       <PageHeader
-        title="Mid Question Bank"
-        description="Prepare the Mid question banks you've been assigned. Each unit needs 10 questions, with Bloom's levels L2, L3 and L4 used at least 3 times each."
+        title="Question Bank"
+        description="Prepare the Mid question banks for the subjects you teach, before the Exam Cell's deadline. Each unit needs 10 questions with Bloom's levels L2, L3 and L4 at least 3 times each."
       />
 
-      {banks.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          <select aria-label="Filter by Mid" className={selectClass} value={mid} onChange={(e) => setMid(e.target.value)}>
-            <option value="">All Mids</option>
-            {mids.map((m) => <option key={m} value={m}>Mid {m}</option>)}
-          </select>
-          <select aria-label="Filter by status" className={selectClass} value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="">All statuses</option>
-            <option value="NOT_STARTED">Not started</option>
-            <option value="IN_PROGRESS">In progress</option>
-            <option value="COMPLETE">Complete</option>
-          </select>
-        </div>
-      )}
-
       {isLoading ? (
-        <div className="grid gap-4 md:grid-cols-2">{[1, 2].map((i) => <div key={i} className="h-44 rounded-lg bg-muted animate-pulse" />)}</div>
-      ) : banks.length === 0 ? (
+        <div className="grid gap-4 md:grid-cols-2">{[1, 2].map((i) => <div key={i} className="h-44 animate-pulse rounded-lg bg-muted" />)}</div>
+      ) : items.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
             <BookOpen className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
-            <p className="font-medium">No Mid question banks assigned</p>
-            <p className="mt-1 text-sm text-muted-foreground">Your HOD assigns these under Mid Paper Setter. They will appear here.</p>
+            <p className="font-medium">No question banks open</p>
+            <p className="mt-1 text-sm text-muted-foreground">When the Exam Cell sets a Mid&rsquo;s question bank deadline, your subjects for that semester appear here.</p>
           </CardContent>
         </Card>
-      ) : shown.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No banks match these filters.</p>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
-          {shown.map((b) => {
-            const pct = b.totalCount > 0 ? Math.round((b.completeCount / b.totalCount) * 100) : 0;
-            const action = nextAction(b);
-            const blocked = b.issues.some((i) => i.who === "EXAM_CELL");
-            return (
-              <Card key={b.id} className={b.status === "IN_PROGRESS" ? "border-primary/40" : undefined}>
-                <CardContent className="space-y-3 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-semibold leading-tight">{b.subjectName}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {b.subjectCode} · {b.courseName}{b.regulation ? ` · ${b.regulation}` : ""} · Year {b.year}{b.semester ? ` · Sem ${b.semester}` : ""}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 gap-1.5">
-                      <Badge variant="outline">Mid {b.midNumber}</Badge>
-                      <Badge variant={STATUS[b.status].variant}>{STATUS[b.status].label}</Badge>
-                    </div>
-                  </div>
+        groups.map((list) => {
+          const d = list[0].deadline;
+          return (
+            <section key={d.id} className="space-y-3" aria-labelledby={`dl-${d.id}`}>
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h2 id={`dl-${d.id}`} className="text-base font-semibold">
+                  Mid {d.midNumber} · {d.courseName} · {ordinalYearLabel(d.year)} · Semester {d.semester}
+                </h2>
+                <Badge variant={d.locked ? "secondary" : "outline"} className={d.locked ? "" : "border-primary/50 text-primary"}>
+                  {d.locked && <Lock className="mr-1 h-3 w-3" />}{deadlineLabel(d.deadline)}
+                </Badge>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                {list.map((i) => {
+                  const pct = i.myBank && i.myBank.totalCount ? Math.round((i.myBank.completeCount / i.myBank.totalCount) * 100) : 0;
+                  return (
+                    <Card key={i.key} className={i.myBank && i.myBank.status !== "COMPLETE" && !d.locked ? "border-primary/40" : undefined}>
+                      <CardContent className="space-y-3 p-4">
+                        <div>
+                          <p className="font-semibold leading-tight">{i.subject.name}</p>
+                          <p className="text-xs text-muted-foreground">{i.subject.code} · {i.branch}</p>
+                        </div>
 
-                  <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                    <dt className="text-muted-foreground">Sections</dt><dd>{b.sections.join(", ") || "-"}</dd>
-                    <dt className="text-muted-foreground">Units</dt><dd>{b.started ? `Units ${b.units.join(", ")} (of ${b.unitsCount})` : b.unitsCount ? `${b.unitsCount} in the syllabus setup` : "Not set up yet"}</dd>
-                    {b.started && <><dt className="text-muted-foreground">Drafts</dt><dd>{b.draftCount}</dd></>}
-                    {b.updatedAt && <><dt className="text-muted-foreground">Last updated</dt><dd>{new Date(b.updatedAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</dd></>}
-                  </dl>
+                        <div className="flex flex-wrap gap-1.5" aria-label="Sections">
+                          {i.sections.map((s) => (
+                            <Badge key={s.sectionId} variant="outline" className={s.mine ? "border-primary/50" : ""} title={s.facultyNames.join(", ")}>
+                              {s.sectionName}{s.mine ? " (you)" : ` · ${s.facultyNames[0] ?? ""}`}
+                              {s.heldBy && <span className="ml-1 text-muted-foreground">- in {s.mine && i.myBank?.sections.includes(s.sectionName) ? "your" : `${s.heldBy}'s`} bank</span>}
+                            </Badge>
+                          ))}
+                        </div>
 
-                  {b.started && (
-                    <div>
-                      <div className="mb-1 flex justify-between text-xs"><span>{b.completeCount} of {b.totalCount} questions complete</span><span className="font-medium">{pct}%</span></div>
-                      <div className="h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`${b.subjectName} Mid ${b.midNumber} progress`}>
-                        <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${pct}%` }} />
-                      </div>
-                    </div>
-                  )}
+                        {i.myBank && (
+                          <div>
+                            <div className="mb-1 flex justify-between text-xs">
+                              <span>Your bank (sections {i.myBank.sections.join(", ")}): {i.myBank.completeCount} of {i.myBank.totalCount} questions</span>
+                              <span className="font-medium">{pct}%</span>
+                            </div>
+                            <div className="h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`${i.subject.name} progress`}>
+                              <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+                            </div>
+                          </div>
+                        )}
 
-                  {!b.started && b.issues.length > 0 && (
-                    <div className="flex gap-2 rounded-md bg-amber-50 p-2 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
-                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                      <span>{b.issues[0].message}</span>
-                    </div>
-                  )}
+                        {i.sharedBanks.map((b) => (
+                          <p key={b.id} className="flex items-center justify-between gap-2 text-xs">
+                            <span>{b.ownerName} is preparing it for section {b.sections.join(", ")} ({b.completeCount}/{b.totalCount})</span>
+                            <Link className="shrink-0 text-primary underline" href={`/panel/mid-bank/${encodeURIComponent(b.id)}/review`}><Eye className="mr-0.5 inline h-3 w-3" />View</Link>
+                          </p>
+                        ))}
 
-                  <div className="flex items-center justify-between gap-2 pt-1">
-                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                      {b.status === "COMPLETE" ? <><CheckCircle2 className="h-3.5 w-3.5 text-green-600" />Ready to download</> : blocked ? <><Clock className="h-3.5 w-3.5" />Waiting for the Exam Cell</> : null}
-                    </span>
-                    <div className="flex gap-2">
-                      {b.status === "COMPLETE" && (
-                        <Button asChild size="sm" variant="outline">
-                          <Link href={`/panel/mid-bank/${encodeURIComponent(b.id)}/review?download=1`}><FileDown className="mr-1.5 h-4 w-4" />Download PDF</Link>
-                        </Button>
-                      )}
-                      <Button asChild size="sm" variant={b.status === "COMPLETE" ? "ghost" : "default"}>
-                        <Link href={action.href}>{action.label}</Link>
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+                        <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+                          {i.myBank?.status === "COMPLETE" && <span className="mr-auto flex items-center gap-1 text-xs text-green-700 dark:text-green-400"><CheckCircle2 className="h-3.5 w-3.5" />Complete</span>}
+                          {i.myBank ? (
+                            <>
+                              <Button asChild size="sm" variant="outline"><Link href={`/panel/mid-bank/${encodeURIComponent(i.myBank.id)}/review`}>Review</Link></Button>
+                              {!d.locked && i.myBank.status !== "COMPLETE" && <Button asChild size="sm"><Link href={`/panel/mid-bank/${encodeURIComponent(i.myBank.id)}`}>Continue</Link></Button>}
+                            </>
+                          ) : i.uncovered.length > 0 ? (
+                            d.locked
+                              ? <span className="text-xs text-muted-foreground">Not prepared - the deadline has passed</span>
+                              : <Button asChild size="sm"><Link href={prepareHref(i)}>Prepare bank</Link></Button>
+                          ) : null}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            </section>
+          );
+        })
       )}
     </div>
   );

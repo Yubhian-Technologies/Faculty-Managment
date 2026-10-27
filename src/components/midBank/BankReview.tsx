@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, CheckCircle2, FileDown, Info } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FileDown, Info, Lock } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/useToast";
 import { QUESTIONS_PER_UNIT } from "@/lib/midBank/constants";
+import { deadlineLabel } from "@/lib/midBank/deadline";
 import { findDuplicates } from "@/lib/midBank/duplicates";
 import { derivePoPso } from "@/lib/midBank/outcomes";
 import { bloomNeeds } from "@/lib/midBank/rules";
@@ -22,7 +23,7 @@ import { MathText } from "./MathText";
 
 interface Issue { level: "error" | "warn"; text: string; qid?: string }
 
-export function BankReview({ id, editHref, autoDownload }: { id: string; editHref?: (qid: string) => string; autoDownload?: boolean }) {
+export function BankReview({ id, editHref, writeHref, autoDownload }: { id: string; editHref?: (qid: string) => string; writeHref?: string; autoDownload?: boolean }) {
   const [detail, setDetail] = useState<MidBankDetail | null>(null);
   const [error, setError] = useState("");
   const [downloading, setDownloading] = useState(false);
@@ -70,7 +71,8 @@ export function BankReview({ id, editHref, autoDownload }: { id: string; editHre
     setDownloading(true);
     try {
       await downloadMidQuestionBankPdf({
-        subject: detail.subject, facultyName: detail.assignment.facultyName,
+        subject: { ...detail.subject, department: detail.subject.branch },
+        facultyName: `${detail.bank.ownerName} (section${detail.bank.sections.length > 1 ? "s" : ""} ${detail.bank.sections.map((s) => s.sectionName).join(", ")})`,
         bank: detail.bank, outcomes: detail.outcomes, questions: detail.questions,
       });
     } catch (e) {
@@ -98,6 +100,16 @@ export function BankReview({ id, editHref, autoDownload }: { id: string; editHre
 
   return (
     <div className="space-y-6">
+      <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+        <span>
+          {detail.subject.name} ({detail.subject.code}) · {detail.subject.branch} · Mid {bank.midNumber} · prepared by{" "}
+          <span className="font-medium text-foreground">{detail.access.isOwner ? "you" : bank.ownerName}</span> for section{bank.sections.length > 1 ? "s" : ""} {bank.sections.map((s) => s.sectionName).join(", ")}
+        </span>
+        {detail.deadline && <Badge variant={detail.access.locked ? "secondary" : "outline"}>{detail.access.locked && <Lock className="mr-1 h-3 w-3" />}{deadlineLabel(detail.deadline.deadline)}</Badge>}
+        {!detail.access.canWrite && <Badge variant="outline">Read-only</Badge>}
+        {detail.access.canWrite && writeHref && <Button asChild size="sm" variant="outline" className="ml-auto"><Link href={writeHref}>Continue writing</Link></Button>}
+      </p>
+
       <div className="grid gap-3 sm:grid-cols-4">
         {[
           ["Questions required", bank.totalCount],
@@ -135,7 +147,7 @@ export function BankReview({ id, editHref, autoDownload }: { id: string; editHre
                 <li key={n} className="flex items-start gap-2">
                   <AlertTriangle className={`mt-0.5 h-4 w-4 shrink-0 ${i.level === "error" ? "text-destructive" : "text-amber-600"}`} />
                   <span className="flex-1">{i.text}</span>
-                  {i.qid && editHref && <Link className="shrink-0 text-xs text-primary underline" href={editHref(i.qid)}>Open</Link>}
+                  {i.qid && editHref && detail.access.canWrite && <Link className="shrink-0 text-xs text-primary underline" href={editHref(i.qid)}>Open</Link>}
                 </li>
               ))}
             </ul>

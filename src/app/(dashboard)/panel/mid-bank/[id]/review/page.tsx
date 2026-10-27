@@ -18,13 +18,10 @@ export default function MidBankReviewPage({ params, searchParams }: { params: Pr
         title="Review question bank"
         description="Everything still missing, a full preview, and the PDF once every unit is complete."
         actions={
-          <div className="flex gap-2">
-            <Button asChild variant="ghost" size="sm"><Link href="/panel/mid-bank"><ArrowLeft className="mr-1.5 h-4 w-4" />All banks</Link></Button>
-            <Button asChild variant="outline" size="sm"><Link href={base}>Back to writing</Link></Button>
-          </div>
+          <Button asChild variant="ghost" size="sm"><Link href="/panel/mid-bank"><ArrowLeft className="mr-1.5 h-4 w-4" />Question Bank</Link></Button>
         }
       />
-      <BankReview id={id} editHref={(qid) => `${base}?q=${qid}`} autoDownload={download === "1"} />
+      <BankReview id={id} editHref={(qid) => `${base}?q=${qid}`} writeHref={base} autoDownload={download === "1"} />
     </div>
   );
 }

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { Search, UserPlus } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +13,6 @@ import { Pagination } from "@/components/shared/Pagination";
 import { usePagination } from "@/hooks/usePagination";
 import { toast } from "@/hooks/useToast";
 import type { Course, CourseCatalogItem, CourseYearTiming, Department, MidNumber, MidPaperAssignment, Subject, SubjectSemesterAssignment } from "@/types";
-import type { MidBankListItem } from "@/lib/midBank/clientTypes";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { fedYears, regulationsForCourseYearByBatch } from "@/lib/college/academicStructure";
 import { managerEffectiveYears, mergeOwnDepartmentOptions } from "@/lib/departments/hodScope";
@@ -60,8 +58,6 @@ export default function MidPaperSetterPage() {
   const [isLoadingFaculty, setIsLoadingFaculty] = useState(false);
 
   const [assignments, setAssignments] = useState<MidPaperAssignment[]>([]);
-  // Progress of each assignment's question bank (keyed by assignment id).
-  const [progress, setProgress] = useState<Record<string, MidBankListItem>>({});
   const assignmentPager = usePagination(assignments, 10);
   const [isLoadingAssignments, setIsLoadingAssignments] = useState(true);
   const [isAssigning, setIsAssigning] = useState(false);
@@ -90,10 +86,6 @@ export default function MidPaperSetterPage() {
       const data = (await res.json()) as { assignments?: MidPaperAssignment[]; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed to load assignments");
       setAssignments(data.assignments ?? []);
-      fetch("/api/college/mid-question-banks?scope=department")
-        .then((r) => (r.ok ? (r.json() as Promise<{ banks?: MidBankListItem[] }>) : { banks: [] }))
-        .then((d) => setProgress(Object.fromEntries((d.banks ?? []).map((b) => [b.id, b]))))
-        .catch(() => undefined);
     } catch (e) {
       toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to load assignments" });
     } finally {
@@ -404,19 +396,9 @@ export default function MidPaperSetterPage() {
                 <div key={a.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3">
                   <div>
                     <p className="text-sm font-medium">{a.subjectName} <span className="text-muted-foreground">({a.subjectCode})</span></p>
-                    <p className="text-xs text-muted-foreground">
-                      Assigned to {a.facultyName}
-                      {progress[a.id] && (progress[a.id].started
-                        ? ` · ${progress[a.id].status === "COMPLETE" ? "Bank complete" : `${progress[a.id].completeCount} of ${progress[a.id].totalCount} questions done`}`
-                        : " · Bank not started")}
-                    </p>
+                    <p className="text-xs text-muted-foreground">Assigned to {a.facultyName}</p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {progress[a.id]?.started && (
-                      <Button asChild size="sm" variant="ghost"><Link href={`/hod/mid-paper-setter/${encodeURIComponent(a.id)}`}>View bank</Link></Button>
-                    )}
-                    <Badge variant="outline">Mid {a.midNumber}</Badge>
-                  </div>
+                  <Badge variant="outline">Mid {a.midNumber}</Badge>
                 </div>
               ))}
               <Pagination

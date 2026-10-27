@@ -37,9 +37,10 @@ export async function PATCH(request: Request, { params }: Params) {
 
     const db = getAdminDb();
     const access = await bankAccess(db, session, id);
-    if (!access) return NextResponse.json({ error: "Assignment not found" }, { status: 404 });
-    if (!access.isHolder) return NextResponse.json({ error: "Only the faculty assigned this question bank can edit it" }, { status: 403 });
-    const outcomes = await loadOutcomes(db, session.collegeId, access.assignment.subjectId);
+    if (!access) return NextResponse.json({ error: "Question bank not found" }, { status: 404 });
+    if (!access.isOwner) return NextResponse.json({ error: "Only the faculty preparing this question bank can edit it" }, { status: 403 });
+    if (!access.canWrite) return NextResponse.json({ error: "The deadline has passed - this question bank is locked. Ask the Exam Cell to extend it." }, { status: 403 });
+    const outcomes = await loadOutcomes(db, session.collegeId, access.bank.outcomesId);
     const coIds = new Set((outcomes?.cos ?? []).map((c) => c.id));
     const name = await actorName(db, session.collegeId, session.uid);
 

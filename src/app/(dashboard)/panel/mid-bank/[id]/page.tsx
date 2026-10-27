@@ -6,13 +6,14 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
-import { BankSetup } from "@/components/midBank/BankSetup";
 import { BankWorkspace } from "@/components/midBank/BankWorkspace";
-import type { MidBankDetail } from "@/lib/midBank/clientTypes";
+import { deadlineLabel } from "@/lib/midBank/deadline";
 import { bankFormatText } from "@/lib/midBank/validateQuestion";
+import type { MidBankDetail } from "@/lib/midBank/clientTypes";
 
-// One Mid question bank: the setup until it is started, then the workspace.
-// Someone who only reads it (the HOD) is sent to the review screen.
+// One question bank's workspace - for its owner until the deadline. Anyone else
+// who may see it (colleagues whose sections it covers), and the owner once it is
+// locked, is sent to the read-only review.
 
 export default function MidBankPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ q?: string }> }) {
   const { id } = use(params);
@@ -33,36 +34,25 @@ export default function MidBankPage({ params, searchParams }: { params: Promise<
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
-    if (detail && detail.bank && !detail.access.isHolder) router.replace(`/panel/mid-bank/${encodeURIComponent(id)}/review`);
+    if (detail && !detail.access.canWrite) router.replace(`/panel/mid-bank/${encodeURIComponent(id)}/review`);
   }, [detail, id, router]);
 
-  const back = (
-    <Button asChild variant="ghost" size="sm">
-      <Link href="/panel/mid-bank"><ArrowLeft className="mr-1.5 h-4 w-4" />All banks</Link>
-    </Button>
-  );
-
-  if (error) {
-    return (
-      <div className="space-y-4">
-        {back}
-        <p className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive" role="alert">{error}</p>
-      </div>
-    );
+  const back = <Button asChild variant="ghost" size="sm"><Link href="/panel/mid-bank"><ArrowLeft className="mr-1.5 h-4 w-4" />Question Bank</Link></Button>;
+  if (error) return <div className="space-y-4">{back}<p className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive" role="alert">{error}</p></div>;
+  if (!detail || !detail.access.canWrite || !detail.outcomes) {
+    return <div className="space-y-4"><div className="h-10 w-64 animate-pulse rounded bg-muted" /><div className="h-96 animate-pulse rounded-lg bg-muted" /></div>;
   }
-  if (!detail) return <div className="space-y-4"><div className="h-10 w-64 animate-pulse rounded bg-muted" /><div className="h-96 animate-pulse rounded-lg bg-muted" /></div>;
 
-  const title = `${detail.subject.name} - Mid ${detail.assignment.midNumber}`;
+  const { bank } = detail;
+  const changeSections = `/panel/mid-bank/prepare?${new URLSearchParams({ deadlineId: bank.deadlineId, subjectId: bank.subjectId, branch: bank.branch })}`;
   return (
     <div className="space-y-6">
       <PageHeader
-        title={title}
-        description={detail.bank
-          ? `${detail.subject.code} · Units ${detail.bank.units.join(", ")} · ${bankFormatText(detail.bank.format, detail.bank.marks)}`
-          : `${detail.subject.code} · Review the subject setup, then start writing questions.`}
-        actions={back}
+        title={`${bank.subjectName} - Mid ${bank.midNumber}`}
+        description={`${bank.subjectCode} · ${bank.branch} · sections ${bank.sections.map((s) => s.sectionName).join(", ")} · Units ${bank.units.join(", ")} · ${bankFormatText(bank.format, bank.marks)}${detail.deadline ? ` · ${deadlineLabel(detail.deadline.deadline)}` : ""}`}
+        actions={<div className="flex gap-2">{back}<Button asChild variant="outline" size="sm"><Link href={changeSections}>Sections &amp; setup</Link></Button></div>}
       />
-      {detail.bank && detail.access.isHolder ? <BankWorkspace detail={detail} initialQ={q} /> : <BankSetup detail={detail} onChanged={load} />}
+      <BankWorkspace detail={detail} initialQ={q} />
     </div>
   );
 }
