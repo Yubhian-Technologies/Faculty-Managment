@@ -24,6 +24,7 @@ export * from "./budget";
 export * from "./indent";
 export * from "./webmaster";
 export * from "./midPaper";
+export * from "./midQuestionBank";
 export type { LocationConfig, LocationDepartment, LocationStaffMember, LocationStaffAttendanceRecord, LocationShift } from "./locationStaff";
 export * from "./library";
 export * from "./customNav";

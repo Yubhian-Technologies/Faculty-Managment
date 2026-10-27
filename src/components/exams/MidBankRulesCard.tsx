@@ -1,0 +1,175 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { Pencil, Trash2 } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { toast } from "@/hooks/useToast";
+import { buildCourseGroups } from "@/lib/departments/hodScope";
+import type { Course, MidBankFormat, MidBankRules } from "@/types";
+
+// Exam Cell > Settings: the Mid Question Bank rules per course (+ regulation):
+// which units each Mid covers, the question format and the marks. A bank takes
+// a copy of these when its faculty starts it, so later edits only affect banks
+// not yet started.
+
+const selectClass = "h-9 w-full rounded-md border border-input bg-background px-3 text-sm";
+const FORMAT_LABEL: Record<MidBankFormat, string> = { SINGLE: "One question per slot", PARTS_AB: "Parts (a) and (b)" };
+
+const parseUnits = (s: string) => [...new Set(s.split(/[\s,]+/).map(Number).filter((n) => Number.isInteger(n) && n > 0))];
+
+export function MidBankRulesCard({ midCount }: { midCount: number }) {
+  const [rules, setRules] = useState<MidBankRules[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [courseKey, setCourseKey] = useState("");
+  const [regulation, setRegulation] = useState("");
+  const [midUnits, setMidUnits] = useState<Record<string, string>>({});
+  const [format, setFormat] = useState<MidBankFormat>("PARTS_AB");
+  const [marks, setMarks] = useState("10");
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState<MidBankRules | null>(null);
+
+  const groups = useMemo(() => buildCourseGroups(courses), [courses]);
+  const mids = Array.from({ length: Math.max(1, Math.min(midCount || 2, 9)) }, (_, i) => String(i + 1));
+
+  function load() {
+    fetch("/api/college/mid-bank-rules")
+      .then((r) => r.json() as Promise<{ rules?: MidBankRules[] }>)
+      .then((d) => setRules(d.rules ?? []))
+      .catch(() => toast({ variant: "destructive", title: "Failed to load the question bank rules" }));
+  }
+  useEffect(() => {
+    load();
+    fetch("/api/college/courses")
+      .then((r) => r.json() as Promise<{ courses?: Course[] }>)
+      .then((d) => setCourses(d.courses ?? []))
+      .catch(() => undefined);
+  }, []);
+
+  function edit(r: MidBankRules) {
+    setCourseKey(r.courseKey);
+    setRegulation(r.regulation === "ALL" ? "" : r.regulation);
+    setMidUnits(Object.fromEntries(Object.entries(r.mids).map(([m, u]) => [m, u.join(", ")])));
+    setFormat(r.format);
+    setMarks(String(r.marks));
+  }
+
+  async function save() {
+    const group = groups.find((g) => g.key === courseKey);
+    if (!group) { toast({ variant: "destructive", title: "Pick a course" }); return; }
+    const payload = {
+      courseKey, courseName: group.name, regulation: regulation.trim() || "ALL", format, marks: Number(marks),
+      mids: Object.fromEntries(mids.map((m) => [m, parseUnits(midUnits[m] ?? "")]).filter(([, u]) => (u as number[]).length > 0)),
+    };
+    setSaving(true);
+    try {
+      const res = await fetch("/api/college/mid-bank-rules", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Failed to save");
+      toast({ variant: "success", title: `Rules saved for ${group.name}${payload.regulation === "ALL" ? "" : ` (${payload.regulation})`}` });
+      load();
+    } catch (e) {
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to save" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function remove() {
+    if (!deleting) return;
+    const res = await fetch(`/api/college/mid-bank-rules?id=${encodeURIComponent(deleting.id)}`, { method: "DELETE" });
+    if (!res.ok) toast({ variant: "destructive", title: "Failed to delete" });
+    setDeleting(null);
+    load();
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Mid Question Bank rules</CardTitle>
+        <CardDescription>
+          For each course, which units each Mid covers and how questions are set. Faculty write 10 questions per unit,
+          with Bloom&rsquo;s levels L2, L3 and L4 each used at least 3 times. A bank keeps the rules it started with.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {rules.length > 0 && (
+          <div className="overflow-x-auto rounded-md border">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
+                <tr><th className="p-2">Course</th><th className="p-2">Regulation</th><th className="p-2">Units per Mid</th><th className="p-2">Format</th><th className="p-2 text-right">Marks</th><th className="p-2" /></tr>
+              </thead>
+              <tbody>
+                {rules.map((r) => (
+                  <tr key={r.id} className="border-t">
+                    <td className="p-2 font-medium">{r.courseName}</td>
+                    <td className="p-2">{r.regulation === "ALL" ? <span className="text-muted-foreground">All</span> : r.regulation}</td>
+                    <td className="p-2">
+                      <div className="flex flex-wrap gap-1">
+                        {Object.entries(r.mids).sort(([a], [b]) => Number(a) - Number(b)).map(([m, u]) => <Badge key={m} variant="outline">Mid {m}: {u.join(", ")}</Badge>)}
+                      </div>
+                    </td>
+                    <td className="p-2">{FORMAT_LABEL[r.format]}</td>
+                    <td className="p-2 text-right">{r.marks}</td>
+                    <td className="p-2 whitespace-nowrap text-right">
+                      <Button size="icon" variant="ghost" aria-label={`Edit rules for ${r.courseName}`} onClick={() => edit(r)}><Pencil className="h-4 w-4" /></Button>
+                      <Button size="icon" variant="ghost" aria-label={`Delete rules for ${r.courseName}`} onClick={() => setDeleting(r)}><Trash2 className="h-4 w-4" /></Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="mbr-course">Course</Label>
+            <select id="mbr-course" className={selectClass} value={courseKey} onChange={(e) => setCourseKey(e.target.value)}>
+              <option value="">Select a course</option>
+              {groups.map((g) => <option key={g.key} value={g.key}>{g.name}</option>)}
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="mbr-reg">Regulation</Label>
+            <Input id="mbr-reg" value={regulation} placeholder="All regulations" onChange={(e) => setRegulation(e.target.value.toUpperCase())} />
+          </div>
+          {mids.map((m) => (
+            <div key={m} className="space-y-1.5">
+              <Label htmlFor={`mbr-mid-${m}`}>Mid {m} units</Label>
+              <Input id={`mbr-mid-${m}`} value={midUnits[m] ?? ""} placeholder={m === "1" ? "e.g. 1, 2, 3" : "e.g. 3, 4, 5"} onChange={(e) => setMidUnits((s) => ({ ...s, [m]: e.target.value }))} />
+            </div>
+          ))}
+          <div className="space-y-1.5">
+            <Label htmlFor="mbr-format">Question format</Label>
+            <select id="mbr-format" className={selectClass} value={format} onChange={(e) => setFormat(e.target.value as MidBankFormat)}>
+              <option value="PARTS_AB">{FORMAT_LABEL.PARTS_AB}</option>
+              <option value="SINGLE">{FORMAT_LABEL.SINGLE}</option>
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="mbr-marks">Marks per question</Label>
+            <Input id="mbr-marks" type="number" min={1} max={100} value={marks} onChange={(e) => setMarks(e.target.value)} />
+            {format === "PARTS_AB" && Number(marks) > 0 && <p className="text-xs text-muted-foreground">{Number(marks) / 2} marks each for (a) and (b)</p>}
+          </div>
+        </div>
+        <div className="flex justify-end">
+          <Button onClick={() => void save()} loading={saving} disabled={!courseKey}>Save rules</Button>
+        </div>
+      </CardContent>
+      <ConfirmDialog
+        open={deleting !== null}
+        onOpenChange={(o) => !o && setDeleting(null)}
+        title="Delete these rules?"
+        description="Banks already started keep their copy. Banks not yet started for this course can't start until rules exist again."
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={() => void remove()}
+      />
+    </Card>
+  );
+}

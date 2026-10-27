@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/useToast";
 import { formatDate, stripLeadingZeros } from "@/lib/utils";
+import { MidBankRulesCard } from "@/components/exams/MidBankRulesCard";
 import type { ExamMidSettings } from "@/types";
 
 export default function ExamCellSettingsPage() {
@@ -107,6 +108,8 @@ export default function ExamCellSettingsPage() {
           Save Settings
         </Button>
       </div>
+
+      <MidBankRulesCard midCount={settings?.midCount ?? Number(midCount)} />
     </div>
   );
 }
