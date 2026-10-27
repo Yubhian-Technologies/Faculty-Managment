@@ -111,7 +111,10 @@ export async function PATCH(
     if (body.classNotes !== undefined && (typeof body.classNotes !== "string" || body.classNotes.length > MAX_CLASS_NOTES)) {
       return NextResponse.json({ error: `classNotes must be text of at most ${MAX_CLASS_NOTES} characters` }, { status: 400 });
     }
+    // The page echoes a locked student's ON_DUTY back; it is not a mark a client
+    // can set (the stored entry stays as is), so drop it instead of refusing the save.
     if (body.entries) {
+      body.entries = body.entries.filter((e) => (e?.status as string | null | undefined) !== "ON_DUTY");
       for (const e of body.entries) {
         if (!e || typeof e.studentId !== "string") {
           return NextResponse.json({ error: "Each entry needs a studentId" }, { status: 400 });

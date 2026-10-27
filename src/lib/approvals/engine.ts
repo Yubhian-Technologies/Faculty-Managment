@@ -97,14 +97,18 @@ export function createApprovalEngine<P, C, Tx = unknown>(deps: EngineDeps<P, C, 
     /** Approves or rejects at the current stage. Only the kind's canDecide may act. */
     async decide(
       ctx: C,
-      input: { collegeId: string; id: string; actor: Actor; decision: "APPROVE" | "REJECT"; remark?: string }
+      input: { collegeId: string; id: string; actor: Actor; decision: "APPROVE" | "REJECT"; remark?: string; completeAll?: boolean }
     ): Promise<ApprovalRequest<P>> {
       const updated = await store.update<P, ApprovalRequest<P>>(input.collegeId, input.id, async (current, tx) => {
         await authorise(ctx, current, input.actor);
         let next = input.decision === "APPROVE"
           ? approve(current, input.actor, iso(), scopeOf(current), input.remark)
           : reject(current, input.actor, iso(), input.remark ?? "");
-        if (input.decision === "APPROVE" && next.status === "PENDING") next = await skipUnactionable(ctx, next);
+        // `completeAll`: an overseer's approval finishes every remaining stage at once (each is recorded in the history).
+        const completeAll = input.decision === "APPROVE" && (input.completeAll ?? !!(await kind.completesAllOnApprove?.(ctx, current, input.actor)));
+        if (completeAll) {
+          while (next.status === "PENDING") next = approve(next, input.actor, iso(), scopeOf(next), input.remark);
+        } else if (input.decision === "APPROVE" && next.status === "PENDING") next = await skipUnactionable(ctx, next);
         if (next.status === "APPROVED") {
           next = { ...next, effectStatus: kind.applyInTransaction || kind.afterApproved ? "PENDING" : "NONE" };
           await kind.applyInTransaction?.(tx, ctx, next, "APPROVED");

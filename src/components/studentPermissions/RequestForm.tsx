@@ -49,8 +49,8 @@ export function RequestForm({ mode, onCreated }: { mode: "student" | "faculty"; 
   const limits = options?.limits;
   const hours = hoursUntil(fromDate);
   const short = hours !== null && limits ? hours < limits.advanceNoticeHours : false;
-  const needsProof = limits?.proofRequired ?? true;
   const isOtherCategory = categoryId.startsWith("other");
+  const needsProof = options?.proofRequiredByCategory?.[categoryId] ?? limits?.proofRequired ?? true;
 
   const days = useMemo(() => {
     if (!fromDate || !toDate || toDate < fromDate) return 0;

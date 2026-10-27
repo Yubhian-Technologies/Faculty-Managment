@@ -12,8 +12,10 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import { loadConfig, saveConfig, type ConfigPayload } from "./api";
-import { addStage, getRoute, isDisabled, moveStage, removeStage, setLimit, setRoute, setTypeDisabled, type PermissionRuleSet } from "@/lib/studentPermissions/ruleSetOps";
+import { addStage, getRoute, isDisabled, moveStage, removeStage, setLimit, setProofForType, setRequestersForType, setRoute, setTypeDisabled, type PermissionRuleSet } from "@/lib/studentPermissions/ruleSetOps";
 import type { PermissionConfig, PermissionStage } from "@/lib/studentPermissions/types";
+import { resolveProofRequired } from "@/lib/studentPermissions/rules";
+import { REQUESTER_ROLE_LABELS } from "@/lib/studentPermissions/roles";
 
 // Routing configuration: who approves which request type, per department.
 // The Principal edits the college defaults and every department, and decides
@@ -56,55 +58,88 @@ function ChainEditor({ chain, allowed, labels, onChange, placeholder }: {
 function RuleSetEditor({ rs, onChange, data, inherited }: {
   rs: PermissionRuleSet; onChange: (rs: PermissionRuleSet) => void; data: ConfigPayload; inherited: boolean;
 }) {
-  const numberField = (label: string, key: "maxDays" | "advanceNoticeHours" | "maxStudentsPerRequest", fallback: number) => (
+  const [sel, setSel] = useState("*"); // "*" = the default for every type; otherwise a group id or an item id
+  const numberField = (label: string, key: "maxDays" | "advanceNoticeHours" | "maxStudentsPerRequest" | "maxBackdateDays", fallback: number) => (
     <div className="space-y-1">
       <Label className="text-xs">{label}</Label>
       <Input type="number" min={0} className="h-8" value={rs.limits?.[key] ?? ""} placeholder={String(fallback)}
         onChange={(e) => onChange(setLimit(rs, key, e.target.value === "" ? undefined : Math.max(0, Number(e.target.value))))} />
     </div>
   );
+
+  const entities = data.groups.flatMap((g) => [{ id: g.id, label: `All ${g.label}`, keys: [g.id] }, ...g.items.map((i) => ({ id: i.id, label: i.label, keys: [i.id, g.id] }))]);
+  const entity = entities.find((e) => e.id === sel);
+  const allowed = entity ? entity.keys.map((k) => rs.limits?.requestersByType?.[k]).find((r) => r?.length) ?? [] : [];
+  const proof = entity ? resolveProofRequired([rs.limits], entity.keys) : true;
+  const showType = (type: "STUDENT" | "FACULTY") => allowed.length === 0 || allowed.some((r) => (r === "STUDENT") === (type === "STUDENT"));
+  const chains = (key: string, types: typeof REQUESTERS) => types.map(({ type, label }) => (
+    <div key={type} className="space-y-1">
+      <p className="text-xs font-medium">{label}</p>
+      <ChainEditor chain={getRoute(rs, type, key)} allowed={data.stages[type]} labels={data.stageLabels}
+        placeholder={key === "*"
+          ? (inherited ? "Inherits the college route" : `Built-in: ${data.defaults.route[type].map((s) => data.stageLabels[s]).join(" → ")}`)
+          : "Uses the default route"}
+        onChange={(c) => onChange(setRoute(rs, type, key, c))} />
+    </div>
+  ));
+
   return (
     <div className="space-y-5">
-      {REQUESTERS.map(({ type, label }) => (
-        <div key={type} className="space-y-2">
-          <h4 className="text-sm font-semibold">{label}</h4>
-          <div className="rounded-md border p-3 space-y-1">
-            <p className="text-xs font-medium">All request types (default)</p>
-            <ChainEditor chain={getRoute(rs, type, "*")} allowed={data.stages[type]} labels={data.stageLabels}
-              placeholder={inherited ? "Inherits the college route" : `Built-in: ${data.defaults.route[type].map((s) => data.stageLabels[s]).join(" → ")}`}
-              onChange={(c) => onChange(setRoute(rs, type, "*", c))} />
-          </div>
-          <div className="space-y-2">
+      <div className="space-y-1 max-w-md">
+        <Label className="text-xs">Permission type</Label>
+        <Select value={sel} onValueChange={setSel}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="*">All types (default route)</SelectItem>
             {data.groups.map((g) => (
-              <div key={g.id} className="rounded-md border p-3 space-y-1">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-medium">{g.label}</p>
-                  {type === "STUDENT" && (
-                    <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      Enabled
-                      <Switch checked={!isDisabled(rs, g.id)} onCheckedChange={(on) => onChange(setTypeDisabled(rs, g.id, !on))} aria-label={`Enable ${g.label}`} />
-                    </label>
-                  )}
-                </div>
-                <ChainEditor chain={getRoute(rs, type, g.id)} allowed={data.stages[type]} labels={data.stageLabels}
-                  placeholder="Uses the default route above" onChange={(c) => onChange(setRoute(rs, type, g.id, c))} />
+              <div key={g.id}>
+                <SelectItem value={g.id}>{`All ${g.label}`}</SelectItem>
+                {g.items.map((i) => <SelectItem key={i.id} value={i.id}><span className="pl-3">{i.label}</span></SelectItem>)}
               </div>
             ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {!entity && <div className="rounded-md border p-3 space-y-3"><p className="text-sm font-semibold">Default approval route</p>{chains("*", REQUESTERS)}</div>}
+
+      {entity && (
+        <div className="rounded-md border p-3 space-y-4">
+          <p className="text-sm font-semibold">{entity.label}</p>
+          <div className="flex flex-wrap gap-6">
+            <label className="flex items-center gap-2 text-sm">
+              <Switch checked={!isDisabled(rs, entity.id)} onCheckedChange={(on) => onChange(setTypeDisabled(rs, entity.id, !on))} aria-label="Enabled" />Enabled
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <Switch checked={proof} onCheckedChange={(v) => onChange(setProofForType(rs, entity.id, v))} aria-label="Proof required" />Proof required
+            </label>
+          </div>
+          <div className="space-y-1">
+            <p className="text-xs font-medium">Who can request <span className="font-normal text-muted-foreground">(none ticked = anyone)</span></p>
+            <div className="flex flex-wrap gap-3">
+              {Object.entries(REQUESTER_ROLE_LABELS).map(([role, label]) => (
+                <label key={role} className="flex items-center gap-1.5 text-xs">
+                  <input type="checkbox" checked={allowed.includes(role)}
+                    onChange={(e) => onChange(setRequestersForType(rs, entity.id, e.target.checked ? [...allowed, role] : allowed.filter((r) => r !== role)))} />
+                  {label}
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-1">
+            <p className="text-xs font-medium">Who approves, in order</p>
+            <div className="space-y-3">{chains(entity.id, REQUESTERS.filter((r) => showType(r.type)))}</div>
           </div>
         </div>
-      ))}
+      )}
+
       <div className="space-y-2">
         <h4 className="text-sm font-semibold">Limits</h4>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {numberField("Longest request (days)", "maxDays", data.defaults.limits.maxDays)}
           {numberField("Preferred notice (hours)", "advanceNoticeHours", data.defaults.limits.advanceNoticeHours)}
           {numberField("Students per request", "maxStudentsPerRequest", data.defaults.limits.maxStudentsPerRequest)}
-          <div className="space-y-1">
-            <Label className="text-xs">Proof required</Label>
-            <div className="h-8 flex items-center">
-              <Switch checked={rs.limits?.proofRequired ?? data.defaults.limits.proofRequired} onCheckedChange={(v) => onChange(setLimit(rs, "proofRequired", v))} aria-label="Proof required" />
-            </div>
-          </div>
+          {numberField("Can start up to (days ago)", "maxBackdateDays", data.defaults.limits.maxBackdateDays)}
         </div>
         <p className="text-xs text-muted-foreground">Empty fields inherit. A request raised with less than the preferred notice is flagged as late, not refused.</p>
       </div>
@@ -137,6 +172,8 @@ export function ConfigPanel() {
   const dept = isCollege ? null : config.departments[active] ?? { hodCanConfigure: false };
   const rs: PermissionRuleSet = isCollege ? config.college : dept?.override ?? {};
 
+  // A department handed to its HOD is theirs to edit: the Principal / VP withdraw the delegation (and save) first.
+  const delegated = principal && !isCollege && !!data.config.departments[active]?.hodCanConfigure;
   const update = (fn: (c: PermissionConfig) => PermissionConfig) => setDraft(fn(config));
   const setRuleSet = (next: PermissionRuleSet) =>
     update((c) => (isCollege ? { ...c, college: next } : { ...c, departments: { ...c.departments, [active]: { hodCanConfigure: !!dept?.hodCanConfigure, override: next } } }));
@@ -190,8 +227,11 @@ export function ConfigPanel() {
         </CardContent>
       </Card>
       <Card>
-        <CardContent className="p-4">
-          <RuleSetEditor rs={rs} onChange={setRuleSet} data={data} inherited={!isCollege} />
+        <CardContent className="p-4 space-y-3">
+          {delegated && <p className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">{active} is delegated to its HOD, who manages these rules. To edit them here, switch off &quot;Let the HOD configure&quot; and save first.</p>}
+          <fieldset disabled={delegated} className={delegated ? "opacity-60" : ""}>
+            <RuleSetEditor rs={rs} onChange={setRuleSet} data={data} inherited={!isCollege} />
+          </fieldset>
         </CardContent>
       </Card>
     </div>

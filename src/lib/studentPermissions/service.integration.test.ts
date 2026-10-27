@@ -31,7 +31,7 @@ const stu = (uid: string) => user(uid, ["STUDENT"]);
 
 const input = (extra: object = {}) => ({
   categoryId: "external-participation.hackathons", title: "Smart India Hackathon", description: "Finals at IIT",
-  fromDate: D1, toDate: D1, periods: "ALL", proof: [{ url: "https://x.test/invite.pdf", name: "Invite" }], ...extra,
+  fromDate: D1, toDate: D1, periods: "ALL", proof: [{ url: `https://firebasestorage.googleapis.com/v0/b/b/o/${encodeURIComponent(`student-permission-proofs/${C}/u/a.pdf`)}?alt=media`, name: "Invite" }], ...extra,
 });
 
 async function seed() {
@@ -156,6 +156,10 @@ describe.skipIf(!RUN)("student permissions (emulator)", () => {
     await fail(svc.createStudentRequest(db, stu("stu2"), input({ fromDate: "2026-11-20", toDate: "2026-12-30" })), "INVALID");
     await fail(svc.createStudentRequest(db, stu("stu2"), input({ categoryId: "nope" })), "INVALID");
     await fail(svc.createStudentRequest(db, stu("nobody"), input()), "INVALID"); // login not linked to a student
+  });
+
+  it("refuses a proof link that is not this college's own upload, even when proof is optional", async () => {
+    await fail(svc.createStudentRequest(db, stu("stu2"), input({ proof: [{ url: "https://evil.test/a.pdf", name: "a" }] })), "INVALID");
   });
 
   it("is late-flagged (not refused) on short notice and when back-dated", async () => {

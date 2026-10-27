@@ -29,6 +29,20 @@ export function setLimit<K extends keyof PermissionLimits>(rs: PermissionRuleSet
   return next;
 }
 
+/** Sets proof required / optional for one permission type (group or item); `undefined` inherits again. */
+export function setProofForType(rs: PermissionRuleSet | undefined, key: string, required: boolean | undefined): PermissionRuleSet {
+  const byType = { ...(rs?.limits?.proofByType ?? {}) };
+  if (required === undefined) delete byType[key]; else byType[key] = required;
+  return setLimit(rs, "proofByType", Object.keys(byType).length ? byType : undefined);
+}
+
+/** Limits who may raise one permission type; an empty list (or undefined) means anyone. */
+export function setRequestersForType(rs: PermissionRuleSet | undefined, key: string, roles: string[] | undefined): PermissionRuleSet {
+  const byType = { ...(rs?.limits?.requestersByType ?? {}) };
+  if (!roles?.length) delete byType[key]; else byType[key] = roles;
+  return setLimit(rs, "requestersByType", Object.keys(byType).length ? byType : undefined);
+}
+
 /** Switches a request type (a group or one item) off or back on. */
 export function setTypeDisabled(rs: PermissionRuleSet | undefined, key: string, disabled: boolean): PermissionRuleSet {
   const set = new Set(rs?.disabledTypes ?? []);
