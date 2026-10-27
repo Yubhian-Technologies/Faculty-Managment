@@ -100,6 +100,9 @@ export interface StudentAttendanceSession {
   correctedByUid?: string;
   correctedByName?: string;
   correctionReason?: string; // required by the office-correction route - why the faculty didn't post it themselves
+  // Set only on a session created by the College Office's past-attendance import (student-attendance/
+  // past-import): the whole day's P/A applied to this period. Lets one import be found again.
+  importRunId?: string;
 
   // Set only when `facultyId`/`facultyName` above are the COVERING faculty,
   // not the one this class was originally assigned to - i.e. posted by an

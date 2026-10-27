@@ -8,7 +8,7 @@ import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
-import { isManualEditWindowOpen, MANUAL_EDIT_WINDOW_CLOSED_MESSAGE } from "@/lib/attendance/attendanceWindow";
+import { isStudentAttendanceEditOpen, STUDENT_EDIT_WINDOW_CLOSED_MESSAGE } from "@/lib/studentAttendance/editWindow";
 import { getFacultyPeriodsForDate } from "@/lib/timetable/currentPeriod";
 import {
   departmentOfficeBlocked, facultyWindowClosed, FACULTY_WINDOW_OPEN_MESSAGE, OFFICE_ATTENDANCE_DENIED_MESSAGE,
@@ -86,9 +86,6 @@ export async function POST(request: Request) {
     if (docDate > istMidnightUTC(new Date())) {
       return NextResponse.json({ error: "Cannot post attendance for a future date" }, { status: 400 });
     }
-    if (!isManualEditWindowOpen(docDate)) {
-      return NextResponse.json({ error: MANUAL_EDIT_WINDOW_CLOSED_MESSAGE }, { status: 403 });
-    }
 
     const assignmentSnap = await collegeRef.collection("teachingAssignments").doc(assignmentId).get();
     if (!assignmentSnap.exists) {
@@ -142,6 +139,10 @@ export async function POST(request: Request) {
     }
     if (hodScope && !canHodManageFacultyDepartment(hodScope, department)) {
       return NextResponse.json({ error: "That class is not in your department" }, { status: 403 });
+    }
+    // Checked here, not earlier: the semester rule needs the section's course-year (see editWindow.ts).
+    if (!(await isStudentAttendanceEditOpen(db, session.collegeId, { sectionId, year }, docDate))) {
+      return NextResponse.json({ error: STUDENT_EDIT_WINDOW_CLOSED_MESSAGE }, { status: 403 });
     }
 
     const id = `${assignmentId}_${date}_${periodNumber}`;
