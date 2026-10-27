@@ -295,7 +295,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       // faculty, so the timetable and both sides' views stay in step. Busy
       // periods declared for the old faculty don't carry over.
       const current = requestAllocations(reqData);
-      const oldFacultyId = body.oldFacultyId ?? "";
+      const oldFacultyId = body.fromFacultyId ?? "";
       const target = current.find((a) => a.facultyId === oldFacultyId);
       if (!target || !target.teachingAssignmentId) {
         return NextResponse.json({ error: "Pick which allocated faculty member to change" }, { status: 400 });
