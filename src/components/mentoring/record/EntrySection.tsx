@@ -148,8 +148,10 @@ function EntryForm({
 }
 
 export function EntrySectionView({
-  section, entries, api, editor, semester, heading = "h3", hideTitle,
+  section, entries, api, editor, semester, heading = "h3", hideTitle, readOnly,
 }: {
+  /** The student's own view: rows are shown, never added, edited or removed. */
+  readOnly?: boolean;
   section: Section;
   entries: MentoringEntry[];
   /** /api/college/mentoring/students/{id} */
@@ -201,7 +203,7 @@ export function EntrySectionView({
     }
   }
 
-  const rowActions = (id: string) => (
+  const rowActions = (id: string) => readOnly ? null : (
     <div className="flex gap-1 justify-end print:hidden">
       <button type="button" className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground" aria-label="Edit" onClick={() => setEditing(id)}><Pencil className="h-3.5 w-3.5" /></button>
       <button type="button" className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-red-600" aria-label="Remove" onClick={() => remove(id)}><Trash2 className="h-3.5 w-3.5" /></button>
@@ -229,7 +231,7 @@ export function EntrySectionView({
               {section.hint && <p className="text-xs text-muted-foreground mt-0.5">{section.hint}</p>}
             </div>
           )}
-          {editing !== "new" && (
+          {!readOnly && editing !== "new" && (
             <Button size="sm" variant="outline" className="print:hidden ml-auto" disabled={full} onClick={() => setEditing("new")} title={full ? "This table is full" : undefined}>
               <Plus className="h-4 w-4 mr-1" /> {section.addLabel}
             </Button>

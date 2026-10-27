@@ -127,13 +127,13 @@ function QualifyingCell({ field, draft, setDraft }: { field: RecordFieldView; dr
 }
 
 // "Any guardian?" first; the guardian form and the Add guardian button appear only for Yes (or once one is on record).
-function GuardiansCard({ api, entries, editor }: { api: string; entries: MentoringEntry[]; editor: EntryEditor }) {
+function GuardiansCard({ api, entries, editor, readOnly }: { api: string; entries: MentoringEntry[]; editor: EntryEditor; readOnly?: boolean }) {
   const section = entrySection("guardians");
   const [answer, setAnswer] = useState<"yes" | "no" | null>(null);
   if (!section) return null;
   const hasRows = entries.some((e) => e.section === "guardians");
-  const showForm = hasRows || answer === "yes";
-  if (showForm) return <EntrySectionView section={section} entries={entries} api={api} editor={editor} />;
+  const showForm = hasRows || answer === "yes" || !!readOnly;
+  if (showForm) return <EntrySectionView section={section} entries={entries} api={api} editor={editor} readOnly={readOnly} />;
   return (
     <Card>
       <CardContent className="pt-5 space-y-3">
@@ -152,8 +152,20 @@ function GuardiansCard({ api, entries, editor }: { api: string; entries: Mentori
   );
 }
 
-export function StudentInfoPage({ api, entries, editor }: { api: string; entries: MentoringEntry[]; editor: EntryEditor }) {
-  const { data, error, loading, setData } = useLoaded<MentoringRecordProfile>(`${api}?part=record`);
+// The student's own view: every field shown as text, none openable for editing.
+function lockProfile(p: MentoringRecordProfile): MentoringRecordProfile {
+  const lock = (f: RecordFieldView): RecordFieldView => ({ ...f, editable: false });
+  return {
+    ...p,
+    missingCount: 0,
+    groups: p.groups.map((g) => ({ ...g, fields: g.fields.map(lock) })),
+    qualifying: p.qualifying.map((q) => ({ ...q, institution: lock(q.institution), yearOfPass: lock(q.yearOfPass), board: lock(q.board), percentage: lock(q.percentage) })),
+  };
+}
+
+export function StudentInfoPage({ api, entries, editor, readOnly }: { api: string; entries: MentoringEntry[]; editor: EntryEditor; readOnly?: boolean }) {
+  const { data: loaded, error, loading, setData } = useLoaded<MentoringRecordProfile>(`${api}?part=record`);
+  const data = useMemo(() => (loaded && readOnly ? lockProfile(loaded) : loaded), [loaded, readOnly]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
@@ -225,7 +237,9 @@ export function StudentInfoPage({ api, entries, editor }: { api: string; entries
           </div>
         </div>
       ) : (
-        <p className="text-xs text-muted-foreground print:hidden"><Lock className="inline h-3 w-3 -mt-0.5" /> Details are read from the student&apos;s own record.</p>
+        <p className="text-xs text-muted-foreground print:hidden">
+          <Lock className="inline h-3 w-3 -mt-0.5" /> {readOnly ? "Read-only. These details come from the student's own record (changed from their profile or by the College Office)." : "Details are read from the student's own record."}
+        </p>
       )}
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -278,9 +292,9 @@ export function StudentInfoPage({ api, entries, editor }: { api: string; entries
         </CardContent>
       </Card>
 
-      <GuardiansCard api={api} entries={entries} editor={editor} />
-      {entrySection("siblings") &&<EntrySectionView section={entrySection("siblings")!} entries={entries} api={api} editor={editor} />}
-      {entrySection("addressChanges") && <EntrySectionView section={entrySection("addressChanges")!} entries={entries} api={api} editor={editor} />}
+      <GuardiansCard api={api} entries={entries} editor={editor} readOnly={readOnly} />
+      {entrySection("siblings") &&<EntrySectionView section={entrySection("siblings")!} entries={entries} api={api} editor={editor} readOnly={readOnly} />}
+      {entrySection("addressChanges") && <EntrySectionView section={entrySection("addressChanges")!} entries={entries} api={api} editor={editor} readOnly={readOnly} />}
 
       {(data.otherGroups?.length ?? 0) > 0 && (
         <div className="space-y-3">
