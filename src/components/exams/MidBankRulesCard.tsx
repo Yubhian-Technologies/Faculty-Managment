@@ -60,7 +60,19 @@ export function MidBankRulesCard({ midCount }: { midCount: number }) {
       .catch(() => undefined);
   }, []);
 
+  // The rule being edited (null = adding a new one) - only to label the form.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  function reset() {
+    setEditingId(null);
+    setCourseKey("");
+    setRegulation("");
+    setMidUnits({});
+    setFormat("EITHER");
+    setMarks("10");
+  }
+
   function edit(r: MidBankRules) {
+    setEditingId(r.id);
     setCourseKey(r.courseKey);
     setRegulation(r.regulation === "ALL" ? "" : r.regulation);
     setMidUnits(Object.fromEntries(Object.entries(r.mids).map(([m, u]) => [m, u.join(", ")])));
@@ -81,6 +93,7 @@ export function MidBankRulesCard({ midCount }: { midCount: number }) {
       const data = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed to save");
       toast({ variant: "success", title: `Rules saved for ${group.name}${payload.regulation === "ALL" ? "" : ` (${payload.regulation})`}` });
+      reset();
       load();
     } catch (e) {
       toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to save" });
@@ -136,6 +149,14 @@ export function MidBankRulesCard({ midCount }: { midCount: number }) {
           </div>
         )}
 
+        <div className="flex items-center justify-between gap-2 border-t pt-4">
+          <h3 className="text-sm font-semibold">
+            {editingId
+              ? `Editing ${rules.find((r) => r.id === editingId)?.courseName ?? "rule"}${(() => { const reg = rules.find((r) => r.id === editingId)?.regulation; return reg && reg !== "ALL" ? ` (${reg})` : " (all regulations)"; })()}`
+              : rules.length > 0 ? "Add a rule for another course or regulation" : "Add a rule"}
+          </h3>
+          {editingId && <Button size="sm" variant="ghost" onClick={reset}>Cancel</Button>}
+        </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="mbr-course">Course</Label>
@@ -175,7 +196,7 @@ export function MidBankRulesCard({ midCount }: { midCount: number }) {
           </div>
         </div>
         <div className="flex justify-end">
-          <Button onClick={() => void save()} loading={saving} disabled={!courseKey}>Save rules</Button>
+          <Button onClick={() => void save()} loading={saving} disabled={!courseKey}>{editingId ? "Save changes" : "Save rules"}</Button>
         </div>
       </CardContent>
       <ConfirmDialog
