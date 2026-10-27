@@ -200,7 +200,7 @@ describe("sections of a bank", () => {
   });
 });
 
-import { formulaToken, renderMathHtml, splitMath } from "./renderMath";
+import { formulaToken, hasEmptyBox, katexHtml, renderMathHtml, splitMath } from "./renderMath";
 
 describe("formulas in question text", () => {
   it("splits text and formulas with their positions, so one formula can be edited in place", () => {
@@ -217,5 +217,13 @@ describe("formulas in question text", () => {
     const html = renderMathHtml("<b>a</b> $x^2$ $\\notacommand{$");
     expect(html).toContain("&lt;b&gt;a&lt;/b&gt;");
     expect(html).toContain("katex");
+  });
+  it("an empty MathLive box prints as a square, never as red \\placeholder; a complete question can't keep one", () => {
+    const html = katexHtml("\\begin{pmatrix}\\placeholder{} & 2\\\\ \\placeholder[a]{5} & 4\\end{pmatrix}", false);
+    expect(html).not.toContain("placeholder");
+    expect(html).not.toContain("katex-error");
+    expect(hasEmptyBox("$\\frac{\\placeholder{}}{2}$")).toBe(true);
+    const errors = questionErrors([{ text: "Find $\\frac{\\placeholder{}}{2}$", cos: ["CO1"], bloom: "L2" }], "SINGLE", 10);
+    expect(errors["parts.0.text"]).toContain("empty boxes");
   });
 });

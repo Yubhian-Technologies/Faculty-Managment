@@ -30,9 +30,15 @@ export function splitMath(text: string): MathSegment[] {
 /** How a formula sits in the text: $...$ inside a sentence, $$...$$ on its own line. */
 export const formulaToken = (latex: string, display: boolean) => (display ? `$$${latex}$$` : `$${latex}$`);
 
+/** MathLive's empty box (`\placeholder{}` / `\placeholder[id]{value}`) - KaTeX doesn't know it. */
+const PLACEHOLDER = /\\placeholder(?:\[[^\]]*\])?\{([^{}]*)\}/g;
+export const hasEmptyBox = (text: string) => /\\placeholder\b/.test(text);
+/** An empty box prints as a square (so it is visible), a filled one as its value. */
+const withoutPlaceholders = (latex: string) => latex.replace(PLACEHOLDER, (_m, v: string) => (v.trim() ? v : "\\square "));
+
 /** One formula as KaTeX HTML (a formula KaTeX can't read is shown in red, never thrown). */
 export const katexHtml = (latex: string, display: boolean) =>
-  katex.renderToString(latex, { displayMode: display, throwOnError: false, output: "html", strict: "ignore", trust: false });
+  katex.renderToString(withoutPlaceholders(latex), { displayMode: display, throwOnError: false, output: "html", strict: "ignore", trust: false });
 
 export function renderMathHtml(text: string): string {
   return splitMath(text).map((s) => (s.kind === "text" ? escapeHtml(s.text).replace(/\n/g, "<br/>") : katexHtml(s.latex, s.display))).join("");

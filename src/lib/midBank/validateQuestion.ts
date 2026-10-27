@@ -59,6 +59,7 @@ export function questionErrors(parts: MidQuestionPart[], format: MidQuestionForm
   parts.forEach((p, i) => {
     const label = partLabel(format, i);
     if (!p.text.trim() || /^\$+\s*\$+$/.test(p.text.trim())) errors[`parts.${i}.text`] = `${label}: write the question (text or a formula)`;
+    else if (/\\placeholder\b/.test(p.text)) errors[`parts.${i}.text`] = `${label}: a formula still has empty boxes - click it in the preview and fill or delete them`;
     if (p.cos.length === 0) errors[`parts.${i}.cos`] = `${label}: pick at least one Course Outcome`;
     if (!p.bloom) errors[`parts.${i}.bloom`] = `${label}: pick one Bloom's level (L2, L3 or L4)`;
     if (p.imageCaption && !p.imageUrl) errors[`parts.${i}.imageCaption`] = `${label}: a caption needs an image`;

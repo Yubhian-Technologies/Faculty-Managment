@@ -36,6 +36,7 @@ export function FormulaPanel({ initial, onSubmit, onRemove, onClose }: {
   const [ready, setReady] = useState(false);
   const [empty, setEmpty] = useState(!initial?.latex);
   const [display, setDisplay] = useState(initial?.display ?? false);
+  const [problem, setProblem] = useState("");
   const editing = Boolean(initial);
 
   useEffect(() => {
@@ -52,7 +53,7 @@ export function FormulaPanel({ initial, onSubmit, onRemove, onClose }: {
       mf.style.border = "1px solid hsl(var(--input))";
       mf.style.borderRadius = "0.375rem";
       if (initial?.latex) mf.value = initial.latex;
-      mf.addEventListener("input", () => setEmpty(!mf.value.trim()));
+      mf.addEventListener("input", () => { setEmpty(!mf.value.trim()); setProblem(""); });
       host.current.appendChild(mf);
       field.current = mf;
       if (typeof window !== "undefined" && window.mathVirtualKeyboard) {
@@ -75,6 +76,8 @@ export function FormulaPanel({ initial, onSubmit, onRemove, onClose }: {
     // "latex-expanded" turns MathLive's own shorthands into standard LaTeX that KaTeX prints.
     const latex = field.current?.getValue("latex-expanded").trim() ?? "";
     if (!latex) return;
+    // A template (matrix, fraction, root ...) still has an empty box - it would print as a gap.
+    if (/\\placeholder\b/.test(latex)) { setProblem("Some boxes in the formula are still empty - fill them, or delete the ones you don't need."); return; }
     window.mathVirtualKeyboard?.hide();
     onSubmit(latex, display);
   }
@@ -94,6 +97,7 @@ export function FormulaPanel({ initial, onSubmit, onRemove, onClose }: {
       <p className="text-xs text-muted-foreground">
         Type: <code>^</code> power, <code>_</code> subscript, <code>/</code> fraction, <code>sqrt</code>, <code>sum</code>, <code>int</code>, <code>lim</code>, <code>pi</code>, <code>alpha</code>, <code>&lt;=</code>. Use the → arrow to leave a power or fraction. The keyboard icon in the box opens the keypad.
       </p>
+      {problem && <p className="text-xs text-destructive" role="alert">{problem}</p>}
       <div className="flex items-center gap-2">
         <Checkbox id="formula-display" checked={display} onCheckedChange={(v) => setDisplay(v === true)} />
         <Label htmlFor="formula-display" className="text-sm font-normal">Show on its own line (centred)</Label>
