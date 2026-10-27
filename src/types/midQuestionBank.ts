@@ -8,8 +8,8 @@ import type { Timestamp } from "firebase/firestore";
 //
 //  colleges/{c}/midBankDeadlines/{id}          Exam Cell deadline (opens the module).
 //  colleges/{c}/midBankRules/{id}              Exam Cell: units per Mid, format, marks.
-//  colleges/{c}/subjectOutcomes/{subjectId}__{branchKey}   units, COs, PSOs and the
-//      CO -> PO/PSO mapping of a subject in a branch; the first preparer enters
+//  colleges/{c}/subjectOutcomes/{subjectId}__{branchKey}   units, COs and the
+//      CO -> PO/PSO mapping (ticked; PO1-PO11, PSO1-PSO2) of a subject in a branch; the first preparer enters
 //      them and Mid 2 reuses them.
 //  colleges/{c}/midQuestionBanks/{id}           one bank (see MidQuestionBank.id).
 //  colleges/{c}/midBankSectionClaims/{deadlineId}__{subjectId}__{sectionId}
@@ -17,7 +17,6 @@ import type { Timestamp } from "firebase/firestore";
 //  .../midQuestionBanks/{id}/questions/{unit}_{slot}   one doc per slot.
 
 export type BloomLevel = "L2" | "L3" | "L4";
-export type CorrelationLevel = 1 | 2 | 3;
 
 export interface SyllabusUnit {
   no: number; // 1..n, in order
@@ -29,13 +28,9 @@ export interface CourseOutcome {
   statement: string;
 }
 
-export interface ProgramSpecificOutcome {
-  id: string; // "PSO1".."PSOn"
-  statement: string;
-}
 
-/** CO id -> PO/PSO id -> correlation 1 (low) .. 3 (high). Absent = no correlation. */
-export type OutcomeMapping = Record<string, Record<string, CorrelationLevel>>;
+/** CO id -> the POs / PSOs it maps to (ticked, no strength level), e.g. { CO1: ["PO1", "PO2", "PSO1"] }. */
+export type OutcomeMapping = Record<string, string[]>;
 
 export interface SubjectOutcomes {
   subjectId: string;
@@ -44,7 +39,6 @@ export interface SubjectOutcomes {
   subjectCode: string;
   units: SyllabusUnit[];
   cos: CourseOutcome[];
-  psos: ProgramSpecificOutcome[];
   mapping: OutcomeMapping;
   version: number; // bumped on every save; a save must name the version it edited
   updatedBy: string;

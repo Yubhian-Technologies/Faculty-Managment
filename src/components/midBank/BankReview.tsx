@@ -175,7 +175,7 @@ export function BankReview({ id, editHref, writeHref, autoDownload }: { id: stri
                             {/* eslint-disable-next-line @next/next/no-img-element -- Storage URL with a token */}
                             {p.imageUrl && <figure className="mt-2"><img src={p.imageUrl} alt={p.imageCaption || ""} className="max-h-40 rounded border" />{p.imageCaption && <figcaption className="text-xs text-muted-foreground">{p.imageCaption}</figcaption>}</figure>}
                             <p className="mt-1 text-xs text-muted-foreground">
-                              [{partMarks(p, i, formatOf(q, bank.format), bank.marks)} M] · {p.cos.join(", ") || "No CO"} · {derivePoPso(p.cos, detail.outcomes!.mapping).map((x) => x.id).join(", ") || "-"} · {p.bloom || "No level"}
+                              [{partMarks(p, i, formatOf(q, bank.format), bank.marks)} M] · {p.cos.join(", ") || "No CO"} · {derivePoPso(p.cos, detail.outcomes!.mapping).join(", ") || "-"} · {p.bloom || "No level"}
                             </p>
                           </div>
                         ))}

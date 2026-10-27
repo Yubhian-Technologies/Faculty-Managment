@@ -2,292 +2,334 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { AlertTriangle, Lock, Plus, Trash2 } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { AlertTriangle, Check, ChevronDown, Lock } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "@/hooks/useToast";
-import { PROGRAM_OUTCOMES } from "@/lib/midBank/constants";
+import { cn } from "@/lib/utils";
+import { LIMITS, MAPPING_TARGETS, PROGRAM_OUTCOMES } from "@/lib/midBank/constants";
 import { deadlineLabel } from "@/lib/midBank/deadline";
 import { bankFormatText } from "@/lib/midBank/validateQuestion";
 import type { MidBankPrepare } from "@/lib/midBank/clientTypes";
-import type { CorrelationLevel, OutcomeMapping } from "@/types";
+import type { OutcomeMapping } from "@/types";
 
-// Preparing a bank for one deadline + subject + branch: the subject (from FMS),
-// the Exam Cell's rules, the branch's units / COs / CO-PO-PSO mapping (entered
-// by whoever prepares first, reused by Mid 2), and the sections it covers - the
-// faculty's own and, if they choose, colleagues' sections of the same subject
-// (who then see the bank read-only). Also used later to change the sections.
+// The question bank setup as a 4-step wizard, the subject card and the steps on
+// the left: 1. Sections (own, and optionally colleagues' sections of the subject
+// in the branch) -> 2. Course Outcomes (units + CO statements) -> 3. CO-PO
+// Mapping (tick the POs / PSOs each CO maps to) -> 4. Question Bank (the
+// workspace). Units, COs and the mapping belong to the subject in the branch:
+// entered by whoever prepares first, reused by Mid 2.
 
-interface Draft { units: { title: string }[]; cos: { statement: string }[]; psos: { statement: string }[]; mapping: OutcomeMapping }
+export type PrepareStep = 1 | 2 | 3;
+interface Draft { units: string[]; cos: string[]; mapping: OutcomeMapping }
 
-const blank = (n: number) => Array.from({ length: n }, () => ({ title: "" }));
 const fromData = (d: MidBankPrepare): Draft => ({
-  units: d.outcomes?.units.map((u) => ({ title: u.title })) ?? blank(5),
-  cos: d.outcomes?.cos.map((c) => ({ statement: c.statement })) ?? Array.from({ length: 5 }, () => ({ statement: "" })),
-  psos: d.outcomes?.psos.map((p) => ({ statement: p.statement })) ?? [],
+  units: d.outcomes?.units.map((u) => u.title) ?? Array.from({ length: 5 }, () => ""),
+  cos: d.outcomes?.cos.map((c) => c.statement) ?? Array.from({ length: 5 }, () => ""),
   mapping: d.outcomes?.mapping ?? {},
 });
+const resize = (list: string[], n: number) => Array.from({ length: n }, (_, i) => list[i] ?? "");
 
-function ListEditor({ label, items, placeholder, onChange, multiline, prefix }: {
-  label: string; items: string[]; placeholder: string; onChange: (next: string[]) => void; multiline?: boolean; prefix: string;
-}) {
+function CountInput({ id, label, value, max, onChange }: { id: string; label: string; value: number; max: number; onChange: (n: number) => void }) {
   return (
-    <div className="space-y-2">
-      {items.map((v, i) => (
-        <div key={i} className="flex items-start gap-2">
-          <Label htmlFor={`${prefix}-${i}`} className="mt-2 w-14 shrink-0 text-xs text-muted-foreground">{prefix}{i + 1}</Label>
-          {multiline
-            ? <Textarea id={`${prefix}-${i}`} rows={2} value={v} placeholder={placeholder} onChange={(e) => onChange(items.map((x, j) => (j === i ? e.target.value : x)))} />
-            : <Input id={`${prefix}-${i}`} value={v} placeholder={placeholder} onChange={(e) => onChange(items.map((x, j) => (j === i ? e.target.value : x)))} />}
-          <Button type="button" size="icon" variant="ghost" aria-label={`Remove ${prefix}${i + 1}`} onClick={() => onChange(items.filter((_, j) => j !== i))}><Trash2 className="h-4 w-4" /></Button>
-        </div>
-      ))}
-      <Button type="button" size="sm" variant="outline" onClick={() => onChange([...items, ""])}><Plus className="mr-1 h-4 w-4" />Add {label}</Button>
+    <div className="flex items-center gap-2">
+      <Label htmlFor={id} className="text-sm font-medium">{label}</Label>
+      <Input id={id} type="number" min={1} max={max} value={value} className="h-8 w-20"
+        onChange={(e) => { const n = Math.max(1, Math.min(max, Math.floor(Number(e.target.value) || 1))); onChange(n); }} />
     </div>
   );
 }
 
-export function PrepareBank({ data, onChanged }: { data: MidBankPrepare; onChanged: () => void }) {
+/** "Select POs / PSOs..." box for one CO: a tick-list of PO1-PO11, PSO1, PSO2. */
+function MappingPicker({ co, value, onChange, disabled }: { co: string; value: string[]; onChange: (v: string[]) => void; disabled?: boolean }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild disabled={disabled}>
+        <button type="button" aria-label={`POs and PSOs for ${co}`}
+          className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60">
+          <span className={value.length ? "" : "text-muted-foreground"}>{value.length ? value.join(", ") : "Select POs / PSOs..."}</span>
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-80 p-3">
+        <div className="grid grid-cols-4 gap-x-3 gap-y-2">
+          {MAPPING_TARGETS.map((t) => {
+            const on = value.includes(t);
+            return (
+              <label key={t} className="flex items-center gap-1.5 text-sm" title={PROGRAM_OUTCOMES.find((p) => p.id === t)?.title ?? "Programme-specific outcome"}>
+                <Checkbox checked={on} onCheckedChange={(v) => onChange(v === true ? [...value, t].sort((a, b) => MAPPING_TARGETS.indexOf(a) - MAPPING_TARGETS.indexOf(b)) : value.filter((x) => x !== t))} />
+                {t}
+              </label>
+            );
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+export function PrepareBank({ data, step, onStep, onChanged }: {
+  data: MidBankPrepare; step: PrepareStep; onStep: (s: PrepareStep) => void; onChanged: () => void;
+}) {
   const router = useRouter();
   const { subject, outcomes, rules, setup, deadline, sections, branch, myBankId, canEditOutcomes } = data;
   const [draft, setDraft] = useState<Draft>(() => fromData(data));
-  const [editing, setEditing] = useState(!outcomes && canEditOutcomes);
-  const [saving, setSaving] = useState(false);
-  const [starting, setStarting] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
-  // Own sections not held by anyone else start ticked; for an existing bank, what it holds.
   const [picked, setPicked] = useState<Set<string>>(() => new Set(sections
     .filter((s) => (myBankId ? s.heldByMe : s.mine && !s.heldBy))
     .map((s) => s.sectionId)));
-  const targets = [...PROGRAM_OUTCOMES.map((p) => p.id), ...draft.psos.map((_, i) => `PSO${i + 1}`)];
   const locked = deadline.locked;
+  const readOnly = locked || !canEditOutcomes;
+  const pickedMine = sections.some((s) => s.mine && picked.has(s.sectionId));
+  const examCellIssues = setup.issues.filter((i) => i.who === "EXAM_CELL");
+  const bankHref = myBankId ? `/panel/mid-bank/${encodeURIComponent(myBankId)}` : null;
 
-  function setCell(co: string, target: string, value: string) {
-    setDraft((d) => {
-      const row = { ...(d.mapping[co] ?? {}) };
-      if (value) row[target] = Number(value) as CorrelationLevel; else delete row[target];
-      return { ...d, mapping: { ...d.mapping, [co]: row } };
+  async function putOutcomes(): Promise<boolean> {
+    const res = await fetch(`/api/college/subject-outcomes/${encodeURIComponent(data.outcomesId)}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        deadlineId: deadline.id, subjectId: subject.id, branch, baseVersion: outcomes?.version ?? 0,
+        units: draft.units.map((title) => ({ title })), cos: draft.cos.map((statement) => ({ statement })), mapping: draft.mapping,
+      }),
     });
+    const json = (await res.json()) as { error?: string; errors?: string[] };
+    if (!res.ok) { setErrors(json.errors ?? [json.error ?? "Failed to save"]); return false; }
+    return true;
   }
 
-  async function saveOutcomes() {
-    setSaving(true);
+  async function next() {
     setErrors([]);
+    setBusy(true);
     try {
-      const res = await fetch(`/api/college/subject-outcomes/${encodeURIComponent(data.outcomesId)}`, {
-        method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...draft, deadlineId: deadline.id, subjectId: subject.id, branch, baseVersion: outcomes?.version ?? 0 }),
-      });
-      const json = (await res.json()) as { error?: string; errors?: string[] };
-      if (!res.ok) { setErrors(json.errors ?? [json.error ?? "Failed to save"]); return; }
-      toast({ variant: "success", title: "Syllabus setup saved" });
-      setEditing(false);
-      onChanged();
-    } catch {
-      setErrors(["Network error - nothing was saved"]);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function submit() {
-    setStarting(true);
-    try {
-      const res = myBankId
-        ? await fetch(`/api/college/mid-question-banks/${encodeURIComponent(myBankId)}`, {
-          method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sectionIds: [...picked] }),
-        })
-        : await fetch("/api/college/mid-question-banks", {
+      if (step === 1) {
+        if (!pickedMine) { setErrors(["Include at least one section you teach"]); return; }
+        if (myBankId) {
+          const res = await fetch(`/api/college/mid-question-banks/${encodeURIComponent(myBankId)}`, {
+            method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sectionIds: [...picked] }),
+          });
+          const json = (await res.json()) as { error?: string };
+          if (!res.ok) { setErrors([json.error ?? "Could not save the sections"]); return; }
+          toast({ variant: "success", title: "Sections saved" });
+        }
+        onStep(2);
+      } else if (step === 2) {
+        if (!readOnly && !(await putOutcomes())) return;
+        if (!readOnly) { toast({ variant: "success", title: "Course Outcomes saved" }); onChanged(); }
+        onStep(3);
+      } else {
+        const unmapped = draft.cos.map((_, i) => `CO${i + 1}`).filter((co) => (draft.mapping[co] ?? []).length === 0);
+        if (unmapped.length) { setErrors(unmapped.map((co) => `${co} needs at least one PO or PSO`)); return; }
+        if (!readOnly && !(await putOutcomes())) return;
+        if (myBankId) { router.push(bankHref!); return; }
+        if (examCellIssues.length) { onChanged(); setErrors([examCellIssues[0].message]); return; }
+        const res = await fetch("/api/college/mid-question-banks", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ deadlineId: deadline.id, subjectId: subject.id, branch, sectionIds: [...picked] }),
         });
-      const json = (await res.json()) as { error?: string; bank?: { id: string }; bankId?: string };
-      if (!res.ok) throw new Error(json.error ?? "Could not save");
-      const id = myBankId ?? json.bank?.id;
-      toast({ variant: "success", title: myBankId ? "Sections updated" : "Question bank started" });
-      if (id) router.push(`/panel/mid-bank/${encodeURIComponent(id)}`);
-    } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not save" });
-      onChanged();
+        const json = (await res.json()) as { error?: string; bank?: { id: string } };
+        if (!res.ok || !json.bank) { setErrors([json.error ?? "Could not start the question bank"]); onChanged(); return; }
+        toast({ variant: "success", title: "Question bank started" });
+        router.push(`/panel/mid-bank/${encodeURIComponent(json.bank.id)}`);
+      }
+    } catch {
+      setErrors(["Network error - nothing was saved"]);
     } finally {
-      setStarting(false);
+      setBusy(false);
     }
   }
 
-  const examCellIssues = setup.issues.filter((i) => i.who === "EXAM_CELL");
-  const facultyIssues = setup.issues.filter((i) => i.who === "FACULTY");
-  const pickedMine = sections.some((s) => s.mine && picked.has(s.sectionId));
+  const steps: { n: 1 | 2 | 3 | 4; label: string; done: boolean }[] = [
+    { n: 1, label: "Sections", done: pickedMine },
+    { n: 2, label: "Course Outcomes", done: Boolean(outcomes) },
+    { n: 3, label: "CO-PO Mapping", done: Boolean(outcomes) && !setup.issues.some((i) => i.code === "MAPPING_MISSING" || i.code === "NO_OUTCOMES") },
+    { n: 4, label: "Question Bank", done: Boolean(myBankId) },
+  ];
 
   return (
-    <div className="space-y-6">
-      {locked && (
-        <p className="flex items-center gap-2 rounded-md border bg-muted/40 p-3 text-sm" role="status"><Lock className="h-4 w-4" />{deadlineLabel(deadline.deadline)} - this question bank is locked. Ask the Exam Cell to extend the deadline.</p>
-      )}
+    <div className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
+      {/* Left: the subject and the steps */}
+      <aside className="space-y-3">
+        <Card>
+          <CardContent className="p-4">
+            <p className="mb-2 font-semibold">{subject.name}</p>
+            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+              {[
+                ["Subject code", subject.code], ["Degree", subject.courseName], ["Branch", branch],
+                ["Regulation", subject.regulation || "-"], ["Year", String(subject.year)], ["Semester", String(subject.semester)],
+                ["Mid", `Mid ${deadline.midNumber}`], ["Deadline", deadlineLabel(deadline.deadline)],
+              ].map(([k, v]) => (
+                <div key={k} className="contents"><dt className="text-muted-foreground">{k}</dt><dd className="text-right font-medium">{v}</dd></div>
+              ))}
+            </dl>
+          </CardContent>
+        </Card>
+        <nav aria-label="Setup steps" className="space-y-2">
+          {steps.map((s) => {
+            const active = s.n === step;
+            const enabled = s.n === 4 ? Boolean(myBankId) : true;
+            return (
+              <button key={s.n} type="button" disabled={!enabled}
+                aria-current={active ? "step" : undefined}
+                onClick={() => (s.n === 4 ? bankHref && router.push(bankHref) : onStep(s.n as PrepareStep))}
+                className={cn("flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
+                  active ? "border-primary bg-primary text-primary-foreground" : "bg-card hover:bg-muted")}>
+                <span>{s.n}. {s.label}</span>
+                {s.done && !active && <Check className="h-4 w-4 text-green-600" aria-label="done" />}
+              </button>
+            );
+          })}
+        </nav>
+      </aside>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Subject</CardTitle>
-          <CardDescription>From FMS - nothing to enter here.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
-            <div><dt className="text-xs text-muted-foreground">Subject</dt><dd className="font-medium">{subject.name}</dd></div>
-            <div><dt className="text-xs text-muted-foreground">Code</dt><dd>{subject.code}</dd></div>
-            <div><dt className="text-xs text-muted-foreground">Branch</dt><dd>{branch}</dd></div>
-            <div><dt className="text-xs text-muted-foreground">Course</dt><dd>{subject.courseName}{subject.regulation ? ` · ${subject.regulation}` : ""}</dd></div>
-            <div><dt className="text-xs text-muted-foreground">Year / Semester</dt><dd>Year {subject.year} · Semester {subject.semester}</dd></div>
-            <div><dt className="text-xs text-muted-foreground">Mid</dt><dd>Mid {deadline.midNumber}</dd></div>
-            <div className="col-span-2"><dt className="text-xs text-muted-foreground">Deadline</dt><dd>{deadlineLabel(deadline.deadline)}</dd></div>
-          </dl>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader><CardTitle className="text-base">Exam Cell rules for this Mid</CardTitle></CardHeader>
-        <CardContent className="text-sm">
-          {examCellIssues.length > 0 ? (
-            <p className="flex gap-2 text-amber-800 dark:text-amber-300"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />{examCellIssues[0].message} You can finish the syllabus setup meanwhile.</p>
-          ) : rules ? (
-            <div className="flex flex-wrap gap-2">
-              <Badge variant="outline">Mid {deadline.midNumber}: Units {setup.units.join(", ")}</Badge>
-              <Badge variant="outline">{bankFormatText(rules.format, rules.marks)}</Badge>
-              <Badge variant="outline">10 questions per unit</Badge>
-              <Badge variant="outline">L2, L3, L4 at least 3 each per unit</Badge>
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
-          <div>
-            <CardTitle className="text-base">Syllabus setup</CardTitle>
-            <CardDescription>
-              Units, Course Outcomes and the CO-PO/PSO mapping of {subject.name} in {branch}. Entered once and reused by every Mid.
-              {outcomes && ` Last saved by ${outcomes.updatedByName || "a colleague"}.`}
-            </CardDescription>
+      {/* Right: the current step */}
+      <section className="min-w-0 space-y-4">
+        {locked && (
+          <p className="flex items-center gap-2 rounded-md border bg-muted/40 p-3 text-sm" role="status"><Lock className="h-4 w-4" />{deadlineLabel(deadline.deadline)} - locked. Ask the Exam Cell to extend the deadline.</p>
+        )}
+        {examCellIssues.length > 0 && (
+          <p className="flex gap-2 rounded-md bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-300"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />{examCellIssues[0].message}</p>
+        )}
+        {rules && examCellIssues.length === 0 && (
+          <div className="flex flex-wrap gap-2 text-xs">
+            <Badge variant="outline">Mid {deadline.midNumber}: Units {setup.units.join(", ")}</Badge>
+            <Badge variant="outline">{bankFormatText(rules.format, rules.marks)}</Badge>
+            <Badge variant="outline">10 questions per unit · L2, L3, L4 at least 3 each</Badge>
           </div>
-          {outcomes && !editing && !locked && (canEditOutcomes
-            ? <Button size="sm" variant="outline" onClick={() => setEditing(true)}>Edit setup</Button>
-            : <span className="flex items-center gap-1 text-xs text-muted-foreground"><Lock className="h-3.5 w-3.5" />Set by {outcomes.updatedByName || "a colleague"}</span>)}
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {facultyIssues.map((i) => <p key={i.code} className="flex gap-2 text-sm text-amber-800 dark:text-amber-300"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />{i.message}</p>)}
-          {!editing && outcomes ? (
-            <div className="grid gap-6 text-sm md:grid-cols-2">
+        )}
+
+        {step === 1 && (
+          <Card>
+            <CardContent className="space-y-3 p-5">
               <div>
-                <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">Units</p>
-                <ol className="space-y-1">{outcomes.units.map((u) => <li key={u.no}><span className="font-medium">Unit {u.no}.</span> {u.title}</li>)}</ol>
+                <h2 className="text-lg font-semibold">Sections</h2>
+                <p className="text-sm text-muted-foreground">Tick the sections this question bank is for: yours, and if you prepare it for them too, colleagues&rsquo; sections of {subject.name} in {branch}. They are told, and can only view it.</p>
               </div>
+              <ul className="divide-y rounded-md border">
+                {sections.map((s) => {
+                  const heldElsewhere = Boolean(s.heldBy) && !s.heldByMe;
+                  return (
+                    <li key={s.sectionId} className="flex items-center gap-3 px-3 py-2.5 text-sm">
+                      <Checkbox id={`sec-${s.sectionId}`} checked={picked.has(s.sectionId)} disabled={heldElsewhere || locked}
+                        onCheckedChange={(v) => setPicked((p) => { const n = new Set(p); if (v === true) n.add(s.sectionId); else n.delete(s.sectionId); return n; })} />
+                      <Label htmlFor={`sec-${s.sectionId}`} className="flex-1 font-normal">
+                        <span className="font-medium">Section {s.sectionName}</span>
+                        <span className="text-muted-foreground"> · {s.mine ? "you" : s.facultyNames.join(", ")}</span>
+                      </Label>
+                      {heldElsewhere && <Badge variant="secondary">In {s.heldBy}&rsquo;s bank</Badge>}
+                    </li>
+                  );
+                })}
+              </ul>
+            </CardContent>
+          </Card>
+        )}
+
+        {step === 2 && (
+          <Card>
+            <CardContent className="space-y-5 p-5">
               <div>
-                <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">Course Outcomes</p>
-                <ul className="space-y-1">{outcomes.cos.map((c) => <li key={c.id}><span className="font-medium">{c.id}.</span> {c.statement}</li>)}</ul>
+                <h2 className="text-lg font-semibold">Course Outcomes</h2>
+                <p className="text-sm text-muted-foreground">
+                  Enter the number of units and COs in the syllabus, then each one. Reducing a number removes the higher ones (and a CO&rsquo;s PO mapping).
+                  {outcomes && ` Last saved by ${outcomes.updatedByName || "a colleague"}.`}
+                  {!canEditOutcomes && !locked && ` Set by ${outcomes?.updatedByName || "a colleague"} - read-only for you.`}
+                </p>
               </div>
-            </div>
-          ) : !editing ? (
-            <p className="text-sm text-muted-foreground">Not set up yet.</p>
-          ) : (
-            <>
-              <section className="space-y-2">
-                <h3 className="text-sm font-semibold">Units</h3>
-                <ListEditor label="unit" prefix="Unit " placeholder="Unit title, e.g. Sets and Relations" items={draft.units.map((u) => u.title)} onChange={(v) => setDraft((d) => ({ ...d, units: v.map((title) => ({ title })) }))} />
-              </section>
-              <section className="space-y-2">
-                <h3 className="text-sm font-semibold">Course Outcomes</h3>
-                <ListEditor label="CO" prefix="CO" multiline placeholder="The student will be able to ..." items={draft.cos.map((c) => c.statement)} onChange={(v) => setDraft((d) => ({ ...d, cos: v.map((statement) => ({ statement })) }))} />
-              </section>
-              <section className="space-y-2">
-                <h3 className="text-sm font-semibold">Programme-Specific Outcomes (optional)</h3>
-                <ListEditor label="PSO" prefix="PSO" multiline placeholder="PSO statement" items={draft.psos.map((p) => p.statement)} onChange={(v) => setDraft((d) => ({ ...d, psos: v.map((statement) => ({ statement })) }))} />
-              </section>
-              <section className="space-y-2">
-                <h3 className="text-sm font-semibold">CO-PO/PSO mapping</h3>
-                <p className="text-xs text-muted-foreground">1 = low, 2 = medium, 3 = high; leave blank for no correlation. Every CO needs at least one.</p>
-                <div className="overflow-x-auto rounded-md border">
-                  <table className="text-xs">
-                    <thead className="bg-muted/50">
-                      <tr><th className="sticky left-0 bg-muted/50 p-2 text-left">CO</th>{targets.map((t) => <th key={t} className="p-2 font-medium" title={PROGRAM_OUTCOMES.find((p) => p.id === t)?.title}>{t}</th>)}</tr>
-                    </thead>
+
+              <div className="space-y-3">
+                <CountInput id="n-units" label="Number of units" value={draft.units.length} max={LIMITS.units} onChange={(n) => !readOnly && setDraft((d) => ({ ...d, units: resize(d.units, n) }))} />
+                <div className="overflow-hidden rounded-md border">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground"><tr><th className="w-20 p-2">Unit</th><th className="p-2">Title</th></tr></thead>
                     <tbody>
-                      {draft.cos.map((_, ci) => {
-                        const co = `CO${ci + 1}`;
-                        return (
-                          <tr key={co} className="border-t">
-                            <th scope="row" className="sticky left-0 bg-background p-2 text-left">{co}</th>
-                            {targets.map((t) => (
-                              <td key={t} className="p-1">
-                                <select aria-label={`${co} to ${t}`} className="h-8 w-12 rounded border border-input bg-background text-center" value={draft.mapping[co]?.[t] ?? ""} onChange={(e) => setCell(co, t, e.target.value)}>
-                                  <option value="">-</option><option value="1">1</option><option value="2">2</option><option value="3">3</option>
-                                </select>
-                              </td>
-                            ))}
-                          </tr>
-                        );
-                      })}
+                      {draft.units.map((t, i) => (
+                        <tr key={i} className="border-t">
+                          <td className="p-2 font-medium"><Label htmlFor={`unit-${i}`}>Unit {i + 1}</Label></td>
+                          <td className="p-2"><Input id={`unit-${i}`} value={t} disabled={readOnly} placeholder="e.g. Linear data structures" onChange={(e) => setDraft((d) => ({ ...d, units: d.units.map((x, j) => (j === i ? e.target.value : x)) }))} /></td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
-              </section>
-              {errors.length > 0 && (
-                <ul className="space-y-1 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive" role="alert">
-                  {errors.map((e) => <li key={e}>{e}</li>)}
-                </ul>
-              )}
-              <div className="flex justify-end gap-2">
-                {outcomes && <Button variant="ghost" onClick={() => { setDraft(fromData(data)); setEditing(false); setErrors([]); }}>Cancel</Button>}
-                <Button onClick={() => void saveOutcomes()} loading={saving}>Save setup</Button>
               </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Sections this bank covers</CardTitle>
-          <CardDescription>
-            Your own sections, and - if you prepare it for them too - colleagues&rsquo; sections of {subject.name} in {branch}. They are told, and see the bank read-only.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ul className="space-y-2">
-            {sections.map((s) => {
-              const heldElsewhere = Boolean(s.heldBy) && !s.heldByMe;
-              return (
-                <li key={s.sectionId} className="flex items-center gap-3 text-sm">
-                  <Checkbox
-                    id={`sec-${s.sectionId}`}
-                    checked={picked.has(s.sectionId)}
-                    disabled={heldElsewhere || locked}
-                    onCheckedChange={(v) => setPicked((p) => { const n = new Set(p); if (v === true) n.add(s.sectionId); else n.delete(s.sectionId); return n; })}
-                  />
-                  <Label htmlFor={`sec-${s.sectionId}`} className="font-normal">
-                    <span className="font-medium">Section {s.sectionName}</span>
-                    <span className="text-muted-foreground"> · {s.mine ? "you" : s.facultyNames.join(", ")}{heldElsewhere ? ` · in ${s.heldBy}'s bank` : ""}</span>
-                  </Label>
-                </li>
-              );
-            })}
+              <div className="space-y-3">
+                <CountInput id="n-cos" label="Number of COs" value={draft.cos.length} max={LIMITS.cos}
+                  onChange={(n) => !readOnly && setDraft((d) => {
+                    const mapping = Object.fromEntries(Object.entries(d.mapping).filter(([co]) => Number(co.slice(2)) <= n));
+                    return { ...d, cos: resize(d.cos, n), mapping };
+                  })} />
+                <div className="overflow-hidden rounded-md border">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground"><tr><th className="w-20 p-2">CO</th><th className="p-2">CO statement</th></tr></thead>
+                    <tbody>
+                      {draft.cos.map((t, i) => (
+                        <tr key={i} className="border-t align-top">
+                          <td className="p-2 pt-4 font-medium"><Label htmlFor={`co-${i}`}>CO{i + 1}</Label></td>
+                          <td className="p-2"><Textarea id={`co-${i}`} rows={2} value={t} disabled={readOnly} placeholder="The student will be able to ..." onChange={(e) => setDraft((d) => ({ ...d, cos: d.cos.map((x, j) => (j === i ? e.target.value : x)) }))} /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {step === 3 && (
+          <Card>
+            <CardContent className="space-y-4 p-5">
+              <div>
+                <h2 className="text-lg font-semibold">CO-PO Mapping</h2>
+                <p className="text-sm text-muted-foreground">Tick the POs and PSOs each CO contributes to, as per the syllabus. Every CO needs at least one. When you pick a CO for a question, its POs / PSOs are shown automatically.</p>
+              </div>
+              <div className="overflow-visible rounded-md border">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground"><tr><th className="w-20 p-2">CO</th><th className="p-2">Mapped POs / PSOs (click to choose)</th></tr></thead>
+                  <tbody>
+                    {draft.cos.map((statement, i) => {
+                      const co = `CO${i + 1}`;
+                      return (
+                        <tr key={co} className="border-t align-top">
+                          <td className="p-2 pt-4 font-medium" title={statement}>{co}</td>
+                          <td className="p-2">
+                            <MappingPicker co={co} value={draft.mapping[co] ?? []} disabled={readOnly}
+                              onChange={(v) => setDraft((d) => ({ ...d, mapping: { ...d.mapping, [co]: v } }))} />
+                            {statement && <p className="mt-1 truncate text-xs text-muted-foreground">{statement}</p>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {errors.length > 0 && (
+          <ul className="space-y-1 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive" role="alert">
+            {errors.map((e) => <li key={e}>{e}</li>)}
           </ul>
-          {!pickedMine && <p className="mt-2 text-xs text-amber-800 dark:text-amber-300">Include at least one section you teach.</p>}
-        </CardContent>
-      </Card>
+        )}
 
-      {!locked && (
-        <div className="flex items-center justify-end gap-3">
-          {myBankId && <Button asChild variant="ghost"><Link href={`/panel/mid-bank/${encodeURIComponent(myBankId)}`}>Back to the bank</Link></Button>}
-          {!myBankId && setup.issues.length > 0 && <span className="text-xs text-muted-foreground">Resolve the items above to start.</span>}
-          <Button size="lg" onClick={() => void submit()} loading={starting} disabled={(!myBankId && setup.issues.length > 0) || editing || !pickedMine}>
-            {myBankId ? "Save sections" : "Start writing questions"}
-          </Button>
+        <div className="flex items-center justify-between gap-2">
+          <Button variant="ghost" disabled={step === 1 || busy} onClick={() => onStep((step - 1) as PrepareStep)}>Back</Button>
+          {!(locked && step === 3) && (
+            <Button onClick={() => void next()} loading={busy} disabled={step === 1 && !pickedMine}>
+              {step === 3 ? (myBankId ? "Save & open the question bank" : "Save & start the question bank") : "Save & Next"}
+            </Button>
+          )}
         </div>
-      )}
+      </section>
     </div>
   );
 }

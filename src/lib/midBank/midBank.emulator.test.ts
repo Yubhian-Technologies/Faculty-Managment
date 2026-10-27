@@ -63,7 +63,7 @@ describe.skipIf(!EMULATOR)("Mid Question Bank (real Firestore)", () => {
     deadlineId: D, subjectId: "sub1", branch: BRANCH, baseVersion: 0,
     units: [{ title: "Sets" }, { title: "Relations" }, { title: "Graphs" }],
     cos: [{ statement: "Explain sets" }, { statement: "Apply relations" }],
-    psos: [], mapping: { CO1: { PO1: 3 }, CO2: { PO2: 2 } },
+    mapping: { CO1: ["PO1"], CO2: ["PO2", "PSO1"] },
   };
   const asFaculty = (uid: string) => { who.uid = uid; who.role = "PANEL_MEMBER"; };
 

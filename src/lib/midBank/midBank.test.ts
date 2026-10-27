@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BloomLevel, MidQuestion } from "@/types/midQuestionBank";
-import { cleanOutcomes, derivePoPso, outcomeConflicts } from "./outcomes";
+import { cleanOutcomes, derivePoPso, mappingErrors, outcomeConflicts } from "./outcomes";
 import { findDuplicates, similarity, textKey } from "./duplicates";
 import { cleanParts, defaultSplit, formatOf, partMarks, questionErrors, questionFormat } from "./validateQuestion";
 import { bankTotals, bloomNeeds, breaksCompletedUnit, lockReason, unitStatus, unitStatuses, unlockedUnits } from "./rules";
@@ -15,31 +15,30 @@ const fullUnit = (unit: number) => [
 ];
 
 describe("outcomes", () => {
-  it("renumbers units, COs and PSOs and keeps only valid mapping cells", () => {
+  it("renumbers units and COs; a CO keeps only known POs / PSOs, in PO1..PO11, PSO1, PSO2 order", () => {
     const { value, errors } = cleanOutcomes({
       units: [{ title: " Sets " }, { title: "Relations" }],
       cos: [{ statement: "Explain sets" }, { statement: "Apply relations" }],
-      psos: [{ statement: "Design systems" }],
-      mapping: { CO1: { PO1: 3, PO2: "2", PO99: 3, PSO1: 1 }, CO2: { PO3: 5, PSO1: 2 } },
+      mapping: { CO1: ["PSO1", "PO2", "PO12", "PO1", "PO2"], CO2: { PO3: 2, PSO2: 1 } }, // CO2: an older save with levels
     });
     expect(errors).toEqual([]);
     expect(value.units).toEqual([{ no: 1, title: "Sets" }, { no: 2, title: "Relations" }]);
     expect(value.cos.map((c) => c.id)).toEqual(["CO1", "CO2"]);
-    expect(value.mapping).toEqual({ CO1: { PO1: 3, PO2: 2, PSO1: 1 }, CO2: { PSO1: 2 } });
+    expect(value.mapping).toEqual({ CO1: ["PO1", "PO2", "PSO1"], CO2: ["PO3", "PSO2"] });
   });
 
-  it("lists what is missing: titles, statements, an unmapped CO", () => {
-    const { errors } = cleanOutcomes({ units: [{ title: "" }], cos: [{ statement: "A" }, { statement: "" }], mapping: { CO1: { PO1: 1 } } });
-    expect(errors).toEqual(["Unit 1 needs a title", "CO2 needs its statement", "CO2 is not mapped to any PO or PSO"]);
+  it("lists what is missing; an unmapped CO is a separate, later check", () => {
+    const { value, errors } = cleanOutcomes({ units: [{ title: "" }], cos: [{ statement: "A" }, { statement: "" }], mapping: { CO1: ["PO1"] } });
+    expect(errors).toEqual(["Unit 1 needs a title", "CO2 needs its statement"]);
+    expect(mappingErrors(value)).toEqual(["CO2 is not mapped to any PO or PSO"]);
   });
 
-  it("derives POs/PSOs from COs with the strongest correlation, PO order then PSO", () => {
-    expect(derivePoPso(["CO1", "CO2"], { CO1: { PSO1: 1, PO2: 2 }, CO2: { PO2: 3, PO10: 1 } }))
-      .toEqual([{ id: "PO2", level: 3 }, { id: "PO10", level: 1 }, { id: "PSO1", level: 1 }]);
+  it("derives the POs / PSOs a question's COs reach", () => {
+    expect(derivePoPso(["CO1", "CO2"], { CO1: ["PSO1", "PO2"], CO2: ["PO2", "PO10"] })).toEqual(["PO2", "PO10", "PSO1"]);
   });
 
   it("refuses removing a unit or CO that questions use", () => {
-    const next = cleanOutcomes({ units: [{ title: "A" }], cos: [{ statement: "x" }], mapping: { CO1: { PO1: 1 } } }).value;
+    const next = cleanOutcomes({ units: [{ title: "A" }], cos: [{ statement: "x" }], mapping: { CO1: ["PO1"] } }).value;
     expect(outcomeConflicts(next, { units: new Set([1, 2]), cos: new Set(["CO1", "CO3"]) }))
       .toEqual(["Unit 2 already has questions and can't be removed", "CO3 is used by questions and can't be removed"]);
   });
@@ -158,6 +157,8 @@ describe("setup issues", () => {
     expect(r.units).toEqual([3, 4, 5]);
     expect(r.issues[0].message).toBe("Mid 2 covers Unit 4, 5, which the setup doesn't have yet - add the unit(s).");
     expect(setupIssues(subject, 1, rules, { units: [1, 2, 3].map((no) => ({ no, title: "t" })) }).issues).toEqual([]);
+    expect(setupIssues(subject, 1, rules, { units: [1, 2, 3].map((no) => ({ no, title: "t" })), cos: [{ id: "CO1", statement: "x" }], mapping: {} }).issues[0].message)
+      .toBe("Map CO1 to at least one PO or PSO (CO-PO Mapping).");
   });
 });
 

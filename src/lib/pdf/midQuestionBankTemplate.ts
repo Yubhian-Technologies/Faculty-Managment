@@ -63,7 +63,7 @@ export function getMidQuestionBankHTML(d: MidBankPdfData): string {
         <td>${cell((p, i) => `${f === "PARTS_AB" ? `<b>(${i === 0 ? "a" : "b"})</b> ` : ""}${renderMathHtml(p.text)}${p.imageUrl ? `<img class="img" src="${esc(p.imageUrl)}" alt="" />${p.imageCaption ? `<div class="cap">${esc(p.imageCaption)}</div>` : ""}` : ""}`)}</td>
         <td class="narrow">${cell((p, i) => String(partMarks(p, i, f, d.bank.marks)))}</td>
         <td class="narrow">${cell((p) => esc(p.cos.join(", ")))}</td>
-        <td class="po">${cell((p) => esc(derivePoPso(p.cos, d.outcomes.mapping).map((x) => x.id).join(", ")))}</td>
+        <td class="po">${cell((p) => esc(derivePoPso(p.cos, d.outcomes.mapping).join(", ")))}</td>
         <td class="narrow">${cell((p) => esc(p.bloom))}</td>
       </tr>`;
     }).join("");

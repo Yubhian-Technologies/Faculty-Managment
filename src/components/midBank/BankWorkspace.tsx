@@ -486,7 +486,7 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
               <>
                 <ul className="mb-2 space-y-1">{allCos.map((c) => <li key={c}><span className="font-medium">{c}</span> {outcomes.cos.find((x) => x.id === c)?.statement}</li>)}</ul>
                 <div className="flex flex-wrap gap-1">
-                  {poPso.map((x) => <Badge key={x.id} variant="outline" title={PROGRAM_OUTCOMES.find((p) => p.id === x.id)?.title ?? outcomes.psos.find((p) => p.id === x.id)?.statement}>{x.id} ({x.level})</Badge>)}
+                  {poPso.map((x) => <Badge key={x} variant="outline" title={PROGRAM_OUTCOMES.find((p) => p.id === x)?.title ?? "Programme-specific outcome"}>{x}</Badge>)}
                 </div>
               </>
             )}

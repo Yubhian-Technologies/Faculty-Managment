@@ -14,26 +14,28 @@ export const BLOOM_LABELS: Record<BloomLevel, string> = {
   L4: "L4 - Analyse",
 };
 
-/** The 12 Programme Outcomes (NBA graduate attributes). PSOs are per subject setup. */
+/** The 11 Programme Outcomes (NBA graduate attributes, current list). */
 export const PROGRAM_OUTCOMES: { id: string; title: string }[] = [
   { id: "PO1", title: "Engineering knowledge" },
   { id: "PO2", title: "Problem analysis" },
   { id: "PO3", title: "Design / development of solutions" },
   { id: "PO4", title: "Conduct investigations of complex problems" },
-  { id: "PO5", title: "Modern tool usage" },
-  { id: "PO6", title: "The engineer and society" },
-  { id: "PO7", title: "Environment and sustainability" },
-  { id: "PO8", title: "Ethics" },
-  { id: "PO9", title: "Individual and team work" },
-  { id: "PO10", title: "Communication" },
-  { id: "PO11", title: "Project management and finance" },
-  { id: "PO12", title: "Life-long learning" },
+  { id: "PO5", title: "Engineering tool usage" },
+  { id: "PO6", title: "The engineer and the world" },
+  { id: "PO7", title: "Ethics" },
+  { id: "PO8", title: "Individual and collaborative team work" },
+  { id: "PO9", title: "Communication" },
+  { id: "PO10", title: "Project management and finance" },
+  { id: "PO11", title: "Life-long learning" },
 ];
+/** Programme-Specific Outcomes: fixed ids, no statements entered. */
+export const PSO_IDS = ["PSO1", "PSO2"];
+/** Everything a CO can map to, in display order. */
+export const MAPPING_TARGETS = [...PROGRAM_OUTCOMES.map((p) => p.id), ...PSO_IDS];
 
 export const LIMITS = {
   units: 10,
   cos: 10,
-  psos: 5,
   unitTitle: 200,
   statement: 500,
   questionText: 3000,
