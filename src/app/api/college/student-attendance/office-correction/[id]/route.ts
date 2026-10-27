@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
-import { isManualEditWindowOpen, MANUAL_EDIT_WINDOW_CLOSED_MESSAGE } from "@/lib/attendance/attendanceWindow";
+import { isStudentAttendanceEditOpen, STUDENT_EDIT_WINDOW_CLOSED_MESSAGE } from "@/lib/studentAttendance/editWindow";
 import { getFacultyPeriodsForDate } from "@/lib/timetable/currentPeriod";
 import {
   departmentOfficeBlocked, facultyWindowClosed, FACULTY_WINDOW_OPEN_MESSAGE, OFFICE_ATTENDANCE_DENIED_MESSAGE,
@@ -72,8 +72,8 @@ export async function PATCH(
 
     const [y, m, d] = existing.date.split("-").map(Number);
     const docDate = istDateFromParts(y, m, d);
-    if (!isManualEditWindowOpen(docDate)) {
-      return NextResponse.json({ error: MANUAL_EDIT_WINDOW_CLOSED_MESSAGE }, { status: 403 });
+    if (!(await isStudentAttendanceEditOpen(db, session.collegeId, existing, docDate))) {
+      return NextResponse.json({ error: STUDENT_EDIT_WINDOW_CLOSED_MESSAGE }, { status: 403 });
     }
     // Only once the faculty's own window is over: a past day, or today after the college day
     // ended. A session whose period is no longer on the timetable has no close time, so for

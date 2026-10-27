@@ -367,6 +367,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Staff Attendance", href: "/college-office/staff-attendance", iconName: "ClipboardCheck", roles: ["COLLEGE_OFFICE"] },
   { label: "Import Attendance", href: "/college-office/attendance-import", iconName: "Upload", roles: ["COLLEGE_OFFICE"] },
   { label: "Certificate Issuance", href: "/college-office/certificates", iconName: "FileCheck", roles: ["COLLEGE_OFFICE"], section: "Certificates" },
+  { label: "Import Student Attendance", href: "/college-office/student-attendance-import", iconName: "Upload", roles: ["COLLEGE_OFFICE"] },
   // College Admin's login has COLLEGE_OFFICE as its primary role (the seat is
   // layered on top - see api/administration/college-people), so it inherits
   // this whole section too, including these personal items - same reasoning

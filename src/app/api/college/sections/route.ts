@@ -618,6 +618,19 @@ export async function POST(request: Request) {
             );
           }
         }
+        // A section is filed under the course of its own department or its parent's. Another department's
+        // course is accepted only for a year that department itself teaches (a shared first year, e.g. Basic
+        // Science's Year 1) - otherwise the section lands under a course its subject assignments and
+        // teaching-assignment screens never look at (CSE [Cyber Security] Years 2-4 under Basic Science English).
+        if (course.departmentId && course.departmentId !== deptDoc.id && course.departmentId !== deptDoc.parentDepartmentId) {
+          const courseOwner = allDepts.find((d) => d.id === course.departmentId);
+          if (!courseOwner || !resolveDepartmentCourseScope(courseOwner, course.catalogId).assignedYears.includes(Number(body.year))) {
+            return NextResponse.json(
+              { error: `This course belongs to ${courseOwner?.name ?? "another department"}, which does not teach Year ${body.year}. Choose "${dept}" or its parent department's course.` },
+              { status: 400 }
+            );
+          }
+        }
         // Available branches: this department's own configured secondaries
         // (for this course), or - for a sub-department with none of its own -
         // those inherited from its parent, so a sub-HOD can create the shared
