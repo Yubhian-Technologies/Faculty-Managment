@@ -24,6 +24,13 @@ export interface ApprovalKind<P, C, Tx = unknown> {
   isStageActionable?(ctx: C, req: ApprovalRequest<P>, stage: StageId): Promise<boolean>;
 
   /**
+   * Optional: does this actor's approval finish every remaining stage at once
+   * (e.g. an overseer)? Each skipped stage is still recorded in the history.
+   * Defaults to "no" - a policy of the kind, not of the engine.
+   */
+  completesAllOnApprove?(ctx: C, req: ApprovalRequest<P>, actor: Actor): Promise<boolean> | boolean;
+
+  /**
    * Writes that must commit atomically with the decision itself - small and
    * idempotent (e.g. recording coverage that other modules read). Runs inside
    * the store's transaction.

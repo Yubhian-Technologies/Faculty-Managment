@@ -1,4 +1,4 @@
-import type { KindConfig } from "@/lib/approvals";
+import type { ApprovalRequest, KindConfig } from "@/lib/approvals";
 import type { StageId } from "@/lib/approvals";
 
 export const PERMISSION_KIND = "STUDENT_PERMISSION";
@@ -25,12 +25,18 @@ export interface PermissionLimits extends Record<string, unknown> {
   maxDays: number;
   /** Must a request carry at least one proof document? */
   proofRequired: boolean;
+  /** Per permission type (a category id or a group id): is proof required? Beats `proofRequired`; see resolveProofRequired. */
+  proofByType?: Record<string, boolean>;
+  /** Per permission type: the roles that may raise it (see REQUESTER_ROLES). Absent = anyone who can raise requests. */
+  requestersByType?: Record<string, string[]>;
   /** Preferred notice before the first day. Advisory: a shorter one is flagged "late", not refused. */
   advanceNoticeHours: number;
   maxStudentsPerRequest: number;
+  /** How many days before today a request may start. Past days are real attendance already taken, so this stays short. */
+  maxBackdateDays: number;
 }
 
-export const DEFAULT_LIMITS: PermissionLimits = { maxDays: 15, proofRequired: true, advanceNoticeHours: 24, maxStudentsPerRequest: 100 };
+export const DEFAULT_LIMITS: PermissionLimits = { maxDays: 15, proofRequired: true, advanceNoticeHours: 24, maxStudentsPerRequest: 100, maxBackdateDays: 7 };
 
 export type PermissionConfig = KindConfig<PermissionLimits>;
 
@@ -75,6 +81,10 @@ export interface PermissionPayload {
   delegatedFacultyUid?: string;
   delegatedFacultyName?: string;
 }
+
+/** The login performing an action, with its CURRENT roles (primary + seats). */
+export interface ActingUser { uid: string; name: string; collegeId: string; roles: readonly string[] }
+export type PermissionRequest = ApprovalRequest<PermissionPayload>;
 
 /** Approvals-engine context: who is acting, with which roles. */
 export interface PermissionContext {

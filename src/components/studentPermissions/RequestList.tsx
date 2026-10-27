@@ -47,7 +47,7 @@ function Route({ request }: { request: PermissionRequestView }) {
   );
 }
 
-function RequestCard({ request, view, viewerUid, onAct }: { request: PermissionRequestView; view: ListView; viewerUid: string; onAct: (p: NonNullable<Pending>) => void }) {
+function RequestCard({ request, view, viewerUid, overseer, onAct }: { request: PermissionRequestView; view: ListView; viewerUid: string; overseer: boolean; onAct: (p: NonNullable<Pending>) => void }) {
   const p = request.payload;
   const [open, setOpen] = useState(false);
   const mine = request.requesterUid === viewerUid;
@@ -114,7 +114,7 @@ function RequestCard({ request, view, viewerUid, onAct }: { request: PermissionR
           </button>
           <div className="flex flex-wrap gap-2 justify-end">
             {mine && request.status === "PENDING" && <Button size="sm" variant="outline" onClick={() => onAct({ request, action: "CANCEL", needsRemark: false })}>Withdraw</Button>}
-            {view === "inbox" && request.status === "PENDING" && !mine && (
+            {(view === "inbox" || (view === "oversight" && overseer)) && request.status === "PENDING" && !mine && (
               <>
                 <Button size="sm" variant="outline" className="text-destructive" onClick={() => onAct({ request, action: "REJECT", needsRemark: true })}>Reject</Button>
                 <Button size="sm" onClick={() => onAct({ request, action: "APPROVE", needsRemark: false })}>Approve</Button>
@@ -147,6 +147,9 @@ const COPY: Record<RequestAction, { title: string; confirm: string; done: string
 
 export function RequestList({ view, empty }: { view: ListView; empty: string }) {
   const viewerUid = useAuthStore((s) => s.user?.uid) ?? "";
+  // Principal / Vice Principal decide any department's request (server: canDecideStage).
+  const overseer = useAuthStore((s) => (s.user?.roles ?? [s.user?.role]).some((r) => r === "PRINCIPAL" || r === "VICE_PRINCIPAL"));
+  const [dept, setDept] = useState("");
   const qc = useQueryClient();
   const { data, isLoading, isError, refetch } = useQuery({ queryKey: ["student-permissions", view], queryFn: () => listRequests(view), staleTime: 15_000 });
   const [pending, setPending] = useState<Pending>(null);
@@ -171,9 +174,17 @@ export function RequestList({ view, empty }: { view: ListView; empty: string }) 
   if (!data?.length) return <p className="text-sm text-muted-foreground">{empty}</p>;
 
   const copy = pending ? COPY[pending.action] : null;
+  const depts = Array.from(new Set(data.map((r) => r.scope))).sort();
+  const shown = dept ? data.filter((r) => r.scope === dept) : data;
   return (
     <>
-      <div className="space-y-3">{data.map((r) => <RequestCard key={r.id} request={r} view={view} viewerUid={viewerUid} onAct={(p) => { setRemark(""); setPending(p); }} />)}</div>
+      {depts.length > 1 && (
+        <select aria-label="Filter by department" className="mb-3 h-9 rounded-md border bg-background px-2 text-sm" value={dept} onChange={(e) => setDept(e.target.value)}>
+          <option value="">All departments</option>
+          {depts.map((d) => <option key={d} value={d}>{d}</option>)}
+        </select>
+      )}
+      <div className="space-y-3">{shown.map((r) => <RequestCard key={r.id} request={r} view={view} viewerUid={viewerUid} overseer={overseer} onAct={(p) => { setRemark(""); setPending(p); }} />)}</div>
       <Dialog open={!!pending} onOpenChange={(o) => { if (!o) setPending(null); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>

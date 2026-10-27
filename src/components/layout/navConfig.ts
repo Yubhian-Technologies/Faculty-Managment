@@ -226,6 +226,7 @@ export const NAV_ITEMS: NavItem[] = [
   // see the matching guard in api/leave/applications/[id]/route.ts.
   { label: "Leave Approvals", href: "/principal/leave-approvals", iconName: "CalendarClock", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Leave & Attendance", hideForRealRoles: ["COLLEGE_ADMIN"], legacyModule: "Staff & HR Management" },
   { label: "Leave History", href: "/principal/leave-history", iconName: "History", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Staff & HR Management" },
+  { label: "Student Permissions", href: "/principal/student-permissions", iconName: "ShieldCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
   // Was 7 separate sidebar items (Student Attendance History, Attendance
   // Report, Attendance Completion, Absent Report, Shortage Report, Faculty
   // Not Posted, Import Attendance), all ungrouped. Now split into two:

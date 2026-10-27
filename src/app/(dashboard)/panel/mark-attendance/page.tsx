@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CalendarClock, Info, Lock, Pencil, RefreshCw, Clock, CloudOff, CloudUpload, Check, X } from "lucide-react";
+import { OnDutyTag } from "@/components/attendance/OnDutyDetailsDialog";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -240,10 +241,6 @@ function updatedAtIso(s: StudentAttendanceSession | null): string | undefined {
     if (typeof (o as unknown as Date).toISOString === "function") return (o as unknown as Date).toISOString();
   }
   try { return new Date(u as string).toISOString(); } catch { return undefined; }
-}
-
-function OnDutyTag() {
-  return <span title="Approved permission - locked" className="inline-flex items-center rounded-full border border-blue-300 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-800">On Duty</span>;
 }
 
 export default function MarkAttendancePage() {
@@ -556,6 +553,8 @@ export default function MarkAttendancePage() {
 
   const isReadOnly = isAllGroupSubmitted || isQueuedPending;
   const isExpandedOpen = expandedGroup?.isOpen ?? false;
+  // The per-student "all periods" buttons only make sense when this page holds more than one period.
+  const showRowBulk = !isReadOnly && isExpandedOpen && !!mode && (expandedGroup?.periodNumbers.length ?? 0) > 1;
 
   const totalPossibleMarks = (expandedGroup?.periodNumbers.length ?? 0) * studentRoster.length;
 
@@ -896,6 +895,7 @@ export default function MarkAttendancePage() {
                         </th>
                       );
                     })}
+                    {showRowBulk && <th className="px-3 py-3 text-center border-l">All periods</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -913,7 +913,7 @@ export default function MarkAttendancePage() {
                         return (
                           <td key={pNum} className="px-3 py-2.5 text-center border-l whitespace-nowrap">
                             {isOnDuty ? (
-                              <OnDutyTag />
+                              <OnDutyTag studentId={st.studentId} studentName={st.name} date={dateStr} periodNumber={pNum} />
                             ) : (
                               <Switch
                                 checked={isChecked}
@@ -925,6 +925,20 @@ export default function MarkAttendancePage() {
                           </td>
                         );
                       })}
+                      {showRowBulk && (
+                        <td className="px-3 py-2.5 text-center border-l whitespace-nowrap">
+                          {(() => {
+                            const open = expandedGroup.periodNumbers.filter((n: number) => draft[st.studentId]?.[n] !== "ON_DUTY");
+                            const label = open.length ? `Periods ${open.join(", ")}` : "No periods to change (On Duty)";
+                            return (["PRESENT", "ABSENT"] as const).map((m) => (
+                              <Button key={m} type="button" size="sm" variant="outline" className="h-7 px-2 mx-0.5 text-xs" disabled={open.length === 0}
+                                title={`Mark ${m === "PRESENT" ? "present" : "absent"}: ${label}. On Duty periods are kept.`}
+                                aria-label={`Mark ${st.name} ${m === "PRESENT" ? "present" : "absent"} for all periods`}
+                                onClick={() => handleRowBulkSet(st.studentId, m)}>{m === "PRESENT" ? "Present" : "Absent"}</Button>
+                            ));
+                          })()}
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

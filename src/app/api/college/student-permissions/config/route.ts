@@ -10,7 +10,7 @@ import { allowedStages, DEFAULT_LIMITS, defaultRoute, PERMISSION_STAGE_LABELS, t
 
 // The routing configuration. The Principal edits everything and decides which
 // departments' HODs may edit their own department's rules; a delegated HOD edits
-// only their own department; the Vice Principal can read it. Enforcement is in
+// only their own department; the Vice Principal edits like the Principal. Enforcement is in
 // applyConfigEdit (lib/approvals/config.ts), so a forbidden edit is refused, never silently dropped.
 export async function GET() {
   try {
@@ -35,13 +35,13 @@ export async function GET() {
 
 export async function PUT(request: Request) {
   try {
-    const session = await authenticate("PRINCIPAL", "HOD");
+    const session = await authenticate("PRINCIPAL", "VICE_PRINCIPAL", "HOD");
     const db = getAdminDb();
     const user = await actingUser(db, session);
     const proposed = (await readJson(request)) as { config?: PermissionConfig };
     if (!proposed?.config || typeof proposed.config !== "object") return NextResponse.json({ error: "config is required" }, { status: 400 });
     const saved = await writeConfig(db, user, proposed.config);
-    await writeAuditLogSafe(db, session.collegeId, { action: "STUDENT_PERMISSION_CONFIG_UPDATED", performedBy: session.uid, performedByName: user.name, details: { byRole: user.roles.includes("PRINCIPAL") ? "PRINCIPAL" : "HOD" } });
+    await writeAuditLogSafe(db, session.collegeId, { action: "STUDENT_PERMISSION_CONFIG_UPDATED", performedBy: session.uid, performedByName: user.name, details: { byRole: user.roles.includes("PRINCIPAL") ? "PRINCIPAL" : user.roles.includes("VICE_PRINCIPAL") ? "VICE_PRINCIPAL" : "HOD" } });
     return NextResponse.json({ config: saved });
   } catch (err) {
     return failure(err, "college/student-permissions/config PUT");

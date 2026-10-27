@@ -13,13 +13,20 @@ describe("canDecideStage", () => {
   });
   it("class-incharge stage needs to be the recorded incharge, whatever other roles they hold", () => {
     expect(canDecideStage(f({ stage: "CLASS_INCHARGE", isRecordedIncharge: true }))).toBe(true);
-    expect(canDecideStage(f({ stage: "CLASS_INCHARGE", actorRoles: ["HOD", "PRINCIPAL"], headsRequestDepartment: true }))).toBe(false);
+    // An HOD of the department is not the class incharge; the Principal / Vice Principal are overseers (see below).
+    expect(canDecideStage(f({ stage: "CLASS_INCHARGE", actorRoles: ["HOD"], headsRequestDepartment: true }))).toBe(false);
   });
-  it("Vice Principal / Principal stages are role-based and not interchangeable", () => {
+  it("Vice Principal / Principal stages need those roles - an HOD or faculty member can't take them", () => {
     expect(canDecideStage(f({ stage: "VICE_PRINCIPAL", actorRoles: ["VICE_PRINCIPAL"] }))).toBe(true);
-    expect(canDecideStage(f({ stage: "VICE_PRINCIPAL", actorRoles: ["PRINCIPAL"] }))).toBe(false);
     expect(canDecideStage(f({ stage: "PRINCIPAL", actorRoles: ["PRINCIPAL"] }))).toBe(true);
-    expect(canDecideStage(f({ stage: "PRINCIPAL", actorRoles: ["HOD", "VICE_PRINCIPAL"] }))).toBe(false);
+    expect(canDecideStage(f({ stage: "PRINCIPAL", actorRoles: ["HOD"], headsRequestDepartment: true }))).toBe(false);
+    expect(canDecideStage(f({ stage: "VICE_PRINCIPAL", actorRoles: ["PANEL_MEMBER"] }))).toBe(false);
+  });
+  it("the Principal and Vice Principal may decide a request waiting at any stage", () => {
+    for (const stage of ["CLASS_INCHARGE", "DELEGATED_FACULTY", "HOD", "VICE_PRINCIPAL", "PRINCIPAL"]) {
+      expect(canDecideStage(f({ stage, actorRoles: ["PRINCIPAL"] }))).toBe(true);
+      expect(canDecideStage(f({ stage, actorRoles: ["VICE_PRINCIPAL"] }))).toBe(true);
+    }
   });
   it("nobody decides their own request, even holding the right role", () => {
     expect(canDecideStage(f({ stage: "PRINCIPAL", actorRoles: ["PRINCIPAL"], actorUid: "r" }))).toBe(false);
