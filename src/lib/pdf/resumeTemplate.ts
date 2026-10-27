@@ -11,7 +11,7 @@ import { currentTimetableAcademicYear } from "@/lib/college/academicSession";
 import { buildTeachingLoadRows, formatClassColumn, type TeachingLoadRow } from "@/lib/teaching/buildTeachingLoadRows";
 import { readPreviousTeachingAssignments, formatPassPercentage } from "@/lib/faculty/previousTeaching";
 import type { PreviousTeachingAssignment } from "@/types";
-import { allPreviousExperienceEntries, sortExperienceLatestFirst, totalYearsOfExperience, experienceBreakdown, formatDuration, durationBetween } from "@/lib/faculty/experienceCalc";
+import { allPreviousExperienceEntries, totalYearsOfExperience, experienceBreakdown, formatDuration, durationBetween } from "@/lib/faculty/experienceCalc";
 
 type TimestampLike = { toDate?: () => Date; seconds?: number; _seconds?: number } | string | null | undefined;
 
@@ -290,13 +290,11 @@ function renderTeachingLoadGroups(groups: { current: TeachingLoadRow[]; past: Te
   const currentRows = groups.current.map(
     (r) => `<tr><td>${esc(r.academicYear)}</td><td>${esc(formatClassColumn(r))}</td><td>${esc(r.subject)}</td></tr>`
   );
-  // Lab subjects ("... Lab", "CDS-LAB", "... Laboratory") are left out of the past internal table.
-  const isLab = (subject?: string) => /\blabs?\b|\blaboratory\b/i.test(subject ?? "");
   const pastInternalRows = [
-    ...groups.past.filter((r) => !isLab(r.subject)).map(
+    ...groups.past.map(
       (r) => `<tr><td>${esc(r.academicYear)}</td><td>${esc(formatClassColumn(r))}</td><td>${esc(r.subject)}</td><td>${pct(r.passPercentage)}</td>${showFeedback ? `<td>${pct(r.studentFeedback)}</td>` : ""}</tr>`
     ),
-    ...previous.filter((r) => r.source !== "EXTERNAL" && !isLab(r.subject)).map(
+    ...previous.filter((r) => r.source !== "EXTERNAL").map(
       (r) => `<tr><td>${esc(r.academicYear)}</td><td>${esc(classOf(r))}</td><td>${esc(r.subject)}</td><td>${esc(formatPassPercentage(r.passPercentage))}</td>${showFeedback ? "<td></td>" : ""}</tr>`
     ),
   ];
@@ -322,20 +320,24 @@ export function renderSection(title: string, body: string): string {
   return body.trim() ? `<div class="section">${sectionTitle(title)}${body}</div>` : "";
 }
 
-function degreeEntry(label: string, d?: DegreeDetail, useSpecialization = false, isHighest = false, note = ""): string {
+function degreeEntry(label: string, d?: DegreeDetail, useSpecialization = false): string {
   if (!d || (!degreeAndBranchLabel(d, useSpecialization) && !d.institutionName)) return "";
   const certLink = d.certificateUrl
     ? `<div class="doc-link"><a href="${esc(d.certificateUrl)}" target="_blank">View Certificate ↗</a></div>`
     : "";
   const secondary = degreeAndBranchLabel(d, useSpecialization);
   const year = useSpecialization ? d.yearOfAward : d.yearOfPassing;
-  // Order: degree name, then college name, then View Certificate, then the tags.
-  const degreeLine = `${label}${secondary ? ` - ${secondary}` : ""}${useSpecialization && d.departmentName ? ` · ${d.departmentName}` : ""}${useSpecialization && d.thesisTitle ? ` · Thesis: ${d.thesisTitle}` : ""}`;
-  const degreeRow = `<div class="entry-sub"><span class="l">${esc(degreeLine)}</span><span class="r">${esc(year ? String(year) : "")}</span></div>`;
-  const collegeRow = `<div class="entry-row"><span class="l">${esc(d.institutionName || label)}</span><span class="r">${esc(d.percentageCgpa || "")}</span></div>`;
   return (
-    `<div class="entry">${degreeRow}${collegeRow}</div>` + certLink +
-    (isHighest ? `<div class="hq-tag">Highest Qualification</div>` : "") + (note ? `<div class="hq-tag">${note}</div>` : "")
+    entry(
+      d.institutionName || label,
+      // useSpecialization is true exactly for the Doctoral entries -> Year of Award.
+      year ? String(year) : "",
+      // The department the doctorate was pursued in and the thesis title
+      // (Ph.D. entries only - the same useSpecialization flag), kept beside the
+      // course/specialization.
+      `${label}${secondary ? ` - ${secondary}` : ""}${useSpecialization && d.departmentName ? ` · ${d.departmentName}` : ""}${useSpecialization && d.thesisTitle ? ` · Thesis: ${d.thesisTitle}` : ""}`,
+      d.percentageCgpa || ""
+    ) + certLink
   );
 }
 
@@ -374,8 +376,8 @@ export function getResumeHTML(rawData: ResumeData): string {
 
   // ── Header ───────────────────────────────────────────────────────────────
   const contactLines = [
-    data.collegeName ? `College: ${esc(data.collegeName)}` : "",
     data.email ? `Email: ${esc(data.email)}` : "",
+    data.collegeName ? `College: ${esc(data.collegeName)}` : "",
     facultyMobileNo(data) ? `Mobile: ${esc(facultyMobileNo(data))}` : "",
     data.employeeId ? `Employee ID: ${esc(data.employeeId)}` : "",
     data.resumeUrl ? `<a href="${esc(data.resumeUrl)}" target="_blank" style="color:#1d4ed8;text-decoration:none;">View Uploaded Resume ↗</a>` : "",
@@ -384,47 +386,16 @@ export function getResumeHTML(rawData: ResumeData): string {
   // ── Education ────────────────────────────────────────────────────────────
   const docHighestQualification = data.highestQualification || data.qualification;
   const highestQualification = ap?.highestQualification || docHighestQualification;
-  // Newest first: by the year of award / passing, so the latest degree leads and the oldest comes
-  // last. An entry with no year (or a tie) falls back to the level order Ph.D., Postgraduate,
-  // Undergraduate, so the result never depends on how the profile happens to list them.
-  const degreeCandidates: { level: number; d?: DegreeDetail; label: string; doctoral: boolean }[] = [
-    { level: 3, d: ap?.phdDetails, label: "Ph.D.", doctoral: true },
-    ...(ap?.additionalPhdDetails ?? []).map((d) => ({ level: 3, d, label: "Ph.D.", doctoral: true })),
-    { level: 2, d: ap?.pgDetails, label: "Postgraduate", doctoral: false },
-    ...(ap?.additionalPgDetails ?? []).map((d) => ({ level: 2, d, label: "Postgraduate", doctoral: false })),
-    { level: 1, d: ap?.ugDetails, label: "Undergraduate", doctoral: false },
-    ...(ap?.additionalUgDetails ?? []).map((d) => ({ level: 1, d, label: "Undergraduate", doctoral: false })),
-  ];
-  const degreeYearOf = (d?: DegreeDetail) => Number((d?.yearOfAward ?? d?.yearOfPassing) || 0) || 0;
-  const sortedDegrees = degreeCandidates
-    .map((c, i) => ({ ...c, i, year: degreeYearOf(c.d) }))
-    .sort((a, b) => b.year - a.year || b.level - a.level || a.i - b.i);
-  // The degree the Highest Qualification came from - the entry whose course matches it
-  // ("Ph.D" -> the Ph.D. entry), else the highest-level degree on record - is tagged under its college.
-  const hqKey = (v: unknown) => String(v ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "");
-  const withInstitution = sortedDegrees.filter((c) => c.d?.institutionName);
-  const hqDegree = highestQualification
-    ? (withInstitution.find((c) => hqKey(c.d?.course) === hqKey(highestQualification) || hqKey(c.label) === hqKey(highestQualification))
-      ?? [...withInstitution].sort((a, b) => b.level - a.level || b.year - a.year)[0])
-    : undefined;
-  // Ph.D. Status ("AWARDED (PART_TIME)") belongs to the Ph.D. entry, so it is printed under that
-  // college. Only if that entry has nothing to print does it stay as a line after the degrees.
-  const phdStatusText = (ap?.phdDetails?.status || ap?.phdDetails?.mode)
-    ? `Ph.D. Status: ${[esc(ap?.phdDetails?.status), ap?.phdDetails?.mode ? `(${esc(ap.phdDetails.mode)})` : ""].filter(Boolean).join(" ")}`
-    : "";
-  let phdStatusPlaced = false;
-  const educationEntries = sortedDegrees.map((c) => {
-    const isPrimaryPhd = !!phdStatusText && c.d === ap?.phdDetails;
-    const html = degreeEntry(c.label, c.d, c.doctoral, c === hqDegree, isPrimaryPhd ? phdStatusText : "");
-    if (isPrimaryPhd && html) phdStatusPlaced = true;
-    return html;
-  }).join("");
-  // Highest Qualification leads the section, centred, set off from the degree entries by a line.
-  const highestQualificationBlock = highestQualification
-    ? `<div class="highest-qual"><span class="fk">Highest Qualification:</span> ${esc(highestQualification)}</div>`
-    : "";
+  const educationEntries =
+    degreeEntry("Ph.D.", ap?.phdDetails, true) +
+    (ap?.additionalPhdDetails ?? []).map((d) => degreeEntry("Ph.D.", d, true)).join("") +
+    degreeEntry("Postgraduate", ap?.pgDetails) +
+    (ap?.additionalPgDetails ?? []).map((d) => degreeEntry("Postgraduate", d)).join("") +
+    degreeEntry("Undergraduate", ap?.ugDetails) +
+    (ap?.additionalUgDetails ?? []).map((d) => degreeEntry("Undergraduate", d)).join("");
   const educationExtras = bullets([
-    !phdStatusPlaced && phdStatusText,
+    highestQualification && `Highest Qualification: ${esc(highestQualification)}`,
+    (ap?.phdDetails?.status || ap?.phdDetails?.mode) && `Ph.D. Status: ${[esc(ap?.phdDetails?.status), ap?.phdDetails?.mode ? `(${esc(ap.phdDetails.mode)})` : ""].filter(Boolean).join(" ")}`,
     (ap?.postdoctoralFellowshipDetails?.status || ap?.postdoctoralFellowshipDetails?.mode) && `Postdoctoral Status: ${[esc(ap?.postdoctoralFellowshipDetails?.status), ap?.postdoctoralFellowshipDetails?.mode ? `(${esc(ap.postdoctoralFellowshipDetails.mode)})` : ""].filter(Boolean).join(" ")}`,
     ap?.netSletSetGateOthers === "YES" && ap?.qualifiedExam &&
       `${esc(ap.qualifiedExam)} Qualified${ap.qualifiedYear ? ` (${esc(ap.qualifiedYear)})` : ""}${ap.examScore ? ` - Exam Score: ${esc(ap.examScore)}` : ""}`,
@@ -434,9 +405,7 @@ export function getResumeHTML(rawData: ResumeData): string {
       return name ? [`${esc(name)} Qualified${e.qualifiedYear ? ` (${esc(e.qualifiedYear)})` : ""}${e.examScore ? ` - Exam Score: ${esc(e.examScore)}` : ""}`] : [];
     }),
   ]);
-  const educationBody = educationEntries || educationExtras
-    ? highestQualificationBlock + educationEntries + educationExtras
-    : highestQualificationBlock;
+  const educationBody = educationEntries + educationExtras;
 
   // ── Professional experience ─────────────────────────────────────────────
   // Internal (time served since Date of Joining) / External (Academic +
@@ -453,7 +422,7 @@ export function getResumeHTML(rawData: ResumeData): string {
   // Each experience entry's own Roles/Responsibilities, plus any legacy shared text no entry
   // could hold (see FacultyProfileFields.teachingRolesResponsibilities).
   const roleBullets = (label: string, entries: PreviousInstitution[] | undefined, unplaced: string | undefined) => [
-    ...sortExperienceLatestFirst(entries ?? [])
+    ...(entries ?? [])
       .filter((e) => e.rolesResponsibilities?.trim())
       .map((e) => `${label} Roles/Responsibilities${e.institutionName ? ` (${esc(e.institutionName)})` : ""}: ${esc(e.rolesResponsibilities)}`),
     unplaced?.trim() && `${label} Roles/Responsibilities: ${esc(unplaced)}`,
@@ -463,14 +432,14 @@ export function getResumeHTML(rawData: ResumeData): string {
     ...roleBullets("Industry", ap?.industryExperience, ap?.industryRolesResponsibilities),
     ...roleBullets("Research", ap?.researchExperience, ap?.researchRolesResponsibilities),
   ]);
-  // External, Internal and Total on ONE line (each only when there is data for it).
-  const experienceTotalsLine = `<span style="white-space:nowrap">` + [
-    hasPreviousExperience && `External: ${formatDuration(externalExperienceDuration)}`,
-    hasJoiningDate && `Internal: ${formatDuration(internalExperienceDuration)}`,
-    (hasJoiningDate || hasPreviousExperience) && `Total Experience: ${esc(totalExperienceYears)} years`,
-  ].filter(Boolean).join(" &nbsp;|&nbsp; ") + `</span>`;
   const experienceOverviewBullets = bullets([
-    (hasJoiningDate || hasPreviousExperience) && experienceTotalsLine,
+    (hasJoiningDate || hasPreviousExperience) &&
+      `Total Professional Experience: ${esc(totalExperienceYears)} years`,
+    // Only worth a line of its own with several previous institutions (it
+    // counts overlapping stints once). With one, that institution's own
+    // "External Experience" line below already says exactly this.
+    previousExperienceEntries.length > 1 &&
+      `Total External Experience: ${formatDuration(externalExperienceDuration)}`,
     data.specialization && `Specialization: ${esc(data.specialization)}`,
   ]);
 
@@ -495,7 +464,7 @@ export function getResumeHTML(rawData: ResumeData): string {
   const internalSection = `<div class="subheading">${esc(internalHeading)}</div>${internalContent}`;
 
   const externalEntries = previousExperienceEntries.length
-    ? sortExperienceLatestFirst(previousExperienceEntries)
+    ? previousExperienceEntries
         .map((pi) => {
           // Prefers the real dates; falls back to the legacy year-only value
           // for a record that hasn't been re-saved under the new shape yet.
@@ -644,10 +613,10 @@ export function getResumeHTML(rawData: ResumeData): string {
     </div>
   </div>
 
-  ${on("personal") ? renderSection("Personal", personalBody) : ""}
-  ${on("education") ? renderSection("Academic Details", educationBody).replace('class="section"', 'class="section academic"') : ""}
+  ${on("personal") ? renderSection("Personal & Contact Details", personalBody) : ""}
+  ${on("education") ? renderSection("Education", educationBody) : ""}
   ${on("experience") ? renderSection("Experience", experienceBody) : ""}
-  ${on("teachingLoad") ? renderSection("Teaching", teachingLoadBody) : ""}
+  ${on("teachingLoad") ? renderSection("Teaching Load", teachingLoadBody) : ""}
   ${on("research") ? renderSection("Research & Innovation", publicationsBody) : ""}
   ${on("otherInfo") ? renderSection("Other Information", otherInfoBody) : ""}
   ${on("financial") ? renderSection("Financial Standing", financialBody) : ""}
@@ -681,8 +650,8 @@ export const DOCUMENT_STYLES = `
 
   .resume-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; border-bottom: 2px solid #111827; padding-bottom: 8px; margin-bottom: 10px; }
   .header-left { display: flex; align-items: center; gap: 14px; flex: 1 1 55%; min-width: 0; }
-  .avatar { width: 84px; height: 105px; border-radius: 2px; object-fit: cover; object-position: top; border: 1px solid #111827; flex-shrink: 0; }
-  .avatar-fallback { width: 84px; height: 105px; border-radius: 2px; background: #111827; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: bold; flex-shrink: 0; }
+  .avatar { width: 66px; height: 66px; border-radius: 50%; object-fit: cover; border: 1.5px solid #111827; flex-shrink: 0; }
+  .avatar-fallback { width: 66px; height: 66px; border-radius: 50%; background: #111827; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: bold; flex-shrink: 0; }
   .name { font-size: 26px; font-weight: bold; color: #000000; }
   .subtitle { font-size: 13.5px; font-weight: 600; color: #1f2937; margin-top: 3px; }
   .college { font-size: 12px; color: #4b5563; margin-top: 2px; }
@@ -697,18 +666,13 @@ export const DOCUMENT_STYLES = `
   .entry { margin-bottom: 6px; break-inside: avoid-page; }
   .entry-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; font-weight: bold; font-size: 12.5px; color: #000000; }
   .entry-row .l { flex: 1 1 auto; min-width: 0; }
-  .entry-row .r { flex: 0 0 auto; white-space: nowrap; text-align: right; }
+  .entry-row .r { flex: 0 1 auto; max-width: 45%; text-align: right; }
   .exp-summary { margin-top: 12px; padding-top: 8px; border-top: 1px solid #d1d5db; }
   .entry-row .r.plain, .entry-sub .r.plain { font-weight: normal; font-style: normal; font-size: 12px; color: #374151; }
   .entry-sub { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; font-size: 12px; font-style: italic; color: #374151; }
   .entry-sub .l { flex: 1 1 auto; min-width: 0; }
-  .entry-sub .r { flex: 0 0 auto; white-space: nowrap; text-align: right; font-weight: bold; font-style: normal; }
+  .entry-sub .r { flex: 0 1 auto; max-width: 45%; text-align: right; font-weight: bold; font-style: normal; }
 
-  /* Academic Details: no rule under the heading - Highest Qualification sits right under it, then its own rule. */
-  .section.academic .section-title { border-bottom: none; margin-bottom: 0; padding-bottom: 6px; }
-  .highest-qual { font-size: 12px; text-align: center; margin: 2px 0 8px; padding-bottom: 6px; border-bottom: 1px solid #d1d5db; }
-  .hq-tag { font-size: 11px; font-weight: bold; color: #1f2937; margin: 1px 0 3px; }
-  .highest-qual .fk { font-weight: bold; }
   .bullets { margin: 2px 0 10px; padding: 0; list-style: none; }
   .bullets li { position: relative; padding-left: 14px; margin-bottom: 3px; font-size: 12px; break-inside: avoid-page; }
   .bullets li::before { content: "○"; position: absolute; left: 0; top: 1px; font-size: 8px; }
