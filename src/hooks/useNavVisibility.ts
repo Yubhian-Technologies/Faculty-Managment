@@ -17,7 +17,7 @@ const TIMETABLE_INCHARGE_HREFS = [
   "/college-staff/timetable-incharge", "/college-staff/assignment-requests", "/college-staff/faculty-timetable",
 ];
 const SECTION_INCHARGE_HREFS = ["/panel/students", "/panel/students/batches", "/panel/section", "/panel/students/class-representatives"];
-const MID_PAPER_HREFS = ["/panel/mid-bank"];
+const QUESTION_BANK_HREFS = ["/panel/mid-bank"];
 const DUTY_ROLES: UserRole[] = ["PANEL_MEMBER", "COLLEGE_STAFF"];
 
 export function useNavVisibility() {
@@ -69,7 +69,7 @@ export function useNavVisibility() {
     if (assignments) {
       if (!assignments.timetableIncharge) TIMETABLE_INCHARGE_HREFS.forEach((h) => hrefs.add(h));
       if (!assignments.sectionIncharge) SECTION_INCHARGE_HREFS.forEach((h) => hrefs.add(h));
-      if (!assignments.midPaperSetter) MID_PAPER_HREFS.forEach((h) => hrefs.add(h));
+      if (assignments.questionBank === false) QUESTION_BANK_HREFS.forEach((h) => hrefs.add(h));
     }
     return Array.from(hrefs);
   }, [raw, primary, seatRoles, assignments, officeAllowed.hrefs]);

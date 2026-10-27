@@ -20,15 +20,18 @@ export async function GET() {
     const memberId = await resolveFacultyMemberId(db, session.collegeId, session.uid);
     const ids = memberId === session.uid ? [session.uid] : [session.uid, memberId];
 
-    const [incharge, section, midPaper] = await Promise.all([
+    const [incharge, section, teaches, inBank] = await Promise.all([
       college.collection("timetableIncharges").where("uid", "==", session.uid).limit(1).get(),
       // Section.facultyInchargeUid holds the login uid or, in older data, the faculty record id.
       college.collection("sections").where("facultyInchargeUid", "in", ids).limit(1).get(),
-      college.collection("midPaperAssignments").where("facultyId", "==", memberId).limit(1).get(),
+      // Question Bank: anyone who teaches (the Exam Cell's deadline opens their subjects
+      // there), or anyone a colleague's bank covers.
+      college.collection("teachingAssignments").where("facultyId", "==", memberId).limit(1).get(),
+      college.collection("midQuestionBanks").where("viewerFacultyIds", "array-contains", memberId).limit(1).get(),
     ]);
 
     return NextResponse.json(
-      { timetableIncharge: !incharge.empty, sectionIncharge: !section.empty, midPaperSetter: !midPaper.empty },
+      { timetableIncharge: !incharge.empty, sectionIncharge: !section.empty, questionBank: !teaches.empty || !inBank.empty },
       { headers: { "Cache-Control": "private, max-age=60" } }
     );
   } catch (err) {
