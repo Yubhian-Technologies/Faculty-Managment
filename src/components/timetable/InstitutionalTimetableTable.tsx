@@ -65,6 +65,8 @@ export interface InstitutionalTimetableTableProps {
   weekStart?: Date;
   onWeekChange?: (d: Date) => void;
   showWeekNav?: boolean;
+  /** Leave out the course/department/section line when the page already shows it above the table. */
+  hideTitle?: boolean;
   typeFilter?: "ALL" | "THEORY" | "PRACTICAL";
   onTypeFilterChange?: (t: "ALL" | "THEORY" | "PRACTICAL") => void;
   className?: string;
@@ -93,6 +95,7 @@ export function InstitutionalTimetableTable({
   weekStart,
   onWeekChange,
   showWeekNav = false,
+  hideTitle = false,
   typeFilter = "ALL",
   onTypeFilterChange,
   className = "",
@@ -292,6 +295,8 @@ export function InstitutionalTimetableTable({
       <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-2.5">
         {showWeekNav && weekStart && onWeekChange ? (
           <WeekNavigator weekStart={weekStart} onChange={onWeekChange} />
+        ) : hideTitle ? (
+          <div />
         ) : (
           <div className="text-sm font-semibold text-foreground min-w-0 truncate">
             {[courseName || section?.courseName, departmentName || section?.department, section ? `Section ${section.name}` : null]

@@ -15,7 +15,6 @@ import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { TextInput } from "@/components/shared/ProfileFieldPrimitives";
 import { HIGHEST_QUALIFICATION_OPTIONS } from "@/lib/import/fieldConstraints";
 import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
-import { honorificForPhd } from "@/lib/faculty/phdHonorific";
 import { PHONE_REGEX, EMAIL_REGEX, APAAR_REGEX } from "@/lib/validations";
 import { toast } from "@/hooks/useToast";
 import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
@@ -107,7 +106,7 @@ export function FacultyIdentityEditPage({
   type EditTabKey = "core" | ProfileModuleKey;
   const tabs: (ChromeStep & { key: EditTabKey })[] = [
     { key: "core", label: "Identity & Employment", icon: User, description: "Official ID, department, designation and employment status" },
-    ...getFacultyProfileModules().map((m) => ({ key: m.key, label: m.label, icon: m.icon, description: m.description })),
+    ...getFacultyProfileModules().map((m) => ({ key: m.key, label: m.label, icon: m.icon })),
   ];
   const [activeTab, setActiveTab] = useState<EditTabKey>("core");
 
@@ -549,9 +548,7 @@ export function FacultyIdentityEditPage({
                   onValueChange={(v) => {
                     const other = v === OTHER_QUALIFICATION;
                     setQualIsOther(other);
-                    // Ph.D -> "Dr." in the Honorific box unless one is already chosen (lib/faculty/phdHonorific.ts)
-                    const dr = honorificForPhd({ isPhd: v === "Ph.D", honorific: form.honorific }, honorificOptions);
-                    set({ highestQualification: other ? "" : v, ...(dr ? { honorific: dr } : {}) });
+                    set({ highestQualification: other ? "" : v });
                   }}
                 >
                   <SelectTrigger><SelectValue placeholder="Select qualification" /></SelectTrigger>

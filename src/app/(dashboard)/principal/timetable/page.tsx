@@ -391,7 +391,7 @@ export default function PrincipalTimetablePage() {
                   return (
                     <div key={entry.sectionId} className="space-y-2">
                       <h4 className="text-sm font-semibold">
-                        {entry.courseName} · {entry.departmentName} · {ordinalYear(entry.year)} Year · Section {entry.sectionName}
+                        {entry.courseName} · {entry.departmentName} · {ordinalYear(entry.year)} · Section {entry.sectionName}
                       </h4>
                       <InstitutionalTimetableTable
                         section={{ name: entry.sectionName, department: entry.departmentName, year: entry.year, courseName: entry.courseName, classroomNumber: entry.classroomNumber, facultyInchargeName: entry.facultyInchargeName } as unknown as Section}
@@ -403,6 +403,7 @@ export default function PrincipalTimetablePage() {
                         semesterLabel={entry.currentSemester != null ? `Sem ${yearSemesterLabelIn(entry.year, inYear, entry.currentSemester)}` : undefined}
                         workingDays={bulkWorkingDays}
                         showWeekNav={false}
+                        hideTitle
                         subjects={bulkSubjects}
                       />
                     </div>

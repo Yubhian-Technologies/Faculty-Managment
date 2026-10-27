@@ -293,7 +293,7 @@ function SectionTimetable() {
         <CardHeader>
           <CardTitle className="text-base">Find a section</CardTitle>
           <CardDescription>
-            Select each filter in sequence. The timetable will load only after you select all required details and click Load Timetable.
+            Each filter narrows the next one. Nothing loads until you press Load.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -415,8 +415,7 @@ function SectionTimetable() {
         !isLoading && (
           <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
             <Users className="h-5 w-5 mx-auto mb-2 opacity-50" />
-            <p className="font-medium text-foreground">No Timetable Selected</p>
-            <p className="mt-1">Select a course, year, semester, and section, then click Load Timetable to view the schedule.</p>
+            Pick a course, year, semester and section above, then press Load Timetable.
           </div>
         )
       )}
@@ -435,7 +434,7 @@ export default function HODTimetablePage() {
     <div className="space-y-6">
       <PageHeader
         title="Timetable"
-        description="Create, manage, and publish section timetables. Review faculty availability and teaching schedules."
+        description="Pick a course, year, semester and section, then load that section's timetable to build or publish it"
       />
 
       <div className="flex flex-wrap gap-2" role="tablist">

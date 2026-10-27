@@ -14,7 +14,6 @@ import {
 } from "@/lib/import/fieldConstraints";
 import { fetchActiveDesignationNames, matchDesignation } from "@/lib/designations/validate";
 import { fetchActiveHonorificNames, matchHonorific } from "@/lib/honorifics/validate";
-import { honorificForPhd } from "@/lib/faculty/phdHonorific";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { PHONE_REGEX, EMAIL_REGEX, PAN_REGEX, AADHAR_REGEX } from "@/lib/validations";
 import { getHodDepartmentScope, facultyManageableDepartmentNames } from "@/lib/departments/scope";
@@ -306,10 +305,6 @@ export async function POST(request: Request) {
           continue;
         }
         resolvedHonorific = honorificResult.name;
-      }
-      // A Ph.D with no honorific in the sheet gets the college's own "Dr" entry (lib/faculty/phdHonorific.ts); one given is kept.
-      if (!row.honorific?.trim()) {
-        resolvedHonorific = honorificForPhd({ isPhd: normalizeHighestQualification(row.highestQualification) === "Ph.D", honorific: undefined }, allowedHonorifics) ?? undefined;
       }
 
       // Employee Category - the same closed set the Add/Edit form and PATCH

@@ -505,7 +505,7 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
     <div className="space-y-6">
       <PageHeader
         title={course ? `${course.name} · ${ordinalYear(Number(year))} · Teaching Assignments` : "Teaching Assignments"}
-        description="Review subject staffing requirements and assign faculty by course, year, semester, and department."
+        description="Find staffing gaps and assign faculty to subjects"
         actions={
           <Button variant="outline" onClick={() => router.push(backHref)}>
             <ArrowLeft className="h-4 w-4 mr-2" />Back
