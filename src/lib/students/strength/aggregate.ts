@@ -87,7 +87,7 @@ export interface StrengthCatalog {
  * "which branch is this student in" is `secondaryDepartment` when set, else
  * `department` - the same rule the spreadsheet's per-branch "I Year" column
  * uses. Both are dedicated database fields; nothing is parsed from names or
- * roll numbers.
+ * Regd. Nos.
  */
 export function effectiveBranchName(row: Pick<StrengthRow, "department" | "secondaryDepartment">): string {
   return cleanLabel(row.secondaryDepartment) || cleanLabel(row.department);
@@ -159,7 +159,7 @@ export interface StrengthBuild {
  * sections, and sum(cells) always equals the number of students scanned.
  *
  * Students are identified only by their document id here - two students who
- * share a name (or even a roll number) are still two rows, two counts.
+ * share a name (or even a Regd. No) are still two rows, two counts.
  */
 export function buildStrengthCube(rows: StrengthRow[], catalog: StrengthCatalog): StrengthBuild {
   const courseById = new Map<string, CatalogCourse>();

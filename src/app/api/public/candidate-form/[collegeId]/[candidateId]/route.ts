@@ -50,6 +50,7 @@ export async function GET(
         bioDataSubmitted: candidateData.bioDataSubmitted ?? false,
       },
       collegeName: (collegeSnap.data() as { name?: string } | undefined)?.name ?? "",
+      collegeLogoUrl: (collegeSnap.data() as { logoUrl?: string } | undefined)?.logoUrl?.trim() ?? "",
       requiredDocuments,
     });
   } catch (err) {

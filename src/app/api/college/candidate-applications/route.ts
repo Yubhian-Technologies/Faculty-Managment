@@ -4,6 +4,7 @@ import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { getHodDepartmentScope, editableDepartmentNames } from "@/lib/departments/scope";
 import type { Firestore } from "firebase-admin/firestore";
 
 async function getUserName(db: Firestore, collegeId: string, uid: string): Promise<string> {
@@ -100,10 +101,12 @@ export async function POST(request: Request) {
 
     // An HOD may only attach candidates to their own department's hiring
     // requests - Principal/VP/SuperAdmin retain full cross-department access.
+    // "Own" is every department they head (a head of several raises a request for the one they are working in, so it
+    // may not be the first on their login), not just the department stored on the login.
     if (session.role === "HOD") {
-      const hodSnap = await collegeRef.collection("users").doc(session.uid).get();
-      const hodDept = (hodSnap.data() as { department?: string } | undefined)?.department ?? "";
-      if (hodDept && vacancy.department !== hodDept) {
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid, { activeOnly: false });
+      const ownDepartments = editableDepartmentNames(scope);
+      if (ownDepartments.length > 0 && !ownDepartments.includes(vacancy.department ?? "")) {
         return NextResponse.json({ error: "You can only attach candidates to your own department's hiring requests" }, { status: 403 });
       }
     }

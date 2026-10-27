@@ -7,6 +7,8 @@ export interface CollegeInfo {
   code?: string;
   affiliation?: string;
   address?: string;
+  /** The college's location city, printed beside the name on timetables. */
+  city?: string;
   phone?: string;
   email?: string;
   type?: CollegeType;
@@ -15,6 +17,8 @@ export interface CollegeInfo {
   rawLogoUrl?: string;
   /** Ticked timetable signature groups (Super Admin > Settings), one row of designations each. */
   timetableSignatureRows?: string[][];
+  /** Ticked Teaching Load signature groups (Principal > Settings), one row of designations each. */
+  teachingLoadSignatureRows?: string[][];
 }
 
 export function useCollegeInfo() {

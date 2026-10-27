@@ -6,6 +6,7 @@ import { findUsersSnapshot } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { getHodDepartmentScope, editableDepartmentNames } from "@/lib/departments/scope";
 import type { Firestore } from "firebase-admin/firestore";
 
 async function getUserName(db: Firestore, collegeId: string, uid: string): Promise<string> {
@@ -86,6 +87,15 @@ export async function POST(request: Request) {
     }
 
     const db = getAdminDb();
+
+    // An HOD raises a request for a department they head (any of them - the page sends the one they are working in),
+    // never for a department outside their scope.
+    if (session.role === "HOD") {
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid, { activeOnly: false });
+      if (!editableDepartmentNames(scope).includes(department.trim())) {
+        return NextResponse.json({ error: "You can only raise a vacancy request for your own department" }, { status: 403 });
+      }
+    }
 
     const hodName = await getUserName(db, session.collegeId, session.uid);
     const now = new Date();

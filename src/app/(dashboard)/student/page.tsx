@@ -150,7 +150,7 @@ export default function StudentDashboardPage() {
                   <UserCircle className="h-5 w-5" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs text-muted-foreground truncate">Roll Number</p>
+                  <p className="text-xs text-muted-foreground truncate">Regd. No</p>
                   <p className="text-xs sm:text-sm font-semibold text-foreground truncate">{student.rollNumber}</p>
                 </div>
               </CardContent>

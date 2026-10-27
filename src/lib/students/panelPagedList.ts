@@ -19,7 +19,7 @@ import { sortStudentsForList } from "@/lib/students/listOrder";
 // Each stream is ordered by document id with a bare equality filter set, which
 // Firestore serves from its automatic single-field indexes - no composite
 // index to deploy. The cursor is `<sectionId>:<p|s>|<lastDocId>`; rows within
-// one page are sorted by roll number (see lib/students/listOrder.ts).
+// one page are sorted by Regd. No (see lib/students/listOrder.ts).
 //
 // The page UI has numbered pages, so a page can be asked for two ways: by
 // `cursor` (the page right after one already fetched - reads exactly `limit`

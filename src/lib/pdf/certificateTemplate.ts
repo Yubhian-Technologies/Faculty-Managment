@@ -1,4 +1,4 @@
-import { VISHNU_LOGO_URL } from "@/lib/pdf/logo";
+import { logoSrc } from "@/lib/pdf/logo";
 
 // One A4 page, split into two identical halves so the printed sheet can be
 // cut in two: the top half stays with the College Office, the bottom half is
@@ -44,6 +44,7 @@ export interface CertificateTemplateData {
   clearances: { branchLabel: string; decidedAt: string }[];
   issuedByName: string;
   issuedAt: string;
+  logoUrl?: string;
 }
 
 function renderHalf(data: CertificateTemplateData, copyTag: string): string {
@@ -55,7 +56,7 @@ function renderHalf(data: CertificateTemplateData, copyTag: string): string {
   <div class="half">
     <div class="copy-tag">${copyTag}</div>
     <div class="header">
-      <img src="${VISHNU_LOGO_URL}" alt="College Logo" />
+      <img src="${logoSrc(data.logoUrl)}" alt="College Logo" />
       <p class="college-name">${data.collegeName}</p>
     </div>
     <div class="title">${data.certificateTypeLabel.toUpperCase()}</div>
@@ -63,7 +64,7 @@ function renderHalf(data: CertificateTemplateData, copyTag: string): string {
 
     <table class="facts">
       <tr><td class="label">Student Name</td><td>${data.studentName}</td></tr>
-      <tr><td class="label">Roll Number</td><td>${data.studentRollNumber}</td></tr>
+      <tr><td class="label">Regd. No</td><td>${data.studentRollNumber}</td></tr>
       <tr><td class="label">Department</td><td>${data.studentDepartment}</td></tr>
       <tr><td class="label">Year / Section</td><td>${data.studentYear} / ${data.studentSection}</td></tr>
     </table>

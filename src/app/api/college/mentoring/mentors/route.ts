@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { editableDepartmentNames } from "@/lib/departments/scope";
+import { facultyManageableDepartmentNames } from "@/lib/departments/scope";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { getInChunks } from "@/lib/firestore/inQuery";
 import { loadHodStudentScope } from "@/lib/mentoring/access";
@@ -15,13 +15,14 @@ import type { MentorOption } from "@/types/mentoring";
 // The faculty an HOD may pick as a mentor: available (not resigned/retired)
 // faculty of the HOD's own departments (sub-departments and managed branches
 // included) that have a login, each with how many students they already mentor.
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await requireCollegeMember("HOD");
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
     const { scope } = await loadHodStudentScope(db, session.collegeId, session.uid);
-    const departments = [...new Set(editableDepartmentNames(scope))];
+    const departments = [...new Set(facultyManageableDepartmentNames(scope))];
+    const sectionId = new URL(request.url).searchParams.get("sectionId")?.trim();
     const snaps = await Promise.all(
       departments.map((department) =>
         collegeRef.collection("facultyMembers")
@@ -31,6 +32,7 @@ export async function GET() {
       )
     );
     const byUid = new Map<string, Omit<MentorOption, "menteeCount">>();
+    const facultyIdByUid = new Map<string, string>();
     for (const snap of snaps) {
       for (const d of snap.docs) {
         const f = d.data() as { legalName?: string; honorific?: string; department?: string; designation?: string; userUid?: string };
@@ -38,6 +40,7 @@ export async function GET() {
         const name = facultyDisplayName(f);
         if (!uid || !name || byUid.has(uid)) continue;
         byUid.set(uid, { uid, name, department: f.department ?? "", designation: f.designation ?? "" });
+        facultyIdByUid.set(uid, d.id);
       }
     }
 
@@ -57,9 +60,25 @@ export async function GET() {
       if (uid) countByUid.set(uid, (countByUid.get(uid) ?? 0) + 1);
     }
 
+    // With ?sectionId=, the faculty who have a teaching assignment on that class are flagged: they are
+    // the natural mentors (a shared first year is mentored by the Basic Science faculty who teach it).
+    const teachingIds = new Set<string>();
+    if (sectionId) {
+      const ta = await collegeRef.collection("teachingAssignments").where("sectionId", "==", sectionId).select("facultyId").get();
+      for (const d of ta.docs) {
+        const id = (d.data() as { facultyId?: string }).facultyId;
+        if (id) teachingIds.add(id);
+      }
+    }
+
     const mentors: MentorOption[] = [...byUid.values()]
-      .map((m) => ({ ...m, menteeCount: countByUid.get(m.uid) ?? 0, ...(m.uid === session.uid ? { isSelf: true } : {}) }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .map((m) => ({
+        ...m,
+        menteeCount: countByUid.get(m.uid) ?? 0,
+        ...(m.uid === session.uid ? { isSelf: true } : {}),
+        ...(sectionId ? { teaches: teachingIds.has(facultyIdByUid.get(m.uid) ?? "") } : {}),
+      }))
+      .sort((a, b) => Number(b.teaches ?? false) - Number(a.teaches ?? false) || a.name.localeCompare(b.name));
     return NextResponse.json({ mentors });
   } catch (err) {
     return mentoringErrorResponse(err, "[college/mentoring/mentors GET]");

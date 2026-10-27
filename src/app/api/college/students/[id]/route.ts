@@ -195,7 +195,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     // (targetSectionId from empty) and Move (targetSectionId to a different
     // section) below. Same role tier as the roll-number/status path (this is
     // just as much a department-structural decision), so Office and Panel
-    // Member stay excluded. Every other field - roll number, department,
+    // Member stay excluded. Every other field - Regd. No, department,
     // secondaryDepartment, courseId/course - is left untouched: courseId in
     // particular is deliberately NOT cleared, since it's still the student's
     // correct, best-effort intended course (StudentRecord.courseId's
@@ -339,7 +339,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       // "The College Office" = anyone who holds the Office role, not only a request that was evaluated AS Office. A
       // College Admin's login is a College Office account with the College Admin seat on top, and requireRole puts a
       // request in the MOST SENIOR hat an endpoint allows - here PRINCIPAL - so `session.role === "COLLEGE_OFFICE"`
-      // was never true for them and their Roll No change was dropped while every other field saved. `roles` is the
+      // was never true for them and their Regd. No change was dropped while every other field saved. `roles` is the
       // live list of roles the login really holds (lib/auth/liveRoles.ts), so this cannot widen access: a Principal
       // who does not hold the Office role is still not the Office.
       const isOffice = holdsRole(session, "COLLEGE_OFFICE");
@@ -373,7 +373,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         addProblem("year", "Year can't be changed here - moving a student between years is done through promotion");
       }
 
-      // 4. Roll No.: Office only; a change goes through the same rules as the department's roll path.
+      // 4. Regd. No.: Office only; a change goes through the same rules as the department's roll path.
       const officeSentRoll = isOffice && details.rollNumber !== undefined;
       const sentRoll = typeof details.rollNumber === "string" ? details.rollNumber.trim() : "";
       const currentRoll = (student.rollNumber ?? "").trim();
@@ -381,15 +381,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       // and the answer says so, rather than the roll quietly vanishing.
       const ignored: DetailProblem[] = [];
       if (!isOffice && sentRoll && sentRoll !== currentRoll) {
-        ignored.push({ field: "rollNumber", label: FIELD_LABELS.get("rollNumber") ?? "rollNumber", message: "Only the College Office can change the Roll No. from this form - it was left as it is" });
+        ignored.push({ field: "rollNumber", label: FIELD_LABELS.get("rollNumber") ?? "rollNumber", message: "Only the College Office can change the Regd. No. from this form - it was left as it is" });
       }
       let officeRollChange: { from: string; to: string } | null = null;
       if (officeSentRoll) {
         if (!sentRoll && currentRoll) {
-          addProblem("rollNumber", "A student's roll number can't be removed - change it to the correct number instead");
+          addProblem("rollNumber", "A student's Regd. No can't be removed - change it to the correct number instead");
         } else if (sentRoll && sentRoll !== currentRoll) {
           if (!studentRollKey(sentRoll)) {
-            addProblem("rollNumber", "This Roll Number has no letters or digits");
+            addProblem("rollNumber", "This Regd. No has no letters or digits");
           } else {
             const clash = await findRollNumberConflict(collegeRef.collection("students"), sentRoll, id);
             if (clash) {
@@ -614,8 +614,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return NextResponse.json({ ok: true, saved, rejected: [], ignored });
     }
 
-    // Field-only edit (no section move): assign/correct a student's roll number,
-    // status, or lab batch. Roll number and status are the department's
+    // Field-only edit (no section move): assign/correct a student's Regd. No,
+    // status, or lab batch. Regd. No and status are the department's
     // responsibility - the assigned HOD (years 2-4) or sub-HOD (year 1) fills
     // them in after sectioning - so those two stay closed to the College
     // Office and faculty. Lab Batch (see StudentRecord.labBatch's own
@@ -635,7 +635,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         && !(session.role === "PANEL_MEMBER" && isLabBatchOnly)
       ) {
         return NextResponse.json(
-          { error: "Only the department's HOD can set a student's roll number or status" },
+          { error: "Only the department's HOD can set a student's Regd. No or status" },
           { status: 403 }
         );
       }
@@ -698,15 +698,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (body.rollNumber !== undefined) {
         const roll = body.rollNumber.trim();
         const currentRoll = (student.rollNumber ?? "").trim();
-        // The roll number is the student's unique identity - it can be
+        // The Regd. No is the student's unique identity - it can be
         // corrected to another free number but never removed. A student who
         // has none yet (legacy import) may be saved with it still blank: the
         // edit dialog re-sends the empty value along with a status / lab-batch
         // change, and that must not be blocked.
         if (!roll && currentRoll) {
-          return NextResponse.json({ error: "A student's roll number can't be removed - change it to the correct number instead" }, { status: 400 });
+          return NextResponse.json({ error: "A student's Regd. No can't be removed - change it to the correct number instead" }, { status: 400 });
         }
-        // Roll numbers are unique across the whole college (like a faculty
+        // Regd. Nos are unique across the whole college (like a faculty
         // member's employee id), compared case-insensitively. Only checked when
         // the roll is actually CHANGING: the edit dialog re-sends the current
         // roll along with a status / lab-batch change, and a student who
@@ -817,7 +817,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       );
     }
 
-    // Only a real roll number can clash - roll-less students (Office imports
+    // Only a real Regd. No can clash - roll-less students (Office imports
     // before the department assigns numbers) can share a section freely.
     // Scoped by department + courseId too, not just section name + year - a
     // section name alone isn't unique (see StudentRecord.courseId's
@@ -834,7 +834,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         .where("year", "==", targetSection.year)
         .get();
       if (dupSnap.docs.some((d) => d.id !== id)) {
-        return NextResponse.json({ error: "Roll number already exists in the target section" }, { status: 400 });
+        return NextResponse.json({ error: "Regd. No already exists in the target section" }, { status: 400 });
       }
     }
 
@@ -904,7 +904,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 }
 
 // Deleting a student is permanent and complete (see lib/students/deleteStudent.ts):
-// the record, its department history, their login and their roll number's registry
+// the record, its department history, their login and their Regd. No's registry
 // entry are all removed - nothing is archived. Whoever could delete before still can:
 // the HOD of the student's department, the Principal/Vice Principal/Office, and the
 // faculty member in charge of the student's section.

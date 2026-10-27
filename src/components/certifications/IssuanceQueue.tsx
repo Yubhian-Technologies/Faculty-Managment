@@ -11,6 +11,7 @@ import { toast } from "@/hooks/useToast";
 import { toDate } from "@/lib/utils";
 import { renderHtmlToPdfBlob } from "@/lib/pdf/htmlToPdf";
 import { getCertificateHTML } from "@/lib/pdf/certificateTemplate";
+import { fetchCollegeLogoUrl } from "@/lib/pdf/logo";
 import type { CertificateRequest } from "@/types";
 import { issueCertificate, listRequests, rejectAtIssuance, uploadCertificatePdf } from "./api";
 import { StatusBadge } from "./StatusBadge";
@@ -53,6 +54,7 @@ function CertificateCard({ request, collegeName, onDone }: { request: Certificat
         clearances: clearances.map((c) => ({ branchLabel: c.branchLabel, decidedAt: (toDate(c.decidedAt as never) ?? new Date()).toISOString() })),
         issuedByName: "College Office",
         issuedAt: now,
+        logoUrl: await fetchCollegeLogoUrl(),
       });
       const blob = await renderHtmlToPdfBlob(html);
       const url = await uploadCertificatePdf(request.id, blob);

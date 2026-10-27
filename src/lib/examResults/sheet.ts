@@ -5,7 +5,7 @@ import { matchHeaders, normalizeHeader } from "@/lib/utils/csv";
 import type { ExamResultType } from "@/types/examResults";
 
 export const RESULT_COLUMNS = [
-  { key: "rollNumber", label: "Roll No", required: true, aliases: ["Roll Number", "Roll.No", "Regd No", "Reg No", "Regno", "Registration No", "Hall Ticket No", "HT No", "HTNO"] },
+  { key: "rollNumber", label: "Regd. No", required: true, aliases: ["Roll No", "Roll Number", "Roll.No", "Regd No", "Reg No", "Regno", "Registration No", "Hall Ticket No", "HT No", "HTNO"] },
   { key: "subjectCode", label: "Subject Code", required: true, aliases: ["Sub Code", "Subcode", "Course Code", "Paper Code", "Subject.Code"] },
   { key: "grade", label: "Grade", required: true, aliases: ["Grade Letter", "Grades", "Letter Grade", "Grade Secured", "Grade Obtained"] },
   // Optional: the university's own SGPA for the student (any one row of theirs

@@ -299,7 +299,7 @@ export default function CollegeOfficeHolidaysPage() {
     <div className="space-y-6">
       <PageHeader
         title="Holidays"
-        description="Academic calendar holidays - feeds the Holidays column on the Leave History Report"
+        description="Holidays counted in the Leave History Report"
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" asChild>
@@ -321,7 +321,7 @@ export default function CollegeOfficeHolidaysPage() {
                 Summer Vacation
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                One break period per academic year - shown as a banner across every role&rsquo;s Leave module starting the day before it begins.
+                One summer break per academic year. A banner shows in everyone&rsquo;s Leave page from the day before it starts.
               </p>
             </div>
             <Button variant="outline" size="sm" onClick={() => openSummerDialog()}>
@@ -397,7 +397,7 @@ export default function CollegeOfficeHolidaysPage() {
                 title={holidays.length === 0 ? "No holidays added yet" : "No holidays for this filter"}
                 description={
                   holidays.length === 0
-                    ? "Add the academic year's holidays so they count toward the Leave History Report."
+                    ? "Add holidays so they count in the Leave History Report."
                     : "Try a different academic year or month."
                 }
               />
@@ -448,9 +448,7 @@ export default function CollegeOfficeHolidaysPage() {
               <CalendarCheck className="h-4 w-4" />Working Days
             </CardTitle>
             <CardDescription>
-              Flip a normally-off Sunday into a working day for specific roles - e.g. only the Principal coming in
-              for an inspection, or a few faculty for an event. Everyone not listed still gets the day off as usual,
-              and it counts as a normal working day (not a weekly off) for check-in and leave balance for whoever is.
+              Make a Sunday a working day for chosen roles. Everyone else keeps the day off.
             </CardDescription>
           </div>
           <Button size="sm" onClick={() => setWorkingDayOpen(true)}>
@@ -467,7 +465,7 @@ export default function CollegeOfficeHolidaysPage() {
               <EmptyState
                 icon={<CalendarCheck className="h-6 w-6" />}
                 title="No working-day overrides yet"
-                description="Add one when a specific role needs to come in on what would otherwise be a Sunday off."
+                description="Add one when a role must work on a Sunday."
               />
             </div>
           ) : (
@@ -550,7 +548,7 @@ export default function CollegeOfficeHolidaysPage() {
                 </SelectContent>
               </Select>
               {form.appliesTo === "STUDENTS" && (
-                <p className="text-xs text-muted-foreground">Faculty leave-day counting will not exclude this date.</p>
+                <p className="text-xs text-muted-foreground">Faculty leave days are not affected.</p>
               )}
             </div>
           </div>
@@ -680,8 +678,8 @@ export default function CollegeOfficeHolidaysPage() {
               )}
               <p className="text-[11px] text-muted-foreground">
                 {workingDayForm.isHalfDay
-                  ? "Taking leave instead of coming in only costs half a leave day for whoever's listed above."
-                  : "Taking leave instead of coming in costs a full leave day, same as any other working day."}
+                  ? "Leave on this day costs half a day."
+                  : "Leave on this day costs one full day."}
               </p>
             </div>
           </div>

@@ -112,6 +112,7 @@ export default function CandidateFormPage() {
 
   const [candidate, setCandidate] = useState<CandidateInfo | null>(null);
   const [collegeName, setCollegeName] = useState("");
+  const [collegeLogoUrl, setCollegeLogoUrl] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -129,11 +130,12 @@ export default function CandidateFormPage() {
   useEffect(() => {
     if (!applicationId) { setLoading(false); return; }
     fetch(`/api/public/candidate-form/${collegeId}/${candidateId}?applicationId=${applicationId}`)
-      .then((r) => (r.ok ? (r.json() as Promise<{ candidate: CandidateInfo; collegeName?: string; requiredDocuments?: string[] }>) : null))
+      .then((r) => (r.ok ? (r.json() as Promise<{ candidate: CandidateInfo; collegeName?: string; collegeLogoUrl?: string; requiredDocuments?: string[] }>) : null))
       .then((d) => {
         if (!d) return;
         setCandidate(d.candidate);
         setCollegeName(d.collegeName ?? "");
+        setCollegeLogoUrl(d.collegeLogoUrl ?? "");
         const required = d.requiredDocuments ?? [];
         setRequiredDocuments(required);
         const templatedLabels = required.filter((label) => EDUCATION_DOCUMENT_TEMPLATES[label]);
@@ -361,7 +363,7 @@ export default function CandidateFormPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
         <div className="max-w-sm w-full space-y-4">
-          <PublicFormHeader collegeName={collegeName} />
+          <PublicFormHeader collegeName={collegeName} logoUrl={collegeLogoUrl} />
           <Card>
             <CardContent className="pt-6 text-center space-y-3">
               <CheckCircle2 className="h-12 w-12 text-green-600 mx-auto" />
@@ -380,7 +382,7 @@ export default function CandidateFormPage() {
   return (
     <div className="min-h-screen bg-muted/30 py-8 px-4">
       <div className="max-w-5xl mx-auto space-y-5">
-        <PublicFormHeader collegeName={collegeName} />
+        <PublicFormHeader collegeName={collegeName} logoUrl={collegeLogoUrl} />
         <div className="text-center space-y-1">
           <h1 className="text-xl font-bold">Interview — Bio Data Form</h1>
           <p className="text-sm text-muted-foreground">Please fill all details and upload your certificates before your interview</p>

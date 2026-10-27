@@ -15,7 +15,7 @@ import {
 import { rollNumberUpperOf } from "@/lib/students/loginDefaults";
 import type { StudentRecord } from "@/types";
 
-// Give a mentor students by roll number - the way subjects are assigned by code: the HOD pastes roll
+// Give a mentor students by Regd. No - the way subjects are assigned by code: the HOD pastes roll
 // numbers, `validate` says what each one comes to, `commit` assigns them. Like the subject flow it is
 // all-or-nothing: one roll that can't be assigned (unknown, another department's, graduated, or already
 // with another mentor) and nothing is saved. A student already with THIS mentor is left as it is.
@@ -28,14 +28,14 @@ export async function POST(request: Request) {
     const mode = body.mode === "commit" ? "commit" : "validate";
     if (!mentorUid) return NextResponse.json({ error: "Pick a mentor first" }, { status: 400 });
     const { rolls, repeated } = parseRollNumbers(body.rollNumbers ?? "");
-    if (rolls.length === 0) return NextResponse.json({ error: "Enter at least one roll number" }, { status: 400 });
+    if (rolls.length === 0) return NextResponse.json({ error: "Enter at least one Regd. No" }, { status: 400 });
     if (rolls.length > ROLL_ASSIGN_MAX) {
-      return NextResponse.json({ error: `Enter at most ${ROLL_ASSIGN_MAX} roll numbers at a time` }, { status: 400 });
+      return NextResponse.json({ error: `Enter at most ${ROLL_ASSIGN_MAX} Regd. Nos at a time` }, { status: 400 });
     }
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
-    const { scope, canManage } = await loadHodStudentScope(db, session.collegeId, session.uid);
+    const { scope, canAssign } = await loadHodStudentScope(db, session.collegeId, session.uid);
 
     const mentor = await resolveMentorForHod(db, session.collegeId, session.uid, scope, mentorUid);
     if (!mentor.ok) return NextResponse.json({ error: mentor.error }, { status: mentor.status });
@@ -55,7 +55,7 @@ export async function POST(request: Request) {
     const plan: RollPlanItem[] = [];
     for (const roll of rolls) {
       const found = studentByRoll.get(roll);
-      const manageable = found ? await canManage(found.data) : false;
+      const manageable = found ? await canAssign(found.data) : false;
       const student: RollStudent | undefined = found && {
         id: found.data.id, name: found.data.name, section: found.data.section, year: found.data.year,
         status: found.data.status, mentorUid: found.data.mentorUid, mentorName: found.data.mentorName,

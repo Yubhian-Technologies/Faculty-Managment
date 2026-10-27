@@ -81,7 +81,7 @@ export function StudentProfileDialog({ requestId, studentName }: { requestId: st
               <div className="flex items-center gap-4">
                 <Avatar name={student.name} photoUrl={student.profilePhotoUrl} size="lg" />
                 <div className="grid grid-cols-2 gap-x-4 gap-y-2 flex-1 min-w-0">
-                  <Fact label="Roll No" value={student.rollNumber} />
+                  <Fact label="Regd. No" value={student.rollNumber} />
                   <Fact label="Course" value={student.course} />
                   <Fact label="Department" value={student.department} />
                   <Fact label="Academic Year" value={student.year ? ordinalYear(student.year) : undefined} />

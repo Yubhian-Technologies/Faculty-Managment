@@ -155,6 +155,7 @@ export async function GET(request: Request) {
       // configured to teach, sent by the page from its own Year dropdown.
       const years = (searchParams.get("years") ?? "").split(",").map(Number).filter((n) => Number.isFinite(n) && n > 0);
       const studentType = (searchParams.get("studentType") ?? "").trim();
+      const status = (searchParams.get("status") ?? "").trim();
       const rollFrom = (searchParams.get("rollFrom") ?? "").trim();
       const rollTo = (searchParams.get("rollTo") ?? "").trim();
 
@@ -166,14 +167,14 @@ export async function GET(request: Request) {
       }
 
       if (searchParams.get("idsOnly") === "1") {
-        const ids = await fetchMatchingStudentIds(studentsColl, { departments, coreDepartment, course, year, years, search, studentType, rollFrom, rollTo });
+        const ids = await fetchMatchingStudentIds(studentsColl, { departments, coreDepartment, course, year, years, search, studentType, status, rollFrom, rollTo });
         return NextResponse.json({ ids, total: ids.length });
       }
 
       const page = Math.max(1, Number(searchParams.get("page")) || 1);
       const pageSizeRaw = Number(searchParams.get("pageSize"));
       const pageSize = PAGE_SIZES.includes(pageSizeRaw) ? pageSizeRaw : 20;
-      const { students, total } = await fetchStudentsPage(studentsColl, { page, pageSize, search, departments, coreDepartment, course, year, years, studentType, rollFrom, rollTo });
+      const { students, total } = await fetchStudentsPage(studentsColl, { page, pageSize, search, departments, coreDepartment, course, year, years, studentType, status, rollFrom, rollTo });
       return NextResponse.json({ students: projectStudentsForRole(session.role, students), total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) });
     }
 
@@ -411,7 +412,7 @@ export async function POST(request: Request) {
       [key: string]: unknown;
     };
 
-    // The roll number is OPTIONAL: the Office often enrols students before roll numbers exist and sets them later
+    // The Regd. No is OPTIONAL: the Office often enrols students before Regd. Nos exist and sets them later
     // (students/[id] PATCH, same uniqueness rule). When given it is unique across all colleges - checked below once the
     // target is resolved. A student with none is identified by their Student Mobile No (unique within the college).
     if (!body.name?.trim() || !body.year) {
@@ -683,7 +684,7 @@ export async function POST(request: Request) {
       }
     }
 
-    // A roll number is unique across the whole college, wherever the student
+    // A Regd. No is unique across the whole college, wherever the student
     // is (or isn't) placed - checked first, for placed and unassigned adds alike.
     // (Uniqueness across ALL colleges is claimed atomically just before the write below.)
     if (providedRoll) {
@@ -711,7 +712,7 @@ export async function POST(request: Request) {
           .where("rollNumber", "==", roll).where("section", "==", "").limit(1).get();
         if (!rollDupSnap.empty) {
           return NextResponse.json(
-            { error: `An unassigned student with this Roll Number already exists for ${dept} Year ${body.year}` },
+            { error: `An unassigned student with this Regd. No already exists for ${dept} Year ${body.year}` },
             { status: 409 }
           );
         }
@@ -783,7 +784,7 @@ export async function POST(request: Request) {
     batch.set(studentRef, newStudent);
     batch.set(history.ref, history.data);
 
-    // Student Mobile No and Roll Number (each unique across ALL colleges) are each claimed atomically just before the
+    // Student Mobile No and Regd. No (each unique across ALL colleges) are each claimed atomically just before the
     // student is written, and given back if anything after that fails.
     try {
       await reserveStudentMobile(db, session.collegeId, mobile10, studentRef.id);
@@ -800,7 +801,7 @@ export async function POST(request: Request) {
       if (!claim.ok) {
         await releaseStudentMobile(db, session.collegeId, mobile10, studentRef.id);
         return NextResponse.json(
-          { error: claim.code === "TAKEN" ? rollTakenMessage(providedRoll, claim.holder) : "Roll number must contain letters or digits" },
+          { error: claim.code === "TAKEN" ? rollTakenMessage(providedRoll, claim.holder) : "Regd. No must contain letters or digits" },
           { status: claim.code === "TAKEN" ? 409 : 400 }
         );
       }

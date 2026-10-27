@@ -5,13 +5,20 @@
 // Every one of them is stored the same way: one document per row at
 // students/{id}/mentoringEntries/{entryId} = { section, semester?, values }.
 
-export type EntryColumnKind = "text" | "textarea" | "date" | "month" | "select" | "check";
+export type EntryColumnKind = "text" | "textarea" | "date" | "month" | "select" | "check" | "multiselect";
+
+/** What a stored cell holds: text, a ticked box, or (multiselect) the chosen option values. */
+export type EntryValue = string | boolean | string[];
+
+export interface EntryChoice { value: string; label: string; hint?: string }
 
 export interface EntryColumn {
   key: string;
   label: string;
   kind: EntryColumnKind;
   options?: readonly string[];
+  /** multiselect: the tickable choices, stored by `value`. */
+  choices?: readonly EntryChoice[];
   placeholder?: string;
   required?: boolean;
   /** Longest accepted text (default 200, 1000 for textarea). */
@@ -33,6 +40,24 @@ export interface EntrySection {
   addLabel: string;
   emptyText: string;
 }
+
+/** What a mentor meeting can be about (ticked on each meeting). `value` is what is stored - never rename one. */
+export const MEETING_CATEGORIES: readonly EntryChoice[] = [
+  { value: "ACADEMIC", label: "Academic progress", hint: "Marks, backlogs, attendance, learning difficulties and study habits." },
+  { value: "WELLBEING", label: "Personal wellbeing", hint: "Adjustment, relationships, homesickness, stress and requests for support." },
+  { value: "CAREER", label: "Career development", hint: "Higher education, placements, internships, competitive examinations and goals." },
+  { value: "ENGAGEMENT", label: "Engagement and skills", hint: "Clubs, sports, hobbies, leadership, communication and social engagement." },
+  { value: "CAMPUS_FAMILY", label: "Campus and family support", hint: "Hostel adjustment, financial or practical difficulties and requests for institutional assistance." },
+  { value: "GOALS", label: "Personal goals", hint: "Short-term targets, discipline, confidence, habits and progress against previous commitments." },
+];
+
+const meetingCategoryLabel = new Map(MEETING_CATEGORIES.map((c) => [c.value, c.label]));
+export const meetingCategoryName = (value: string): string => meetingCategoryLabel.get(value) ?? value;
+
+export const WEEKLY_ATTENDANCE_OPTIONS = ["Present", "Absent", "Excused"] as const;
+export const FOLLOW_UP_STATUS_OPTIONS = ["Open", "In progress", "Done"] as const;
+export const ESCALATION_TO_OPTIONS = ["HOD", "Counsellor", "Vice-Principal", "Principal"] as const;
+export const ESCALATION_STATUS_OPTIONS = ["Open", "Under review", "Resolved"] as const;
 
 const DOCS_NOTE = "Copies of supporting documents are submitted to the mentor";
 const docsCol: EntryColumn = { key: "docReceived", label: "Supporting document received", kind: "check" };
@@ -64,19 +89,36 @@ export const ENTRY_SECTIONS: EntrySection[] = [
   // ── Student information (booklet p.1) ──────────────────────────────────────
   {
     key: "siblings",
-    title: "Brother / sister in Sri Vishnu Educational Society",
+    title: "Brother / Sister in Sri Vishnu Educational Society",
     hint: "Studying or studied in any college of the Society.",
     layout: "table",
     columns: [
       { key: "collegeName", label: "College", kind: "text", required: true },
       { key: "siblingName", label: "Name of the sibling", kind: "text", required: true },
-      { key: "rollNumber", label: "Roll No", kind: "text" },
+      { key: "rollNumber", label: "Regd. No", kind: "text" },
       { key: "branch", label: "Branch", kind: "text" },
       { key: "academicYear", label: "Academic year", kind: "text", placeholder: "2024-25" },
     ],
     maxEntries: 10,
     addLabel: "Add sibling",
     emptyText: "No sibling recorded.",
+  },
+  {
+    key: "guardians",
+    title: "Guardian",
+    hint: "Someone other than the parents who looks after the student. Kept by the mentor - students cannot edit it.",
+    layout: "table",
+    columns: [
+      { key: "name", label: "Name of the guardian", kind: "text", required: true },
+      { key: "relationship", label: "Relationship", kind: "text", placeholder: "Uncle, aunt, ..." },
+      { key: "occupation", label: "Occupation", kind: "text" },
+      { key: "mobile", label: "Mobile number", kind: "text", placeholder: "9876543210", max: 15 },
+      { key: "email", label: "E-mail", kind: "text" },
+      { key: "address", label: "Address", kind: "textarea", max: 500 },
+    ],
+    maxEntries: 5,
+    addLabel: "Add guardian",
+    emptyText: "No guardian recorded.",
   },
   {
     key: "addressChanges",
@@ -193,6 +235,52 @@ export const ENTRY_SECTIONS: EntrySection[] = [
     emptyText: "No disciplinary issue recorded.",
   },
 
+  // ── Follow-up: weekly check-ins, action items, escalations ─────────────────
+  {
+    key: "weeklyAttendance",
+    title: "Weekly attendance",
+    hint: "Whether the student came to the weekly mentoring check-in. Class attendance is read from the college's attendance records - nothing to type for that.",
+    layout: "table",
+    columns: [
+      { key: "weekStart", label: "Week starting", kind: "date", required: true },
+      { key: "status", label: "Attended", kind: "select", options: WEEKLY_ATTENDANCE_OPTIONS, required: true },
+      { key: "remarks", label: "Remarks", kind: "textarea" },
+    ],
+    maxEntries: 200,
+    addLabel: "Record a week",
+    emptyText: "No week recorded.",
+  },
+  {
+    key: "actionItems",
+    title: "Action items and follow-ups",
+    hint: "What the mentor and the student agreed to do, and whether it got done.",
+    layout: "table",
+    columns: [
+      { key: "action", label: "Action", kind: "textarea", required: true },
+      { key: "dueDate", label: "Due date", kind: "date" },
+      { key: "status", label: "Status", kind: "select", options: FOLLOW_UP_STATUS_OPTIONS, required: true },
+    ],
+    maxEntries: 100,
+    addLabel: "Add action item",
+    emptyText: "No action item.",
+  },
+  {
+    key: "escalations",
+    title: "Referral / escalation",
+    hint: "A concern passed to someone else for support. Visible to this student's mentor and HOD only; the college summary shows counts, never this text.",
+    layout: "table",
+    columns: [
+      { key: "concern", label: "Concern", kind: "textarea", required: true },
+      { key: "escalatedTo", label: "Referred to", kind: "select", options: ESCALATION_TO_OPTIONS, required: true },
+      { key: "date", label: "Date", kind: "date" },
+      { key: "status", label: "Status", kind: "select", options: ESCALATION_STATUS_OPTIONS, required: true },
+      { key: "outcome", label: "Outcome", kind: "textarea" },
+    ],
+    maxEntries: 30,
+    addLabel: "Add referral",
+    emptyText: "No referral recorded.",
+  },
+
   // ── Mentor meetings (booklet p.13-16) ──────────────────────────────────────
   {
     key: "meetings",
@@ -202,6 +290,7 @@ export const ENTRY_SECTIONS: EntrySection[] = [
     perSemester: true,
     columns: [
       { key: "date", label: "Date", kind: "date", required: true },
+      { key: "categories", label: "Discussion categories", kind: "multiselect", required: true, choices: MEETING_CATEGORIES },
       { key: "purpose", label: "Purpose", kind: "textarea", required: true },
       { key: "outcome", label: "Outcome", kind: "textarea" },
       { key: "studentSigned", label: "Student signed", kind: "check" },
@@ -214,6 +303,9 @@ export const ENTRY_SECTIONS: EntrySection[] = [
 
 const BY_KEY = new Map(ENTRY_SECTIONS.map((s) => [s.key, s]));
 export const entrySection = (key: string): EntrySection | undefined => BY_KEY.get(key);
+
+/** How a student reached the degree: Intermediate (then EAPCET) or Diploma (then ECET). */
+export const QUALIFICATION_OPTIONS = ["Intermediate (Class XII)", "Diploma (Polytechnic)"] as const;
 
 /** The four categories the booklet ticks. */
 export const CATEGORY_OPTIONS = ["OC", "OBC", "SC", "ST"] as const;
@@ -231,7 +323,7 @@ function isRealDate(v: string): boolean {
 }
 
 export type CleanEntry =
-  | { ok: true; values: Record<string, string | boolean> }
+  | { ok: true; values: Record<string, EntryValue> }
   | { ok: false; error: string };
 
 /**
@@ -247,11 +339,24 @@ export function cleanEntryValues(section: EntrySection, input: unknown): CleanEn
   const stray = Object.keys(raw).filter((k) => !known.has(k));
   if (stray.length > 0) return { ok: false, error: `Unknown field: ${stray.join(", ")}` };
 
-  const values: Record<string, string | boolean> = {};
+  const values: Record<string, EntryValue> = {};
   for (const col of section.columns) {
     const v = raw[col.key];
     if (col.kind === "check") {
       if (v === true || v === "true") values[col.key] = true;
+      continue;
+    }
+    if (col.kind === "multiselect") {
+      const allowed = new Set((col.choices ?? []).map((c) => c.value));
+      const picked = Array.isArray(v) ? v : v == null || v === "" ? [] : [v];
+      if (picked.some((x) => typeof x !== "string" || !allowed.has(x))) return { ok: false, error: `${col.label} has an unknown choice` };
+      // keep the definition's order, drop repeats
+      const chosen = (col.choices ?? []).map((c) => c.value).filter((x) => picked.includes(x));
+      if (chosen.length === 0) {
+        if (col.required) return { ok: false, error: `${col.label} is required` };
+        continue;
+      }
+      values[col.key] = chosen;
       continue;
     }
     const s = typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim();
@@ -264,9 +369,15 @@ export function cleanEntryValues(section: EntrySection, input: unknown): CleanEn
     if (col.kind === "date" && !isRealDate(s)) return { ok: false, error: `${col.label} must be a valid date` };
     if (col.kind === "month" && !/^\d{4}-(0[1-9]|1[0-2])$/.test(s)) return { ok: false, error: `${col.label} must be a valid month` };
     if (col.kind === "select" && !(col.options ?? []).includes(s)) return { ok: false, error: `${col.label} must be one of: ${(col.options ?? []).join(", ")}` };
+    if (section.key === "guardians" && col.key === "mobile") {
+      const digits = s.replace(/[\s-]/g, "").replace(/^(\+91|91|0)(?=\d{10}$)/, "");
+      if (!/^[6-9]\d{9}$/.test(digits)) return { ok: false, error: `${col.label} must be exactly 10 digits, starting with 6, 7, 8 or 9` };
+      values[col.key] = digits;
+      continue;
+    }
     values[col.key] = s;
   }
-  if (!Object.values(values).some((v) => typeof v === "string")) return { ok: false, error: "Fill in at least one detail" };
+  if (!Object.values(values).some((v) => typeof v === "string" || Array.isArray(v))) return { ok: false, error: "Fill in at least one detail" };
   return { ok: true, values };
 }
 

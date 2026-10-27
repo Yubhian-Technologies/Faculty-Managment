@@ -10,10 +10,10 @@ import type { Section, StudentRecord } from "@/types";
 
 // Lets any faculty pick students for a request - not just their own department's,
 // since an event can draw from several. Deliberately returns only what the picker
-// needs (id, roll number, name, section) - never contact or document fields.
+// needs (id, Regd. No, name, section) - never contact or document fields.
 //   ?mode=sections                  every section in the college (id, department, course, year, name)
 //   ?mode=roster&sectionId=<id>     one section's students
-//   ?mode=search&q=<roll prefix>    up to 20 students whose roll number starts with q
+//   ?mode=search&q=<roll prefix>    up to 20 students whose Regd. No starts with q
 const MAX_ROSTER = 300;
 const pick = (id: string, s: StudentRecord) => ({
   id, rollNumber: s.rollNumber, name: s.name, department: s.department, year: s.year, section: s.section, hasLogin: !!s.uid,

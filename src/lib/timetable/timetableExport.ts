@@ -7,6 +7,7 @@
 // Same shared grid/column derivation as the on-screen table and the PDF
 // (lib/timetable/gridModel.ts), so the three renderings can't drift.
 
+import { subjectAbbreviation } from "@/lib/timetable/subjectAbbreviation";
 import ExcelJS from "exceljs";
 import type { CourseYearTiming, DayOfWeek, Department, PeriodTiming, Subject, TeachingAssignment, TimetableSlot } from "@/types";
 import { DAY_LABELS } from "@/types";
@@ -15,19 +16,19 @@ import { loadExcelLogo } from "./logoAsset";
 import {
   buildAllocationList,
   buildTimetableColumns,
-  timetableClassLine,
-  buildClassTimetableSubtitle,
   latestEffectiveDate,
   resolveTimetableDays,
-  slotShortCode, mergeCoTaughtSlots, continuousSpans, isLabSlot,
+  slotShortCode, mergeCoTaughtSlots, continuousSpans,
 } from "./gridModel";
 import { resolveSignatureRows } from "./signatureAuthority";
+import { buildTimetableHeaderLines, collegeHeading, departmentHeading, facultyClassLabel, facultyTimetableTitle, groupAllocationByType, facultyInitials, timetableTitle } from "./timetableHeader";
 
 export interface SectionTimetableXlsxOptions {
   collegeName?: string;
   collegeCode?: string;
   affiliation?: string;
-  address?: string;
+  /** The college's city, printed beside its name. */
+  city?: string;
   phone?: string;
   /** The college's own logo; the bundled Vishnu logo is used when absent or unreachable. */
   logoUrl?: string;
@@ -74,11 +75,6 @@ const PERIOD_COL_WIDTH = 16;
 const BREAK_COL_WIDTH = 11;
 const LINE_HEIGHT = 13;
 
-// Fills: the header and day column read as headings; a lab cell is tinted (like the screen and PDF).
-const HEADER_FILL: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE5E7EB" } };
-const DAY_FILL: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3F4F6" } };
-const LAB_FILL: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEDE9FE" } };
-const BREAK_FILL: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEF3C7" } };
 // Drawn between two subjects sharing one period, so they never run together.
 const DIVIDER = "- - - - - - - - - -";
 
@@ -126,10 +122,8 @@ function splitColumns(total: number, weights: number[]): [number, number][] {
 export async function buildSectionTimetableXlsxBuffer(opts: SectionTimetableXlsxOptions): Promise<ArrayBuffer> {
   const {
     collegeName = "",
-    collegeCode = "",
     affiliation = "",
-    address = "",
-    phone = "",
+    city = "",
     departmentName,
     courseName,
     sectionName,
@@ -182,7 +176,7 @@ export async function buildSectionTimetableXlsxBuffer(opts: SectionTimetableXlsx
     sheet.getColumn(i + 2).width = col.kind === "break" ? BREAK_COL_WIDTH : PERIOD_COL_WIDTH;
   });
 
-  // ── Letterhead: college, affiliation, address, phone, title, class line ───
+  // ── Letterhead: college, affiliation, department, "Time Table <year>" ────
   let r = 1;
   // Letterhead text sits to the right of the logo, which occupies the Day
   // column - so the two can never overlap, however narrow the grid is.
@@ -203,10 +197,11 @@ export async function buildSectionTimetableXlsxBuffer(opts: SectionTimetableXlsx
   };
   const letterheadStart = r;
 
-  if (collegeName) putAcross(`${collegeName}${collegeCode ? ` ( Code: ${collegeCode} )` : ""}`, { bold: true, size: 14 }, textFrom);
-  if (affiliation) putAcross(affiliation, { bold: true, size: 10 }, textFrom);
-  if (address) putAcross(address, { bold: true, size: 10 }, textFrom);
-  if (phone) putAcross(`Tel : ${phone}`, { bold: true, size: 10 }, textFrom);
+  if (collegeName) putAcross(collegeHeading(collegeName, city), { bold: true, size: 14 }, textFrom);
+  if (affiliation) putAcross(affiliation, { bold: true, size: 11 }, textFrom);
+  const deptHeading = departmentHeading(departmentName);
+  if (deptHeading) putAcross(deptHeading, { bold: true, size: 11 }, textFrom);
+  putAcross(timetableTitle(opts.academicYear), { bold: true, size: 11 }, textFrom);
   // Logo: fitted inside the Day column and the letterhead rows above the title.
   const logo = await loadExcelLogo(opts.logoUrl);
   if (logo && r > letterheadStart) {
@@ -229,63 +224,85 @@ export async function buildSectionTimetableXlsxBuffer(opts: SectionTimetableXlsx
     }
   }
 
-  putAcross("TIME TABLE", { bold: true, size: 13 });
+  r++; // spacer
 
-  const subtitleText = buildClassTimetableSubtitle({
-    academicYear: opts.academicYear,
+  // ── Class details: year / branch / class in-charge on the left, W.E.F and room on the right ──
+  const header = buildTimetableHeaderLines({
+    courseName,
+    year: sectionYear,
     semesterLabel,
+    sectionName,
+    departmentName,
+    classroom: opts.classroom,
+    classInchargeName,
     effectiveDate: opts.effectiveDate ?? latestEffectiveDate(slots),
   });
-  putAcross(subtitleText, { bold: true, size: 10 });
-
-  const classLine = [
-    timetableClassLine({ courseName, year: sectionYear, semesterLabel, sectionName, departmentName, classroom: opts.classroom }),
-    classInchargeName ? `Class In-charge: ${classInchargeName}` : undefined,
-  ].filter((v): v is string => !!v);
-  if (classLine.length) putAcross(classLine.join("  |  "), { size: 10 });
+  const leftLines = [header.yearLine, header.branchLine, header.inchargeLine].filter(Boolean);
+  const rightLines = [header.wefLine, header.roomLine].filter(Boolean);
+  const split = lastCol >= 2 ? Math.ceil(lastCol / 2) : lastCol;
+  for (let i = 0; i < Math.max(leftLines.length, rightLines.length); i++) {
+    const row = sheet.getRow(r);
+    if (leftLines[i]) {
+      row.getCell(1).value = leftLines[i];
+      row.getCell(1).font = { bold: true, size: 10 };
+      row.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
+      if (split > 1) sheet.mergeCells(r, 1, r, split);
+    }
+    // Both right-hand lines start in the same column (W.E.F over ROOM NO), over the last three columns.
+    if (rightLines[i] && lastCol > split) {
+      const from = Math.max(split + 1, lastCol - 2);
+      row.getCell(from).value = rightLines[i];
+      row.getCell(from).font = { bold: true, size: 10 };
+      row.getCell(from).alignment = { horizontal: "left", vertical: "middle" };
+      if (lastCol > from) sheet.mergeCells(r, from, r, lastCol);
+    }
+    row.height = 16;
+    r++;
+  }
 
   r++; // spacer
 
-  // ── Grid header: Day | Period N + start/end | break + start/end ──────────
-  const headerRowIndex = r++;
-  const headerRow = sheet.getRow(headerRowIndex);
-  headerRow.getCell(1).value = "Day";
-  let maxHeaderLines = 1;
+  // ── Grid header, two rows like the printed sheet: PERIOD | 1 2 3 ... then DAY | clock times ──
+  const periodRowIndex = r++;
+  const timeRowIndex = r++;
+  sheet.getCell(periodRowIndex, 1).value = "PERIOD";
+  sheet.getCell(timeRowIndex, 1).value = "DAY";
   columns.forEach((col, i) => {
-    const time = col.startTime && col.endTime
-      ? [formatTime12h(col.startTime), formatTime12h(col.endTime)]
-      : [];
-    const label = col.kind === "break" ? (col.breakKind === "lunch" ? "Lunch" : "Break") : `Period ${col.periodNumber}`;
-    const lines = [label, ...time];
-    headerRow.getCell(i + 2).value = lines.join("\n");
-    maxHeaderLines = Math.max(maxHeaderLines, lines.length);
+    const time = col.startTime && col.endTime ? `${formatTime12h(col.startTime)} - ${formatTime12h(col.endTime)}` : "";
+    if (col.kind === "break") {
+      sheet.getCell(periodRowIndex, i + 2).value = time;
+      sheet.mergeCells(periodRowIndex, i + 2, timeRowIndex, i + 2);
+    } else {
+      sheet.getCell(periodRowIndex, i + 2).value = col.periodNumber;
+      sheet.getCell(timeRowIndex, i + 2).value = time;
+    }
   });
-  styleRange(sheet, headerRowIndex, 1, lastCol, { bold: true });
-  for (let c = 1; c <= lastCol; c++) sheet.getCell(headerRowIndex, c).fill = HEADER_FILL;
-  headerRow.height = maxHeaderLines * LINE_HEIGHT + 6;
+  styleRange(sheet, periodRowIndex, 1, lastCol, { bold: true });
+  styleRange(sheet, timeRowIndex, 1, lastCol, { bold: true, size: 9 });
+  sheet.getRow(periodRowIndex).height = 20;
+  sheet.getRow(timeRowIndex).height = 2 * LINE_HEIGHT + 6;
   // Keep the Day column and period header on screen while scrolling, and
   // repeat the header if the sheet ever prints on more than one page.
-  sheet.views = [{ state: "frozen", xSplit: 1, ySplit: headerRowIndex }];
-  sheet.pageSetup.printTitlesRow = `${headerRowIndex}:${headerRowIndex}`;
+  sheet.views = [{ state: "frozen", xSplit: 1, ySplit: timeRowIndex }];
+  sheet.pageSetup.printTitlesRow = `${periodRowIndex}:${timeRowIndex}`;
 
-  // ── Grid body: the subject code only, like the printed timetable ─────────
+  // ── Grid body: subject code with the faculty's initials in brackets, like the printed timetable ──
   const firstBodyRow = r;
   for (const day of days) {
     const row = sheet.getRow(r);
-    row.getCell(1).value = DAY_LABELS[day] ?? day;
+    row.getCell(1).value = day;
     let maxLines = 1;
     // Periods merged in the timetable editor (a 2-3 period lab block, one subject across back-to-back
     // periods) are one wide cell here too, exactly as on screen and in the PDF.
     const { spans, skipped } = continuousSpans(columns, (p) => slots.filter((s) => s.day === day && s.periodNumber === p));
-    const labCols: [number, number][] = [];
     columns.forEach((col, i) => {
       if (col.kind === "break" || skipped.has(i)) return;
       // Faculty of one subject sharing the period print the subject once.
       const rawCell = slots.filter((s) => s.day === day && s.periodNumber === col.periodNumber);
       const cellSlots = opts.mergeCoTaught === false ? rawCell : mergeCoTaughtSlots(rawCell);
       if (cellSlots.length === 0) return;
-      // One block per subject: the code in bold, then batch / room / cover in smaller type. Two subjects in
-      // one period are told apart by a divider line between them.
+      // One block per subject: the code, its faculty initials, then batch / room / cover in smaller type.
+      // Two subjects in one period are told apart by a divider line between them.
       const richText: ExcelJS.RichText[] = [];
       let lines = 0;
       cellSlots.forEach((s, bi) => {
@@ -298,23 +315,25 @@ export async function buildSectionTimetableXlsxBuffer(opts: SectionTimetableXlsx
           s.classroom ? (/^room/i.test(s.classroom.trim()) ? s.classroom.trim() : `ROOM NO: ${s.classroom.trim()}`) : undefined,
           s.substituteFacultyName ? `Sub: ${s.substituteFacultyName}` : undefined,
         ].filter((v): v is string => !!v);
-        richText.push({ text: slotShortCode(s, subjectMap), font: { bold: true, size: 10 } });
+        const initials = facultyInitials(s.facultyName);
+        richText.push({ text: slotShortCode(s, subjectMap), font: { size: 10 } });
+        lines += 1;
+        if (initials) {
+          richText.push({ text: `\n(${initials})`, font: { size: 10 } });
+          lines += 1;
+        }
         if (notes.length) richText.push({ text: "\n" + notes.join("\n"), font: { size: 9, color: { argb: "FF4B5563" } } });
-        lines += 1 + notes.length;
+        lines += notes.length;
       });
       const cell = row.getCell(i + 2);
       cell.value = { richText };
       maxLines = Math.max(maxLines, lines);
       const span = spans.get(i) ?? 1;
       if (span > 1) sheet.mergeCells(r, i + 2, r, i + 1 + span);
-      if (cellSlots.some((s) => isLabSlot(s, subjectMap))) labCols.push([i + 2, i + 1 + span]);
     });
     styleRange(sheet, r, 1, lastCol);
-    row.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
     row.getCell(1).font = { bold: true, size: 10 };
-    row.getCell(1).fill = DAY_FILL;
-    for (const [from, to] of labCols) for (let c = from; c <= to; c++) sheet.getCell(r, c).fill = LAB_FILL;
-    row.height = Math.max(30, maxLines * LINE_HEIGHT + 8);
+    row.height = Math.max(32, maxLines * LINE_HEIGHT + 8);
     r++;
   }
   const lastBodyRow = r - 1;
@@ -328,40 +347,68 @@ export async function buildSectionTimetableXlsxBuffer(opts: SectionTimetableXlsx
       const cell = sheet.getCell(firstBodyRow, colIdx);
       cell.value = col.breakKind === "lunch" ? "LUNCH BREAK" : "SHORT BREAK";
       styleRange(sheet, firstBodyRow, colIdx, colIdx, { bold: true, size: 10 });
-      cell.fill = BREAK_FILL;
       cell.alignment = { horizontal: "center", vertical: "middle", textRotation: 90, wrapText: true };
     }
   });
 
-  // ── Allocation of subjects, under the grid, using merged column groups so the
-  //    grid's own column widths are never changed ──────────────────────────
+  // Heavier frame round the grid and under the header, like the printed sheet.
+  const heavy = (row: number, col: number, side: "top" | "left" | "bottom" | "right") => {
+    const cell = sheet.getCell(row, col);
+    cell.border = { ...cell.border, [side]: { style: "medium" } };
+  };
+  if (lastBodyRow >= firstBodyRow) {
+    for (let c = 1; c <= lastCol; c++) {
+      heavy(periodRowIndex, c, "top");
+      heavy(timeRowIndex, c, "bottom");
+      heavy(lastBodyRow, c, "bottom");
+    }
+    for (let rr = periodRowIndex; rr <= lastBodyRow; rr++) {
+      heavy(rr, 1, "left");
+      heavy(rr, 1, "right");
+      heavy(rr, lastCol, "right");
+    }
+  }
+
+  // ── Subject list: S.No | Subject Name | Sub Acr | Faculty, under the grid, using merged
+  //    column groups so the grid's own column widths are never changed ──────
   const allocation = buildAllocationList(slots, { subjects: subjectMap, assignments });
   if (allocation.length) {
     r++; // spacer
-    putAcross("Allocation of Subjects", { bold: true, size: 12 });
 
-    const headings = ["Subject", "Name of Faculty"];
-    const weights = [3, 2];
-    const groups = splitColumns(lastCol, weights);
+    const headings = ["S.No", "Subject Name", "Sub Acr", "Faculty"];
+    const groups = splitColumns(lastCol, [1, 4, 1.5, 3.5]);
     const mergeable = lastCol >= headings.length;
 
-    const writeRow = (rowIndex: number, values: string[], bold: boolean) => {
+    const writeRow = (rowIndex: number, values: (string | number)[], bold: boolean) => {
       values.forEach((value, i) => {
         const [from, to] = groups[i];
         sheet.getCell(rowIndex, from).value = value;
         if (mergeable && to > from) sheet.mergeCells(rowIndex, from, rowIndex, to);
-        styleRange(sheet, rowIndex, from, to, { bold, align: "left" });
+        for (let c = from; c <= to; c++) {
+          const cell = sheet.getCell(rowIndex, c);
+          cell.font = { bold, size: 10 };
+          cell.alignment = { horizontal: i === 0 ? "center" : "left", vertical: "middle", wrapText: true };
+        }
       });
     };
 
     writeRow(r, headings, true);
-    sheet.getRow(r).height = 22;
+    sheet.getRow(r).height = 20;
     r++;
-    for (const a of allocation) {
-      const subject = a.labBatches.length ? `${a.name} (${a.labBatches.join(", ")})` : a.name;
-      writeRow(r, [subject, a.faculty], false);
+    for (const group of groupAllocationByType(allocation)) {
+      // Theory / Practical ... heading, then that kind's subjects numbered from 1.
+      sheet.getCell(r, 1).value = group.label;
+      if (lastCol > 1) sheet.mergeCells(r, 1, r, lastCol);
+      sheet.getCell(r, 1).font = { bold: true, size: 10 };
+      sheet.getCell(r, 1).alignment = { horizontal: "left", vertical: "middle" };
       sheet.getRow(r).height = 20;
       r++;
+      group.entries.forEach((a, idx) => {
+        const subject = a.labBatches.length ? `${a.name} (${a.labBatches.join(", ")})` : a.name;
+        writeRow(r, [idx + 1, subject, a.shortCode, a.faculty], false);
+        sheet.getRow(r).height = 18;
+        r++;
+      });
     }
   }
 
@@ -409,11 +456,12 @@ export interface FacultyTimetableXlsxOptions {
   courseCodeById: Map<string, string>;
   departments: Department[];
   formatDMY: (d: Date) => string;
-  college?: { name?: string; code?: string; affiliation?: string; address?: string; phone?: string; logoUrl?: string };
+  departmentName?: string;
+  college?: { name?: string; code?: string; affiliation?: string; address?: string; city?: string; phone?: string; logoUrl?: string; teachingLoadSignatureRows?: string[][] };
 }
 
 export async function downloadFacultyTimetableXlsx(opts: FacultyTimetableXlsxOptions, filename: string): Promise<void> {
-  const { facultyName, semesterLabel, weekStart, weekEnd, days, periods, slots, assignmentById, periodTimeFor, courseCodeById, formatDMY } = opts;
+  const { facultyName, semesterLabel, days, periods, slots, assignmentById, periodTimeFor, courseCodeById } = opts;
 
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "Faculty Management System";
@@ -459,10 +507,14 @@ export async function downloadFacultyTimetableXlsx(opts: FacultyTimetableXlsxOpt
     row.height = Math.max(16, (font.size ?? 10) * 1.6);
     r++;
   };
-  if (c.name) putText(`${c.name}${c.code ? ` ( Code: ${c.code} )` : ""}`, { bold: true, size: 14 });
-  if (c.affiliation) putText(c.affiliation, { bold: true, size: 10 });
-  if (c.address) putText(c.address, { bold: true, size: 10 });
-  if (c.phone) putText(`Tel : ${c.phone}`, { bold: true, size: 10 });
+  // Only the assignments the grid actually shows (the summary follows the slots).
+  const shownIds = new Set(slots.map((sl) => sl.assignmentId));
+  const shownAssignments = Array.from(assignmentById.values()).filter((a) => shownIds.has(a.id));
+  const deptName = opts.departmentName || Array.from(new Set(shownAssignments.map((a) => a.department).filter(Boolean))).join(", ");
+  if (c.name) putText(collegeHeading(c.name, c.city), { bold: true, size: 14 });
+  if (c.affiliation) putText(c.affiliation, { bold: true, size: 11 });
+  if (deptName) putText(departmentHeading(deptName), { bold: true, size: 11 });
+  putText(facultyTimetableTitle(slots.find((sl) => sl.academicYear)?.academicYear, semesterLabel), { bold: true, size: 11 });
   const logo = await loadExcelLogo(c.logoUrl);
   if (logo && r > letterheadStart) {
     try {
@@ -482,8 +534,8 @@ export async function downloadFacultyTimetableXlsx(opts: FacultyTimetableXlsxOpt
       // A logo that can't be placed must never fail the download.
     }
   }
-  putHeader("FACULTY TIME TABLE", { bold: true, size: 13 });
-  putHeader(`${facultyName}   |   Semester: ${semesterLabel}   |   ${formatDMY(weekStart)} – ${formatDMY(weekEnd)}`, { bold: true, size: 10 });
+  r++; // spacer
+  putHeader(`Faculty: ${facultyName}`, { bold: true, size: 11 });
   r++; // spacer
 
   const headerRowIndex = r++;
@@ -532,7 +584,7 @@ export async function downloadFacultyTimetableXlsx(opts: FacultyTimetableXlsxOpt
           const assignment = assignmentById.get(slot.assignmentId);
           const courseCode = assignment?.courseId ? courseCodeById.get(assignment.courseId) : undefined;
           const classStr = [courseCode ?? assignment?.courseName, assignment?.year ? `Yr ${assignment.year}` : null, assignment?.sectionName ? `Sec ${assignment.sectionName}` : null].filter(Boolean).join(" ");
-          const subjStr = assignment?.shortCode || assignment?.subjectName || slot.subjectName;
+          const subjStr = subjectAbbreviation(assignment?.subjectName || slot.subjectName, assignment?.shortCode);
           const roomStr = slot.classroom ? (/^room/i.test(slot.classroom.trim()) ? slot.classroom.trim() : `ROOM NO: ${slot.classroom.trim()}`) : "";
           return [classStr, subjStr, roomStr].filter(Boolean).join("\n");
         });
@@ -546,65 +598,54 @@ export async function downloadFacultyTimetableXlsx(opts: FacultyTimetableXlsxOpt
     r++;
   }
 
-  const uniqueAssignments = Array.from(assignmentById.values());
-  if (uniqueAssignments.length > 0) {
+  // ── Bottom: subject list (S.No | Class | Sub Acronym | Subject Name), then the signatures ──
+  const classRows = new Map<string, { cls: string; acr: string; name: string }>();
+  for (const a of shownAssignments) {
+    const semester = slots.find((sl) => sl.assignmentId === a.id)?.semester ?? a.semester;
+    const cls = facultyClassLabel({ courseName: a.courseName, year: a.year, semester, sectionName: a.sectionName });
+    const acr = subjectAbbreviation(a.subjectName, a.shortCode) || "—";
+    const name = a.subjectName ?? "—";
+    classRows.set(`${cls}|${acr}|${name}`, { cls, acr, name });
+  }
+  if (classRows.size > 0) {
     r += 2;
-    const titleRow = sheet.getRow(r++);
-    titleRow.getCell(1).value = "TEACHING WORKLOAD & SUBJECT DETAILS";
-    titleRow.getCell(1).font = { bold: true, size: 11 };
-    sheet.mergeCells(r - 1, 1, r - 1, Math.max(7, lastCol));
-
-    const wlHeader = sheet.getRow(r++);
-    const headers = ["S.No", "Class / Section", "Subject Code", "Subject Name", "Short Code", "Type", "Hours/Wk"];
-    headers.forEach((h, i) => {
-      const cell = wlHeader.getCell(i + 1);
-      cell.value = h;
-      cell.font = { bold: true, size: 9 };
-      cell.alignment = { horizontal: "center", vertical: "middle" };
-      cell.border = BORDER;
-    });
-    wlHeader.height = 20;
-
-    let totalHours = 0;
-    uniqueAssignments.forEach((a, idx) => {
-      const row = sheet.getRow(r++);
-      const courseCode = a.courseId ? courseCodeById.get(a.courseId) : undefined;
-      const classStr = [courseCode ?? a.courseName, a.year ? `Yr ${a.year}` : null, a.sectionName].filter(Boolean).join(" ");
-      const hours = a.hoursPerWeek ?? 0;
-      totalHours += hours;
-
-      const vals = [
-        idx + 1,
-        classStr,
-        a.subjectCode ?? "—",
-        a.subjectName ?? "—",
-        a.shortCode ?? a.subjectCode ?? "—",
-        a.subjectType ?? "Theory",
-        hours,
-      ];
-      vals.forEach((v, cIdx) => {
-        const cell = row.getCell(cIdx + 1);
-        cell.value = v;
-        cell.font = { size: 9 };
-        cell.alignment = { horizontal: cIdx === 1 || cIdx === 3 ? "left" : "center", vertical: "middle" };
-        cell.border = BORDER;
+    const groups = splitColumns(lastCol, [1, 3, 2, 4]);
+    const mergeable = lastCol >= 4;
+    const writeRow = (rowIndex: number, values: (string | number)[], bold: boolean) => {
+      values.forEach((value, i) => {
+        const [from, to] = groups[i];
+        sheet.getCell(rowIndex, from).value = value;
+        if (mergeable && to > from) sheet.mergeCells(rowIndex, from, rowIndex, to);
+        for (let col = from; col <= to; col++) {
+          const cell = sheet.getCell(rowIndex, col);
+          cell.font = { bold, size: 10 };
+          cell.alignment = { horizontal: i === 0 ? "center" : "left", vertical: "middle", wrapText: true };
+        }
       });
-      row.height = 18;
+    };
+    writeRow(r, ["S.No", "Class", "Sub Acronym", "Subject Name"], true);
+    sheet.getRow(r).height = 20;
+    r++;
+    Array.from(classRows.values()).forEach((row, i) => {
+      writeRow(r, [i + 1, row.cls, row.acr, row.name], false);
+      sheet.getRow(r).height = 18;
+      r++;
     });
+  }
 
-    const totalRow = sheet.getRow(r++);
-    totalRow.getCell(1).value = "TOTAL TEACHING HOURS PER WEEK";
-    totalRow.getCell(1).font = { bold: true, size: 9 };
-    sheet.mergeCells(r - 1, 1, r - 1, 6);
-    totalRow.getCell(1).alignment = { horizontal: "right", vertical: "middle" };
-    totalRow.getCell(1).border = BORDER;
-
-    const totalCell = totalRow.getCell(7);
-    totalCell.value = totalHours;
-    totalCell.font = { bold: true, size: 10 };
-    totalCell.alignment = { horizontal: "center", vertical: "middle" };
-    totalCell.border = BORDER;
-    totalRow.height = 20;
+  // Signature blocks, one row per group the college chose (default: In-Charge / HOD / Principal).
+  r += 2;
+  for (const row of resolveSignatureRows(c.teachingLoadSignatureRows, deptName)) {
+    const sigGroups = splitColumns(lastCol, row.map(() => 1));
+    row.forEach((label, i) => {
+      const [from, to] = sigGroups[i];
+      sheet.getCell(r, from).value = label;
+      if (to > from) sheet.mergeCells(r, from, r, to);
+      styleRange(sheet, r, from, to, { bold: true, align: "center" });
+      for (let col = from; col <= to; col++) sheet.getCell(r, col).border = {};
+    });
+    sheet.getRow(r).height = 24;
+    r += 3;
   }
 
   const buffer = (await workbook.xlsx.writeBuffer()) as ArrayBuffer;

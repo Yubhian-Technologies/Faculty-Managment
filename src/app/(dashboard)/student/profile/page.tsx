@@ -51,7 +51,7 @@ function Fields({ rows }: { rows: Row[] }) {
 
 // "My Profile" - everything the college holds about the logged-in student, on one page (reached from the avatar in the
 // top bar). The student can edit their own contact, family, address and bank details and their photo; identity and
-// academic data (Roll No, name, course, department, year, section, admission details...) stays with the College
+// academic data (Regd. No, name, course, department, year, section, admission details...) stays with the College
 // Office. The server sends ready-made rows with staff-only fields removed, and refuses any non-editable field.
 export default function StudentProfilePage() {
   const { user } = useAuth();
@@ -138,7 +138,7 @@ export default function StudentProfilePage() {
       <PageHeader
         title="My Profile"
         description={editing
-          ? "Update your contact, family, address and bank details. Roll No, name, course, year and admission details are managed by the College Office."
+          ? "Update your contact, family, address and bank details. Regd. No, name, course, year and admission details are managed by the College Office."
           : "The details your college holds for you. You can update your own contact details and photo; to correct anything else, contact the College Office."}
         actions={
           <div className="flex gap-2">

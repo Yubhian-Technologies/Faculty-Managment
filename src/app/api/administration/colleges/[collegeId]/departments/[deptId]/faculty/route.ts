@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireLocationMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
-import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { compareFacultyForList } from "@/lib/faculty/sortFacultyForList";
 
 // Read-only: faculty of one department of a college in the caller's location.
 export async function GET(_request: Request, { params }: { params: Promise<{ collegeId: string; deptId: string }> }) {
@@ -19,12 +19,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ col
     if (!college || college.locationId !== session.locationId || !deptSnap.exists) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-    const deptName = (deptSnap.data() as { name?: string }).name ?? "";
+    const deptData = deptSnap.data() as { name?: string; hodUid?: string };
+    const deptName = deptData.name ?? "";
 
     const facultySnap = await collegeRef.collection("facultyMembers").where("department", "==", deptName).get();
     const faculty = facultySnap.docs
       .map((d) => ({ id: d.id, ...migrateFacultyDoc(d.data()) }))
-      .sort((a, b) => facultyDisplayName(a as { legalName?: string }).localeCompare(facultyDisplayName(b as { legalName?: string })));
+      .sort(compareFacultyForList(deptData.hodUid));
 
     return NextResponse.json({ faculty, collegeName: college.name ?? "", departmentName: deptName });
   } catch (err) {

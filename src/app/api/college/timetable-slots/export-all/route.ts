@@ -103,6 +103,8 @@ export async function GET(request: Request) {
       year: number;
       batch: string;
       regulation?: string;
+      classroomNumber?: string;
+      facultyInchargeName?: string;
       currentSemester: number | null;
       timing: CourseYearTiming;
       slots: (TimetableSlot & { id: string })[];
@@ -126,6 +128,8 @@ export async function GET(request: Request) {
         year: section.year,
         batch: section.batch,
         regulation: section.regulation,
+        classroomNumber: section.classroomNumber || undefined,
+        facultyInchargeName: section.facultyInchargeName || undefined,
         currentSemester,
         timing,
         slots,

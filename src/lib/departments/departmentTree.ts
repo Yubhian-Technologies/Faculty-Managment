@@ -220,6 +220,31 @@ export function groupDepartmentsByParent<T extends TreeDepartment>(
   return out;
 }
 
+/**
+ * Orders an already-chosen candidate list (e.g. "departments offering this
+ * course") so each child sits directly under its parent, indented - for a
+ * picker that renders exactly the candidates it's given, with no section-based
+ * filtering or "all sub-departments" container option (unlike
+ * departmentFilterOptions below). Parents with no children among the
+ * candidates, and departments with no parent at all, keep their own relative
+ * order; this never adds or removes anything from the list.
+ */
+export function orderDepartmentsByParent<T extends TreeDepartment>(candidates: T[]): { department: T; depth: 0 | 1 }[] {
+  const order = new Map(candidates.map((d, i) => [d, i] as const));
+  const byOrder = (a: T, b: T) => (order.get(a) ?? 0) - (order.get(b) ?? 0);
+  const ids = new Set(candidates.map((d) => d.id).filter(Boolean));
+  const roots = candidates.filter((d) => !(d.parentDepartmentId && ids.has(d.parentDepartmentId))).sort(byOrder);
+  const out: { department: T; depth: 0 | 1 }[] = [];
+  for (const root of roots) {
+    out.push({ department: root, depth: 0 });
+    if (!root.id) continue;
+    for (const child of candidates.filter((d) => d.parentDepartmentId === root.id).sort(byOrder)) {
+      out.push({ department: child, depth: 1 });
+    }
+  }
+  return out;
+}
+
 export interface DepartmentFilterOption<T> {
   department: T;
   /** 0 = top level, 1 = listed under its parent. Presentation only. */
@@ -249,7 +274,7 @@ export function departmentFilterOptions<T extends TreeDepartment>(
 ): DepartmentFilterOption<T>[] {
   const have = new Set(Array.from(sectionDepartmentNames, clean).filter(Boolean));
   const active = candidates.filter((d) => d.isActive !== false);
-  const base = active.filter((d) => departmentHasSections(d, have));
+  const base = active.filter((d) => departmentHasSections(d, have, all));
   const kept: T[] = base.length > 0 ? [...base] : [...active];
   if (base.length > 0) {
     const keptNames = new Set(kept.map((d) => clean(d.name)));

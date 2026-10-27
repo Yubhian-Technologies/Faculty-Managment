@@ -20,6 +20,16 @@ const ALL = [BASIC, BS_CHEM, BS_ENG, CSE, CSBS, EEE, EMPTY];
 // Only the branches hold sections - which is the whole point.
 const SECTIONS = ["CSE", "CSBS", "EEE"];
 
+// Shaped after live VWU data: a managed branch (AI) that is ITSELF a container
+// holding nothing of its own - its sections are filed under ITS children
+// (AIDS, AIML) - managed by a Basic Science department one level further up.
+const AI = dept({ id: "ai", name: "Artificial Intelligence", hasSubDepartments: true, parentRunsOwnSections: false });
+const AIDS = dept({ id: "aids", name: "AIDS", parentDepartmentId: "ai" });
+const AIML = dept({ id: "aiml", name: "AIML", parentDepartmentId: "ai" });
+const BS_MATHS = dept({ id: "bsm", name: "Basic Science - Maths", managedDepartments: ["Artificial Intelligence"] });
+const ALL_WITH_AI = [...ALL, AI, AIDS, AIML, BS_MATHS];
+const SECTIONS_WITH_AI = [...SECTIONS, "AIDS", "AIML"];
+
 describe("departmentHasSections", () => {
   it("includes a department whose own name is on sections", () => {
     expect(departmentHasSections(CSE, SECTIONS)).toBe(true);
@@ -54,6 +64,18 @@ describe("departmentHasSections", () => {
 
   it("ignores surrounding whitespace on either side", () => {
     expect(departmentHasSections(dept({ id: "w", name: "CSE" }), ["  CSE  "])).toBe(true);
+  });
+
+  // The VWU bug: a managed branch that is itself split into sub-departments
+  // (its own sections sit one level deeper, under ITS children) was wrongly
+  // judged to have no sections at all - without `all`, the exact-name check
+  // can't see past the one extra hop.
+  it("includes a department whose managed branch is itself a container - resolved through that branch's children", () => {
+    expect(departmentHasSections(BS_MATHS, SECTIONS_WITH_AI, ALL_WITH_AI)).toBe(true);
+  });
+
+  it("still excludes it when the `all` list isn't given (the old, narrower behaviour)", () => {
+    expect(departmentHasSections(BS_MATHS, SECTIONS_WITH_AI)).toBe(false);
   });
 });
 

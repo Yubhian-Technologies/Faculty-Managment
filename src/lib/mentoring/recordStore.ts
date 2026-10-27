@@ -20,7 +20,7 @@ const iso = (t: Stamp) => t?.toDate?.().toISOString() ?? null;
 
 export function toEntry(doc: DocumentSnapshot): MentoringEntry {
   const d = (doc.data() ?? {}) as {
-    section?: string; semester?: number | null; values?: Record<string, string | boolean>;
+    section?: string; semester?: number | null; values?: Record<string, string | boolean | string[]>;
     createdByName?: string; createdAt?: Stamp; updatedAt?: Stamp;
   };
   return {

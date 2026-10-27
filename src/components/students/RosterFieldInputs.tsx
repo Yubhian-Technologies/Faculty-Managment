@@ -13,6 +13,8 @@ import {
 } from "@/lib/students/rosterFields";
 import { resolveDepartmentCourseScope, resolveCatalogId, freshmanPickerDepartmentNames, getFreshmanDepartmentIds, isValidYear1LandingDepartment, isValidYear1LandingDepartmentForPicker, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { managerEffectiveYears } from "@/lib/departments/hodScope";
+import { findBranchManager } from "@/lib/departments/managedBranches";
+import { orderDepartmentsByParent } from "@/lib/departments/departmentTree";
 import { CASTE_LABELS, SUB_CASTES_BY_CASTE } from "@/types";
 import type { Department, Course, Caste } from "@/types";
 
@@ -332,7 +334,7 @@ interface FormProps {
   /** Academic years offered by the Year select. */
   years: number[];
   /**
-   * Rendered read-only with a note. Used for Roll No on Edit: it's a template
+   * Rendered read-only with a note. Used for Regd. No on Edit: it's a template
    * column the Office can set at intake, but correcting it afterwards belongs
    * to the department (see students/[id] PATCH).
    */
@@ -378,7 +380,7 @@ function FieldInputBody({ field, values, onChange, departments, courseNames, cou
     // doesn't look like a different, unformatted field.
     const displayValue = field.key === "year" && value ? ordinalYear(Number(value)) : value;
     const caption = readOnlyCaptions?.[field.key] ?? (field.key === "rollNumber"
-      ? "The student's unique Roll No. Corrections are made by the department (Students page)."
+      ? "The student's unique Regd. No. Corrections are made by the department (Students page)."
       : "Set when the student was added - use Sectioning/Promotion to move them, not this form.");
     return (
       <div className="space-y-2">
@@ -513,7 +515,9 @@ function FieldInputBody({ field, values, onChange, departments, courseNames, cou
         >
           <SelectTrigger><SelectValue placeholder={values.course ? "Select department" : "Select a course first"} /></SelectTrigger>
           <SelectContent>
-            {options.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
+            {orderDepartmentsByParent(options).map(({ department: d, depth }) => (
+              <SelectItem key={d.id} value={d.name} className={depth === 1 ? "pl-8" : undefined}>{d.name}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>

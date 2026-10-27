@@ -23,7 +23,7 @@ const EMPTY_FORM: RosterForm = Object.fromEntries(EDITABLE_ROSTER_FIELDS.map((f)
 /**
  * The fields shown read-only (disabled) in the form. Add: none. Edit: Department and
  * Year always (moving a student is the sectioning/promotion flow's job), and the
- * Roll No unless this is the College Office's form (`rollEditable`). Course too when `courseLocked`: a student who is
+ * Regd. No unless this is the College Office's form (`rollEditable`). Course too when `courseLocked`: a student who is
  * already in a section keeps that section's course (moving them is the sectioning flow's job, not this form's).
  */
 export function lockedFieldKeys(isEdit: boolean, rollEditable: boolean, courseLocked = false): string[] {
@@ -39,7 +39,7 @@ interface StudentFormDialogProps {
   student?: StudentListItem | StudentRecord | null;
   onSaved: () => void;
   /**
-   * Edit only: let the Roll No be changed (instead of the read-only box every other
+   * Edit only: let the Regd. No be changed (instead of the read-only box every other
    * role sees). Passed by the College Office pages alone - the server applies the
    * same rule by role, so this only decides whether the field is unlocked.
    */
@@ -138,7 +138,7 @@ export function StudentFormDialog({ open, onOpenChange, student, onSaved, rollEd
   async function handleSave() {
     const found: EditProblem[] = [];
     const need = (field: string, message: string) => found.push({ field, label: editFieldLabel(field), message });
-    // Roll No is optional on Add - the Office often enrols students before roll numbers exist and sets them later.
+    // Regd. No is optional on Add - the Office often enrols students before Regd. Nos exist and sets them later.
     // Student Mobile No is required (and unique across every college - the server checks that): on Add it must be
     // filled in; on Edit an existing number can be corrected but not removed (a legacy student with none may be saved
     // without one until it is entered).
@@ -146,10 +146,10 @@ export function StudentFormDialog({ open, onOpenChange, student, onSaved, rollEd
     if (editTarget && !form.mobileNo?.trim() && editTarget.mobileNo?.trim()) {
       need("mobileNo", "A student's Student Mobile No can't be removed - change it to the correct number instead");
     }
-    // Edit with an editable Roll No: an existing roll can be corrected, never emptied
+    // Edit with an editable Regd. No: an existing roll can be corrected, never emptied
     // (the server refuses it too). A legacy roll-less student may still be saved blank.
     if (editTarget && rollEditable && !form.rollNumber?.trim() && editTarget.rollNumber?.trim()) {
-      need("rollNumber", "A student's Roll No can't be removed - change it to the correct number instead");
+      need("rollNumber", "A student's Regd. No can't be removed - change it to the correct number instead");
     }
     if (!form.name?.trim()) need("name", "Name is required");
     if (!form.course) need("course", "Course is required");
@@ -306,7 +306,7 @@ export function StudentFormDialog({ open, onOpenChange, student, onSaved, rollEd
             />
             {fieldErrors.loginPassword && <p role="alert" data-field-error="loginPassword" className="text-xs font-medium text-destructive">{fieldErrors.loginPassword}</p>}
             <p className="text-xs text-muted-foreground">
-              When given, the student can sign in with their Roll Number and this password straight away. It is not saved anywhere readable, and they can change it after signing in.
+              When given, the student can sign in with their Regd. No and this password straight away. It is not saved anywhere readable, and they can change it after signing in.
             </p>
           </div>
         )}

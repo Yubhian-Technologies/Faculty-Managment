@@ -9,13 +9,16 @@ import { SUBJECT_COLORS, isSubjectColor } from "@/lib/timetable/subjectColors";
 import { facultySpans } from "@/lib/timetable/facultySpans";
 import { toast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
+import { useCollegeInfo } from "@/hooks/useCollegeInfo";
 import { formatDMY, currentWeekDates } from "@/lib/utils";
 import { isoDateKey } from "@/lib/leave/dayCounter";
 import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
+import { subjectAbbreviation } from "@/lib/timetable/subjectAbbreviation";
 import { renderHtmlToPdf } from "@/lib/pdf/htmlToPdf";
 import { buildFacultyTimetablePdfHtml, formatTime12h as format12h } from "@/lib/timetable/facultyTimetablePdf";
 import { downloadFacultyTimetableXlsx } from "@/lib/timetable/timetableExport";
 import { WeekNavigator } from "@/components/timetable/WeekNavigator";
+import { FacultyTimetableFooter, FacultyTimetableLetterhead, facultyTimetableDepartment } from "@/components/timetable/FacultyTimetableSheet";
 import type { TeachingAssignment, TimetableSlot, DayOfWeek, CourseYearTiming, PeriodTiming, Course, Department } from "@/types";
 import { DAY_LABELS } from "@/types";
 
@@ -59,11 +62,11 @@ function formatTeachingShorthand(parts: {
   const semStr = semNum != null ? (typeof semNum === "number" ? `${toRomanYear(Number(semNum))} Sem` : `${semNum} Sem`) : "";
 
   // Strip BS/BSE/BSC prefix tags (e.g. "BSE-ME-A" -> "ME-A", "BSC-CSE-C" -> "CSE-C")
-  let sec = (parts.sectionName ?? "").trim().replace(/^BS[EC]?[-_]/i, "");
-  if (sec) sec = `Section ${sec}`;
+  const sec = (parts.sectionName ?? "").trim().replace(/^BS[EC]?[-_]/i, "");
 
-  const classPrefix = [yearStr, courseStr, semStr].filter(Boolean).join(" ");
-  return [classPrefix, sec].filter(Boolean).join(" - ");
+  // "III B.Tech-I Sem-CSBS-A"
+  const classPrefix = [yearStr, courseStr].filter(Boolean).join(" ");
+  return [classPrefix, semStr, sec].filter(Boolean).join("-");
 }
 
 export default function HODTeachingPage() {
@@ -153,9 +156,18 @@ export default function HODTeachingPage() {
   const filteredSlots = timetableSlots.filter(
     (s) => !nonTeachingAssignmentIds.has(s.assignmentId) && s.subjectType !== "NON_TEACHING" && !(s as any).isNonTeachingLoad
   );
-  const maxPeriod = filteredSlots.reduce((max, s) => Math.max(max, s.periodNumber), 0);
+  // Every period of the college day, not just the ones with a class in them: the longest day among the
+  // loaded course-year timings, or a placed slot beyond it.
+  const timingPeriodCount = timings.reduce((max, t) => Math.max(max, t.periods?.length || t.numberOfPeriods || 0), 0);
+  const maxPeriod = filteredSlots.reduce((max, s) => Math.max(max, s.periodNumber), timingPeriodCount);
   const periods = Array.from({ length: maxPeriod }, (_, i) => i + 1);
   const displaySlots = typeFilter === "ALL" ? filteredSlots : filteredSlots.filter((s) => s.subjectType === typeFilter);
+  // What the letterhead and the bottom list describe: the same standing slots the downloads use.
+  const sheetSlots = displaySlots.filter((s) => !s.id.startsWith("substitute_"));
+  const sheetSemesterLabel = (() => {
+    const nums = Array.from(new Set(sheetSlots.map((sl) => sl.semester).filter((n): n is number => n != null))).sort((a, b) => a - b);
+    return nums.length > 0 ? nums.join(", ") : "—";
+  })();
 
 
     const periodsByCourseYear = new Map<string, PeriodTiming[]>(
@@ -179,6 +191,8 @@ export default function HODTeachingPage() {
     return set;
   }
 
+  const { collegeInfo } = useCollegeInfo();
+  const college = collegeInfo ?? undefined;
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isExportingXlsx, setIsExportingXlsx] = useState(false);
 
@@ -206,6 +220,7 @@ export default function HODTeachingPage() {
         courseCodeById,
         departments,
         formatDMY,
+        college,
       });
       await renderHtmlToPdf(html, `Faculty-Teaching-Load-${isoDateKey(weekStart)}.pdf`);
       toast({ title: "Timetable downloaded", description: "Saved as PDF" });
@@ -240,6 +255,8 @@ export default function HODTeachingPage() {
           courseCodeById,
           departments,
           formatDMY,
+          departmentName: user?.department,
+          college,
         },
         `Semester-Timetable-${isoDateKey(weekStart)}.xlsx`
       );
@@ -274,6 +291,7 @@ export default function HODTeachingPage() {
       courseCodeById,
       departments,
       formatDMY,
+      college,
     });
     const printWindow = window.open("", "_blank");
     if (!printWindow) {
@@ -293,7 +311,7 @@ export default function HODTeachingPage() {
     return (
       <div className="space-y-6">
         <PageHeader
-          title="Teaching Load"
+          title="My Time Table"
           description="Your subject allocations and weekly timetable, period by period"
         />
         <div className="h-96 rounded-lg border bg-muted/30 animate-pulse" />
@@ -304,11 +322,11 @@ export default function HODTeachingPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Teaching Load"
+        title="My Time Table"
         description="Your subject allocations and weekly timetable, period by period"
       />
 
-      {periods.length === 0 ? (
+      {filteredSlots.length === 0 ? (
         <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
           No timetable slots have been published for you yet.
         </div>
@@ -339,6 +357,13 @@ export default function HODTeachingPage() {
              </Button>
            </div>
          </div>
+        <FacultyTimetableLetterhead
+          college={collegeInfo ?? undefined}
+          facultyName={user?.name ?? ""}
+          departmentName={facultyTimetableDepartment(user?.department, sheetSlots, assignmentById)}
+          academicYear={sheetSlots.find((s) => s.academicYear)?.academicYear}
+          semesterLabel={sheetSemesterLabel}
+        />
         <div className="overflow-x-auto md:overflow-x-visible rounded-lg border">
           <table className="w-full text-xs md:table-fixed border-collapse">
             <colgroup>
@@ -392,7 +417,7 @@ export default function HODTeachingPage() {
                               });
                               const subjectName = slot.subjectName || assignment?.subjectName || "";
                               const shortCode = assignment?.shortCode;
-                              const titleDisplay = shortCode ? `${subjectName} (${shortCode})` : subjectName;
+                              const titleDisplay = subjectAbbreviation(subjectName, shortCode);
                               const codeKey = (shortCode || assignment?.subjectCode || (slot as any).subjectCode || slot.subjectId || "").toUpperCase().trim();
                               
                               const nameKey = (subjectName || "").toUpperCase().trim();
@@ -408,7 +433,7 @@ export default function HODTeachingPage() {
                                       {format12h(time.startTime)}&ndash;{format12h((lastTime ?? time).endTime)}
                                     </p>
                                   )}
-                                  <p className="text-xs font-semibold leading-tight">{titleDisplay}</p>
+                                  <p className="text-xs font-semibold leading-tight" title={subjectName}>{titleDisplay}</p>
                                   {slot.substituteFacultyName ? (
                                     <p className="text-[11px] font-medium text-amber-700 mt-0.5">
                                       Covered by {slot.substituteFacultyName}{slot.substituteDate ? ` (${formatDMY(slot.substituteDate)})` : ""}
@@ -441,6 +466,12 @@ export default function HODTeachingPage() {
             </tbody>
           </table>
         </div>
+        <FacultyTimetableFooter
+          college={collegeInfo ?? undefined}
+          departmentName={facultyTimetableDepartment(user?.department, sheetSlots, assignmentById)}
+          slots={sheetSlots}
+          assignmentById={assignmentById}
+        />
         </>
       )}
     </div>

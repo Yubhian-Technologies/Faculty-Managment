@@ -1,4 +1,5 @@
 import { auth } from "@/lib/firebase/client";
+import { fetchCollegeLogoUrl } from "@/lib/pdf/logo";
 import { renderHtmlToPdf } from "@/lib/pdf/htmlToPdf";
 import type { getDocumentAcknowledgementHTML } from "@/lib/pdf/documentAcknowledgementTemplate";
 
@@ -14,7 +15,7 @@ export async function downloadDocumentAcknowledgementPdf(
   const res = await fetch("/api/pdf/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ type: "DOCUMENT_ACKNOWLEDGEMENT", data }),
+    body: JSON.stringify({ type: "DOCUMENT_ACKNOWLEDGEMENT", data: { ...data, logoUrl: data.logoUrl ?? (await fetchCollegeLogoUrl()) } }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => null) as { error?: string } | null;

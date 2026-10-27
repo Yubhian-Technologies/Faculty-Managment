@@ -3,14 +3,14 @@ import { batchTitle, completeFromTarget, examHeldLabel, normalizeBatchMeta, regu
 
 describe("resolveResultHeaders", () => {
   it("reads the template's own headings", () => {
-    const r = resolveResultHeaders(["Roll No", "Subject Code", "Grade"]);
+    const r = resolveResultHeaders(["Regd. No", "Subject Code", "Grade"]);
     expect(r.keyMap).toEqual({ 0: "rollNumber", 1: "subjectCode", 2: "grade" });
     expect(r.missing).toEqual([]);
     expect(r.ignored).toEqual([]);
   });
 
   it("ignores marks columns - results are grades only", () => {
-    const r = resolveResultHeaders(["Roll No", "Subject Code", "Internal Marks", "External Marks", "Total", "Grade"]);
+    const r = resolveResultHeaders(["Regd. No", "Subject Code", "Internal Marks", "External Marks", "Total", "Grade"]);
     expect(r.keyMap).toEqual({ 0: "rollNumber", 1: "subjectCode", 5: "grade" });
     expect(r.ignored).toEqual(["Internal Marks", "External Marks", "Total"]);
   });
@@ -23,11 +23,11 @@ describe("resolveResultHeaders", () => {
   });
 
   it("names the required columns that are missing", () => {
-    expect(resolveResultHeaders(["Roll No", "Marks"]).missing).toEqual(["Subject Code", "Grade"]);
+    expect(resolveResultHeaders(["Regd. No", "Marks"]).missing).toEqual(["Subject Code", "Grade"]);
   });
 
   it("uses only the first column for a field named twice", () => {
-    const r = resolveResultHeaders(["Roll No", "Regd No", "Subject Code", "Grade"]);
+    const r = resolveResultHeaders(["Regd. No", "Regd No", "Subject Code", "Grade"]);
     expect(r.keyMap).toEqual({ 0: "rollNumber", 2: "subjectCode", 3: "grade" });
     expect(r.ignored).toEqual(["Regd No"]);
   });

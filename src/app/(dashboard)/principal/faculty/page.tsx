@@ -1,5 +1,6 @@
 "use client";
 
+import { useFacultyListFilters } from "@/components/faculty/FacultyListFilters";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -53,15 +54,6 @@ const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "RETIRED", label: "Retired" },
 ];
 
-const STATUS_TABS: { key: string; label: string }[] = [
-  { key: "", label: "All" },
-  { key: "ACTIVE", label: "Active" },
-  { key: "INTERVIEW_DONE", label: "Interview Done" },
-  { key: "RETAINERSHIP", label: "Retainership" },
-  { key: "ON_LEAVE", label: "On Leave" },
-  { key: "RESIGNED", label: "Resigned" },
-  { key: "RETIRED", label: "Retired" },
-];
 
 type FacultyRow = FacultyListRow;
 
@@ -78,7 +70,6 @@ function PrincipalFacultyContent() {
   const [faculty, setFaculty] = useState<FacultyRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
-  const [statusTab, setStatusTab] = useState<string>("");
 
   // Selection & Actions state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -141,10 +132,8 @@ function PrincipalFacultyContent() {
     p.set("load", "1");
     if (loadedFilters.dept !== ALL_DEPTS) p.set("department", loadedFilters.dept);
     if (loadedFilters.status !== ALL_STATUS) p.set("status", loadedFilters.status);
-    const defaultTab = loadedFilters.status !== ALL_STATUS ? loadedFilters.status : "";
-    if (statusTab !== defaultTab) p.set("tab", statusTab || "all");
     return `/principal/faculty?${p.toString()}`;
-  }, [loadedFilters, statusTab]);
+  }, [loadedFilters]);
 
   // Keep the address bar in step with what is loaded (no navigation, no reload).
   useEffect(() => {
@@ -155,7 +144,7 @@ function PrincipalFacultyContent() {
   }, [listUrl, loadedFilters]);
 
   // Load faculty with current filters
-  const handleLoad = useCallback(async (dept = selectedDept, status = selectedStatus, tab = "") => {
+  const handleLoad = useCallback(async (dept = selectedDept, status = selectedStatus) => {
     abortControllerRef.current?.abort();
     const ctrl = new AbortController();
     abortControllerRef.current = ctrl;
@@ -174,7 +163,6 @@ function PrincipalFacultyContent() {
       setFaculty(data.faculty ?? []);
       setHasLoaded(true);
       setSelectedIds(new Set());
-      setStatusTab(tab === "all" ? "" : tab || (status !== ALL_STATUS ? status : ""));
       setLoadedFilters({ dept, status });
     } catch (err) {
       if ((err as Error)?.name === "AbortError") return;
@@ -199,7 +187,7 @@ function PrincipalFacultyContent() {
       const s = statusParam || ALL_STATUS;
       setSelectedDept(d);
       setSelectedStatus(s);
-      void handleLoad(d, s, searchParams.get("tab") ?? "");
+      void handleLoad(d, s);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -212,7 +200,6 @@ function PrincipalFacultyContent() {
     setFaculty([]);
     setHasLoaded(false);
     setSelectedIds(new Set());
-    setStatusTab("");
   }
 
   // Find department ID for a row to form links
@@ -221,16 +208,8 @@ function PrincipalFacultyContent() {
     return match?.id ?? "all";
   }
 
-  // Client-side filtering by status tab
-  const displayedFaculty = useMemo(() => {
-    if (!statusTab) return faculty;
-    return faculty.filter((f) => f.status === statusTab);
-  }, [faculty, statusTab]);
-
-  const countForStatus = (statusKey: string) => {
-    if (!statusKey) return faculty.length;
-    return faculty.filter((f) => f.status === statusKey).length;
-  };
+  // Gender / Qualification / Designation / Status filters and the joining / experience sorts, same as the HOD register.
+  const { rows: displayedFaculty, bar: filterBar } = useFacultyListFilters(faculty);
 
   // Selection
   const allSelected = displayedFaculty.length > 0 && displayedFaculty.every((f) => selectedIds.has(f.id as string));
@@ -347,7 +326,7 @@ function PrincipalFacultyContent() {
     },
     {
       key: "totalYearsOfExperience",
-      header: "Total Experience",
+      header: "Experience",
       hideOnMobile: true,
       render: (row) => <FacultyExperienceCell row={row} />,
     },
@@ -455,8 +434,8 @@ function PrincipalFacultyContent() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Faculty Register"
-        description="Filter and manage teaching faculty across all departments"
+        title="Staff Profiles"
+        description="Staff records of the College"
         actions={
           <div className="flex items-center gap-2">
             {selectedIds.size > 0 && (
@@ -488,7 +467,7 @@ function PrincipalFacultyContent() {
         <SegmentedTabs
           value="faculty"
           options={[
-            { key: "faculty", label: "Teaching Faculty", href: "/principal/faculty" },
+            { key: "faculty", label: "Teaching Staff", href: "/principal/faculty" },
             { key: "supporting", label: "Supporting Staff", href: "/principal/faculty/supporting-staff" },
           ]}
         />
@@ -604,29 +583,7 @@ function PrincipalFacultyContent() {
         </Card>
       ) : (
         <div className="space-y-4">
-          {/* Quick status tabs across the loaded roster */}
-          <div className="flex gap-1.5 overflow-x-auto pb-1">
-            {STATUS_TABS.map((tab) => {
-              const active = statusTab === tab.key;
-              const count = countForStatus(tab.key);
-              return (
-                <button
-                  key={tab.key}
-                  onClick={() => setStatusTab(tab.key)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors whitespace-nowrap ${
-                    active
-                      ? "bg-primary text-primary-foreground border-primary"
-                      : "bg-background border-border hover:bg-muted text-muted-foreground"
-                  }`}
-                >
-                  {tab.label}
-                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${active ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-foreground"}`}>
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          {filterBar}
 
           <DataTable
             data={displayedFaculty}
@@ -638,12 +595,8 @@ function PrincipalFacultyContent() {
             searchPlaceholder="Search by name, employee ID, email, designation, role, or department..."
             searchKeys={["name", "legalName", "email", "collegeEmail", "employeeId", "designation", "department", "mobileNo", "seatLabels"] as (keyof FacultyRow)[]}
             onRowClick={(row) => router.push(withReturnTo(`/principal/faculty/${getDeptIdForRow(row)}/${row.id}`, listUrl))}
-            emptyTitle={statusTab ? `No ${statusTab.toLowerCase().replace(/_/g, " ")} faculty found` : "No faculty found"}
-            emptyDescription={
-              statusTab
-                ? `There are no faculty members with status "${statusTab.toLowerCase().replace(/_/g, " ")}" in ${deptLabel}.`
-                : `No faculty records found in ${deptLabel}.`
-            }
+            emptyTitle="No faculty found"
+            emptyDescription={`No faculty records found in ${deptLabel}.`}
             emptyAction={
               <Button onClick={() => router.push("/principal/faculty/new")}>
                 <UserPlus className="h-4 w-4 mr-2" />

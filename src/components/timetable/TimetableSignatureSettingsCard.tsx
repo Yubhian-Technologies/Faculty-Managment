@@ -16,7 +16,22 @@ import { parseDesignations, MAX_SIGNATURE_GROUPS, MAX_DESIGNATIONS_PER_GROUP, ty
 // src/app/api/college/settings/timetable-signatures/route.ts. A group is one line
 // of designations joined with "+"; every ticked group is printed as a row of
 // signature blocks under the college's timetables (PDF, print, Excel).
-export function TimetableSignatureSettingsCard() {
+interface SignatureCardProps {
+  /** Settings endpoint holding the groups. */
+  apiPath?: string;
+  title?: string;
+  /** What the ticked designations print under, in the description and the toast. */
+  printsOn?: string;
+  /** Short name for the aria labels / toast, e.g. "timetables". */
+  noun?: string;
+}
+
+export function TimetableSignatureSettingsCard({
+  apiPath = "/api/college/settings/timetable-signatures",
+  title = "Timetable Signature Authority",
+  printsOn = "published timetables",
+  noun = "timetables",
+}: SignatureCardProps = {}) {
   const queryClient = useQueryClient();
   const [groups, setGroups] = useState<SignatureGroup[]>([]);
   const [groupName, setGroupName] = useState("");
@@ -27,7 +42,7 @@ export function TimetableSignatureSettingsCard() {
 
   useEffect(() => {
     const ctrl = new AbortController();
-    fetch("/api/college/settings/timetable-signatures", { signal: ctrl.signal })
+    fetch(apiPath, { signal: ctrl.signal })
       .then((r) => r.json() as Promise<{ groups?: SignatureGroup[] }>)
       .then((d) => setGroups(d.groups ?? []))
       .catch((err) => {
@@ -36,7 +51,7 @@ export function TimetableSignatureSettingsCard() {
       })
       .finally(() => setIsLoading(false));
     return () => ctrl.abort();
-  }, []);
+  }, [apiPath]);
 
   function addGroup() {
     if (groups.length >= MAX_SIGNATURE_GROUPS) {
@@ -69,7 +84,7 @@ export function TimetableSignatureSettingsCard() {
   async function handleSave() {
     setIsSaving(true);
     try {
-      const res = await fetch("/api/college/settings/timetable-signatures", {
+      const res = await fetch(apiPath, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ groups }),
@@ -78,7 +93,7 @@ export function TimetableSignatureSettingsCard() {
       if (!res.ok) throw new Error(d.error || "Failed to save");
       if (d.groups) setGroups(d.groups);
       await queryClient.invalidateQueries({ queryKey: ["college-info"] });
-      toast({ variant: "success", title: "Timetable signature authority saved", description: "Ticked groups print on timetables from now on." });
+      toast({ variant: "success", title: `${title} saved`, description: `Ticked groups print on ${printsOn} from now on.` });
     } catch (err) {
       toast({ variant: "destructive", title: "Failed to save", description: err instanceof Error ? err.message : undefined });
     } finally {
@@ -92,10 +107,10 @@ export function TimetableSignatureSettingsCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Timetable Signature Authority</CardTitle>
+        <CardTitle className="text-base">{title}</CardTitle>
         <CardDescription>
           Add a group, then add its designations inside it (type several at once with <b>+</b>, e.g. Timetable In-Charge + HOD + Principal).
-          Tick the designations to show under published timetables - all ticked designations print side by side in one row, like the usual signature line -
+          Tick the designations to show under {printsOn} - all ticked designations print side by side in one row, like the usual signature line -
           then save. Type <b>HOD</b> to print the section&apos;s own HOD-&lt;dept&gt; label. With nothing ticked, the usual
           In-Charge / HOD / Principal row is printed.
         </CardDescription>
@@ -143,7 +158,7 @@ export function TimetableSignatureSettingsCard() {
                     <div key={`${d.label}-${j}`} className="flex items-center gap-3">
                       <Checkbox
                         checked={d.selected}
-                        aria-label={`Show ${d.label} on timetables`}
+                        aria-label={`Show ${d.label} on ${noun}`}
                         onCheckedChange={(v) =>
                           setDesignations(g.id, g.designations.map((x, k) => (k === j ? { ...x, selected: v === true } : x)))
                         }

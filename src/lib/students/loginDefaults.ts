@@ -1,7 +1,7 @@
 // Student login identity. Browser-safe (the login page imports it) - nothing
 // here may touch node-only APIs.
 //
-// A student signs in with their Roll Number. Roll numbers are GLOBALLY unique -
+// A student signs in with their Regd. No. Regd. Nos are GLOBALLY unique -
 // across every college, compared after normalisation - so the roll alone is the
 // identity and the login page needs no college picker. Firebase Auth needs an
 // email, so each student login owns a synthetic, non-deliverable one.

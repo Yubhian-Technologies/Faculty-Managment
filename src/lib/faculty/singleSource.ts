@@ -24,7 +24,7 @@ export const FACULTY_OWNED_MIRRORED_KEYS = ["name", "profilePhotoUrl", "employee
 export const FACULTY_PERSONAL_KEYS = [
   "gender", "dateOfBirth", "legalName", "nameAsPerAadhar", "nameAsPerPan", "fatherName", "motherName", "religion", "caste", "subCaste",
   "aadharNo", "panNo", "passportNo", "differentlyAbled", "differentlyAbledDetails", "bankAccountNumber", "ifscCode", "bankName", "bankBranch",
-  "bankOtherDetails", "emergencyContactName", "emergencyContactRelation", "emergencyContactMobileNo", "ratificationStatus",
+  "bankOtherDetails", "emergencyContactName", "emergencyContactRelation", "emergencyContactMobileNo", "ratificationStatus", "ratificationAttended",
   "ratificationProceedingsNumber", "ratificationDate", "ratifications", "maritalStatus", "spouseName", "numberOfChildren", "temporaryAddress",
   "permanentAddressSameAsTemporary", "permanentAddress", "bloodGroup", "motherTongue", "languagesKnown", "height", "weightKg", "pfNumber",
   "uanNumber", "esiNumber",

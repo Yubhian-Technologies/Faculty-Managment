@@ -13,7 +13,7 @@ function unauthorized(err: unknown) {
 
 export async function PATCH(request: Request, { params }: Ctx) {
   try {
-    const session = await requireCollegeMember("COLLEGE_OFFICE");
+    const session = await requireCollegeMember("EXAM_CELL");
     const { id } = await params;
     const body = (await readJsonBody(request)) as { name?: string; block?: string; floor?: number; benches?: number; studentsPerBench?: number; isActive?: boolean };
     const update: Record<string, unknown> = { updatedAt: new Date() };
@@ -64,7 +64,7 @@ export async function PATCH(request: Request, { params }: Ctx) {
 
 export async function DELETE(_request: Request, { params }: Ctx) {
   try {
-    const session = await requireCollegeMember("COLLEGE_OFFICE");
+    const session = await requireCollegeMember("EXAM_CELL");
     const { id } = await params;
     // Existing seating plans embed a snapshot of the room, so deleting it
     // never rewrites a plan that was already made.

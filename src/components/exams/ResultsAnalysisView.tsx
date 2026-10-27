@@ -224,7 +224,7 @@ export function ResultsAnalysisView({ title = "Results Analysis", description }:
 
   function exportBacklogs() {
     if (!a || !picked) return;
-    const rows = [["Roll No", "Name", "Branch", "Backlogs", "Subjects"], ...a.backlogStudents.map((s) => [
+    const rows = [["Regd. No", "Name", "Branch", "Backlogs", "Subjects"], ...a.backlogStudents.map((s) => [
       s.rollNumber, s.name, s.branch, String(s.backlogs.length), s.backlogs.map((b) => `${b.subjectCode} ${b.subjectName}`).join("; "),
     ])];
     downloadCSV(toCSV(rows), `backlogs_${picked.batch}_sem${picked.semester}${branch ? `_${branch}` : ""}${section ? `_${section}` : ""}.csv`);
@@ -294,7 +294,12 @@ export function ResultsAnalysisView({ title = "Results Analysis", description }:
 
       {!picked ? (
         <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
-          {isLoadingClasses ? "Loading…" : "No published results yet. They appear here once the Exam Cell publishes a results sheet."}
+          {isLoadingClasses ? "Loading…" : (
+            <>
+              <p className="font-medium text-foreground">No Published Results Available</p>
+              <p className="mt-1">Results will appear here once the Examination Cell publishes the relevant results.</p>
+            </>
+          )}
         </div>
       ) : !applied ? (
         <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
@@ -408,7 +413,7 @@ export function ResultsAnalysisView({ title = "Results Analysis", description }:
               <CardContent>
                 {a.toppers.length === 0 ? <p className="text-sm text-muted-foreground">No SGPA to rank yet.</p> : (
                   <table className="w-full text-sm">
-                    <thead className="text-left text-xs text-muted-foreground"><tr className="border-b"><th className="p-2">#</th><th className="p-2">Roll No</th><th className="p-2">Name</th><th className="p-2">Branch</th><th className="p-2 text-right">SGPA</th></tr></thead>
+                    <thead className="text-left text-xs text-muted-foreground"><tr className="border-b"><th className="p-2">#</th><th className="p-2">Regd. No</th><th className="p-2">Name</th><th className="p-2">Branch</th><th className="p-2 text-right">SGPA</th></tr></thead>
                     <tbody>
                       {a.toppers.map((t, i) => (
                         <tr key={t.studentId} className="border-b last:border-0">
@@ -435,10 +440,10 @@ export function ResultsAnalysisView({ title = "Results Analysis", description }:
               <CardContent className="space-y-2">
                 {a.studentsWithBacklogs === 0 ? <p className="text-sm text-muted-foreground">No backlogs.</p> : (
                   <>
-                    <Input placeholder="Search by Roll No or name" value={search} onChange={(e) => setSearch(e.target.value)} />
+                    <Input placeholder="Search by Regd. No or name" value={search} onChange={(e) => setSearch(e.target.value)} />
                     <div className="max-h-80 overflow-auto">
                       <table className="w-full text-sm">
-                        <thead className="sticky top-0 bg-card text-left text-xs text-muted-foreground"><tr className="border-b"><th className="p-2">Roll No</th><th className="p-2">Name</th><th className="p-2">Subjects</th></tr></thead>
+                        <thead className="sticky top-0 bg-card text-left text-xs text-muted-foreground"><tr className="border-b"><th className="p-2">Regd. No</th><th className="p-2">Name</th><th className="p-2">Subjects</th></tr></thead>
                         <tbody>
                           {backlogRows.map((s) => (
                             <tr key={s.studentId} className="border-b last:border-0 align-top">

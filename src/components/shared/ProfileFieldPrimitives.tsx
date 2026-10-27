@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -12,6 +13,10 @@ import { splitDegreeAndBranch } from "@/lib/faculty/legacyProfileFallbacks";
 import { migrateDegree, migrateStaffQualifications } from "@/lib/faculty/fieldRenames";
 import { degreeTypeOptions, isValidDegreeType } from "@/lib/faculty/degreeType";
 import { degreeHasData, isRealYear } from "@/lib/faculty/degreeHasData";
+import {
+  COLLEGE_TYPE_OPTIONS, INSTITUTION_TYPE_OPTIONS, UNIVERSITY_TYPE_OPTIONS, collegeTypeLabel, institutionTypeLabel,
+  institutionNameLabel, universityTypeLabel, withInstitutionType, withUniversityType,
+} from "@/lib/faculty/institutionType";
 import { isDiplomaCourse, diplomaBranchPlaceholder, DIPLOMA_PHARMACY_COURSE } from "@/lib/faculty/schoolCourses";
 import { degreeYear } from "@/types";
 import type { DegreeDetail, DegreeType, StaffQualification, PhdStatus, PhdMode } from "@/types";
@@ -297,6 +302,8 @@ export function DegreeFields({
   const isPostDoc = level === "POST_DOCTORAL";
   const isDoctoralOrPostDoc = level === "DOCTORAL" || level === "POST_DOCTORAL";
   const isUgOrPg = level === "UG" || level === "PG";
+  // UG, PG, Ph.D. and Post-Doctoral ask which kind of institution it was, and end with Additional Information.
+  const hasInstitutionType = isUgOrPg || isDoctoralOrPostDoc;
   // Records saved before Specialization existed have this in Branch instead -
   // fall back to it (same legacy-migration idea as resolveDegree's
   // degreeAndBranch handling above) so existing PhD entries don't appear to
@@ -438,29 +445,58 @@ export function DegreeFields({
         {isUgOrPg && !(level === "UG" && domain === "DENTAL_SCIENCE") && (
           <TextInput label="Specialization" value={v.specialization} onChange={(x) => onChange({ ...v, specialization: x })} placeholder="e.g. Power Electronics & Drives" />
         )}
-        {isUgOrPg ? (
+        {hasInstitutionType ? (
           <>
             <div className="space-y-2">
               <Label>Institution Type</Label>
               <Select
                 value={v.institutionType ?? ""}
-                onValueChange={(x) => onChange({ ...v, institutionType: x as DegreeDetail["institutionType"] })}
+                onValueChange={(x) => onChange(withInstitutionType(v, x as DegreeDetail["institutionType"]))}
               >
-                <SelectTrigger onClear={v.institutionType ? () => onChange(omitKey(v, "institutionType")) : undefined}><SelectValue placeholder="Select type" /></SelectTrigger>
+                <SelectTrigger onClear={v.institutionType ? () => onChange(omitKey(withInstitutionType(v, undefined), "institutionType")) : undefined}><SelectValue placeholder="Select type" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="UNIVERSITY">University</SelectItem>
-                  <SelectItem value="INSTITUTE">Institute</SelectItem>
+                  {INSTITUTION_TYPE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
+            {/* Affiliated College -> College Type. University -> University Type (+ a free-text box for "Others").
+                All optional; a record saved before these existed simply shows them blank. */}
+            {v.institutionType === "INSTITUTE" && (
+              <div className="space-y-2">
+                <Label>College Type</Label>
+                <Select value={v.collegeType ?? ""} onValueChange={(x) => onChange({ ...v, collegeType: x as DegreeDetail["collegeType"] })}>
+                  <SelectTrigger onClear={v.collegeType ? () => onChange(omitKey(v, "collegeType")) : undefined}><SelectValue placeholder="Select college type" /></SelectTrigger>
+                  <SelectContent>
+                    {COLLEGE_TYPE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {v.institutionType === "UNIVERSITY" && (
+              <div className="space-y-2">
+                <Label>University Type</Label>
+                <Select value={v.universityType ?? ""} onValueChange={(x) => onChange(withUniversityType(v, x as NonNullable<DegreeDetail["universityType"]>))}>
+                  <SelectTrigger onClear={v.universityType ? () => onChange(omitKey(omitKey(v, "universityType"), "universityTypeOther")) : undefined}><SelectValue placeholder="Select university type" /></SelectTrigger>
+                  <SelectContent>
+                    {UNIVERSITY_TYPE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                {v.universityType === "OTHERS" && (
+                  <Input
+                    value={v.universityTypeOther ?? ""}
+                    onChange={(e) => onChange({ ...v, universityTypeOther: e.target.value })}
+                    placeholder="Please specify university type"
+                  />
+                )}
+              </div>
+            )}
             <TextInput
-              label="Institution Name"
+              label={institutionNameLabel(v.institutionType)}
               value={v.institutionName}
               onChange={(x) => onChange({ ...v, institutionName: x })}
             />
-            {/* Only when Institute is picked - an Institute is typically
-                affiliated to a University, which a plain University entry
-                has no separate concept of. */}
+            {/* Only when Affiliated College is picked - such a college is affiliated to a University, which a plain
+                University entry has no separate concept of. */}
             {v.institutionType === "INSTITUTE" && (
               <TextInput
                 label="Affiliated University"
@@ -514,6 +550,13 @@ export function DegreeFields({
           <NumInput label="Year of Passing" value={v.yearOfPassing} onChange={(x) => onChange(withYear(v, "yearOfPassing", x))} />
         )}
         <TextInput label="Hall Ticket Number" value={v.hallTicketNumber} onChange={(x) => onChange({ ...v, hallTicketNumber: x })} />
+        {/* Optional free text, stored as `additionalInformation`; never required. */}
+        {hasInstitutionType && (
+          <div className="space-y-2 sm:col-span-2">
+            <Label>Additional Information (if any)</Label>
+            <Textarea rows={2} value={v.additionalInformation ?? ""} onChange={(e) => onChange({ ...v, additionalInformation: e.target.value })} />
+          </div>
+        )}
       </div>
       <CertificateUploadField
         label="Certificate"
@@ -851,15 +894,19 @@ export function StringListInput({ label, values, onChange, placeholder }: {
 
 // ── Read-only primitives ────────────────────────────────────────────────────
 
-export function Section({ number, title, children }: { number: number; title: string; children: React.ReactNode }) {
+// `hideHeader` drops the numbered title row only (a per-module page already names the module in its own page
+// title); the content is rendered exactly as before. Off by default.
+export function Section({ number, title, children, hideHeader = false }: { number: number; title: string; children: React.ReactNode; hideHeader?: boolean }) {
   return (
-    <div className="space-y-3 pt-5 border-t first:border-t-0 first:pt-0">
-      <div className="flex items-center gap-2.5">
-        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-          {number}
-        </span>
-        <p className="text-sm font-semibold">{title}</p>
-      </div>
+    <div className={hideHeader ? "space-y-3" : "space-y-3 pt-5 border-t first:border-t-0 first:pt-0"}>
+      {!hideHeader && (
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+            {number}
+          </span>
+          <p className="text-sm font-semibold">{title}</p>
+        </div>
+      )}
       {children}
     </div>
   );
@@ -964,10 +1011,12 @@ export function DegreeView({
         </>
       ) : null}
       {isSchoolLevel && <OptionalField label="Board" value={degree?.board} />}
-      {isUgOrPg ? (
+      {isUgOrPg || isDoctoralOrPostDoc ? (
         <>
-          <OptionalField label="Institution Type" value={degree?.institutionType === "INSTITUTE" ? "Institute" : degree?.institutionType === "UNIVERSITY" ? "University" : undefined} />
-          <OptionalField label="Institution Name" value={degree?.institutionName} />
+          <OptionalField label="Institution Type" value={institutionTypeLabel(degree?.institutionType)} />
+          {degree?.institutionType === "INSTITUTE" && <OptionalField label="College Type" value={collegeTypeLabel(degree?.collegeType)} />}
+          {degree?.institutionType === "UNIVERSITY" && <OptionalField label="University Type" value={universityTypeLabel(degree)} />}
+          <OptionalField label={institutionNameLabel(degree?.institutionType)} value={degree?.institutionName} />
           {degree?.institutionType === "INSTITUTE" && <OptionalField label="Affiliated University" value={degree?.affiliatedUniversity} />}
         </>
       ) : (
@@ -988,6 +1037,7 @@ export function DegreeView({
         <OptionalField label="Year of Passing" value={isRealYear(degreeYear(degree, false)) ? degreeYear(degree, false) : undefined} />
       )}
       <OptionalField label="Hall Ticket Number" value={degree?.hallTicketNumber} />
+      {(isUgOrPg || isDoctoralOrPostDoc) && <OptionalField label="Additional Information (if any)" value={degree?.additionalInformation} />}
       {degree?.certificateUrl && (
         <div className="col-span-full">
           <a

@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { useAuthStore } from "@/store/authStore";
+import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { toast } from "@/hooks/useToast";
 import { FileText, MapPin, Monitor, UploadCloud, X } from "lucide-react";
 import { formatDate } from "@/lib/utils";
@@ -41,7 +41,8 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 
 export default function NewCandidatePage() {
   const router = useRouter();
-  const user = useAuthStore((s) => s.user);
+  // The department(s) this person is working in: the one picked in "Working as" for a head of several, else their own.
+  const myDepartments = useMyDepartments();
   const searchParams = useSearchParams();
   const prefilledVacancyId = searchParams.get("vacancyId") ?? "";
 
@@ -63,7 +64,6 @@ export default function NewCandidatePage() {
   const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
-    const dept = user?.department ?? "";
 
     void Promise.all([
       fetch("/api/college/vacancy-requests?status=APPROVED")
@@ -92,7 +92,7 @@ export default function NewCandidatePage() {
         // have availableCount 0 (nobody in the role yet) while still needing
         // candidates, so it must never gate eligibility here.
         const filtered = allVacancies.filter((v) =>
-          (dept ? v.department === dept : true) &&
+          (myDepartments.length > 0 ? myDepartments.includes(v.department) : true) &&
           v.requiredCount > 0 &&
           !completedVacancyIds.has(v.id)
         );
@@ -102,7 +102,7 @@ export default function NewCandidatePage() {
       })
       .catch(() => {})
       .finally(() => setIsLoadingVacancies(false));
-  }, [user?.department]);
+  }, [myDepartments]);
 
   function attachedCandidateNamesFor(v: VacancyRequest): string[] {
     return applications

@@ -215,7 +215,7 @@ export default function ExamCellAttendanceReportPage() {
 
   function downloadPdf() {
     if (!rows || rows.length === 0) return;
-    const tableHead = `<tr>${["Roll No", "Name", "Section", "Held", "Attended", "Attendance %"]
+    const tableHead = `<tr>${["Regd. No", "Name", "Section", "Held", "Attended", "Attendance %"]
       .map((h) => `<th style="border:1px solid #999;background:#0a0a7a;color:#fff;padding:4px 6px;font-size:11px;white-space:nowrap;">${h}</th>`)
       .join("")}</tr>`;
     const tableBody = rows
@@ -232,7 +232,7 @@ export default function ExamCellAttendanceReportPage() {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Attendance");
     sheet.columns = [
-      { header: "Roll No", key: "rollNumber", width: 15 },
+      { header: "Regd. No", key: "rollNumber", width: 15 },
       { header: "Name", key: "name", width: 28 },
       { header: "Section", key: "sectionName", width: 12 },
       { header: "Held", key: "held", width: 10 },
@@ -360,7 +360,7 @@ export default function ExamCellAttendanceReportPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b text-left text-xs text-muted-foreground">
-                      <th className="pb-2 pr-3">Roll No</th>
+                      <th className="pb-2 pr-3">Regd. No</th>
                       <th className="pb-2 pr-3">Name</th>
                       <th className="pb-2 pr-3">Section</th>
                       <th className="pb-2 pr-3">Held</th>

@@ -74,7 +74,7 @@ describe("merge: profile content", () => {
 
 describe("FACULTY_PERSONAL_KEYS stays in step with buildPersonalDetailsUpdate", () => {
   it("every personal key the shared builder can write is on the list (so a new field cannot bypass the guard)", () => {
-    const all = Object.fromEntries(FACULTY_PERSONAL_KEYS.map((k) => [k, k === "ratifications" ? [{ status: "Ratified" }] : k === "differentlyAbled" || k === "permanentAddressSameAsTemporary" ? false : k === "numberOfChildren" || k === "weightKg" ? 1 : k === "languagesKnown" ? ["en"] : k === "dateOfBirth" || k === "ratificationDate" ? "2000-01-01" : "x"]));
+    const all = Object.fromEntries(FACULTY_PERSONAL_KEYS.map((k) => [k, k === "ratifications" ? [{ status: "Ratified" }] : k === "differentlyAbled" || k === "permanentAddressSameAsTemporary" || k === "ratificationAttended" ? false : k === "numberOfChildren" || k === "weightKg" ? 1 : k === "languagesKnown" ? ["en"] : k === "dateOfBirth" || k === "ratificationDate" ? "2000-01-01" : "x"]));
     const written = Object.keys(buildPersonalDetailsUpdate(all as never));
     const known = new Set<string>(FACULTY_PERSONAL_KEYS);
     for (const k of written) expect(known.has(k), `${k} is written by buildPersonalDetailsUpdate but not guarded`).toBe(true);

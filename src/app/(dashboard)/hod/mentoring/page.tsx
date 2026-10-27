@@ -2,22 +2,21 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, XCircle } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { MenteeList } from "@/components/mentoring/MenteeList";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
-import type { Section } from "@/types";
 import type { MenteeSummary, MentorOption } from "@/types/mentoring";
 
-type View = "assign" | "mentors" | "mine";
+type View = "assign" | "browse" | "mine";
 const VIEWS: { key: View; label: string }[] = [
   { key: "assign", label: "Assign Students" },
-  { key: "mentors", label: "Mentors" },
+  { key: "browse", label: "Students & Mentors" },
   { key: "mine", label: "My Mentees" },
 ];
 
@@ -44,7 +43,7 @@ export default function HodMentoringPage() {
     <div>
       <PageHeader
         title="Mentoring"
-        description="Assign students to a faculty member who follows their progress - profile, attendance, results and internal marks."
+        description="Assign faculty mentors to students and monitor their academic progress, attendance, results, and internal assessment performance."
       />
       <div className="flex flex-wrap gap-1 border-b mb-4">
         {VIEWS.map((v) => (
@@ -59,49 +58,59 @@ export default function HodMentoringPage() {
         ))}
       </div>
       {mentorsError && <p className="text-sm text-red-600 mb-3">{mentorsError}</p>}
-      {view === "assign" && <AssignView mentors={mentors} onChanged={loadMentors} />}
-      {view === "mentors" && <MentorsView mentors={mentors} />}
+      {view === "assign" && <AssignView onChanged={loadMentors} />}
+      {view === "browse" && <BrowseView mentors={mentors} />}
       {view === "mine" && <MyMenteesView />}
     </div>
   );
 }
 
-interface RollPlanRow { roll: string; status: "ASSIGN" | "ALREADY_MENTEE" | "HAS_OTHER_MENTOR" | "NOT_FOUND" | "OUTSIDE_DEPARTMENT" | "GRADUATED"; studentId?: string; name?: string; section?: string; year?: number; message?: string }
-interface RollCheck { ok: boolean; mentor: { uid: string; name: string }; plan: RollPlanRow[]; counts: { toAssign: number; alreadyMentee: number; problems: number; repeatedInList: number } }
+type MentorFilter = "all" | "unassigned" | "assigned";
+const MENTOR_FILTERS: { key: MentorFilter; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "unassigned", label: "Not assigned" },
+  { key: "assigned", label: "Assigned" },
+];
 
-const ROLL_STATUS: Record<RollPlanRow["status"], { label: string; className: string }> = {
-  ASSIGN: { label: "Will be assigned", className: "text-green-700 dark:text-green-400" },
-  ALREADY_MENTEE: { label: "Already with this mentor", className: "text-muted-foreground" },
-  HAS_OTHER_MENTOR: { label: "Has another mentor", className: "text-red-600" },
-  NOT_FOUND: { label: "Not found", className: "text-red-600" },
-  OUTSIDE_DEPARTMENT: { label: "Not your department", className: "text-red-600" },
-  GRADUATED: { label: "Graduated", className: "text-red-600" },
-};
+interface AssignSection { id: string; name: string; year: number; department: string; courseId: string; courseName: string }
 
-// Mentor + pasted roll numbers, like assigning subjects by code: check what each roll comes to, then
-// assign. One roll that cannot be assigned and nothing is saved. A student who already has a mentor must
-// have that mentor removed first (the Remove link in the section list below) - their record stays.
-function AssignView({ mentors, onChanged }: { mentors: MentorOption[]; onChanged: () => void }) {
-  const [mentorUid, setMentorUid] = useState("");
-  const [rollText, setRollText] = useState("");
-  const [check, setCheck] = useState<{ result: RollCheck; forKey: string } | null>(null);
-  const [checking, setChecking] = useState(false);
-  const [assigning, setAssigning] = useState(false);
-  const [error, setError] = useState("");
-
-  const [sections, setSections] = useState<Section[]>([]);
+// Course -> Year -> Section, then the mentor, then tick the students (search by name or Regd. No).
+// Only sections whose year this HOD runs are offered (a year another department runs is that HOD's to
+// assign). The mentor list puts the faculty who teach the chosen class first. A student who already has
+// a mentor shows only when the filter asks for them, and cannot be ticked: remove that mentor first
+// (the mentoring record stays).
+function AssignView({ onChanged }: { onChanged: () => void }) {
+  const [sections, setSections] = useState<AssignSection[]>([]);
   const [courseKey, setCourseKey] = useState("");
   const [yearKey, setYearKey] = useState("");
   const [sectionId, setSectionId] = useState("");
+  const [mentors, setMentors] = useState<MentorOption[]>([]);
+  const [mentorUid, setMentorUid] = useState("");
   const [students, setStudents] = useState<MenteeSummary[] | null>(null);
+  const [search, setSearch] = useState("");
+  const [mentorFilter, setMentorFilter] = useState<MentorFilter>("unassigned");
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [assigning, setAssigning] = useState(false);
   const [removing, setRemoving] = useState(false);
 
   useEffect(() => {
-    fetch("/api/college/sections")
-      .then((r) => r.json() as Promise<{ sections?: Section[] }>)
-      .then((d) => setSections(d.sections ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load sections" }));
+    getJson<{ sections: AssignSection[] }>("/api/college/mentoring/sections")
+      .then((d) => setSections(d.sections))
+      .catch((e: Error) => toast({ variant: "destructive", title: e.message }));
   }, []);
+
+  const courseOf = (s: AssignSection) => s.courseName || "-";
+  const courseNames = useMemo(() => [...new Set(sections.map(courseOf))].sort((a, b) => a.localeCompare(b)), [sections]);
+  const yearOptions = useMemo(
+    () => [...new Set(sections.filter((s) => courseOf(s) === courseKey).map((s) => s.year))].sort((a, b) => a - b),
+    [sections, courseKey]
+  );
+  const sectionOptions = useMemo(
+    () => sections.filter((s) => courseOf(s) === courseKey && String(s.year) === yearKey),
+    [sections, courseKey, yearKey]
+  );
+  // Two departments can each run a section with the same name, so the department is shown when names repeat.
+  const sectionLabel = (s: AssignSection) => (sectionOptions.filter((o) => o.name === s.name).length > 1 ? `${s.name} · ${s.department}` : s.name);
 
   const loadStudents = useCallback(async (id: string) => {
     setStudents(null);
@@ -114,84 +123,85 @@ function AssignView({ mentors, onChanged }: { mentors: MentorOption[]; onChanged
     }
   }, []);
 
-  useEffect(() => { if (sectionId) void loadStudents(sectionId); }, [sectionId, loadStudents]);
+  const loadMentors = useCallback((id: string) => {
+    getJson<{ mentors: MentorOption[] }>(`/api/college/mentoring/mentors?sectionId=${encodeURIComponent(id)}`)
+      .then((d) => setMentors(d.mentors))
+      .catch((e: Error) => toast({ variant: "destructive", title: e.message }));
+  }, []);
 
-  const sortedSections = useMemo(
-    () => [...sections].sort((a, b) => (a.courseName ?? "").localeCompare(b.courseName ?? "") || a.year - b.year || a.name.localeCompare(b.name)),
-    [sections]
-  );
-
-  // Course -> Year -> Section, each narrowing the next; a section's own list loads once all three are picked.
-  const courseOf = (s: Section) => s.courseName || "-";
-  const courseNames = useMemo(() => [...new Set(sections.map(courseOf))].sort((a, b) => a.localeCompare(b)), [sections]);
-  const yearOptions = useMemo(
-    () => [...new Set(sections.filter((s) => courseOf(s) === courseKey).map((s) => s.year))].sort((a, b) => a - b),
-    [sections, courseKey]
-  );
-  const sectionOptions = useMemo(
-    () => sortedSections.filter((s) => courseOf(s) === courseKey && String(s.year) === yearKey),
-    [sortedSections, courseKey, yearKey]
-  );
-  // Two departments can each run a section with the same name, so the department is shown when names repeat.
-  const sectionLabel = (s: Section) => (sectionOptions.filter((o) => o.name === s.name).length > 1 ? `${s.name} · ${s.department}` : s.name);
-  const withoutMentor = useMemo(() => (students ?? []).filter((s) => !s.mentorUid && s.rollNumber), [students]);
-
-  function addToRollBox() {
-    const have = new Set(rollText.split(/[\s,;]+/).map((r) => r.trim().toUpperCase()).filter(Boolean));
-    const add = withoutMentor.map((s) => s.rollNumber).filter((r) => !have.has(r.toUpperCase()));
-    if (add.length === 0) return;
-    setRollText((t) => `${t.trim() ? `${t.trim()}\n` : ""}${add.join("\n")}`);
+  function pickSection(id: string) {
+    setSectionId(id);
+    setPicked(new Set());
+    setMentorUid("");
+    setSearch("");
+    void loadStudents(id);
+    loadMentors(id);
   }
 
-  const key = `${mentorUid}|${rollText.trim()}`;
-  const fresh = !!check && check.forKey === key;
-  const canAssign = fresh && check!.result.ok && check!.result.counts.toAssign > 0 && !assigning;
+  function resetBelow() {
+    setSectionId("");
+    setStudents(null);
+    setMentors([]);
+    setMentorUid("");
+    setPicked(new Set());
+  }
 
-  async function post(mode: "validate" | "commit") {
-    const res = await fetch("/api/college/mentoring/assign-by-roll", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mode, mentorUid, rollNumbers: rollText }),
+  const shown = useMemo(() => {
+    const q = search.trim().toUpperCase();
+    return (students ?? []).filter((s) => {
+      if (mentorFilter === "assigned" && !s.mentorUid) return false;
+      if (mentorFilter === "unassigned" && s.mentorUid) return false;
+      if (q && !s.rollNumber.toUpperCase().includes(q) && !s.name.toUpperCase().includes(q)) return false;
+      return true;
     });
-    return (await res.json().catch(() => ({}))) as Partial<RollCheck> & { error?: string };
+  }, [students, search, mentorFilter]);
+
+  const pickable = useMemo(() => shown.filter((s) => !s.mentorUid), [shown]);
+  const allTicked = pickable.length > 0 && pickable.every((s) => picked.has(s.id));
+  const teachingMentors = mentors.filter((m) => m.teaches);
+  const otherMentors = mentors.filter((m) => !m.teaches);
+  const mentorLabel = (m: MentorOption) => `${m.name}${m.isSelf ? " (You)" : ""} · ${m.menteeCount} mentee${m.menteeCount === 1 ? "" : "s"}`;
+
+  function toggle(id: string) {
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+  function toggleAll() {
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (allTicked) pickable.forEach((s) => next.delete(s.id));
+      else pickable.forEach((s) => next.add(s.id));
+      return next;
+    });
   }
 
-  async function runCheck() {
-    if (!mentorUid || !rollText.trim()) return;
-    setChecking(true);
-    setError("");
-    try {
-      const json = await post("validate");
-      if (json.plan) setCheck({ result: json as RollCheck, forKey: key });
-      else { setCheck(null); setError(json.error ?? "Couldn't check the roll numbers."); }
-    } catch {
-      setError("Network error while checking the roll numbers.");
-    } finally {
-      setChecking(false);
-    }
+  async function post(body: unknown) {
+    const res = await fetch("/api/college/mentoring/assign", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const d = (await res.json().catch(() => ({}))) as { assigned?: string[]; skipped?: { id: string; reason: string }[]; error?: string };
+    if (!res.ok) throw new Error(d.error || "Couldn't save the change");
+    return d;
   }
 
-  async function runAssign() {
-    if (!canAssign) return;
+  async function assign() {
+    if (!mentorUid || picked.size === 0) return;
     setAssigning(true);
-    setError("");
     try {
-      const json = await post("commit");
-      if (json.plan && json.ok) {
-        const n = json.counts?.toAssign ?? 0;
-        toast({ variant: "success", title: n > 0 ? `${n} student${n === 1 ? "" : "s"} assigned to ${json.mentor?.name ?? "the mentor"}` : "Nothing new to assign" });
-        setRollText("");
-        setCheck(null);
-        onChanged();
-        if (sectionId) void loadStudents(sectionId);
-      } else if (json.plan) {
-        setCheck({ result: json as RollCheck, forKey: key });
-        setError("Nothing was assigned. Fix the roll numbers marked below and check again.");
-      } else {
-        setError(json.error ?? "Couldn't assign the students. Nothing was saved.");
-      }
-    } catch {
-      setError("Network error. Nothing was saved.");
+      const d = await post({ mentorUid, studentIds: [...picked] });
+      const n = d.assigned?.length ?? 0;
+      const skipped = d.skipped?.length ?? 0;
+      toast({
+        variant: skipped > 0 ? "destructive" : "success",
+        title: `${n} student${n === 1 ? "" : "s"} assigned${skipped > 0 ? `, ${skipped} skipped (${d.skipped![0].reason})` : ""}`,
+      });
+      setPicked(new Set());
+      onChanged();
+      loadMentors(sectionId);
+      await loadStudents(sectionId);
+    } catch (e) {
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't assign the students" });
     } finally {
       setAssigning(false);
     }
@@ -200,15 +210,10 @@ function AssignView({ mentors, onChanged }: { mentors: MentorOption[]; onChanged
   async function removeMentor(studentId: string) {
     setRemoving(true);
     try {
-      const res = await fetch("/api/college/mentoring/assign", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mentorUid: null, studentIds: [studentId] }),
-      });
-      const d = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) throw new Error(d.error || "Could not remove the mentor");
+      await post({ mentorUid: null, studentIds: [studentId] });
       toast({ title: "Mentor removed - the mentoring record stays with the student" });
-      if (sectionId) await loadStudents(sectionId);
+      loadMentors(sectionId);
+      await loadStudents(sectionId);
       onChanged();
     } catch (e) {
       toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not remove the mentor" });
@@ -218,191 +223,301 @@ function AssignView({ mentors, onChanged }: { mentors: MentorOption[]; onChanged
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <Card>
         <CardContent className="pt-4 space-y-4">
-          <div className="w-full max-w-md">
-            <p className="text-xs text-muted-foreground mb-1">Mentor</p>
-            <Select value={mentorUid} onValueChange={setMentorUid}>
-              <SelectTrigger><SelectValue placeholder="Pick a faculty member" /></SelectTrigger>
-              <SelectContent>
-                {mentors.map((m) => (
-                  <SelectItem key={m.uid} value={m.uid}>{`${m.name}${m.isSelf ? " (You)" : ""} · ${m.menteeCount} mentee${m.menteeCount === 1 ? "" : "s"}`}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <p className="text-xs text-muted-foreground">Roll numbers</p>
-            <Textarea
-              rows={6}
-              value={rollText}
-              disabled={!mentorUid}
-              onChange={(e) => setRollText(e.target.value)}
-              placeholder={mentorUid ? "24A91A0514\n24A91A0515\n24A91A0516" : "Pick the mentor first"}
-              className="font-mono"
-            />
-            <p className="text-xs text-muted-foreground">
-              One roll number per line, or separated by commas or spaces - up to 200. These students become this mentor&apos;s mentees.
-              A student who already has a mentor has to be removed from that mentor first (list below).
-            </p>
-          </div>
-
-          {error && <p className="rounded-md border border-red-200 bg-red-50 p-2 text-sm text-red-700 dark:border-destructive/20 dark:bg-destructive/10 dark:text-red-400">{error}</p>}
-
-          <div className="flex flex-wrap items-center gap-3">
-            <Button variant="outline" onClick={() => void runCheck()} loading={checking} disabled={!mentorUid || !rollText.trim() || assigning}>Check roll numbers</Button>
-            <Button onClick={() => void runAssign()} loading={assigning} disabled={!canAssign}>
-              {fresh && check!.result.counts.toAssign > 0 ? `Assign ${check!.result.counts.toAssign} student${check!.result.counts.toAssign === 1 ? "" : "s"}` : "Assign"}
-            </Button>
-            {check && !fresh && <span className="text-xs text-muted-foreground">The mentor or roll numbers changed - check again.</span>}
-          </div>
-
-          {check && (
-            <div className="rounded-lg border">
-              <table className="w-full text-sm">
-                <thead className="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                  <tr><th className="p-2">Roll No</th><th className="p-2">Student</th><th className="p-2">Result</th></tr>
-                </thead>
-                <tbody className="divide-y">
-                  {check.result.plan.map((p) => (
-                    <tr key={p.roll}>
-                      <td className="p-2 font-mono">{p.roll}</td>
-                      <td className="p-2">{p.name ? `${p.name}${p.section ? ` · ${p.section}` : ""}` : "-"}</td>
-                      <td className={`p-2 ${ROLL_STATUS[p.status].className}`}>
-                        <span className="inline-flex items-start gap-1">
-                          {p.status === "ASSIGN" ? <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" /> : p.status === "ALREADY_MENTEE" ? null : <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />}
-                          {ROLL_STATUS[p.status].label}{p.message && p.status !== "ASSIGN" ? ` - ${p.message}` : ""}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {check.result.counts.repeatedInList > 0 && (
-                <p className="border-t p-2 text-xs text-muted-foreground">{check.result.counts.repeatedInList} repeated roll number{check.result.counts.repeatedInList === 1 ? "" : "s"} in the list ignored.</p>
-              )}
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="w-56">
+              <p className="text-xs text-muted-foreground mb-1">Course</p>
+              <Select value={courseKey} onValueChange={(v) => { setCourseKey(v); setYearKey(""); resetBelow(); }}>
+                <SelectTrigger><SelectValue placeholder="Pick a course" /></SelectTrigger>
+                <SelectContent>
+                  {courseNames.map((c) => <SelectItem key={c} value={c}>{c === "-" ? "No course set" : c}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
-          )}
+            <div className="w-36">
+              <p className="text-xs text-muted-foreground mb-1">Year</p>
+              <Select value={yearKey} disabled={!courseKey} onValueChange={(v) => { setYearKey(v); resetBelow(); }}>
+                <SelectTrigger><SelectValue placeholder="Pick a year" /></SelectTrigger>
+                <SelectContent>
+                  {yearOptions.map((y) => <SelectItem key={y} value={String(y)}>{`Year ${y}`}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="w-56">
+              <p className="text-xs text-muted-foreground mb-1">Section</p>
+              <Select value={sectionId} disabled={!yearKey} onValueChange={pickSection}>
+                <SelectTrigger><SelectValue placeholder="Pick a section" /></SelectTrigger>
+                <SelectContent>
+                  {sectionOptions.map((o) => <SelectItem key={o.id} value={o.id}>{sectionLabel(o)}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="w-full max-w-xs">
+              <p className="text-xs text-muted-foreground mb-1">Mentor</p>
+              <Select value={mentorUid} disabled={!sectionId} onValueChange={setMentorUid}>
+                <SelectTrigger><SelectValue placeholder={sectionId ? "Pick a faculty member" : "Pick the section first"} /></SelectTrigger>
+                <SelectContent>
+                  {teachingMentors.length > 0 && <div className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Teaching this class</div>}
+                  {teachingMentors.map((m) => <SelectItem key={m.uid} value={m.uid}>{mentorLabel(m)}</SelectItem>)}
+                  {otherMentors.length > 0 && <div className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Other faculty of the department</div>}
+                  {otherMentors.map((m) => <SelectItem key={m.uid} value={m.uid}>{mentorLabel(m)}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Only sections whose year you run are listed - a year another department runs (the shared first year) is assigned by that department&apos;s HOD.
+            A student who already has a mentor must be removed from that mentor first.
+          </p>
         </CardContent>
       </Card>
 
-      <div className="space-y-3">
-        <p className="text-xs text-muted-foreground">Who has a mentor - filter by course, year and section</p>
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="w-56">
-            <p className="text-xs text-muted-foreground mb-1">Course</p>
-            <Select value={courseKey} onValueChange={(v) => { setCourseKey(v); setYearKey(""); setSectionId(""); setStudents(null); }}>
-              <SelectTrigger><SelectValue placeholder="Pick a course" /></SelectTrigger>
-              <SelectContent>
-                {courseNames.map((c) => <SelectItem key={c} value={c}>{c === "-" ? "No course set" : c}</SelectItem>)}
-              </SelectContent>
-            </Select>
+      {!sectionId && <p className="text-sm text-muted-foreground">{sections.length === 0 ? "No sections of yours to assign." : <><span className="font-medium text-foreground">No Section Selected.</span> Select a course, year, and section to view students and assign faculty mentors.</>}</p>}
+      {sectionId && !students && <p className="text-sm text-muted-foreground">Loading…</p>}
+
+      {sectionId && students && (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="w-64">
+              <p className="text-xs text-muted-foreground mb-1">Search</p>
+              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name or Regd. No" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Mentor status</p>
+              <div className="flex gap-1.5">
+                {MENTOR_FILTERS.map((f) => (
+                  <Button key={f.key} size="sm" variant={mentorFilter === f.key ? "default" : "outline"} onClick={() => setMentorFilter(f.key)}>{f.label}</Button>
+                ))}
+              </div>
+            </div>
           </div>
-          <div className="w-36">
-            <p className="text-xs text-muted-foreground mb-1">Year</p>
-            <Select value={yearKey} disabled={!courseKey} onValueChange={(v) => { setYearKey(v); setSectionId(""); setStudents(null); }}>
-              <SelectTrigger><SelectValue placeholder="Pick a year" /></SelectTrigger>
-              <SelectContent>
-                {yearOptions.map((y) => <SelectItem key={y} value={String(y)}>{`Year ${y}`}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="w-56">
-            <p className="text-xs text-muted-foreground mb-1">Section</p>
-            <Select value={sectionId} disabled={!yearKey} onValueChange={setSectionId}>
-              <SelectTrigger><SelectValue placeholder="Pick a section" /></SelectTrigger>
-              <SelectContent>
-                {sectionOptions.map((o) => <SelectItem key={o.id} value={o.id}>{sectionLabel(o)}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          {sectionId && students && withoutMentor.length > 0 && (
-            <Button variant="outline" size="sm" disabled={!mentorUid} onClick={addToRollBox} title={mentorUid ? undefined : "Pick the mentor above first"}>
-              Add the {withoutMentor.length} without a mentor to the roll numbers
+
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">{shown.length} of {students.length} student{students.length === 1 ? "" : "s"} · {picked.size} selected</p>
+            <Button onClick={() => void assign()} loading={assigning} disabled={!mentorUid || picked.size === 0 || assigning} title={mentorUid ? undefined : "Pick the mentor first"}>
+              {picked.size > 0 ? `Assign ${picked.size} student${picked.size === 1 ? "" : "s"}` : "Assign"}
             </Button>
+          </div>
+
+          {shown.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{students.length === 0 ? "No students in this section." : "No students match."}</p>
+          ) : (
+            <Card>
+              <CardContent className="pt-2 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead><tr className="text-left text-muted-foreground border-b">
+                    <th className="py-2 pr-3 w-8">
+                      <Checkbox checked={allTicked} disabled={pickable.length === 0} onCheckedChange={toggleAll} aria-label="Select all shown without a mentor" />
+                    </th>
+                    <th className="py-2 pr-3 font-medium">Regd. No</th>
+                    <th className="py-2 pr-3 font-medium">Name</th>
+                    <th className="py-2 font-medium">Mentor</th>
+                  </tr></thead>
+                  <tbody>
+                    {shown.map((s) => (
+                      <tr key={s.id} className="border-b last:border-0">
+                        <td className="py-2 pr-3">
+                          <Checkbox checked={picked.has(s.id)} disabled={!!s.mentorUid} onCheckedChange={() => toggle(s.id)} aria-label={`Select ${s.name}`} />
+                        </td>
+                        <td className="py-2 pr-3 tabular-nums">{s.rollNumber || "—"}</td>
+                        <td className="py-2 pr-3">
+                          <Link href={`/hod/mentoring/${s.id}`} className="hover:underline">{s.name}</Link>
+                        </td>
+                        <td className="py-2">
+                          {s.mentorName ? (
+                            <span className="inline-flex items-center gap-2">
+                              <Badge variant="secondary">{s.mentorName}</Badge>
+                              <button type="button" disabled={removing} onClick={() => void removeMentor(s.id)} className="text-xs text-destructive hover:underline disabled:opacity-50">Remove</button>
+                            </span>
+                          ) : <span className="text-muted-foreground">Not assigned</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
           )}
         </div>
-        {sectionId && !students && <p className="text-sm text-muted-foreground">Loading…</p>}
-        {sectionId && students && students.length === 0 && <p className="text-sm text-muted-foreground">No students in this section.</p>}
-        {sectionId && students && students.length > 0 && (
-          <Card>
-            <CardContent className="pt-2 overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead><tr className="text-left text-muted-foreground border-b">
-                  <th className="py-2 pr-3 font-medium">Roll No</th>
-                  <th className="py-2 pr-3 font-medium">Name</th>
-                  <th className="py-2 font-medium">Mentor</th>
-                </tr></thead>
-                <tbody>
-                  {students.map((s) => (
-                    <tr key={s.id} className="border-b last:border-0">
-                      <td className="py-2 pr-3 tabular-nums">{s.rollNumber || "—"}</td>
-                      <td className="py-2 pr-3">
-                        <Link href={`/hod/mentoring/${s.id}`} className="hover:underline">{s.name}</Link>
-                      </td>
-                      <td className="py-2">
-                        {s.mentorName ? (
-                          <span className="inline-flex items-center gap-2">
-                            <Badge variant="secondary">{s.mentorName}</Badge>
-                            <button type="button" disabled={removing} onClick={() => void removeMentor(s.id)} className="text-xs text-destructive hover:underline disabled:opacity-50">Remove</button>
-                          </span>
-                        ) : <span className="text-muted-foreground">Not assigned</span>}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </CardContent>
-          </Card>
-        )}
-      </div>
+      )}
     </div>
   );
 }
 
-function MentorsView({ mentors }: { mentors: MentorOption[] }) {
-  const [open, setOpen] = useState<string | null>(null);
-  const [menteesByMentor, setMenteesByMentor] = useState<Record<string, MenteeSummary[]>>({});
+// One place to look students and mentors up: filter by course, year, section and mentor (all optional),
+// by assigned / not assigned, or just search a name or Regd. No. Every row opens the student's
+// mentoring details. Shows any student the HOD may view (the shared first year included).
+function BrowseView({ mentors }: { mentors: MentorOption[] }) {
+  const [sections, setSections] = useState<AssignSection[]>([]);
+  const [courseKey, setCourseKey] = useState("all");
+  const [yearKey, setYearKey] = useState("all");
+  const [sectionId, setSectionId] = useState("all");
+  const [mentorUid, setMentorUid] = useState("all");
+  const [mentorFilter, setMentorFilter] = useState<MentorFilter>("all");
+  const [search, setSearch] = useState("");
+  const [fetched, setFetched] = useState<{ key: string; students: MenteeSummary[] } | null>(null);
+  const [sectionsLoaded, setSectionsLoaded] = useState(false);
 
-  async function toggle(uid: string) {
-    if (open === uid) { setOpen(null); return; }
-    setOpen(uid);
-    if (menteesByMentor[uid]) return;
-    try {
-      const d = await getJson<{ students: MenteeSummary[] }>(`/api/college/mentoring/students?mentorUid=${encodeURIComponent(uid)}`);
-      setMenteesByMentor((prev) => ({ ...prev, [uid]: d.students }));
-    } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to load mentees" });
+  useEffect(() => {
+    getJson<{ sections: AssignSection[] }>("/api/college/mentoring/sections?for=view")
+      .then((d) => setSections(d.sections))
+      .catch((e: Error) => toast({ variant: "destructive", title: `Could not load your classes: ${e.message}` }))
+      .finally(() => setSectionsLoaded(true));
+  }, []);
+
+  const courseOf = (s: AssignSection) => s.courseName || "-";
+  const courseNames = useMemo(() => [...new Set(sections.map(courseOf))].sort((a, b) => a.localeCompare(b)), [sections]);
+  const inCourse = useMemo(() => sections.filter((s) => courseKey === "all" || courseOf(s) === courseKey), [sections, courseKey]);
+  const yearOptions = useMemo(() => [...new Set(inCourse.map((s) => s.year))].sort((a, b) => a - b), [inCourse]);
+  const sectionOptions = useMemo(() => inCourse.filter((s) => yearKey === "all" || String(s.year) === yearKey), [inCourse, yearKey]);
+  const sectionLabel = (s: AssignSection) => `${s.name} · ${s.department}${yearKey === "all" ? ` · Y${s.year}` : ""}`;
+
+  const q = search.trim();
+  const narrowed = courseKey !== "all" || yearKey !== "all" || sectionId !== "all";
+  // What to ask the server for: the chosen section(s) when the class is narrowed, else the mentor's
+  // mentees, else a name / Regd. No search. Everything else is a filter over what comes back.
+  const plan = useMemo(() => {
+    const classUrl = (id: string) => `/api/college/mentoring/students?for=view&sectionId=${encodeURIComponent(id)}`;
+    if (sectionId !== "all") return { key: `s:${sectionId}`, urls: [classUrl(sectionId)] };
+    if (narrowed) {
+      const ids = sectionOptions.map((s) => s.id);
+      return { key: `c:${ids.join(",")}`, urls: ids.map(classUrl) };
     }
-  }
+    if (mentorUid !== "all") return { key: `m:${mentorUid}`, urls: [`/api/college/mentoring/students?mentorUid=${encodeURIComponent(mentorUid)}`] };
+    if (q.length >= 3) return { key: `q:${q}`, urls: [`/api/college/mentoring/search?q=${encodeURIComponent(q)}`] };
+    return null;
+  }, [sectionId, narrowed, sectionOptions, mentorUid, q]);
 
-  if (mentors.length === 0) {
-    return <p className="text-sm text-muted-foreground">No available faculty with a login in your department.</p>;
-  }
+  useEffect(() => {
+    if (!plan) return;
+    let cancelled = false;
+    const t = setTimeout(() => {
+      Promise.all(plan.urls.map((u) => getJson<{ students: MenteeSummary[] }>(u)))
+        .then((all) => { if (!cancelled) setFetched({ key: plan.key, students: all.flatMap((d) => d.students) }); })
+        .catch((e: Error) => { if (!cancelled) { setFetched({ key: plan.key, students: [] }); toast({ variant: "destructive", title: e.message }); } });
+    }, plan.key.startsWith("q:") ? 350 : 0);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [plan]);
+
+  const loading = !!plan && fetched?.key !== plan.key;
+  const rows = useMemo(() => {
+    if (!plan || fetched?.key !== plan.key) return [];
+    const needle = q.toUpperCase();
+    return fetched.students.filter((s) => {
+      if (mentorUid !== "all" && s.mentorUid !== mentorUid) return false;
+      if (mentorFilter === "assigned" && !s.mentorUid) return false;
+      if (mentorFilter === "unassigned" && s.mentorUid) return false;
+      if (yearKey !== "all" && String(s.year) !== yearKey) return false;
+      if (needle && !s.rollNumber.toUpperCase().includes(needle) && !s.name.toUpperCase().includes(needle)) return false;
+      return true;
+    });
+  }, [plan, fetched, mentorUid, mentorFilter, yearKey, q]);
+
   return (
-    <div className="space-y-2">
-      {mentors.map((m) => (
-        <Card key={m.uid}>
-          <CardContent className="pt-4">
-            <button type="button" onClick={() => toggle(m.uid)} className="w-full flex items-center justify-between gap-3 text-left">
-              <span>
-                <span className="font-medium">{m.name}</span>
-                <span className="text-sm text-muted-foreground"> · {m.designation || m.department}</span>
-              </span>
-              <Badge variant={m.menteeCount > 0 ? "secondary" : "outline"}>{m.menteeCount} mentee{m.menteeCount === 1 ? "" : "s"}</Badge>
-            </button>
-            {open === m.uid && (
-              <div className="mt-3">
-                {!menteesByMentor[m.uid]
-                  ? <p className="text-sm text-muted-foreground">Loading…</p>
-                  : <MenteeList students={menteesByMentor[m.uid]} basePath="/hod/mentoring" empty="No students assigned." />}
+    <div className="space-y-4">
+      <Card>
+        <CardContent className="pt-4 space-y-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="w-52">
+              <p className="text-xs text-muted-foreground mb-1">Course</p>
+              <Select value={courseKey} onValueChange={(v) => { setCourseKey(v); setYearKey("all"); setSectionId("all"); }}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All courses</SelectItem>
+                  {courseNames.map((c) => <SelectItem key={c} value={c}>{c === "-" ? "No course set" : c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="w-32">
+              <p className="text-xs text-muted-foreground mb-1">Year</p>
+              <Select value={yearKey} onValueChange={(v) => { setYearKey(v); setSectionId("all"); }}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All years</SelectItem>
+                  {yearOptions.map((y) => <SelectItem key={y} value={String(y)}>{`Year ${y}`}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="w-52">
+              <p className="text-xs text-muted-foreground mb-1">Section</p>
+              <Select value={sectionId} onValueChange={setSectionId}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All sections</SelectItem>
+                  {sectionOptions.map((o) => <SelectItem key={o.id} value={o.id}>{sectionLabel(o)}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="w-56">
+              <p className="text-xs text-muted-foreground mb-1">Mentor</p>
+              <Select value={mentorUid} onValueChange={setMentorUid}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Any mentor</SelectItem>
+                  {mentors.map((m) => <SelectItem key={m.uid} value={m.uid}>{`${m.name}${m.isSelf ? " (You)" : ""} · ${m.menteeCount}`}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="w-64">
+              <p className="text-xs text-muted-foreground mb-1">Search</p>
+              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name or Regd. No" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Mentor status</p>
+              <div className="flex gap-1.5">
+                {MENTOR_FILTERS.map((f) => (
+                  <Button key={f.key} size="sm" variant={mentorFilter === f.key ? "default" : "outline"} onClick={() => setMentorFilter(f.key)}>{f.label}</Button>
+                ))}
               </div>
-            )}
-          </CardContent>
-        </Card>
-      ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {sectionsLoaded && sections.length === 0 && (
+        <p className="text-sm text-amber-700">No classes were found for your department, so the Course, Year and Section lists are empty. Search by name or Regd. No meanwhile.</p>
+      )}
+      {!plan && <p className="text-sm text-muted-foreground">Pick a course, year, section or mentor - or type at least 3 characters of a name or Regd. No.</p>}
+      {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
+      {plan && !loading && (
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground">{rows.length} student{rows.length === 1 ? "" : "s"}</p>
+          {rows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No student matches.</p>
+          ) : (
+            <Card>
+              <CardContent className="pt-2 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead><tr className="text-left text-muted-foreground border-b">
+                    <th className="py-2 pr-3 font-medium">Regd. No</th>
+                    <th className="py-2 pr-3 font-medium">Name</th>
+                    <th className="py-2 pr-3 font-medium">Branch</th>
+                    <th className="py-2 pr-3 font-medium">Year</th>
+                    <th className="py-2 pr-3 font-medium">Section</th>
+                    <th className="py-2 font-medium">Mentor</th>
+                  </tr></thead>
+                  <tbody>
+                    {rows.map((s) => (
+                      <tr key={s.id} className="border-b last:border-0 hover:bg-muted/40">
+                        <td className="py-2 pr-3 tabular-nums">{s.rollNumber || "—"}</td>
+                        <td className="py-2 pr-3"><Link href={`/hod/mentoring/${s.id}`} className="font-medium text-primary hover:underline">{s.name}</Link></td>
+                        <td className="py-2 pr-3">{s.department}</td>
+                        <td className="py-2 pr-3">{s.year}</td>
+                        <td className="py-2 pr-3">{s.section || "—"}</td>
+                        <td className="py-2">{s.mentorName ? <Badge variant="secondary">{s.mentorName}</Badge> : <span className="text-muted-foreground">Not assigned</span>}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
     </div>
   );
 }

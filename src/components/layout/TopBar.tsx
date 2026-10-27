@@ -1,5 +1,6 @@
 "use client";
 
+import { CollegeLogo } from "@/components/shared/CollegeLogo";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, Bell } from "lucide-react";
@@ -11,7 +12,6 @@ import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
 import { CollegeSwitcher } from "@/components/layout/CollegeSwitcher";
 
-import { VISHNU_LOGO_URL } from "@/lib/pdf/logo";
 
 interface TopBarProps {
   title?: string;
@@ -31,11 +31,7 @@ export function TopBar({ title, hiddenItems }: TopBarProps) {
       <div className="flex items-center gap-3">
         {isClassLeader ? (
           <Link href="/class-leader" className="flex items-center gap-2.5 hover:opacity-90 transition-opacity">
-            <img
-              src={VISHNU_LOGO_URL}
-              alt="Vishnu Logo"
-              className="h-8 w-8 rounded-md object-contain shrink-0"
-            />
+            <CollegeLogo className="h-8 w-8 rounded-md object-contain shrink-0" />
             <div className="flex flex-col">
               <span className="text-sm font-bold leading-tight tracking-tight">Vishnu People</span>
               <span className="text-[10px] text-muted-foreground font-semibold leading-none">Class Leader</span>
@@ -53,11 +49,7 @@ export function TopBar({ title, hiddenItems }: TopBarProps) {
               <Menu className="h-5 w-5" />
             </Button>
             <div className="md:hidden flex items-center gap-2">
-              <img
-                src={VISHNU_LOGO_URL}
-                alt="Vishnu Logo"
-                className="h-7 w-7 rounded-md object-contain shrink-0"
-              />
+              <CollegeLogo className="h-7 w-7 rounded-md object-contain shrink-0" />
             </div>
           </>
         )}

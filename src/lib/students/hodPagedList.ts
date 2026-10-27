@@ -219,7 +219,7 @@ export async function fetchHodStudentsPage(
 }
 
 /**
- * Every student matching the filters (and, optionally, whose roll number lies
+ * Every student matching the filters (and, optionally, whose Regd. No lies
  * between `rollFrom` and `rollTo`, inclusive, compared upper-cased as strings)
  * - what a bulk selection acts on. Never includes search: "select all N
  * unassigned" and "select by roll range" are about the filtered view, not the

@@ -166,7 +166,7 @@ function PrincipalSupportingStaffViewContent() {
       <SegmentedTabs
         value="supporting"
         options={[
-          { key: "faculty", label: "Teaching Faculty", href: "/principal/faculty" },
+          { key: "faculty", label: "Teaching Staff", href: "/principal/faculty" },
           { key: "supporting", label: "Supporting Staff", href: "/principal/faculty/supporting-staff" },
         ]}
       />

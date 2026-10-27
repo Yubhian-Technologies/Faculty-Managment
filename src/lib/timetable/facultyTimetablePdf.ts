@@ -1,8 +1,11 @@
+import { subjectAbbreviation } from "@/lib/timetable/subjectAbbreviation";
 import type { Department, DayOfWeek, PeriodTiming, TeachingAssignment, TimetableSlot } from "@/types";
 import { DAY_LABELS } from "@/types";
 import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
 import { resolveLogoUrl } from "./logoAsset";
 import { facultySpans } from "./facultySpans";
+import { resolveSignatureRows } from "./signatureAuthority";
+import { collegeHeading, departmentHeading, buildFacultyClassRows, facultyTimetableTitle } from "./timetableHeader";
 
 // Shared by hod/teaching and panel/teaching's own "Download"/"Print" buttons -
 // both pages lay a faculty member's own slots out identically and, until this
@@ -19,10 +22,6 @@ import { facultySpans } from "./facultySpans";
 // PDF never does - a colour picked for the screen means nothing to someone
 // reading a printed page days later, and dropping it keeps every faculty
 // member's PDF reading the same plain black-and-white way.
-
-// A custom subject's generated code ("CUS-AB12C") reads as its typed name instead.
-const readable = (code: string | undefined, name: string | undefined) =>
-  code && /^CUS-[A-Z0-9]{5}$/.test(code) ? (name || code) : code;
 
 /** "09:00" -> "9:00 AM" - display only. */
 export function formatTime12h(hhmm: string): string {
@@ -70,22 +69,19 @@ export interface FacultyTimetablePdfOptions {
   departments: Department[];
   formatDMY: (d: Date) => string;
   /** College letterhead (name, logo ...) - printed like the section timetable's. */
-  college?: { name?: string; code?: string; affiliation?: string; address?: string; phone?: string; logoUrl?: string };
-  /** Defaults to "FACULTY TEACHING LOAD & TIMETABLE". */
+  college?: { name?: string; code?: string; affiliation?: string; address?: string; city?: string; phone?: string; logoUrl?: string; teachingLoadSignatureRows?: string[][] };
+  /** Defaults to "Time Table : <academic year> <I|II> Sem". */
   title?: string;
 }
 
 export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): string {
   const { facultyName, departmentName, semesterLabel, weekStart, weekEnd, days, periods, slots, assignmentById, periodTimeFor, breakAfter, courseCodeById, departments, formatDMY, title } = opts;
 
-  // ── Letterhead ────────────────────────────────────────────────────────────
-  const identityLines = [opts.college?.affiliation, opts.college?.address, opts.college?.phone ? `Tel : ${opts.college.phone}` : ""]
-    .filter(Boolean)
-    .map((line) => `<div class="identity-line">${escapeHtml(line as string)}</div>`)
-    .join("");
+  // ── Letterhead: college :: city, affiliation, department, "Time Table : <year> <sem>", faculty ──
   const nameLine = opts.college?.name
-    ? `<div class="inst-name">${escapeHtml(opts.college.name)}${opts.college.code ? ` ( Code: ${escapeHtml(opts.college.code)} )` : ""}</div>`
+    ? `<div class="inst-name">${escapeHtml(collegeHeading(opts.college.name, opts.college.city))}</div>`
     : "";
+  const affiliationLine = opts.college?.affiliation ? `<div class="identity-line">${escapeHtml(opts.college.affiliation)}</div>` : "";
   const resolvedLogo = resolveLogoUrl(opts.college?.logoUrl);
 
   // Scoped to what the grid actually shows: `assignmentById` is whatever the
@@ -94,6 +90,8 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
   const workloadAssignmentIds = new Set(slots.map((s) => s.assignmentId));
   const uniqueAssignments = Array.from(assignmentById.values()).filter((a) => workloadAssignmentIds.has(a.id));
   const resolvedDept = departmentName || Array.from(new Set(uniqueAssignments.map((a) => a.department).filter(Boolean))).join(", ");
+  const deptHeading = departmentHeading(resolvedDept);
+  const academicYear = slots.find((s) => s.academicYear)?.academicYear;
 
   const headerHtml = `
   <table class="letterhead" cellspacing="0" cellpadding="0">
@@ -101,22 +99,14 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
       <td class="logo-cell"><img src="${escapeHtml(resolvedLogo)}" alt="logo"></td>
       <td class="letterhead-text">
         ${nameLine}
-        ${identityLines}
+        ${affiliationLine}
+        ${deptHeading ? `<div class="dept-line">${escapeHtml(deptHeading)}</div>` : ""}
+        <div class="doc-title">${escapeHtml(title || facultyTimetableTitle(academicYear, semesterLabel))}</div>
       </td>
       <td class="logo-cell"></td>
     </tr>
   </table>
-  <div class="doc-title">${escapeHtml(title || "FACULTY TEACHING LOAD & TIMETABLE")}</div>
-
-  <table class="meta-header-table" style="width:100%;border-collapse:collapse;margin-bottom:2px;font-size:9.5pt;font-weight:600;">
-    <tr>
-      <td style="text-align:left;padding:0;font-weight:700;">Faculty: ${escapeHtml(facultyName)}</td>
-      <td style="text-align:right;padding:0;font-weight:700;">Department: ${escapeHtml(resolvedDept || "—")}</td>
-    </tr>
-    <tr>
-      <td style="text-align:left;padding-top:2px;font-weight:600;" colspan="2">Semester: ${escapeHtml(semesterLabel)} &nbsp;&middot;&nbsp; Academic Period: ${escapeHtml(formatDMY(weekStart))} &ndash; ${escapeHtml(formatDMY(weekEnd))}</td>
-    </tr>
-  </table>`;
+  <div class="faculty-line">Faculty: ${escapeHtml(facultyName)}</div>`;
 
   // ── Grid: Day rows x Period columns ─────────────────────────────────────
   // The header just names the period - a faculty's periods can come from
@@ -164,7 +154,7 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
         const subline = [courseCode ?? assignment?.courseName, assignment?.year ? romanYear(assignment.year) : null, sectionLabel]
           .filter(Boolean)
           .join(" · ");
-        const subjectDisplay = readable(assignment?.shortCode, assignment?.subjectName) || readable(assignment?.subjectCode, assignment?.subjectName) || slot.subjectName || "—";
+        const subjectDisplay = subjectAbbreviation(assignment?.subjectName || slot.subjectName, assignment?.shortCode) || "—";
         const room = slot.classroom ? `Room: ${slot.classroom}` : null;
         const sub = slot.substituteFacultyName ? `Sub: ${slot.substituteFacultyName}` : null;
         const time = periodTimeFor(slot.courseId, slot.year, period);
@@ -191,47 +181,29 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
     <tbody>${bodyRows}</tbody>
   </table>`;
 
-  // ── Teaching workload & subject summary ──────────────────────────────────
-  const workloadRows = uniqueAssignments.map((a, i) => {
-    const courseCode = a.courseId ? courseCodeById.get(a.courseId) : undefined;
-    const classStr = [courseCode ?? a.courseName, a.year ? romanYear(a.year) : null, a.sectionName].filter(Boolean).join(" ");
-    return `<tr>
-      <td class="cell"><div class="fx">${i + 1}</div></td>
-      <td class="cell left"><div class="fx fx-left">${escapeHtml(classStr)}</div></td>
-      <td class="cell left"><div class="fx fx-left">${escapeHtml(readable(a.subjectCode, a.subjectName) ?? "—")}</div></td>
-      <td class="cell left"><div class="fx fx-left">${escapeHtml(a.subjectName ?? "—")}</div></td>
-      <td class="cell"><div class="fx">${escapeHtml(readable(a.shortCode, a.subjectName) ?? readable(a.subjectCode, a.subjectName) ?? "—")}</div></td>
-      <td class="cell"><div class="fx">${escapeHtml(a.subjectType ?? "THEORY")}</div></td>
-      <td class="cell"><div class="fx">${a.hoursPerWeek ?? "—"}</div></td>
-    </tr>`;
-  }).join("");
-
-  const totalHours = uniqueAssignments.reduce((sum, a) => sum + (a.hoursPerWeek ?? 0), 0);
-
-  const workloadHtml = uniqueAssignments.length > 0 ? `
-  <div class="section">
-  <div class="section-title">Teaching Workload &amp; Subject Summary</div>
+  // ── Bottom: subject list (S.No | Class | Sub Acronym | Subject Name), then the signatures ──
+  const classRows = buildFacultyClassRows(slots, assignmentById.values());
+  const workloadHtml = classRows.length > 0 ? `
   <table class="allocation workload" cellspacing="0" cellpadding="0">
+    <colgroup><col style="width:8%"><col style="width:28%"><col style="width:16%"><col style="width:48%"></colgroup>
     <thead>
-      <tr>
-        <th class="cell" style="width:6%"><div class="fx">S.No</div></th>
-        <th class="cell left" style="width:20%"><div class="fx fx-left">Course &amp; Section</div></th>
-        <th class="cell left" style="width:14%"><div class="fx fx-left">Subject Code</div></th>
-        <th class="cell left" style="width:32%"><div class="fx fx-left">Subject Name</div></th>
-        <th class="cell" style="width:10%"><div class="fx">Short Code</div></th>
-        <th class="cell" style="width:9%"><div class="fx">Type</div></th>
-        <th class="cell" style="width:9%"><div class="fx">Hours/Wk</div></th>
-      </tr>
+      <tr><th class="num">S.No</th><th>Class</th><th>Sub Acronym</th><th>Subject Name</th></tr>
     </thead>
     <tbody>
-      ${workloadRows}
-      <tr>
-        <td class="cell left" colspan="6"><div class="fx fx-left" style="font-weight:700;">TOTAL TEACHING WORKLOAD</div></td>
-        <td class="cell"><div class="fx" style="font-weight:700;">${totalHours}</div></td>
-      </tr>
+      ${classRows
+        .map((r, i) => `<tr><td class="num">${i + 1}</td><td>${escapeHtml(r.cls)}</td><td>${escapeHtml(r.acr)}</td><td>${escapeHtml(r.name)}</td></tr>`)
+        .join("")}
     </tbody>
-  </table>
-  </div>` : "";
+  </table>` : "";
+
+  const signatureHtml = resolveSignatureRows(opts.college?.teachingLoadSignatureRows, resolvedDept)
+    .map(
+      (row) => `
+  <div class="signature-row" style="margin-top:48px;margin-bottom:16px;padding-top:16px;display:flex;justify-content:space-between;align-items:flex-end;width:100%;page-break-inside:avoid;">
+    ${row.map((label) => `<div class="signature-block" style="flex:1;text-align:center;font-weight:700;font-size:9.5pt;">${escapeHtml(label)}</div>`).join("\n    ")}
+  </div>`
+    )
+    .join("");
 
   return `<!doctype html>
 <html>
@@ -249,8 +221,10 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
     .logo-cell img { max-width: 24mm; max-height: 24mm; object-fit: contain; }
     .letterhead-text { vertical-align: middle; text-align: center; }
     .inst-name { font-size: 13pt; font-weight: 700; overflow-wrap: anywhere; }
-    .identity-line { font-size: 10pt; font-weight: 700; overflow-wrap: anywhere; }
-    .doc-title { text-align: center; font-size: 12pt; font-weight: 700; margin: 12px 0 6px; }
+    .identity-line { font-size: 11pt; font-weight: 700; overflow-wrap: anywhere; }
+    .dept-line { font-size: 11pt; font-weight: 700; overflow-wrap: anywhere; margin-top: 2px; }
+    .doc-title { font-size: 11pt; font-weight: 700; margin-top: 2px; }
+    .faculty-line { text-align: center; font-size: 11pt; font-weight: 700; margin: 16px 0 4px; }
 
     table.grid, table.allocation { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; border-top: 1px solid #555; border-left: 1px solid #555; margin-top: 8px; }
     .cell { border-right: 1px solid #555; border-bottom: 1px solid #555; padding: 0; text-align: center; vertical-align: middle; line-height: 1.2; overflow-wrap: anywhere; }
@@ -271,11 +245,11 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
     .slot-code { font-size: 8pt; font-weight: 800; margin-top: 1px; overflow-wrap: anywhere; line-height: 1.2; }
     .slot-note { font-size: 6.5pt; color: #333; margin-top: 1px; overflow-wrap: anywhere; line-height: 1.2; }
 
-    .section { margin-top: 10px; }
-    .section-title { text-align: center; font-size: 12pt; font-weight: 700; margin: 18px 0 8px; }
-    table.workload td.cell, table.workload th.cell { font-size: 8.5pt; }
-    table.allocation .fx { min-height: 24px; }
-    table.allocation th.cell > .fx { min-height: 26px; }
+    table.allocation { border: 0; }
+    table.workload { width: 100%; table-layout: fixed; border-collapse: collapse; margin-top: 18px; font-size: 10pt; }
+    table.workload th { font-weight: 700; text-align: left; padding: 2px 4px; }
+    table.workload td { text-align: left; padding: 2px 4px; overflow-wrap: anywhere; }
+    table.workload th.num, table.workload td.num { text-align: center; }
   </style>
 </head>
 <body>
@@ -283,6 +257,7 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
     ${headerHtml}
     ${gridHtml}
     ${workloadHtml}
+    ${signatureHtml}
   </div>
 </body>
 </html>`;

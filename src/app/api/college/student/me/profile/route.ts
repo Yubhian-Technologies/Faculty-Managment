@@ -50,7 +50,7 @@ export async function GET() {
       },
       // Label/value pairs in display order; empty values are dropped.
       identity: [
-        ["Roll No", student.rollNumber],
+        ["Regd. No", student.rollNumber],
         ["Course", formatShortCourseName(course?.name ?? student.course, course?.code)],
         ["Department", student.department],
         ["Core Department", student.secondaryDepartment ?? ""],
@@ -65,7 +65,7 @@ export async function GET() {
         .map(([label, value]) => ({ label, value })),
       groups: buildOwnProfileGroups(student),
       // What the student may edit and its current value (form strings) - only the editable fields, so nothing
-      // office-managed travels here. The mobile number is editable once a Roll No exists (see selfEdit.ts).
+      // office-managed travels here. The mobile number is editable once a Regd. No exists (see selfEdit.ts).
       editable: {
         values: Object.fromEntries(
           ROSTER_FIELDS.filter((f) => STUDENT_SELF_EDITABLE_KEYS.includes(f.key)).map((f) => [f.key, rosterFieldFormValue(f, student)])
@@ -84,7 +84,7 @@ export async function GET() {
 }
 
 // A student's own edit of their own details. Only the fields in STUDENT_SELF_EDITABLE_KEYS (selfEdit.ts) - everything
-// else (Roll No, name, course/department/year/section, admission, caste, Aadhar, remarks...) stays with the College
+// else (Regd. No, name, course/department/year/section, admission, caste, Aadhar, remarks...) stays with the College
 // Office and is refused here. Resolved from session.uid only. Only changed fields are written, so a stale form can't
 // overwrite what the Office changed meanwhile; a changed Student Mobile No is claimed globally first (studentMobile.ts).
 export async function PATCH(request: Request) {
