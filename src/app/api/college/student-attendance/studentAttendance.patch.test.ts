@@ -65,7 +65,7 @@ describe("PATCH student-attendance/[id]", () => {
     ["an entry has no studentId", { entries: [{ status: "PRESENT" }] }],
     ["classNotes is not text", { classNotes: 5 }],
     ["classNotes is far too long", { classNotes: "x".repeat(5001) }],
-    ["a status is not PRESENT/ABSENT", { entries: [{ studentId: "s1", status: "ON_DUTY" }] }],
+    ["a status is not PRESENT/ABSENT", { entries: [{ studentId: "s1", status: "LATE" }] }],
   ])("answers 400, not 500, when %s", async (_name, body) => {
     expect((await patch(body)).status).toBe(400);
   });

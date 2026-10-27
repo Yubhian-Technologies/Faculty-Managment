@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildChain, checkLimits, clampLimits, enumerateDates, facultyPermissionInputSchema, isLate, noticeHours, permissionInputSchema, spanDays } from "./rules";
+import { buildChain, checkLimits, clampLimits, enumerateDates, facultyPermissionInputSchema, hasEarlierPendingOverlap, isLate, isOwnProofUrl, mayRequest, noticeHours, resolveRequesters, permissionInputSchema, resolveProofRequired, shiftDate, spanDays } from "./rules";
 import { ALL_CATEGORIES, categoryTypeKeys, findCategory, PERMISSION_GROUPS } from "./categories";
 import { DEFAULT_LIMITS } from "./types";
 
@@ -48,6 +48,57 @@ describe("dates", () => {
   });
 });
 
+describe("backdating limit", () => {
+  const ok2 = { studentCount: 1, typeDisabled: false };
+  const req = (fromDate: string, toDate = fromDate) => ({ ...base, fromDate, toDate });
+  it("allows a start inside the window and refuses one before it", () => {
+    expect(checkLimits(req("2026-10-19"), DEFAULT_LIMITS, { ...ok2, today: "2026-10-26" })).toEqual([]); // exactly 7 days back
+    expect(checkLimits(req("2026-10-18"), DEFAULT_LIMITS, { ...ok2, today: "2026-10-26" })).toEqual(["A request can't start more than 7 days in the past"]);
+  });
+  it("a limit of 0 means no past dates at all, and 1 reads singular", () => {
+    expect(checkLimits(req("2026-10-25"), { ...DEFAULT_LIMITS, maxBackdateDays: 0 }, { ...ok2, today: "2026-10-26" })).toEqual(["A request can't start in the past"]);
+    expect(checkLimits(req("2026-10-24"), { ...DEFAULT_LIMITS, maxBackdateDays: 1 }, { ...ok2, today: "2026-10-26" })).toEqual(["A request can't start more than 1 day in the past"]);
+  });
+  it("today and the future are always fine, and without `today` nothing is checked", () => {
+    expect(checkLimits(req("2026-10-26"), { ...DEFAULT_LIMITS, maxBackdateDays: 0 }, { ...ok2, today: "2026-10-26" })).toEqual([]);
+    expect(checkLimits(req("2026-12-01"), DEFAULT_LIMITS, { ...ok2, today: "2026-10-26" })).toEqual([]);
+    expect(checkLimits(req("2020-01-01"), DEFAULT_LIMITS, ok2)).toEqual([]);
+  });
+  it("works across a month and year boundary", () => {
+    expect(shiftDate("2026-03-02", -7)).toBe("2026-02-23");
+    expect(shiftDate("2027-01-03", -7)).toBe("2026-12-27");
+    expect(shiftDate("2026-10-26", 0)).toBe("2026-10-26");
+  });
+  it("the configured value is clamped to 0-90 days", () => {
+    expect(clampLimits({ maxBackdateDays: 500 })).toEqual({ maxBackdateDays: 90 });
+    expect(clampLimits({ maxBackdateDays: -3 })).toEqual({ maxBackdateDays: 0 });
+    expect(clampLimits({ maxBackdateDays: 3 })).toEqual({ maxBackdateDays: 3 });
+  });
+});
+
+describe("hasEarlierPendingOverlap (double-submit guard)", () => {
+  const own = { id: "b", createdAt: "2026-10-26T10:00:00.000Z", coverageDates: ["2026-10-27", "2026-10-28"], studentIds: ["s1"] };
+  const other = (o: object) => ({ id: "a", status: "PENDING", createdAt: "2026-10-26T09:59:59.000Z", payload: { coverageDates: ["2026-10-28"], students: [{ id: "s1" }] }, ...o });
+  it("an earlier pending request for the same student and a shared day means this one backs off", () => {
+    expect(hasEarlierPendingOverlap(own, [other({})])).toBe(true);
+  });
+  it("a later request does not make the earlier one back off, so exactly one of two racers survives", () => {
+    const later = other({ id: "c", createdAt: "2026-10-26T10:00:01.000Z" });
+    expect(hasEarlierPendingOverlap(own, [later])).toBe(false);
+    expect(hasEarlierPendingOverlap({ ...own, id: "c", createdAt: later.createdAt }, [{ ...other({}), id: "b", createdAt: own.createdAt }])).toBe(true);
+  });
+  it("the same instant is settled by id", () => {
+    expect(hasEarlierPendingOverlap(own, [other({ id: "a", createdAt: own.createdAt })])).toBe(true);
+    expect(hasEarlierPendingOverlap({ ...own, id: "a" }, [other({ id: "b", createdAt: own.createdAt })])).toBe(false);
+  });
+  it("ignores itself, finished requests, other students and other days", () => {
+    expect(hasEarlierPendingOverlap(own, [other({ id: "b" })])).toBe(false);
+    expect(hasEarlierPendingOverlap(own, [other({ status: "REJECTED" }), other({ status: "APPROVED" }), other({ status: "CANCELLED" })])).toBe(false);
+    expect(hasEarlierPendingOverlap(own, [other({ payload: { coverageDates: ["2026-10-28"], students: [{ id: "s9" }] } })])).toBe(false);
+    expect(hasEarlierPendingOverlap(own, [other({ payload: { coverageDates: ["2026-11-02"], students: [{ id: "s1" }] } })])).toBe(false);
+  });
+});
+
 describe("checkLimits", () => {
   const ok = { studentCount: 1, typeDisabled: false };
   it("passes a compliant request", () => expect(checkLimits(base, DEFAULT_LIMITS, ok)).toEqual([]));
@@ -92,9 +143,9 @@ describe("buildChain", () => {
     expect(buildChain(["HOD", "PRINCIPAL"], { ...none, isHodOfDepartment: true })).toEqual(["PRINCIPAL"]);
     expect(buildChain(["HOD", "VICE_PRINCIPAL", "PRINCIPAL"], { ...none, isVicePrincipal: true })).toEqual(["HOD", "PRINCIPAL"]);
   });
-  it("falls back to the Principal when nothing is left, and refuses a Principal requester", () => {
+  it("falls back to the Principal when nothing is left, and sends a Principal requester to the Vice Principal", () => {
     expect(buildChain(["HOD"], { ...none, isHodOfDepartment: true })).toEqual(["PRINCIPAL"]);
-    expect(() => buildChain(["PRINCIPAL"], { ...none, isPrincipal: true })).toThrow(/Principal/);
+    expect(buildChain(["PRINCIPAL"], { ...none, isPrincipal: true })).toEqual(["VICE_PRINCIPAL"]);
   });
 });
 
@@ -105,5 +156,48 @@ describe("clampLimits", () => {
     expect(clampLimits({ proofRequired: false })).toEqual({ proofRequired: false });
     expect(clampLimits(undefined)).toBeUndefined();
     expect(clampLimits({ maxDays: Number.NaN })).toEqual({ maxDays: 15 });
+  });
+});
+
+describe("proof requirement per permission type", () => {
+  const hack = categoryTypeKeys(findCategory("external-participation.hackathons")!); // [item, group]
+  it("defaults to required when nothing is configured", () => {
+    expect(resolveProofRequired([undefined, undefined], hack)).toBe(true);
+  });
+  it("a type-level entry beats the general switch; the item beats its group", () => {
+    const college = { proofRequired: true, proofByType: { "external-participation": false } };
+    expect(resolveProofRequired([undefined, college], hack)).toBe(false);
+    expect(resolveProofRequired([undefined, { proofByType: { "external-participation": false, "external-participation.hackathons": true } }], hack)).toBe(true);
+    expect(resolveProofRequired([undefined, college], categoryTypeKeys(findCategory("certifications.nptel")!))).toBe(true);
+  });
+  it("the department's setting beats the college's", () => {
+    expect(resolveProofRequired([{ proofRequired: false }, { proofByType: { "external-participation.hackathons": true } }], hack)).toBe(false);
+    expect(resolveProofRequired([{ proofByType: { "external-participation": true } }, { proofRequired: false }], hack)).toBe(true);
+  });
+  it("clampLimits keeps only known types with boolean values", () => {
+    expect(clampLimits({ proofByType: { "external-participation": false, bogus: true, "certifications.nptel": "x" as unknown as boolean } })).toEqual({ proofByType: { "external-participation": false } });
+  });
+  it("accepts only this college's own uploaded proof links", () => {
+    const own = (c: string, p: string) => `https://firebasestorage.googleapis.com/v0/b/b/o/${encodeURIComponent(p)}?alt=media`.replace("COLLEGE", c);
+    expect(isOwnProofUrl(own("c1", "student-permission-proofs/c1/u/a.pdf"), "c1")).toBe(true);
+    expect(isOwnProofUrl(own("c2", "student-permission-proofs/c2/u/a.pdf"), "c1")).toBe(false);
+    expect(isOwnProofUrl("https://x.test/student-permission-proofs/c1/a.pdf", "c1")).toBe(false);
+    expect(isOwnProofUrl("not a url", "c1")).toBe(false);
+  });
+});
+
+describe("who can request a permission type", () => {
+  const keys = categoryTypeKeys(findCategory("external-participation.hackathons")!);
+  it("is unrestricted until configured, then item beats group and department beats college", () => {
+    expect(resolveRequesters([undefined, undefined], keys)).toBeNull();
+    expect(resolveRequesters([undefined, { requestersByType: { "external-participation": ["STUDENT"] } }], keys)).toEqual(["STUDENT"]);
+    expect(resolveRequesters([undefined, { requestersByType: { "external-participation": ["STUDENT"], "external-participation.hackathons": ["HOD"] } }], keys)).toEqual(["HOD"]);
+    expect(resolveRequesters([{ requestersByType: { "external-participation": ["PANEL_MEMBER"] } }, { requestersByType: { "external-participation": ["STUDENT"] } }], keys)).toEqual(["PANEL_MEMBER"]);
+  });
+  it("checks the actor's roles, and clampLimits keeps only known roles and types", () => {
+    expect(mayRequest(null, ["STUDENT"])).toBe(true);
+    expect(mayRequest(["HOD"], ["PANEL_MEMBER", "HOD"])).toBe(true);
+    expect(mayRequest(["HOD"], ["STUDENT"])).toBe(false);
+    expect(clampLimits({ requestersByType: { "external-participation": ["STUDENT", "ADMIN"], bogus: ["HOD"], "certifications.nptel": [] } })).toEqual({ requestersByType: { "external-participation": ["STUDENT"] } });
   });
 });

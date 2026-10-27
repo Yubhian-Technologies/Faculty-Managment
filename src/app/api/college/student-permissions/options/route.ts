@@ -6,7 +6,8 @@ import { isTypeDisabled, resolveLimits } from "@/lib/approvals";
 import { actingUser, ANY_PERMISSION_ROLE, authenticate, failure } from "@/lib/studentPermissions/http";
 import { loadStudentByUid } from "@/lib/studentPermissions/service";
 import { loadPermissionConfig } from "@/lib/studentPermissions/configStore";
-import { PERMISSION_GROUPS, categoryTypeKeys } from "@/lib/studentPermissions/categories";
+import { ALL_CATEGORIES, PERMISSION_GROUPS, categoryTypeKeys } from "@/lib/studentPermissions/categories";
+import { mayRequest, resolveProofRequired, resolveRequesters } from "@/lib/studentPermissions/rules";
 import { findCurrentSectionDoc } from "@/lib/students/findCurrentSectionDoc";
 import { DEFAULT_LIMITS } from "@/lib/studentPermissions/types";
 
@@ -23,12 +24,14 @@ export async function GET(request: Request) {
     const config = await loadPermissionConfig(db, session.collegeId);
 
     let department = new URL(request.url).searchParams.get("department") ?? "";
+    let isClassRepresentative = false;
     let studentInfo: { name: string; rollNumber: string; department: string; year: number; section: string } | undefined;
     if (session.role === "STUDENT") {
       const student = await loadStudentByUid(db, session.collegeId, user.uid);
       if (student) {
         const sec = await findCurrentSectionDoc(db, session.collegeId, student);
         department = (sec?.data() as { department?: string } | undefined)?.department || student.department;
+        isClassRepresentative = !!(sec?.data() as { classRepresentatives?: { studentId: string }[] } | undefined)?.classRepresentatives?.some((r) => r.studentId === student.id);
         studentInfo = {
           name: student.name,
           rollNumber: student.rollNumber,
@@ -39,11 +42,13 @@ export async function GET(request: Request) {
       }
     }
 
+    const layers = [config.departments?.[department]?.override?.limits, config.college?.limits];
+    const proofRequiredByCategory = Object.fromEntries(ALL_CATEGORIES.map((c) => [c.id, resolveProofRequired(layers, categoryTypeKeys(c))]));
     const groups = PERMISSION_GROUPS.map((g) => ({
       id: g.id, label: g.label,
-      items: g.items.map((c) => ({ id: c.id, label: c.label, enabled: !isTypeDisabled(config, department, categoryTypeKeys(c)) })),
+      items: g.items.map((c) => ({ id: c.id, label: c.label, enabled: !isTypeDisabled(config, department, categoryTypeKeys(c)) && mayRequest(resolveRequesters(layers, categoryTypeKeys(c)), user.roles) })),
     })).filter((g) => g.items.some((i) => i.enabled));
-    return NextResponse.json({ enabled: config.enabled, department, studentInfo, groups, limits: resolveLimits(config, DEFAULT_LIMITS, department) });
+    return NextResponse.json({ enabled: config.enabled, department, studentInfo, isClassRepresentative, groups, limits: resolveLimits(config, DEFAULT_LIMITS, department), proofRequiredByCategory });
   } catch (err) {
     return failure(err, "college/student-permissions/options GET");
   }
