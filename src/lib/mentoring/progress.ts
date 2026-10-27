@@ -6,12 +6,8 @@ import { effectiveJoiningDate } from "@/lib/studentAttendance/joiningDate";
 import { computeStudentAttendanceHistory, studentDepartmentsForHistory } from "@/lib/studentAttendance/history";
 import { loadAcademicYearConfig, windowForAcademicYear } from "@/lib/studentAttendance/academicYearWindow";
 import { calcPercent } from "@/lib/studentAttendance/percentage";
-import {
-  currentSemesterOf,
-  semesterOptionsForStudent,
-  type SemesterRange,
-  type YearTiming,
-} from "@/lib/studentAttendance/studentReportRange";
+import { type SemesterRange, type YearTiming } from "@/lib/studentAttendance/studentReportRange";
+import { currentMentoringSemester, mentoringSemesterRanges, withEarlierYears } from "./semesterRanges";
 import { loadResultRules } from "@/lib/examResults/store";
 import { buildStudentResults } from "@/lib/examResults/studentResults";
 import { finalSubjectsOfSemester, loadPublishedSittings } from "@/lib/examResults/studentSittings";
@@ -88,7 +84,7 @@ export async function loadStudentSemesterRanges(
       semesters: timing.semesters.map((s) => ({ semester: s.semester, startDate: toDateStr(s.startDate), endDate: toDateStr(s.endDate) })),
     });
   }
-  return semesterOptionsForStudent(timings, student.year, istDateKey(new Date()));
+  return mentoringSemesterRanges(withEarlierYears(timings, student.year), student.year, istDateKey(new Date()));
 }
 
 export async function loadMenteeAttendance(
@@ -101,7 +97,7 @@ export async function loadMenteeAttendance(
 
   const today = istDateKey(new Date());
   const picked = semesterParam != null ? semesters.find((s) => s.semester === semesterParam) ?? null : null;
-  const chosen = picked ?? currentSemesterOf(semesters, today);
+  const chosen = picked ?? currentMentoringSemester(semesters, today);
 
   let from: string | null = null;
   let to: string | null = null;

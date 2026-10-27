@@ -50,6 +50,18 @@ describe("engine: happy path", () => {
   });
 });
 
+describe("engine: completeAll (overseer approval)", () => {
+  it("finishes every remaining stage in one decision, recording each, and runs the effects once", async () => {
+    const { engine, ctx, raise } = setup();
+    const r = await raise(["HOD", "PRINCIPAL"]);
+    ctx.approvers.HOD.push("pri1");
+    const done = await engine.decide(ctx, { collegeId: "c1", id: r.id, actor: pri, decision: "APPROVE", completeAll: true });
+    expect(done).toMatchObject({ status: "APPROVED", pendingKey: null, effectStatus: "APPLIED" });
+    expect(done.history.filter((h) => h.action === "APPROVE").map((h) => h.stage)).toEqual(["HOD", "PRINCIPAL"]);
+    expect(calls).toEqual(["tx:APPROVED", "after:approved"]);
+  });
+});
+
 describe("engine: authorisation", () => {
   it("only the stage's approver may decide - not another stage's, not the requester", async () => {
     const { engine, ctx, raise } = setup();

@@ -113,6 +113,13 @@ export function applyConfigEdit<L extends object>(
   allowedStages: (requesterType: string) => readonly StageId[]
 ): KindConfig<L> {
   if (editor.role === "PRINCIPAL") {
+    // A department handed to its HOD is the HOD's to edit: the Principal must withdraw the delegation first (in its own save).
+    for (const [dept, dc] of Object.entries(proposed.departments ?? {})) {
+      const before = current.departments[dept];
+      if (before?.hodCanConfigure && JSON.stringify(before.override ?? null) !== JSON.stringify(dc.override ?? null)) {
+        throw new ApprovalError("FORBIDDEN", `${dept} is delegated to its HOD - withdraw the delegation before changing its rules`, 403);
+      }
+    }
     const departments: KindConfig<L>["departments"] = {};
     for (const [dept, dc] of Object.entries(proposed.departments ?? {})) {
       departments[dept] = { hodCanConfigure: !!dc.hodCanConfigure, override: sanitizeRuleSet(dc.override, allowedStages) };

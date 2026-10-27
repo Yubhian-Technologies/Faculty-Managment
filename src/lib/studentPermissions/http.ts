@@ -3,14 +3,14 @@ import type { Firestore } from "firebase-admin/firestore";
 import { ApprovalError } from "@/lib/approvals";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import type { SessionPayload } from "@/lib/auth/verifySession";
-import { FACULTY_RAISER_ROLES, type ActingUser } from "./service";
+import { FACULTY_RAISER_ROLES, OVERSIGHT_ROLES, STUDENT_ROLE } from "./roles";
+import type { ActingUser } from "./types";
 
 // Shared plumbing for the permission routes, so each route file is only its own
 // use-case: authenticate -> parse -> one service call -> respond.
 
-export const STUDENT_ROLE = "STUDENT";
-export const OVERSIGHT_ROLES = ["HOD", "VICE_PRINCIPAL", "PRINCIPAL"] as const;
-export const ANY_PERMISSION_ROLE = [STUDENT_ROLE, ...FACULTY_RAISER_ROLES, "PRINCIPAL"] as const;
+export { OVERSIGHT_ROLES, STUDENT_ROLE };
+export const ANY_PERMISSION_ROLE = [STUDENT_ROLE, ...FACULTY_RAISER_ROLES] as const;
 
 /** The acting login with its CURRENT roles (live-checked by requireRole) and display name. */
 export async function actingUser(db: Firestore, session: SessionPayload & { collegeId: string }): Promise<ActingUser> {

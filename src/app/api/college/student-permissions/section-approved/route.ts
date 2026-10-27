@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { ApprovalError } from "@/lib/approvals";
 import { actingUser, ANY_PERMISSION_ROLE, authenticate, failure, pageOptions } from "@/lib/studentPermissions/http";
+import { representedSectionOf } from "@/lib/studentPermissions/directory";
 import { listSectionApproved, loadStudentByUid } from "@/lib/studentPermissions/service";
 
 // GET /api/college/student-permissions/section-approved?department=...&section=...&year=...
@@ -16,21 +17,18 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const opts = pageOptions(url);
 
+    // A student sees only their OWN section's feed, and only as a Class Representative - never another section via the query string.
     let department = url.searchParams.get("department");
     let section = url.searchParams.get("section");
     let year = Number(url.searchParams.get("year"));
-
-    // If params are omitted and user is a student, automatically infer section from student profile
-    if (!department || !section || !year) {
-      if (session.role === "STUDENT") {
-        const student = await loadStudentByUid(db, user.collegeId, user.uid);
-        if (!student) throw new ApprovalError("NOT_FOUND", "Student record not found", 404);
-        department = student.department;
-        section = student.section;
-        year = student.year;
-      } else {
-        throw new ApprovalError("INVALID", "Missing department, section, or year parameter", 400);
-      }
+    if (session.role === "STUDENT") {
+      const student = await loadStudentByUid(db, user.collegeId, user.uid);
+      if (!student) throw new ApprovalError("NOT_FOUND", "Student record not found", 404);
+      const sec = await representedSectionOf(db, user.collegeId, student);
+      if (!sec) throw new ApprovalError("FORBIDDEN", "Only a Class Representative can view the section feed", 403);
+      department = sec.department; section = sec.name; year = sec.year;
+    } else if (!department || !section || !year) {
+      throw new ApprovalError("INVALID", "Missing department, section, or year parameter", 400);
     }
 
     const requests = await listSectionApproved(db, user, department, section, year, opts);

@@ -19,12 +19,16 @@ export async function GET() {
 
     // One collection-group read narrowed to this college by the document path
     // (colleges/{id}/students/{sid}/mentoringEntries/{eid}); a path range needs no extra index.
-    const prefix = `${collegeRef.path}/students/`;
+    // Firestore wants each bound of a documentId() range on a collection group to be a complete,
+    // valid document path - a bare "colleges/{id}/students/" (empty last segment) is refused, which
+    // made this route answer 500. "!" sorts below every real student id and "\uf8ff" above.
+    const low = `${collegeRef.path}/students/!/mentoringEntries/!`;
+    const high = `${collegeRef.path}/students/\uf8ff/mentoringEntries/\uf8ff`;
     const [studentSnap, entrySnap] = await Promise.all([
       collegeRef.collection("students").select("department", "mentorUid", "mentorName", "status").get(),
       db.collectionGroup("mentoringEntries")
-        .where(FieldPath.documentId(), ">=", prefix)
-        .where(FieldPath.documentId(), "<", `${prefix}`)
+        .where(FieldPath.documentId(), ">=", low)
+        .where(FieldPath.documentId(), "<", high)
         .select("section", "values.categories", "values.status", "values.date", "values.dueDate", "values.weekStart")
         .get(),
     ]);

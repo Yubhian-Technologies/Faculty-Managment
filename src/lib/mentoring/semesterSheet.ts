@@ -3,7 +3,8 @@ import { istDateKey } from "@/lib/attendance/istTime";
 import { effectiveJoiningDate } from "@/lib/studentAttendance/joiningDate";
 import { computeStudentAttendanceWindows, studentDepartmentsForHistory, type StudentAttendanceHistory } from "@/lib/studentAttendance/history";
 import { calcPercent } from "@/lib/studentAttendance/percentage";
-import { currentSemesterOf, type SemesterRange } from "@/lib/studentAttendance/studentReportRange";
+import type { SemesterRange } from "@/lib/studentAttendance/studentReportRange";
+import { currentMentoringSemester } from "./semesterRanges";
 import { orderSittings, studentStanding, type GpaSubject } from "@/lib/examResults/gpa";
 import { loadResultRules } from "@/lib/examResults/store";
 import { asGpaSitting, finalSubjectsOfSemester, loadPublishedSittings, type PublishedSitting } from "@/lib/examResults/studentSittings";
@@ -57,7 +58,7 @@ export async function loadSemesterOptions(
     loadStudentSemesterRanges(db, collegeId, student),
     loadPublishedRecords(db, collegeId, student.id),
   ]);
-  const current = currentSemesterOf(ranges, istDateKey(new Date()))?.semester ?? null;
+  const current = currentMentoringSemester(ranges, istDateKey(new Date()))?.semester ?? null;
   const byNumber = new Map<number, MentoringSemesterOption>();
   for (const r of ranges) byNumber.set(r.semester, optionOf(r.semester, r.year ?? null, r.inYear ?? null, current));
   for (const r of records) if (!byNumber.has(r.semester)) byNumber.set(r.semester, optionOf(r.semester, r.year || null, null, current));
@@ -126,7 +127,7 @@ export async function buildSemesterSheet(
   const revals = records.filter((r) => r.semester === semester && r.examType === "REVALUATION");
   if (!range && own.length === 0) return null;
 
-  const current = currentSemesterOf(ranges, today);
+  const current = currentMentoringSemester(ranges, today);
   const isCurrent = !!range && current?.semester === semester && range.endDate >= today;
   const isPast = !range || range.endDate < today || (current != null && semester < current.semester);
   const year = range?.year ?? (own[0]?.year || null);
