@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getJson } from "@/components/mentoring/record/recordApi";
-import type { MenteeSummary } from "@/types/mentoring";
+import type { MenteeSummary, MentoringOverviewRow } from "@/types/mentoring";
 
 type FinderOptions = { departments: string[]; sections: { department: string; year: number; name: string }[] };
 type Page = { students: MenteeSummary[]; nextCursor: string | null };
@@ -28,9 +28,8 @@ function FilterSelect({ label, value, onChange, options, disabled }: { label: st
 // Principal / Vice-Principal: filters first, never a whole-college list. Pick a department (then
 // year / section / mentor) and only that slice is read, 50 at a time; or type a Regd. No for a
 // direct lookup. Each row opens the student's read-only Mentoring Record.
-export type FinderPick = { department?: string; mentorUid?: string; n: number };
-
-export function StudentFinder({ mentors, pick }: { mentors: { uid: string; name: string }[]; pick?: FinderPick }) {
+export function StudentFinder({ byDepartment, byMentor }: { byDepartment: MentoringOverviewRow[]; byMentor: MentoringOverviewRow[] }) {
+  const allMentors = useMemo(() => byMentor.map((m) => ({ uid: m.key, name: m.label })).sort((a, b) => a.name.localeCompare(b.name)), [byMentor]);
   const [options, setOptions] = useState<FinderOptions | null>(null);
   const [department, setDepartment] = useState(ANY);
   const [year, setYear] = useState(ANY);
@@ -43,18 +42,23 @@ export function StudentFinder({ mentors, pick }: { mentors: { uid: string; name:
   const [error, setError] = useState<string | null>(null);
   const term = q.trim();
   const mentorUid = mentor.startsWith("uid:") ? mentor.slice(4) : "";
+
+  // With a department picked, only that department's mentors are offered (fetched once per department);
+  // without one, every mentor of the college.
+  const [deptMentors, setDeptMentors] = useState<{ department: string; list: { uid: string; name: string }[] } | null>(null);
+  useEffect(() => {
+    if (department === ANY) return;
+    let cancelled = false;
+    getJson<{ mentors: { uid: string; name: string }[] }>(`/api/college/mentoring/college-students/mentors?department=${encodeURIComponent(department)}`)
+      .then((d) => { if (!cancelled) setDeptMentors({ department, list: d.mentors }); })
+      .catch(() => { if (!cancelled) setDeptMentors({ department, list: [] }); });
+    return () => { cancelled = true; };
+  }, [department]);
+  const mentors = department === ANY ? allMentors : deptMentors?.department === department ? deptMentors.list : [];
   const ready = department !== ANY || !!mentorUid || term.length >= 3;
 
-  // A row clicked in the "By department" / "By mentor" tables below starts a fresh filter here.
-  const [appliedPick, setAppliedPick] = useState(0);
-  if (pick && pick.n !== appliedPick) {
-    setAppliedPick(pick.n);
-    if (pick.n > 0) {
-      setDepartment(pick.department ?? ANY);
-      setMentor(pick.mentorUid ? `uid:${pick.mentorUid}` : ANY);
-      setYear(ANY); setSection(ANY); setQ("");
-    }
-  }
+  // The college summary's numbers for the department / mentor picked (already loaded - no extra read).
+  const stats = mentorUid ? byMentor.find((r) => r.key === mentorUid) : department !== ANY ? byDepartment.find((r) => r.key === department) : undefined;
 
   useEffect(() => {
     let cancelled = false;
@@ -79,11 +83,11 @@ export function StudentFinder({ mentors, pick }: { mentors: { uid: string; name:
     if (year !== ANY) p.set("year", year);
     if (section !== ANY) p.set("section", section);
     if (mentorUid) p.set("mentorUid", mentorUid);
-    else if (mentor !== ANY) p.set("mentor", mentor);
+
     if (term) p.set("q", term);
     if (cursor) p.set("cursor", cursor);
     return `/api/college/mentoring/college-students?${p}`;
-  }, [department, year, section, mentor, mentorUid, term]);
+  }, [department, year, section, mentorUid, term]);
 
   // A changed filter starts a new list (typing waits a moment so each keystroke is not a query).
   useEffect(() => {
@@ -117,24 +121,29 @@ export function StudentFinder({ mentors, pick }: { mentors: { uid: string; name:
         <div>
           <h2 className="text-base font-semibold">Look up a student</h2>
           <p className="text-xs text-muted-foreground">
-            Pick a department or a mentor to see their students (narrow by year, section or name), or type a Regd. No. You can also click a row in the tables below. Read-only; referrals, the health record and the mentor&apos;s private notes are not shown.
+            Pick a department or a mentor to see their students (narrow by year, section, mentor or name), or type a Regd. No. Read-only; referrals, the health record and the mentor&apos;s private notes are not shown.
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
-          <FilterSelect label="Department" value={department} onChange={(v) => { setDepartment(v); setYear(ANY); setSection(ANY); }}
+          <FilterSelect label="Department" value={department} onChange={(v) => { setDepartment(v); setYear(ANY); setSection(ANY); setMentor(ANY); }}
             options={[{ value: ANY, label: "Choose a department" }, ...(options?.departments ?? []).map((d) => ({ value: d, label: d }))]} />
           <FilterSelect label="Year" value={year} disabled={department === ANY} onChange={(v) => { setYear(v); setSection(ANY); }}
             options={[{ value: ANY, label: "All years" }, ...years.map((y) => ({ value: String(y), label: `Year ${y}` }))]} />
           <FilterSelect label="Section" value={section} disabled={department === ANY} onChange={setSection}
             options={[{ value: ANY, label: "All sections" }, ...sections.map((n) => ({ value: n, label: n }))]} />
           <FilterSelect label="Mentor" value={mentor} onChange={setMentor}
-            options={[{ value: ANY, label: "Any" }, { value: "with", label: "Has a mentor" }, { value: "none", label: "No mentor yet" }, ...mentors.map((m) => ({ value: `uid:${m.uid}`, label: m.name }))]} />
+            options={[{ value: ANY, label: "All mentors" }, ...mentors.map((m) => ({ value: `uid:${m.uid}`, label: m.name }))]} />
           <div className="min-w-[12rem] flex-1 max-w-xs">
             <label className="text-xs text-muted-foreground mb-1 block">{department === ANY ? "Regd. No" : "Name or Regd. No (optional)"}</label>
             <Input className="h-9" value={q} onChange={(e) => setQ(e.target.value)} placeholder={department === ANY ? "e.g. 22A91A05" : "Narrow the list"} />
           </div>
         </div>
 
+        {stats && (
+          <p className="rounded-lg bg-muted/40 px-3 py-2 text-sm">
+            <strong>{stats.label}</strong>: {stats.students} student{stats.students === 1 ? "" : "s"} · {stats.mentored} with a mentor · {stats.metRecently} met recently · {stats.openActions} open action{stats.openActions === 1 ? "" : "s"} · {stats.openEscalations} open referral{stats.openEscalations === 1 ? "" : "s"}
+          </p>
+        )}
         {error && <p className="text-sm text-destructive">{error}</p>}
         {!ready && <p className="text-sm text-muted-foreground">Choose a department or a mentor, or type at least 3 characters of a Regd. No.</p>}
         {ready && state === "loading" && rows.length === 0 && <p className="text-sm text-muted-foreground">Loading…</p>}
