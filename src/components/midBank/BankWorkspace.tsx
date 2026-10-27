@@ -15,7 +15,7 @@ import { bloomNeeds, lockReason } from "@/lib/midBank/rules";
 import { defaultSplit, formatOf, isBlankPart, partLabel, partMarks, questionErrors, questionFormat } from "@/lib/midBank/validateQuestion";
 import type { MidBankDetail } from "@/lib/midBank/clientTypes";
 import type { BloomLevel, MidQuestion, MidQuestionBank, MidQuestionFormat, MidQuestionPart, MidUnitStatus } from "@/types";
-import { FormulaTextarea, MathText } from "./MathText";
+import { MathText, QuestionTextField } from "./MathText";
 
 // Stage 3 + 4: write the bank. Left - units and their 10 slots; centre - the
 // question editor; right - COs, derived POs/PSOs, Bloom tally, preview and
@@ -386,8 +386,8 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
 
                 <div className="space-y-1.5">
                   <Label htmlFor={`${pre}-text`}>Question text</Label>
-                  <FormulaTextarea id={`${pre}-text`} value={p.text} onChange={(v) => edit(i, { text: v })} invalid={Boolean(err("text"))} describedBy={err("text") ? `${pre}-text-err` : undefined}
-                    placeholder="Write the question. Put formulas between $ signs, e.g. Find $\\int_0^1 x^2 dx$." />
+                  <QuestionTextField id={`${pre}-text`} value={p.text} onChange={(v) => edit(i, { text: v })} invalid={Boolean(err("text"))} describedBy={err("text") ? `${pre}-text-err` : undefined}
+                    placeholder="Type the question here. Use the Formula button to add a formula." />
                   {err("text") && <p id={`${pre}-text-err`} className="text-xs text-destructive">{err("text")}</p>}
                 </div>
 

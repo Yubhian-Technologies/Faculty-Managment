@@ -199,3 +199,23 @@ describe("sections of a bank", () => {
     expect(bankIdFor("d1", "dm", "Information Technology", "f1")).toBe("d1__dm__information-technology__f1");
   });
 });
+
+import { formulaToken, renderMathHtml, splitMath } from "./renderMath";
+
+describe("formulas in question text", () => {
+  it("splits text and formulas with their positions, so one formula can be edited in place", () => {
+    const text = "State $O(\\log_2 n)$ and derive\n$$T(n)=T\\left(\\frac{n}{2}\\right)+1$$";
+    const segs = splitMath(text);
+    expect(segs.map((s) => s.kind)).toEqual(["text", "math", "text", "math"]);
+    const first = segs[1] as Extract<(typeof segs)[number], { kind: "math" }>;
+    expect([first.latex, first.display, text.slice(first.start, first.end)]).toEqual(["O(\\log_2 n)", false, "$O(\\log_2 n)$"]);
+    expect((segs[3] as { display: boolean }).display).toBe(true);
+  });
+  it("tokens and rendering: text escaped, formulas typeset, a bad formula never throws", () => {
+    expect(formulaToken("x^2", false)).toBe("$x^2$");
+    expect(formulaToken("\\sum_{i=1}^n i", true)).toBe("$$\\sum_{i=1}^n i$$");
+    const html = renderMathHtml("<b>a</b> $x^2$ $\\notacommand{$");
+    expect(html).toContain("&lt;b&gt;a&lt;/b&gt;");
+    expect(html).toContain("katex");
+  });
+});
