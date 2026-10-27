@@ -59,18 +59,18 @@ function InternalCell({ internal }: { internal: SheetSubject["internal"] }) {
 }
 
 export function SemesterPage({
-  api, semester, onOpenMeetings,
-}: { api: string; semester: number; onOpenMeetings: (semester: number) => void }) {
+  api, semester, onOpenMeetings, readOnly,
+}: { api: string; semester: number; onOpenMeetings: (semester: number) => void; readOnly?: boolean }) {
   const { data, error, loading } = useLoaded<{ sheet: MentoringSemesterSheet }>(`${api}?part=sheet&semester=${semester}`);
   const sheet = data?.sheet.semester === semester ? data.sheet : null;
 
   if (error && !sheet) return <p className="text-sm text-muted-foreground py-6">{error}</p>;
   if (!sheet) return <p className="text-sm text-muted-foreground py-6">{loading ? "Loading this semester…" : "Nothing to show."}</p>;
   // Remounts the remarks box when another semester's sheet arrives.
-  return <Sheet key={sheet.semester} api={api} sheet={sheet} stale={loading} onOpenMeetings={onOpenMeetings} />;
+  return <Sheet key={sheet.semester} api={api} sheet={sheet} stale={loading} onOpenMeetings={onOpenMeetings} readOnly={readOnly} />;
 }
 
-function Sheet({ api, sheet, stale, onOpenMeetings }: { api: string; sheet: MentoringSemesterSheet; stale: boolean; onOpenMeetings: (s: number) => void }) {
+function Sheet({ api, sheet, stale, onOpenMeetings, readOnly }: { api: string; sheet: MentoringSemesterSheet; stale: boolean; onOpenMeetings: (s: number) => void; readOnly?: boolean }) {
   const src = SOURCE_STYLE[sheet.subjectsSource];
   const o = sheet.overall;
   const fmt = (v: number | null, withheld: boolean) => (withheld ? "Withheld" : v == null ? "—" : v.toFixed(o.decimals));
@@ -194,7 +194,7 @@ function Sheet({ api, sheet, stale, onOpenMeetings }: { api: string; sheet: Ment
         </CardContent>
       </Card>
 
-      <Remarks api={api} sheet={sheet} />
+      {!readOnly && <Remarks api={api} sheet={sheet} />}
 
       <button
         type="button"
