@@ -277,6 +277,10 @@ export const NAV_ITEMS: NavItem[] = [
   // Appoint people to seats (Principal, each HOD, Vice Principal, Academics, ...) -
   // see types/roleSeats.ts.
   { label: "Role Assignments", href: "/principal/role-assignments", iconName: "UserCog", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  // Read-only list of the incidents College Office / College Admin record (red dot = not opened yet).
+  // Also what a College Admin sees while working as Principal - they record
+  // incidents only from "My Work" (College Office's Incident Report item).
+  { label: "Incident Record", href: "/principal/incident-record", iconName: "ClipboardList", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Settings", href: "/principal/settings", iconName: "Settings2", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
 
   // HOD
@@ -312,6 +316,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Leave History", href: "/hod/leave-history", iconName: "History", roles: ["HOD"], module: "leave-approvals" },
   { label: "Student Permissions", href: "/hod/student-permissions", iconName: "ShieldCheck", roles: ["HOD"] },
   { label: "Certificate Requests", href: "/hod/certificate-requests", iconName: "FileCheck", roles: ["HOD"] },
+  { label: "Incident Record", href: "/hod/incident-record", iconName: "ClipboardList", roles: ["HOD"] },
   // Was 8 separate sidebar items (Attendance Reports, Attendance History,
   // Faculty Attendance, Attendance Completion, Absent Report, Shortage
   // Report, Faculty Not Posted, Import Attendance), all ungrouped and, on
@@ -374,6 +379,7 @@ export const NAV_ITEMS: NavItem[] = [
   // Principal, so it isn't named as anyone's substitute either.
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["COLLEGE_OFFICE"], hideForRealRoles: ["COLLEGE_ADMIN"] },
   { label: "My Attendance", href: "/college-office/attendance", iconName: "ClipboardCheck", roles: ["COLLEGE_OFFICE"], section: "My Work", hideForRealRoles: ["COLLEGE_ADMIN"] },
+  { label: "Incident Report", href: "/college-office/incident-report", iconName: "ClipboardList", roles: ["COLLEGE_OFFICE"], section: "My Work" },
 
   // College Staff (generic fallback for titles that don't warrant their own role)
   { label: "Dashboard", href: "/college-staff", iconName: "LayoutDashboard", roles: ["COLLEGE_STAFF"] },
@@ -394,6 +400,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/academics", iconName: "LayoutDashboard", roles: ["ACADEMICS"] },
   { label: "Curriculum", href: "/academics/course-structure", iconName: "Library", roles: ["ACADEMICS"], section: "Academics" },
   { label: "Timetable View", href: "/academics/timetable-view", iconName: "CalendarDays", roles: ["ACADEMICS"], section: "Academics" },
+  { label: "Incident Record", href: "/academics/incident-record", iconName: "ClipboardList", roles: ["ACADEMICS"] },
   { label: "My Profile", href: "/academics/profile", iconName: "UserCircle", roles: ["ACADEMICS"], section: "Personal" },
   { label: "My Leave", href: "/academics/leave", iconName: "CalendarClock", roles: ["ACADEMICS"] },
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["ACADEMICS"] },

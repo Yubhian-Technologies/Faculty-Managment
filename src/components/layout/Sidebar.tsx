@@ -14,6 +14,7 @@ import { useAssignedCoordinator } from "@/hooks/useAssignedCoordinator";
 import { useIsSubDepartmentHod } from "@/hooks/useIsSubDepartmentHod";
 import { usePrincipalPendingHiring } from "@/hooks/usePrincipalPendingHiring";
 import { useCollegeType } from "@/hooks/useCollegeType";
+import { INCIDENT_RECORD_HREFS, useIncidentUnread } from "@/hooks/useIncidentUnread";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { isNavItemActive, filterVisibleNavItems, isPathHidden, ROLES_WITH_EMBEDDED_PANEL_ACCESS, type NavItem } from "./navConfig";
 import { NavIcon } from "./NavIcon";
@@ -54,6 +55,7 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
   const { coordinatorBatchId } = useAssignedCoordinator();
   const { hideSubDepartmentsLink } = useIsSubDepartmentHod();
   const { pendingCount: pendingHiringCount } = usePrincipalPendingHiring();
+  const incidentUnread = useIncidentUnread();
   const { collegeType } = useCollegeType();
   const { items: contextItems, active: activeContext } = useWorkContext();
   const { apply: applyCustomNav } = useCustomNav();
@@ -208,6 +210,13 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
                               {pendingHiringCount > 99 ? "99+" : pendingHiringCount}
                             </span>
                           ))}
+                          {incidentUnread > 0 && INCIDENT_RECORD_HREFS.includes(item.href) && (
+                            <span
+                              className={cn("h-2.5 w-2.5 rounded-full bg-red-500", collapsed ? "absolute top-1 right-1" : "ml-auto")}
+                              role="img"
+                              aria-label="New incident records"
+                            />
+                          )}
                         </Link>
                       );
                     })}
