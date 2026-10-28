@@ -1,0 +1,42 @@
+import { describe, expect, it } from "vitest";
+import { autoFill, checkSlots, cleanDays, cleanSessions, examDaysBetween, timeLabel } from "./rules";
+
+const S = [{ id: "S1", label: "Morning", from: "10:00", to: "11:30" }, { id: "S2", label: "Afternoon", from: "14:00", to: "15:30" }];
+const subj = (n: number) => ({ subjectId: `s${n}`, subjectCode: `C${n}`, subjectName: `Subject ${n}` });
+
+describe("mid timetable rules", () => {
+  it("exam days: the Mid's dates without Sundays", () => {
+    expect(examDaysBetween("2026-11-07", "2026-11-10")).toEqual(["2026-11-07", "2026-11-09", "2026-11-10"]); // 8 Nov 2026 is a Sunday
+    expect(examDaysBetween("2026-11-10", "2026-11-07")).toEqual([]);
+    expect(cleanDays(["2026-11-09", "2026-11-09", "bad"], { from: "2026-11-07", to: "2026-11-10" })).toEqual({ days: ["2026-11-09"], error: "" });
+    expect(cleanDays(["2026-11-20"], { from: "2026-11-07", to: "2026-11-10" }).error).toContain("within the Mid's dates");
+    expect(timeLabel("14:05")).toBe("2:05 PM");
+  });
+
+  it("sessions: named, end after start, no overlap, in time order", () => {
+    expect(cleanSessions([S[1], S[0]]).sessions.map((s) => s.label)).toEqual(["Morning", "Afternoon"]);
+    expect(cleanSessions([{ ...S[0], to: "09:00" }]).error).toContain("end time");
+    expect(cleanSessions([S[0], { ...S[1], from: "11:00" }]).error).toBe("Morning and Afternoon overlap");
+    expect(cleanSessions([]).error).toBe("Add at least one session");
+  });
+
+  it("slots: branch subjects once each, real day + session, no clash; complete when all placed", () => {
+    const days = ["2026-11-09", "2026-11-10"];
+    const ok = checkSlots([{ subjectId: "s1", date: "2026-11-09", sessionId: "S1" }, { subjectId: "s2", date: "2026-11-09", sessionId: "S2" }], [subj(1), subj(2)], days, S);
+    expect(ok).toMatchObject({ errors: [], complete: true });
+    const clash = checkSlots([{ subjectId: "s1", date: "2026-11-09", sessionId: "S1" }, { subjectId: "s2", date: "2026-11-09", sessionId: "S1" }], [subj(1), subj(2)], days, S);
+    expect(clash.errors).toEqual(["Subject 2 and Subject 1 are both on Mon 9 Nov 2026, Morning"]);
+    const partial = checkSlots([{ subjectId: "s1", date: "2026-11-09", sessionId: "S1" }, { subjectId: "s2" }], [subj(1), subj(2)], days, S);
+    expect(partial).toMatchObject({ errors: [], complete: false });
+    expect(checkSlots([{ subjectId: "x", date: "2026-11-09", sessionId: "S1" }], [subj(1)], days, S).errors[0]).toContain("isn't taught");
+  });
+
+  it("auto-fill: earliest free day + session in subject order, placed ones stay, leftovers reported", () => {
+    const days = ["2026-11-09", "2026-11-10"];
+    const one = autoFill([subj(1), subj(2), subj(3)], [], days, [S[0]]);
+    expect(one.slots.map((s) => `${s.subjectId}@${s.date}`)).toEqual(["s1@2026-11-09", "s2@2026-11-10"]);
+    expect(one.unplaced).toEqual(["Subject 3"]);
+    const kept = autoFill([subj(1), subj(2)], [{ ...subj(2), date: "2026-11-09", sessionId: "S1" }], days, S);
+    expect(kept.slots.find((s) => s.subjectId === "s1")).toMatchObject({ date: "2026-11-09", sessionId: "S2" });
+  });
+});
