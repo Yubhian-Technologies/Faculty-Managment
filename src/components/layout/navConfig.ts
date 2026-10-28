@@ -220,7 +220,6 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Results Analysis", href: "/principal/results-analysis", iconName: "BarChart3", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
   { label: "Faculty", href: "/principal/faculty", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Staff & HR", legacyModule: "Staff & HR Management" },
   { label: "Profile Completion Statistics", href: "/principal/faculty/profile-completion", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Staff & HR Management" },
-  { label: "Staff", href: "/principal/staff", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Staff & HR Management" },
   { label: "Circulars", href: "/principal/circulars", iconName: "Megaphone", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Staff & HR Management" },
   // Deciding a leave request is Principal/VP authority, not College Admin's -
   // see the matching guard in api/leave/applications/[id]/route.ts.

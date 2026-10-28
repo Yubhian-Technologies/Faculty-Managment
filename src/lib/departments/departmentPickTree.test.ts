@@ -3,6 +3,7 @@ import type { Department } from "@/types";
 import {
   buildDepartmentPickOptions,
   departmentPickValue,
+  dropEmptyFeederGroups,
   isDepartmentPickOffered,
   parseDepartmentPick,
 } from "./departmentPickTree";
@@ -58,5 +59,34 @@ describe("buildDepartmentPickOptions", () => {
   it("recognises a stale pick", () => {
     expect(isDepartmentPickOffered(opts, "all")).toBe(true);
     expect(isDepartmentPickOffered(opts, "Nope")).toBe(false);
+  });
+});
+
+describe("dropEmptyFeederGroups (College Office Students filter)", () => {
+  const BT = "cat-btech";
+  // VIT: Basic Science still lists every branch as fed for year 1, but sections
+  // and students are filed under the core branches only.
+  const vitBS = dept({
+    id: "bs", name: "Basic Science", hasSubDepartments: true, parentRunsOwnSections: true,
+    courseScopes: { [BT]: { assignedYears: [1], secondaryDepartments: ["AIDS", "CSE", "IT"] } },
+  });
+  const VIT = [vitBS, BSM, BSP, AIDS, CSE, IT];
+  const labelsOf = (all: Department[], sections: string[]) =>
+    dropEmptyFeederGroups(buildDepartmentPickOptions(all, all, sections), sections).map((o) => `${o.depth}:${o.label}`);
+
+  it("VIT: only the core branches that hold sections remain - no Basic Science group", () => {
+    expect(labelsOf(VIT, ["AIDS", "CSE", "IT"])).toEqual(["0:AIDS", "0:CSE", "0:IT"]);
+  });
+
+  it("VWU-style: when the shared year is filed under a sub-department, its group is kept", () => {
+    const labels = labelsOf(VIT, ["Basic Science - Maths", "CSE"]);
+    expect(labels).toContain("0:Basic Science");
+    expect(labels).toContain("1:Basic Science - Maths");
+    expect(labels).not.toContain("1:Basic Science - Physics");
+  });
+
+  it("with no section names (still loading) the list is unchanged", () => {
+    const built = buildDepartmentPickOptions(VIT, VIT, []);
+    expect(dropEmptyFeederGroups(built, [])).toBe(built);
   });
 });

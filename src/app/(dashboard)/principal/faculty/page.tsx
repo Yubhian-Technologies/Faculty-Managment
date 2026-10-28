@@ -27,8 +27,6 @@ import {
   JoiningLine,
   type FacultyListRow,
 } from "@/components/faculty/facultyListCells";
-import { useCollegeType } from "@/hooks/useCollegeType";
-import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { toast } from "@/hooks/useToast";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { withReturnTo } from "@/lib/faculty/returnTo";
@@ -60,7 +58,6 @@ type FacultyRow = FacultyListRow;
 function PrincipalFacultyContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { collegeType, loading: collegeTypeLoading } = useCollegeType();
 
   // Filters state
   const [selectedDept, setSelectedDept] = useState<string>(searchParams.get("department") || ALL_DEPTS);
@@ -462,16 +459,14 @@ function PrincipalFacultyContent() {
         }
       />
 
-      {/* Supporting Staff segmented tabs for colleges with split */}
-      {!collegeTypeLoading && hasSupportingStaffSplit(collegeType) && (
-        <SegmentedTabs
-          value="faculty"
-          options={[
-            { key: "faculty", label: "Teaching Staff", href: "/principal/faculty" },
-            { key: "supporting", label: "Supporting Staff", href: "/principal/faculty/supporting-staff" },
-          ]}
-        />
-      )}
+      <SegmentedTabs
+        value="faculty"
+        options={[
+          { key: "faculty", label: "Teaching Staff", href: "/principal/faculty" },
+          { key: "supporting", label: "Supporting Staff", href: "/principal/faculty/supporting-staff" },
+          { key: "staff", label: "Staff", href: "/principal/faculty/staff" },
+        ]}
+      />
 
       <PeopleNotOnRoster departments={departments} />
 

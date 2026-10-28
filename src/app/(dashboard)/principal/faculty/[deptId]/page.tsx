@@ -412,6 +412,7 @@ function PrincipalDepartmentFacultyContent() {
           options={[
             { key: "faculty", label: "Teaching Staff", href: "/principal/faculty" },
             { key: "supporting", label: "Supporting Staff", href: "/principal/faculty/supporting-staff" },
+            { key: "staff", label: "Staff", href: "/principal/faculty/staff" },
           ]}
         />
       )}

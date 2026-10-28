@@ -540,6 +540,19 @@ function HODSectionsContent() {
     return dept ? new Set(dept.managedDepartments ?? []) : new Set<string>();
   }, [subDeptFilter, groupingChildren]);
 
+  // The cascade as ONE dropdown: each grouping sub-department with the branches it manages listed
+  // under it. A pick is still the same (subDeptFilter, deptFilter) pair the two dropdowns used to set.
+  const CASCADE_SEP = "\u001f";
+  const cascadeValue = subDeptFilter
+    ? (deptFilter === "all" ? `sub${CASCADE_SEP}${subDeptFilter}` : `br${CASCADE_SEP}${subDeptFilter}${CASCADE_SEP}${deptFilter}`)
+    : deptFilter;
+  function pickCascade(v: string) {
+    const [kind, a, b] = v.split(CASCADE_SEP);
+    if (kind === "sub") { setSubDeptFilter(a); setDeptFilter("all"); return; }
+    if (kind === "br") { setSubDeptFilter(a); setDeptFilter(b); return; }
+    setSubDeptFilter(null); setDeptFilter(v);
+  }
+
   const filteredSections = yearScopedSections.filter((s) => {
     if (activeOwnedScope && !activeOwnedScope.realNames.has(s.department)) return false;
     if (activeCourseIds && !activeCourseIds.has(s.courseId)) return false;
@@ -754,37 +767,20 @@ function HODSectionsContent() {
         <>
           <div className="flex items-center gap-2">
             <span className="text-xs font-medium text-muted-foreground">Department:</span>
-            <Select
-              value={subDeptFilter ?? deptFilter}
-              onValueChange={(v) => {
-                if (v === "all") { setSubDeptFilter(null); setDeptFilter("all"); return; }
-                if (plainChildren.some((c) => c.name === v)) { setSubDeptFilter(null); setDeptFilter(v); return; }
-                setSubDeptFilter(v); setDeptFilter("all");
-              }}
-            >
+            <Select value={cascadeValue} onValueChange={pickCascade}>
               <SelectTrigger className="w-64"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Departments</SelectItem>
                 {plainChildren.map((c) => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}
-                {groupingChildren.map((c) => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}
+                {groupingChildren.flatMap((c) => [
+                  <SelectItem key={c.id} value={`sub${CASCADE_SEP}${c.name}`}>{c.name}</SelectItem>,
+                  ...Array.from(new Set(c.managedDepartments ?? [])).sort().map((name) => (
+                    <SelectItem key={`${c.id}-${name}`} value={`br${CASCADE_SEP}${c.name}${CASCADE_SEP}${name}`} className="pl-8">{name}</SelectItem>
+                  )),
+                ])}
               </SelectContent>
             </Select>
           </div>
-
-          {subDeptFilter && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-muted-foreground">Branch:</span>
-              <Select value={deptFilter} onValueChange={setDeptFilter}>
-                <SelectTrigger className="w-64"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All {subDeptFilter}</SelectItem>
-                  {Array.from(subDeptBranchNames ?? []).sort().map((name) => (
-                    <SelectItem key={name} value={name}>{name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
         </>
       ) : (
         scopeDepartments.length > 1 && (
