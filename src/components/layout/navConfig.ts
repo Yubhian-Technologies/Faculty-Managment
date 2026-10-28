@@ -50,6 +50,7 @@ const SUB_PAGE_PARENT: Record<string, string> = {
   "/hod/supporting-staff": "/hod/faculty", // tab of the Faculty page
   "/hod/assignment-requests": "/hod/teaching-assignments", // button on the Teaching Assignments page
   "/academics/course-structure": "/principal/courses", // Assign-subjects deep link from a department's semester chip
+  "/exam-cell/question-banks": "/exam-cell/question-banks", // a deadline's progress / one bank (else "/exam-cell" Dashboard also prefix-matches)
 };
 
 export function isNavItemActive(item: NavItem, pathname: string, allItems: NavItem[]): boolean {
