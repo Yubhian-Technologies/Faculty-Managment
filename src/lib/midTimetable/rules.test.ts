@@ -20,15 +20,17 @@ describe("mid timetable rules", () => {
     expect(cleanSessions([]).error).toBe("Add at least one session");
   });
 
-  it("slots: branch subjects once each, real day + session, no clash; complete when all placed", () => {
+  it("slots: branch subjects once each, a real day + session; electives share a cell under one heading", () => {
     const days = ["2026-11-09", "2026-11-10"];
     const ok = checkSlots([{ subjectId: "s1", date: "2026-11-09", sessionId: "S1" }, { subjectId: "s2", date: "2026-11-09", sessionId: "S2" }], [subj(1), subj(2)], days, S);
     expect(ok).toMatchObject({ errors: [], complete: true });
-    const clash = checkSlots([{ subjectId: "s1", date: "2026-11-09", sessionId: "S1" }, { subjectId: "s2", date: "2026-11-09", sessionId: "S1" }], [subj(1), subj(2)], days, S);
-    expect(clash.errors).toEqual(["Subject 2 and Subject 1 are both on Mon 9 Nov 2026, Morning"]);
+    const electives = checkSlots([{ subjectId: "s1", date: "2026-11-09", sessionId: "S1", group: " Professional  Elective-IV " }, { subjectId: "s2", date: "2026-11-09", sessionId: "S1" }], [subj(1), subj(2)], days, S);
+    expect(electives.errors).toEqual([]);
+    expect(electives.slots.map((x) => x.group)).toEqual(["Professional Elective-IV", "Professional Elective-IV"]);
     const partial = checkSlots([{ subjectId: "s1", date: "2026-11-09", sessionId: "S1" }, { subjectId: "s2" }], [subj(1), subj(2)], days, S);
     expect(partial).toMatchObject({ errors: [], complete: false });
     expect(checkSlots([{ subjectId: "x", date: "2026-11-09", sessionId: "S1" }], [subj(1)], days, S).errors[0]).toContain("isn't taught");
+    expect(checkSlots([{ subjectId: "s1", date: "2026-11-30", sessionId: "S1" }], [subj(1)], days, S).errors[0]).toContain("exam days");
   });
 
   it("auto-fill: earliest free day + session in subject order, placed ones stay, leftovers reported", () => {

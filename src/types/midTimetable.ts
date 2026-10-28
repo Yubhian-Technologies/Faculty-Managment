@@ -38,13 +38,18 @@ export interface MidExamPlan {
   updatedAt: Timestamp;
 }
 
-/** One subject's exam: its day and session. */
+/**
+ * One subject's exam: its day and session. Several subjects of a branch in the
+ * same day + session are electives (students write one); `group` is the cell's
+ * heading, e.g. "Professional Elective-IV".
+ */
 export interface MidExamSlot {
   subjectId: string;
   subjectCode: string;
   subjectName: string;
   date: string;
   sessionId: string;
+  group?: string;
 }
 
 export type MidTimetableStatus = "DRAFT" | "PUBLISHED";

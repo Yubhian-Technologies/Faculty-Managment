@@ -81,17 +81,16 @@ export interface BranchSubject { subjectId: string; subjectCode: string; subject
 
 /**
  * A branch's slots as sent by the builder, checked: only the branch's subjects,
- * each once; a known day and session; no two exams in one day + session.
- * Unscheduled subjects are simply absent. `complete` = every subject placed.
+ * each once; a plan day + session. Several subjects in one day + session are
+ * electives sharing the cell (its heading is `group`, the same for all of them).
+ * Unplaced subjects are simply absent. `complete` = every subject placed.
  */
 export function checkSlots(raw: unknown, subjects: BranchSubject[], days: string[], sessions: MidExamSession[]): { slots: MidExamSlot[]; errors: string[]; complete: boolean } {
   const known = new Map(subjects.map((s) => [s.subjectId, s]));
   const daySet = new Set(days);
   const sessionIds = new Set(sessions.map((s) => s.id));
-  const sessionName = new Map(sessions.map((s) => [s.id, s.label]));
   const errors: string[] = [];
   const seen = new Set<string>();
-  const taken = new Map<string, string>();
   const slots: MidExamSlot[] = [];
   for (const r of Array.isArray(raw) ? raw : []) {
     const o = (r ?? {}) as Partial<MidExamSlot>;
@@ -104,13 +103,17 @@ export function checkSlots(raw: unknown, subjects: BranchSubject[], days: string
     const sessionId = String(o.sessionId ?? "");
     if (!daySet.has(date)) { errors.push(`${subj.subjectName}: pick one of the exam days`); continue; }
     if (!sessionIds.has(sessionId)) { errors.push(`${subj.subjectName}: pick a session`); continue; }
-    const key = `${date}|${sessionId}`;
-    const other = taken.get(key);
-    if (other) { errors.push(`${subj.subjectName} and ${other} are both on ${dayLabel(date)}, ${sessionName.get(sessionId)}`); continue; }
-    taken.set(key, subj.subjectName);
-    slots.push({ ...subj, date, sessionId });
+    const group = String(o.group ?? "").replace(/\s+/g, " ").trim().slice(0, 60);
+    slots.push({ ...subj, date, sessionId, ...(group ? { group } : {}) });
   }
-  slots.sort((a, b) => a.date.localeCompare(b.date) || a.sessionId.localeCompare(b.sessionId, undefined, { numeric: true }));
+  // One heading per cell: the first one given.
+  const heading = new Map<string, string>();
+  for (const sl of slots) if (sl.group && !heading.has(`${sl.date}|${sl.sessionId}`)) heading.set(`${sl.date}|${sl.sessionId}`, sl.group);
+  for (const sl of slots) {
+    const h = heading.get(`${sl.date}|${sl.sessionId}`);
+    if (h) sl.group = h; else delete sl.group;
+  }
+  slots.sort((a, b) => a.date.localeCompare(b.date) || a.sessionId.localeCompare(b.sessionId, undefined, { numeric: true }) || a.subjectCode.localeCompare(b.subjectCode));
   return { slots, errors, complete: errors.length === 0 && subjects.every((s) => seen.has(s.subjectId)) };
 }
 

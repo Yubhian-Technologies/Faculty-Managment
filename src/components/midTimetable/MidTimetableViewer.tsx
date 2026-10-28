@@ -5,22 +5,37 @@ import { CalendarDays, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
 import { ordinalYearLabel } from "@/lib/college/courseYears";
+import { dayLabel, timeLabel } from "@/lib/midTimetable/rules";
 import { downloadMidTimetablePdf } from "@/lib/pdf/downloadMidTimetable";
-import type { MidTimetable } from "@/types";
-import { MidTimetableGrid } from "./MidTimetableGrid";
+import type { MidExamSession, MidTimetable } from "@/types";
+import { MidTimetableSheet, SheetCell } from "./MidTimetableSheet";
 
-// Read-only Mid exam timetables - the published ones the viewer may see (the API
-// decides: a student's own branch, a faculty member's branches, every branch for
-// the Principal / VP). Filters appear only when there is more than one choice.
+// Read-only Mid exam timetables: the published ones the viewer may see (the API
+// decides - a student's own branch, a faculty member's branches, every branch
+// for the Principal / VP), one sheet per Mid like the printed one. A single
+// branch reads better as a list of days, so that is how it is shown.
 
-const selectClass = "h-9 rounded-md border border-input bg-background px-3 text-sm";
+interface Sheet { planId: string; courseName: string; year: number; semester: number; midNumber: number; days: string[]; sessions: MidExamSession[]; rows: MidTimetable[] }
+
+function toSheets(list: MidTimetable[]): Sheet[] {
+  const by = new Map<string, MidTimetable[]>();
+  for (const t of list) by.set(t.planId, [...(by.get(t.planId) ?? []), t]);
+  return [...by.entries()].map(([planId, rows]) => {
+    const sessions = new Map<string, MidExamSession>();
+    for (const r of rows) for (const s of r.sessions) if (!sessions.has(s.id)) sessions.set(s.id, s);
+    const used = new Set(rows.flatMap((r) => r.slots.map((s) => s.sessionId)));
+    return {
+      planId, courseName: rows[0].courseName, year: rows[0].year, semester: rows[0].semester, midNumber: rows[0].midNumber,
+      days: [...new Set(rows.flatMap((r) => r.slots.map((s) => s.date)))].sort(),
+      sessions: [...sessions.values()].filter((s) => used.has(s.id)).sort((a, b) => a.from.localeCompare(b.from)),
+      rows: [...rows].sort((a, b) => a.branch.localeCompare(b.branch)),
+    };
+  }).sort((a, b) => (b.days[0] ?? "").localeCompare(a.days[0] ?? "") || a.courseName.localeCompare(b.courseName) || a.year - b.year);
+}
 
 export function MidTimetableViewer({ emptyText }: { emptyText: string }) {
   const [list, setList] = useState<MidTimetable[] | null>(null);
   const [error, setError] = useState("");
-  const [mid, setMid] = useState("");
-  const [course, setCourse] = useState("");
-  const [branch, setBranch] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => {
@@ -28,23 +43,18 @@ export function MidTimetableViewer({ emptyText }: { emptyText: string }) {
       .then(async (r) => { const d = (await r.json()) as { timetables?: MidTimetable[]; error?: string }; if (!r.ok) throw new Error(d.error ?? "Failed to load"); setList(d.timetables ?? []); })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load"));
   }, []);
+  const sheets = useMemo(() => toSheets(list ?? []), [list]);
 
-  const courseOf = (t: MidTimetable) => `${t.courseName} · ${ordinalYearLabel(t.year)} · Semester ${t.semester}`;
-  const mids = useMemo(() => [...new Set((list ?? []).map((t) => t.midNumber))].sort((a, b) => b - a), [list]);
-  const courses = useMemo(() => [...new Set((list ?? []).map(courseOf))].sort(), [list]);
-  const branches = useMemo(() => [...new Set((list ?? []).map((t) => t.branch))].sort(), [list]);
-  const shown = (list ?? []).filter((t) => (!mid || t.midNumber === Number(mid)) && (!course || courseOf(t) === course) && (!branch || t.branch === branch));
-
-  async function pdf(items: MidTimetable[], name: string, key: string) {
-    setBusy(key);
-    try { await downloadMidTimetablePdf(items, name); }
+  async function pdf(s: Sheet) {
+    setBusy(s.planId);
+    try { await downloadMidTimetablePdf({ ...s, rows: s.rows.map((r) => ({ branch: r.branch, slots: r.slots })) }, `mid${s.midNumber}-${s.courseName}-year${s.year}-timetable`); }
     catch { toast({ variant: "destructive", title: "Could not make the PDF" }); }
     finally { setBusy(null); }
   }
 
   if (error) return <p className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive" role="alert">{error}</p>;
   if (!list) return <div className="h-64 animate-pulse rounded-2xl bg-muted" />;
-  if (list.length === 0) {
+  if (sheets.length === 0) {
     return (
       <div className="flex flex-col items-center gap-3 rounded-2xl border bg-card p-10 text-center">
         <span className="grid h-12 w-12 place-items-center rounded-full bg-primary/10 text-primary"><CalendarDays className="h-6 w-6" /></span>
@@ -55,47 +65,36 @@ export function MidTimetableViewer({ emptyText }: { emptyText: string }) {
   }
 
   return (
-    <div className="space-y-5">
-      {(mids.length > 1 || courses.length > 1 || branches.length > 1) && (
-        <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3">
-          {mids.length > 1 && (
-            <select aria-label="Mid" className={selectClass} value={mid} onChange={(e) => setMid(e.target.value)}>
-              <option value="">All Mids</option>
-              {mids.map((m) => <option key={m} value={m}>Mid {m}</option>)}
-            </select>
-          )}
-          {courses.length > 1 && (
-            <select aria-label="Course and year" className={selectClass} value={course} onChange={(e) => setCourse(e.target.value)}>
-              <option value="">All courses and years</option>
-              {courses.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-          )}
-          {branches.length > 1 && (
-            <select aria-label="Branch" className={selectClass} value={branch} onChange={(e) => setBranch(e.target.value)}>
-              <option value="">All branches</option>
-              {branches.map((b) => <option key={b} value={b}>{b}</option>)}
-            </select>
-          )}
-          <span className="ml-auto text-xs text-muted-foreground">{shown.length} timetable{shown.length === 1 ? "" : "s"}</span>
-          {shown.length > 1 && (
-            <Button size="sm" variant="outline" loading={busy === "all"} onClick={() => void pdf(shown, "mid-timetables", "all")}><Download className="mr-1.5 h-4 w-4" />PDF of all shown</Button>
-          )}
-        </div>
-      )}
-
-      {shown.map((t) => (
-        <section key={t.id} className="space-y-3 rounded-2xl border bg-card p-4 shadow-sm sm:p-5" aria-label={`Mid ${t.midNumber} ${t.branch}`}>
+    <div className="space-y-6">
+      {sheets.map((s) => (
+        <section key={s.planId} className="space-y-3 rounded-2xl border bg-card p-4 shadow-sm sm:p-5" aria-label={`Mid ${s.midNumber} timetable`}>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{courseOf(t)}</p>
-              <h2 className="text-lg font-semibold">Mid {t.midNumber} <span className="text-muted-foreground">·</span> {t.branch}</h2>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{s.courseName} · {ordinalYearLabel(s.year)} · Semester {s.semester}</p>
+              <h2 className="text-lg font-semibold">Mid {s.midNumber} timetable{s.rows.length === 1 ? ` · ${s.rows[0].branch}` : ""}</h2>
+              {s.sessions.length === 1 && <p className="text-sm text-muted-foreground">Time: {timeLabel(s.sessions[0].from)} - {timeLabel(s.sessions[0].to)}</p>}
             </div>
-            <Button size="sm" variant="outline" loading={busy === t.id} onClick={() => void pdf([t], `mid${t.midNumber}-${t.branch}-timetable`, t.id)}><Download className="mr-1.5 h-4 w-4" />PDF</Button>
+            <Button size="sm" variant="outline" loading={busy === s.planId} onClick={() => void pdf(s)}><Download className="mr-1.5 h-4 w-4" />PDF</Button>
           </div>
-          <MidTimetableGrid slots={t.slots} sessions={t.sessions} />
+          {s.rows.length === 1 ? (
+            <ol className="divide-y rounded-xl border">
+              {s.days.flatMap((d) => s.sessions.map((ses) => ({ d, ses, slots: s.rows[0].slots.filter((x) => x.date === d && x.sessionId === ses.id) })))
+                .filter((x) => x.slots.length)
+                .map(({ d, ses, slots }) => (
+                  <li key={`${d}|${ses.id}`} className="flex flex-wrap items-center gap-x-6 gap-y-2 p-3 sm:p-4">
+                    <div className="w-44 shrink-0">
+                      <p className="font-semibold">{dayLabel(d)}</p>
+                      <p className="text-xs text-muted-foreground">{s.sessions.length > 1 ? `${ses.label} · ` : ""}{timeLabel(ses.from)} - {timeLabel(ses.to)}</p>
+                    </div>
+                    <div className="min-w-0 flex-1 text-left [&_div]:text-left"><SheetCell slots={slots} /></div>
+                  </li>
+                ))}
+            </ol>
+          ) : (
+            <MidTimetableSheet rows={s.rows.map((r) => ({ key: r.id, branch: r.branch, slots: r.slots }))} days={s.days} sessions={s.sessions} />
+          )}
         </section>
       ))}
-      {shown.length === 0 && <p className="text-sm text-muted-foreground">No timetable matches these filters.</p>}
     </div>
   );
 }
