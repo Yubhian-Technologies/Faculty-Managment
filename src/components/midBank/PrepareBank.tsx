@@ -316,45 +316,98 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
             <CardContent className="space-y-6 p-6">
               <StepHeading icon={BookOpen} title="Course Outcomes">
                 Enter the number of units and COs in the syllabus, then each one. Reducing a number removes the higher ones (and a CO&rsquo;s PO mapping).
-                {outcomes && ` Last saved by ${outcomes.updatedByName || "a colleague"}.`}
-                {!canEditOutcomes && !locked && ` Set by ${outcomes?.updatedByName || "a colleague"} - read-only for you.`}
               </StepHeading>
 
-              <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="text-sm font-semibold">Syllabus units</h3>
-                  <CountInput id="n-units" label="Number of units" value={draft.units.length} max={LIMITS.units} disabled={readOnly} onChange={(n) => !readOnly && setDraft((d) => ({ ...d, units: resize(d.units, n) }))} />
-                </div>
-                <ol className="space-y-2">
-                  {draft.units.map((t, i) => (
-                    <li key={i} className="flex items-center gap-3">
-                      <Label htmlFor={`unit-${i}`} className="grid h-9 w-16 shrink-0 place-items-center rounded-lg bg-background text-xs font-semibold text-muted-foreground ring-1 ring-border">Unit {i + 1}</Label>
-                      <Input id={`unit-${i}`} value={t} disabled={readOnly} placeholder="e.g. Linear data structures" className="bg-background"
-                        onChange={(e) => setDraft((d) => ({ ...d, units: d.units.map((x, j) => (j === i ? e.target.value : x)) }))} />
-                    </li>
-                  ))}
-                </ol>
+              <div className="flex flex-wrap gap-2 text-xs">
+                {outcomes && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-muted-foreground"><Check className="h-3.5 w-3.5 text-emerald-600" />Last saved by {outcomes.updatedByName || "a colleague"}</span>
+                )}
+                {!canEditOutcomes && !locked && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 font-medium text-amber-900 dark:bg-amber-950/40 dark:text-amber-300"><Lock className="h-3.5 w-3.5" />Set by {outcomes?.updatedByName || "a colleague"} - read-only for you</span>
+                )}
               </div>
 
-              <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="text-sm font-semibold">Course outcomes (COs)</h3>
+              {/* How far along: filled units and COs */}
+              <div className="grid gap-3 sm:grid-cols-2">
+                {[
+                  { label: "Units", icon: Layers, filled: draft.units.filter((t) => t.trim()).length, total: draft.units.length },
+                  { label: "Course outcomes", icon: Target, filled: draft.cos.filter((t) => t.trim()).length, total: draft.cos.length },
+                ].map(({ label, icon: Icon, filled, total }) => (
+                  <div key={label} className="rounded-xl border bg-card p-3.5">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="flex items-center gap-2 font-medium"><Icon className="h-4 w-4 text-primary" />{label}</span>
+                      <span className={cn("text-xs font-semibold", filled === total ? "text-emerald-600" : "text-muted-foreground")}>{filled} of {total} filled</span>
+                    </div>
+                    <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label={`${label} filled`} aria-valuenow={filled} aria-valuemin={0} aria-valuemax={total}>
+                      <div className={cn("h-full rounded-full transition-all", filled === total ? "bg-emerald-500" : "bg-primary")} style={{ width: `${total ? (filled / total) * 100 : 0}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Units */}
+              <section aria-labelledby="units-h" className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3">
+                  <div>
+                    <h3 id="units-h" className="text-base font-semibold">Syllabus units</h3>
+                    <p className="text-xs text-muted-foreground">The unit titles exactly as in the syllabus.</p>
+                  </div>
+                  <CountInput id="n-units" label="Number of units" value={draft.units.length} max={LIMITS.units} disabled={readOnly} onChange={(n) => !readOnly && setDraft((d) => ({ ...d, units: resize(d.units, n) }))} />
+                </div>
+                <ol className="grid gap-3 md:grid-cols-2">
+                  {draft.units.map((t, i) => {
+                    const filled = Boolean(t.trim());
+                    const inMid = setup.units.includes(i + 1);
+                    return (
+                      <li key={i} className={cn("group rounded-xl border p-3 transition-colors focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20",
+                        filled ? "bg-card" : "border-dashed bg-muted/20")}>
+                        <div className="mb-2 flex items-center gap-2">
+                          <Label htmlFor={`unit-${i}`} className={cn("grid h-7 min-w-7 place-items-center rounded-md px-2 text-xs font-bold", filled ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>{i + 1}</Label>
+                          <span className="text-sm font-medium">Unit {i + 1}</span>
+                          {inMid && <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-primary">Mid {deadline.midNumber}</span>}
+                          {filled && <Check className="ml-auto h-4 w-4 text-emerald-600" aria-label="filled" />}
+                        </div>
+                        <Input id={`unit-${i}`} value={t} disabled={readOnly} maxLength={LIMITS.unitTitle} placeholder="e.g. Linear data structures"
+                          className="border-0 bg-transparent px-0 text-[15px] shadow-none focus-visible:ring-0"
+                          onChange={(e) => setDraft((d) => ({ ...d, units: d.units.map((x, j) => (j === i ? e.target.value : x)) }))} />
+                      </li>
+                    );
+                  })}
+                </ol>
+              </section>
+
+              {/* COs */}
+              <section aria-labelledby="cos-h" className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3">
+                  <div>
+                    <h3 id="cos-h" className="text-base font-semibold">Course outcomes (COs)</h3>
+                    <p className="text-xs text-muted-foreground">Start with an action verb - e.g. <em>Explain</em>, <em>Apply</em>, <em>Analyse</em>, <em>Design</em>.</p>
+                  </div>
                   <CountInput id="n-cos" label="Number of COs" value={draft.cos.length} max={LIMITS.cos} disabled={readOnly}
                     onChange={(n) => !readOnly && setDraft((d) => {
                       const mapping = Object.fromEntries(Object.entries(d.mapping).filter(([co]) => Number(co.slice(2)) <= n));
                       return { ...d, cos: resize(d.cos, n), mapping };
                     })} />
                 </div>
-                <ol className="space-y-2">
-                  {draft.cos.map((t, i) => (
-                    <li key={i} className="flex items-start gap-3">
-                      <Label htmlFor={`co-${i}`} className="mt-1 grid h-9 w-16 shrink-0 place-items-center rounded-lg bg-primary/10 text-xs font-bold text-primary">CO{i + 1}</Label>
-                      <Textarea id={`co-${i}`} rows={2} value={t} disabled={readOnly} placeholder="The student will be able to ..." className="bg-background"
-                        onChange={(e) => setDraft((d) => ({ ...d, cos: d.cos.map((x, j) => (j === i ? e.target.value : x)) }))} />
-                    </li>
-                  ))}
+                <ol className="space-y-3">
+                  {draft.cos.map((t, i) => {
+                    const filled = Boolean(t.trim());
+                    return (
+                      <li key={i} className={cn("flex gap-3 rounded-xl border p-3 transition-colors focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20",
+                        filled ? "bg-card" : "border-dashed bg-muted/20")}>
+                        <Label htmlFor={`co-${i}`} className={cn("grid h-10 w-14 shrink-0 place-items-center rounded-lg text-sm font-bold", filled ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary")}>CO{i + 1}</Label>
+                        <div className="min-w-0 flex-1">
+                          <Textarea id={`co-${i}`} rows={2} value={t} disabled={readOnly} maxLength={LIMITS.statement} placeholder="The student will be able to ..."
+                            className="min-h-14 resize-y border-0 bg-transparent px-0 py-1.5 text-[15px] shadow-none focus-visible:ring-0"
+                            onChange={(e) => setDraft((d) => ({ ...d, cos: d.cos.map((x, j) => (j === i ? e.target.value : x)) }))} />
+                          <div className="flex justify-end text-[11px] text-muted-foreground">{t.length}/{LIMITS.statement}</div>
+                        </div>
+                        {filled && <Check className="mt-2.5 h-4 w-4 shrink-0 text-emerald-600" aria-label="filled" />}
+                      </li>
+                    );
+                  })}
                 </ol>
-              </div>
+              </section>
             </CardContent>
           </Card>
         )}
