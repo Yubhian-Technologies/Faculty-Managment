@@ -19,8 +19,9 @@ const dmy = (d: string) => `${d.slice(8, 10)}-${d.slice(5, 7)}-${d.slice(0, 4)}`
 const STYLE = `
   body { font-family: "Times New Roman", Times, serif; margin: 0; color: #000; font-size: 14px; }
   .page { width: 210mm; padding: 10mm 12mm 14mm; box-sizing: border-box; }
-  .top { display: flex; justify-content: space-between; align-items: center; gap: 18px; margin-bottom: 6px; font-family: Arial, Helvetica, sans-serif; }
-  .top-right { display: flex; align-items: center; gap: 18px; }
+  .top { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; margin-bottom: 6px; font-family: Arial, Helvetica, sans-serif; }
+  .top > :first-child { justify-self: start; }
+  .top > :last-child { justify-self: end; }
   .code { border: 1.5px solid #000; padding: 4px 14px; font-weight: bold; font-size: 15px; }
   .regd { display: flex; border: 1px solid #000; font-size: 13px; }
   .regd span { padding: 3px 6px; border-right: 1px solid #000; }
@@ -102,7 +103,7 @@ export function getMidQuestionPaperHTML(d: {
   const sections = shortSections(p);
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8" /><style>${STYLE}</style></head><body><div class="page">
-    <div class="top"><span class="code">${esc(p.subjectCode)}</span><span class="top-right">${regCode ? `<span class="code">${esc(regCode)}</span>` : ""}<span class="regd"><span>Regd. No:</span>${"<i></i>".repeat(REGD_BOXES)}</span></span></div>
+    <div class="top"><span class="code">${esc(p.subjectCode)}</span><span>${regCode ? `<span class="code">${esc(regCode)}</span>` : ""}</span><span class="regd"><span>Regd. No:</span>${"<i></i>".repeat(REGD_BOXES)}</span></div>
     <div class="head">
       <img src="${logoSrc(d.college.logoUrl)}" alt="College logo" />
       <div class="center">
