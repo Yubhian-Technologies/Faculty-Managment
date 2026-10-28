@@ -67,9 +67,9 @@ export default function ExamCellDashboard() {
         title="Exam Cell"
         description="Configure Internal and External examination marks for every course, year and branch — applied automatically to every subject taught under it."
         actions={
-          !isHidden("/exam-cell/configure") && (
+          !isHidden("/exam-cell/mid-configuration") && (
             <Button asChild>
-              <Link href="/exam-cell/configure">Configure Examination</Link>
+              <Link href="/exam-cell/mid-configuration?tab=marks">Configure Examination</Link>
             </Button>
           )
         }
@@ -131,7 +131,7 @@ export default function ExamCellDashboard() {
                       <td className="px-4 py-2.5">{c.externalMaxMarks}</td>
                       <td className="px-4 py-2.5 text-right">
                         <Button asChild variant="ghost" size="sm">
-                          <Link href={`/exam-cell/configure?courseId=${c.courseId}&year=${c.year}${c.examType ? `&examType=${c.examType}` : ""}`}>Edit</Link>
+                          <Link href={`/exam-cell/mid-configuration?tab=marks&courseId=${c.courseId}&year=${c.year}${c.examType ? `&examType=${c.examType}` : ""}`}>Edit</Link>
                         </Button>
                       </td>
                     </tr>

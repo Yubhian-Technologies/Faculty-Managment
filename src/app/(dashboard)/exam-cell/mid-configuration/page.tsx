@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Info } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -10,11 +12,40 @@ import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/useToast";
 import { formatDate, stripLeadingZeros } from "@/lib/utils";
 import { MidBankRulesCard } from "@/components/exams/MidBankRulesCard";
+import { ExamConfigurationPanel } from "@/components/exams/ExamConfigurationPanel";
+import { cn } from "@/lib/utils";
 import type { ExamMidSettings } from "@/types";
 
-// Exam Cell > Mid Exams > Mid Configuration: how many Mids the college runs and
-// the Mid Question Bank rules per course (+ regulation).
+// Exam Cell > Mid Exams > Mid Configuration, two tabs: "Mid exams & question
+// bank" (how many Mids the college runs, the question bank rules per course) and
+// "Marks" (Internal / External marks per course, year, branch - the former
+// Exam Configuration page; /exam-cell/configure redirects to it).
 export default function MidConfigurationPage() {
+  return (
+    <Suspense fallback={<div className="h-64 animate-pulse rounded-lg bg-muted" />}>
+      <MidConfigurationTabs />
+    </Suspense>
+  );
+}
+
+function MidConfigurationTabs() {
+  const sp = useSearchParams();
+  const tab = sp.get("tab") === "marks" ? "marks" : "mid";
+  return (
+    <div className={cn("space-y-6", tab === "mid" && "max-w-2xl")}>
+      <PageHeader title="Mid Configuration" description="How many Mid exams the college runs, the question bank rules, and the Internal / External marks." />
+      <nav className="inline-flex rounded-xl border bg-muted/40 p-1 text-sm" aria-label="Mid Configuration sections">
+        {([["mid", "Mid exams & question bank"], ["marks", "Marks (Internal / External)"]] as const).map(([k, label]) => (
+          <Link key={k} href={k === "marks" ? "/exam-cell/mid-configuration?tab=marks" : "/exam-cell/mid-configuration"} aria-current={tab === k ? "page" : undefined}
+            className={cn("rounded-lg px-3.5 py-1.5 font-medium", tab === k ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}>{label}</Link>
+        ))}
+      </nav>
+      {tab === "marks" ? <ExamConfigurationPanel embedded /> : <MidSettings />}
+    </div>
+  );
+}
+
+function MidSettings() {
   const [settings, setSettings] = useState<ExamMidSettings | null>(null);
   const [midCount, setMidCount] = useState("2");
   const [isLoading, setIsLoading] = useState(true);
@@ -62,17 +93,11 @@ export default function MidConfigurationPage() {
   }
 
   if (isLoading) {
-    return (
-      <div className="max-w-2xl space-y-6">
-        <PageHeader title="Mid Configuration" description="Loading..." />
-        <div className="h-32 bg-muted animate-pulse rounded-lg" />
-      </div>
-    );
+    return <div className="h-32 bg-muted animate-pulse rounded-lg" />;
   }
 
   return (
-    <div className="max-w-2xl space-y-6">
-      <PageHeader title="Mid Configuration" description="How many Mid exams the college runs, and the question bank rules for each course." />
+    <div className="space-y-6">
 
       {!settings?.midCount && (
         <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" role="status">

@@ -163,7 +163,6 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Mid Timings & Dates", href: "/exam-cell/mid-timings", iconName: "CalendarRange", roles: ["EXAM_CELL"], legacyModule: "General" },
   { label: "Mid Timetable", href: "/exam-cell/mid-timetable", iconName: "CalendarDays", roles: ["EXAM_CELL"], legacyModule: "General" },
   { label: "Mid Question Bank", href: "/exam-cell/question-banks", iconName: "BookOpenCheck", roles: ["EXAM_CELL"], legacyModule: "General" },
-  { label: "Exam Configuration", href: "/exam-cell/configure", iconName: "ClipboardList", roles: ["EXAM_CELL"], legacyModule: "General" },
   { label: "Exam Rooms", href: "/exam-cell/exam-rooms", iconName: "DoorOpen", roles: ["EXAM_CELL"], section: "Exam Conduct", legacyModule: "General" },
   { label: "Exam Seating", href: "/exam-cell/seating", iconName: "Armchair", roles: ["EXAM_CELL"], legacyModule: "General" },
   { label: "Timetable View", href: "/exam-cell/timetable-view", iconName: "CalendarDays", roles: ["EXAM_CELL"], legacyModule: "General" },
@@ -966,7 +965,7 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   ],
   EXAM_CELL: [
     { label: "Home", href: "/exam-cell", iconName: "LayoutDashboard", roles: ["EXAM_CELL"] },
-    { label: "Configure", href: "/exam-cell/configure", iconName: "ClipboardList", roles: ["EXAM_CELL"] },
+    { label: "Configure", href: "/exam-cell/mid-configuration", iconName: "ClipboardList", roles: ["EXAM_CELL"] },
     { label: "Attendance", href: "/exam-cell/attendance", iconName: "ClipboardCheck", roles: ["EXAM_CELL"] },
     { label: "Staff", href: "/exam-cell/staff-attendance", iconName: "ClipboardCheck", roles: ["EXAM_CELL"] },
     { label: "Profile", href: "/exam-cell/profile", iconName: "UserCircle", roles: ["EXAM_CELL"] },
