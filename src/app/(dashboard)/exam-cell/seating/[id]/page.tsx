@@ -3,7 +3,7 @@
 import { neutraliseFormula } from "@/lib/utils/csv";
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Download, Printer, Save, Send, Trash2 } from "lucide-react";
+import { ArrowLeft, Download, FileText, Printer, Save, Send, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
@@ -15,6 +15,11 @@ import { toast } from "@/hooks/useToast";
 import { moveStudent, rollRangeBySection } from "@/lib/exams/seatingAllocator";
 import { benchRows, moveStudentLayered } from "@/lib/exams/seatingLayers";
 import { AllotSectionPanel } from "@/components/exams/AllotSectionPanel";
+import { SEAT_LETTERS } from "@/lib/exams/seatingPaired";
+import { dayLabel, timeLabel } from "@/lib/midTimetable/rules";
+import { fetchCollegeLogoUrl } from "@/lib/pdf/logo";
+import { renderHtmlToPdf, renderMultiHtmlToPdf } from "@/lib/pdf/htmlToPdf";
+import { attendanceSheetHTML, noticeBoardHTML, roomSheetHTML } from "@/lib/pdf/examSeatingTemplate";
 import type { ExamSeatingPlan } from "@/types/examSeating";
 
 // Review of an automatic allotment: every room with its roll-number ranges,
@@ -27,6 +32,7 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState<string | null>(null);
 
   function reload() {
     fetch(`/api/college/exam-seating/${id}`)
@@ -39,7 +45,9 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
   if (!plan) return <div className="h-40 rounded-lg border bg-muted/30 animate-pulse" />;
 
   const published = plan.status === "PUBLISHED";
-  const layered = plan.mode === "LAYERED";
+  // Paired plans show bench-wise like layered ones; their seats are fixed by the build (rebuild to change).
+  const paired = plan.mode === "PAIRED";
+  const layered = plan.mode === "LAYERED" || paired;
   const deptBySection = new Map(plan.sections.map((s) => [s.id, s.department]));
 
   function move(studentId: string, target: string) {
@@ -107,6 +115,24 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
 
   const usedRooms = plan.rooms.filter((r) => r.students.length > 0);
 
+  async function pdf(kind: "rooms" | "notice" | "attendance") {
+    setPdfBusy(kind);
+    try {
+      const [info, logoUrl] = await Promise.all([
+        fetch("/api/college/info").then((r) => (r.ok ? r.json() : {})).catch(() => ({})) as Promise<{ name?: string }>,
+        fetchCollegeLogoUrl(),
+      ]);
+      const c = { name: info.name || "College", logoUrl };
+      const base = plan!.name.replace(/[^a-z0-9]+/gi, "-");
+      if (kind === "notice") await renderHtmlToPdf(noticeBoardHTML(c, plan!), `${base}-notice-board.pdf`);
+      else await renderMultiHtmlToPdf(usedRooms.map((r) => (kind === "rooms" ? roomSheetHTML : attendanceSheetHTML)(c, plan!, r)), `${base}-${kind === "rooms" ? "room-sheets" : "attendance"}.pdf`);
+    } catch {
+      toast({ variant: "destructive", title: "Could not make the PDF" });
+    } finally {
+      setPdfBusy(null);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="print:hidden space-y-4">
@@ -115,12 +141,15 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
         </Link>
         <PageHeader
           title={plan.name}
-          description={`${plan.rooms.reduce((n, r) => n + r.students.length, 0)} students seated in ${usedRooms.length} rooms`}
+          description={`${plan.examDate ? `${dayLabel(plan.examDate)}${plan.examTime ? ` · ${plan.examTime.split("-").map(timeLabel).join(" - ")}` : ""} · ` : ""}${plan.rooms.reduce((n, r) => n + r.students.length, 0)} students seated in ${usedRooms.length} rooms`}
           actions={
             <>
               <Badge variant={published ? "approved" : "pending"}>{published ? "Published" : "Draft"}</Badge>
               <Button size="sm" variant="outline" onClick={downloadCsv}><Download className="h-4 w-4 mr-1" /> CSV</Button>
               <Button size="sm" variant="outline" onClick={() => window.print()}><Printer className="h-4 w-4 mr-1" /> Print</Button>
+              <Button size="sm" variant="outline" loading={pdfBusy === "rooms"} disabled={usedRooms.length === 0} onClick={() => void pdf("rooms")}><FileText className="h-4 w-4 mr-1" /> Room sheets</Button>
+              <Button size="sm" variant="outline" loading={pdfBusy === "notice"} disabled={usedRooms.length === 0} onClick={() => void pdf("notice")}><FileText className="h-4 w-4 mr-1" /> Notice board</Button>
+              <Button size="sm" variant="outline" loading={pdfBusy === "attendance"} disabled={usedRooms.length === 0} onClick={() => void pdf("attendance")}><FileText className="h-4 w-4 mr-1" /> Attendance</Button>
               <Button size="sm" variant="outline" disabled={!dirty} loading={busy} onClick={() => void patch(edits(), "Changes saved")}>
                 <Save className="h-4 w-4 mr-1" /> Save
               </Button>
@@ -134,16 +163,26 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
           }
         />
 
-        {layered && !published && <AllotSectionPanel plan={plan} onAllotted={reload} />}
+        {plan.mode === "LAYERED" && !published && <AllotSectionPanel plan={plan} onAllotted={reload} />}
+        {paired && plan.streams && (
+          <Card>
+            <CardContent className="flex flex-wrap gap-x-6 gap-y-1 p-4 text-sm">
+              {plan.streams.map((st) => (
+                <span key={st.seat}><span className="font-semibold">Seat {SEAT_LETTERS[st.seat - 1]}:</span> {st.groups.map((g) => `${g.label} (${g.count})`).join(" → ")}</span>
+              ))}
+              <span className="w-full text-xs text-muted-foreground">Seats are set by the build - to change them, delete this draft and build again.</span>
+            </CardContent>
+          </Card>
+        )}
 
         {plan.unplaced.length > 0 && (
           <Card className="border-destructive/50">
             <CardContent className="p-4 space-y-2">
-              <p className="text-sm font-medium text-destructive">{plan.unplaced.length} student(s) have no seat - move them into a room with space (or add a room by building a new plan).</p>
+              <p className="text-sm font-medium text-destructive">{plan.unplaced.length} student(s) have no seat - {paired ? "the rooms picked are full: delete this draft and build again with more rooms." : "move them into a room with space (or add a room by building a new plan)."}</p>
               {plan.unplaced.map((s) => (
                 <div key={s.id} className="flex items-center justify-between gap-2 text-sm">
                   <span>{s.rollNumber} · {s.name} <span className="text-xs text-muted-foreground">{s.sectionLabel}</span></span>
-                  <MoveSelect plan={plan} current="UNPLACED" onMove={(t) => move(s.id, t)} />
+                  {!paired && <MoveSelect plan={plan} current="UNPLACED" onMove={(t) => move(s.id, t)} />}
                 </div>
               ))}
             </CardContent>
@@ -190,7 +229,7 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
                                 {s.rollNumber} · {s.name}
                                 <span className="block text-[11px] text-muted-foreground">{s.sectionLabel}</span>
                               </span>
-                              {!published && <span className="print:hidden"><MoveSelect plan={plan} current={room.roomId} onMove={(t) => move(s.id, t)} /></span>}
+                              {!published && !paired && <span className="print:hidden"><MoveSelect plan={plan} current={room.roomId} onMove={(t) => move(s.id, t)} /></span>}
                             </div>
                           ) : <span className="text-muted-foreground">-</span>}
                         </td>

@@ -14,6 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { toast } from "@/hooks/useToast";
 import { roomBenches, roomPerBench } from "@/lib/exams/roomLayout";
+import { PairedPlanCard } from "@/components/exams/PairedPlanCard";
 import type { ExamRoom, SeatingPlanStatus, SeatingSectionRef } from "@/types/examSeating";
 
 interface PlanRow {
@@ -113,6 +114,8 @@ export default function ExamSeatingPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Exam Seating" description="Build a room-wise seating plan for an exam, review it, then print it." />
+
+      <PairedPlanCard rooms={rooms} />
 
       <Card>
         <CardHeader><CardTitle className="text-base">Quick auto-fill plan</CardTitle></CardHeader>

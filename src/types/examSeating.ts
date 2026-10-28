@@ -29,6 +29,17 @@ export interface SeatingStudent {
   // Layered plans only: which seat on the bench (1..studentsPerBench). All
   // students of one layer in a room belong to one branch.
   layer?: number;
+  // Paired plans: the bench number in the room (1..benches), and the group the
+  // student was seated with (branch + year of the Mid timetable) - two students
+  // of one group never share a bench.
+  bench?: number;
+  group?: string;
+}
+
+/** Paired plans: the groups (branch + year writing on that date) seated in each seat position, in order. */
+export interface SeatingStream {
+  seat: number; // 1 = seat A ...
+  groups: { key: string; label: string; count: number }[];
 }
 
 export interface SeatingSectionRef {
@@ -56,7 +67,10 @@ export interface SeatingRoomAllocation {
 
 // QUICK: one-shot auto-fill, one student per bench. LAYERED: sections are
 // allotted one at a time, each into a bench layer of the rooms chosen for it.
-export type SeatingPlanMode = "QUICK" | "LAYERED";
+// PAIRED: from a Mid timetable date - each seat position of a bench takes its
+// own stream of groups (e.g. seat A: CSE, seat B: Civil then Mech), bench by
+// bench, room by room in the order picked.
+export type SeatingPlanMode = "QUICK" | "LAYERED" | "PAIRED";
 
 export type SeatingPlanStatus = "DRAFT" | "PUBLISHED";
 
@@ -70,6 +84,10 @@ export interface ExamSeatingPlan {
   sections: SeatingSectionRef[];
   rooms: SeatingRoomAllocation[];
   unplaced: SeatingStudent[];
+  // PAIRED plans: the exam's date and time (from the Mid timetable) and the seat streams.
+  examDate?: string;
+  examTime?: string;
+  streams?: SeatingStream[];
   createdBy: string;
   createdByName: string;
   createdAt?: unknown;

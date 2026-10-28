@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { validateLayeredRoom } from "@/lib/exams/seatingLayers";
+import { validatePairedRoom } from "@/lib/exams/seatingPaired";
 import type { ExamSeatingPlan, SeatingRoomAllocation, SeatingStudent } from "@/types/examSeating";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -72,6 +73,11 @@ export async function PATCH(request: Request, { params }: Ctx) {
         if (cap === undefined) return NextResponse.json({ error: "Unknown room in plan" }, { status: 400 });
         if (r.students.length > cap) {
           return NextResponse.json({ error: `Room ${r.name} exceeds its capacity of ${cap}` }, { status: 400 });
+        }
+        if (plan.mode === "PAIRED") {
+          const orig = plan.rooms.find((o) => o.roomId === r.roomId)!;
+          const problem = validatePairedRoom({ ...orig, students: r.students });
+          if (problem) return NextResponse.json({ error: problem }, { status: 400 });
         }
         if (plan.mode === "LAYERED") {
           const orig = plan.rooms.find((o) => o.roomId === r.roomId)!;
