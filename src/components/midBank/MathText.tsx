@@ -10,7 +10,7 @@ import { FormulaPanel } from "./FormulaPanel";
 /** Question text with its $...$ formulas rendered (text is escaped - see renderMathHtml). */
 export function MathText({ text, className }: { text: string; className?: string }) {
   const html = useMemo(() => renderMathHtml(text), [text]);
-  return <div className={className} dangerouslySetInnerHTML={{ __html: html }} />;
+  return <div className={`[overflow-wrap:anywhere] ${className ?? ""}`} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 /**
@@ -102,7 +102,7 @@ export function QuestionTextField({ id, value, onChange, placeholder, invalid, d
           const f = (e.target as HTMLElement).closest<HTMLElement>("[data-latex]");
           if (f && !disabled && box.current?.contains(f)) setPanel({ mode: "edit", el: f, latex: f.dataset.latex ?? "", display: f.dataset.display === "1" });
         }}
-        className={`min-h-28 w-full whitespace-pre-wrap break-words rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)] ${disabled ? "cursor-not-allowed opacity-50" : ""}`}
+        className={`min-h-28 w-full min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere] rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)] ${disabled ? "cursor-not-allowed opacity-50" : ""}`}
       />
       {!disabled && (
         <div className="flex flex-wrap items-center gap-2">

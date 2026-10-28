@@ -24,7 +24,7 @@ const STYLE = `
   .meta { text-align: center; font-size: 11px; color: #333; margin-bottom: 10px; }
   .section-title { font-size: 13px; font-weight: bold; background: #eef2ff; padding: 5px 8px; margin: 14px 0 6px; break-after: avoid-page; }
   table { width: 100%; border-collapse: collapse; }
-  th, td { border: 1px solid #999; padding: 5px 6px; vertical-align: top; text-align: left; }
+  th, td { border: 1px solid #999; padding: 5px 6px; vertical-align: top; text-align: left; overflow-wrap: anywhere; }
   th { background: #f3f4f6; font-size: 11px; }
   tr { break-inside: avoid-page; }
   .num { width: 34px; text-align: center; }

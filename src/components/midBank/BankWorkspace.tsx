@@ -395,7 +395,7 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
         </nav>
 
         {/* Centre: editor */}
-        <section aria-label="Question editor" className={cn("overflow-hidden rounded-2xl border bg-card shadow-sm", tab !== "editor" && "hidden lg:block")}>
+        <section aria-label="Question editor" className={cn("min-w-0 overflow-hidden rounded-2xl border bg-card shadow-sm", tab !== "editor" && "hidden lg:block")}>
           <header className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/30 px-5 py-3.5">
             <div className="flex items-center gap-2">
               <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Previous question" disabled={!prev || saveState === "saving"} onClick={() => prev && void go(prev.unit, prev.slot)}><ChevronLeft className="h-4 w-4" /></Button>
@@ -476,7 +476,7 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
               const pre = `p${i}`;
               const err = (f: string) => fieldErrors[`parts.${i}.${f}`];
               return (
-                <fieldset key={i} disabled={Boolean(lockedHere)} className="space-y-5 rounded-xl border bg-background p-4 sm:p-5">
+                <fieldset key={i} disabled={Boolean(lockedHere)} className="min-w-0 space-y-5 rounded-xl border bg-background p-4 sm:p-5">
                   <legend className="flex items-center gap-2 px-1 text-sm font-semibold">
                     <span className="grid h-6 min-w-6 place-items-center rounded-md bg-primary px-1.5 text-xs text-primary-foreground">{qFormat === "SINGLE" ? "Q" : partLetter(i)}</span>
                     {partLabel(qFormat, i)}
@@ -583,7 +583,7 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
         </section>
 
         {/* Right: academic details */}
-        <aside aria-label="Question details" className={cn("space-y-4 text-sm lg:sticky lg:top-4 lg:self-start", tab !== "info" && "hidden lg:block")}>
+        <aside aria-label="Question details" className={cn("min-w-0 space-y-4 text-sm lg:sticky lg:top-4 lg:self-start", tab !== "info" && "hidden lg:block")}>
           <div className="rounded-2xl border bg-card p-4 shadow-sm">
             <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><BarChart3 className="h-3.5 w-3.5" />Unit {cur.unit} Bloom&rsquo;s levels</p>
             <ul className="space-y-3">
@@ -616,7 +616,7 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
 
           <div className="rounded-2xl border bg-card p-4 shadow-sm">
             <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><Eye className="h-3.5 w-3.5" />Preview</p>
-            <div className="space-y-3 rounded-xl border bg-white p-3 font-serif text-[15px] text-neutral-900">
+            <div className="space-y-3 overflow-hidden rounded-xl border bg-white p-3 font-serif [overflow-wrap:anywhere] text-[15px] text-neutral-900">
               {parts.map((p, i) => (
                 <div key={i}>
                   <div className="flex gap-1.5">
