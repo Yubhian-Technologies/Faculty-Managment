@@ -28,6 +28,15 @@ async function landscapePdf(html: string, fileName: string): Promise<void> {
     const canvas = await html2canvas(page, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
     const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "landscape" });
     const pxPerMm = canvas.width / W_MM;
+    const heightMm = canvas.height / pxPerMm;
+    // A sheet up to ~1.6 pages tall is shrunk onto ONE page (centred) - a timetable
+    // reads best whole, and the signature line never lands alone on page 2.
+    if (heightMm <= H_MM * 1.6) {
+      const k = Math.min(1, H_MM / heightMm);
+      pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", (W_MM - W_MM * k) / 2, 0, W_MM * k, heightMm * k);
+      pdf.save(fileName);
+      return;
+    }
     const pageH = Math.floor(H_MM * pxPerMm);
     for (let y = 0, first = true; y < canvas.height; y += pageH, first = false) {
       const h = Math.min(pageH, canvas.height - y);
