@@ -264,7 +264,7 @@ export interface SummerHoliday {
 // Flips a normally-off Sunday into a working day for specific roles - e.g.
 // the Principal alone, or a subset of faculty, coming in for an inspection or
 // event. Maintained in the same Office/Principal/VP-only Settings screen as
-// Holidays (see college-office/holidays/page.tsx) but kept as its own
+// Holidays (see academics/holidays/page.tsx) but kept as its own
 // collection since it targets specific roles rather than everyone, and
 // exempts nobody by default - only the listed roles are affected; anyone else
 // still gets the day off as usual. See lib/attendance/workingDays.ts for how

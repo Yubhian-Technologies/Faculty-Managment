@@ -69,15 +69,16 @@ function sessionStartYear(label: string): number {
   return Number(label.slice(0, 4)) || 0;
 }
 
-// Academic Calendar Holidays - maintained by Office, feeds the "Holidays"
+// Academic Calendar Holidays - maintained by Academics, feeds the "Holidays"
 // column on the Leave History Report (see LeaveHistoryReport.tsx), which
 // used to just show "-" since nothing ever populated this collection.
-export default function CollegeOfficeHolidaysPage() {
+export default function AcademicsHolidaysPage() {
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(emptyForm());
   const [isSaving, setIsSaving] = useState(false);
+  const [editing, setEditing] = useState<Holiday | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Holiday | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -92,7 +93,7 @@ export default function CollegeOfficeHolidaysPage() {
   const [isSavingWorkingDay, setIsSavingWorkingDay] = useState(false);
   const [workingDayDeleteTarget, setWorkingDayDeleteTarget] = useState<WorkingDayOverride | null>(null);
   const [isDeletingWorkingDay, setIsDeletingWorkingDay] = useState(false);
-  // Defaults to the current session so Office lands on "this year" - the
+  // Defaults to the current session so Academics lands on "this year" - the
   // year picker below still reaches back to any earlier session that has
   // holidays, and "All Years" shows the full history at once.
   const [selectedAcademicYear, setSelectedAcademicYear] = useState(academicSessionLabel(currentAcademicStartYear()));
@@ -252,6 +253,16 @@ export default function CollegeOfficeHolidaysPage() {
     }
   }
 
+  function openEdit(h: Holiday) {
+    setEditing(h);
+    setForm({
+      date: toDateInputValue(h.date), name: h.name, type: h.type, appliesTo: h.appliesTo ?? "BOTH",
+      category: h.category ?? "REGULAR", hostelersOutingAllowed: h.hostelersOutingAllowed ?? false,
+      offerCompensatory: false, compensatoryDateKey: "",
+    });
+    setOpen(true);
+  }
+
   async function handleAdd() {
     if (!form.date || !form.name.trim()) {
       toast({ variant: "destructive", title: "Date and name are required" });
@@ -263,10 +274,16 @@ export default function CollegeOfficeHolidaysPage() {
     }
     setIsSaving(true);
     try {
-      const res = await fetch("/api/college/holidays", {
-        method: "POST",
+      const res = await fetch(editing ? `/api/college/holidays/${editing.id}` : "/api/college/holidays", {
+        method: editing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        body: JSON.stringify(editing ? {
+          date: form.date,
+          name: form.name.trim(),
+          type: form.category === "REGULAR" ? form.type : undefined,
+          appliesTo: form.category === "BRIDGE" ? undefined : form.appliesTo,
+          hostelersOutingAllowed: form.hostelersOutingAllowed,
+        } : {
           date: form.date,
           name: form.name.trim(),
           type: form.type,
@@ -277,9 +294,10 @@ export default function CollegeOfficeHolidaysPage() {
         }),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to add holiday");
-      toast({ variant: "success", title: "Holiday added" });
+      if (!res.ok) throw new Error(data.error ?? (editing ? "Failed to update holiday" : "Failed to add holiday"));
+      toast({ variant: "success", title: editing ? "Holiday updated" : "Holiday added" });
       setOpen(false);
+      setEditing(null);
       setForm(emptyForm());
       load();
     } catch (err) {
@@ -422,7 +440,7 @@ export default function CollegeOfficeHolidaysPage() {
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" asChild>
-              <Link href="/college-office/holidays/import"><Upload className="h-4 w-4 mr-2" />Import</Link>
+              <Link href="/academics/holidays/import"><Upload className="h-4 w-4 mr-2" />Import</Link>
             </Button>
             <Button onClick={() => setOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />Add Holiday
@@ -617,7 +635,10 @@ export default function CollegeOfficeHolidaysPage() {
                           </p>
                         )}
                       </td>
-                      <td className="px-4 py-2.5 text-right">
+                      <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                        <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Edit holiday" onClick={() => openEdit(h)}>
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setDeleteTarget(h)}>
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
@@ -701,16 +722,16 @@ export default function CollegeOfficeHolidaysPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setForm(emptyForm()); }}>
+      <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) { setForm(emptyForm()); setEditing(null); } }}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Add Holiday</DialogTitle>
+            <DialogTitle>{editing ? "Edit Holiday" : "Add Holiday"}</DialogTitle>
             <DialogDescription>Added holidays count toward the Leave History Report&rsquo;s Holidays column for their month.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Category</Label>
-              <Select value={form.category} onValueChange={(v) => setForm((f) => ({ ...f, category: v as HolidayCategory, appliesTo: v === "CLASS_SUSPENDED" ? "STUDENTS" : "BOTH" }))}>
+              <Select disabled={!!editing} value={form.category} onValueChange={(v) => setForm((f) => ({ ...f, category: v as HolidayCategory, appliesTo: v === "CLASS_SUSPENDED" ? "STUDENTS" : "BOTH" }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {HOLIDAY_CATEGORIES.map((c) => (
@@ -773,7 +794,7 @@ export default function CollegeOfficeHolidaysPage() {
               )}
             </div>
             )}
-            {form.category === "BRIDGE" && (
+            {form.category === "BRIDGE" && !editing && (
               <div className="space-y-2 rounded-lg border p-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -808,7 +829,7 @@ export default function CollegeOfficeHolidaysPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button onClick={() => void handleAdd()} loading={isSaving}>Add Holiday</Button>
+            <Button onClick={() => void handleAdd()} loading={isSaving}>{editing ? "Save Changes" : "Add Holiday"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

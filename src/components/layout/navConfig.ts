@@ -216,6 +216,7 @@ export const NAV_ITEMS: NavItem[] = [
   // still work as direct routes for any existing bookmarks/links.
   { label: "Students", href: "/principal/students", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
   { label: "Timetable View", href: "/principal/timetable", iconName: "CalendarDays", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
+  { label: "Compensatory Sundays", href: "/principal/holidays", iconName: "CalendarDays", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
   { label: "Internal Marks", href: "/principal/internal-marks", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
   { label: "Results Analysis", href: "/principal/results-analysis", iconName: "BarChart3", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
   { label: "Mentoring", href: "/principal/mentoring", iconName: "UserCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
@@ -362,7 +363,6 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Leave History", href: "/college-office/leave-history", iconName: "History", roles: ["COLLEGE_OFFICE"] },
   { label: "Leave Profiles", href: "/college-office/leave/profiles", iconName: "ClipboardList", roles: ["COLLEGE_OFFICE"] },
   // Arrange cover for supporting staff who have other work on a date or range.
-  { label: "Holidays", href: "/college-office/holidays", iconName: "CalendarDays", roles: ["COLLEGE_OFFICE"] },
   { label: "Staff Attendance", href: "/college-office/staff-attendance", iconName: "ClipboardCheck", roles: ["COLLEGE_OFFICE"] },
   { label: "Import Attendance", href: "/college-office/attendance-import", iconName: "Upload", roles: ["COLLEGE_OFFICE"] },
   { label: "Certificate Issuance", href: "/college-office/certificates", iconName: "FileCheck", roles: ["COLLEGE_OFFICE"], section: "Certificates" },
@@ -400,6 +400,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/academics", iconName: "LayoutDashboard", roles: ["ACADEMICS"] },
   { label: "Curriculum", href: "/academics/course-structure", iconName: "Library", roles: ["ACADEMICS"], section: "Academics" },
   { label: "Timetable View", href: "/academics/timetable-view", iconName: "CalendarDays", roles: ["ACADEMICS"], section: "Academics" },
+  { label: "Holidays", href: "/academics/holidays", iconName: "CalendarDays", roles: ["ACADEMICS"], section: "Academics" },
   { label: "Incident Record", href: "/academics/incident-record", iconName: "ClipboardList", roles: ["ACADEMICS"] },
   { label: "My Profile", href: "/academics/profile", iconName: "UserCircle", roles: ["ACADEMICS"], section: "Personal" },
   { label: "My Leave", href: "/academics/leave", iconName: "CalendarClock", roles: ["ACADEMICS"] },
@@ -518,6 +519,7 @@ export const NAV_ITEMS: NavItem[] = [
   // Student
   { label: "Dashboard", href: "/student", iconName: "LayoutDashboard", roles: ["STUDENT"] },
   { label: "Timetable", href: "/student/timetable", iconName: "CalendarDays", roles: ["STUDENT"], section: "Academics" },
+  { label: "Holidays", href: "/student/holidays", iconName: "CalendarDays", roles: ["STUDENT"] },
   { label: "Attendance", href: "/student/attendance", iconName: "TrendingUp", roles: ["STUDENT"] },
   { label: "Results", href: "/student/results", iconName: "GraduationCap", roles: ["STUDENT"] },
   { label: "Mentoring", href: "/student/mentoring", iconName: "UserCheck", roles: ["STUDENT"] },

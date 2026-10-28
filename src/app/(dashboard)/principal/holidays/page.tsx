@@ -76,7 +76,7 @@ export default function PrincipalHolidaysPage() {
               <EmptyState
                 icon={<CalendarCheck className="h-6 w-6" />}
                 title="Nothing to decide"
-                description="When College Office declares a compensatory holiday with a Sunday in return, it appears here."
+                description="When Academics declares a compensatory holiday with a Sunday in return, it appears here."
               />
             </div>
           ) : (

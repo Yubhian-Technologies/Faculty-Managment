@@ -21,7 +21,7 @@ function parseDate(dateStr: string): Date {
 export async function GET() {
   try {
     const session = await requireCollegeMember(
-      "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL",
+      "STUDENT", "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL",
       "COLLEGE_OFFICE", "ACCOUNTS", "FINANCE", "COLLEGE_STAFF",
       "ACADEMICS", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D",
       "LIBRARY", "HOSTEL", "PD", "EXAM_CELL", "WEBMASTER", "PLACEMENT_DEPT", "PURCHASE_DEPT"
@@ -41,7 +41,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "ACADEMICS");
     const body = (await readJsonBody(request)) as {
       academicYear?: string; kind?: SemBreakKind; fromDate?: string; toDate?: string; hostelersOutingAllowed?: boolean;
     };

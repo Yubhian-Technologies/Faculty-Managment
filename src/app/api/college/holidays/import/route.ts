@@ -7,18 +7,16 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { currentTimetableAcademicYear } from "@/lib/college/academicSession";
-import { parseHolidayAudience, parseHolidayCategory, parseOutingFlag } from "@/lib/college/holidayImportColumns";
+import { parseOutingFlag } from "@/lib/college/holidayImportColumns";
 import { HOLIDAY_TYPE_LABELS } from "@/types";
-import type { HolidayAudience, HolidayCategory, HolidayType } from "@/types";
+import type { HolidayType } from "@/types";
 
 interface ImportRow {
-  category?: string;
   hostelersOutingAllowed?: string;
   sno?: string;
   occasion?: string;
   date?: string;
   type?: string;
-  appliesTo?: string;
 }
 
 // code (NATIONAL) or label (National) accepted, case-insensitive - matches
@@ -31,12 +29,12 @@ for (const code of Object.keys(HOLIDAY_TYPE_LABELS) as HolidayType[]) {
 
 // Bulk alternative to holidays/route.ts POST's one-at-a-time Add Holiday -
 // matches the S.No/Occasion/Date/Type CSV template (see
-// lib/college/holidayImportColumns.ts). The optional Applies To column says
-// Both (the default) or Students only - the same field staff leave counts read.
+// lib/college/holidayImportColumns.ts). Every row is a regular holiday for
+// faculty and students; other kinds are added on the Holidays page.
 // Same role gate as the single-add route.
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "ACADEMICS");
     const body = (await readJsonBody(request)) as { records?: ImportRow[] };
     const records = body.records;
 
@@ -53,7 +51,7 @@ export async function POST(request: Request) {
 
     const failed: { row: number; identifier: string; error: string }[] = [];
     const toCreate: {
-      date: Date; name: string; type: HolidayType; appliesTo: HolidayAudience; category: HolidayCategory;
+      date: Date; name: string; type: HolidayType;
       hostelersOutingAllowed?: boolean; academicYear: string;
     }[] = [];
 
@@ -79,30 +77,13 @@ export async function POST(request: Request) {
         failed.push({ row: rowNum, identifier, error: `Type must be National, Regional, College or Restricted, got "${rawType}"` });
         continue;
       }
-      const parsedAudience = parseHolidayAudience(row.appliesTo);
-      if (!parsedAudience) {
-        failed.push({ row: rowNum, identifier, error: `Applies To must be Both or Students, got "${row.appliesTo?.trim()}"` });
-        continue;
-      }
-      const category = parseHolidayCategory(row.category);
-      if (!category) {
-        failed.push({ row: rowNum, identifier, error: `Category must be Regular, Compensatory or Classwork Suspended, got "${row.category?.trim()}"` });
-        continue;
-      }
       const outing = parseOutingFlag(row.hostelersOutingAllowed);
       if (outing === null) {
         failed.push({ row: rowNum, identifier, error: `Hostellers Outing must be Yes or No, got "${row.hostelersOutingAllowed?.trim()}"` });
         continue;
       }
-      if (category === "BRIDGE" && date.getUTCDay() === 0) {
-        failed.push({ row: rowNum, identifier, error: "A compensatory holiday cannot fall on a Sunday" });
-        continue;
-      }
-      // Bridge is always for everyone; a suspension defaults to students only when Applies To is blank.
-      const appliesTo: HolidayAudience =
-        category === "BRIDGE" ? "BOTH" : category === "CLASS_SUSPENDED" && !row.appliesTo?.trim() ? "STUDENTS" : parsedAudience;
       toCreate.push({
-        date, name: occasion, type: category === "REGULAR" ? type : "COLLEGE", appliesTo, category,
+        date, name: occasion, type,
         ...(outing !== undefined ? { hostelersOutingAllowed: outing } : {}),
         academicYear: currentTimetableAcademicYear(date),
       });
@@ -117,8 +98,8 @@ export async function POST(request: Request) {
         date: h.date,
         name: h.name,
         type: h.type,
-        appliesTo: h.appliesTo,
-        category: h.category,
+        appliesTo: "BOTH",
+        category: "REGULAR",
         ...(h.hostelersOutingAllowed !== undefined ? { hostelersOutingAllowed: h.hostelersOutingAllowed } : {}),
         academicYear: h.academicYear,
         createdAt: now,

@@ -6,7 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "ACADEMICS");
     const { id } = await params;
     const docRef = getAdminDb().collection("colleges").doc(session.collegeId).collection("semBreaks").doc(id);
     const snap = await docRef.get();

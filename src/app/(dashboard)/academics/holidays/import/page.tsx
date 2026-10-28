@@ -116,7 +116,7 @@ export default function HolidaysImportPage() {
         description="Bulk-add the academic calendar's holidays at once instead of one at a time"
         actions={
           <Button variant="outline" asChild>
-            <Link href="/college-office/holidays"><ArrowLeft className="h-4 w-4 mr-1" />Back to Holidays</Link>
+            <Link href="/academics/holidays"><ArrowLeft className="h-4 w-4 mr-1" />Back to Holidays</Link>
           </Button>
         }
       />
@@ -281,7 +281,7 @@ export default function HolidaysImportPage() {
             )}
             {result.created > 0 && (
               <Button asChild variant="outline" size="sm">
-                <Link href="/college-office/holidays">View Holidays</Link>
+                <Link href="/academics/holidays">View Holidays</Link>
               </Button>
             )}
           </CardContent>
