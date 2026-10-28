@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { BloomLevel, MidQuestion } from "@/types/midQuestionBank";
 import { cleanOutcomes, derivePoPso, mappingErrors, outcomeConflicts } from "./outcomes";
 import { findDuplicates, similarity, textKey } from "./duplicates";
-import { cleanParts, defaultSplit, formatOf, partMarks, questionErrors, questionFormat } from "./validateQuestion";
+import { allowedFormats, bankFormatText, cleanParts, defaultSplit, formatName, formatOf, partMarks, questionErrors, questionFormat } from "./validateQuestion";
 import { bankTotals, bloomNeeds, breaksCompletedUnit, lockReason, unitStatus, unitStatuses, unlockedUnits } from "./rules";
 
 const q = (unit: number, state: MidQuestion["state"], ...blooms: BloomLevel[]) =>
@@ -94,13 +94,26 @@ describe("question validation", () => {
     expect(questionErrors([p(10), p(0)], "PARTS_AB", 10)["parts.1.marks"]).toBe("Part (b): give it at least 1 mark");
   });
 
-  it("the format: the bank's own, or the question's when the bank allows either", () => {
-    expect(questionFormat("PARTS_AB", "SINGLE")).toBe("PARTS_AB");
-    expect(questionFormat("EITHER", "PARTS_AB")).toBe("PARTS_AB");
-    expect(questionFormat("EITHER", "bogus")).toBe("SINGLE");
-    expect(formatOf({ parts: [{ text: "", cos: [], bloom: "" }, { text: "", cos: [], bloom: "" }] }, "EITHER")).toBe("PARTS_AB"); // older doc without format
+  it("question types: the Exam Cell's ticked list (older rules: one format or EITHER); the faculty picks one", () => {
+    expect(allowedFormats({ formats: ["PARTS_ABC", "SINGLE", "bogus"] })).toEqual(["SINGLE", "PARTS_ABC"]);
+    expect(allowedFormats({ format: "EITHER" })).toEqual(["SINGLE", "PARTS_AB"]);
+    expect(allowedFormats({ format: "PARTS_AB" })).toEqual(["PARTS_AB"]);
+    expect(questionFormat(["PARTS_AB"], "SINGLE")).toBe("PARTS_AB");
+    expect(questionFormat(["SINGLE", "PARTS_ABC"], "PARTS_ABC")).toBe("PARTS_ABC");
+    expect(questionFormat(["SINGLE", "PARTS_AB"], "bogus")).toBe("SINGLE");
+    expect(formatOf({ parts: [{ text: "", cos: [], bloom: "" }, { text: "", cos: [], bloom: "" }] }, ["SINGLE", "PARTS_AB"])).toBe("PARTS_AB"); // older doc without format
     expect(defaultSplit("PARTS_AB", 9)).toEqual([5, 4]);
+    expect(defaultSplit("PARTS_ABC", 10)).toEqual([4, 3, 3]);
     expect(partMarks({ text: "", cos: [], bloom: "" }, 1, "PARTS_AB", 10)).toBe(5);
+    expect([formatName("SINGLE"), formatName("PARTS_ABC")]).toEqual(["One question", "Parts (a) + (b) + (c)"]);
+    expect(bankFormatText(["SINGLE", "PARTS_AB", "PARTS_ABC"], 10)).toBe("One question or parts (a) + (b) or parts (a) + (b) + (c), 10 marks");
+  });
+  it("three parts: each needs a mark, and together they make the total", () => {
+    const cos = new Set(["CO1"]);
+    const p = (marks: number) => ({ text: "x", cos: ["CO1"], bloom: "L2" as const, marks });
+    expect(cleanParts([{ text: "a" }], "PARTS_ABC", cos, 10).map((x) => x.marks)).toEqual([4, 3, 3]);
+    expect(questionErrors([p(4), p(3), p(2)], "PARTS_ABC", 10).marks).toBe("Parts (a), (b) and (c) must add up to 10 marks (now 9)");
+    expect(questionErrors([p(4), p(3), p(3)], "PARTS_ABC", 10)).toEqual({});
   });
 });
 

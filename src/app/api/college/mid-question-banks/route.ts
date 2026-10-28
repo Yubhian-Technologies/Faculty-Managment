@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { allowedFormats } from "@/lib/midBank/validateQuestion";
 import { NextResponse } from "next/server";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -128,7 +129,7 @@ export async function POST(request: Request) {
         subjectId, subjectName: subject.name, subjectCode: subject.code, branch, outcomesId,
         sections: pick.sections, ownerFacultyId: me, ownerName, ownerUid: session.uid,
         viewerFacultyIds: [...new Set(pick.sections.flatMap((s) => s.facultyIds))],
-        units, format: rules.format, marks: rules.marks, unitStatus, status: "IN_PROGRESS",
+        units, formats: allowedFormats(rules), marks: rules.marks, unitStatus, status: "IN_PROGRESS",
         completeCount: totals.completeCount, totalCount: totals.totalCount,
         createdAt: now as unknown as MidQuestionBank["createdAt"], updatedAt: now as unknown as MidQuestionBank["updatedAt"],
       };

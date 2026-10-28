@@ -87,7 +87,7 @@ describe.skipIf(!EMULATOR)("Mid Question Bank (real Firestore)", () => {
     await col("subjectSemesterAssignments").doc("i1").set({ courseId: "crs", semester: 3, year: 2, subjectId: "sub1", subjectName: "Discrete Maths", subjectCode: "DM101", departmentId: "it" });
     await col("teachingAssignments").doc("t1").set({ sectionId: "sA", subjectId: "sub1", subjectName: "Discrete Maths", subjectCode: "DM101", facultyId: "fm1", facultyName: "Dr A", year: 2 });
     await col("teachingAssignments").doc("t2").set({ sectionId: "sB", subjectId: "sub1", subjectName: "Discrete Maths", subjectCode: "DM101", facultyId: "fm2", facultyName: "Dr B", year: 2 });
-    await col("midBankRules").doc("btech__ALL").set({ courseKey: "btech", courseName: "B.Tech", regulation: "ALL", mids: { "1": [1, 2] }, format: "EITHER", marks: 10 });
+    await col("midBankRules").doc("btech__ALL").set({ courseKey: "btech", courseName: "B.Tech", regulation: "ALL", mids: { "1": [1, 2] }, formats: ["SINGLE", "PARTS_AB", "PARTS_ABC"], marks: 10 });
     await col("midBankDeadlines").doc(D).set({ courseKey: "btech", courseName: "B.Tech", courseIds: ["crs"], year: 2, semester: 3, midNumber: 1, deadline: FUTURE, extensions: [] });
   });
 
@@ -96,7 +96,7 @@ describe.skipIf(!EMULATOR)("Mid Question Bank (real Firestore)", () => {
     expect((await putOutcomes(outcomes)).status).toBe(200);
     const started = await startBank(["sA", "sB"]);
     expect(started.status).toBe(201);
-    expect(started.json.bank).toMatchObject({ units: [1, 2], format: "EITHER", viewerFacultyIds: ["fm1", "fm2"] });
+    expect(started.json.bank).toMatchObject({ units: [1, 2], formats: ["SINGLE", "PARTS_AB", "PARTS_ABC"], viewerFacultyIds: ["fm1", "fm2"] });
     expect((await col("notifications").where("toUid", "==", "u-other").get()).size).toBe(1);
 
     asFaculty("u-other");

@@ -10,7 +10,9 @@ import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { buildCourseGroups } from "@/lib/departments/hodScope";
-import type { Course, MidBankFormat, MidBankRules } from "@/types";
+import { Checkbox } from "@/components/ui/checkbox";
+import { allowedFormats, formatName, partsFor, QUESTION_FORMATS } from "@/lib/midBank/validateQuestion";
+import type { Course, MidBankRules, MidQuestionFormat } from "@/types";
 
 // Exam Cell > Settings: the Mid Question Bank rules per course (+ regulation):
 // which units each Mid covers, the question format and the marks. A bank takes
@@ -18,11 +20,6 @@ import type { Course, MidBankFormat, MidBankRules } from "@/types";
 // not yet started.
 
 const selectClass = "h-9 w-full rounded-md border border-input bg-background px-3 text-sm";
-const FORMAT_LABEL: Record<MidBankFormat, string> = {
-  SINGLE: "One question per slot",
-  PARTS_AB: "Parts (a) and (b)",
-  EITHER: "Either - faculty picks per question",
-};
 
 const parseUnits = (s: string) => [...new Set(s.split(/[\s,]+/).map(Number).filter((n) => Number.isInteger(n) && n > 0))];
 
@@ -33,7 +30,7 @@ export function MidBankRulesCard({ midCount }: { midCount: number }) {
   const [courseKey, setCourseKey] = useState("");
   const [regulation, setRegulation] = useState("");
   const [midUnits, setMidUnits] = useState<Record<string, string>>({});
-  const [format, setFormat] = useState<MidBankFormat>("EITHER");
+  const [formats, setFormats] = useState<MidQuestionFormat[]>(["SINGLE", "PARTS_AB"]);
   const [marks, setMarks] = useState("10");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<MidBankRules | null>(null);
@@ -67,7 +64,7 @@ export function MidBankRulesCard({ midCount }: { midCount: number }) {
     setCourseKey("");
     setRegulation("");
     setMidUnits({});
-    setFormat("EITHER");
+    setFormats(["SINGLE", "PARTS_AB"]);
     setMarks("10");
   }
 
@@ -76,7 +73,7 @@ export function MidBankRulesCard({ midCount }: { midCount: number }) {
     setCourseKey(r.courseKey);
     setRegulation(r.regulation === "ALL" ? "" : r.regulation);
     setMidUnits(Object.fromEntries(Object.entries(r.mids).map(([m, u]) => [m, u.join(", ")])));
-    setFormat(r.format);
+    setFormats(allowedFormats(r));
     setMarks(String(r.marks));
   }
 
@@ -84,7 +81,7 @@ export function MidBankRulesCard({ midCount }: { midCount: number }) {
     const group = groups.find((g) => g.key === courseKey);
     if (!group) { toast({ variant: "destructive", title: "Pick a course" }); return; }
     const payload = {
-      courseKey, courseName: group.name, regulation: regulation.trim() || "ALL", format, marks: Number(marks),
+      courseKey, courseName: group.name, regulation: regulation.trim() || "ALL", formats, marks: Number(marks),
       mids: Object.fromEntries(mids.map((m) => [m, parseUnits(midUnits[m] ?? "")]).filter(([, u]) => (u as number[]).length > 0)),
     };
     setSaving(true);
@@ -124,7 +121,7 @@ export function MidBankRulesCard({ midCount }: { midCount: number }) {
           <div className="overflow-x-auto rounded-md border">
             <table className="w-full text-sm">
               <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
-                <tr><th className="p-2">Course</th><th className="p-2">Regulation</th><th className="p-2">Units per Mid</th><th className="p-2">Format</th><th className="p-2 text-right">Marks</th><th className="p-2" /></tr>
+                <tr><th className="p-2">Course</th><th className="p-2">Regulation</th><th className="p-2">Units per Mid</th><th className="p-2">Question types</th><th className="p-2 text-right">Marks</th><th className="p-2" /></tr>
               </thead>
               <tbody>
                 {rules.map((r) => (
@@ -136,7 +133,9 @@ export function MidBankRulesCard({ midCount }: { midCount: number }) {
                         {Object.entries(r.mids).sort(([a], [b]) => Number(a) - Number(b)).map(([m, u]) => <Badge key={m} variant="outline">Mid {m}: {u.join(", ")}</Badge>)}
                       </div>
                     </td>
-                    <td className="p-2">{FORMAT_LABEL[r.format]}</td>
+                    <td className="p-2">
+                      <div className="flex flex-wrap gap-1">{allowedFormats(r).map((f) => <Badge key={f} variant="secondary">{formatName(f)}</Badge>)}</div>
+                    </td>
                     <td className="p-2 text-right">{r.marks}</td>
                     <td className="p-2 whitespace-nowrap text-right">
                       <Button size="icon" variant="ghost" aria-label={`Edit rules for ${r.courseName}`} onClick={() => edit(r)}><Pencil className="h-4 w-4" /></Button>
@@ -182,21 +181,31 @@ export function MidBankRulesCard({ midCount }: { midCount: number }) {
             </div>
           ))}
           <div className="space-y-1.5">
-            <Label htmlFor="mbr-format">Question format</Label>
-            <select id="mbr-format" className={selectClass} value={format} onChange={(e) => setFormat(e.target.value as MidBankFormat)}>
-              <option value="EITHER">{FORMAT_LABEL.EITHER}</option>
-              <option value="PARTS_AB">{FORMAT_LABEL.PARTS_AB}</option>
-              <option value="SINGLE">{FORMAT_LABEL.SINGLE}</option>
-            </select>
-          </div>
-          <div className="space-y-1.5">
             <Label htmlFor="mbr-marks">Marks per question</Label>
             <Input id="mbr-marks" type="number" min={1} max={100} value={marks} onChange={(e) => setMarks(e.target.value)} />
-            {format !== "SINGLE" && Number(marks) > 0 && <p className="text-xs text-muted-foreground">With parts, the faculty splits the {Number(marks)} marks between (a) and (b)</p>}
+            {formats.some((f) => f !== "SINGLE") && Number(marks) > 0 && <p className="text-xs text-muted-foreground">With parts, the faculty splits the {Number(marks)} marks between the parts.</p>}
           </div>
+          <fieldset className="space-y-2 sm:col-span-2">
+            <legend className="text-sm font-medium">Question types the faculty may use</legend>
+            <p className="text-xs text-muted-foreground">Tick every type allowed. Faculty pick one of them for each question; with one ticked, every question uses it.</p>
+            <div className="flex flex-wrap gap-2">
+              {QUESTION_FORMATS.map((f) => {
+                const on = formats.includes(f);
+                const tooMany = partsFor(f) > Number(marks || 0);
+                return (
+                  <label key={f} className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ${on ? "border-primary bg-primary/5" : "hover:bg-muted/50"} ${tooMany ? "opacity-50" : ""}`}>
+                    <Checkbox checked={on} disabled={tooMany && !on}
+                      onCheckedChange={(v) => setFormats((cur) => (v === true ? QUESTION_FORMATS.filter((x) => x === f || cur.includes(x)) : cur.filter((x) => x !== f)))} />
+                    {formatName(f)}
+                  </label>
+                );
+              })}
+            </div>
+            {formats.length === 0 && <p className="text-xs text-destructive">Tick at least one question type.</p>}
+          </fieldset>
         </div>
         <div className="flex justify-end">
-          <Button onClick={() => void save()} loading={saving} disabled={!courseKey}>{editingId ? "Save changes" : "Save rules"}</Button>
+          <Button onClick={() => void save()} loading={saving} disabled={!courseKey || formats.length === 0}>{editingId ? "Save changes" : "Save rules"}</Button>
         </div>
       </CardContent>
       <ConfirmDialog

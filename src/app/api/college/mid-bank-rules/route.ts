@@ -6,7 +6,8 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { actorName, guardError, midBankRefs, rulesDocId } from "@/lib/midBank/server";
 import { LIMITS } from "@/lib/midBank/constants";
-import type { MidBankFormat, MidBankRules } from "@/types";
+import type { MidBankRules } from "@/types";
+import { allowedFormats, formatName, partsFor, QUESTION_FORMATS } from "@/lib/midBank/validateQuestion";
 
 // Mid Question Bank rules, per course (+ regulation, or "ALL"): which units
 // each Mid covers, the question format and marks. Set by the Exam Cell; read
@@ -43,12 +44,15 @@ export async function PUT(request: Request) {
     const courseKey = String(body.courseKey ?? "").trim();
     const courseName = String(body.courseName ?? "").trim();
     const regulation = String(body.regulation ?? "").trim().toUpperCase() || "ALL";
-    const format = body.format as MidBankFormat;
     const marks = Number(body.marks);
     if (!courseKey || !courseName) return NextResponse.json({ error: "Pick a course" }, { status: 400 });
-    if (format !== "SINGLE" && format !== "PARTS_AB" && format !== "EITHER") return NextResponse.json({ error: "Pick the question format" }, { status: 400 });
+    // The ticked question types (an older client may still send one `format`).
+    const sent = Array.isArray(body.formats) ? body.formats : body.format ? null : [];
+    const formats = sent === null ? allowedFormats({ format: body.format }) : QUESTION_FORMATS.filter((f) => sent.includes(f));
+    if (formats.length === 0) return NextResponse.json({ error: "Tick at least one question type" }, { status: 400 });
     if (!Number.isInteger(marks) || marks < 1 || marks > 100) return NextResponse.json({ error: "Marks per question must be a whole number from 1 to 100" }, { status: 400 });
-    if (format !== "SINGLE" && marks < 2) return NextResponse.json({ error: "A question with parts (a) and (b) needs at least 2 marks" }, { status: 400 });
+    const tooMany = formats.find((f) => partsFor(f) > marks);
+    if (tooMany) return NextResponse.json({ error: `${formatName(tooMany)} needs at least ${partsFor(tooMany)} marks (1 per part)` }, { status: 400 });
 
     const mids: Record<string, number[]> = {};
     for (const [mid, list] of Object.entries(body.mids ?? {})) {
@@ -71,7 +75,7 @@ export async function PUT(request: Request) {
     }
     const id = rulesDocId(courseKey, regulation);
     const data = {
-      courseKey, courseName, regulation, mids, format, marks,
+      courseKey, courseName, regulation, mids, formats, marks,
       updatedBy: session.uid, updatedByName: await actorName(db, session.collegeId, session.uid), updatedAt: new Date(),
     };
     await midBankRefs(db, session.collegeId).rules.doc(id).set(data);

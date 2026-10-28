@@ -47,10 +47,10 @@ export interface SubjectOutcomes {
   updatedAt: Timestamp;
 }
 
-/** How one question is set: one question, or parts (a) and (b) with the marks split by the faculty. */
-export type MidQuestionFormat = "SINGLE" | "PARTS_AB";
-/** What the Exam Cell allows in a bank: always one, always parts, or EITHER (faculty picks per question). */
-export type MidBankFormat = MidQuestionFormat | "EITHER";
+/** How one question is set: one question, or parts (a) + (b) [+ (c) ...] with the marks split by the faculty. */
+export type MidQuestionFormat = "SINGLE" | "PARTS_AB" | "PARTS_ABC" | "PARTS_ABCD" | "PARTS_ABCDE";
+/** Older rules / banks: one format, or EITHER (one question or (a) + (b)). Read through `allowedFormats`. */
+export type MidBankFormat = "SINGLE" | "PARTS_AB" | "EITHER";
 
 export interface MidBankRules {
   id: string;
@@ -61,7 +61,10 @@ export interface MidBankRules {
   regulation: string;
   /** Mid number -> the unit numbers it covers, in unlock order. */
   mids: Record<string, number[]>;
-  format: MidBankFormat;
+  /** The question types the faculty may pick from, per question (Exam Cell ticks them). */
+  formats?: MidQuestionFormat[];
+  /** Older rules only - see `allowedFormats`. */
+  format?: MidBankFormat;
   marks: number; // per question (parts split it - see MidQuestionPart.marks)
   updatedBy: string;
   updatedByName: string;
@@ -159,7 +162,9 @@ export interface MidQuestionBank {
   viewerFacultyIds: string[];
   // Snapshot of the Exam Cell rules when the bank was started.
   units: number[];
-  format: MidBankFormat;
+  formats?: MidQuestionFormat[];
+  /** Older banks only - see `allowedFormats`. */
+  format?: MidBankFormat;
   marks: number;
   unitStatus: Record<string, MidUnitStatus>;
   status: MidQuestionBankStatus;

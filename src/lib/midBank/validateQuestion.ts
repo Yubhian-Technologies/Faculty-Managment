@@ -5,26 +5,48 @@ import { BLOOM_LEVELS, LIMITS, MID_IMAGE_URL_PREFIX } from "./constants";
 // the right shape) and the academic checks a COMPLETE question must pass.
 // Messages are keyed by field so the editor can show each beside its input.
 //
-// Format: the Exam Cell allows SINGLE, PARTS_AB, or EITHER (the faculty picks
-// per question). Marks: a single question carries the bank's marks; parts (a)
-// and (b) split them as the faculty sets, and must add up to them.
+// Format: the Exam Cell ticks the question types a bank allows (one question,
+// parts (a) + (b), (a) + (b) + (c) ...); the faculty picks one per question.
+// Marks: a single question carries the bank's marks; parts split them as the
+// faculty sets, and must add up to them.
 
-export const partsFor = (format: MidQuestionFormat) => (format === "PARTS_AB" ? 2 : 1);
-export const partLabel = (format: MidQuestionFormat, i: number) => (format === "PARTS_AB" ? `Part (${i === 0 ? "a" : "b"})` : "Question");
+/** Every question type, fewest parts first. A type with n parts needs at least n marks. */
+export const QUESTION_FORMATS: MidQuestionFormat[] = ["SINGLE", "PARTS_AB", "PARTS_ABC", "PARTS_ABCD", "PARTS_ABCDE"];
+export const partsFor = (format: MidQuestionFormat) => (format === "SINGLE" ? 1 : format.length - "PARTS_".length);
+const letter = (i: number) => "abcde"[i] ?? String(i + 1);
+export const partLetter = letter;
+export const partLabel = (format: MidQuestionFormat, i: number) => (format === "SINGLE" ? "Question" : `Part (${letter(i)})`);
+/** "One question" / "Parts (a) + (b) + (c)". */
+export const formatName = (format: MidQuestionFormat) =>
+  format === "SINGLE" ? "One question" : `Parts ${Array.from({ length: partsFor(format) }, (_, i) => `(${letter(i)})`).join(" + ")}`;
+const listParts = (n: number) => {
+  const l = Array.from({ length: n }, (_, i) => `(${letter(i)})`);
+  return l.length > 1 ? `${l.slice(0, -1).join(", ")} and ${l[l.length - 1]}` : l[0];
+};
 
-/** The format a question uses: its own (when the bank allows either), else the bank's. */
-export function questionFormat(bankFormat: MidBankFormat, wanted?: unknown): MidQuestionFormat {
-  if (bankFormat !== "EITHER") return bankFormat;
-  return wanted === "PARTS_AB" ? "PARTS_AB" : "SINGLE";
+/** The types a bank (or rule) allows: its ticked list, else what an older single `format` meant. */
+export function allowedFormats(x: { formats?: unknown; format?: MidBankFormat | string }): MidQuestionFormat[] {
+  const list = Array.isArray(x.formats) ? x.formats : [];
+  const ticked = QUESTION_FORMATS.filter((f) => list.includes(f));
+  if (ticked.length) return ticked;
+  if (x.format === "EITHER") return ["SINGLE", "PARTS_AB"];
+  if (x.format === "PARTS_AB") return ["PARTS_AB"];
+  return ["SINGLE"];
 }
-export const formatOf = (q: Pick<MidQuestion, "format" | "parts">, bankFormat: MidBankFormat): MidQuestionFormat =>
-  q.format ?? (bankFormat === "EITHER" ? (q.parts.length > 1 ? "PARTS_AB" : "SINGLE") : bankFormat);
 
-/** An even starting split of the question's marks over its parts (5 + 5, 5 + 4 ...). */
+/** The type a question uses: the one asked for when allowed, else the bank's first. */
+export function questionFormat(allowed: MidQuestionFormat[], wanted?: unknown): MidQuestionFormat {
+  return allowed.includes(wanted as MidQuestionFormat) ? (wanted as MidQuestionFormat) : allowed[0] ?? "SINGLE";
+}
+/** A saved question's type: its own, else (older docs) from its number of parts. */
+export const formatOf = (q: Pick<MidQuestion, "format" | "parts">, allowed: MidQuestionFormat[]): MidQuestionFormat =>
+  q.format ?? QUESTION_FORMATS[q.parts.length - 1] ?? allowed[0] ?? "SINGLE";
+
+/** An even starting split of the question's marks over its parts (5 + 5, 4 + 3 + 3 ...). */
 export function defaultSplit(format: MidQuestionFormat, total: number): number[] {
-  if (format === "SINGLE") return [total];
-  const a = Math.ceil(total / 2);
-  return [a, total - a];
+  const n = partsFor(format);
+  const base = Math.floor(total / n);
+  return Array.from({ length: n }, (_, i) => base + (i < total - base * n ? 1 : 0));
 }
 
 /** A part's marks as shown and printed: its own, else the even split (older questions). */
@@ -63,20 +85,18 @@ export function questionErrors(parts: MidQuestionPart[], format: MidQuestionForm
     if (p.cos.length === 0) errors[`parts.${i}.cos`] = `${label}: pick at least one Course Outcome`;
     if (!p.bloom) errors[`parts.${i}.bloom`] = `${label}: pick one Bloom's level (L2, L3 or L4)`;
     if (p.imageCaption && !p.imageUrl) errors[`parts.${i}.imageCaption`] = `${label}: a caption needs an image`;
-    if (format === "PARTS_AB" && !(Number(p.marks) >= 1)) errors[`parts.${i}.marks`] = `${label}: give it at least 1 mark`;
+    if (format !== "SINGLE" && !(Number(p.marks) >= 1)) errors[`parts.${i}.marks`] = `${label}: give it at least 1 mark`;
   });
-  if (format === "PARTS_AB") {
+  if (format !== "SINGLE") {
     const sum = parts.reduce((n, p) => n + (Number(p.marks) || 0), 0);
-    if (sum !== total) errors.marks = `Parts (a) and (b) must add up to ${total} marks (now ${sum})`;
+    if (sum !== total) errors.marks = `Parts ${listParts(parts.length)} must add up to ${total} marks (now ${sum})`;
   }
   return errors;
 }
 
-/** How a bank's questions are set, in words: "One question or parts (a) + (b), 10 marks". */
-export function bankFormatText(format: MidBankFormat, marks: number): string {
-  if (format === "SINGLE") return `One question, ${marks} marks`;
-  if (format === "PARTS_AB") return `Parts (a) + (b) adding up to ${marks} marks`;
-  return `One question or parts (a) + (b), ${marks} marks`;
+/** How a bank's questions are set, in words: "One question or Parts (a) + (b), 10 marks". */
+export function bankFormatText(allowed: MidQuestionFormat[], marks: number): string {
+  return `${allowed.map((f, i) => (i === 0 ? formatName(f) : formatName(f).replace(/^O|^P/, (c) => c.toLowerCase()))).join(" or ")}, ${marks} marks`;
 }
 
 export const isBlankPart = (p: MidQuestionPart) => !p.text.trim() && !p.imageUrl && p.cos.length === 0 && !p.bloom;

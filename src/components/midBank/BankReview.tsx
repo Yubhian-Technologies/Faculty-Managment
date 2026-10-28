@@ -12,7 +12,7 @@ import { deadlineLabel } from "@/lib/midBank/deadline";
 import { findDuplicates } from "@/lib/midBank/duplicates";
 import { derivePoPso } from "@/lib/midBank/outcomes";
 import { bloomNeeds } from "@/lib/midBank/rules";
-import { formatOf, partMarks, questionErrors } from "@/lib/midBank/validateQuestion";
+import { allowedFormats, formatOf, partLetter, partMarks, questionErrors } from "@/lib/midBank/validateQuestion";
 import { downloadMidQuestionBankPdf } from "@/lib/pdf/downloadMidQuestionBank";
 import type { MidBankDetail } from "@/lib/midBank/clientTypes";
 import { MathText } from "./MathText";
@@ -55,7 +55,7 @@ export function BankReview({ id, editHref, writeHref, autoDownload }: { id: stri
     }
     for (const q of [...qs].sort((a, b2) => a.unit - b2.unit || a.slot - b2.slot)) {
       if (q.state === "DRAFT") {
-        const errs = Object.values(questionErrors(q.parts, formatOf(q, b.format), b.marks));
+        const errs = Object.values(questionErrors(q.parts, formatOf(q, allowedFormats(b)), b.marks));
         out.push({ level: "error", qid: q.id, text: `Unit ${q.unit} Q${q.slot} is a draft${errs.length ? ` - ${errs[0]}` : ""}` });
       }
       const others = qs.filter((o) => o.id > q.id);
@@ -127,7 +127,7 @@ export function BankReview({ id, editHref, writeHref, autoDownload }: { id: stri
           <Button onClick={() => void download()} disabled={!ready} loading={downloading}><FileDown className="mr-1.5 h-4 w-4" />Download PDF</Button>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
-          {ready && errors.length === 0 && <p className="flex items-center gap-2 text-green-700 dark:text-green-400"><CheckCircle2 className="h-4 w-4" />Every unit is complete.</p>}
+          {ready && errors.length === 0 && <p className="flex items-center gap-2 text-green-700"><CheckCircle2 className="h-4 w-4" />Every unit is complete.</p>}
           {!ready && <p className="flex items-center gap-2 text-muted-foreground"><Info className="h-4 w-4" />The PDF is available once every unit has 10 complete questions and L2, L3 and L4 at least 3 times each.</p>}
           {bank.units.map((u) => {
             const st = bank.unitStatus[String(u)];
@@ -136,7 +136,7 @@ export function BankReview({ id, editHref, writeHref, autoDownload }: { id: stri
                 <span className="w-16 font-medium">Unit {u}</span>
                 <Badge variant={st?.complete ? "default" : "outline"}>{st?.complete ? "Complete" : `${st?.completeCount ?? 0}/${QUESTIONS_PER_UNIT}`}</Badge>
                 {bloomNeeds(st?.bloom ?? { L2: 0, L3: 0, L4: 0 }).map((b) => (
-                  <Badge key={b.level} variant="outline" className={b.need ? "border-amber-500/60 text-amber-800 dark:text-amber-300" : "border-green-600/50 text-green-800 dark:text-green-300"}>{b.level}: {b.count}</Badge>
+                  <Badge key={b.level} variant="outline" className={b.need ? "border-amber-500/60 text-amber-800" : "border-green-600/50 text-green-800"}>{b.level}: {b.count}</Badge>
                 ))}
               </div>
             );
@@ -170,12 +170,12 @@ export function BankReview({ id, editHref, writeHref, autoDownload }: { id: stri
                       <div className="min-w-0 flex-1 space-y-2">
                         {!q ? <span className="text-sm text-muted-foreground">Empty</span> : q.parts.map((p, i) => (
                           <div key={i} className="text-sm">
-                            {q.parts.length > 1 && <span className="mr-1 font-medium">({i === 0 ? "a" : "b"})</span>}
+                            {q.parts.length > 1 && <span className="mr-1 font-medium">({partLetter(i)})</span>}
                             <MathText text={p.text || "-"} className="inline" />
                             {/* eslint-disable-next-line @next/next/no-img-element -- Storage URL with a token */}
                             {p.imageUrl && <figure className="mt-2"><img src={p.imageUrl} alt={p.imageCaption || ""} className="max-h-40 rounded border" />{p.imageCaption && <figcaption className="text-xs text-muted-foreground">{p.imageCaption}</figcaption>}</figure>}
                             <p className="mt-1 text-xs text-muted-foreground">
-                              [{partMarks(p, i, formatOf(q, bank.format), bank.marks)} M] · {p.cos.join(", ") || "No CO"} · {derivePoPso(p.cos, detail.outcomes!.mapping).join(", ") || "-"} · {p.bloom || "No level"}
+                              [{partMarks(p, i, formatOf(q, allowedFormats(bank)), bank.marks)} M] · {p.cos.join(", ") || "No CO"} · {derivePoPso(p.cos, detail.outcomes!.mapping).join(", ") || "-"} · {p.bloom || "No level"}
                             </p>
                           </div>
                         ))}

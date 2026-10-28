@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { BLOOM_LABELS, BLOOM_LEVELS, BLOOM_MIN_PER_UNIT, PROGRAM_OUTCOMES, QUESTIONS_PER_UNIT } from "@/lib/midBank/constants";
 import { derivePoPso } from "@/lib/midBank/outcomes";
 import { bloomNeeds, lockReason } from "@/lib/midBank/rules";
-import { defaultSplit, formatOf, isBlankPart, partLabel, partMarks, questionErrors, questionFormat } from "@/lib/midBank/validateQuestion";
+import { allowedFormats, defaultSplit, formatName, formatOf, isBlankPart, partLabel, partLetter, partMarks, partsFor, questionErrors, questionFormat } from "@/lib/midBank/validateQuestion";
 import type { MidBankDetail } from "@/lib/midBank/clientTypes";
 import type { BloomLevel, MidQuestion, MidQuestionBank, MidQuestionFormat, MidQuestionPart, MidUnitStatus } from "@/types";
 import { MathText, QuestionTextField } from "./MathText";
@@ -34,8 +34,8 @@ const qidOf = (unit: number, slot: number) => `${unit}_${slot}`;
 function slotState(q: MidQuestion | undefined, attention: boolean): { label: string; cls: string } {
   if (attention) return { label: "Needs attention", cls: "border-destructive bg-destructive/10 text-destructive" };
   if (!q) return { label: "Empty", cls: "border-dashed text-muted-foreground" };
-  if (q.state === "COMPLETE") return { label: "Complete", cls: "border-green-600/50 bg-green-600/10 text-green-800 dark:text-green-300" };
-  return { label: "Draft", cls: "border-amber-500/60 bg-amber-500/10 text-amber-800 dark:text-amber-300" };
+  if (q.state === "COMPLETE") return { label: "Complete", cls: "border-green-600/50 bg-green-600/10 text-green-800" };
+  return { label: "Draft", cls: "border-amber-500/60 bg-amber-500/10 text-amber-800" };
 }
 
 export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; initialQ?: string }) {
@@ -52,9 +52,10 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
     return { unit, slot };
   });
   const qid = qidOf(cur.unit, cur.slot);
-  // A bank that allows EITHER lets each question pick; a new question starts as one question.
-  const defaultFormat = questionFormat(bank.format);
-  const fmtOf = (q: MidQuestion | undefined | null): MidQuestionFormat => (q ? formatOf(q, bank.format) : defaultFormat);
+  // The question types the Exam Cell allows; with more than one, each question picks. A new question starts with the first.
+  const allowed = allowedFormats(bank);
+  const defaultFormat = questionFormat(allowed);
+  const fmtOf = (q: MidQuestion | undefined | null): MidQuestionFormat => (q ? formatOf(q, allowed) : defaultFormat);
   const [qFormat, setQFormat] = useState<MidQuestionFormat>(() => fmtOf(questions[qid]));
   const [parts, setParts] = useState<MidQuestionPart[]>(() => questions[qid]?.parts ?? emptyParts(fmtOf(questions[qid]), bank.marks));
   const [rev, setRev] = useState(questions[qid]?.rev ?? 0);
@@ -218,8 +219,8 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
     const src = questions[id];
     if (!src) return;
     editSeq.current++;
-    // The copy keeps its format where the bank allows either; otherwise it is fitted to the bank's.
-    const f = bank.format === "EITHER" ? fmtOf(src) : bank.format;
+    // The copy keeps its type where the bank allows it; otherwise it is fitted to the bank's first.
+    const f = questionFormat(allowed, fmtOf(src));
     const blank = emptyParts(f, bank.marks);
     setQFormat(f);
     setParts(blank.map((b, i) => (src.parts[i] ? { ...src.parts[i], cos: [...src.parts[i].cos], marks: f === "SINGLE" ? bank.marks : src.parts[i].marks ?? b.marks } : b)));
@@ -229,16 +230,18 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
 
   const liveErrors = useMemo(() => questionErrors(parts, qFormat, bank.marks), [parts, qFormat, bank.marks]);
 
-  /** Switch this question between one question and parts (a) + (b). Part (b) must be empty to drop it. */
+  /** Switch this question to another allowed type. Parts that would be dropped must be empty. */
   function changeFormat(f: MidQuestionFormat) {
     if (f === qFormat) return;
-    if (f === "SINGLE" && parts[1] && !isBlankPart(parts[1])) {
-      toast({ variant: "destructive", title: "Clear part (b) first", description: "Its text, COs and level would be lost." });
+    const n = partsFor(f);
+    const lost = parts.slice(n).findIndex((p) => !isBlankPart(p));
+    if (lost >= 0) {
+      toast({ variant: "destructive", title: `Clear part (${partLetter(n + lost)}) first`, description: "Its text, COs and level would be lost." });
       return;
     }
     const split = defaultSplit(f, bank.marks);
     editSeq.current++;
-    setParts(f === "SINGLE" ? [{ ...parts[0], marks: bank.marks }] : [{ ...parts[0], marks: split[0] }, { text: "", cos: [], bloom: "", marks: split[1] }]);
+    setParts(split.map((marks, i) => (parts[i] ? { ...parts[i], marks } : { text: "", cos: [], bloom: "", marks })));
     setQFormat(f);
     setDirty(true);
   }
@@ -259,13 +262,13 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
   const saveBadge = {
     idle: dirty ? <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-muted-foreground"><span className="h-1.5 w-1.5 rounded-full bg-amber-500" />{isComplete ? "Unsaved changes - press Save question" : "Unsaved changes"}</span> : null,
     saving: <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" />Saving…</span>,
-    saved: <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400"><Cloud className="h-3.5 w-3.5" />Saved</span>,
+    saved: <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-700"><Cloud className="h-3.5 w-3.5" />Saved</span>,
     failed: <span className="inline-flex items-center gap-1.5 rounded-full bg-destructive/10 px-2.5 py-1 text-destructive"><CloudOff className="h-3.5 w-3.5" />Save failed <button type="button" className="font-semibold underline" onClick={() => void save(isComplete ? "complete" : "draft")}>Retry</button></span>,
     conflict: null,
   }[saveState];
   const stateChip = isComplete
-    ? { label: "Complete", cls: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300" }
-    : current ? { label: "Draft", cls: "bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-300" }
+    ? { label: "Complete", cls: "bg-emerald-100 text-emerald-800" }
+    : current ? { label: "Draft", cls: "bg-amber-100 text-amber-900" }
     : { label: "Empty", cls: "bg-muted text-muted-foreground" };
 
   return (
@@ -344,7 +347,7 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
                           className={cn("relative grid h-9 place-items-center rounded-lg text-xs font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                             att ? "bg-destructive/10 text-destructive ring-1 ring-destructive"
                               : q?.state === "COMPLETE" ? "bg-emerald-500 text-white hover:bg-emerald-600"
-                              : q ? "bg-amber-100 text-amber-900 ring-1 ring-amber-300 hover:bg-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:ring-amber-800"
+                              : q ? "bg-amber-100 text-amber-900 ring-1 ring-amber-300 hover:bg-amber-200"
                               : "border border-dashed text-muted-foreground hover:border-primary/50 hover:text-foreground",
                             active && "scale-105 ring-2 ring-primary ring-offset-2 ring-offset-card")}>
                           {s}
@@ -383,7 +386,7 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
 
           <div className="space-y-5 p-5">
             {saveState === "conflict" && (
-              <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-500/50 bg-amber-50 p-3 text-sm dark:bg-amber-950/30" role="alert">
+              <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-500/50 bg-amber-50 p-3 text-sm" role="alert">
                 <AlertTriangle className="h-4 w-4 text-amber-700" />
                 <span className="flex-1">This question was changed in another tab or window. Your edits here were not saved.</span>
                 <Button size="sm" variant="outline" onClick={() => {
@@ -395,16 +398,16 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
 
             {lockedHere && <p className="flex items-center gap-2 rounded-xl bg-muted/50 p-3 text-sm text-muted-foreground"><Lock className="h-4 w-4" />{lockedHere}</p>}
 
-            {(others.length > 0 || bank.format === "EITHER") && !lockedHere && (
+            {(others.length > 0 || allowed.length > 1) && !lockedHere && (
               <div className="flex flex-wrap items-center justify-between gap-3">
-                {bank.format === "EITHER" && (
-                  <fieldset className="inline-flex rounded-xl border bg-muted/40 p-1 text-sm">
+                {allowed.length > 1 && (
+                  <fieldset className="inline-flex flex-wrap rounded-xl border bg-muted/40 p-1 text-sm">
                     <legend className="sr-only">Question format</legend>
-                    {(["SINGLE", "PARTS_AB"] as MidQuestionFormat[]).map((f) => (
+                    {allowed.map((f) => (
                       <label key={f} className={cn("flex cursor-pointer items-center rounded-lg px-3.5 py-1.5 font-medium transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
                         qFormat === f ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
                         <input type="radio" name="q-format" checked={qFormat === f} onChange={() => changeFormat(f)} className="sr-only" />
-                        {f === "SINGLE" ? `One question · ${bank.marks} marks` : "Parts (a) + (b)"}
+                        {f === "SINGLE" ? `One question · ${bank.marks} marks` : formatName(f)}
                       </label>
                     ))}
                   </fieldset>
@@ -420,7 +423,7 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
                 )}
               </div>
             )}
-            {qFormat === "PARTS_AB" && (fieldErrors.marks || (dirty && liveErrors.marks)) && (
+            {qFormat !== "SINGLE" && (fieldErrors.marks || (dirty && liveErrors.marks)) && (
               <p className="text-xs text-destructive">{fieldErrors.marks || liveErrors.marks}</p>
             )}
 
@@ -430,11 +433,11 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
               return (
                 <fieldset key={i} disabled={Boolean(lockedHere)} className="space-y-5 rounded-xl border bg-background p-4 sm:p-5">
                   <legend className="flex items-center gap-2 px-1 text-sm font-semibold">
-                    <span className="grid h-6 min-w-6 place-items-center rounded-md bg-primary px-1.5 text-xs text-primary-foreground">{qFormat === "SINGLE" ? "Q" : i === 0 ? "a" : "b"}</span>
+                    <span className="grid h-6 min-w-6 place-items-center rounded-md bg-primary px-1.5 text-xs text-primary-foreground">{qFormat === "SINGLE" ? "Q" : partLetter(i)}</span>
                     {partLabel(qFormat, i)}
                     {qFormat === "SINGLE" ? <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">{bank.marks} marks</span> : (
                       <span className="flex items-center gap-1 text-xs font-normal text-muted-foreground">
-                        <input type="number" min={1} max={bank.marks - 1} aria-label={`Marks for ${partLabel(qFormat, i)}`}
+                        <input type="number" min={1} max={bank.marks - (partsFor(qFormat) - 1)} aria-label={`Marks for ${partLabel(qFormat, i)}`}
                           value={p.marks ?? ""} onChange={(e) => edit(i, { marks: e.target.value === "" ? 0 : Number(e.target.value) })}
                           className="h-7 w-14 rounded-md border border-input bg-background px-1 text-center text-sm font-semibold text-foreground" /> marks
                       </span>
@@ -516,7 +519,7 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
             })}
 
             {warnings.length > 0 && (
-              <ul className="space-y-1 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
+              <ul className="space-y-1 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
                 {warnings.map((w) => <li key={w} className="flex gap-1.5"><AlertTriangle className="h-3.5 w-3.5 shrink-0" />{w} - check it isn&rsquo;t a repeat.</li>)}
               </ul>
             )}
@@ -543,7 +546,7 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
                 <li key={b.level}>
                   <div className="mb-1 flex justify-between text-xs">
                     <span className="font-medium">{BLOOM_LABELS[b.level as BloomLevel] ?? b.level} <span className="text-muted-foreground">· {b.count}</span></span>
-                    <span className={b.need ? "font-medium text-amber-700 dark:text-amber-400" : "font-medium text-emerald-700 dark:text-emerald-400"}>{b.need ? `Need ${b.need} more` : "Done"}</span>
+                    <span className={b.need ? "font-medium text-amber-700" : "font-medium text-emerald-700"}>{b.need ? `Need ${b.need} more` : "Done"}</span>
                   </div>
                   <div className="h-1.5 overflow-hidden rounded-full bg-muted">
                     <div className={cn("h-full rounded-full", b.need ? "bg-amber-400" : "bg-emerald-500")} style={{ width: `${Math.min(100, (b.count / BLOOM_MIN_PER_UNIT) * 100)}%` }} />
@@ -568,11 +571,11 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
 
           <div className="rounded-2xl border bg-card p-4 shadow-sm">
             <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><Eye className="h-3.5 w-3.5" />Preview</p>
-            <div className="space-y-3 rounded-xl border bg-white p-3 font-serif text-[15px] text-neutral-900 dark:bg-neutral-50">
+            <div className="space-y-3 rounded-xl border bg-white p-3 font-serif text-[15px] text-neutral-900">
               {parts.map((p, i) => (
                 <div key={i}>
                   <div className="flex gap-1.5">
-                    <span className="font-semibold">{qFormat === "PARTS_AB" ? `(${i === 0 ? "a" : "b"})` : `${cur.slot}.`}</span>
+                    <span className="font-semibold">{qFormat !== "SINGLE" ? `(${partLetter(i)})` : `${cur.slot}.`}</span>
                     <div className="min-w-0 flex-1">
                       {p.text.trim() ? <MathText text={p.text} /> : <span className="font-sans text-sm italic text-neutral-500">Nothing written yet</span>}
                     </div>
@@ -585,10 +588,10 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
             </div>
           </div>
 
-          <div className={cn("rounded-2xl border p-4 shadow-sm", Object.keys(liveErrors).length === 0 ? "border-emerald-300/70 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/20" : "bg-card")}>
+          <div className={cn("rounded-2xl border p-4 shadow-sm", Object.keys(liveErrors).length === 0 ? "border-emerald-300/70 bg-emerald-50/60" : "bg-card")}>
             <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><ListChecks className="h-3.5 w-3.5" />To save as complete</p>
             {Object.keys(liveErrors).length === 0
-              ? <p className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-400"><CheckCircle2 className="h-4 w-4" />Ready - the server also checks for duplicates</p>
+              ? <p className="flex items-center gap-2 text-sm font-medium text-emerald-700"><CheckCircle2 className="h-4 w-4" />Ready - the server also checks for duplicates</p>
               : <ul className="space-y-2 text-xs">{Object.entries(liveErrors).map(([k, v]) => <li key={k} className="flex gap-2"><span className="mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full bg-destructive/10 text-destructive"><X className="h-2.5 w-2.5" /></span>{v}</li>)}</ul>}
           </div>
         </aside>

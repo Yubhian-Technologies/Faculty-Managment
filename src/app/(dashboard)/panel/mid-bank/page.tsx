@@ -117,7 +117,7 @@ export default function FacultyQuestionBankPage() {
                         ))}
 
                         <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
-                          {i.myBank?.status === "COMPLETE" && <span className="mr-auto flex items-center gap-1 text-xs text-green-700 dark:text-green-400"><CheckCircle2 className="h-3.5 w-3.5" />Complete</span>}
+                          {i.myBank?.status === "COMPLETE" && <span className="mr-auto flex items-center gap-1 text-xs text-green-700"><CheckCircle2 className="h-3.5 w-3.5" />Complete</span>}
                           {i.myBank ? (
                             <>
                               <Button asChild size="sm" variant="outline"><Link href={`/panel/mid-bank/${encodeURIComponent(i.myBank.id)}/review`}>Review</Link></Button>

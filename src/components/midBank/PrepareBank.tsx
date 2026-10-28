@@ -13,7 +13,7 @@ import { toast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
 import { LIMITS, MAPPING_TARGETS, PROGRAM_OUTCOMES } from "@/lib/midBank/constants";
 import { daysLeft, deadlineLabel } from "@/lib/midBank/deadline";
-import { bankFormatText } from "@/lib/midBank/validateQuestion";
+import { allowedFormats, bankFormatText } from "@/lib/midBank/validateQuestion";
 import type { MidBankPrepare } from "@/lib/midBank/clientTypes";
 import type { OutcomeMapping } from "@/types";
 
@@ -240,16 +240,16 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
       {/* Right: the current step */}
       <section className="min-w-0 space-y-4">
         {locked && (
-          <p className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300" role="status"><Lock className="h-4 w-4 shrink-0" />{deadlineLabel(deadline.deadline)} - locked. Ask the Exam Cell to extend the deadline.</p>
+          <p className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="status"><Lock className="h-4 w-4 shrink-0" />{deadlineLabel(deadline.deadline)} - locked. Ask the Exam Cell to extend the deadline.</p>
         )}
         {examCellIssues.length > 0 && (
-          <p className="flex gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />{examCellIssues[0].message}</p>
+          <p className="flex gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />{examCellIssues[0].message}</p>
         )}
         {rules && examCellIssues.length === 0 && (
           <div className="grid gap-2 sm:grid-cols-3">
             {[
               { icon: Layers, label: `Mid ${deadline.midNumber} covers`, value: `Units ${setup.units.join(", ")}` },
-              { icon: FileText, label: "Question format", value: bankFormatText(rules.format, rules.marks) },
+              { icon: FileText, label: "Question format", value: bankFormatText(allowedFormats(rules), rules.marks) },
               { icon: ListChecks, label: "Each unit", value: "10 questions · L2, L3, L4 at least 3 each" },
             ].map(({ icon: Icon, label, value }) => (
               <div key={label} className="flex items-start gap-2.5 rounded-xl border bg-card p-3">
@@ -286,7 +286,7 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
                         <span className="min-w-0 flex-1">
                           <span className="flex items-center gap-2">
                             <span className="font-semibold">Section {s.sectionName}</span>
-                            {s.mine && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">Yours</span>}
+                            {s.mine && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-800">Yours</span>}
                           </span>
                           <span className="block truncate text-xs text-muted-foreground">{heldElsewhere ? `Already in ${s.heldBy}\u2019s bank` : who}</span>
                         </span>
@@ -298,7 +298,7 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
                   );
                 })}
               </ul>
-              {!pickedMine && <p className="text-xs text-amber-700 dark:text-amber-400">Include at least one of your own sections to continue.</p>}
+              {!pickedMine && <p className="text-xs text-amber-700">Include at least one of your own sections to continue.</p>}
             </CardContent>
           </Card>
         )}
@@ -315,7 +315,7 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-muted-foreground"><Check className="h-3.5 w-3.5 text-emerald-600" />Last saved by {outcomes.updatedByName || "a colleague"}</span>
                 )}
                 {!canEditOutcomes && !locked && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 font-medium text-amber-900 dark:bg-amber-950/40 dark:text-amber-300"><Lock className="h-3.5 w-3.5" />Set by {outcomes?.updatedByName || "a colleague"} - read-only for you</span>
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 font-medium text-amber-900"><Lock className="h-3.5 w-3.5" />Set by {outcomes?.updatedByName || "a colleague"} - read-only for you</span>
                 )}
               </div>
 
@@ -412,7 +412,7 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
               </StepHeading>
               <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <span>Hover a PO for its title · PSOs have a dashed border</span>
-                <span className={cn("rounded-full px-2.5 py-0.5 font-semibold", mappedCount === draft.cos.length ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300" : "bg-primary/10 text-primary")}>
+                <span className={cn("rounded-full px-2.5 py-0.5 font-semibold", mappedCount === draft.cos.length ? "bg-emerald-100 text-emerald-800" : "bg-primary/10 text-primary")}>
                   {mappedCount} of {draft.cos.length} COs mapped
                 </span>
               </div>
@@ -421,7 +421,7 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
                   const co = `CO${i + 1}`;
                   const done = (draft.mapping[co] ?? []).length > 0;
                   return (
-                    <li key={co} className={cn("rounded-xl border p-4", done ? "border-emerald-300/70 bg-emerald-50/40 dark:border-emerald-900 dark:bg-emerald-950/10" : "bg-card")}>
+                    <li key={co} className={cn("rounded-xl border p-4", done ? "border-emerald-300/70 bg-emerald-50/40" : "bg-card")}>
                       <div className="mb-3 flex items-start gap-3">
                         <span className="grid h-8 w-12 shrink-0 place-items-center rounded-lg bg-primary/10 text-xs font-bold text-primary">{co}</span>
                         <p className={cn("pt-1.5 text-sm", statement ? "" : "italic text-muted-foreground")}>{statement || "No statement yet - add it in Course Outcomes."}</p>
