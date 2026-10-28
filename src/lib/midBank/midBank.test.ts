@@ -232,7 +232,7 @@ describe("sections of a bank", () => {
   });
 });
 
-import { formulaToken, hasEmptyBox, katexHtml, renderMathHtml, splitMath } from "./renderMath";
+import { formulaProblem, formulaToken, hasEmptyBox, katexHtml, normalizeLatex, renderMathHtml, splitMath } from "./renderMath";
 
 describe("formulas in question text", () => {
   it("splits text and formulas with their positions, so one formula can be edited in place", () => {
@@ -249,6 +249,15 @@ describe("formulas in question text", () => {
     const html = renderMathHtml("<b>a</b> $x^2$ $\\notacommand{$");
     expect(html).toContain("&lt;b&gt;a&lt;/b&gt;");
     expect(html).toContain("katex");
+  });
+  it("MathLive's braced delimiters (\\bigm{.}) are rewritten so KaTeX prints them; a formula KaTeX can't read is refused", () => {
+    expect(normalizeLatex("\\dfrac{d^{c}}{dx^4}5\\bigm{.}_{x=0}")).toBe("\\dfrac{d^{c}}{dx^4}5\\bigm._{x=0}");
+    expect(normalizeLatex("\\Bigl{(}x\\Bigr{\\rbrace}")).toBe("\\Bigl(x\\Bigr\\rbrace ");
+    expect(normalizeLatex("\\leftarrow{x}")).toBe("\\leftarrow{x}");
+    expect(katexHtml("5\\bigm{.}_{x=0}", false)).not.toContain("katex-error");
+    expect(formulaProblem("\\dfrac{d}{dx}\\bigm{.}_{x=0}")).toBe("");
+    expect(formulaProblem("\\frac{1}{")).toContain("can't be printed");
+    expect(formulaProblem("\\frac{\\placeholder{}}{2}")).toContain("empty");
   });
   it("an empty MathLive box prints as a square, never as red \\placeholder; a complete question can't keep one", () => {
     const html = katexHtml("\\begin{pmatrix}\\placeholder{} & 2\\\\ \\placeholder[a]{5} & 4\\end{pmatrix}", false);

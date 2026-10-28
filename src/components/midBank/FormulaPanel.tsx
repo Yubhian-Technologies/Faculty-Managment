@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import type { MathfieldElement } from "mathlive";
+import { formulaProblem, normalizeLatex } from "@/lib/midBank/renderMath";
 
 // The formula pop-up: a visual maths box (MathLive) - type with the keyboard
 // (^ power, _ subscript, / fraction, sqrt, sum, int, lim, pi, alpha, <=, != ...)
@@ -74,10 +75,11 @@ export function FormulaPanel({ initial, onSubmit, onRemove, onClose }: {
 
   function submit() {
     // "latex-expanded" turns MathLive's own shorthands into standard LaTeX that KaTeX prints.
-    const latex = field.current?.getValue("latex-expanded").trim() ?? "";
+    const latex = normalizeLatex(field.current?.getValue("latex-expanded").trim() ?? "");
     if (!latex) return;
-    // A template (matrix, fraction, root ...) still has an empty box - it would print as a gap.
-    if (/\\placeholder\b/.test(latex)) { setProblem("Some boxes in the formula are still empty - fill them, or delete the ones you don't need."); return; }
+    // An empty box, or anything the printer (KaTeX) can't read, is refused here - never stored.
+    const problem = formulaProblem(latex);
+    if (problem) { setProblem(problem); return; }
     window.mathVirtualKeyboard?.hide();
     onSubmit(latex, display);
   }

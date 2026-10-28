@@ -16,6 +16,7 @@ import { bloomNeeds, lockReason } from "@/lib/midBank/rules";
 import { allowedFormats, bankFormats, defaultSplit, formatsFor, formatName, formatOf, isBlankPart, partLabel, partLetter, partMarks, partsFor, questionErrors, questionFormat, splitAfterEdit } from "@/lib/midBank/validateQuestion";
 import type { MidBankDetail } from "@/lib/midBank/clientTypes";
 import type { BloomLevel, MidQuestion, MidQuestionBank, MidQuestionFormat, MidQuestionPart, MidUnitStatus } from "@/types";
+import { formulaProblem, splitMath } from "@/lib/midBank/renderMath";
 import { MathText, QuestionTextField } from "./MathText";
 
 // Stage 3 + 4: write the bank. Left - units and their 10 slots; centre - the
@@ -246,7 +247,15 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
     toast({ title: `Copied Unit ${src.unit} Q${src.slot}`, description: "Edit it - an identical question can't be saved as complete." });
   }
 
-  const liveErrors = useMemo(() => questionErrors(parts, qFormat, bank.marks), [parts, qFormat, bank.marks]);
+  const liveErrors = useMemo(() => {
+    const errs = questionErrors(parts, qFormat, bank.marks);
+    // A formula the printer can't read (written before the pop-up checked them) - shown, not saved over.
+    parts.forEach((p, i) => {
+      const bad = splitMath(p.text).find((m) => m.kind === "math" && formulaProblem(m.latex));
+      if (bad && !errs[`parts.${i}.text`]) errs[`parts.${i}.formula`] = `${partLabel(qFormat, i)}: a formula can't be printed - click it and fix it`;
+    });
+    return errs;
+  }, [parts, qFormat, bank.marks]);
 
   /** Switch this question to another allowed type. Parts that would be dropped must be empty. */
   function changeFormat(f: MidQuestionFormat) {

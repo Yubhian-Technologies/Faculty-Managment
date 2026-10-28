@@ -36,9 +36,31 @@ export const hasEmptyBox = (text: string) => /\\placeholder\b/.test(text);
 /** An empty box prints as a square (so it is visible), a filled one as its value. */
 const withoutPlaceholders = (latex: string) => latex.replace(PLACEHOLDER, (_m, v: string) => (v.trim() ? v : "\\square "));
 
+/**
+ * MathLive's own spellings that KaTeX refuses, rewritten to the standard form:
+ * a sized delimiter with its delimiter in braces (`\bigm{.}`, `\Bigl{(}`, `\left{|}`)
+ * -> `\bigm.` / `\Bigl(` / `\left|`.
+ */
+export const normalizeLatex = (latex: string) =>
+  latex.replace(/\\(big|Big|bigg|Bigg|left|right)([lmr]?)\s*\{\s*(\\[a-zA-Z]+|\\\S|[^{}\s\\])\s*\}/g, (_m, size: string, side: string, d: string) =>
+    `\\${size}${side}${/^\\[a-zA-Z]+$/.test(d) ? `${d} ` : d}`);
+
+const katexOptions = (display: boolean) => ({ displayMode: display, output: "html" as const, strict: "ignore" as const, trust: false });
+
 /** One formula as KaTeX HTML (a formula KaTeX can't read is shown in red, never thrown). */
 export const katexHtml = (latex: string, display: boolean) =>
-  katex.renderToString(withoutPlaceholders(latex), { displayMode: display, throwOnError: false, output: "html", strict: "ignore", trust: false });
+  katex.renderToString(withoutPlaceholders(normalizeLatex(latex)), { ...katexOptions(display), throwOnError: false });
+
+/** Why a formula can't be printed ("" = it can) - checked before it goes into a question. */
+export function formulaProblem(latex: string): string {
+  if (hasEmptyBox(latex)) return "Some boxes in the formula are still empty - fill them, or delete the ones you don't need.";
+  try {
+    katex.renderToString(normalizeLatex(latex), { ...katexOptions(false), throwOnError: true });
+    return "";
+  } catch {
+    return "This formula can't be printed as it is - delete the last part you added and try another way of writing it.";
+  }
+}
 
 export function renderMathHtml(text: string): string {
   return splitMath(text).map((s) => (s.kind === "text" ? escapeHtml(s.text).replace(/\n/g, "<br/>") : katexHtml(s.latex, s.display))).join("");
