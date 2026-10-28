@@ -17,7 +17,10 @@ const dmy = (d: string) => `${d.slice(8, 10)}-${d.slice(5, 7)}-${d.slice(0, 4)}`
 
 const STYLE = `
   body { font-family: "Times New Roman", Times, serif; margin: 0; color: #000; font-size: 14px; }
-  .page { width: 210mm; padding: 10mm 12mm 14mm; box-sizing: border-box; }
+  .page { width: 210mm; padding: 0 12mm 14mm; box-sizing: border-box; }
+  /* Blank band the PDF maker stamps at the top of EVERY page (.pdf-page-header) - the top margin, page 2 too. */
+  .pdf-page-header { height: 10mm; }
+  .colhead { font-family: Arial, Helvetica, sans-serif; font-weight: bold; font-size: 13px; text-align: center; }
   .top { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; margin-bottom: 6px; font-family: Arial, Helvetica, sans-serif; }
   .top > :first-child { justify-self: start; }
   .top > :last-child { justify-self: end; }
@@ -79,19 +82,24 @@ export function getMidQuestionPaperHTML(d: {
   const body = (text: string, img?: string, cap?: string) =>
     `${renderMathHtml(text, d.formula)}${img ? `<img class="qimg" src="${esc(img)}" alt="" />${cap ? `<div class="cap">${esc(cap)}</div>` : ""}` : ""}`;
 
+  // Each question (with the OR / UNIT rows above it) is one <tbody class="section">, so a
+  // page break never splits a question's parts; the column labels are plain bold
+  // cells, so the PDF maker doesn't repeat "UNIT-I | Marks ..." on later pages.
   let rows = "";
   qs.forEach((q, i) => {
     const no = i + 1;
     const firstOfPair = i % 2 === 0;
-    if (!firstOfPair) rows += `<tr class="or"><td colspan="6">OR</td></tr>`;
+    // "OR" travels with the question after it - never left alone at the foot of a page.
+    let block = firstOfPair ? "" : `<tr class="or"><td colspan="6">OR</td></tr>`;
     if (firstOfPair || q.unit !== qs[i - 1].unit) {
-      rows += `<tr class="unit"><td colspan="2">UNIT-${ROMAN[q.unit] ?? q.unit}</td>${i === 0 ? `<th class="num">Marks</th><th class="num">CO</th><th class="num">BL</th><th class="po">PO</th>` : `<td colspan="4"></td>`}</tr>`;
+      block += `<tr class="unit"><td colspan="2">UNIT-${ROMAN[q.unit] ?? q.unit}</td>${i === 0 ? `<td class="num colhead">Marks</td><td class="num colhead">CO</td><td class="num colhead">BL</td><td class="po colhead">PO</td>` : `<td colspan="4"></td>`}</tr>`;
     }
     const single = q.parts.length === 1;
     q.parts.forEach((part, j) => {
       const label = single ? `${no}` : `${no}.${"abcde"[j]}`;
-      rows += `<tr><td class="no">${label}</td><td class="q">${body(part.text, part.imageUrl, part.imageCaption)}</td><td class="num">${partMarks(part, j, q.format ?? (single ? "SINGLE" : "PARTS_AB"), p.marks)}</td><td class="num">${coText(part.cos)}</td><td class="num">${esc(part.bloom.replace(/^L/, ""))}</td><td class="po">${poText(part.cos)}</td></tr>`;
+      block += `<tr><td class="no">${label}</td><td class="q">${body(part.text, part.imageUrl, part.imageCaption)}</td><td class="num">${partMarks(part, j, q.format ?? (single ? "SINGLE" : "PARTS_AB"), p.marks)}</td><td class="num">${coText(part.cos)}</td><td class="num">${esc(part.bloom.replace(/^L/, ""))}</td><td class="po">${poText(part.cos)}</td></tr>`;
     });
+    rows += `<tbody class="section">${block}</tbody>`;
   });
 
   const used = [...new Set(qs.flatMap((q) => q.parts.flatMap((x) => x.cos)))].sort((a, b) => Number(a.slice(2)) - Number(b.slice(2)));
@@ -102,6 +110,7 @@ export function getMidQuestionPaperHTML(d: {
   const sections = shortSections(p);
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8" /><style>${STYLE}</style></head><body><div class="page">
+    <div class="pdf-page-header"></div>
     <div class="top"><span class="code">${esc(p.subjectCode)}</span><span>${regCode ? `<span class="code">${esc(regCode)}</span>` : ""}</span><span class="regd"><span>Regd. No:</span>${"<i></i>".repeat(p.regdBoxes || DEFAULT_REGD_BOXES)}</span></div>
     <div class="head">
       <img src="${logoSrc(d.college.logoUrl)}" alt="College logo" />
@@ -117,7 +126,7 @@ export function getMidQuestionPaperHTML(d: {
     <hr />
     <p class="instr">${esc(p.instruction)}</p>
     ${coList ? `<p class="cos-title">Course Outcomes:</p><div class="cos"><p>Upon the completion of the course, the student will be able to:</p>${coList}</div>` : ""}
-    <table><tbody>${rows}</tbody></table>
+    <table>${rows}</table>
     <p class="end">*****</p>
   </div></body></html>`;
 }
