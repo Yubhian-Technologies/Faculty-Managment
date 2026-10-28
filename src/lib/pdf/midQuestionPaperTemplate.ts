@@ -41,7 +41,7 @@ const STYLE = `
   .instr { margin: 4px 0 8px; }
   .cos-title { font-weight: bold; margin: 8px 0 2px; }
   .cos p { margin: 2px 0; }
-  /* Fixed columns: narrow Marks / CO / BL / PO, the question gets the rest (64%). */
+  /* Fixed columns: narrow Marks / CO / BL / PO (a long PO list wraps), the question gets the rest (71%). */
   table { width: 100%; border-collapse: collapse; margin-top: 8px; table-layout: fixed; }
   th, td { border: 1.5px solid #000; padding: 5px 7px; vertical-align: middle; overflow-wrap: anywhere; line-height: 1.3; }
   td.q { font-size: 14.5px; text-align: justify; }
@@ -50,7 +50,7 @@ const STYLE = `
   .or td { text-align: center; font-family: Arial, Helvetica, sans-serif; font-weight: bold; }
   .no { text-align: center; font-family: Arial, Helvetica, sans-serif; font-weight: bold; }
   .num { text-align: center; padding-left: 2px; padding-right: 2px; }
-  .po { text-align: center; padding-left: 3px; padding-right: 3px; }
+  .po { text-align: center; padding-left: 2px; padding-right: 2px; font-size: 12px; line-height: 1.2; }
   .q img.qimg { display: block; max-width: 100%; max-height: 170px; margin-top: 6px; }
   .cap { font-size: 11px; color: #333; }
   tr { break-inside: avoid-page; }
@@ -129,7 +129,7 @@ export function getMidQuestionPaperHTML(d: {
     <hr />
     <p class="instr">${esc(p.instruction)}</p>
     ${coList ? `<p class="cos-title">Course Outcomes:</p><div class="cos"><p>Upon the completion of the course, the student will be able to:</p>${coList}</div>` : ""}
-    <table><colgroup><col style="width:7%" /><col style="width:64%" /><col style="width:7%" /><col style="width:5%" /><col style="width:5%" /><col style="width:12%" /></colgroup>${rows}</table>
+    <table><colgroup><col style="width:7%" /><col style="width:71%" /><col style="width:7%" /><col style="width:5%" /><col style="width:5%" /><col style="width:5%" /></colgroup>${rows}</table>
     <p class="end">*****</p>
   </div></body></html>`;
 }
