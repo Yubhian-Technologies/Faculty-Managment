@@ -2,11 +2,12 @@
 
 import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Lock } from "lucide-react";
+import { ArrowLeft, Lock, Search, X } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { deadlineLabel } from "@/lib/midBank/deadline";
 import { ordinalYearLabel } from "@/lib/college/courseYears";
 import { deadlineProgress } from "@/lib/midBank/progress";
@@ -25,11 +26,23 @@ interface Progress {
   }[];
 }
 
+type GroupStatus = "NOT_STARTED" | "IN_PROGRESS" | "COMPLETE";
+const STATUS_LABEL: Record<GroupStatus, string> = { NOT_STARTED: "Not started", IN_PROGRESS: "In progress", COMPLETE: "Complete" };
+const STATUS_CLASS: Record<GroupStatus, string> = { NOT_STARTED: "bg-amber-100 text-amber-900", IN_PROGRESS: "bg-primary/10 text-primary", COMPLETE: "bg-emerald-100 text-emerald-800" };
+/** A subject (in a branch): complete when every section is in a complete bank; not started when no bank covers any. */
+function groupStatus(g: Progress["groups"][number]): GroupStatus {
+  if (g.banks.length === 0) return "NOT_STARTED";
+  const done = new Set(g.banks.filter((b) => b.status === "COMPLETE").map((b) => b.id));
+  return g.sections.length > 0 && g.sections.every((s) => s.bankId && done.has(s.bankId)) ? "COMPLETE" : "IN_PROGRESS";
+}
+
 export default function QuestionBankProgressPage({ params }: { params: Promise<{ deadlineId: string }> }) {
   const { deadlineId } = use(params);
   const [data, setData] = useState<Progress | null>(null);
   const [error, setError] = useState("");
   const [branch, setBranch] = useState("");
+  const [status, setStatus] = useState<"" | GroupStatus>("");
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     fetch(`/api/college/mid-bank-deadlines/${encodeURIComponent(deadlineId)}/progress`)
@@ -38,7 +51,13 @@ export default function QuestionBankProgressPage({ params }: { params: Promise<{
   }, [deadlineId]);
 
   const branches = useMemo(() => [...new Set((data?.groups ?? []).map((g) => g.branch))].sort(), [data]);
-  const shown = (data?.groups ?? []).filter((g) => !branch || g.branch === branch);
+  const allGroups = data?.groups ?? [];
+  const q = query.trim().toLowerCase();
+  const shown = allGroups.filter((g) =>
+    (!branch || g.branch === branch)
+    && (!status || groupStatus(g) === status)
+    && (!q || [g.subjectName, g.subjectCode, ...g.sections.flatMap((s) => s.facultyNames), ...g.banks.map((b) => b.ownerName)].some((t) => t.toLowerCase().includes(q))));
+  const filtered = Boolean(branch || status || q);
   const totals = useMemo(() => deadlineProgress(data?.groups ?? []), [data]);
 
   const d = data?.deadline;
@@ -64,15 +83,25 @@ export default function QuestionBankProgressPage({ params }: { params: Promise<{
             ))}
           </div>
 
-          {branches.length > 1 && (
-            <select aria-label="Filter by branch" className="h-9 rounded-md border border-input bg-background px-3 text-sm" value={branch} onChange={(e) => setBranch(e.target.value)}>
-              <option value="">All branches</option>
+          <div className="flex flex-wrap items-end gap-3 rounded-xl border bg-card p-3">
+            <div className="relative min-w-56 flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input aria-label="Search subject or faculty" placeholder="Search subject, code or faculty" value={query} onChange={(e) => setQuery(e.target.value)} className="pl-9" />
+            </div>
+            <select aria-label="Filter by branch" className="h-9 min-w-48 rounded-md border border-input bg-background px-3 text-sm" value={branch} onChange={(e) => setBranch(e.target.value)}>
+              <option value="">All branches ({branches.length})</option>
               {branches.map((b) => <option key={b} value={b}>{b}</option>)}
             </select>
-          )}
+            <select aria-label="Filter by status" className="h-9 min-w-40 rounded-md border border-input bg-background px-3 text-sm" value={status} onChange={(e) => setStatus(e.target.value as "" | GroupStatus)}>
+              <option value="">Any status</option>
+              {(Object.keys(STATUS_LABEL) as GroupStatus[]).map((k) => <option key={k} value={k}>{STATUS_LABEL[k]} ({allGroups.filter((g) => groupStatus(g) === k).length})</option>)}
+            </select>
+            {filtered && <Button variant="ghost" size="sm" onClick={() => { setBranch(""); setStatus(""); setQuery(""); }}><X className="mr-1 h-4 w-4" />Clear filters</Button>}
+            <p className="ml-auto self-center text-xs text-muted-foreground">Showing {shown.length} of {allGroups.length} subjects</p>
+          </div>
 
           {shown.length === 0 ? (
-            <p className="rounded-lg border p-6 text-center text-sm text-muted-foreground">No subjects of this semester have teaching assignments yet.</p>
+            <p className="rounded-lg border p-6 text-center text-sm text-muted-foreground">{filtered ? "No subjects match these filters." : "No subjects of this semester have teaching assignments yet."}</p>
           ) : (
             <div className="overflow-x-auto rounded-lg border">
               <table className="w-full text-sm">
@@ -83,7 +112,12 @@ export default function QuestionBankProgressPage({ params }: { params: Promise<{
                   {shown.map((g) => (
                     <tr key={`${g.branch}|${g.subjectId}`} className="border-t align-top">
                       <td className="p-3">{g.branch}</td>
-                      <td className="p-3"><p className="font-medium">{g.subjectName}</p><p className="text-xs text-muted-foreground">{g.subjectCode}</p></td>
+                      <td className="p-3">
+                        <p className="font-medium">{g.subjectName}</p>
+                        <p className="flex items-center gap-2 text-xs text-muted-foreground">{g.subjectCode}
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_CLASS[groupStatus(g)]}`}>{STATUS_LABEL[groupStatus(g)]}</span>
+                        </p>
+                      </td>
                       <td className="p-3">
                         <div className="flex flex-wrap gap-1">
                           {g.sections.map((s) => (
