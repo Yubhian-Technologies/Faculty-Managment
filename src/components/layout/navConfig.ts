@@ -159,7 +159,8 @@ export const NAV_ITEMS: NavItem[] = [
   // Exam Cell - grouped by job (was one ungrouped "General" list; `legacyModule`
   // carries a module the Super Admin hid across the split).
   { label: "Dashboard", href: "/exam-cell", iconName: "LayoutDashboard", roles: ["EXAM_CELL"] },
-  { label: "Mid Timings & Dates", href: "/exam-cell/mid-timings", iconName: "CalendarRange", roles: ["EXAM_CELL"], section: "Mid Exams", legacyModule: "General" },
+  { label: "Mid Configuration", href: "/exam-cell/mid-configuration", iconName: "Settings2", roles: ["EXAM_CELL"], section: "Mid Exams", legacyModule: "General" },
+  { label: "Mid Timings & Dates", href: "/exam-cell/mid-timings", iconName: "CalendarRange", roles: ["EXAM_CELL"], legacyModule: "General" },
   { label: "Mid Question Bank", href: "/exam-cell/question-banks", iconName: "BookOpenCheck", roles: ["EXAM_CELL"], legacyModule: "General" },
   { label: "Exam Configuration", href: "/exam-cell/configure", iconName: "ClipboardList", roles: ["EXAM_CELL"], legacyModule: "General" },
   { label: "Exam Rooms", href: "/exam-cell/exam-rooms", iconName: "DoorOpen", roles: ["EXAM_CELL"], section: "Exam Conduct", legacyModule: "General" },
@@ -174,7 +175,6 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Staff Attendance", href: "/exam-cell/staff-attendance", iconName: "ClipboardCheck", roles: ["EXAM_CELL"], legacyModule: "General" },
   { label: "Circulars", href: "/exam-cell/circulars", iconName: "ScrollText", roles: ["EXAM_CELL"], section: "Communication", legacyModule: "General" },
   { label: "Exam Cell Guidelines", href: "/exam-cell/guidelines", iconName: "BookOpen", roles: ["EXAM_CELL"], legacyModule: "General" },
-  { label: "Settings", href: "/exam-cell/settings", iconName: "Settings2", roles: ["EXAM_CELL"], section: "Settings", legacyModule: "General" },
   { label: "My Profile", href: "/exam-cell/profile", iconName: "UserCircle", roles: ["EXAM_CELL"], section: "Personal" },
   { label: "My Leave", href: "/exam-cell/leave", iconName: "CalendarClock", roles: ["EXAM_CELL"] },
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["EXAM_CELL"] },

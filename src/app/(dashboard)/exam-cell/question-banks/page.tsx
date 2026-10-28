@@ -53,7 +53,7 @@ export default function MidQuestionBankOverviewPage() {
         description="Question bank deadlines and how far the faculty have got - open one to see every branch, subject and section."
         actions={
           <div className="flex flex-wrap gap-2">
-            <Button asChild variant="outline" size="sm"><Link href="/exam-cell/settings"><Settings2 className="mr-1.5 h-4 w-4" />Question rules</Link></Button>
+            <Button asChild variant="outline" size="sm"><Link href="/exam-cell/mid-configuration"><Settings2 className="mr-1.5 h-4 w-4" />Question rules</Link></Button>
             <Button asChild size="sm"><Link href="/exam-cell/mid-timings"><CalendarPlus className="mr-1.5 h-4 w-4" />Set / edit deadlines</Link></Button>
           </div>
         }
@@ -68,7 +68,7 @@ export default function MidQuestionBankOverviewPage() {
           <CardContent className="flex flex-col items-center gap-3 p-10 text-center">
             <span className="grid h-12 w-12 place-items-center rounded-full bg-primary/10 text-primary"><BookOpenCheck className="h-6 w-6" /></span>
             <p className="font-semibold">No question bank deadlines yet</p>
-            <p className="max-w-md text-sm text-muted-foreground">Set the question rules for each course in Settings, then publish a deadline on Mid Timings &amp; Dates - the faculty teaching that semester are notified.</p>
+            <p className="max-w-md text-sm text-muted-foreground">Set the question rules for each course in Mid Configuration, then publish a deadline on Mid Timings &amp; Dates - the faculty teaching that semester are notified.</p>
             <Button asChild size="sm"><Link href="/exam-cell/mid-timings">Publish a deadline</Link></Button>
           </CardContent>
         </Card>

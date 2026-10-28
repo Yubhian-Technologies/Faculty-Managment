@@ -91,7 +91,7 @@ export default function ExamCellMidTimingsPage() {
             <Info className="h-4 w-4 shrink-0" />
             <span>
               Set how many Mid exams this college runs in{" "}
-              <Link href="/exam-cell/settings" className="font-medium underline">Settings</Link> before publishing timings.
+              <Link href="/exam-cell/mid-configuration" className="font-medium underline">Mid Configuration</Link> before publishing timings.
             </span>
           </CardContent>
         </Card>
