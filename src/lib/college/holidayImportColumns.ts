@@ -17,7 +17,27 @@ export const HOLIDAY_IMPORT_COLUMNS: HolidayImportCsvColumn[] = [
   { key: "date", label: "Date (YYYY-MM-DD)", required: true, sample: "2026-08-15", aliases: ["Date"] },
   { key: "type", label: "Type", required: false, sample: "National", aliases: ["Holiday Type"] },
   { key: "appliesTo", label: "Applies To", required: false, sample: "Both", aliases: ["Applicable To", "Audience"] },
+  { key: "category", label: "Category", required: false, sample: "Regular", aliases: ["Holiday Category", "Kind"] },
+  { key: "hostelersOutingAllowed", label: "Hostellers Outing", required: false, sample: "No", aliases: ["Hostelers Outing", "Hostellers Permitted", "Hostelers Permitted", "Outing"] },
 ];
+
+/** Category column: Regular (default), Compensatory (or the older "Bridge") or Classwork Suspended. Null = unrecognised. */
+export function parseHolidayCategory(raw: string | undefined): "REGULAR" | "BRIDGE" | "CLASS_SUSPENDED" | null {
+  const t = (raw ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+  if (!t || ["regular", "regular holiday", "holiday"].includes(t)) return "REGULAR";
+  if (["compensatory", "compensatory holiday", "bridge", "bridge holiday"].includes(t)) return "BRIDGE";
+  if (["classwork suspended", "class work suspended", "class suspended", "suspended", "class_suspended"].includes(t)) return "CLASS_SUSPENDED";
+  return null;
+}
+
+/** Hostellers Outing column: yes / no. Blank = not stated (undefined); null = unrecognised. */
+export function parseOutingFlag(raw: string | undefined): boolean | undefined | null {
+  const t = (raw ?? "").trim().toLowerCase();
+  if (!t) return undefined;
+  if (["yes", "y", "true", "permitted", "allowed"].includes(t)) return true;
+  if (["no", "n", "false", "not permitted", "not allowed"].includes(t)) return false;
+  return null;
+}
 
 /**
  * What the Applies To column may say: Both / Faculty & Students (everyone) or Students / Students (Outing)
@@ -37,4 +57,6 @@ export const HOLIDAY_IMPORT_HINTS = [
   "Date must be in YYYY-MM-DD format (e.g. 2026-08-15).",
   "Type must be one of National, Regional, College or Restricted (not case-sensitive) - leave blank to default to College.",
   "Applies To is optional: \"Both\" (faculty and students - also what a blank means) or \"Students\" (a students-only holiday, e.g. outing). Students-only holidays are not counted as holidays for faculty and staff leave.",
+  "Category is optional: Regular (also what a blank means), Compensatory (everyone; a compensatory Sunday is optional and is set afterwards on the Holidays page) or Classwork Suspended (students only unless Applies To says Both).",
+  "Hostellers Outing is optional: Yes or No - are hostellers permitted to go out on that day. Blank leaves it unstated.",
 ];

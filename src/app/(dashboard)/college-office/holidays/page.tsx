@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -18,11 +19,23 @@ import { toast } from "@/hooks/useToast";
 import { formatDate, toDate, toDateInputValue } from "@/lib/utils";
 import { academicSessionLabel, currentAcademicStartYear, recentAcademicSessions } from "@/lib/college/academicSession";
 import { WORKING_DAY_ELIGIBLE_ROLES } from "@/lib/attendance/workingDays";
-import { HOLIDAY_TYPE_LABELS, HOLIDAY_AUDIENCE_LABELS, ROLE_LABELS } from "@/types";
-import type { Holiday, HolidayAudience, HolidayType, SummerHoliday, UserRole, WorkingDayOverride } from "@/types";
+import { nextSundayAfter, suggestBridgeDays } from "@/lib/college/holidayCalendar";
+import { istDateKey } from "@/lib/attendance/istTime";
+import { HOLIDAY_TYPE_LABELS, HOLIDAY_AUDIENCE_LABELS, HOLIDAY_CATEGORY_LABELS, SEM_BREAK_LABELS, ROLE_LABELS } from "@/types";
+import type { Holiday, HolidayAudience, HolidayCategory, HolidayType, SemBreak, SemBreakKind, SummerHoliday, UserRole, WorkingDayOverride } from "@/types";
 
 const HOLIDAY_TYPES: HolidayType[] = ["NATIONAL", "REGIONAL", "COLLEGE", "RESTRICTED"];
 const HOLIDAY_AUDIENCES: HolidayAudience[] = ["BOTH", "STUDENTS"];
+const HOLIDAY_CATEGORIES: HolidayCategory[] = ["REGULAR", "BRIDGE", "CLASS_SUSPENDED"];
+const SEM_BREAK_KINDS: SemBreakKind[] = ["WINTER", "SUMMER"];
+const DAY_NAMES: Record<string, string> = {
+  MON: "Monday", TUE: "Tuesday", WED: "Wednesday", THU: "Thursday", FRI: "Friday", SAT: "Saturday",
+};
+const CATEGORY_HINT: Record<HolidayCategory, string> = {
+  REGULAR: "The yearly list. Everyone gets the day off.",
+  BRIDGE: "A day between two holidays, so people get a long break. Everyone gets it off. Offering a Sunday in return is optional.",
+  CLASS_SUSPENDED: "Classes suspended at short notice (a death, bandh, cyclone, flood ...).",
+};
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
@@ -30,7 +43,15 @@ const MONTH_NAMES = [
 const ALL_SENTINEL = "__all__"; // sentinel: Radix Select items can't use an empty string value
 
 function emptyForm() {
-  return { date: "", name: "", type: "COLLEGE" as HolidayType, appliesTo: "BOTH" as HolidayAudience };
+  return {
+    date: "", name: "", type: "COLLEGE" as HolidayType, appliesTo: "BOTH" as HolidayAudience,
+    category: "REGULAR" as HolidayCategory, hostelersOutingAllowed: false,
+    offerCompensatory: false, compensatoryDateKey: "",
+  };
+}
+
+function emptySemBreakForm(academicYear: string) {
+  return { academicYear, kind: "WINTER" as SemBreakKind, fromDate: "", toDate: "", hostelersOutingAllowed: false };
 }
 
 function emptySummerForm(academicYear: string) {
@@ -90,6 +111,16 @@ export default function CollegeOfficeHolidaysPage() {
   const [summerDeleteTarget, setSummerDeleteTarget] = useState<SummerHoliday | null>(null);
   const [isSummerDeleting, setIsSummerDeleting] = useState(false);
 
+  // Sem Breaks - students-only winter/summer break ranges (faculty keep
+  // working). Several per year, one per kind.
+  const [semBreaks, setSemBreaks] = useState<SemBreak[]>([]);
+  const [isSemBreaksLoading, setIsSemBreaksLoading] = useState(true);
+  const [semBreakOpen, setSemBreakOpen] = useState(false);
+  const [semBreakForm, setSemBreakForm] = useState(emptySemBreakForm(academicSessionLabel(currentAcademicStartYear())));
+  const [isSemBreakSaving, setIsSemBreakSaving] = useState(false);
+  const [semBreakDeleteTarget, setSemBreakDeleteTarget] = useState<SemBreak | null>(null);
+  const [isSemBreakDeleting, setIsSemBreakDeleting] = useState(false);
+
   // recentAcademicSessions() only covers ~4 sessions around now - merge in
   // whatever years actually show up in the data (older imported holidays,
   // say) so the picker never hides real history.
@@ -128,11 +159,31 @@ export default function CollegeOfficeHolidaysPage() {
       .finally(() => setIsSummerLoading(false));
   }
 
+  function loadSemBreaks() {
+    setIsSemBreaksLoading(true);
+    fetch("/api/college/sem-breaks")
+      .then((r) => r.json() as Promise<{ semBreaks: SemBreak[] }>)
+      .then((d) => setSemBreaks(d.semBreaks ?? []))
+      .catch(() => toast({ variant: "destructive", title: "Failed to load sem breaks" }))
+      .finally(() => setIsSemBreaksLoading(false));
+  }
+
   useEffect(() => {
     // Wrapped so load()'s setState calls aren't reachable synchronously from
     // the effect body (react-hooks/set-state-in-effect).
-    void (async () => { load(); loadSummerHolidays(); })();
+    void (async () => { load(); loadSummerHolidays(); loadSemBreaks(); })();
   }, []);
+
+  // Working days between two declared holidays that aren't holidays themselves
+  // yet (Mon + Wed -> Tue) - offered as one-click bridge holidays.
+  const bridgeSuggestions = useMemo(() => {
+    const today = istDateKey();
+    const keys = holidays
+      .filter((h) => (h.appliesTo ?? "BOTH") === "BOTH")
+      .map((h) => toDateInputValue(h.date))
+      .filter(Boolean);
+    return suggestBridgeDays(keys, ["MON", "TUE", "WED", "THU", "FRI", "SAT"]).filter((k) => k >= today);
+  }, [holidays]);
 
   function loadWorkingDays() {
     setIsLoadingWorkingDays(true);
@@ -206,12 +257,24 @@ export default function CollegeOfficeHolidaysPage() {
       toast({ variant: "destructive", title: "Date and name are required" });
       return;
     }
+    if (form.category === "BRIDGE" && form.offerCompensatory && !form.compensatoryDateKey) {
+      toast({ variant: "destructive", title: "Pick the compensatory Sunday" });
+      return;
+    }
     setIsSaving(true);
     try {
       const res = await fetch("/api/college/holidays", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: form.date, name: form.name.trim(), type: form.type, appliesTo: form.appliesTo }),
+        body: JSON.stringify({
+          date: form.date,
+          name: form.name.trim(),
+          type: form.type,
+          appliesTo: form.category === "REGULAR" || form.category === "CLASS_SUSPENDED" ? form.appliesTo : undefined,
+          category: form.category,
+          hostelersOutingAllowed: form.hostelersOutingAllowed,
+          compensatoryDateKey: form.category === "BRIDGE" && form.offerCompensatory ? form.compensatoryDateKey : undefined,
+        }),
       });
       const data = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed to add holiday");
@@ -240,6 +303,62 @@ export default function CollegeOfficeHolidaysPage() {
     } finally {
       setIsDeleting(false);
     }
+  }
+
+  async function handleSaveSemBreak() {
+    if (!semBreakForm.academicYear || !semBreakForm.fromDate || !semBreakForm.toDate) {
+      toast({ variant: "destructive", title: "Academic year, from date and to date are all required" });
+      return;
+    }
+    if (semBreakForm.toDate < semBreakForm.fromDate) {
+      toast({ variant: "destructive", title: "To date cannot be before from date" });
+      return;
+    }
+    setIsSemBreakSaving(true);
+    try {
+      const res = await fetch("/api/college/sem-breaks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(semBreakForm),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Failed to save sem break");
+      toast({ variant: "success", title: "Sem break saved" });
+      setSemBreakOpen(false);
+      loadSemBreaks();
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save sem break" });
+    } finally {
+      setIsSemBreakSaving(false);
+    }
+  }
+
+  async function handleDeleteSemBreak() {
+    if (!semBreakDeleteTarget) return;
+    setIsSemBreakDeleting(true);
+    try {
+      const res = await fetch(`/api/college/sem-breaks/${semBreakDeleteTarget.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      toast({ variant: "success", title: "Sem break removed" });
+      setSemBreakDeleteTarget(null);
+      loadSemBreaks();
+    } catch {
+      toast({ variant: "destructive", title: "Failed to remove sem break" });
+    } finally {
+      setIsSemBreakDeleting(false);
+    }
+  }
+
+  function startBridge(dateKey: string) {
+    setForm({
+      ...emptyForm(),
+      date: dateKey,
+      category: "BRIDGE",
+      name: "Compensatory holiday",
+      offerCompensatory: false,
+      compensatoryDateKey: nextSundayAfter(dateKey),
+    });
+    setOpen(true);
   }
 
   function openSummerDialog(existing?: SummerHoliday) {
@@ -356,6 +475,61 @@ export default function CollegeOfficeHolidaysPage() {
       </Card>
 
       <Card>
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <p className="text-sm font-medium flex items-center gap-1.5">
+                <Sun className="h-4 w-4 text-muted-foreground" />
+                Sem Breaks (students)
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Winter and summer semester breaks. Classes close for students; faculty keep working.
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => { setSemBreakForm(emptySemBreakForm(academicSessionLabel(currentAcademicStartYear()))); setSemBreakOpen(true); }}>
+              <Plus className="h-3.5 w-3.5 mr-1.5" />Set Sem Break
+            </Button>
+          </div>
+          {isSemBreaksLoading ? (
+            <div className="h-10 bg-muted animate-pulse rounded-lg" />
+          ) : semBreaks.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No sem breaks set yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {semBreaks.map((s) => (
+                <div key={s.id} className="flex items-center justify-between gap-3 rounded-lg border p-3 flex-wrap">
+                  <div className="text-sm">
+                    <span className="font-medium">{SEM_BREAK_LABELS[s.kind]}</span>
+                    <span className="text-muted-foreground"> &middot; {s.academicYear} &middot; {formatDate(s.fromDate)} &ndash; {formatDate(s.toDate)}</span>
+                    <span className="text-xs text-muted-foreground"> &middot; {s.hostelersOutingAllowed ? "hostellers: outing permitted" : "hostellers: no outing"}</span>
+                  </div>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setSemBreakDeleteTarget(s)}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {bridgeSuggestions.length > 0 && (
+        <Card>
+          <CardContent className="p-4 space-y-2">
+            <p className="text-sm font-medium">Possible compensatory holidays</p>
+            <p className="text-xs text-muted-foreground">These days sit between two holidays. Declare one to give a long break; the Sunday in return is optional.</p>
+            <div className="flex flex-wrap gap-2">
+              {bridgeSuggestions.map((k) => (
+                <Button key={k} variant="outline" size="sm" onClick={() => startBridge(k)}>
+                  {formatDate(k)}
+                </Button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
         <CardContent className="p-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-1.5">
             <Label>Academic Year</Label>
@@ -412,6 +586,7 @@ export default function CollegeOfficeHolidaysPage() {
                     <th className="px-4 py-3">Academic Year</th>
                     <th className="px-4 py-3">Type</th>
                     <th className="px-4 py-3">Applies To</th>
+                    <th className="px-4 py-3">Details</th>
                     <th className="px-4 py-3" />
                   </tr>
                 </thead>
@@ -422,10 +597,25 @@ export default function CollegeOfficeHolidaysPage() {
                       <td className="px-4 py-2.5 font-medium text-foreground">{h.name}</td>
                       <td className="px-4 py-2.5 text-muted-foreground">{h.academicYear}</td>
                       <td className="px-4 py-2.5">
-                        <Badge variant="secondary" className="text-xs">{HOLIDAY_TYPE_LABELS[h.type]}</Badge>
+                        <Badge variant="secondary" className="text-xs">
+                          {h.category && h.category !== "REGULAR" ? HOLIDAY_CATEGORY_LABELS[h.category] : HOLIDAY_TYPE_LABELS[h.type]}
+                        </Badge>
                       </td>
                       <td className="px-4 py-2.5">
                         <Badge variant="outline" className="text-xs">{HOLIDAY_AUDIENCE_LABELS[h.appliesTo ?? "BOTH"]}</Badge>
+                      </td>
+                      <td className="px-4 py-2.5 text-xs text-muted-foreground space-y-0.5">
+                        <p>
+                          {h.hostelersOutingAllowed == null
+                            ? "Hostellers: not stated"
+                            : h.hostelersOutingAllowed ? "Hostellers: outing permitted" : "Hostellers: no outing"}
+                        </p>
+                        {h.category === "BRIDGE" && h.compensatoryDateKey && (
+                          <p>
+                            Sunday {formatDate(h.compensatoryDateKey)} ({DAY_NAMES[h.compensatoryFollowsDay ?? ""] ?? ""} timetable):{" "}
+                            {h.compensatoryEnabled ? "working day" : "awaiting Principal / VP"}
+                          </p>
+                        )}
                       </td>
                       <td className="px-4 py-2.5 text-right">
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setDeleteTarget(h)}>
@@ -512,20 +702,45 @@ export default function CollegeOfficeHolidaysPage() {
       </Card>
 
       <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setForm(emptyForm()); }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add Holiday</DialogTitle>
             <DialogDescription>Added holidays count toward the Leave History Report&rsquo;s Holidays column for their month.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Date</Label>
-              <Input type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} />
+              <Label>Category</Label>
+              <Select value={form.category} onValueChange={(v) => setForm((f) => ({ ...f, category: v as HolidayCategory, appliesTo: v === "CLASS_SUSPENDED" ? "STUDENTS" : "BOTH" }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {HOLIDAY_CATEGORIES.map((c) => (
+                    <SelectItem key={c} value={c}>{HOLIDAY_CATEGORY_LABELS[c]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">{CATEGORY_HINT[form.category]}</p>
             </div>
             <div className="space-y-2">
-              <Label>Name</Label>
-              <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Independence Day" />
+              <Label>Date</Label>
+              <Input
+                type="date"
+                value={form.date}
+                onChange={(e) => setForm((f) => ({
+                  ...f,
+                  date: e.target.value,
+                  compensatoryDateKey: f.category === "BRIDGE" && e.target.value ? nextSundayAfter(e.target.value) : f.compensatoryDateKey,
+                }))}
+              />
             </div>
+            <div className="space-y-2">
+              <Label>{form.category === "CLASS_SUSPENDED" ? "Reason" : "Name"}</Label>
+              <Input
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder={form.category === "CLASS_SUSPENDED" ? "e.g. Cyclone warning" : "e.g. Independence Day"}
+              />
+            </div>
+            {form.category === "REGULAR" && (
             <div className="space-y-2">
               <Label>Type</Label>
               <Select value={form.type} onValueChange={(v) => setForm((f) => ({ ...f, type: v as HolidayType }))}>
@@ -537,19 +752,58 @@ export default function CollegeOfficeHolidaysPage() {
                 </SelectContent>
               </Select>
             </div>
+            )}
+            {form.category !== "BRIDGE" && (
             <div className="space-y-2">
-              <Label>Applies To</Label>
+              <Label>{form.category === "CLASS_SUSPENDED" ? "Who is affected?" : "Applies To"}</Label>
               <Select value={form.appliesTo} onValueChange={(v) => setForm((f) => ({ ...f, appliesTo: v as HolidayAudience }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {HOLIDAY_AUDIENCES.map((a) => (
-                    <SelectItem key={a} value={a}>{HOLIDAY_AUDIENCE_LABELS[a]}</SelectItem>
+                    <SelectItem key={a} value={a}>
+                      {form.category === "CLASS_SUSPENDED"
+                        ? (a === "BOTH" ? "Students and faculty" : "Students only")
+                        : HOLIDAY_AUDIENCE_LABELS[a]}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               {form.appliesTo === "STUDENTS" && (
-                <p className="text-xs text-muted-foreground">Faculty leave days are not affected.</p>
+                <p className="text-xs text-muted-foreground">Faculty keep working and their leave days are not affected.</p>
               )}
+            </div>
+            )}
+            {form.category === "BRIDGE" && (
+              <div className="space-y-2 rounded-lg border p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <Label>Offer a compensatory Sunday (optional)</Label>
+                    <p className="text-xs text-muted-foreground">
+                      That Sunday would run {form.date ? "the bridged day's" : "this day's"} timetable for students and faculty. The Principal or Vice Principal decides whether it is worked.
+                    </p>
+                  </div>
+                  <Switch checked={form.offerCompensatory} onCheckedChange={(v) => setForm((f) => ({ ...f, offerCompensatory: v }))} />
+                </div>
+                {form.offerCompensatory && (
+                  <Input
+                    type="date"
+                    value={form.compensatoryDateKey}
+                    min={form.date || undefined}
+                    onChange={(e) => setForm((f) => ({ ...f, compensatoryDateKey: e.target.value }))}
+                  />
+                )}
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label>Hostellers permitted to go out (outing)?</Label>
+              <SegmentedTabs
+                value={form.hostelersOutingAllowed ? "YES" : "NO"}
+                onChange={(v) => setForm((f) => ({ ...f, hostelersOutingAllowed: v === "YES" }))}
+                options={[
+                  { key: "YES", label: "Yes" },
+                  { key: "NO", label: "No" },
+                ]}
+              />
             </div>
           </div>
           <DialogFooter>
@@ -592,6 +846,73 @@ export default function CollegeOfficeHolidaysPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={semBreakOpen} onOpenChange={setSemBreakOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Set Sem Break</DialogTitle>
+            <DialogDescription>For students only. One winter and one summer break per academic year - setting it again overwrites.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Academic Year</Label>
+                <Select value={semBreakForm.academicYear} onValueChange={(v) => setSemBreakForm((f) => ({ ...f, academicYear: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {recentAcademicSessions().map((y) => <SelectItem key={y} value={y}>{y}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Break</Label>
+                <Select value={semBreakForm.kind} onValueChange={(v) => setSemBreakForm((f) => ({ ...f, kind: v as SemBreakKind }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {SEM_BREAK_KINDS.map((k) => <SelectItem key={k} value={k}>{SEM_BREAK_LABELS[k]}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>From</Label>
+                <Input type="date" value={semBreakForm.fromDate} onChange={(e) => setSemBreakForm((f) => ({ ...f, fromDate: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label>To</Label>
+                <Input type="date" value={semBreakForm.toDate} min={semBreakForm.fromDate || undefined} onChange={(e) => setSemBreakForm((f) => ({ ...f, toDate: e.target.value }))} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Hostellers permitted to go out (outing)?</Label>
+              <SegmentedTabs
+                value={semBreakForm.hostelersOutingAllowed ? "YES" : "NO"}
+                onChange={(v) => setSemBreakForm((f) => ({ ...f, hostelersOutingAllowed: v === "YES" }))}
+                options={[
+                  { key: "YES", label: "Yes" },
+                  { key: "NO", label: "No" },
+                ]}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSemBreakOpen(false)}>Cancel</Button>
+            <Button onClick={() => void handleSaveSemBreak()} loading={isSemBreakSaving}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        open={!!semBreakDeleteTarget}
+        onOpenChange={(open) => { if (!open) setSemBreakDeleteTarget(null); }}
+        title="Remove sem break?"
+        description={`This will remove the ${semBreakDeleteTarget ? SEM_BREAK_LABELS[semBreakDeleteTarget.kind] : ""} for ${semBreakDeleteTarget?.academicYear ?? ""}. Classes will run on those dates again.`}
+        confirmLabel="Remove"
+        variant="destructive"
+        onConfirm={() => void handleDeleteSemBreak()}
+        loading={isSemBreakDeleting}
+      />
 
       <ConfirmDialog
         open={!!summerDeleteTarget}

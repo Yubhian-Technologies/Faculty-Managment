@@ -4,6 +4,7 @@ import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
 import { loadEffectiveTiming, resolveCurrentSemester, matchesCurrentSemester } from "@/lib/college/semester";
 import { resolveSubstituteSlotsForDate } from "@/lib/leave/periodCoverage";
 import { istDateFromParts } from "@/lib/attendance/istTime";
+import { getTimetableDay } from "@/lib/studentAttendance/classDay";
 
 // Exported for callers that need to map an arbitrary calendar date (not just
 // "now") to a DayOfWeek against published timetableSlots - e.g. backfilling
@@ -223,8 +224,10 @@ export async function getFacultyPeriodsForDate(
   // (not `new Date(dateISO)`, which parses as UTC midnight and can land on
   // the wrong local weekday).
   const [y, m, d] = dateISO.split("-").map(Number);
-  const day = DAY_BY_JS_DAY[new Date(y, m - 1, d).getDay()];
-  if (!day) return []; // Sunday - nothing scheduled
+  // A Sunday the Principal made a compensatory class day runs another weekday's
+  // timetable; any other Sunday has nothing scheduled.
+  const day = DAY_BY_JS_DAY[new Date(y, m - 1, d).getDay()] ?? await getTimetableDay(db, collegeId, dateISO);
+  if (!day) return [];
 
   const collegeRef = db.collection("colleges").doc(collegeId);
   const slotsSnap = await collegeRef.collection("timetableSlots")

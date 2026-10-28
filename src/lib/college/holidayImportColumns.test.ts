@@ -1,5 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { parseHolidayAudience } from "./holidayImportColumns";
+import { parseHolidayAudience, parseHolidayCategory, parseOutingFlag } from "./holidayImportColumns";
+
+describe("parseHolidayCategory / parseOutingFlag", () => {
+  it("reads the category, blank meaning Regular", () => {
+    expect(parseHolidayCategory("")).toBe("REGULAR");
+    expect(parseHolidayCategory("Bridge")).toBe("BRIDGE");
+    expect(parseHolidayCategory("Classwork Suspended")).toBe("CLASS_SUSPENDED");
+    expect(parseHolidayCategory("festival")).toBeNull();
+  });
+  it("reads the outing flag, blank meaning not stated", () => {
+    expect(parseOutingFlag(undefined)).toBeUndefined();
+    expect(parseOutingFlag("Yes")).toBe(true);
+    expect(parseOutingFlag("no")).toBe(false);
+    expect(parseOutingFlag("maybe")).toBeNull();
+  });
+});
 
 describe("parseHolidayAudience", () => {
   it("defaults a blank to Both", () => {

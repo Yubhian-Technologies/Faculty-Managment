@@ -7,11 +7,13 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { currentTimetableAcademicYear } from "@/lib/college/academicSession";
-import { parseHolidayAudience } from "@/lib/college/holidayImportColumns";
+import { parseHolidayAudience, parseHolidayCategory, parseOutingFlag } from "@/lib/college/holidayImportColumns";
 import { HOLIDAY_TYPE_LABELS } from "@/types";
-import type { HolidayAudience, HolidayType } from "@/types";
+import type { HolidayAudience, HolidayCategory, HolidayType } from "@/types";
 
 interface ImportRow {
+  category?: string;
+  hostelersOutingAllowed?: string;
   sno?: string;
   occasion?: string;
   date?: string;
@@ -50,7 +52,10 @@ export async function POST(request: Request) {
     const now = new Date();
 
     const failed: { row: number; identifier: string; error: string }[] = [];
-    const toCreate: { date: Date; name: string; type: HolidayType; appliesTo: HolidayAudience; academicYear: string }[] = [];
+    const toCreate: {
+      date: Date; name: string; type: HolidayType; appliesTo: HolidayAudience; category: HolidayCategory;
+      hostelersOutingAllowed?: boolean; academicYear: string;
+    }[] = [];
 
     for (let i = 0; i < records.length; i++) {
       const row = records[i];
@@ -74,12 +79,33 @@ export async function POST(request: Request) {
         failed.push({ row: rowNum, identifier, error: `Type must be National, Regional, College or Restricted, got "${rawType}"` });
         continue;
       }
-      const appliesTo = parseHolidayAudience(row.appliesTo);
-      if (!appliesTo) {
+      const parsedAudience = parseHolidayAudience(row.appliesTo);
+      if (!parsedAudience) {
         failed.push({ row: rowNum, identifier, error: `Applies To must be Both or Students, got "${row.appliesTo?.trim()}"` });
         continue;
       }
-      toCreate.push({ date, name: occasion, type, appliesTo, academicYear: currentTimetableAcademicYear(date) });
+      const category = parseHolidayCategory(row.category);
+      if (!category) {
+        failed.push({ row: rowNum, identifier, error: `Category must be Regular, Compensatory or Classwork Suspended, got "${row.category?.trim()}"` });
+        continue;
+      }
+      const outing = parseOutingFlag(row.hostelersOutingAllowed);
+      if (outing === null) {
+        failed.push({ row: rowNum, identifier, error: `Hostellers Outing must be Yes or No, got "${row.hostelersOutingAllowed?.trim()}"` });
+        continue;
+      }
+      if (category === "BRIDGE" && date.getUTCDay() === 0) {
+        failed.push({ row: rowNum, identifier, error: "A compensatory holiday cannot fall on a Sunday" });
+        continue;
+      }
+      // Bridge is always for everyone; a suspension defaults to students only when Applies To is blank.
+      const appliesTo: HolidayAudience =
+        category === "BRIDGE" ? "BOTH" : category === "CLASS_SUSPENDED" && !row.appliesTo?.trim() ? "STUDENTS" : parsedAudience;
+      toCreate.push({
+        date, name: occasion, type: category === "REGULAR" ? type : "COLLEGE", appliesTo, category,
+        ...(outing !== undefined ? { hostelersOutingAllowed: outing } : {}),
+        academicYear: currentTimetableAcademicYear(date),
+      });
     }
 
     const holidaysRef = db.collection("colleges").doc(collegeId).collection("holidays");
@@ -92,6 +118,8 @@ export async function POST(request: Request) {
         name: h.name,
         type: h.type,
         appliesTo: h.appliesTo,
+        category: h.category,
+        ...(h.hostelersOutingAllowed !== undefined ? { hostelersOutingAllowed: h.hostelersOutingAllowed } : {}),
         academicYear: h.academicYear,
         createdAt: now,
       });

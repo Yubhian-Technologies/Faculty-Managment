@@ -4,18 +4,15 @@ import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { academicSessionLabel } from "@/lib/college/academicSession";
-import type { Holiday, HolidayAudience, HolidayType } from "@/types";
+import { istDateKey } from "@/lib/attendance/istTime";
+import { notifyRole } from "@/lib/notify";
+import { academicYearForDate, syncCompensatoryWorkingDay } from "@/lib/college/compensatorySync";
+import { isDateKey, isSundayKey, weekdayOfKey } from "@/lib/college/holidayCalendar";
+import type { Holiday, HolidayAudience, HolidayCategory, HolidayType } from "@/types";
 
 const HOLIDAY_TYPES: HolidayType[] = ["NATIONAL", "REGIONAL", "COLLEGE", "RESTRICTED"];
 const HOLIDAY_AUDIENCES: HolidayAudience[] = ["STUDENTS", "BOTH"];
-
-// April cutoff, same convention as academicSession.ts's currentAcademicStartYear -
-// a Jan/Feb/Mar holiday belongs to the session that started the previous April.
-function academicYearForDate(date: Date): string {
-  const startYear = date.getMonth() >= 3 ? date.getFullYear() : date.getFullYear() - 1;
-  return academicSessionLabel(startYear);
-}
+const HOLIDAY_CATEGORIES: HolidayCategory[] = ["REGULAR", "BRIDGE", "CLASS_SUSPENDED"];
 
 // Academic Calendar Holidays - maintained by Office (Principal/VP too, same as
 // firestore.rules' isPrincipalOrOffice) so the Leave History Report's
@@ -54,20 +51,57 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE");
-    const body = (await readJsonBody(request)) as { date?: string; name?: string; type?: HolidayType; appliesTo?: HolidayAudience };
+    const body = (await readJsonBody(request)) as {
+      date?: string; name?: string; type?: HolidayType; appliesTo?: HolidayAudience;
+      category?: HolidayCategory; hostelersOutingAllowed?: boolean;
+      compensatoryDateKey?: string; compensatoryEnabled?: boolean;
+    };
 
-    if (!body.date || !body.name?.trim() || !body.type) {
+    const category: HolidayCategory = body.category ?? "REGULAR";
+    if (!HOLIDAY_CATEGORIES.includes(category)) {
+      return NextResponse.json({ error: "Invalid holiday category" }, { status: 400 });
+    }
+    // Only the yearly list carries a National/Regional/... type; the other
+    // categories are always filed as College.
+    const type: HolidayType | undefined = category === "REGULAR" ? body.type : "COLLEGE";
+    if (!body.date || !body.name?.trim() || !type) {
       return NextResponse.json({ error: "date, name and type are required" }, { status: 400 });
     }
-    if (!HOLIDAY_TYPES.includes(body.type)) {
+    if (!HOLIDAY_TYPES.includes(type)) {
       return NextResponse.json({ error: "Invalid holiday type" }, { status: 400 });
     }
     if (body.appliesTo != null && !HOLIDAY_AUDIENCES.includes(body.appliesTo)) {
       return NextResponse.json({ error: "Invalid audience" }, { status: 400 });
     }
+    if (category === "CLASS_SUSPENDED" && !body.appliesTo) {
+      return NextResponse.json({ error: "Choose whether faculty are affected too" }, { status: 400 });
+    }
+    if (body.hostelersOutingAllowed != null && typeof body.hostelersOutingAllowed !== "boolean") {
+      return NextResponse.json({ error: "Invalid hostellers outing value" }, { status: 400 });
+    }
     const date = new Date(body.date);
     if (Number.isNaN(date.getTime())) {
       return NextResponse.json({ error: "Invalid date" }, { status: 400 });
+    }
+    const dateKey = isDateKey(body.date) ? body.date : istDateKey(date);
+
+    // A bridge holiday is for everyone. Its optional compensatory Sunday runs
+    // the bridged weekday's timetable, but stays an ordinary day off until the
+    // Principal switches it on.
+    let compensatory: Record<string, unknown> = {};
+    if (category === "BRIDGE") {
+      const followsDay = weekdayOfKey(dateKey);
+      if (!followsDay) return NextResponse.json({ error: "A compensatory holiday cannot fall on a Sunday" }, { status: 400 });
+      if (body.compensatoryDateKey) {
+        if (!isDateKey(body.compensatoryDateKey) || !isSundayKey(body.compensatoryDateKey) || body.compensatoryDateKey <= dateKey) {
+          return NextResponse.json({ error: "The compensatory day must be a Sunday after the holiday" }, { status: 400 });
+        }
+        compensatory = {
+          compensatoryDateKey: body.compensatoryDateKey,
+          compensatoryFollowsDay: followsDay,
+          compensatoryEnabled: (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") && body.compensatoryEnabled === true,
+        };
+      }
     }
 
     const db = getAdminDb();
@@ -77,11 +111,29 @@ export async function POST(request: Request) {
       collegeId: session.collegeId,
       date,
       name: body.name.trim(),
-      type: body.type,
-      appliesTo: body.appliesTo ?? "BOTH",
+      type,
+      appliesTo: category === "BRIDGE" ? "BOTH" : body.appliesTo ?? "BOTH",
+      category,
+      ...(body.hostelersOutingAllowed != null ? { hostelersOutingAllowed: body.hostelersOutingAllowed } : {}),
+      ...compensatory,
       academicYear: academicYearForDate(date),
       createdAt: now,
     });
+    if (compensatory.compensatoryEnabled === true) {
+      await syncCompensatoryWorkingDay(db, session.collegeId, {
+        id: docRef.id, name: body.name.trim(), enabled: true, dateKey: compensatory.compensatoryDateKey as string,
+      });
+    } else if (compensatory.compensatoryDateKey) {
+      // Waiting on the Principal's yes/no.
+      for (const role of ["PRINCIPAL", "VICE_PRINCIPAL"]) {
+        await notifyRole(
+          db, session.collegeId, role, "COMPENSATORY_SUNDAY_PENDING",
+          "Compensatory Sunday needs a decision",
+          `${body.name.trim()} is a compensatory holiday. Decide whether ${compensatory.compensatoryDateKey} is a working day.`,
+          "/principal/holidays"
+        );
+      }
+    }
 
     return NextResponse.json({ id: docRef.id }, { status: 201 });
   } catch (err) {

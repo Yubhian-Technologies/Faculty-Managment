@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { noClassReason } from "./classDay";
+import { noClassReason, timetableDayFor } from "./classDay";
 
 const base = { workingDays: ["MON", "TUE", "WED", "THU", "FRI", "SAT"] as const, holidays: [], summerBreaks: [] };
 const input = (dateISO: string, extra: object = {}) => ({ ...base, workingDays: [...base.workingDays], dateISO, ...extra });
@@ -16,5 +16,21 @@ describe("noClassReason", () => {
     expect(noClassReason(input("2026-05-01", b))).toBe("Summer break");
     expect(noClassReason(input("2026-06-10", b))).toBe("Summer break");
     expect(noClassReason(input("2026-06-11", b))).toBeNull();
+  });
+  it("names a sem break", () =>
+    expect(noClassReason(input("2026-12-24", { summerBreaks: [{ fromKey: "2026-12-20", toKey: "2027-01-02", label: "Winter sem break" }] }))).toBe("Winter sem break"));
+  it("treats an enabled compensatory Sunday as a class day, other Sundays still closed", () => {
+    const c = { compensatory: [{ dateKey: "2026-09-27", followsDay: "TUE" as const }] };
+    expect(noClassReason(input("2026-09-27", c))).toBeNull();
+    expect(noClassReason(input("2026-10-04", c))).toBe("Sunday");
+  });
+});
+
+describe("timetableDayFor", () => {
+  it("is the date's weekday, a compensatory Sunday's followed weekday, else null", () => {
+    const c = [{ dateKey: "2026-09-27", followsDay: "TUE" as const }];
+    expect(timetableDayFor("2026-09-30", c)).toBe("WED");
+    expect(timetableDayFor("2026-09-27", c)).toBe("TUE");
+    expect(timetableDayFor("2026-10-04", c)).toBeNull();
   });
 });

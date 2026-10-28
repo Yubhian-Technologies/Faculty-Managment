@@ -1,6 +1,7 @@
 import type { Firestore } from "firebase-admin/firestore";
-import { DEFAULT_TIMETABLE_RULES, type DayOfWeek } from "@/types";
-import { istDateFromParts, istDateKey } from "@/lib/attendance/istTime";
+import type { DayOfWeek } from "@/types";
+import { istDateKey } from "@/lib/attendance/istTime";
+import { loadClassCalendar as loadCalendar } from "@/lib/studentAttendance/classDay";
 import { matchesCurrentSemester } from "@/lib/college/semester";
 import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
 import { makeLiveSlotPredicate } from "@/lib/timetable/liveSlots";
@@ -64,30 +65,7 @@ function toISTDate(value: unknown): string | null {
   return d ? istDateKey(d) : null;
 }
 
-export async function loadClassCalendar(db: Firestore, collegeId: string, fromISO: string, toISO: string): Promise<Calendar> {
-  const [fy, fm, fd] = fromISO.split("-").map(Number);
-  const [ty, tm, td] = toISO.split("-").map(Number);
-  const start = istDateFromParts(fy, fm, fd);
-  const endExclusive = new Date(istDateFromParts(ty, tm, td).getTime() + 86400000);
-  const collegeRef = db.collection("colleges").doc(collegeId);
-  const [rulesSnap, holidaySnap, summerSnap] = await Promise.all([
-    collegeRef.collection("settings").doc("timetableRules").get(),
-    collegeRef.collection("holidays").where("date", ">=", start).where("date", "<", endExclusive).get(),
-    collegeRef.collection("summerHolidays").where("toDate", ">=", start).get(),
-  ]);
-  const rules = rulesSnap.exists ? (rulesSnap.data() as { workingDays?: DayOfWeek[] }) : null;
-  return {
-    workingDays: rules?.workingDays?.length ? rules.workingDays : DEFAULT_TIMETABLE_RULES.workingDays,
-    holidays: holidaySnap.docs.map((d) => {
-      const data = d.data() as { date: unknown; name?: string };
-      return { dateKey: toISTDate(data.date) ?? "", name: data.name ?? "" };
-    }),
-    summerBreaks: summerSnap.docs.map((d) => {
-      const data = d.data() as { fromDate: unknown; toDate: unknown };
-      return { fromKey: toISTDate(data.fromDate) ?? "", toKey: toISTDate(data.toDate) ?? "" };
-    }),
-  };
-}
+export const loadClassCalendar: (db: Firestore, collegeId: string, fromISO: string, toISO: string) => Promise<Calendar> = loadCalendar;
 
 /**
  * The not-posted periods of ONE section in [from, to] (clipped to today and,
