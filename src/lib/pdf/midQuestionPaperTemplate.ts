@@ -36,7 +36,8 @@ const STYLE = `
   .uni { font-size: 17px; font-weight: bold; margin: 0 0 4px; text-transform: uppercase; }
   .line { margin: 2px 0; font-size: 14px; }
   .subject { font-weight: bold; text-transform: uppercase; margin: 2px 0 0; }
-  .meta { display: flex; justify-content: space-between; margin: 6px 36px 0 110px; font-family: Arial, Helvetica, sans-serif; font-size: 14px; }
+  /* Branch & Sections / Time start where the rule below starts; Date / Max. Marks end where it ends. */
+  .meta { display: flex; justify-content: space-between; margin: 6px 0 0; font-family: Arial, Helvetica, sans-serif; font-size: 14px; }
   hr { border: 0; border-top: 2px solid #000; margin: 6px 0 10px; }
   .instr { margin: 4px 0 8px; }
   .cos-title { font-weight: bold; margin: 8px 0 2px; }
