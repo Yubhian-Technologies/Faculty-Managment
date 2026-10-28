@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { deadlineLabel } from "@/lib/midBank/deadline";
 import { ordinalYearLabel } from "@/lib/college/courseYears";
+import { deadlineProgress } from "@/lib/midBank/progress";
 import type { MidBankDeadline, MidQuestionBank } from "@/types";
 
 // Exam Cell: how far the question banks of one deadline are - per branch and
@@ -38,11 +39,7 @@ export default function QuestionBankProgressPage({ params }: { params: Promise<{
 
   const branches = useMemo(() => [...new Set((data?.groups ?? []).map((g) => g.branch))].sort(), [data]);
   const shown = (data?.groups ?? []).filter((g) => !branch || g.branch === branch);
-  const totals = useMemo(() => {
-    const all = (data?.groups ?? []).flatMap((g) => g.sections);
-    const banks = (data?.groups ?? []).flatMap((g) => g.banks);
-    return { sections: all.length, covered: all.filter((s) => s.bankId).length, banks: banks.length, complete: banks.filter((b) => b.status === "COMPLETE").length };
-  }, [data]);
+  const totals = useMemo(() => deadlineProgress(data?.groups ?? []), [data]);
 
   const d = data?.deadline;
   return (
@@ -56,12 +53,12 @@ export default function QuestionBankProgressPage({ params }: { params: Promise<{
       {!data && !error && <div className="h-80 animate-pulse rounded-lg bg-muted" />}
       {data && d && (
         <>
-          <div className="grid gap-3 sm:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {[
               ["Deadline", <span key="d" className="flex items-center gap-1">{d.locked && <Lock className="h-4 w-4" />}{deadlineLabel(d.deadline)}</span>],
+              ["Overall progress", `${totals.pct}% · ${totals.ready} of ${totals.sections} sections ready`],
               ["Sections covered", `${totals.covered} of ${totals.sections}`],
-              ["Banks started", totals.banks],
-              ["Banks complete", `${totals.complete} of ${totals.banks}`],
+              ["Banks complete", `${totals.banksComplete} of ${totals.banks} started`],
             ].map(([label, value]) => (
               <Card key={label as string}><CardContent className="p-4"><p className="text-xs text-muted-foreground">{label}</p><p className="text-lg font-semibold">{value}</p></CardContent></Card>
             ))}
@@ -90,7 +87,7 @@ export default function QuestionBankProgressPage({ params }: { params: Promise<{
                       <td className="p-3">
                         <div className="flex flex-wrap gap-1">
                           {g.sections.map((s) => (
-                            <Badge key={s.sectionId} variant="outline" className={s.bankId ? "" : "border-amber-500/60 text-amber-800 dark:text-amber-300"} title={s.facultyNames.join(", ")}>
+                            <Badge key={s.sectionId} variant="outline" className={s.bankId ? "" : "border-amber-500/60 text-amber-800"} title={s.facultyNames.join(", ")}>
                               {s.sectionName}: {s.bankId ? s.ownerName : "not started"}
                             </Badge>
                           ))}

@@ -268,3 +268,18 @@ describe("formulas in question text", () => {
     expect(errors["parts.0.text"]).toContain("empty boxes");
   });
 });
+
+import { deadlineProgress } from "./progress";
+
+describe("deadline progress", () => {
+  it("counts every section: a section in no bank is 0 %, so one complete bank of 88 sections is 1 %, not 100 %", () => {
+    const empty = (n: number) => Array.from({ length: n }, () => ({ bankId: null }));
+    const p = deadlineProgress([
+      { sections: [{ bankId: "b1" }, ...empty(1)], banks: [{ id: "b1", status: "COMPLETE", completeCount: 20, totalCount: 20 }] },
+      ...Array.from({ length: 40 }, () => ({ sections: empty(2), banks: [] })).map((g, i) => (i === 39 ? { ...g, sections: empty(8) } : g)),
+    ]);
+    expect(p).toMatchObject({ subjects: 41, subjectsStarted: 1, sections: 88, covered: 1, ready: 1, banks: 1, banksComplete: 1, pct: 1 });
+    const half = deadlineProgress([{ sections: [{ bankId: "b" }, { bankId: "b" }], banks: [{ id: "b", status: "IN_PROGRESS", completeCount: 10, totalCount: 20 }] }]);
+    expect(half.pct).toBe(50);
+  });
+});

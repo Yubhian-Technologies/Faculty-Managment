@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { daysLeft, deadlineLabel } from "@/lib/midBank/deadline";
 import { ordinalYearLabel } from "@/lib/college/courseYears";
+import { deadlineProgress, type DeadlineProgress, type ProgressGroup } from "@/lib/midBank/progress";
 import type { MidBankDeadline } from "@/types";
 
 // Exam Cell > Mid Question Bank: every question bank deadline with how far its
@@ -17,28 +18,10 @@ import type { MidBankDeadline } from "@/types";
 // & Dates, the question rules on Settings.
 
 type Row = MidBankDeadline & { locked: boolean };
-interface Summary { subjects: number; sections: number; covered: number; banks: number; complete: number; total: number; done: number }
-interface Progress {
-  groups: { sections: { bankId: string | null }[]; banks: { status: string; completeCount: number; totalCount: number }[] }[];
-}
-
-function summarise(p: Progress): Summary {
-  const banks = p.groups.flatMap((g) => g.banks);
-  const sections = p.groups.flatMap((g) => g.sections);
-  return {
-    subjects: p.groups.length,
-    sections: sections.length,
-    covered: sections.filter((s) => s.bankId).length,
-    banks: banks.length,
-    complete: banks.reduce((n, b) => n + b.completeCount, 0),
-    total: banks.reduce((n, b) => n + b.totalCount, 0),
-    done: banks.filter((b) => b.status === "COMPLETE").length,
-  };
-}
 
 export default function MidQuestionBankOverviewPage() {
   const [rows, setRows] = useState<Row[] | null>(null);
-  const [summaries, setSummaries] = useState<Record<string, Summary | "error">>({});
+  const [summaries, setSummaries] = useState<Record<string, DeadlineProgress | "error">>({});
   const [error, setError] = useState("");
   const [show, setShow] = useState<"open" | "all">("open");
 
@@ -52,7 +35,7 @@ export default function MidQuestionBankOverviewPage() {
         // Each deadline's progress, loaded side by side.
         for (const row of list) {
           fetch(`/api/college/mid-bank-deadlines/${encodeURIComponent(row.id)}/progress`)
-            .then(async (res) => { if (!res.ok) throw new Error(); return summarise((await res.json()) as Progress); })
+            .then(async (res) => { if (!res.ok) throw new Error(); return deadlineProgress(((await res.json()) as { groups: ProgressGroup[] }).groups); })
             .then((s) => setSummaries((m) => ({ ...m, [row.id]: s })))
             .catch(() => setSummaries((m) => ({ ...m, [row.id]: "error" })));
         }
@@ -102,7 +85,7 @@ export default function MidQuestionBankOverviewPage() {
             {shown.map((r) => {
               const s = summaries[r.id];
               const left = daysLeft(r.deadline);
-              const pct = s && s !== "error" && s.total ? Math.round((s.complete / s.total) * 100) : 0;
+              const pct = s && s !== "error" ? s.pct : 0;
               return (
                 <Link key={r.id} href={`/exam-cell/question-banks/${encodeURIComponent(r.id)}`}
                   className="group rounded-2xl border bg-card p-5 shadow-sm transition-colors hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
@@ -124,13 +107,13 @@ export default function MidQuestionBankOverviewPage() {
                   ) : (
                     <>
                       <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-                        {[["Subjects", String(s.subjects)], ["Sections covered", `${s.covered}/${s.sections}`], ["Banks complete", `${s.done}/${s.banks}`]].map(([k, v]) => (
+                        {[["Subjects started", `${s.subjectsStarted}/${s.subjects}`], ["Sections covered", `${s.covered}/${s.sections}`], ["Banks complete", `${s.banksComplete}/${s.banks}`]].map(([k, v]) => (
                           <div key={k} className="rounded-xl bg-muted/50 px-2 py-2.5"><p className="text-lg font-bold">{v}</p><p className="text-[11px] text-muted-foreground">{k}</p></div>
                         ))}
                       </div>
                       <div className="mt-4">
-                        <div className="mb-1 flex justify-between text-xs"><span className="text-muted-foreground">{s.complete} of {s.total} questions complete</span><span className="font-semibold">{pct}%</span></div>
-                        <div className="h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Questions complete">
+                        <div className="mb-1 flex justify-between text-xs"><span className="text-muted-foreground">Overall - {s.ready} of {s.sections} sections have a complete bank</span><span className="font-semibold">{pct}%</span></div>
+                        <div className="h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Overall progress">
                           <div className={cn("h-full rounded-full", pct === 100 ? "bg-emerald-500" : "bg-primary")} style={{ width: `${pct}%` }} />
                         </div>
                       </div>
