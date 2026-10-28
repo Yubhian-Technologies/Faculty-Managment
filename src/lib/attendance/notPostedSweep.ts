@@ -3,7 +3,7 @@ import { getNotPostedSettings, markSweptToday } from "@/lib/attendance/notPosted
 import { istDateKey, istTimeHHMM } from "@/lib/attendance/istTime";
 import { DAY_BY_JS_DAY, getFacultyPeriodsForDate, type TimingCache } from "@/lib/timetable/currentPeriod";
 import { resolvePeriodCompletionStatus } from "@/lib/attendance/periodAttendanceStatus";
-import { getNoClassReason } from "@/lib/studentAttendance/classDay";
+import { getNoClassReason, getTimetableDay } from "@/lib/studentAttendance/classDay";
 import { emitWorkflowNotification } from "@/lib/notifications/workflowNotifications";
 import type { FacultyMember, StudentAttendanceSession } from "@/types";
 
@@ -60,7 +60,7 @@ export async function sweepCollege(db: Firestore, collegeId: string, now: Date):
   const collegeRef = db.collection("colleges").doc(collegeId);
   const timingCache: TimingCache = new Map();
   const [y, m, d] = today.split("-").map(Number);
-  const dayName = DAY_BY_JS_DAY[new Date(y, m - 1, d).getDay()];
+  const dayName = DAY_BY_JS_DAY[new Date(y, m - 1, d).getDay()] ?? await getTimetableDay(db, collegeId, today);
   if (!dayName) {
     // Sunday - nothing scheduled college-wide. Still mark swept so this
     // college doesn't get re-checked on every tick for the rest of the day.

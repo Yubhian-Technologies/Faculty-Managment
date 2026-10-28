@@ -18,7 +18,7 @@ function academicYearForDate(date: Date): string {
 // Working Day overrides - flips a normally-off Sunday into a working day for
 // specific roles (see types/attendance.ts's WorkingDayOverride and
 // lib/attendance/workingDays.ts). Maintained in the same Settings screen as
-// Holidays (college-office/holidays/page.tsx), same role gating as that
+// Holidays (academics/holidays/page.tsx), same role gating as that
 // collection: read open to every role that marks attendance or applies for
 // leave, write restricted to Office/Principal/VP.
 export async function GET() {
@@ -49,7 +49,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "ACADEMICS");
     const body = (await readJsonBody(request)) as {
       date?: string; reason?: string; roles?: UserRole[];
       isHalfDay?: boolean; halfDaySession?: "FN" | "AN";

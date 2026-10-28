@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     const { date, dateISO: docSuffix, timeHHMM: checkIn } = nowInIndia();
     const db = getAdminDb();
     const today = date;
-    // A Working Day override (see college-office/holidays/page.tsx) naming
+    // A Working Day override (see academics/holidays/page.tsx) naming
     // this caller's own role flips today from a Sunday off to a working day
     // for them specifically - everyone else still gets the day off.
     if (isSunday(date) && !(await isWorkingDayForRole(db, session.collegeId, today, session.role as UserRole))) {

@@ -7,6 +7,8 @@ import { BottomNav, hasBottomNav } from "@/components/layout/BottomNav";
 import { MobileDrawer } from "@/components/layout/MobileDrawer";
 import { TopBar } from "@/components/layout/TopBar";
 import { SummerHolidayBanner } from "@/components/layout/SummerHolidayBanner";
+import { TodayHolidayBanner } from "@/components/timetable/TodayHolidayBanner";
+import { HolidayReminder } from "@/components/layout/HolidayReminder";
 import { ReadOnlyAccessGate } from "@/components/layout/ReadOnlyAccessGate";
 import { readOnlyHiddenHrefs } from "@/components/layout/readOnlyNav";
 import { isPathHidden } from "@/components/layout/navConfig";
@@ -67,7 +69,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className={`${sidebarCollapsed ? "md:ml-[4.5rem]" : "md:ml-64"} flex flex-col min-h-screen transition-[margin] duration-300 ease-in-out`}>
         <TopBar hiddenItems={navHiddenItems} />
         <SummerHolidayBanner />
+        <HolidayReminder />
         <main className={`flex-1 p-4 md:p-6 md:pb-6 max-w-7xl mx-auto w-full ${hasBottomNav(user.role, pathname) ? "pb-24" : "pb-6"}`}>
+          {/timetable/i.test(pathname) && <TodayHolidayBanner />}
           <ReadOnlyAccessGate>{children}</ReadOnlyAccessGate>
         </main>
         <footer className="hidden md:flex items-center justify-between px-6 py-3 border-t bg-background text-xs text-muted-foreground">

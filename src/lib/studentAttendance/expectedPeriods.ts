@@ -1,5 +1,5 @@
 import type { DayOfWeek } from "@/types";
-import { noClassReason, type ClassDayInputs } from "@/lib/studentAttendance/classDay";
+import { noClassReason, timetableDayFor, type ClassDayInputs } from "@/lib/studentAttendance/classDay";
 import { resolvePeriodCompletionStatus } from "@/lib/attendance/periodAttendanceStatus";
 import { istDateKey } from "@/lib/attendance/istTime";
 import { countsFromJoining } from "@/lib/studentAttendance/joiningDate";
@@ -84,7 +84,7 @@ export function listExpectedPeriods(args: {
   for (const date of eachDate(args.from, args.to)) {
     if (date > today) break;
     if (noClassReason({ dateISO: date, ...args.calendar })) continue;
-    const day = dayNameOf(date);
+    const day = timetableDayFor(date, args.calendar.compensatory);
     if (!day) continue;
     for (const slot of args.slots) {
       if (slot.day !== day) continue;

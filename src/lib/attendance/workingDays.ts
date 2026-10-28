@@ -3,7 +3,7 @@ import type { UserRole } from "@/types/core";
 import { istDateKey, istMidnightUTC } from "@/lib/attendance/istTime";
 
 // Roles that can be targeted by a Working Day override (colleges/{id}/
-// workingDays - see college-office/holidays/page.tsx's Working Days section)
+// workingDays - see academics/holidays/page.tsx's Working Days section)
 // - the same set of roles that can self-mark attendance or apply for leave
 // (see check-in/route.ts and leave/applications/route.ts's own role lists).
 // Students/Class Leaders and the system/location-scoped roles never mark
