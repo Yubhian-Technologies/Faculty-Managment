@@ -469,7 +469,6 @@ function SheetResult({ sheet }: { sheet: SheetState }) {
                     {d.status === "SKIPPED" ? <Badge variant="pending">Skipped</Badge> : d.skippedPeriods.length ? <Badge variant="modified">Partly</Badge> : <Badge variant="approved">OK</Badge>}
                     {d.reason && <span className="ml-2 text-muted-foreground">{d.reason}</span>}
                     {d.skippedPeriods.length > 0 && <div className="mt-1 text-xs text-muted-foreground">{d.skippedPeriods.join("; ")}</div>}
-                    {d.timetableNote && <div className="mt-1 text-xs text-amber-700">{d.timetableNote}</div>}
                     {d.detail.length > 0 && <ul className="mt-1 text-xs text-muted-foreground">{d.detail.map((x) => <li key={x}>{x}</li>)}</ul>}
                   </td>
                   <td className="p-2 text-right tabular-nums">{d.periods}</td>
