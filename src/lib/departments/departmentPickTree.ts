@@ -94,6 +94,34 @@ export function buildDepartmentPickOptions<T extends TreeDepartment>(
   return out;
 }
 
+/**
+ * For a college-wide list (the College Office): drop the shared-year group when
+ * the feeder department holds no sections of its own. At a college where the
+ * core branches own their students and sections for every year (VIT), "Basic
+ * Science (all sub-departments)" and the branches listed under it only repeat
+ * the branches already offered at the top level.
+ *
+ * Kept: every top-level department that is not a container, and any
+ * sub-department or core entry whose own department has a section filed under
+ * it - which is how a college that files the shared year under the feeder (VWU)
+ * keeps its Basic Science group. A container stays only while something under
+ * it does. With no section names (still loading / no sections) nothing can be
+ * judged, so the list is unchanged. Departments with no sections at all are
+ * already left out by buildDepartmentPickOptions itself.
+ */
+export function dropEmptyFeederGroups(options: DepartmentPickOption[], sectionDepartmentNames: Iterable<string>): DepartmentPickOption[] {
+  const have = new Set(Array.from(sectionDepartmentNames, clean).filter(Boolean));
+  if (have.size === 0) return options;
+  const keep = options.map((o) => !o.container && ((o.depth === 0 && !o.coreDepartment) || have.has(o.department)));
+  options.forEach((o, i) => {
+    if (!o.container) return;
+    for (let j = i + 1; j < options.length && options[j].depth > o.depth; j++) {
+      if (keep[j]) { keep[i] = true; break; }
+    }
+  });
+  return options.filter((_, i) => keep[i]);
+}
+
 /** The sub-departments of a department, as picks (used by callers that need to expand "all of it"). */
 export function subDepartmentNames<T extends TreeDepartment>(all: T[], departmentName: string): string[] {
   const dept = all.find((d) => clean(d.name) === clean(departmentName));

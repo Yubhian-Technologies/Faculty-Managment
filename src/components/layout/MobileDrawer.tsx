@@ -13,6 +13,7 @@ import { useAssignedInterviews } from "@/hooks/useAssignedInterviews";
 import { useAssignedCoordinator } from "@/hooks/useAssignedCoordinator";
 import { useIsSubDepartmentHod } from "@/hooks/useIsSubDepartmentHod";
 import { usePrincipalPendingHiring } from "@/hooks/usePrincipalPendingHiring";
+import { INCIDENT_RECORD_HREFS, useIncidentUnread } from "@/hooks/useIncidentUnread";
 import { isNavItemActive, filterVisibleNavItems, isPathHidden, ROLES_WITH_EMBEDDED_PANEL_ACCESS, type NavItem } from "./navConfig";
 import { NavIcon } from "./NavIcon";
 import { useCustomNav } from "@/hooks/useCustomNav";
@@ -47,6 +48,7 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
   const { coordinatorBatchId } = useAssignedCoordinator();
   const { hideSubDepartmentsLink } = useIsSubDepartmentHod();
   const { pendingCount: pendingHiringCount } = usePrincipalPendingHiring();
+  const incidentUnread = useIncidentUnread();
   const { items: contextItems, active: activeContext } = useWorkContext();
   const { apply: applyCustomNav } = useCustomNav();
   // Groups the user folded shut (keyed by section title) - same behaviour as the desktop sidebar.
@@ -206,6 +208,9 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
                               <span className="ml-auto bg-red-500 text-white text-xs rounded-full h-5 min-w-5 px-1 flex items-center justify-center font-semibold">
                                 {pendingHiringCount > 99 ? "99+" : pendingHiringCount}
                               </span>
+                            )}
+                            {incidentUnread > 0 && INCIDENT_RECORD_HREFS.includes(item.href) && (
+                              <span className="ml-auto h-2.5 w-2.5 rounded-full bg-red-500" role="img" aria-label="New incident records" />
                             )}
                           </Link>
                         );

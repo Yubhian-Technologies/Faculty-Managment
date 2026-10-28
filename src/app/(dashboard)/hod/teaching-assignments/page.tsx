@@ -17,8 +17,7 @@ import { toast } from "@/hooks/useToast";
 import { MAX_FACULTY_PER_SUBJECT } from "@/lib/teaching/facultyCap";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { sectionDisplayLabel, departmentCode } from "@/lib/sections/sectionLabel";
-import { deriveHodScope, buildCourseGroups, managerEffectiveYears } from "@/lib/departments/hodScope";
-import { fedYears } from "@/lib/college/academicStructure";
+import { deriveHodScope, buildCourseGroups, managerEffectiveYears, feederOnlyYears } from "@/lib/departments/hodScope";
 import { matchesCurrentSemester } from "@/lib/college/semester";
 import { departmentPickNames } from "@/lib/departments/subjectCoverage";
 import { assignmentsForFilter } from "@/lib/teaching/assignmentView";
@@ -258,21 +257,16 @@ export default function TeachingAssignmentsPage() {
       ? subDepartmentOptions
       : scope.ownDept ? [scope.ownDept] : [];
     const assigned = new Set<number>();
-    // A year some OTHER department already claims as a feeder FOR a given
-    // department in `relevant` (e.g. Basic Science owning year 1 of a
-    // shared-first-year B.Tech) is never THAT department's own to staff - see
-    // fedYears. Checked PER department, not merged into one global exclusion
-    // set across all of `relevant`: now that `relevant` can hold both the
-    // shared-year manager (Basic Science, via subDepartmentOptions including
-    // managed branches) and the branch itself (CSE), CSE's own exclusion of
-    // year 1 (correctly - it doesn't own that year directly) must not cancel
-    // out Basic Science's own legitimate claim to it. A global set did
-    // exactly that: year 1 ended up in both `assigned` (from Basic Science)
-    // and `excluded` (from CSE), and the shared exclusion check hid it from
-    // everyone. Nothing assigned means no years (never "every year":
+    // A year some OTHER department claims as a feeder FOR a department in
+    // `relevant` is dropped only when that department does not claim the year
+    // itself - see feederOnlyYears: a core department with its own Years Taught
+    // (1-4) keeps year 1 even while Basic Science still lists it as a feeder.
+    // Checked PER department, not merged into one global exclusion set, so one
+    // department's exclusion can't cancel out another's legitimate claim.
+    // Nothing assigned means no years (never "every year":
     // lib/college/taughtYears.ts).
     for (const d of relevant) {
-      const excludedForD = new Set(fedYears(d, departments, course.catalogId));
+      const excludedForD = new Set(feederOnlyYears(d, departments, course.catalogId));
       for (const y of managerEffectiveYears(d, departments, course.catalogId)) {
         if (!excludedForD.has(y)) assigned.add(y);
       }
@@ -1179,7 +1173,7 @@ const effectiveSemester = semesterOptions.length === 0
     <div className="space-y-6">
       <PageHeader
         title="Teaching Assignments"
-        description="Review subject staffing requirements and assign faculty by course, year, semester, and department."
+        description="Find staffing gaps and assign faculty to subjects, course &amp; year wise"
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" variant="outline" onClick={handleExportPdf} disabled={isExportingPdf}>
@@ -1297,7 +1291,7 @@ const effectiveSemester = semesterOptions.length === 0
           <CardHeader className="pb-3"><CardTitle className="text-base">Unstaffed Subjects</CardTitle></CardHeader>
           <CardContent>
             {!applied ? (
-              <p className="text-sm text-muted-foreground text-center py-6">Select a course, year, semester, and department to identify subjects that require faculty assignments.</p>
+              <p className="text-sm text-muted-foreground text-center py-6">Select the course, year, semester and sub-department, then press Load to see staffing gaps.</p>
             ) : !subjectsSemesterReady ? (
               <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-14 bg-muted animate-pulse rounded-lg" />)}</div>
             ) : subjects.length === 0 ? (
@@ -1342,7 +1336,7 @@ const effectiveSemester = semesterOptions.length === 0
           <CardHeader className="pb-3"><CardTitle className="text-base">Assign Faculty</CardTitle></CardHeader>
           <CardContent>
             {!applied ? (
-              <p className="text-sm text-muted-foreground text-center py-6">Select the required academic details to assign faculty members to subjects.</p>
+              <p className="text-sm text-muted-foreground text-center py-6">Select the course, year, semester and sub-department, then press Load to assign faculty.</p>
             ) : sections.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-6">No sections created yet for {course?.name} · {ordinalYear(Number(year))}.</p>
             ) : (

@@ -75,7 +75,6 @@ import {
   FACULTY_STATUS_DATE_LABELS,
 } from "@/types";
 import type { DesignationCatalogItem, EmployeeCategory, FacultyStatus, HonorificCatalogItem } from "@/types";
-import { honorificForPhd } from "@/lib/faculty/phdHonorific";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { designationLabel } from "@/lib/designations/config";
 import { useAuthStore } from "@/store/authStore";
@@ -260,58 +259,58 @@ export default function NewFacultyPage() {
       {
         key: "personal",
         label: PROFILE_MODULES.personal.label,
-        shortLabel: "Personal & Contact",
+        shortLabel: "Personal",
         icon: FileText,
-        description: PROFILE_MODULES.personal.description ?? "",
+        description: "Date of birth, blood group, identification details, and address",
       },
       {
         key: "qualification",
         label: PROFILE_MODULES.qualification.label,
         shortLabel: "Qualifications",
         icon: GraduationCap,
-        description: PROFILE_MODULES.qualification.description ?? "",
+        description: "Degrees, academic background, and certifications",
       },
       {
         key: "experience",
         label: PROFILE_MODULES.experience.label,
         shortLabel: "Experience",
         icon: Briefcase,
-        description: PROFILE_MODULES.experience.description ?? "",
+        description: "Prior academic, industrial, and research service",
       },
       {
         key: "research",
         label: PROFILE_MODULES.research.label,
         shortLabel: "Research",
         icon: Award,
-        description: PROFILE_MODULES.research.description ?? "",
+        description: "Publications, patents, book chapters, and research grants",
       },
       {
         key: "mentorship",
         label: PROFILE_MODULES.mentorship.label,
-        shortLabel: "Development",
+        shortLabel: "Mentorship",
         icon: UserCheck,
-        description: PROFILE_MODULES.mentorship.description ?? "",
+        description: "PhD guidance, workshops, and faculty development activities",
       },
       {
         key: "financial",
         label: PROFILE_MODULES.financial.label,
-        shortLabel: "Compensation",
+        shortLabel: "Funding",
         icon: DollarSign,
-        description: PROFILE_MODULES.financial.description ?? "",
+        description: "Sponsored research, consultancy projects, and seed funds",
       },
       {
         key: "teaching-load",
         label: PROFILE_MODULES["teaching-load"].label,
-        shortLabel: "Teaching",
+        shortLabel: "Teaching Load",
         icon: BookOpen,
-        description: PROFILE_MODULES["teaching-load"].description ?? "",
+        description: "Curriculum subject allocations and weekly lecture load",
       },
       {
         key: "others",
         label: PROFILE_MODULES.others.label,
-        shortLabel: "Additional Info",
+        shortLabel: "Achievements",
         icon: Sparkles,
-        description: "Anything not covered in the other sections",
+        description: "Professional memberships, awards, and institutional responsibilities",
       },
       {
         key: "review",
@@ -362,7 +361,7 @@ export default function NewFacultyPage() {
     if (key === "personal") {
       const missing = getMissingRequiredPersonalFields(personalDetails, FACULTY_REQUIRED_PERSONAL_FIELDS);
       if (missing.length > 0) {
-        return { title: `${PROFILE_MODULES.personal.label} is incomplete`, description: `Required: ${missing.join(", ")}` };
+        return { title: "Personal Details is incomplete", description: `Required: ${missing.join(", ")}` };
       }
       const joiningDate = getValues("joiningDate");
       if (personalDetails.dateOfBirth && joiningDate && personalDetails.dateOfBirth >= joiningDate) {
@@ -451,7 +450,7 @@ export default function NewFacultyPage() {
       toast({
         variant: "destructive",
         title: "Some required fields are missing",
-        description: `${PROFILE_MODULES.personal.label}: ${missingPersonal.join(", ")}`,
+        description: `Personal Details: ${missingPersonal.join(", ")}`,
       });
       return;
     }
@@ -461,7 +460,7 @@ export default function NewFacultyPage() {
       toast({
         variant: "destructive",
         title: "Date of Birth must be before Date of Joining",
-        description: `Check the Date of Birth on ${PROFILE_MODULES.personal.label} and the Date of Joining on Identity & Employment.`,
+        description: "Check the Date of Birth on Personal Details and the Date of Joining on Identity & Employment.",
       });
       return;
     }
@@ -918,9 +917,6 @@ export default function NewFacultyPage() {
                           const other = v === OTHER_QUALIFICATION;
                           setQualIsOther(other);
                           setValue("highestQualification", other ? "" : v);
-                          // Ph.D -> "Dr." in the Honorific box unless one is already chosen (lib/faculty/phdHonorific.ts)
-                          const dr = honorificForPhd({ isPhd: v === "Ph.D", honorific }, honorificOptions);
-                          if (dr) setHonorific(dr);
                         }}
                       >
                         <SelectTrigger className="bg-card">
@@ -965,7 +961,7 @@ export default function NewFacultyPage() {
                       <div>
                         <p className="text-xs font-bold text-foreground">Total Experience Preview</p>
                         <p className="text-[11px] text-muted-foreground">
-                          Computed live from Joining Date + Professional Experience & Employment entries
+                          Computed live from Joining Date + Professional Experience entries
                         </p>
                       </div>
                     </div>
@@ -1198,7 +1194,7 @@ export default function NewFacultyPage() {
                         <span className="font-semibold text-primary">{formatDuration(previewTotalExperience)}</span>
                       </div>
                       <div className="flex justify-between py-1">
-                        <span className="text-muted-foreground">Teaching &amp; Academic Responsibilities Staged:</span>
+                        <span className="text-muted-foreground">Teaching Load Staged:</span>
                         <span className="font-semibold text-foreground">{teachingRows.length} subjects{previousTeaching.length > 0 ? ` + ${previousTeaching.length} previous` : ""}</span>
                       </div>
                     </div>

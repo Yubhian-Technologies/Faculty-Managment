@@ -28,3 +28,4 @@ export type { LocationConfig, LocationDepartment, LocationStaffMember, LocationS
 export * from "./library";
 export * from "./customNav";
 export * from "./certification";
+export * from "./incident";

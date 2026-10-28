@@ -29,6 +29,17 @@ export async function parseExcelFileWithRowNumbers(file: File): Promise<{ rows: 
   return { rows, rowNumbers: json.rowNumbers ?? rows.map((_, i) => i + 1) };
 }
 
+// Every non-empty sheet of a workbook, by name (one section per sheet in an attendance register).
+export async function parseExcelWorkbook(file: File): Promise<{ name: string; rows: string[][] }[]> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("allSheets", "1");
+  const res = await fetch("/api/college/parse-excel", { method: "POST", body: formData });
+  const json = await res.json() as { sheets?: { name: string; rows: string[][] }[]; error?: string };
+  if (!res.ok) throw new Error(json.error ?? "Failed to parse Excel file");
+  return json.sheets ?? [];
+}
+
 export function readFileAsText(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

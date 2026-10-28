@@ -10,11 +10,13 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { Download, Pencil, Search, Trash2 } from "lucide-react";
+import { SUBJECT_TYPE_LABELS } from "@/types";
 import type { Subject, SubjectCategory, SubjectType } from "@/types";
 import { CategoryField } from "@/components/academics/CategoryField";
 import { downloadCSV, toCSV } from "@/lib/utils/csv";
 
 const PAGE_SIZE = 20;
+const SELECT_CLASS = "h-9 w-full rounded-md border bg-background px-2 text-sm";
 
 interface EditForm {
   id: string;
@@ -232,6 +234,12 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
                 <div className="space-y-1"><Label>Second Short Code</Label><Input className="uppercase" placeholder="Asked when placing in the timetable" value={editForm.altShortCode} onChange={(e) => setEditForm({ ...editForm, altShortCode: e.target.value })} /></div>
               </div>
               <p className="text-xs text-muted-foreground">Code and Name can&apos;t change once the subject is assigned to a semester - add a new subject with the new code instead.</p>
+              <div className="space-y-1">
+                <Label>Type</Label>
+                <select className={SELECT_CLASS} value={editForm.type} onChange={(e) => setEditForm({ ...editForm, type: e.target.value as SubjectType })}>
+                  {Object.entries(SUBJECT_TYPE_LABELS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+                </select>
+              </div>
               <div className="grid grid-cols-4 gap-3">
                 <div className="space-y-1"><Label>L</Label><Input value={editForm.lectureHours} onChange={(e) => setEditForm({ ...editForm, lectureHours: e.target.value })} /></div>
                 <div className="space-y-1"><Label>T</Label><Input value={editForm.tutorialHours} onChange={(e) => setEditForm({ ...editForm, tutorialHours: e.target.value })} /></div>

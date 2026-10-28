@@ -12,26 +12,26 @@ describe("effectiveJoiningDate", () => {
     expect(effectiveJoiningDate({ dateOfJoining: "10-07-2026" })).toBeUndefined();
     expect(effectiveJoiningDate({})).toBeUndefined();
   });
-  it("counts every session when there is no joining date", () => {
+  it("counts every session, including days before the joining date", () => {
     expect(countsFromJoining("2020-01-01", undefined)).toBe(true);
-    expect(countsFromJoining("2026-07-09", "2026-07-10")).toBe(false);
+    expect(countsFromJoining("2026-07-09", "2026-07-10")).toBe(true);
     expect(countsFromJoining("2026-07-10", "2026-07-10")).toBe(true);
   });
 });
 
-describe("joining date cutoff", () => {
+describe("no joining date cutoff", () => {
   const sessions = indexSessions([session("2026-07-01", "ABSENT"), session("2026-07-10", "PRESENT"), session("2026-07-11", "ABSENT")]);
-  it("leaves out sessions before the joining date", () => {
+  it("counts sessions before the joining date in every tally", () => {
     expect(tallyStudentBySubject(sessions, "a").get("s1")).toEqual({ held: 3, attended: 1 });
-    expect(tallyStudentBySubject(sessions, "a", "2026-07-10").get("s1")).toEqual({ held: 2, attended: 1 });
-    expect(countFullyAbsentDays(sessions, "a", "2026-07-10")).toBe(1);
+    expect(tallyStudentBySubject(sessions, "a", "2026-07-10").get("s1")).toEqual({ held: 3, attended: 1 });
+    expect(countFullyAbsentDays(sessions, "a", "2026-07-10")).toBe(2);
   });
-  it("owes a late joiner only the not-posted periods from their joining date", () => {
+  it("owes a late joiner every not-posted period too", () => {
     const idx = buildNotPostedIndex([
       { key: "1", date: "2026-07-01", periodNumber: 1, assignmentId: "x", subjectId: "s1" },
       { key: "2", date: "2026-07-12", periodNumber: 1, assignmentId: "x", subjectId: "s1" },
     ]);
     expect(idx.forStudent({}).get("s1")).toBe(2);
-    expect(idx.forStudent({ joinedOn: "2026-07-10" }).get("s1")).toBe(1);
+    expect(idx.forStudent({ joinedOn: "2026-07-10" }).get("s1")).toBe(2);
   });
 });

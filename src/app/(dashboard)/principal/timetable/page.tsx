@@ -17,7 +17,7 @@ import { buildSectionTimetableXlsxBuffer } from "@/lib/timetable/timetableExport
 import { renderMultiHtmlToPdf } from "@/lib/pdf/htmlToPdf";
 import type { Course, Department, Section, CourseYearTiming, TimetableSlot, Subject, DayOfWeek } from "@/types";
 import { DepartmentPickSelect } from "@/components/shared/DepartmentPickSelect";
-import { buildDepartmentPickOptions, DEPARTMENT_PICK_ALL, parseDepartmentPick } from "@/lib/departments/departmentPickTree";
+import { buildDepartmentPickOptions, DEPARTMENT_PICK_ALL, dropEmptyFeederGroups, parseDepartmentPick } from "@/lib/departments/departmentPickTree";
 import { sectionIsOfCore, sectionMatchesPick } from "@/lib/departments/sectionDepartmentPick";
 import { departmentsOfferingCourse } from "@/components/students/RosterFieldInputs";
 import { yearSemesterLabelIn } from "@/lib/academic/format";
@@ -135,7 +135,7 @@ export default function PrincipalTimetablePage() {
         return active.filter((d) => ids.has(d.id));
       })()
       : active;
-    return buildDepartmentPickOptions(offered, departments, sectionDepartmentNames);
+    return dropEmptyFeederGroups(buildDepartmentPickOptions(offered, departments, sectionDepartmentNames), sectionDepartmentNames);
   }, [departments, courses, fCourse, sectionDepartmentNames]);
   const inDept = useMemo(
     () => inCourse.filter((x) => matchesPick(x, deptPick)),
@@ -391,7 +391,7 @@ export default function PrincipalTimetablePage() {
                   return (
                     <div key={entry.sectionId} className="space-y-2">
                       <h4 className="text-sm font-semibold">
-                        {entry.courseName} · {entry.departmentName} · {ordinalYear(entry.year)} Year · Section {entry.sectionName}
+                        {entry.courseName} · {entry.departmentName} · {ordinalYear(entry.year)} · Section {entry.sectionName}
                       </h4>
                       <InstitutionalTimetableTable
                         section={{ name: entry.sectionName, department: entry.departmentName, year: entry.year, courseName: entry.courseName, classroomNumber: entry.classroomNumber, facultyInchargeName: entry.facultyInchargeName } as unknown as Section}
@@ -403,6 +403,7 @@ export default function PrincipalTimetablePage() {
                         semesterLabel={entry.currentSemester != null ? `Sem ${yearSemesterLabelIn(entry.year, inYear, entry.currentSemester)}` : undefined}
                         workingDays={bulkWorkingDays}
                         showWeekNav={false}
+                        hideTitle
                         subjects={bulkSubjects}
                       />
                     </div>

@@ -33,7 +33,7 @@ import type { StudentListItem, Department, AcademicYear, Course } from "@/types"
 import { selectableYears } from "@/lib/college/courseYears";
 import { DepartmentPickSelect } from "@/components/shared/DepartmentPickSelect";
 import {
-  buildDepartmentPickOptions, DEPARTMENT_PICK_ALL, departmentPickValue, isDepartmentPickOffered, parseDepartmentPick,
+  buildDepartmentPickOptions, DEPARTMENT_PICK_ALL, departmentPickValue, dropEmptyFeederGroups, isDepartmentPickOffered, parseDepartmentPick,
 } from "@/lib/departments/departmentPickTree";
 import { useSectionDepartments } from "@/hooks/useSectionDepartments";
 import { useListUrlSync } from "@/hooks/useListUrlSync";
@@ -356,7 +356,7 @@ function OfficeStudentsContent() {
         const offeringIds = new Set(departmentsOfferingCourse(departments, courses, courseFilter).map((d) => d.id));
         return activeDepartments.filter((d) => offeringIds.has(d.id));
       })();
-    return buildDepartmentPickOptions(offered, departments, sectionDepartments);
+    return dropEmptyFeederGroups(buildDepartmentPickOptions(offered, departments, sectionDepartments), sectionDepartments);
   }, [courseFilter, activeDepartments, departments, courses, sectionDepartments]);
 
   const yearFilterOptions = useMemo(() => {
@@ -459,7 +459,10 @@ function OfficeStudentsContent() {
     const nextDeptOptions = value === "all"
       ? activeDepartments
       : activeDepartments.filter((d) => new Set(departmentsOfferingCourse(departments, courses, value).map((o) => o.id)).has(d.id));
-    const deptStillValid = isDepartmentPickOffered(buildDepartmentPickOptions(nextDeptOptions, departments, sectionDepartments), deptPick);
+    const deptStillValid = isDepartmentPickOffered(
+      dropEmptyFeederGroups(buildDepartmentPickOptions(nextDeptOptions, departments, sectionDepartments), sectionDepartments),
+      deptPick
+    );
     const nextDept = deptStillValid ? deptFilter : "all";
     if (!deptStillValid) setDeptPick(DEPARTMENT_PICK_ALL);
     const nextYearOptions = nextDept === "all"
