@@ -97,8 +97,13 @@ export function AssignByCodeStep({ catalogId, regulation, courseName, initialDep
       .filter((d) => ownerIds.has(d.id) || departments.some((sub) => sub.parentDepartmentId === d.id && ownerIds.has(sub.id)))
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [departments, courses, catalogId]);
-  const subDepartments = useMemo(() => departments.filter((d) => d.parentDepartmentId === deptId), [departments, deptId]);
   const activeDeptId = subDeptId || deptId;
+  // A sub-department is stored as its parent (deptId) plus the sub-department (subDeptId).
+  function pickDepartment(id: string) {
+    const d = departments.find((x) => x.id === id);
+    if (d?.parentDepartmentId) { setDeptId(d.parentDepartmentId); setSubDeptId(d.id); }
+    else { setDeptId(id); setSubDeptId(""); }
+  }
   const activeDept = useMemo(() => departments.find((d) => d.id === activeDeptId), [departments, activeDeptId]);
 
   // The department's own Course doc for this catalog course decides the years and semesters. A
@@ -293,23 +298,21 @@ export function AssignByCodeStep({ catalogId, regulation, courseName, initialDep
 
       <Card>
         <CardContent className="space-y-4 p-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <div className="space-y-1.5">
               <Label className="text-xs">Department</Label>
-              <select className={SELECT_CLASS} value={deptId} onChange={(e) => { setDeptId(e.target.value); setSubDeptId(""); }}>
+              {/* One field: each sub-department sits indented under its department. */}
+              <select className={SELECT_CLASS} value={activeDeptId} onChange={(e) => pickDepartment(e.target.value)}>
                 <option value="">Select department</option>
-                {topDepartments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                {topDepartments.flatMap((d) => [
+                  <option key={d.id} value={d.id}>{d.name}</option>,
+                  ...departments
+                    .filter((sub) => sub.parentDepartmentId === d.id)
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map((sub) => <option key={sub.id} value={sub.id}>{"    "}{sub.name}</option>),
+                ])}
               </select>
             </div>
-            {subDepartments.length > 0 && (
-              <div className="space-y-1.5">
-                <Label className="text-xs">Sub-department</Label>
-                <select className={SELECT_CLASS} value={subDeptId} onChange={(e) => setSubDeptId(e.target.value)}>
-                  <option value="">The department itself</option>
-                  {subDepartments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                </select>
-              </div>
-            )}
             <div className="space-y-1.5">
               <Label className="text-xs">Year</Label>
               <select className={SELECT_CLASS} value={yearValue} disabled={!activeDeptId} onChange={(e) => setYear(e.target.value)}>

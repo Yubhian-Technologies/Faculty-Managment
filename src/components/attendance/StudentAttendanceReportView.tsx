@@ -14,7 +14,7 @@ import { applyStudentFilters, NO_FILTERS, type StudentReportFilters } from "@/li
 import { offeredYears } from "@/lib/college/departmentYears";
 import { managedCoreCandidates, rollupDepartmentNames } from "@/lib/departments/departmentTree";
 import { DepartmentPickSelect } from "@/components/shared/DepartmentPickSelect";
-import { buildDepartmentPickOptions, departmentPickValue, parseDepartmentPick } from "@/lib/departments/departmentPickTree";
+import { buildDepartmentPickOptions, departmentPickValue, dropEmptyFeederGroups, parseDepartmentPick } from "@/lib/departments/departmentPickTree";
 import type { Course, Department, SectionListItem } from "@/types";
 import { semesterLabel, semestersInYear, yearOfSemester } from "@/lib/college/courseYears";
 import { useCourseSemesterPlan } from "@/hooks/useCourseSemesterPlan";
@@ -159,7 +159,10 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
     // could only ever come back empty. An HOD/faculty sees only what their own sections are filed under.
     const byName = [...departmentDocs].sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
     const candidates = scoped ? byName.filter((d) => fromSections.includes((d.name ?? "").trim())) : byName;
-    const options = buildDepartmentPickOptions(candidates, departmentDocs, fromSections);
+    const built = buildDepartmentPickOptions(candidates, departmentDocs, fromSections);
+    // College-wide roles: drop the shared-year group when the feeder holds no sections of its own.
+    // An HOD keeps theirs - a Basic Science HOD needs it to reach the branches they manage.
+    const options = scoped ? built : dropEmptyFeederGroups(built, fromSections);
     if (scoped) {
       const known = new Set(options.map((o) => o.department));
       for (const name of fromSections.sort()) {
