@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Calendar, Clock, MapPin, Users, ShieldCheck, FileCheck } from "lucide-react";
-import { formatPeriods, formatRange } from "./statusBadge";
+import { formatPeriods, formatRange, EmptyState, ListSkeleton, LoadError } from "./statusBadge";
 import type { PermissionRequestView } from "./api";
 
 interface SectionApprovedResponse {
@@ -19,30 +19,16 @@ async function fetchSectionApproved(): Promise<SectionApprovedResponse> {
 }
 
 export function SectionPermissionsFeed() {
-  const { data, isLoading, error } = useQuery<SectionApprovedResponse>({
+  const { data, isLoading, error, refetch } = useQuery<SectionApprovedResponse>({
     queryKey: ["student-permissions", "section-approved"],
     queryFn: fetchSectionApproved,
     staleTime: 30_000,
   });
 
-  if (isLoading) {
-    return (
-      <Card className="border shadow-xs">
-        <CardContent className="p-6 text-center text-sm text-slate-500">
-          Loading Class Representative section permissions...
-        </CardContent>
-      </Card>
-    );
-  }
+  if (isLoading) return <ListSkeleton rows={3} />;
 
   if (error || !data) {
-    return (
-      <Card className="border border-red-200 bg-red-50/50 shadow-xs">
-        <CardContent className="p-6 text-center text-sm text-red-600">
-          Unable to load section permissions. Please refresh or check your section assignment.
-        </CardContent>
-      </Card>
-    );
+    return <LoadError message="Unable to load section permissions. Check your section assignment." onRetry={() => void refetch()} />;
   }
 
   const { requests, sectionInfo } = data;
@@ -65,21 +51,17 @@ export function SectionPermissionsFeed() {
       </div>
 
       {requests.length === 0 ? (
-        <Card className="border shadow-xs text-center p-6 sm:p-8 text-muted-foreground">
-          <FileCheck className="w-10 h-10 mx-auto mb-2 text-muted" />
-          <p className="text-sm font-medium">No approved permissions for this section yet.</p>
-          <p className="text-xs text-muted-foreground mt-1">Approved On-Duty permissions automatically display here.</p>
-        </Card>
+        <EmptyState icon={FileCheck} headline="No approved permissions for this section yet." hint="Approved On-Duty permissions automatically display here." />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {requests.map((req) => (
             <Card key={req.id} className="border shadow-xs hover:border-emerald-300 transition-colors">
-              <CardHeader className="p-3 sm:p-4 pb-2 flex flex-row items-start justify-between space-y-0">
-                <div>
-                  <Badge variant="secondary" className="mb-1 text-[11px] font-medium rounded-md">
+              <CardHeader className="p-3 sm:p-4 pb-2 flex flex-row items-start justify-between gap-2 space-y-0">
+                <div className="min-w-0">
+                  <Badge variant="secondary" className="mb-1 h-auto max-w-full whitespace-normal break-words text-[11px] font-medium rounded-md">
                     {req.payload.otherCategory || req.payload.categoryLabel}
                   </Badge>
-                  <CardTitle className="text-sm font-semibold text-foreground line-clamp-1">
+                  <CardTitle className="text-sm font-semibold text-foreground line-clamp-2 break-words">
                     {req.payload.title}
                   </CardTitle>
                 </div>
@@ -100,9 +82,9 @@ export function SectionPermissionsFeed() {
                     <span>{formatPeriods(req.payload.periods)}</span>
                   </div>
                   {req.payload.venue && (
-                    <div className="flex items-center gap-1">
-                      <MapPin className="w-3.5 h-3.5 text-muted-foreground" />
-                      <span className="truncate max-w-[140px]">{req.payload.venue}</span>
+                    <div className="flex min-w-0 items-center gap-1">
+                      <MapPin className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+                      <span className="truncate max-w-[12rem] sm:max-w-[10rem]">{req.payload.venue}</span>
                     </div>
                   )}
                 </div>
@@ -114,9 +96,9 @@ export function SectionPermissionsFeed() {
                       Covered Students ({req.payload.students.length})
                     </span>
                   </div>
-                  <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto pr-1">
+                  <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto overscroll-contain pr-1">
                     {req.payload.students.map((st) => (
-                      <span key={st.id} className="inline-flex items-center gap-1 bg-muted px-2 py-0.5 rounded-md text-[10px] font-mono text-foreground">
+                      <span key={st.id} className="inline-flex max-w-full items-center gap-1 break-words bg-muted px-2 py-0.5 rounded-md text-[11px] font-mono text-foreground">
                         <span className="font-semibold">{st.rollNumber}</span> ({st.name} - Sec {st.section})
                       </span>
                     ))}
