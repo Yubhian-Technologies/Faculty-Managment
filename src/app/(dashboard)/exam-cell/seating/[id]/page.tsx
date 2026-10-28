@@ -18,7 +18,9 @@ import { AllotSectionPanel } from "@/components/exams/AllotSectionPanel";
 import { SEAT_LETTERS } from "@/lib/exams/seatingPaired";
 import { fetchCollegeLogoUrl } from "@/lib/pdf/logo";
 import { renderHtmlToPdf, renderMultiHtmlToPdf } from "@/lib/pdf/htmlToPdf";
-import { attendanceSheetHTML, noticeBoardHTML, roomSheetHTML, seatingWhen } from "@/lib/pdf/examSeatingTemplate";
+import { noticeBoardHTML, roomSheetHTML, seatingWhen, signatureSheetsHTML, type SheetExam } from "@/lib/pdf/examSeatingTemplate";
+import { ordinalYearLabel } from "@/lib/college/courseYears";
+import type { MidExamPlan, MidTimetable } from "@/types";
 import type { ExamSeatingPlan } from "@/types/examSeating";
 
 // Review of an automatic allotment: every room with its roll-number ranges,
@@ -114,6 +116,31 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
 
   const usedRooms = plan.rooms.filter((r) => r.students.length > 0);
 
+  /** Each group's exams (date, time, subjects) from the Mid timetable(s) the plan was built from. */
+  async function examsByGroup(): Promise<((group: string) => SheetExam[]) | undefined> {
+    if (!plan?.midPlanIds?.length) return undefined;
+    const map = new Map<string, SheetExam[]>();
+    for (const id of plan.midPlanIds) {
+      const res = await fetch(`/api/college/mid-timetables/${encodeURIComponent(id)}`);
+      if (!res.ok) continue;
+      const d = (await res.json()) as { plan: MidExamPlan; branches: { branch: string; timetable: MidTimetable | null }[] };
+      for (const b of d.branches) {
+        if (!b.timetable) continue;
+        const group = `${b.branch} (${ordinalYearLabel(d.plan.year)})`; // as the plan's groups are named
+        const exams = new Map<string, SheetExam>();
+        for (const sl of b.timetable.slots) {
+          const ses = d.plan.sessions.find((x) => x.id === sl.sessionId) ?? b.timetable.sessions.find((x) => x.id === sl.sessionId);
+          const key = `${sl.date}|${sl.sessionId}`;
+          const e = exams.get(key) ?? { date: sl.date, time: ses ? `${ses.from}-${ses.to}` : "", subjects: [] };
+          e.subjects.push({ name: sl.subjectName, code: sl.subjectCode });
+          exams.set(key, e);
+        }
+        map.set(group, [...(map.get(group) ?? []), ...exams.values()]);
+      }
+    }
+    return (group) => map.get(group) ?? [];
+  }
+
   async function pdf(kind: "rooms" | "notice" | "attendance") {
     setPdfBusy(kind);
     try {
@@ -124,7 +151,8 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
       const c = { name: info.name || "College", logoUrl };
       const base = plan!.name.replace(/[^a-z0-9]+/gi, "-");
       if (kind === "notice") await renderHtmlToPdf(noticeBoardHTML(c, plan!), `${base}-notice-board.pdf`);
-      else await renderMultiHtmlToPdf(usedRooms.map((r) => (kind === "rooms" ? roomSheetHTML : attendanceSheetHTML)(c, plan!, r)), `${base}-${kind === "rooms" ? "room-sheets" : "attendance"}.pdf`);
+      else if (kind === "rooms") await renderMultiHtmlToPdf(usedRooms.map((r) => roomSheetHTML(c, plan!, r)), `${base}-room-sheets.pdf`);
+      else await renderMultiHtmlToPdf(signatureSheetsHTML(c, plan!, await examsByGroup()), `${base}-signature-sheets.pdf`);
     } catch {
       toast({ variant: "destructive", title: "Could not make the PDF" });
     } finally {
@@ -148,7 +176,7 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
               <Button size="sm" variant="outline" onClick={() => window.print()}><Printer className="h-4 w-4 mr-1" /> Print</Button>
               <Button size="sm" variant="outline" loading={pdfBusy === "rooms"} disabled={usedRooms.length === 0} onClick={() => void pdf("rooms")}><FileText className="h-4 w-4 mr-1" /> Room sheets</Button>
               <Button size="sm" variant="outline" loading={pdfBusy === "notice"} disabled={usedRooms.length === 0} onClick={() => void pdf("notice")}><FileText className="h-4 w-4 mr-1" /> Notice board</Button>
-              <Button size="sm" variant="outline" loading={pdfBusy === "attendance"} disabled={usedRooms.length === 0} onClick={() => void pdf("attendance")}><FileText className="h-4 w-4 mr-1" /> Attendance</Button>
+              <Button size="sm" variant="outline" loading={pdfBusy === "attendance"} disabled={usedRooms.length === 0} onClick={() => void pdf("attendance")}><FileText className="h-4 w-4 mr-1" /> Signature sheets</Button>
               <Button size="sm" variant="outline" disabled={!dirty} loading={busy} onClick={() => void patch(edits(), "Changes saved")}>
                 <Save className="h-4 w-4 mr-1" /> Save
               </Button>

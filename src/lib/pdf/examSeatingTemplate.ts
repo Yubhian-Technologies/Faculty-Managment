@@ -73,11 +73,53 @@ export function noticeBoardHTML(c: College, p: ExamSeatingPlan): string {
   return shell(c, p, "Seating Arrangement", `<table><thead><tr><th style="width:18%">Room</th><th>Section</th><th>From Regd. No</th><th>To Regd. No</th><th style="width:9%">Count</th></tr></thead><tbody>${rows}</tbody></table>`);
 }
 
-export function attendanceSheetHTML(c: College, p: ExamSeatingPlan, r: SeatingRoomAllocation): string {
-  const per = r.perBench ?? 1;
-  const seated = benchRows(r).flatMap((row, b) => row.map((s, l) => (s ? { s, seat: `${b + 1}${per > 1 ? SEAT_LETTERS[l] : ""}` } : null)).filter((x): x is { s: NonNullable<typeof row[number]>; seat: string } => Boolean(x)));
-  const rows = seated.map(({ s, seat }, i) => `<tr><td>${i + 1}</td><td>${seat}</td><td><b>${esc(s.rollNumber)}</b></td><td class="l">${esc(s.name)}</td><td class="l" style="font-size:10.5px">${esc(s.sectionLabel)}</td><td class="sig"></td></tr>`).join("");
-  return shell(c, p, `Attendance - ${roomTitle(r)}`, `<table><thead><tr><th style="width:6%">S.No</th><th style="width:9%">Bench</th><th style="width:17%">Regd. No</th><th>Name</th><th style="width:22%">Section</th><th style="width:18%">Signature</th></tr></thead><tbody>${rows}</tbody></table>
-    <p class="line" style="margin-top:8px">Present: ______ &nbsp;&nbsp; Absent: ______</p>
-    <div class="sign"><span>Invigilator</span><span>Chief Superintendent</span></div>`);
+/** One exam of one branch on one day (from the Mid timetable): subject(s) and time. */
+export interface SheetExam { date: string; time: string; subjects: { name: string; code: string }[] }
+
+/**
+ * Signature sheets - one per exam day + subject x room x branch (paired plans
+ * built from a Mid timetable: `examsOf(group)` gives that branch's exams), or
+ * one per room x branch when there is no timetable. Each lists only that
+ * branch's students in that room, in bench order, with a signature column.
+ */
+export function signatureSheetsHTML(c: College, p: ExamSeatingPlan, examsOf?: (group: string) => SheetExam[]): string[] {
+  const out: string[] = [];
+  const rooms = p.rooms.filter((r) => r.students.length);
+  const groupOf = (s: SeatingRoomAllocation["students"][number]) => s.group ?? p.sections.find((x) => x.id === s.sectionId)?.department ?? s.sectionLabel;
+  const seatedIn = (r: SeatingRoomAllocation) => {
+    const per = r.perBench ?? 1;
+    return benchRows(r).flatMap((row, b) => row.flatMap((s, l) => (s ? [{ s, seat: `${b + 1}${per > 1 ? SEAT_LETTERS[l] : ""}` }] : [])));
+  };
+  const groupsIn = (r: SeatingRoomAllocation) => [...new Set(seatedIn(r).map(({ s }) => groupOf(s)))];
+  const sheet = (r: SeatingRoomAllocation, group: string, exam: SheetExam | null) => {
+    const list = seatedIn(r).filter(({ s }) => groupOf(s) === group);
+    const [from, to] = (exam?.time ?? "").split("-");
+    const facts = [
+      exam ? ["Subject", exam.subjects.map((x) => `${esc(x.name)} (${esc(x.code)})`).join(" / ")] : null,
+      exam ? ["Date &amp; time", `${esc(dayLabel(exam.date))}${from && to ? ` · ${timeLabel(from)} - ${timeLabel(to)}` : ""}`] : null,
+      ["Room", esc(roomTitle(r))],
+      ["Branch", esc(group)],
+    ].filter((x): x is string[] => Boolean(x));
+    const rows = list.map(({ s, seat }, i) => `<tr><td>${i + 1}</td><td>${seat}</td><td><b>${esc(s.rollNumber)}</b></td><td class="l">${esc(s.name)}</td><td class="l" style="font-size:10.5px">${esc(s.sectionLabel)}</td><td class="sig"></td></tr>`).join("");
+    return `<!DOCTYPE html><html><head><meta charset="utf-8" /><style>${STYLE}</style></head><body><div class="page">
+      <div class="pdf-page-header"></div>
+      <div class="head"><img src="${logoSrc(c.logoUrl)}" alt="" /><div class="center"><p class="college">${esc(c.name)}</p>
+        <p class="line"><b>${esc(p.name)}</b></p><p class="big">Signature Sheet</p></div><span></span></div>
+      <hr />
+      <table class="facts"><tbody>${facts.map(([k, v]) => `<tr><th style="width:22%;text-align:left">${k}</th><td class="l"><b>${v}</b></td></tr>`).join("")}</tbody></table>
+      <table style="margin-top:8px"><thead><tr><th style="width:6%">S.No</th><th style="width:9%">Bench</th><th style="width:17%">Regd. No</th><th>Name</th><th style="width:22%">Section</th><th style="width:18%">Signature</th></tr></thead><tbody>${rows}</tbody></table>
+      <p class="line" style="margin-top:8px">Total: ${list.length} &nbsp;&nbsp; Present: ______ &nbsp;&nbsp; Absent: ______</p>
+      <div class="sign"><span>Invigilator</span><span>Chief Superintendent</span></div>
+    </div></body></html>`;
+  };
+
+  if (examsOf) {
+    const days = [...new Set(rooms.flatMap((r) => groupsIn(r).flatMap((g) => examsOf(g).map((e) => e.date))))].sort();
+    for (const day of days) for (const r of rooms) for (const g of groupsIn(r)) {
+      for (const exam of examsOf(g).filter((e) => e.date === day)) out.push(sheet(r, g, exam));
+    }
+    if (out.length) return out;
+  }
+  for (const r of rooms) for (const g of groupsIn(r)) out.push(sheet(r, g, null));
+  return out;
 }
