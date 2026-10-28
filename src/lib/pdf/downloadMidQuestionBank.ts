@@ -1,6 +1,7 @@
 import { fetchCollegeLogoUrl } from "@/lib/pdf/logo";
 import { renderHtmlToPdf } from "@/lib/pdf/htmlToPdf";
 import { getMidQuestionBankHTML, type MidBankPdfData } from "@/lib/pdf/midQuestionBankTemplate";
+import { pdfFormulaRenderer } from "@/lib/midBank/mathSvg";
 
 // Builds the Mid Question Bank PDF in the browser. Everything it prints is
 // already on the page (the bank, its questions, the syllabus setup); only the
@@ -20,15 +21,17 @@ function katexCss(): string {
   return out.join("\n");
 }
 
-export async function downloadMidQuestionBankPdf(data: Omit<MidBankPdfData, "college" | "katexCss">): Promise<void> {
-  const [info, logoUrl] = await Promise.all([
+export async function downloadMidQuestionBankPdf(data: Omit<MidBankPdfData, "college" | "katexCss" | "formula">): Promise<void> {
+  const [info, logoUrl, formula] = await Promise.all([
     fetch("/api/college/info").then((r) => (r.ok ? r.json() : {})).catch(() => ({})) as Promise<{ name?: string; affiliation?: string; address?: string }>,
     fetchCollegeLogoUrl(),
+    pdfFormulaRenderer(),
   ]);
   const html = getMidQuestionBankHTML({
     ...data,
     college: { name: info.name || "College", affiliation: info.affiliation, address: info.address, logoUrl },
     katexCss: katexCss(),
+    formula,
   });
   const safe = `${data.subject.code}-mid${data.bank.midNumber}-question-bank`.replace(/[^a-zA-Z0-9-_]+/g, "-");
   await renderHtmlToPdf(html, `${safe}.pdf`);

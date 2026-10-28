@@ -285,3 +285,15 @@ describe("deadline progress", () => {
     expect(whole).toMatchObject({ subjectsComplete: 1, subjects: 2 });
   });
 });
+
+import { pdfFormulaRenderer } from "./mathSvg";
+
+describe("PDF formulas", () => {
+  it("are MathJax SVG images sized in px, on the baseline - not KaTeX HTML that html2canvas misplaces", async () => {
+    const formula = await pdfFormulaRenderer();
+    const matrix = formula("\\begin{pmatrix}3 & 7\\\\ 6 & 6\\end{pmatrix}", false);
+    expect(matrix).toMatch(/^<img class="mj" src="data:image\/svg\+xml;base64,[A-Za-z0-9+/=]+" alt="" style="width:[\d.]+px;max-width:100%;height:auto;vertical-align:-[\d.]+px" \/>$/);
+    expect(formula("\\dfrac{d^{c}}{dx^4}5\\bigm{.}_{x=0}", true)).toContain('class="mj-display"');
+    expect(renderMathHtml("Find $x^2$ now", formula)).toMatch(/^Find <img class="mj".* now$/);
+  }, 20000);
+});

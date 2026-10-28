@@ -47,9 +47,12 @@ export const normalizeLatex = (latex: string) =>
 
 const katexOptions = (display: boolean) => ({ displayMode: display, output: "html" as const, strict: "ignore" as const, trust: false });
 
+/** The LaTeX as it is printed: MathLive spellings fixed, empty boxes as squares. */
+export const printableLatex = (latex: string) => withoutPlaceholders(normalizeLatex(latex));
+
 /** One formula as KaTeX HTML (a formula KaTeX can't read is shown in red, never thrown). */
 export const katexHtml = (latex: string, display: boolean) =>
-  katex.renderToString(withoutPlaceholders(normalizeLatex(latex)), { ...katexOptions(display), throwOnError: false });
+  katex.renderToString(printableLatex(latex), { ...katexOptions(display), throwOnError: false });
 
 /** Why a formula can't be printed ("" = it can) - checked before it goes into a question. */
 export function formulaProblem(latex: string): string {
@@ -62,6 +65,7 @@ export function formulaProblem(latex: string): string {
   }
 }
 
-export function renderMathHtml(text: string): string {
-  return splitMath(text).map((s) => (s.kind === "text" ? escapeHtml(s.text).replace(/\n/g, "<br/>") : katexHtml(s.latex, s.display))).join("");
+/** Text with its formulas rendered: KaTeX by default, or `formula` (the PDF passes MathJax SVG images). */
+export function renderMathHtml(text: string, formula: (latex: string, display: boolean) => string = katexHtml): string {
+  return splitMath(text).map((s) => (s.kind === "text" ? escapeHtml(s.text).replace(/\n/g, "<br/>") : formula(s.latex, s.display))).join("");
 }

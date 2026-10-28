@@ -15,6 +15,9 @@ const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&
 
 const STYLE = `
   body { font-family: Arial, Helvetica, sans-serif; margin: 0; color: #111; font-size: 12px; }
+  img.mj { display: inline-block; margin: 0 1px; }
+  .mj-display { display: block; text-align: center; margin: 6px 0; }
+  .mj-display img { display: inline-block; }
   .page { width: 210mm; padding: 14mm 15mm; box-sizing: border-box; }
   .pdf-page-header { display: flex; align-items: center; gap: 12px; border-bottom: 2px solid #1e3a8a; padding-bottom: 8px; margin-bottom: 10px; }
   .pdf-page-header img { height: 48px; }
@@ -46,6 +49,8 @@ export interface MidBankPdfData {
   outcomes: Pick<SubjectOutcomes, "units" | "cos" | "mapping">;
   questions: MidQuestion[];
   katexCss: string;
+  /** How formulas are drawn (the PDF passes MathJax SVG images - see mathSvg.ts); KaTeX when absent. */
+  formula?: (latex: string, display: boolean) => string;
 }
 
 export function getMidQuestionBankHTML(d: MidBankPdfData): string {
@@ -60,7 +65,7 @@ export function getMidQuestionBankHTML(d: MidBankPdfData): string {
       const cell = (fn: (p: MidQuestion["parts"][number], i: number) => string) => q.parts.map((p, i) => `<div class="part">${fn(p, i)}</div>`).join("");
       return `<tr>
         <td class="num">${slot}</td>
-        <td>${cell((p, i) => `${f !== "SINGLE" ? `<b>(${partLetter(i)})</b> ` : ""}${renderMathHtml(p.text)}${p.imageUrl ? `<img class="img" src="${esc(p.imageUrl)}" alt="" />${p.imageCaption ? `<div class="cap">${esc(p.imageCaption)}</div>` : ""}` : ""}`)}</td>
+        <td>${cell((p, i) => `${f !== "SINGLE" ? `<b>(${partLetter(i)})</b> ` : ""}${renderMathHtml(p.text, d.formula)}${p.imageUrl ? `<img class="img" src="${esc(p.imageUrl)}" alt="" />${p.imageCaption ? `<div class="cap">${esc(p.imageCaption)}</div>` : ""}` : ""}`)}</td>
         <td class="narrow">${cell((p, i) => String(partMarks(p, i, f, d.bank.marks)))}</td>
         <td class="narrow">${cell((p) => esc(p.cos.join(", ")))}</td>
         <td class="po">${cell((p) => esc(derivePoPso(p.cos, d.outcomes.mapping).join(", ")))}</td>
