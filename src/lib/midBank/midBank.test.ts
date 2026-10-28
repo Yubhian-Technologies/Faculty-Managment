@@ -278,8 +278,10 @@ describe("deadline progress", () => {
       { sections: [{ bankId: "b1" }, ...empty(1)], banks: [{ id: "b1", status: "COMPLETE", completeCount: 20, totalCount: 20 }] },
       ...Array.from({ length: 40 }, () => ({ sections: empty(2), banks: [] })).map((g, i) => (i === 39 ? { ...g, sections: empty(8) } : g)),
     ]);
-    expect(p).toMatchObject({ subjects: 41, subjectsStarted: 1, sections: 88, covered: 1, ready: 1, banks: 1, banksComplete: 1, pct: 1 });
+    expect(p).toMatchObject({ subjects: 41, subjectsStarted: 1, subjectsComplete: 0, sections: 88, covered: 1, ready: 1, banks: 1, banksComplete: 1, pct: 1 });
     const half = deadlineProgress([{ sections: [{ bankId: "b" }, { bankId: "b" }], banks: [{ id: "b", status: "IN_PROGRESS", completeCount: 10, totalCount: 20 }] }]);
     expect(half.pct).toBe(50);
+    const whole = deadlineProgress([{ sections: [{ bankId: "b" }], banks: [{ id: "b", status: "COMPLETE", completeCount: 20, totalCount: 20 }] }, { sections: [{ bankId: null }], banks: [] }]);
+    expect(whole).toMatchObject({ subjectsComplete: 1, subjects: 2 });
   });
 });

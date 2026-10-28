@@ -11,6 +11,8 @@ export interface ProgressGroup {
 export interface DeadlineProgress {
   subjects: number;
   subjectsStarted: number;
+  /** Subjects (branch + subject) whose every section is in a complete bank. */
+  subjectsComplete: number;
   sections: number;
   covered: number;
   /** Sections whose bank is complete. */
@@ -36,6 +38,7 @@ export function deadlineProgress(groups: ProgressGroup[]): DeadlineProgress {
   return {
     subjects: groups.length,
     subjectsStarted: groups.filter((g) => g.banks.length > 0).length,
+    subjectsComplete: groups.filter((g) => g.sections.length > 0 && g.sections.every((s) => s.bankId && byId.get(s.bankId)?.status === "COMPLETE")).length,
     sections: sections.length,
     covered: sections.filter((s) => s.bankId).length,
     ready,

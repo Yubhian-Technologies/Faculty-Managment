@@ -107,7 +107,7 @@ export default function MidQuestionBankOverviewPage() {
                   ) : (
                     <>
                       <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-                        {[["Subjects started", `${s.subjectsStarted}/${s.subjects}`], ["Sections covered", `${s.covered}/${s.sections}`], ["Banks complete", `${s.banksComplete}/${s.banks}`]].map(([k, v]) => (
+                        {[["Subjects started", `${s.subjectsStarted}/${s.subjects}`], ["Sections covered", `${s.covered}/${s.sections}`], ["Subjects complete", `${s.subjectsComplete}/${s.subjects}`]].map(([k, v]) => (
                           <div key={k} className="rounded-xl bg-muted/50 px-2 py-2.5"><p className="text-lg font-bold">{v}</p><p className="text-[11px] text-muted-foreground">{k}</p></div>
                         ))}
                       </div>

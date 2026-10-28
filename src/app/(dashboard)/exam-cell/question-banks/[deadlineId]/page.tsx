@@ -58,7 +58,7 @@ export default function QuestionBankProgressPage({ params }: { params: Promise<{
               ["Deadline", <span key="d" className="flex items-center gap-1">{d.locked && <Lock className="h-4 w-4" />}{deadlineLabel(d.deadline)}</span>],
               ["Overall progress", `${totals.pct}% · ${totals.ready} of ${totals.sections} sections ready`],
               ["Sections covered", `${totals.covered} of ${totals.sections}`],
-              ["Banks complete", `${totals.banksComplete} of ${totals.banks} started`],
+              ["Subjects complete", `${totals.subjectsComplete} of ${totals.subjects}`],
             ].map(([label, value]) => (
               <Card key={label as string}><CardContent className="p-4"><p className="text-xs text-muted-foreground">{label}</p><p className="text-lg font-semibold">{value}</p></CardContent></Card>
             ))}
