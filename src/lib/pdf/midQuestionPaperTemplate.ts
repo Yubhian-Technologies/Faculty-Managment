@@ -17,7 +17,8 @@ const dmy = (d: string) => `${d.slice(8, 10)}-${d.slice(5, 7)}-${d.slice(0, 4)}`
 const STYLE = `
   body { font-family: "Times New Roman", Times, serif; margin: 0; color: #000; font-size: 14px; }
   .page { width: 210mm; padding: 10mm 12mm 14mm; box-sizing: border-box; }
-  .top { display: flex; justify-content: flex-end; align-items: center; gap: 18px; margin-bottom: 6px; font-family: Arial, Helvetica, sans-serif; }
+  .top { display: flex; justify-content: space-between; align-items: center; gap: 18px; margin-bottom: 6px; font-family: Arial, Helvetica, sans-serif; }
+  .top-right { display: flex; align-items: center; gap: 18px; }
   .code { border: 1.5px solid #000; padding: 4px 14px; font-weight: bold; font-size: 15px; }
   .regd { display: flex; border: 1px solid #000; font-size: 13px; }
   .regd span { padding: 3px 6px; border-right: 1px solid #000; }
@@ -50,11 +51,17 @@ const STYLE = `
   .mj-display { display: block; text-align: center; margin: 6px 0; }
 `;
 
+/** Section names that already carry the branch ("CSBS-A") as just "A". */
+export function shortSections(p: Pick<GeneratedPaper, "sections" | "branchCode">): string[] {
+  const prefix = p.branchCode.toLowerCase();
+  return p.sections.map((x) => (prefix && x.toLowerCase().startsWith(prefix) ? x.slice(prefix.length).replace(/^[\s-]+/, "") || x : x));
+}
+
 export function paperFileName(h: GeneratedPapers["header"], p: GeneratedPaper): string {
   const reg = (p.regulation.match(/\d+/)?.[0] ?? p.regulation) || "R";
   const parts = [`MID${h.midNumber}`, h.academicYear, reg, h.courseCode.replace(/[^A-Za-z0-9]/g, "").toUpperCase(),
     `${ROMAN[h.year] ?? h.year}-${h.semesterInYear ? ROMAN[h.semesterInYear] : h.semester}`, p.branchCode, p.subjectCode,
-    p.subjectName.replace(/\s+/g, "-"), `Sec-${p.sections.join("-")}`];
+    p.subjectName.replace(/\s+/g, "-"), `Sec-${shortSections(p).join("-")}`];
   return `${parts.join("_").replace(/[^A-Za-z0-9_\-]+/g, "-")}.pdf`;
 }
 
@@ -88,19 +95,22 @@ export function getMidQuestionPaperHTML(d: {
   const used = [...new Set(qs.flatMap((q) => q.parts.flatMap((x) => x.cos)))].sort((a, b) => Number(a.slice(2)) - Number(b.slice(2)));
   const coList = p.cos.filter((c) => used.includes(c.id)).map((c) => `<p><b>${esc(c.id.replace(/^CO/, ""))}.</b> ${esc(c.statement)}</p>`).join("");
   const sem = h.semesterInYear ? `${ROMAN[h.semesterInYear]} SEMESTER` : `SEMESTER ${h.semester}`;
+  // "B.Tech" -> "B.TECH." ("I B.TECH. I SEMESTER MID-1 EXAMINATION").
+  const courseLabel = `${h.courseCode.toUpperCase().replace(/\.$/, "")}.`;
+  const sections = shortSections(p);
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8" /><style>${STYLE}</style></head><body><div class="page">
-    <div class="top">${regCode ? `<span class="code">${esc(regCode)}</span>` : ""}<span class="regd"><span>Regd. No:</span>${"<i></i>".repeat(10)}</span></div>
+    <div class="top"><span class="code">${esc(p.subjectCode)}</span><span class="top-right">${regCode ? `<span class="code">${esc(regCode)}</span>` : ""}<span class="regd"><span>Regd. No:</span>${"<i></i>".repeat(10)}</span></span></div>
     <div class="head">
       <img src="${logoSrc(d.college.logoUrl)}" alt="College logo" />
       <div class="center">
         <p class="uni">${esc(d.college.name)}</p>
-        <p class="line">${ROMAN[h.year] ?? h.year} YEAR ${esc(h.courseCode.toUpperCase())} ${sem} MID-${h.midNumber} EXAMINATION</p>
+        <p class="line">${ROMAN[h.year] ?? h.year} ${esc(courseLabel)} ${sem} MID-${h.midNumber} EXAMINATION</p>
         ${h.academicYear ? `<p class="line">Academic Year: ${esc(h.academicYear)}</p>` : ""}
         <p class="subject">${esc(p.subjectName)}</p>
       </div><span></span>
     </div>
-    <div class="meta"><span>Branch &amp; Sections: <b>${esc(p.branchCode)}${p.sections.length ? ` - ${esc(p.sections.join(", "))}` : ""}</b></span><span>Date: <b>${dmy(h.date)}</b></span></div>
+    <div class="meta"><span>Branch &amp; Sections: <b>${esc(p.branchCode)}${sections.length ? ` - ${esc(sections.join(", "))}` : ""}</b></span><span>Date: <b>${dmy(h.date)}</b></span></div>
     <div class="meta"><span>Time: <b>${h.minutes ? `${h.minutes}Mins.` : ""}</b></span><span>Max. Marks: <b>${p.maxMarks}</b></span></div>
     <hr />
     <p class="instr">${esc(p.instruction)}</p>
