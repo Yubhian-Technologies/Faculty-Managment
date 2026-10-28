@@ -32,7 +32,10 @@ const STYLE = `
   .ranges { margin: 4px 0 8px; font-size: 12px; }
   .ranges span { display: inline-block; border: 1px solid #000; padding: 2px 6px; margin: 2px 4px 2px 0; }
   .sign { display: flex; justify-content: space-between; margin-top: 24px; font-weight: bold; }
-  .sig { height: 26px; }
+  .sig { height: 22px; }
+  table.sheet td { padding: 3px 5px; font-size: 11px; }
+  .sheet-foot { display: flex; justify-content: space-between; align-items: baseline; margin-top: 6px; }
+  .sheet-sign { display: flex; justify-content: space-between; margin-top: 16px; font-weight: bold; }
 `;
 
 type College = { name: string; logoUrl?: string };
@@ -100,16 +103,18 @@ export function signatureSheetsHTML(c: College, p: ExamSeatingPlan, examsOf?: (g
       ["Room", esc(roomTitle(r))],
       ["Branch", esc(group)],
     ].filter((x): x is string[] => Boolean(x));
-    const rows = list.map(({ s, seat }, i) => `<tr><td>${i + 1}</td><td>${seat}</td><td><b>${esc(s.rollNumber)}</b></td><td class="l">${esc(s.name)}</td><td class="l" style="font-size:10.5px">${esc(s.sectionLabel)}</td><td class="sig"></td></tr>`).join("");
+    // The branch is in the header - the Section column needs only the section ("CSBS-A"), keeping rows one line.
+    const sectionOnly = (label: string) => label.split(" · ").pop() ?? label;
+    const rows = list.map(({ s, seat }, i) => `<tr><td>${i + 1}</td><td>${seat}</td><td><b>${esc(s.rollNumber)}</b></td><td class="l">${esc(s.name)}</td><td>${esc(sectionOnly(s.sectionLabel))}</td><td class="sig"></td></tr>`).join("");
     return `<!DOCTYPE html><html><head><meta charset="utf-8" /><style>${STYLE}</style></head><body><div class="page">
       <div class="pdf-page-header"></div>
       <div class="head"><img src="${logoSrc(c.logoUrl)}" alt="" /><div class="center"><p class="college">${esc(c.name)}</p>
         <p class="line"><b>${esc(p.name)}</b></p><p class="big">Signature Sheet</p></div><span></span></div>
       <hr />
       <table class="facts"><tbody>${facts.map(([k, v]) => `<tr><th style="width:22%;text-align:left">${k}</th><td class="l"><b>${v}</b></td></tr>`).join("")}</tbody></table>
-      <table style="margin-top:8px"><thead><tr><th style="width:6%">S.No</th><th style="width:9%">Bench</th><th style="width:17%">Regd. No</th><th>Name</th><th style="width:22%">Section</th><th style="width:18%">Signature</th></tr></thead><tbody>${rows}</tbody></table>
-      <p class="line" style="margin-top:8px">Total: ${list.length} &nbsp;&nbsp; Present: ______ &nbsp;&nbsp; Absent: ______</p>
-      <div class="sign"><span>Invigilator</span><span>Chief Superintendent</span></div>
+      <table class="sheet" style="margin-top:8px"><thead><tr><th style="width:6%">S.No</th><th style="width:7%">Bench</th><th style="width:15%">Regd. No</th><th>Name</th><th style="width:10%">Section</th><th style="width:19%">Signature</th></tr></thead><tbody>${rows}</tbody></table>
+      <div class="sheet-foot"><span>Total: ${list.length} &nbsp;&nbsp; Present: ______ &nbsp;&nbsp; Absent: ______</span></div>
+      <div class="sheet-sign"><span>Invigilator</span><span>Chief Superintendent</span></div>
     </div></body></html>`;
   };
 

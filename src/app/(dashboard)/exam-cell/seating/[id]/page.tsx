@@ -118,9 +118,17 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
 
   /** Each group's exams (date, time, subjects) from the Mid timetable(s) the plan was built from. */
   async function examsByGroup(): Promise<((group: string) => SheetExam[]) | undefined> {
-    if (!plan?.midPlanIds?.length) return undefined;
+    if (!plan) return undefined;
+    // Plans built before they recorded their Mid timetable: look through every Mid
+    // timetable (groups are matched by branch + year), limited to the plan's date if it has one.
+    let ids = plan.midPlanIds ?? [];
+    if (ids.length === 0) {
+      const list = await fetch("/api/college/mid-timetables").then((r) => (r.ok ? r.json() : {})).catch(() => ({})) as { plans?: { id: string }[] };
+      ids = (list.plans ?? []).map((x) => x.id);
+    }
+    const onlyDate = plan.midPlanIds?.length ? null : plan.examDate ?? null;
     const map = new Map<string, SheetExam[]>();
-    for (const id of plan.midPlanIds) {
+    for (const id of ids) {
       const res = await fetch(`/api/college/mid-timetables/${encodeURIComponent(id)}`);
       if (!res.ok) continue;
       const d = (await res.json()) as { plan: MidExamPlan; branches: { branch: string; timetable: MidTimetable | null }[] };
@@ -129,6 +137,7 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
         const group = `${b.branch} (${ordinalYearLabel(d.plan.year)})`; // as the plan's groups are named
         const exams = new Map<string, SheetExam>();
         for (const sl of b.timetable.slots) {
+          if (onlyDate && sl.date !== onlyDate) continue;
           const ses = d.plan.sessions.find((x) => x.id === sl.sessionId) ?? b.timetable.sessions.find((x) => x.id === sl.sessionId);
           const key = `${sl.date}|${sl.sessionId}`;
           const e = exams.get(key) ?? { date: sl.date, time: ses ? `${ses.from}-${ses.to}` : "", subjects: [] };
@@ -138,7 +147,7 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
         map.set(group, [...(map.get(group) ?? []), ...exams.values()]);
       }
     }
-    return (group) => map.get(group) ?? [];
+    return map.size ? (group) => map.get(group) ?? [] : undefined;
   }
 
   async function pdf(kind: "rooms" | "notice" | "attendance") {
