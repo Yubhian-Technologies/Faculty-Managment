@@ -17,8 +17,7 @@ import { toast } from "@/hooks/useToast";
 import { MAX_FACULTY_PER_SUBJECT } from "@/lib/teaching/facultyCap";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { sectionDisplayLabel, departmentCode } from "@/lib/sections/sectionLabel";
-import { deriveHodScope, buildCourseGroups, managerEffectiveYears } from "@/lib/departments/hodScope";
-import { fedYears } from "@/lib/college/academicStructure";
+import { deriveHodScope, buildCourseGroups, managerEffectiveYears, feederOnlyYears } from "@/lib/departments/hodScope";
 import { matchesCurrentSemester } from "@/lib/college/semester";
 import { departmentPickNames } from "@/lib/departments/subjectCoverage";
 import { assignmentsForFilter } from "@/lib/teaching/assignmentView";
@@ -258,21 +257,16 @@ export default function TeachingAssignmentsPage() {
       ? subDepartmentOptions
       : scope.ownDept ? [scope.ownDept] : [];
     const assigned = new Set<number>();
-    // A year some OTHER department already claims as a feeder FOR a given
-    // department in `relevant` (e.g. Basic Science owning year 1 of a
-    // shared-first-year B.Tech) is never THAT department's own to staff - see
-    // fedYears. Checked PER department, not merged into one global exclusion
-    // set across all of `relevant`: now that `relevant` can hold both the
-    // shared-year manager (Basic Science, via subDepartmentOptions including
-    // managed branches) and the branch itself (CSE), CSE's own exclusion of
-    // year 1 (correctly - it doesn't own that year directly) must not cancel
-    // out Basic Science's own legitimate claim to it. A global set did
-    // exactly that: year 1 ended up in both `assigned` (from Basic Science)
-    // and `excluded` (from CSE), and the shared exclusion check hid it from
-    // everyone. Nothing assigned means no years (never "every year":
+    // A year some OTHER department claims as a feeder FOR a department in
+    // `relevant` is dropped only when that department does not claim the year
+    // itself - see feederOnlyYears: a core department with its own Years Taught
+    // (1-4) keeps year 1 even while Basic Science still lists it as a feeder.
+    // Checked PER department, not merged into one global exclusion set, so one
+    // department's exclusion can't cancel out another's legitimate claim.
+    // Nothing assigned means no years (never "every year":
     // lib/college/taughtYears.ts).
     for (const d of relevant) {
-      const excludedForD = new Set(fedYears(d, departments, course.catalogId));
+      const excludedForD = new Set(feederOnlyYears(d, departments, course.catalogId));
       for (const y of managerEffectiveYears(d, departments, course.catalogId)) {
         if (!excludedForD.has(y)) assigned.add(y);
       }
