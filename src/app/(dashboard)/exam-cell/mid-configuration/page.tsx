@@ -13,6 +13,7 @@ import { toast } from "@/hooks/useToast";
 import { formatDate, stripLeadingZeros } from "@/lib/utils";
 import { MidBankRulesCard } from "@/components/exams/MidBankRulesCard";
 import { ExamConfigurationPanel } from "@/components/exams/ExamConfigurationPanel";
+import { MidPaperTemplateCard } from "@/components/exams/MidPaperTemplateCard";
 import { cn } from "@/lib/utils";
 import type { ExamMidSettings } from "@/types";
 
@@ -30,17 +31,17 @@ export default function MidConfigurationPage() {
 
 function MidConfigurationTabs() {
   const sp = useSearchParams();
-  const tab = sp.get("tab") === "marks" ? "marks" : "mid";
+  const tab = sp.get("tab") === "marks" ? "marks" : sp.get("tab") === "paper" ? "paper" : "mid";
   return (
-    <div className={cn("space-y-6", tab === "mid" && "max-w-2xl")}>
-      <PageHeader title="Mid Configuration" description="How many Mid exams the college runs, the question bank rules, and the Internal / External marks." />
-      <nav className="inline-flex rounded-xl border bg-muted/40 p-1 text-sm" aria-label="Mid Configuration sections">
-        {([["mid", "Mid exams & question bank"], ["marks", "Marks (Internal / External)"]] as const).map(([k, label]) => (
-          <Link key={k} href={k === "marks" ? "/exam-cell/mid-configuration?tab=marks" : "/exam-cell/mid-configuration"} aria-current={tab === k ? "page" : undefined}
+    <div className={cn("space-y-6", tab === "mid" && "max-w-2xl", tab === "paper" && "max-w-4xl")}>
+      <PageHeader title="Mid Configuration" description="How many Mid exams the college runs, the question bank rules, the question paper template, and the Internal / External marks." />
+      <nav className="inline-flex flex-wrap rounded-xl border bg-muted/40 p-1 text-sm" aria-label="Mid Configuration sections">
+        {([["mid", "Mid exams & question bank"], ["paper", "Question paper"], ["marks", "Marks (Internal / External)"]] as const).map(([k, label]) => (
+          <Link key={k} href={k === "mid" ? "/exam-cell/mid-configuration" : `/exam-cell/mid-configuration?tab=${k}`} aria-current={tab === k ? "page" : undefined}
             className={cn("rounded-lg px-3.5 py-1.5 font-medium", tab === k ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}>{label}</Link>
         ))}
       </nav>
-      {tab === "marks" ? <ExamConfigurationPanel embedded /> : <MidSettings />}
+      {tab === "marks" ? <ExamConfigurationPanel embedded /> : tab === "paper" ? <MidPaperTemplateCard /> : <MidSettings />}
     </div>
   );
 }

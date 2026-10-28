@@ -26,6 +26,7 @@ export * from "./webmaster";
 export * from "./midPaper";
 export * from "./midQuestionBank";
 export * from "./midTimetable";
+export * from "./midQuestionPaper";
 export type { LocationConfig, LocationDepartment, LocationStaffMember, LocationStaffAttendanceRecord, LocationShift } from "./locationStaff";
 export * from "./library";
 export * from "./customNav";
