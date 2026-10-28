@@ -25,7 +25,8 @@ const MAX_IDS = 150;
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACADEMICS");
+    // EXAM_CELL: its Timetable View (exam-cell/timetable-view) is this same read-only college-wide view.
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACADEMICS", "EXAM_CELL");
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
     const { searchParams } = new URL(request.url);
