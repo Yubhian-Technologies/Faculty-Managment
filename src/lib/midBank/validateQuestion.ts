@@ -62,6 +62,30 @@ export function defaultSplit(format: MidQuestionFormat, total: number): number[]
   return Array.from({ length: n }, (_, i) => base + (i < total - base * n ? 1 : 0));
 }
 
+/**
+ * Marks after the faculty types one part's marks: that part gets the value (kept
+ * between 1 and what leaves 1 for every other part), the parts before it keep
+ * theirs and the rest is split evenly over the parts after it - or, when the last
+ * part was typed, over the parts before it. The total always stays the bank's marks.
+ */
+export function splitAfterEdit(marks: number[], i: number, value: number, total: number): number[] {
+  const n = marks.length;
+  if (n <= 1) return [total];
+  const even = (sum: number, k: number) => Array.from({ length: k }, (_, j) => Math.floor(sum / k) + (j < sum - Math.floor(sum / k) * k ? 1 : 0));
+  const clamp = (v: number, max: number) => Math.max(1, Math.min(max, Math.floor(Number.isFinite(v) ? v : 1)));
+  if (i === n - 1) {
+    const v = clamp(value, total - (n - 1));
+    return [...even(total - v, n - 1), v];
+  }
+  const before = marks.slice(0, i).map((m) => Math.max(1, Math.floor(m) || 1));
+  let used = before.reduce((x, y) => x + y, 0);
+  const after = n - 1 - i;
+  // Earlier parts that leave too little are reset to an even split first.
+  if (used + 1 + after > total) { before.splice(0, i, ...even(total - after - 1, i).map((m) => Math.max(1, m))); used = before.reduce((x, y) => x + y, 0); }
+  const v = clamp(value, total - used - after);
+  return [...before, v, ...even(total - used - v, after)];
+}
+
 /** A part's marks as shown and printed: its own, else the even split (older questions). */
 export const partMarks = (p: MidQuestionPart, i: number, format: MidQuestionFormat, total: number) =>
   format === "SINGLE" ? total : (typeof p.marks === "number" && p.marks > 0 ? p.marks : defaultSplit(format, total)[i]);

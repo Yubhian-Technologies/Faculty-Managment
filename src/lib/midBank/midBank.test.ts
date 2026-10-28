@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { BloomLevel, MidQuestion } from "@/types/midQuestionBank";
 import { cleanOutcomes, derivePoPso, mappingErrors, outcomeConflicts } from "./outcomes";
 import { findDuplicates, similarity, textKey } from "./duplicates";
-import { allowedFormats, bankFormats, bankFormatText, formatsFor, cleanParts, defaultSplit, formatName, formatOf, partMarks, questionErrors, questionFormat } from "./validateQuestion";
+import { allowedFormats, bankFormats, bankFormatText, formatsFor, splitAfterEdit, cleanParts, defaultSplit, formatName, formatOf, partMarks, questionErrors, questionFormat } from "./validateQuestion";
 import { bankTotals, bloomNeeds, breaksCompletedUnit, lockReason, unitStatus, unitStatuses, unlockedUnits } from "./rules";
 
 const q = (unit: number, state: MidQuestion["state"], ...blooms: BloomLevel[]) =>
@@ -114,6 +114,15 @@ describe("question validation", () => {
     expect(bankFormats(bank, null)).toEqual(["SINGLE", "PARTS_AB"]); // rule deleted: the bank's copy
     expect(bankFormats({ formats: ["SINGLE"], marks: 2 }, { formats: ["PARTS_ABC"] })).toEqual(["SINGLE"]); // 3 parts don't fit 2 marks
     expect(formatsFor(["SINGLE"], "PARTS_AB")).toEqual(["SINGLE", "PARTS_AB"]);
+  });
+  it("typing one part's marks splits the rest so the parts always make the total", () => {
+    expect(splitAfterEdit([5, 5], 0, 9, 10)).toEqual([9, 1]);
+    expect(splitAfterEdit([5, 5], 1, 3, 10)).toEqual([7, 3]);
+    expect(splitAfterEdit([5, 5], 0, 14, 10)).toEqual([9, 1]); // never more than leaves 1 for the other part
+    expect(splitAfterEdit([4, 3, 3], 0, 6, 10)).toEqual([6, 2, 2]);
+    expect(splitAfterEdit([6, 2, 2], 1, 3, 10)).toEqual([6, 3, 1]);
+    expect(splitAfterEdit([6, 2, 2], 2, 4, 10)).toEqual([3, 3, 4]);
+    expect(splitAfterEdit([8, 1, 1], 1, 5, 10)).toEqual([8, 1, 1]); // (a) keeps 8, so (b) can be at most 1
   });
   it("three parts: each needs a mark, and together they make the total", () => {
     const cos = new Set(["CO1"]);

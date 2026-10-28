@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 import { BLOOM_LABELS, BLOOM_LEVELS, BLOOM_MIN_PER_UNIT, PROGRAM_OUTCOMES, QUESTIONS_PER_UNIT } from "@/lib/midBank/constants";
 import { derivePoPso } from "@/lib/midBank/outcomes";
 import { bloomNeeds, lockReason } from "@/lib/midBank/rules";
-import { allowedFormats, bankFormats, defaultSplit, formatsFor, formatName, formatOf, isBlankPart, partLabel, partLetter, partMarks, partsFor, questionErrors, questionFormat } from "@/lib/midBank/validateQuestion";
+import { allowedFormats, bankFormats, defaultSplit, formatsFor, formatName, formatOf, isBlankPart, partLabel, partLetter, partMarks, partsFor, questionErrors, questionFormat, splitAfterEdit } from "@/lib/midBank/validateQuestion";
 import type { MidBankDetail } from "@/lib/midBank/clientTypes";
 import type { BloomLevel, MidQuestion, MidQuestionBank, MidQuestionFormat, MidQuestionPart, MidUnitStatus } from "@/types";
 import { MathText, QuestionTextField } from "./MathText";
@@ -84,6 +84,18 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
   const isComplete = current?.state === "COMPLETE";
   const unitStatus: MidUnitStatus = bank.unitStatus[String(cur.unit)] ?? { complete: false, completeCount: 0, draftCount: 0, bloom: { L2: 0, L3: 0, L4: 0 } };
   const unitTitle = (u: number) => outcomes.units.find((x) => x.no === u)?.title ?? "";
+
+  /** Typed marks for one part: the other parts take what is left (splitAfterEdit). Clearing the box waits for a number. */
+  const setPartMarks = (i: number, raw: string) => {
+    editSeq.current++;
+    setParts((ps) => {
+      if (raw.trim() === "") return ps.map((p, j) => (j === i ? { ...p, marks: 0 } : p));
+      const next = splitAfterEdit(ps.map((p) => p.marks ?? 0), i, Number(raw), bank.marks);
+      return ps.map((p, j) => ({ ...p, marks: next[j] }));
+    });
+    setDirty(true);
+    setSaveState((st) => (st === "saved" ? "idle" : st));
+  };
 
   const edit = (i: number, patch: Partial<MidQuestionPart>) => {
     editSeq.current++;
@@ -462,7 +474,7 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
                     {qFormat === "SINGLE" ? <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">{bank.marks} marks</span> : (
                       <span className="flex items-center gap-1 text-xs font-normal text-muted-foreground">
                         <input type="number" min={1} max={bank.marks - (partsFor(qFormat) - 1)} aria-label={`Marks for ${partLabel(qFormat, i)}`}
-                          value={p.marks ?? ""} onChange={(e) => edit(i, { marks: e.target.value === "" ? 0 : Number(e.target.value) })}
+                          value={p.marks || ""} onChange={(e) => setPartMarks(i, e.target.value)}
                           className="h-7 w-14 rounded-md border border-input bg-background px-1 text-center text-sm font-semibold text-foreground" /> marks
                       </span>
                     )}
