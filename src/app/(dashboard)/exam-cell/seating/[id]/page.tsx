@@ -16,10 +16,9 @@ import { moveStudent, rollRangeBySection } from "@/lib/exams/seatingAllocator";
 import { benchRows, moveStudentLayered } from "@/lib/exams/seatingLayers";
 import { AllotSectionPanel } from "@/components/exams/AllotSectionPanel";
 import { SEAT_LETTERS } from "@/lib/exams/seatingPaired";
-import { dayLabel, timeLabel } from "@/lib/midTimetable/rules";
 import { fetchCollegeLogoUrl } from "@/lib/pdf/logo";
 import { renderHtmlToPdf, renderMultiHtmlToPdf } from "@/lib/pdf/htmlToPdf";
-import { attendanceSheetHTML, noticeBoardHTML, roomSheetHTML } from "@/lib/pdf/examSeatingTemplate";
+import { attendanceSheetHTML, noticeBoardHTML, roomSheetHTML, seatingWhen } from "@/lib/pdf/examSeatingTemplate";
 import type { ExamSeatingPlan } from "@/types/examSeating";
 
 // Review of an automatic allotment: every room with its roll-number ranges,
@@ -141,7 +140,7 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
         </Link>
         <PageHeader
           title={plan.name}
-          description={`${plan.examDate ? `${dayLabel(plan.examDate)}${plan.examTime ? ` · ${plan.examTime.split("-").map(timeLabel).join(" - ")}` : ""} · ` : ""}${plan.rooms.reduce((n, r) => n + r.students.length, 0)} students seated in ${usedRooms.length} rooms`}
+          description={`${seatingWhen(plan) ? `${seatingWhen(plan)} · ` : ""}${plan.rooms.reduce((n, r) => n + r.students.length, 0)} students seated in ${usedRooms.length} rooms`}
           actions={
             <>
               <Badge variant={published ? "approved" : "pending"}>{published ? "Published" : "Draft"}</Badge>

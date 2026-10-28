@@ -8,6 +8,7 @@ import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { findOwnStudent } from "@/lib/students/ownContext";
 import { rollRangeBySection } from "@/lib/exams/seatingAllocator";
 import { SEAT_LETTERS } from "@/lib/exams/seatingPaired";
+import { seatingWhen } from "@/lib/pdf/examSeatingTemplate";
 import type { TeachingAssignment } from "@/types";
 import type { ExamSeatingPlan } from "@/types/examSeating";
 
@@ -22,8 +23,8 @@ export async function GET() {
     const college = db.collection("colleges").doc(session.collegeId);
     const plans = (await college.collection("examSeatingPlans").where("status", "==", "PUBLISHED").get()).docs
       .map((d) => ({ ...(d.data() as ExamSeatingPlan), id: d.id }))
-      .sort((a, b) => (b.examDate ?? "").localeCompare(a.examDate ?? ""));
-    const head = (p: ExamSeatingPlan) => ({ planId: p.id, exam: p.name, date: p.examDate ?? null, time: p.examTime ?? null });
+      .sort((a, b) => (b.examDays?.[0] ?? b.examDate ?? "").localeCompare(a.examDays?.[0] ?? a.examDate ?? ""));
+    const head = (p: ExamSeatingPlan) => ({ planId: p.id, exam: p.name, when: seatingWhen(p) });
 
     if (session.role === "STUDENT") {
       const own = await findOwnStudent(db, session.collegeId, session.uid);

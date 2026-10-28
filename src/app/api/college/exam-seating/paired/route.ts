@@ -8,12 +8,13 @@ import { guardError } from "@/lib/midBank/server";
 import { roomBenches, roomPerBench } from "@/lib/exams/roomLayout";
 import { sectionLabel } from "@/lib/exams/seatingSections";
 import { allocatePaired } from "@/lib/exams/seatingPaired";
-import { examSittings, groupStudents, sittingGroups } from "@/lib/exams/seatingPairedServer";
+import { groupStudents, midGroups, midSources } from "@/lib/exams/seatingPairedServer";
 import type { ExamRoom, ExamSeatingPlan, SeatingSectionRef, SeatingStream } from "@/types/examSeating";
 
-// Exam Cell: a PAIRED seating plan from the Mid timetable.
-//   GET                   -> the exam dates + times the Mid timetables hold
-//   GET ?date=&time=      -> the groups (branch + year) writing then, with sections and counts
+// Exam Cell: a PAIRED seating plan from the Mid timetable - one arrangement
+// for every exam day of the Mid.
+//   GET                   -> the Mid timetables (course + year + semester + Mid) with branches
+//   GET ?planIds=a,b      -> the groups (branch + year) of those timetables, with sections and counts
 //   POST                  -> build the plan: each seat position's stream of groups, rooms in the order picked
 
 export async function GET(request: Request) {
@@ -21,9 +22,9 @@ export async function GET(request: Request) {
     const session = await requireCollegeMember("EXAM_CELL");
     const db = getAdminDb();
     const q = new URL(request.url).searchParams;
-    const date = q.get("date"), time = q.get("time");
-    if (!date || !time) return NextResponse.json({ days: await examSittings(db, session.collegeId) });
-    const groups = await sittingGroups(db, session.collegeId, date, time);
+    const planIds = (q.get("planIds") ?? "").split(",").filter(Boolean);
+    if (planIds.length === 0) return NextResponse.json({ mids: await midSources(db, session.collegeId) });
+    const groups = await midGroups(db, session.collegeId, planIds);
     const withCounts = await Promise.all(groups.map(async (g) => {
       const students = await groupStudents(db, session.collegeId, g);
       return {
@@ -40,11 +41,11 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("EXAM_CELL");
-    const body = (await readJsonBody(request)) as { name?: string; date?: string; time?: string; streams?: unknown; roomIds?: unknown };
+    const body = (await readJsonBody(request)) as { name?: string; planIds?: unknown; streams?: unknown; roomIds?: unknown };
     const name = String(body.name ?? "").trim();
-    const date = String(body.date ?? ""), time = String(body.time ?? "");
+    const planIds = (Array.isArray(body.planIds) ? body.planIds : []).map(String).filter(Boolean);
     if (!name) return NextResponse.json({ error: "Exam name is required" }, { status: 400 });
-    if (!date || !time) return NextResponse.json({ error: "Pick the exam date and time" }, { status: 400 });
+    if (planIds.length === 0) return NextResponse.json({ error: "Pick the Mid timetable" }, { status: 400 });
     const streamKeys = (Array.isArray(body.streams) ? body.streams : []).map((x) => (Array.isArray(x) ? x.map(String) : [])).filter((x) => x.length);
     if (streamKeys.length === 0) return NextResponse.json({ error: "Put at least one branch in Seat A" }, { status: 400 });
     const all = streamKeys.flat();
@@ -54,13 +55,14 @@ export async function POST(request: Request) {
 
     const db = getAdminDb();
     const college = db.collection("colleges").doc(session.collegeId);
-    const [groups, roomSnaps] = await Promise.all([
-      sittingGroups(db, session.collegeId, date, time),
+    const [groups, roomSnaps, sources] = await Promise.all([
+      midGroups(db, session.collegeId, planIds),
       Promise.all(roomIds.map((id) => college.collection("examRooms").doc(id).get())),
+      midSources(db, session.collegeId),
     ]);
     const byKey = new Map(groups.map((g) => [g.key, g]));
     const missing = all.filter((k) => !byKey.has(k));
-    if (missing.length) return NextResponse.json({ error: "A branch is no longer in the timetable for that date - reload" }, { status: 400 });
+    if (missing.length) return NextResponse.json({ error: "A branch is no longer in that Mid timetable - reload" }, { status: 400 });
     const rooms = roomSnaps.filter((r) => r.exists).map((r) => ({ id: r.id, ...(r.data() as Omit<ExamRoom, "id">) }));
     if (rooms.length === 0) return NextResponse.json({ error: "The rooms picked no longer exist" }, { status: 400 });
 
@@ -85,7 +87,10 @@ export async function POST(request: Request) {
     const plan: Omit<ExamSeatingPlan, "id"> = {
       collegeId: session.collegeId, name, status: "DRAFT", mode: "PAIRED",
       sections: sectionRefs, rooms: allocation.rooms, unplaced: allocation.unplaced,
-      examDate: date, examTime: time, streams: streamRefs,
+      midPlanIds: planIds,
+      examDays: [...new Set(sources.filter((x) => planIds.includes(x.id)).flatMap((x) => x.days))].sort(),
+      examTime: [...new Set(sources.filter((x) => planIds.includes(x.id)).map((x) => x.time).filter(Boolean))].length === 1 ? sources.find((x) => planIds.includes(x.id) && x.time)!.time : "",
+      streams: streamRefs,
       createdBy: session.uid, createdByName: (me.data() as { name?: string } | undefined)?.name ?? session.email ?? "Exam Cell",
       createdAt: now, updatedAt: now,
     };

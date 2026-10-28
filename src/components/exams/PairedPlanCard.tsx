@@ -14,22 +14,19 @@ import { SEAT_LETTERS } from "@/lib/exams/seatingPaired";
 import { dayLabel } from "@/lib/midTimetable/rules";
 import type { ExamRoom } from "@/types/examSeating";
 
-// Paired seating from the Mid timetable: pick the exam date + time (the branches
-// writing then come from the timetable), put each branch in a seat position -
+// Paired seating from the Mid timetable - ONE arrangement for every exam day of
+// the Mid: pick the Mid timetable(s) (their branches load), put each branch in a seat position -
 // Seat A, Seat B (and C for 3-per-bench rooms) - in order, tick the rooms in the
 // order they should fill, and build. Each bench takes the next student of every
 // seat's stream; when a stream runs out its seat stays empty.
 
-interface Sitting { date: string; times: { time: string; label: string; groups: number }[] }
+interface MidSource { id: string; label: string; midNumber: number; branches: number; days: string[] }
 interface Group { key: string; label: string; courseName: string; subjects: string[]; count: number; sections: { id: string; name: string; count: number }[] }
-
-const selectClass = "h-9 w-full rounded-md border border-input bg-background px-3 text-sm";
 
 export function PairedPlanCard({ rooms }: { rooms: ExamRoom[] }) {
   const router = useRouter();
-  const [sittings, setSittings] = useState<Sitting[] | null>(null);
-  const [date, setDate] = useState("");
-  const [time, setTime] = useState("");
+  const [mids, setMids] = useState<MidSource[] | null>(null);
+  const [planIds, setPlanIds] = useState<string[]>([]);
   const [groups, setGroups] = useState<Group[] | null>(null);
   // seat index (0 = A) per group key; absent = not seated. Order within a seat = `order`.
   const [seatOf, setSeatOf] = useState<Record<string, number>>({});
@@ -39,12 +36,12 @@ export function PairedPlanCard({ rooms }: { rooms: ExamRoom[] }) {
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    fetch("/api/college/exam-seating/paired").then((r) => r.json() as Promise<{ days?: Sitting[] }>).then((d) => setSittings(d.days ?? [])).catch(() => setSittings([]));
+    fetch("/api/college/exam-seating/paired").then((r) => r.json() as Promise<{ mids?: MidSource[] }>).then((d) => setMids(d.mids ?? [])).catch(() => setMids([]));
   }, []);
   useEffect(() => {
-    if (!date || !time) return;
+    if (planIds.length === 0) return;
     let cancelled = false;
-    fetch(`/api/college/exam-seating/paired?date=${encodeURIComponent(date)}&time=${encodeURIComponent(time)}`)
+    fetch(`/api/college/exam-seating/paired?planIds=${encodeURIComponent(planIds.join(","))}`)
       .then((r) => r.json() as Promise<{ groups?: Group[] }>)
       .then((d) => {
         if (cancelled) return;
@@ -57,9 +54,8 @@ export function PairedPlanCard({ rooms }: { rooms: ExamRoom[] }) {
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load the branches for that date" }));
     return () => { cancelled = true; };
-  }, [date, time]);
+  }, [planIds]);
 
-  const day = sittings?.find((s) => s.date === date);
   const maxSeats = Math.max(1, ...rooms.map((r) => roomPerBench(r)));
   const streams = useMemo(() => Array.from({ length: maxSeats }, (_, s) => order.filter((k) => seatOf[k] === s)), [order, seatOf, maxSeats]);
   const usedStreams = streams.filter((s) => s.length);
@@ -84,7 +80,7 @@ export function PairedPlanCard({ rooms }: { rooms: ExamRoom[] }) {
     try {
       const res = await fetch("/api/college/exam-seating/paired", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, date, time, streams: usedStreams, roomIds }),
+        body: JSON.stringify({ name, planIds, streams: usedStreams, roomIds }),
       });
       const data = (await res.json()) as { id?: string; unplaced?: number; error?: string };
       if (!res.ok || !data.id) throw new Error(data.error ?? "Could not build the plan");
@@ -102,26 +98,27 @@ export function PairedPlanCard({ rooms }: { rooms: ExamRoom[] }) {
       <CardHeader>
         <CardTitle className="text-base">Paired plan from the Mid Timetable</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Pick the exam date: the branches writing then come from the Mid timetable. Put each branch in a seat of the bench -
-          e.g. Seat A: CSE, Seat B: Civil then Mech. Every bench gets one student from each seat&rsquo;s list, room after room in the
-          order you tick them; when a list runs out its seat stays empty. Within a branch: section by section, each in Regd. No order.
+          One arrangement for the whole Mid - every exam day. Pick the Mid timetable (its branches load), put each branch in a seat of the
+          bench - e.g. Seat A: CSE, Seat B: Civil then Mech. Every bench gets one student from each seat&rsquo;s list, room after room in
+          the order you tick them; when a list runs out its seat stays empty. Within a branch: section by section, each in Regd. No order.
         </p>
       </CardHeader>
       <CardContent className="space-y-5">
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
           <div className="space-y-1.5">
-            <Label htmlFor="pp-date">Exam date</Label>
-            <select id="pp-date" className={selectClass} value={date} onChange={(e) => { setDate(e.target.value); setTime(""); setGroups(null); }}>
-              <option value="">{sittings === null ? "Loading..." : sittings.length ? "Select the date" : "No Mid timetable exams yet"}</option>
-              {(sittings ?? []).map((s) => <option key={s.date} value={s.date}>{dayLabel(s.date)}</option>)}
-            </select>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="pp-time">Exam time</Label>
-            <select id="pp-time" className={selectClass} value={time} disabled={!day} onChange={(e) => { setTime(e.target.value); setGroups(null); }}>
-              <option value="">Select the time</option>
-              {(day?.times ?? []).map((t) => <option key={t.time} value={t.time}>{t.label} · {t.groups} branch{t.groups === 1 ? "" : "es"}</option>)}
-            </select>
+            <p className="text-sm font-medium">Mid timetable{mids && mids.length > 1 ? "s (tick more than one to seat several years together)" : ""}</p>
+            <div className="space-y-1.5 rounded-lg border p-3">
+              {mids === null && <p className="text-sm text-muted-foreground">Loading...</p>}
+              {mids?.length === 0 && <p className="text-sm text-muted-foreground">No Mid timetable with branches yet - make one under Mid Timetable.</p>}
+              {(mids ?? []).map((m) => (
+                <label key={m.id} className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" className="h-4 w-4" checked={planIds.includes(m.id)}
+                    onChange={() => { setGroups(null); setPlanIds((l) => (l.includes(m.id) ? l.filter((x) => x !== m.id) : [...l, m.id])); if (!name) setName(`Mid-${m.midNumber} Examinations`); }} />
+                  <span className="font-medium">{m.label}</span>
+                  <span className="text-xs text-muted-foreground">{m.branches} branch{m.branches === 1 ? "" : "es"}{m.days.length ? ` · ${dayLabel(m.days[0])} - ${dayLabel(m.days[m.days.length - 1])}` : ""}</span>
+                </label>
+              ))}
+            </div>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="pp-name">Exam name</Label>
@@ -131,8 +128,8 @@ export function PairedPlanCard({ rooms }: { rooms: ExamRoom[] }) {
 
         {groups && (
           <div className="space-y-2">
-            <p className="text-sm font-medium">Branches writing then - choose the seat for each</p>
-            {groups.length === 0 && <p className="text-sm text-muted-foreground">No branch has an exam at that time.</p>}
+            <p className="text-sm font-medium">Branches - choose the seat for each</p>
+            {groups.length === 0 && <p className="text-sm text-muted-foreground">No branch in the Mid timetable picked.</p>}
             {Array.from({ length: maxSeats + 1 }, (_, s) => (s === maxSeats ? -1 : s)).map((s) => {
               const keys = s === -1 ? order.filter((k) => seatOf[k] === undefined) : streams[s];
               if (s === -1 && keys.length === 0) return null;
@@ -150,7 +147,7 @@ export function PairedPlanCard({ rooms }: { rooms: ExamRoom[] }) {
                           <li key={k} className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/30 px-2.5 py-2 text-sm">
                             {s !== -1 && <span className="w-5 text-center text-xs font-semibold text-muted-foreground">{i + 1}</span>}
                             <span className="min-w-0 flex-1">
-                              <span className="font-medium">{g.label}</span> <span className="text-xs text-muted-foreground">· {g.count} students · {g.sections.map((x) => `${x.name} (${x.count})`).join(", ")} · {g.subjects.join(", ")}</span>
+                              <span className="font-medium">{g.label}</span> <span className="text-xs text-muted-foreground">· {g.count} students · {g.sections.map((x) => `${x.name} (${x.count})`).join(", ")} · {g.subjects.length} exam{g.subjects.length === 1 ? "" : "s"}</span>
                             </span>
                             {s !== -1 && (
                               <span className="flex">
@@ -199,7 +196,7 @@ export function PairedPlanCard({ rooms }: { rooms: ExamRoom[] }) {
           </p>
         )}
 
-        <Button disabled={!name.trim() || !date || !time || usedStreams.length === 0 || roomIds.length === 0} loading={creating} onClick={() => void create()}>
+        <Button disabled={!name.trim() || planIds.length === 0 || usedStreams.length === 0 || roomIds.length === 0} loading={creating} onClick={() => void create()}>
           <Armchair className="mr-1 h-4 w-4" /> Build paired plan
         </Button>
       </CardContent>

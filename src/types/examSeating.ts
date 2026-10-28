@@ -84,8 +84,11 @@ export interface ExamSeatingPlan {
   sections: SeatingSectionRef[];
   rooms: SeatingRoomAllocation[];
   unplaced: SeatingStudent[];
-  // PAIRED plans: the exam's date and time (from the Mid timetable) and the seat streams.
-  examDate?: string;
+  // PAIRED plans: the Mid timetables seated (one arrangement for every exam day
+  // of the Mid), their exam days, the exam time, and the seat streams.
+  midPlanIds?: string[];
+  examDays?: string[];
+  examDate?: string; // older drafts: one date
   examTime?: string;
   streams?: SeatingStream[];
   createdBy: string;

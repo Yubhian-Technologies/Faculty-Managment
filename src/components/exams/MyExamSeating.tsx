@@ -2,16 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { Armchair, DoorOpen } from "lucide-react";
-import { dayLabel, timeLabel } from "@/lib/midTimetable/rules";
 
 // Published exam seating, read-only: a student's own seats, or the rooms where
 // a faculty member's students sit (GET /api/college/exam-seating/mine decides).
+// A Mid's seating holds for every exam day of that Mid.
 
-interface Head { planId: string; exam: string; date: string | null; time: string | null; room: string; block: string; floor: number }
+interface Head { planId: string; exam: string; when: string; room: string; block: string; floor: number }
 type Seat = Head & { seat: string; rollNumber: string };
 type Room = Head & { total: number; sections: { sectionLabel: string; from: string; to: string; count: number }[] };
 
-const when = (h: Head) => (h.date ? `${dayLabel(h.date)}${h.time ? ` · ${h.time.split("-").map(timeLabel).join(" - ")}` : ""}` : "");
+const when = (h: Head) => h.when;
 
 export function MyExamSeating({ mode }: { mode: "student" | "faculty" }) {
   const [data, setData] = useState<{ seats?: Seat[]; rooms?: Room[] } | null>(null);

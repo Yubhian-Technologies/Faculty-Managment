@@ -37,11 +37,15 @@ const STYLE = `
 
 type College = { name: string; logoUrl?: string };
 
-const when = (p: ExamSeatingPlan) => {
-  if (!p.examDate) return "";
+/** "Fri 2 Oct 2026 - Thu 8 Oct 2026 · 10:00 AM - 11:30 AM" - the Mid's exam days (one arrangement for all of them). */
+export function seatingWhen(p: Pick<ExamSeatingPlan, "examDays" | "examDate" | "examTime">): string {
+  const days = p.examDays?.length ? p.examDays : p.examDate ? [p.examDate] : [];
+  if (!days.length) return "";
   const [from, to] = (p.examTime ?? "").split("-");
-  return `${dayLabel(p.examDate)}${from && to ? ` · ${timeLabel(from)} - ${timeLabel(to)}` : ""}`;
-};
+  const range = days.length === 1 ? dayLabel(days[0]) : `${dayLabel(days[0])} - ${dayLabel(days[days.length - 1])}`;
+  return `${range}${from && to ? ` · ${timeLabel(from)} - ${timeLabel(to)}` : ""}`;
+}
+const when = seatingWhen;
 
 function shell(c: College, p: ExamSeatingPlan, title: string, body: string): string {
   return `<!DOCTYPE html><html><head><meta charset="utf-8" /><style>${STYLE}</style></head><body><div class="page">
