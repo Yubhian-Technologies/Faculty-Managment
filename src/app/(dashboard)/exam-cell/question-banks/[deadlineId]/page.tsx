@@ -50,7 +50,7 @@ export default function QuestionBankProgressPage({ params }: { params: Promise<{
       <PageHeader
         title="Question bank progress"
         description={d ? `${d.courseName} · ${ordinalYearLabel(d.year)} · Semester ${d.semester} · Mid ${d.midNumber}` : undefined}
-        actions={<Button asChild variant="ghost" size="sm"><Link href="/exam-cell/mid-timings"><ArrowLeft className="mr-1.5 h-4 w-4" />Mid Timings &amp; Dates</Link></Button>}
+        actions={<Button asChild variant="ghost" size="sm"><Link href="/exam-cell/question-banks"><ArrowLeft className="mr-1.5 h-4 w-4" />Mid Question Bank</Link></Button>}
       />
       {error && <p className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive" role="alert">{error}</p>}
       {!data && !error && <div className="h-80 animate-pulse rounded-lg bg-muted" />}

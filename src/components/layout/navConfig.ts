@@ -165,6 +165,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Results Analysis", href: "/exam-cell/results-analysis", iconName: "BarChart3", roles: ["EXAM_CELL"] },
   { label: "Exam Cell Guidelines", href: "/exam-cell/guidelines", iconName: "BookOpen", roles: ["EXAM_CELL"] },
   { label: "Mid Timings & Dates", href: "/exam-cell/mid-timings", iconName: "CalendarRange", roles: ["EXAM_CELL"] },
+  { label: "Mid Question Bank", href: "/exam-cell/question-banks", iconName: "BookOpenCheck", roles: ["EXAM_CELL"] },
   { label: "Timetable View", href: "/exam-cell/timetable-view", iconName: "CalendarDays", roles: ["EXAM_CELL"] },
   { label: "PC & CMM Requests", href: "/exam-cell/certificate-requests", iconName: "FileCheck", roles: ["EXAM_CELL"] },
   { label: "Settings", href: "/exam-cell/settings", iconName: "Settings2", roles: ["EXAM_CELL"] },
