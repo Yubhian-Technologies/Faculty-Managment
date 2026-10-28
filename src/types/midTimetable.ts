@@ -24,7 +24,10 @@ export interface MidExamPlan {
   year: number;
   semester: number;
   midNumber: number;
-  /** Exam days ("YYYY-MM-DD"), inside the Mid's published dates. */
+  /** The date range exam days are picked from: the Mid's published dates, or the ones given when the timetable was made. */
+  from?: string;
+  to?: string;
+  /** Exam days ("YYYY-MM-DD"), inside that range. */
   days: string[];
   sessions: MidExamSession[];
   createdBy: string;

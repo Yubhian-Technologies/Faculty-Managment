@@ -26,7 +26,7 @@ import type { MidExamPlan, MidExamSession, MidExamSlot, MidTimetable } from "@/t
 // "Copy to other branches" gives shared subjects the same day + session there.
 
 interface Branch { branch: string; key: string; subjects: BranchSubject[]; timetable: MidTimetable | null }
-interface Data { plan: MidExamPlan; window: { from: string; to: string; fromTime: string; toTime: string } | null; branches: Branch[] }
+interface Data { plan: MidExamPlan; window: { from: string; to: string; fromTime: string; toTime: string } | null; range: { from: string; to: string } | null; branches: Branch[] }
 type Row = { subjectId: string; date: string; sessionId: string };
 
 const selectClass = "h-9 w-full rounded-md border border-input bg-background px-2 text-sm";
@@ -183,7 +183,7 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
   if (error) return <div className="space-y-4"><Button asChild variant="ghost" size="sm"><Link href="/exam-cell/mid-timetable"><ArrowLeft className="mr-1.5 h-4 w-4" />Mid Timetable</Link></Button><p className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive" role="alert">{error}</p></div>;
   if (!data || !plan) return <div className="space-y-4"><div className="h-10 w-72 animate-pulse rounded bg-muted" /><div className="h-96 animate-pulse rounded-2xl bg-muted" /></div>;
 
-  const allDates = data.window ? windowDates(data.window.from, data.window.to) : plan.days;
+  const allDates = data.range ? windowDates(data.range.from, data.range.to) : plan.days;
   const status = branch?.timetable?.status;
   const shared = (b: Branch) => branch ? b.subjects.filter((s) => branch.subjects.some((x) => x.subjectId === s.subjectId)).length : 0;
   const previewSlots: MidExamSlot[] = branch ? (check?.slots ?? []) : [];
@@ -192,7 +192,7 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
     <div className="space-y-6">
       <PageHeader
         title={`Mid ${plan.midNumber} timetable`}
-        description={`${plan.courseName} · ${ordinalYearLabel(plan.year)} · Semester ${plan.semester}${data.window ? ` · Mid dates ${dayLabel(data.window.from)} - ${dayLabel(data.window.to)}` : ""}`}
+        description={`${plan.courseName} · ${ordinalYearLabel(plan.year)} · Semester ${plan.semester}${data.range ? ` · ${data.window ? "Mid dates" : "Exam dates"} ${dayLabel(data.range.from)} - ${dayLabel(data.range.to)}` : ""}`}
         actions={
           <div className="flex flex-wrap gap-2">
             <Button asChild variant="ghost" size="sm"><Link href="/exam-cell/mid-timetable"><ArrowLeft className="mr-1.5 h-4 w-4" />Mid Timetable</Link></Button>
@@ -200,7 +200,6 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
           </div>
         }
       />
-      {!data.window && <p className="flex gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />The Mid&rsquo;s dates are no longer published on Mid Timings &amp; Dates - the saved exam days are kept.</p>}
 
       {/* 1. Exam days and sessions (shared by every branch) */}
       <Card className="rounded-2xl">

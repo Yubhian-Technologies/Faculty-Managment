@@ -33,7 +33,9 @@ export async function GET(_request: Request, { params }: Params) {
       const key = branchKey(branch);
       return { branch, key, subjects: list, timetable: saved.get(`${planId}__${key}`) ?? null };
     });
-    return NextResponse.json({ plan, window, branches });
+    // The range days are picked from: the Mid's published dates, else the plan's own.
+    const range = window ? { from: window.from, to: window.to } : plan.from && plan.to ? { from: plan.from, to: plan.to } : null;
+    return NextResponse.json({ plan, window, range, branches });
   } catch (err) {
     return guardError(err, "[college/mid-timetables/[planId] GET]");
   }
@@ -49,7 +51,8 @@ export async function PATCH(request: Request, { params }: Params) {
     const plan = await loadPlan(db, session.collegeId, planId);
     if (!plan) return NextResponse.json({ error: "Timetable not found" }, { status: 404 });
     const window = await midWindow(db, session.collegeId, plan);
-    const d = cleanDays(body.days, window ? { from: window.from, to: window.to } : null);
+    const range = window ? { from: window.from, to: window.to } : plan.from && plan.to ? { from: plan.from, to: plan.to } : null;
+    const d = cleanDays(body.days, range);
     if (d.error) return NextResponse.json({ error: d.error }, { status: 400 });
     const s = cleanSessions(body.sessions);
     if (s.error) return NextResponse.json({ error: s.error }, { status: 400 });

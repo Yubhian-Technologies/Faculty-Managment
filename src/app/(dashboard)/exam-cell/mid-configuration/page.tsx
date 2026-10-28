@@ -74,6 +74,13 @@ export default function MidConfigurationPage() {
     <div className="max-w-2xl space-y-6">
       <PageHeader title="Mid Configuration" description="How many Mid exams the college runs, and the question bank rules for each course." />
 
+      {!settings?.midCount && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" role="status">
+          <Info className="mt-0.5 h-4 w-4 shrink-0" />
+          The number of Mid exams isn&rsquo;t saved yet - press Save Settings. Until then Mid Timings &amp; Dates can&rsquo;t publish timings.
+        </div>
+      )}
+
       {settings?.updatedAt && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-lg border bg-muted/40 px-3 py-2">
           <Info className="h-3.5 w-3.5 shrink-0" />
