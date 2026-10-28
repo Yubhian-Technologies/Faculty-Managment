@@ -17,11 +17,12 @@ const dmy = (d: string) => `${d.slice(8, 10)}-${d.slice(5, 7)}-${d.slice(0, 4)}`
 
 const STYLE = `
   body { font-family: "Times New Roman", Times, serif; margin: 0; color: #000; font-size: 14px; }
-  .page { width: 210mm; padding: 0 12mm 14mm; box-sizing: border-box; }
+  /* No bottom padding: anything after the last line would start an empty page. */
+  .page { width: 210mm; padding: 0 12mm; box-sizing: border-box; }
   /* Blank band the PDF maker stamps at the top of EVERY page (.pdf-page-header) - the top margin, page 2 too. */
-  .pdf-page-header { height: 10mm; }
+  .pdf-page-header { height: 8mm; }
   .colhead { font-family: Arial, Helvetica, sans-serif; font-weight: bold; font-size: 13px; text-align: center; }
-  .top { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; margin-bottom: 6px; font-family: Arial, Helvetica, sans-serif; }
+  .top { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; margin: 2mm 0 6px; font-family: Arial, Helvetica, sans-serif; }
   .top > :first-child { justify-self: start; }
   .top > :last-child { justify-self: end; }
   .code { border: 1.5px solid #000; padding: 4px 14px; font-weight: bold; font-size: 15px; }
@@ -40,18 +41,20 @@ const STYLE = `
   .instr { margin: 4px 0 8px; }
   .cos-title { font-weight: bold; margin: 8px 0 2px; }
   .cos p { margin: 2px 0; }
-  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-  th, td { border: 1px solid #000; padding: 7px 8px; vertical-align: middle; overflow-wrap: anywhere; }
+  /* Fixed columns in the college paper's proportions - the question gets most of the width. */
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; table-layout: fixed; }
+  th, td { border: 1.5px solid #000; padding: 5px 7px; vertical-align: middle; overflow-wrap: anywhere; line-height: 1.3; }
+  td.q { font-size: 14.5px; text-align: justify; }
   th { font-family: Arial, Helvetica, sans-serif; font-size: 13px; }
   .unit td { font-family: Arial, Helvetica, sans-serif; font-weight: bold; font-size: 13px; }
   .or td { text-align: center; font-family: Arial, Helvetica, sans-serif; font-weight: bold; }
-  .no { width: 46px; text-align: center; font-family: Arial, Helvetica, sans-serif; font-weight: bold; }
-  .num { width: 46px; text-align: center; }
-  .po { width: 96px; text-align: center; }
+  .no { text-align: center; font-family: Arial, Helvetica, sans-serif; font-weight: bold; }
+  .num { text-align: center; }
+  .po { text-align: center; }
   .q img.qimg { display: block; max-width: 100%; max-height: 170px; margin-top: 6px; }
   .cap { font-size: 11px; color: #333; }
   tr { break-inside: avoid-page; }
-  .end { text-align: center; font-weight: bold; margin-top: 6px; letter-spacing: 2px; }
+  .end { text-align: center; font-weight: bold; margin: 6px 0 0; letter-spacing: 2px; }
   img.mj { display: inline-block; margin: 0 1px; }
   .mj-display { display: block; text-align: center; margin: 6px 0; }
 `;
@@ -126,7 +129,7 @@ export function getMidQuestionPaperHTML(d: {
     <hr />
     <p class="instr">${esc(p.instruction)}</p>
     ${coList ? `<p class="cos-title">Course Outcomes:</p><div class="cos"><p>Upon the completion of the course, the student will be able to:</p>${coList}</div>` : ""}
-    <table>${rows}</table>
+    <table><colgroup><col style="width:7%" /><col style="width:59%" /><col style="width:8%" /><col style="width:6%" /><col style="width:6%" /><col style="width:14%" /></colgroup>${rows}</table>
     <p class="end">*****</p>
   </div></body></html>`;
 }
