@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, Download } from "lucide-react";
+import { CalendarClock, CalendarDays, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
 import { ordinalYearLabel } from "@/lib/college/courseYears";
@@ -76,6 +76,15 @@ export function MidTimetableViewer({ emptyText }: { emptyText: string }) {
             </div>
             <Button size="sm" variant="outline" loading={busy === s.planId} onClick={() => void pdf(s)}><Download className="mr-1.5 h-4 w-4" />PDF</Button>
           </div>
+          {(() => {
+            const last = s.rows.flatMap((r) => r.changes ?? []).sort((a, b) => b.at.localeCompare(a.at))[0];
+            return last ? (
+              <p className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="status">
+                <CalendarClock className="mt-0.5 h-4 w-4 shrink-0" />
+                <span><span className="font-semibold">{last.toDate > last.fromDate ? "Postponed" : "Preponed"}:</span> {dayLabel(last.fromDate)} exam moved to {dayLabel(last.toDate)}{last.reason ? ` - ${last.reason}` : ""}.</span>
+              </p>
+            ) : null;
+          })()}
           {s.rows.length === 1 ? (
             <ol className="divide-y rounded-xl border">
               {s.days.flatMap((d) => s.sessions.map((ses) => ({ d, ses, slots: s.rows[0].slots.filter((x) => x.date === d && x.sessionId === ses.id) })))

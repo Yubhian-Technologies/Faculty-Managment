@@ -50,6 +50,22 @@ export interface MidExamSlot {
   date: string;
   sessionId: string;
   group?: string;
+  /** Set when the exam was rescheduled (postponed / preponed): the date it was first published for. */
+  movedFrom?: string;
+}
+
+/** One reschedule of a branch's exams, kept on the timetable as history. */
+export interface MidTimetableChange {
+  at: string; // ISO time
+  byName: string;
+  fromDate: string;
+  fromSessionId: string;
+  toDate: string;
+  toSessionId: string;
+  subjects: string[];
+  reason: string;
+  /** "ALL" when the whole year moved together, else this branch alone. */
+  scope: "ALL" | "BRANCH";
 }
 
 export type MidTimetableStatus = "DRAFT" | "PUBLISHED";
@@ -68,6 +84,8 @@ export interface MidTimetable {
   sessions: MidExamSession[];
   status: MidTimetableStatus;
   rev: number;
+  /** Reschedules, oldest first. */
+  changes?: MidTimetableChange[];
   publishedAt?: Timestamp | null;
   publishedByName?: string;
   updatedBy: string;

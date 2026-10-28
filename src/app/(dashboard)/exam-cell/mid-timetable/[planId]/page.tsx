@@ -3,7 +3,7 @@
 import { use, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Check, Download, Eraser, Plus, Save, Send, Sparkles, Trash2, X } from "lucide-react";
+import { ArrowLeft, CalendarClock, Check, Download, Eraser, History, Plus, Save, Send, Sparkles, Trash2, X } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import { ordinalYearLabel } from "@/lib/college/courseYears";
 import { autoFill, checkSlots, dayLabel, MAX_SESSIONS, timeLabel, type BranchSubject } from "@/lib/midTimetable/rules";
 import { downloadMidTimetablePdf } from "@/lib/pdf/downloadMidTimetable";
-import type { MidExamPlan, MidExamSession, MidExamSlot, MidTimetable } from "@/types";
+import type { MidExamPlan, MidExamSession, MidExamSlot, MidTimetable, MidTimetableChange } from "@/types";
 
 // Exam Cell: one Mid's timetable as ONE sheet, like the printed one - branches
 // down the side, exam days across the top. Click a cell to put that branch's
@@ -28,7 +28,7 @@ import type { MidExamPlan, MidExamSession, MidExamSlot, MidTimetable } from "@/t
 
 interface Branch { branch: string; key: string; subjects: BranchSubject[]; timetable: MidTimetable | null }
 interface Data { plan: MidExamPlan; window: { from: string; to: string } | null; range: { from: string; to: string } | null; branches: Branch[] }
-type Row = { subjectId: string; date: string; sessionId: string; group?: string };
+type Row = { subjectId: string; date: string; sessionId: string; group?: string; movedFrom?: string };
 type CellRef = { key: string; date: string; sessionId: string };
 
 /** Every date of the range, Sundays included (they start unticked). */
@@ -55,6 +55,10 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
   const [heading, setHeading] = useState("");
   const [everywhere, setEverywhere] = useState(true);
   const [deleting, setDeleting] = useState(false);
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [move, setMove] = useState({ scope: "ALL", fromDate: "", fromSessionId: "", toDate: "", toSessionId: "", reason: "" });
+  const [movePreview, setMovePreview] = useState<{ branch: string; subjects: string[]; status: string }[] | null>(null);
+  const [moveError, setMoveError] = useState("");
 
   const load = useCallback(() => {
     fetch(`/api/college/mid-timetables/${encodeURIComponent(planId)}`)
@@ -73,11 +77,11 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
 
   const rowsOf = useCallback((b: Branch): Row[] => edits[b.key] ?? b.subjects.map((s) => {
     const slot = b.timetable?.slots.find((x) => x.subjectId === s.subjectId);
-    return { subjectId: s.subjectId, date: slot?.date ?? "", sessionId: slot?.sessionId ?? "", ...(slot?.group ? { group: slot.group } : {}) };
+    return { subjectId: s.subjectId, date: slot?.date ?? "", sessionId: slot?.sessionId ?? "", ...(slot?.group ? { group: slot.group } : {}), ...(slot?.movedFrom ? { movedFrom: slot.movedFrom } : {}) };
   }), [edits]);
 
   const plan = data?.plan;
-  const slotsOf = useCallback((b: Branch): MidExamSlot[] => rowsOf(b).filter((r) => r.date && r.sessionId).map((r) => ({ ...b.subjects.find((s) => s.subjectId === r.subjectId)!, date: r.date, sessionId: r.sessionId, ...(r.group ? { group: r.group } : {}) })), [rowsOf]);
+  const slotsOf = useCallback((b: Branch): MidExamSlot[] => rowsOf(b).filter((r) => r.date && r.sessionId).map((r) => ({ ...b.subjects.find((s) => s.subjectId === r.subjectId)!, date: r.date, sessionId: r.sessionId, ...(r.group ? { group: r.group } : {}), ...(r.movedFrom ? { movedFrom: r.movedFrom } : {}) })), [rowsOf]);
   const sheetRows = useMemo(() => (data?.branches ?? []).map((b) => {
     const slots = slotsOf(b);
     const missing = b.subjects.filter((s) => !slots.some((x) => x.subjectId === s.subjectId));
@@ -115,7 +119,10 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
     const next: Record<string, Row[]> = {};
     const target = branchOf(cell.key)!;
     next[target.key] = rowsOf(target).map((r) => {
-      if (picked.has(r.subjectId)) return { subjectId: r.subjectId, date: cell.date, sessionId: cell.sessionId, ...(group ? { group } : {}) };
+      if (picked.has(r.subjectId)) {
+        const stays = r.date === cell.date && r.sessionId === cell.sessionId;
+        return { subjectId: r.subjectId, date: cell.date, sessionId: cell.sessionId, ...(group ? { group } : {}), ...(stays && r.movedFrom ? { movedFrom: r.movedFrom } : {}) };
+      }
       if (r.date === cell.date && r.sessionId === cell.sessionId) return { subjectId: r.subjectId, date: "", sessionId: "" };
       return r;
     });
@@ -220,6 +227,26 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
     finally { setBusy(null); }
   }
 
+  /** Postpone / prepone: check first (dryRun) to show what moves, then apply. */
+  async function reschedule(apply: boolean) {
+    setBusy(apply ? "move" : "move-check");
+    setMoveError("");
+    try {
+      const res = await fetch(`/api/college/mid-timetables/${encodeURIComponent(planId)}/reschedule`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...move, dryRun: !apply }),
+      });
+      const json = (await res.json()) as { error?: string; preview?: { branch: string; subjects: string[]; status: string }[]; notified?: number };
+      if (!res.ok) { setMovePreview(null); setMoveError(json.error ?? "Could not reschedule"); return; }
+      if (!apply) { setMovePreview(json.preview ?? []); return; }
+      toast({ variant: "success", title: `Rescheduled to ${dayLabel(move.toDate)}`, description: json.notified ? `${json.notified} faculty member(s) and student(s) notified.` : undefined });
+      setMoveOpen(false);
+      setMovePreview(null);
+      setEdits({});
+      load();
+    } catch { setMoveError("Network error - nothing was moved"); }
+    finally { setBusy(null); }
+  }
+
   async function removePlan() {
     const res = await fetch(`/api/college/mid-timetables/${encodeURIComponent(planId)}`, { method: "DELETE" });
     const json = (await res.json()) as { error?: string };
@@ -230,7 +257,15 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
   if (error) return <div className="space-y-4"><Button asChild variant="ghost" size="sm"><Link href="/exam-cell/mid-timetable"><ArrowLeft className="mr-1.5 h-4 w-4" />Mid Timetable</Link></Button><p className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive" role="alert">{error}</p></div>;
   if (!data || !plan) return <div className="space-y-4"><div className="h-10 w-72 animate-pulse rounded bg-muted" /><div className="h-96 animate-pulse rounded-2xl bg-muted" /></div>;
 
-  const allDates = data.range ? rangeDates(data.range.from, data.range.to) : plan.days;
+  const allDates = [...new Set([...(data.range ? rangeDates(data.range.from, data.range.to) : []), ...plan.days])].sort();
+  const history = data.branches.flatMap((b) => (b.timetable?.changes ?? []).map((c) => ({ ...c, branch: b.branch })))
+    .reduce<{ key: string; c: MidTimetableChange; branches: string[]; subjects: string[] }[]>((acc, c) => {
+      const key = `${c.at}|${c.fromDate}|${c.toDate}`;
+      const hit = acc.find((x) => x.key === key);
+      if (hit) { hit.branches.push(c.branch); hit.subjects.push(...c.subjects); } else acc.push({ key, c, branches: [c.branch], subjects: [...c.subjects] });
+      return acc;
+    }, []).sort((a, b) => b.c.at.localeCompare(a.c.at));
+  const examDays = plan.days.filter((d) => data.branches.some((b) => (move.scope === "ALL" || b.key === move.scope) && b.timetable?.slots.some((x) => x.date === d)));
   const cellBranch = cell ? branchOf(cell.key) : null;
   const cellRows = cellBranch ? rowsOf(cellBranch) : [];
   const placed = data.branches.reduce((n, b) => n + slotsOf(b).length, 0);
@@ -311,6 +346,13 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" onClick={autoFillAll} disabled={setupDirty || data.branches.length === 0}><Sparkles className="mr-1.5 h-4 w-4" />Auto-fill all branches</Button>
             <Button variant="ghost" size="sm" disabled={setupDirty} onClick={() => setEdits(Object.fromEntries(data.branches.filter((b) => b.timetable?.status !== "PUBLISHED").map((b) => [b.key, b.subjects.map((s) => ({ subjectId: s.subjectId, date: "", sessionId: "" }))])))}><Eraser className="mr-1.5 h-4 w-4" />Clear drafts</Button>
+            <Button variant="outline" size="sm" disabled={setupDirty || !data.branches.some((b) => b.timetable)}
+              title={Object.keys(edits).length ? "Save your changes first" : "Postpone or prepone an exam day"}
+              onClick={() => {
+                if (Object.keys(edits).length) { toast({ variant: "destructive", title: "Save draft or publish your changes first", description: "Rescheduling works on the saved timetable." }); return; }
+                setMove({ scope: "ALL", fromDate: "", fromSessionId: plan.sessions[0]?.id ?? "", toDate: "", toSessionId: plan.sessions[0]?.id ?? "", reason: "" });
+                setMovePreview(null); setMoveError(""); setMoveOpen(true);
+              }}><CalendarClock className="mr-1.5 h-4 w-4" />Reschedule</Button>
             <Button variant="outline" size="sm" loading={busy === "pdf"} disabled={placed === 0}
               onClick={async () => {
                 setBusy("pdf");
@@ -335,6 +377,86 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
           </div>
         </div>
       </div>
+
+      {history.length > 0 && (
+        <Card className="rounded-2xl">
+          <CardContent className="space-y-3 p-5">
+            <h2 className="flex items-center gap-2 text-base font-semibold"><History className="h-4 w-4 text-primary" />Changes after the timetable was made</h2>
+            <ul className="divide-y rounded-xl border text-sm">
+              {history.map(({ key, c, branches, subjects }) => (
+                <li key={key} className="space-y-0.5 p-3">
+                  <p><span className="font-semibold">{c.toDate > c.fromDate ? "Postponed" : "Preponed"}</span> {dayLabel(c.fromDate)}{plan.sessions.length > 1 ? ` (${plan.sessions.find((x) => x.id === c.fromSessionId)?.label ?? ""})` : ""} &rarr; <span className="font-semibold">{dayLabel(c.toDate)}</span>{plan.sessions.length > 1 ? ` (${plan.sessions.find((x) => x.id === c.toSessionId)?.label ?? ""})` : ""}{c.reason ? ` - ${c.reason}` : ""}</p>
+                  <p className="text-xs text-muted-foreground">{c.scope === "ALL" ? "Whole year" : branches.join(", ")} · {[...new Set(subjects)].join(", ")} · {c.byName || "Exam Cell"}, {new Date(c.at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}</p>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      <Dialog open={moveOpen} onOpenChange={(o) => !o && !busy?.startsWith("move") && setMoveOpen(false)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Reschedule an exam day</DialogTitle>
+            <DialogDescription>Postpone or prepone every exam of one day - for one branch or the whole year. Published timetables stay published with the new date, and their faculty and students are told.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="mv-scope">For</Label>
+              <select id="mv-scope" className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" value={move.scope} onChange={(e) => { setMove((m) => ({ ...m, scope: e.target.value, fromDate: "" })); setMovePreview(null); setMoveError(""); }}>
+                <option value="ALL">Whole year - every branch</option>
+                {data.branches.filter((b) => b.timetable).map((b) => <option key={b.key} value={b.key}>{b.branch} only</option>)}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="mv-from">Exam day to move</Label>
+              <select id="mv-from" className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" value={move.fromDate} onChange={(e) => { setMove((m) => ({ ...m, fromDate: e.target.value })); setMovePreview(null); setMoveError(""); }}>
+                <option value="">Pick a day</option>
+                {examDays.map((d) => <option key={d} value={d}>{dayLabel(d)}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="mv-to">New date</Label>
+              <Input id="mv-to" type="date" value={move.toDate} onChange={(e) => { setMove((m) => ({ ...m, toDate: e.target.value })); setMovePreview(null); setMoveError(""); }} />
+            </div>
+            {plan.sessions.length > 1 && (
+              <>
+                <div className="space-y-1.5">
+                  <Label htmlFor="mv-fs">Session</Label>
+                  <select id="mv-fs" className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" value={move.fromSessionId} onChange={(e) => { setMove((m) => ({ ...m, fromSessionId: e.target.value })); setMovePreview(null); }}>
+                    {plan.sessions.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="mv-ts">New session</Label>
+                  <select id="mv-ts" className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" value={move.toSessionId} onChange={(e) => { setMove((m) => ({ ...m, toSessionId: e.target.value })); setMovePreview(null); }}>
+                    {plan.sessions.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
+                  </select>
+                </div>
+              </>
+            )}
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="mv-reason">Reason (optional, shown to students and faculty)</Label>
+              <Input id="mv-reason" value={move.reason} maxLength={200} placeholder="e.g. Holiday declared on 3 Oct" onChange={(e) => setMove((m) => ({ ...m, reason: e.target.value }))} />
+            </div>
+          </div>
+          {moveError && <p className="rounded-lg border border-destructive/40 bg-destructive/5 p-2.5 text-sm text-destructive" role="alert">{moveError}</p>}
+          {movePreview && (
+            <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+              <p className="mb-1.5 font-medium">{dayLabel(move.fromDate)} &rarr; {dayLabel(move.toDate)} moves:</p>
+              <ul className="space-y-1 text-xs">
+                {movePreview.map((p) => <li key={p.branch}><span className="font-semibold">{p.branch}</span>{p.status === "DRAFT" ? " (draft)" : ""}: {p.subjects.join(" / ")}</li>)}
+              </ul>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setMoveOpen(false)} disabled={busy === "move"}>Cancel</Button>
+            {movePreview
+              ? <Button onClick={() => void reschedule(true)} loading={busy === "move"}><CalendarClock className="mr-1.5 h-4 w-4" />Reschedule</Button>
+              : <Button onClick={() => void reschedule(false)} loading={busy === "move-check"} disabled={!move.fromDate || !move.toDate}>Check what moves</Button>}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={cell !== null} onOpenChange={(o) => !o && setCell(null)}>
         <DialogContent className="sm:max-w-lg">

@@ -30,6 +30,7 @@ const STYLE = `
   th { font-size: 13px; }
   th .wd { display: block; font-weight: normal; }
   .branch { width: 120px; font-weight: bold; }
+  .moved { display: block; font-size: 0.85em; font-style: italic; font-weight: bold; margin-bottom: 2px; }
   .grp { font-weight: bold; text-decoration: underline; display: block; margin-bottom: 2px; }
   .subj { display: block; margin-bottom: 3px; }
   .subj:last-child { margin-bottom: 0; }
@@ -50,7 +51,8 @@ export function getMidTimetableHTML(d: { college: { name: string; affiliation?: 
   const cell = (slots: MidExamSlot[]) => {
     if (!slots.length) return "-";
     const group = slots.find((x) => x.group)?.group;
-    return `${group ? `<span class="grp">${esc(group)}</span>` : ""}${slots.map((x, i) => `<span class="subj">${esc(x.subjectName)}<span class="code">(${esc(x.subjectCode)})${i < slots.length - 1 ? " /" : ""}</span></span>`).join("")}`;
+    const moved = slots.find((x) => x.movedFrom)?.movedFrom;
+    return `${moved ? `<span class="moved">Rescheduled (was ${dmy(moved)})</span>` : ""}${group ? `<span class="grp">${esc(group)}</span>` : ""}${slots.map((x, i) => `<span class="subj">${esc(x.subjectName)}<span class="code">(${esc(x.subjectCode)})${i < slots.length - 1 ? " /" : ""}</span></span>`).join("")}`;
   };
   const head1 = `<tr><th class="branch" rowspan="${t.sessions.length > 1 ? 2 : 1}">Branch</th>${t.days.map((day) => `<th colspan="${t.sessions.length}">${dmy(day)}<span class="wd">(${WEEKDAY[new Date(`${day}T00:00:00Z`).getUTCDay()]})</span></th>`).join("")}</tr>`;
   const head2 = t.sessions.length > 1 ? `<tr>${cols.map(({ s }) => `<th>${esc(s.label)}<span class="wd">${timeLabel(s.from)} - ${timeLabel(s.to)}</span></th>`).join("")}</tr>` : "";

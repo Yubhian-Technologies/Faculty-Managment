@@ -18,8 +18,10 @@ const weekday = (d: string) => WEEKDAY[new Date(`${d}T00:00:00Z`).getUTCDay()] ?
 
 export function SheetCell({ slots }: { slots: MidExamSlot[] }) {
   const group = slots.find((s) => s.group)?.group;
+  const movedFrom = slots.find((s) => s.movedFrom)?.movedFrom;
   return (
     <div className="space-y-1 text-center">
+      {movedFrom && <p className="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900">Rescheduled · was {dmy(movedFrom)}</p>}
       {group && <p className="text-[11px] font-semibold underline underline-offset-2">{group}</p>}
       {slots.map((s, i) => (
         <p key={s.subjectId} className="text-xs leading-snug">

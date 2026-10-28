@@ -5,6 +5,7 @@ import type { MidExamSession, MidExamSlot } from "@/types/midTimetable";
 
 export const MAX_SESSIONS = 3;
 export const MAX_DAYS = 31;
+export const MAX_SPAN_DAYS = 92;
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -42,12 +43,16 @@ export function timeLabel(t: string): string {
 
 export const sessionText = (s: MidExamSession) => `${s.label} (${timeLabel(s.from)} - ${timeLabel(s.to)})`;
 
-/** The exam days sent by the builder: real dates inside the Mid's window, sorted, no repeats. */
-export function cleanDays(raw: unknown, window: { from: string; to: string } | null): { days: string[]; error: string } {
+/**
+ * The exam days sent by the builder: real dates, sorted, no repeats, spanning at
+ * most ~3 months. They may go outside the Mid's published dates - a postponed
+ * or preponed exam can land anywhere.
+ */
+export function cleanDays(raw: unknown): { days: string[]; error: string } {
   const list = Array.isArray(raw) ? [...new Set(raw.map(String).filter((d) => DATE.test(d) && !Number.isNaN(Date.parse(d))))].sort() : [];
   if (list.length === 0) return { days: [], error: "Pick at least one exam day" };
   if (list.length > MAX_DAYS) return { days: [], error: `At most ${MAX_DAYS} exam days` };
-  if (window && list.some((d) => d < window.from || d > window.to)) return { days: [], error: `Exam days must be within the Mid's dates (${window.from} to ${window.to})` };
+  if ((Date.parse(list[list.length - 1]) - Date.parse(list[0])) / 86_400_000 > MAX_SPAN_DAYS) return { days: [], error: "Exam days can span at most three months" };
   return { days: list, error: "" };
 }
 
@@ -104,7 +109,8 @@ export function checkSlots(raw: unknown, subjects: BranchSubject[], days: string
     if (!daySet.has(date)) { errors.push(`${subj.subjectName}: pick one of the exam days`); continue; }
     if (!sessionIds.has(sessionId)) { errors.push(`${subj.subjectName}: pick a session`); continue; }
     const group = String(o.group ?? "").replace(/\s+/g, " ").trim().slice(0, 60);
-    slots.push({ ...subj, date, sessionId, ...(group ? { group } : {}) });
+    const movedFrom = typeof o.movedFrom === "string" && DATE.test(o.movedFrom) && o.movedFrom !== date ? o.movedFrom : "";
+    slots.push({ ...subj, date, sessionId, ...(group ? { group } : {}), ...(movedFrom ? { movedFrom } : {}) });
   }
   // One heading per cell: the first one given.
   const heading = new Map<string, string>();
@@ -136,4 +142,24 @@ export function autoFill(subjects: BranchSubject[], placed: MidExamSlot[], days:
     slots.push({ ...subj, ...next });
   }
   return { slots, unplaced };
+}
+
+/**
+ * Reschedule (postpone / prepone): every exam of one day + session moves to
+ * another day + session, keeping its electives heading; each remembers the date
+ * it was first published for (`movedFrom`). Refused when the new day + session
+ * already has an exam of this branch (nothing is overwritten).
+ */
+export function rescheduleSlots(slots: MidExamSlot[], from: { date: string; sessionId: string }, to: { date: string; sessionId: string }): { slots: MidExamSlot[]; moved: MidExamSlot[]; clash: string[] } {
+  const moving = slots.filter((s) => s.date === from.date && s.sessionId === from.sessionId);
+  const clash = slots.filter((s) => s.date === to.date && s.sessionId === to.sessionId && !moving.includes(s)).map((s) => s.subjectName);
+  if (moving.length === 0 || clash.length) return { slots, moved: [], clash };
+  const next = slots.map((s) => {
+    if (!moving.includes(s)) return s;
+    const original = s.movedFrom ?? s.date;
+    const { movedFrom: _old, ...rest } = s;
+    void _old;
+    return { ...rest, date: to.date, sessionId: to.sessionId, ...(original !== to.date ? { movedFrom: original } : {}) };
+  });
+  return { slots: next, moved: next.filter((s) => moving.some((m) => m.subjectId === s.subjectId)), clash: [] };
 }

@@ -50,9 +50,7 @@ export async function PATCH(request: Request, { params }: Params) {
     const refs = midTimetableRefs(db, session.collegeId);
     const plan = await loadPlan(db, session.collegeId, planId);
     if (!plan) return NextResponse.json({ error: "Timetable not found" }, { status: 404 });
-    const window = await midWindow(db, session.collegeId, plan);
-    const range = window ? { from: window.from, to: window.to } : plan.from && plan.to ? { from: plan.from, to: plan.to } : null;
-    const d = cleanDays(body.days, range);
+    const d = cleanDays(body.days);
     if (d.error) return NextResponse.json({ error: d.error }, { status: 400 });
     const s = cleanSessions(body.sessions);
     if (s.error) return NextResponse.json({ error: s.error }, { status: 400 });
