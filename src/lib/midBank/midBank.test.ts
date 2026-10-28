@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { BloomLevel, MidQuestion } from "@/types/midQuestionBank";
 import { cleanOutcomes, derivePoPso, mappingErrors, outcomeConflicts } from "./outcomes";
 import { findDuplicates, similarity, textKey } from "./duplicates";
-import { allowedFormats, bankFormatText, cleanParts, defaultSplit, formatName, formatOf, partMarks, questionErrors, questionFormat } from "./validateQuestion";
+import { allowedFormats, bankFormats, bankFormatText, formatsFor, cleanParts, defaultSplit, formatName, formatOf, partMarks, questionErrors, questionFormat } from "./validateQuestion";
 import { bankTotals, bloomNeeds, breaksCompletedUnit, lockReason, unitStatus, unitStatuses, unlockedUnits } from "./rules";
 
 const q = (unit: number, state: MidQuestion["state"], ...blooms: BloomLevel[]) =>
@@ -107,6 +107,13 @@ describe("question validation", () => {
     expect(partMarks({ text: "", cos: [], bloom: "" }, 1, "PARTS_AB", 10)).toBe(5);
     expect([formatName("SINGLE"), formatName("PARTS_ABC")]).toEqual(["One question", "Parts (a) + (b) + (c)"]);
     expect(bankFormatText(["SINGLE", "PARTS_AB", "PARTS_ABC"], 10)).toBe("One question or parts (a) + (b) or parts (a) + (b) + (c), 10 marks");
+  });
+  it("a started bank follows the Exam Cell's current types; a saved question keeps its own", () => {
+    const bank = { format: "EITHER", marks: 10 };
+    expect(bankFormats(bank, { formats: ["SINGLE", "PARTS_AB", "PARTS_ABC"] })).toEqual(["SINGLE", "PARTS_AB", "PARTS_ABC"]);
+    expect(bankFormats(bank, null)).toEqual(["SINGLE", "PARTS_AB"]); // rule deleted: the bank's copy
+    expect(bankFormats({ formats: ["SINGLE"], marks: 2 }, { formats: ["PARTS_ABC"] })).toEqual(["SINGLE"]); // 3 parts don't fit 2 marks
+    expect(formatsFor(["SINGLE"], "PARTS_AB")).toEqual(["SINGLE", "PARTS_AB"]);
   });
   it("three parts: each needs a mark, and together they make the total", () => {
     const cos = new Set(["CO1"]);

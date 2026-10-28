@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { BLOOM_LABELS, BLOOM_LEVELS, BLOOM_MIN_PER_UNIT, PROGRAM_OUTCOMES, QUESTIONS_PER_UNIT } from "@/lib/midBank/constants";
 import { derivePoPso } from "@/lib/midBank/outcomes";
 import { bloomNeeds, lockReason } from "@/lib/midBank/rules";
-import { allowedFormats, defaultSplit, formatName, formatOf, isBlankPart, partLabel, partLetter, partMarks, partsFor, questionErrors, questionFormat } from "@/lib/midBank/validateQuestion";
+import { allowedFormats, bankFormats, defaultSplit, formatsFor, formatName, formatOf, isBlankPart, partLabel, partLetter, partMarks, partsFor, questionErrors, questionFormat } from "@/lib/midBank/validateQuestion";
 import type { MidBankDetail } from "@/lib/midBank/clientTypes";
 import type { BloomLevel, MidQuestion, MidQuestionBank, MidQuestionFormat, MidQuestionPart, MidUnitStatus } from "@/types";
 import { MathText, QuestionTextField } from "./MathText";
@@ -53,9 +53,10 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
   });
   const qid = qidOf(cur.unit, cur.slot);
   // The question types the Exam Cell allows; with more than one, each question picks. A new question starts with the first.
-  const allowed = allowedFormats(bank);
-  const defaultFormat = questionFormat(allowed);
-  const fmtOf = (q: MidQuestion | undefined | null): MidQuestionFormat => (q ? formatOf(q, allowed) : defaultFormat);
+  // Live from the Exam Cell's current rule; a saved question also keeps its own type.
+  const bankAllowed = bankFormats(bank, detail.rules);
+  const defaultFormat = questionFormat(bankAllowed);
+  const fmtOf = (q: MidQuestion | undefined | null): MidQuestionFormat => (q ? formatOf(q, allowedFormats(bank)) : defaultFormat);
   const [qFormat, setQFormat] = useState<MidQuestionFormat>(() => fmtOf(questions[qid]));
   const [parts, setParts] = useState<MidQuestionPart[]>(() => questions[qid]?.parts ?? emptyParts(fmtOf(questions[qid]), bank.marks));
   const [rev, setRev] = useState(questions[qid]?.rev ?? 0);
@@ -75,6 +76,7 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
   useEffect(() => { latest.current = { parts, rev, qid, dirty, qFormat }; }, [parts, rev, qid, dirty, qFormat]);
 
   const current = questions[qid];
+  const allowed = formatsFor(bankAllowed, current ? fmtOf(current) : null);
   const isComplete = current?.state === "COMPLETE";
   const unitStatus: MidUnitStatus = bank.unitStatus[String(cur.unit)] ?? { complete: false, completeCount: 0, draftCount: 0, bloom: { L2: 0, L3: 0, L4: 0 } };
   const unitTitle = (u: number) => outcomes.units.find((x) => x.no === u)?.title ?? "";

@@ -4,8 +4,8 @@ import { NextResponse } from "next/server";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { actorName, bankAccess, guardError, loadOutcomes, MID_BANK_WRITE_ROLES, midBankRefs } from "@/lib/midBank/server";
-import { allowedFormats, cleanParts, isBlankPart, partLabel, questionErrors, questionFormat } from "@/lib/midBank/validateQuestion";
+import { actorName, bankAccess, guardError, loadOutcomes, loadSubject, MID_BANK_WRITE_ROLES, midBankRefs, rulesForSubject } from "@/lib/midBank/server";
+import { allowedFormats, bankFormats, cleanParts, formatOf, formatsFor, isBlankPart, partLabel, questionErrors, questionFormat } from "@/lib/midBank/validateQuestion";
 import { findDuplicates, textKey } from "@/lib/midBank/duplicates";
 import { bankTotals, breaksCompletedUnit, lockReason, unitStatus } from "@/lib/midBank/rules";
 import { QUESTIONS_PER_UNIT } from "@/lib/midBank/constants";
@@ -40,7 +40,12 @@ export async function PATCH(request: Request, { params }: Params) {
     if (!access) return NextResponse.json({ error: "Question bank not found" }, { status: 404 });
     if (!access.isOwner) return NextResponse.json({ error: "Only the faculty preparing this question bank can edit it" }, { status: 403 });
     if (!access.canWrite) return NextResponse.json({ error: "The deadline has passed - this question bank is locked. Ask the Exam Cell to extend it." }, { status: 403 });
-    const outcomes = await loadOutcomes(db, session.collegeId, access.bank.outcomesId);
+    const [outcomes, subject] = await Promise.all([
+      loadOutcomes(db, session.collegeId, access.bank.outcomesId),
+      loadSubject(db, session.collegeId, access.bank.subjectId),
+    ]);
+    // The question types follow the Exam Cell's current rule (see bankFormats).
+    const liveRules = subject ? await rulesForSubject(db, session.collegeId, subject) : null;
     const coIds = new Set((outcomes?.cos ?? []).map((c) => c.id));
     const name = await actorName(db, session.collegeId, session.uid);
 
@@ -66,7 +71,8 @@ export async function PATCH(request: Request, { params }: Params) {
         return { status: 409, body: { error: "This question was changed in another tab or window - reload it before saving", question: current } };
       }
 
-      const format = questionFormat(allowedFormats(bank), body.format);
+      const allowed = bankFormats(bank, liveRules);
+      const format = questionFormat(formatsFor(allowed, current ? formatOf(current, allowedFormats(bank)) : null), body.format);
       const parts = cleanParts(body.parts, format, coIds, bank.marks);
       const keys = parts.map((p) => textKey(p.text));
       const others = all.filter((q) => q.id !== qid);

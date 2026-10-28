@@ -34,6 +34,19 @@ export function allowedFormats(x: { formats?: unknown; format?: MidBankFormat | 
   return ["SINGLE"];
 }
 
+/**
+ * A started bank's question types: the Exam Cell's CURRENT rule (so a type ticked
+ * later shows up in banks already started), less any type needing more marks than
+ * the bank's; the bank's own copy only when the rule is gone.
+ */
+export function bankFormats(bank: { formats?: unknown; format?: MidBankFormat | string; marks: number }, liveRules?: { formats?: unknown; format?: MidBankFormat | string } | null): MidQuestionFormat[] {
+  const live = liveRules ? allowedFormats(liveRules).filter((f) => partsFor(f) <= bank.marks) : [];
+  return live.length ? live : allowedFormats(bank);
+}
+/** The types offered for one question: the bank's, plus the question's own saved type (never taken away from it). */
+export const formatsFor = (allowed: MidQuestionFormat[], own?: MidQuestionFormat | null): MidQuestionFormat[] =>
+  own && !allowed.includes(own) ? QUESTION_FORMATS.filter((f) => f === own || allowed.includes(f)) : allowed;
+
 /** The type a question uses: the one asked for when allowed, else the bank's first. */
 export function questionFormat(allowed: MidQuestionFormat[], wanted?: unknown): MidQuestionFormat {
   return allowed.includes(wanted as MidQuestionFormat) ? (wanted as MidQuestionFormat) : allowed[0] ?? "SINGLE";

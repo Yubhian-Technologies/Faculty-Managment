@@ -7,7 +7,7 @@ import { ArrowLeft, BookOpen, CalendarClock, FileText, GraduationCap, Layers, Se
 import { Button } from "@/components/ui/button";
 import { BankWorkspace } from "@/components/midBank/BankWorkspace";
 import { daysLeft, deadlineLabel } from "@/lib/midBank/deadline";
-import { allowedFormats, bankFormatText } from "@/lib/midBank/validateQuestion";
+import { bankFormatText, bankFormats } from "@/lib/midBank/validateQuestion";
 import type { MidBankDetail } from "@/lib/midBank/clientTypes";
 
 // One question bank's workspace - for its owner until the deadline. Anyone else
@@ -49,7 +49,7 @@ export default function MidBankPage({ params, searchParams }: { params: Promise<
     [GraduationCap, bank.branch],
     [Users, `Section${bank.sections.length === 1 ? "" : "s"} ${bank.sections.map((s) => s.sectionName).join(", ")}`],
     [Layers, `Units ${bank.units.join(", ")}`],
-    [FileText, bankFormatText(allowedFormats(bank), bank.marks)],
+    [FileText, bankFormatText(bankFormats(bank, detail.rules), bank.marks)],
   ];
   return (
     <div className="space-y-5">
