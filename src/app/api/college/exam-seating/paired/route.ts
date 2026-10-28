@@ -42,9 +42,7 @@ export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("EXAM_CELL");
     const body = (await readJsonBody(request)) as { name?: string; planIds?: unknown; streams?: unknown; roomIds?: unknown };
-    const name = String(body.name ?? "").trim();
     const planIds = (Array.isArray(body.planIds) ? body.planIds : []).map(String).filter(Boolean);
-    if (!name) return NextResponse.json({ error: "Exam name is required" }, { status: 400 });
     if (planIds.length === 0) return NextResponse.json({ error: "Pick the Mid timetable" }, { status: 400 });
     const streamKeys = (Array.isArray(body.streams) ? body.streams : []).map((x) => (Array.isArray(x) ? x.map(String) : [])).filter((x) => x.length);
     if (streamKeys.length === 0) return NextResponse.json({ error: "Put at least one branch in Seat A" }, { status: 400 });
@@ -76,6 +74,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `The rooms picked have fewer than ${streamKeys.length} seats per bench` }, { status: 400 });
     }
 
+    // The plan's name comes from the Mid timetables: "Mid-1 Examinations · B.Tech · 1st Year · Sem 1".
+    const picked = sources.filter((x) => planIds.includes(x.id));
+    const name = String(body.name ?? "").trim()
+      || `${[...new Set(picked.map((x) => `Mid-${x.midNumber}`))].join(" & ")} Examinations · ${picked.map((x) => x.label.replace(/ · Mid \d+$/, "")).join(", ")}`;
     const used = all.map((k) => byKey.get(k)!);
     const sectionRefs: SeatingSectionRef[] = used.flatMap((g) => g.sections.map((s) => ({
       id: s.id, label: sectionLabel(s), department: s.department, year: s.year, name: s.name,

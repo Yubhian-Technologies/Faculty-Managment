@@ -5,8 +5,6 @@ import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowUp, Armchair } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
 import { roomBenches, roomPerBench } from "@/lib/exams/roomLayout";
@@ -32,7 +30,6 @@ export function PairedPlanCard({ rooms }: { rooms: ExamRoom[] }) {
   const [seatOf, setSeatOf] = useState<Record<string, number>>({});
   const [order, setOrder] = useState<string[]>([]);
   const [roomIds, setRoomIds] = useState<string[]>([]); // tick order = fill order
-  const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
@@ -80,7 +77,7 @@ export function PairedPlanCard({ rooms }: { rooms: ExamRoom[] }) {
     try {
       const res = await fetch("/api/college/exam-seating/paired", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, planIds, streams: usedStreams, roomIds }),
+        body: JSON.stringify({ planIds, streams: usedStreams, roomIds }),
       });
       const data = (await res.json()) as { id?: string; unplaced?: number; error?: string };
       if (!res.ok || !data.id) throw new Error(data.error ?? "Could not build the plan");
@@ -104,7 +101,7 @@ export function PairedPlanCard({ rooms }: { rooms: ExamRoom[] }) {
         </p>
       </CardHeader>
       <CardContent className="space-y-5">
-        <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
+        <div>
           <div className="space-y-1.5">
             <p className="text-sm font-medium">Mid timetable{mids && mids.length > 1 ? "s (tick more than one to seat several years together)" : ""}</p>
             <div className="space-y-1.5 rounded-lg border p-3">
@@ -113,16 +110,12 @@ export function PairedPlanCard({ rooms }: { rooms: ExamRoom[] }) {
               {(mids ?? []).map((m) => (
                 <label key={m.id} className="flex items-center gap-2 text-sm">
                   <input type="checkbox" className="h-4 w-4" checked={planIds.includes(m.id)}
-                    onChange={() => { setGroups(null); setPlanIds((l) => (l.includes(m.id) ? l.filter((x) => x !== m.id) : [...l, m.id])); if (!name) setName(`Mid-${m.midNumber} Examinations`); }} />
+                    onChange={() => { setGroups(null); setPlanIds((l) => (l.includes(m.id) ? l.filter((x) => x !== m.id) : [...l, m.id])); }} />
                   <span className="font-medium">{m.label}</span>
                   <span className="text-xs text-muted-foreground">{m.branches} branch{m.branches === 1 ? "" : "es"}{m.days.length ? ` · ${dayLabel(m.days[0])} - ${dayLabel(m.days[m.days.length - 1])}` : ""}</span>
                 </label>
               ))}
             </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="pp-name">Exam name</Label>
-            <Input id="pp-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Mid-1 Examinations" />
           </div>
         </div>
 
@@ -196,7 +189,7 @@ export function PairedPlanCard({ rooms }: { rooms: ExamRoom[] }) {
           </p>
         )}
 
-        <Button disabled={!name.trim() || planIds.length === 0 || usedStreams.length === 0 || roomIds.length === 0} loading={creating} onClick={() => void create()}>
+        <Button disabled={planIds.length === 0 || usedStreams.length === 0 || roomIds.length === 0} loading={creating} onClick={() => void create()}>
           <Armchair className="mr-1 h-4 w-4" /> Build paired plan
         </Button>
       </CardContent>
