@@ -12,6 +12,13 @@ export function deadlineLabel(deadline: string, today: string = istDateKey()): s
   return isDeadlineLocked(deadline, today) ? `Deadline ${text} passed` : `Due ${text}`;
 }
 
+/** Whole days from today (IST) to the deadline day; negative once it has passed, null for a bad date. */
+export function daysLeft(deadline: string, today: string = istDateKey()): number | null {
+  const a = Date.parse(`${today}T00:00:00Z`);
+  const b = Date.parse(`${deadline}T00:00:00Z`);
+  return Number.isNaN(a) || Number.isNaN(b) ? null : Math.round((b - a) / 86_400_000);
+}
+
 /** A deadline must be a real date, not in the past, and before the Mid's exam starts (when its dates are set). */
 export function deadlineError(deadline: string, today: string, midStarts: string | null): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(deadline) || Number.isNaN(Date.parse(deadline))) return "Pick the deadline date";

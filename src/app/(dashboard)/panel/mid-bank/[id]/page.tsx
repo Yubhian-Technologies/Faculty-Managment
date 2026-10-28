@@ -3,11 +3,10 @@
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
-import { PageHeader } from "@/components/shared/PageHeader";
+import { ArrowLeft, BookOpen, CalendarClock, FileText, GraduationCap, Layers, Settings2, Users, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BankWorkspace } from "@/components/midBank/BankWorkspace";
-import { deadlineLabel } from "@/lib/midBank/deadline";
+import { daysLeft, deadlineLabel } from "@/lib/midBank/deadline";
 import { bankFormatText } from "@/lib/midBank/validateQuestion";
 import type { MidBankDetail } from "@/lib/midBank/clientTypes";
 
@@ -45,13 +44,41 @@ export default function MidBankPage({ params, searchParams }: { params: Promise<
 
   const { bank } = detail;
   const changeSections = `/panel/mid-bank/prepare?${new URLSearchParams({ deadlineId: bank.deadlineId, subjectId: bank.subjectId, branch: bank.branch })}`;
+  const left = detail.deadline ? daysLeft(detail.deadline.deadline) : null;
+  const facts: [LucideIcon, string][] = [
+    [GraduationCap, bank.branch],
+    [Users, `Section${bank.sections.length === 1 ? "" : "s"} ${bank.sections.map((s) => s.sectionName).join(", ")}`],
+    [Layers, `Units ${bank.units.join(", ")}`],
+    [FileText, bankFormatText(bank.format, bank.marks)],
+  ];
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title={`${bank.subjectName} - Mid ${bank.midNumber}`}
-        description={`${bank.subjectCode} · ${bank.branch} · sections ${bank.sections.map((s) => s.sectionName).join(", ")} · Units ${bank.units.join(", ")} · ${bankFormatText(bank.format, bank.marks)}${detail.deadline ? ` · ${deadlineLabel(detail.deadline.deadline)}` : ""}`}
-        actions={<div className="flex gap-2">{back}<Button asChild variant="outline" size="sm"><Link href={changeSections}>Sections &amp; setup</Link></Button></div>}
-      />
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {back}
+        <Button asChild variant="outline" size="sm"><Link href={changeSections}><Settings2 className="mr-1.5 h-4 w-4" />Sections &amp; setup</Link></Button>
+      </div>
+      <header className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary to-primary/80 p-5 text-primary-foreground shadow-md sm:p-6">
+        <div aria-hidden className="pointer-events-none absolute -right-10 -top-16 h-48 w-48 rounded-full bg-white/10" />
+        <div className="relative flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2 text-xs font-medium">
+              <span className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-0.5"><BookOpen className="h-3.5 w-3.5" />{bank.subjectCode}</span>
+              <span className="rounded-full bg-white/20 px-2.5 py-0.5">Mid {bank.midNumber}</span>
+            </div>
+            <h1 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">{bank.subjectName}</h1>
+            <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-sm opacity-95">
+              {facts.map(([Icon, text]) => <li key={text} className="flex items-center gap-1.5"><Icon className="h-4 w-4 opacity-80" />{text}</li>)}
+            </ul>
+          </div>
+          {detail.deadline && (
+            <div className="rounded-xl bg-white px-4 py-3 text-right text-primary shadow-sm">
+              <p className="flex items-center justify-end gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"><CalendarClock className="h-3.5 w-3.5" />Deadline</p>
+              <p className="text-lg font-bold leading-tight">{left === 0 ? "Due today" : left === 1 ? "1 day left" : left !== null && left > 1 ? `${left} days left` : deadlineLabel(detail.deadline.deadline)}</p>
+              <p className="text-xs text-muted-foreground">{deadlineLabel(detail.deadline.deadline)}</p>
+            </div>
+          )}
+        </div>
+      </header>
       <BankWorkspace detail={detail} initialQ={q} />
     </div>
   );

@@ -11,9 +11,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
-import { istDateKey } from "@/lib/attendance/istTime";
 import { LIMITS, MAPPING_TARGETS, PROGRAM_OUTCOMES } from "@/lib/midBank/constants";
-import { deadlineLabel } from "@/lib/midBank/deadline";
+import { daysLeft, deadlineLabel } from "@/lib/midBank/deadline";
 import { bankFormatText } from "@/lib/midBank/validateQuestion";
 import type { MidBankPrepare } from "@/lib/midBank/clientTypes";
 import type { OutcomeMapping } from "@/types";
@@ -34,13 +33,6 @@ const fromData = (d: MidBankPrepare): Draft => ({
   mapping: d.outcomes?.mapping ?? {},
 });
 const resize = (list: string[], n: number) => Array.from({ length: n }, (_, i) => list[i] ?? "");
-
-/** Whole days from today (IST) to the deadline day; negative once it has passed. */
-function daysLeft(deadline: string): number | null {
-  const a = Date.parse(`${istDateKey()}T00:00:00Z`);
-  const b = Date.parse(`${deadline}T00:00:00Z`);
-  return Number.isNaN(a) || Number.isNaN(b) ? null : Math.round((b - a) / 86_400_000);
-}
 
 const initials = (name: string) => name.replace(/^(dr|mr|mrs|ms|prof)\.?\s*/i, "").split(/[\s.]+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("") || "?";
 

@@ -2,14 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, CheckCircle2, ClipboardCheck, Cloud, CloudOff, ImagePlus, Loader2, Lock, X } from "lucide-react";
+import { AlertTriangle, BarChart3, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck, Cloud, CloudOff, Copy, Eye, ImagePlus, ListChecks, Loader2, Lock, Target, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
-import { BLOOM_LABELS, BLOOM_LEVELS, PROGRAM_OUTCOMES, QUESTIONS_PER_UNIT } from "@/lib/midBank/constants";
+import { BLOOM_LABELS, BLOOM_LEVELS, BLOOM_MIN_PER_UNIT, PROGRAM_OUTCOMES, QUESTIONS_PER_UNIT } from "@/lib/midBank/constants";
 import { derivePoPso } from "@/lib/midBank/outcomes";
 import { bloomNeeds, lockReason } from "@/lib/midBank/rules";
 import { defaultSplit, formatOf, isBlankPart, partLabel, partMarks, questionErrors, questionFormat } from "@/lib/midBank/validateQuestion";
@@ -248,65 +248,105 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
   const others = Object.values(questions).filter((q) => q.id !== qid && q.parts.some((p) => p.text.trim())).sort((a, b) => a.unit - b.unit || a.slot - b.slot);
   const pct = bank.totalCount ? Math.round((bank.completeCount / bank.totalCount) * 100) : 0;
 
+  const prevSlot = (): { unit: number; slot: number } | null => {
+    if (cur.slot > 1) return { unit: cur.unit, slot: cur.slot - 1 };
+    const pu = bank.units[bank.units.indexOf(cur.unit) - 1];
+    return pu !== undefined ? { unit: pu, slot: QUESTIONS_PER_UNIT } : null;
+  };
+  const prev = prevSlot();
+  const nxt = nextSlot();
+
   const saveBadge = {
-    idle: dirty ? <span className="text-muted-foreground">{isComplete ? "Unsaved changes - press Save question" : "Unsaved changes"}</span> : null,
-    saving: <span className="flex items-center gap-1 text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" />Saving…</span>,
-    saved: <span className="flex items-center gap-1 text-green-700 dark:text-green-400"><Cloud className="h-3.5 w-3.5" />Saved</span>,
-    failed: <span className="flex items-center gap-1 text-destructive"><CloudOff className="h-3.5 w-3.5" />Save failed <button type="button" className="underline" onClick={() => void save(isComplete ? "complete" : "draft")}>Retry</button></span>,
+    idle: dirty ? <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-muted-foreground"><span className="h-1.5 w-1.5 rounded-full bg-amber-500" />{isComplete ? "Unsaved changes - press Save question" : "Unsaved changes"}</span> : null,
+    saving: <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" />Saving…</span>,
+    saved: <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400"><Cloud className="h-3.5 w-3.5" />Saved</span>,
+    failed: <span className="inline-flex items-center gap-1.5 rounded-full bg-destructive/10 px-2.5 py-1 text-destructive"><CloudOff className="h-3.5 w-3.5" />Save failed <button type="button" className="font-semibold underline" onClick={() => void save(isComplete ? "complete" : "draft")}>Retry</button></span>,
     conflict: null,
   }[saveState];
+  const stateChip = isComplete
+    ? { label: "Complete", cls: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300" }
+    : current ? { label: "Draft", cls: "bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-300" }
+    : { label: "Empty", cls: "bg-muted text-muted-foreground" };
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="mb-1 flex justify-between text-xs"><span>{bank.completeCount} of {bank.totalCount} questions complete</span><span className="font-medium">{pct}%</span></div>
-          <div className="h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Bank progress">
-            <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+    <div className="space-y-5">
+      {/* Bank progress, per unit */}
+      <div className="flex flex-wrap items-center gap-4 rounded-2xl border bg-card p-4 shadow-sm">
+        <div className="grid h-14 w-14 shrink-0 place-items-center rounded-full text-sm font-bold text-primary"
+          style={{ background: `conic-gradient(hsl(var(--primary)) ${pct * 3.6}deg, hsl(var(--muted)) 0deg)` }}>
+          <span className="grid h-11 w-11 place-items-center rounded-full bg-card">{pct}%</span>
+        </div>
+        <div className="min-w-48 flex-1 space-y-2">
+          <p className="text-sm"><span className="text-base font-semibold">{bank.completeCount}</span><span className="text-muted-foreground"> of {bank.totalCount} questions complete</span></p>
+          <div className="flex gap-1.5" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Bank progress">
+            {bank.units.map((u) => {
+              const st = bank.unitStatus[String(u)];
+              const w = ((st?.completeCount ?? 0) / QUESTIONS_PER_UNIT) * 100;
+              return (
+                <div key={u} className="flex-1" title={`Unit ${u}: ${st?.completeCount ?? 0}/${QUESTIONS_PER_UNIT}`}>
+                  <div className="h-2 overflow-hidden rounded-full bg-muted"><div className={cn("h-full rounded-full", st?.complete ? "bg-emerald-500" : "bg-primary")} style={{ width: `${w}%` }} /></div>
+                  <p className="mt-1 text-[11px] text-muted-foreground">Unit {u}</p>
+                </div>
+              );
+            })}
           </div>
         </div>
-        <Button asChild variant="outline" size="sm">
+        <Button asChild variant="outline">
           <Link href={`/panel/mid-bank/${encodeURIComponent(bank.id)}/review`}><ClipboardCheck className="mr-1.5 h-4 w-4" />Review bank</Link>
         </Button>
       </div>
 
       {/* Below lg the three panels become tabs. */}
-      <div className="flex gap-1 rounded-md border p-1 lg:hidden" role="tablist" aria-label="Workspace panels">
+      <div className="flex gap-1 rounded-xl border bg-muted/40 p-1 lg:hidden" role="tablist" aria-label="Workspace panels">
         {(["nav", "editor", "info"] as Tab[]).map((t) => (
           <button key={t} role="tab" aria-selected={tab === t} type="button" onClick={() => setTab(t)}
-            className={cn("flex-1 rounded px-3 py-1.5 text-sm", tab === t ? "bg-primary text-primary-foreground" : "text-muted-foreground")}>
+            className={cn("flex-1 rounded-lg px-3 py-1.5 text-sm font-medium", tab === t ? "bg-background text-foreground shadow-sm" : "text-muted-foreground")}>
             {t === "nav" ? "Questions" : t === "editor" ? "Editor" : "Details"}
           </button>
         ))}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[230px_minmax(0,1fr)_300px]">
+      <div className="grid gap-5 lg:grid-cols-[240px_minmax(0,1fr)_300px]">
         {/* Left: units and slots */}
-        <nav aria-label="Units and questions" className={cn("space-y-4", tab !== "nav" && "hidden lg:block")}>
+        <nav aria-label="Units and questions" className={cn("space-y-3 lg:sticky lg:top-4 lg:self-start", tab !== "nav" && "hidden lg:block")}>
           {bank.units.map((u) => {
             const st = bank.unitStatus[String(u)];
             const reason = lockReason(bank.units, bank.unitStatus, u);
+            const here = u === cur.unit;
             return (
-              <section key={u} className="rounded-lg border p-3">
-                <div className="mb-2 flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold">Unit {u}</p>
-                    <p className="truncate text-xs text-muted-foreground" title={unitTitle(u)}>{unitTitle(u)}</p>
+              <section key={u} className={cn("rounded-2xl border bg-card p-3.5 shadow-sm", here && !reason && "border-primary/40 ring-1 ring-primary/20", reason && "bg-muted/30")}>
+                <div className="mb-3 flex items-start gap-2.5">
+                  <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-lg text-sm font-bold",
+                    st?.complete ? "bg-emerald-500 text-white" : reason ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary")}>
+                    {st?.complete ? <CheckCircle2 className="h-4 w-4" aria-label="Unit complete" /> : reason ? <Lock className="h-3.5 w-3.5" /> : u}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-semibold">Unit {u}</p>
+                      <span className="text-xs font-medium text-muted-foreground">{st?.completeCount ?? 0}/{QUESTIONS_PER_UNIT}</span>
+                    </div>
+                    <p className="truncate text-xs text-muted-foreground" title={unitTitle(u)}>{unitTitle(u) || "-"}</p>
                   </div>
-                  {st?.complete ? <CheckCircle2 className="h-4 w-4 shrink-0 text-green-600" aria-label="Unit complete" /> : <span className="text-xs text-muted-foreground">{st?.completeCount ?? 0}/{QUESTIONS_PER_UNIT}</span>}
                 </div>
                 {reason ? (
-                  <p className="flex items-center gap-1 text-xs text-muted-foreground"><Lock className="h-3.5 w-3.5" />{reason}</p>
+                  <p className="rounded-lg bg-background/60 px-2.5 py-2 text-xs text-muted-foreground">{reason}</p>
                 ) : (
                   <div className="grid grid-cols-5 gap-1.5">
                     {Array.from({ length: QUESTIONS_PER_UNIT }, (_, i) => i + 1).map((s) => {
                       const id = qidOf(u, s);
-                      const state = slotState(questions[id], attention.has(id));
+                      const q = questions[id];
+                      const att = attention.has(id);
+                      const state = slotState(q, att);
                       const active = u === cur.unit && s === cur.slot;
                       return (
                         <button key={s} type="button" onClick={() => void go(u, s)} aria-current={active ? "true" : undefined}
                           aria-label={`Unit ${u} question ${s}: ${state.label}`} title={state.label}
-                          className={cn("h-8 rounded border text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", state.cls, active && "ring-2 ring-primary ring-offset-1")}>
+                          className={cn("relative grid h-9 place-items-center rounded-lg text-xs font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                            att ? "bg-destructive/10 text-destructive ring-1 ring-destructive"
+                              : q?.state === "COMPLETE" ? "bg-emerald-500 text-white hover:bg-emerald-600"
+                              : q ? "bg-amber-100 text-amber-900 ring-1 ring-amber-300 hover:bg-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:ring-amber-800"
+                              : "border border-dashed text-muted-foreground hover:border-primary/50 hover:text-foreground",
+                            active && "scale-105 ring-2 ring-primary ring-offset-2 ring-offset-card")}>
                           {s}
                         </button>
                       );
@@ -316,202 +356,240 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
               </section>
             );
           })}
-          <p className="text-xs text-muted-foreground">Grey dashed = empty, amber = draft, green = complete, red = needs attention.</p>
+          <ul className="flex flex-wrap gap-x-3 gap-y-1 px-1 text-[11px] text-muted-foreground" aria-label="Legend">
+            <li className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm border border-dashed border-muted-foreground" />Empty</li>
+            <li className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-amber-300" />Draft</li>
+            <li className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" />Complete</li>
+            <li className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-destructive" />Needs attention</li>
+          </ul>
         </nav>
 
         {/* Centre: editor */}
-        <section aria-label="Question editor" className={cn("space-y-4", tab !== "editor" && "hidden lg:block")}>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-lg font-semibold">Unit {cur.unit} · Question {cur.slot}</h2>
-            <div className="flex items-center gap-3 text-xs">
-              {saveBadge}
-              <Badge variant={isComplete ? "default" : current ? "secondary" : "outline"}>{isComplete ? "Complete" : current ? "Draft" : "Empty"}</Badge>
-            </div>
-          </div>
-
-          {saveState === "conflict" && (
-            <div className="flex flex-wrap items-center gap-3 rounded-md border border-amber-500/50 bg-amber-50 p-3 text-sm dark:bg-amber-950/30" role="alert">
-              <AlertTriangle className="h-4 w-4 text-amber-700" />
-              <span className="flex-1">This question was changed in another tab or window. Your edits here were not saved.</span>
-              <Button size="sm" variant="outline" onClick={() => {
-                if (conflict) setQuestions((qs) => ({ ...qs, [qid]: conflict })); else setQuestions((qs) => { const n = { ...qs }; delete n[qid]; return n; });
-                setQFormat(fmtOf(conflict)); setParts(conflict?.parts ?? emptyParts(fmtOf(conflict), bank.marks)); setRev(conflict?.rev ?? 0); setDirty(false); setConflict(null); setSaveState("idle");
-              }}>Load the saved version</Button>
-            </div>
-          )}
-
-          {lockedHere && <p className="text-sm text-muted-foreground"><Lock className="mr-1 inline h-4 w-4" />{lockedHere}</p>}
-
-          {others.length > 0 && !lockedHere && (
+        <section aria-label="Question editor" className={cn("overflow-hidden rounded-2xl border bg-card shadow-sm", tab !== "editor" && "hidden lg:block")}>
+          <header className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/30 px-5 py-3.5">
             <div className="flex items-center gap-2">
-              <Label htmlFor="copy-from" className="shrink-0 text-xs text-muted-foreground">Start from a copy of</Label>
-              <select id="copy-from" className="h-8 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-xs" value="" onChange={(e) => { if (e.target.value) copyFrom(e.target.value); }}>
-                <option value="">Choose a question…</option>
-                {others.map((q) => <option key={q.id} value={q.id}>Unit {q.unit} Q{q.slot}: {q.parts[0]?.text.slice(0, 70)}</option>)}
-              </select>
+              <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Previous question" disabled={!prev || saveState === "saving"} onClick={() => prev && void go(prev.unit, prev.slot)}><ChevronLeft className="h-4 w-4" /></Button>
+              <div>
+                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Unit {cur.unit}{unitTitle(cur.unit) ? ` · ${unitTitle(cur.unit)}` : ""}</p>
+                <h2 className="text-lg font-semibold leading-tight">Question {cur.slot} <span className="text-sm font-normal text-muted-foreground">of {QUESTIONS_PER_UNIT}</span></h2>
+              </div>
+              <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Next question" disabled={!nxt || saveState === "saving"} onClick={() => nxt && void go(nxt.unit, nxt.slot)}><ChevronRight className="h-4 w-4" /></Button>
             </div>
-          )}
+            <div className="flex items-center gap-2 text-xs">
+              {saveBadge}
+              <span className={cn("rounded-full px-2.5 py-1 font-semibold", stateChip.cls)}>{stateChip.label}</span>
+            </div>
+          </header>
 
-          {bank.format === "EITHER" && !lockedHere && (
-            <fieldset className="flex flex-wrap items-center gap-4 text-sm">
-              <legend className="sr-only">Question format</legend>
-              {(["SINGLE", "PARTS_AB"] as MidQuestionFormat[]).map((f) => (
-                <label key={f} className="flex items-center gap-1.5">
-                  <input type="radio" name="q-format" checked={qFormat === f} onChange={() => changeFormat(f)} className="h-4 w-4 accent-[hsl(var(--primary))]" />
-                  {f === "SINGLE" ? `One question (${bank.marks} marks)` : "Parts (a) and (b)"}
-                </label>
-              ))}
-            </fieldset>
-          )}
-          {qFormat === "PARTS_AB" && (fieldErrors.marks || (dirty && liveErrors.marks)) && (
-            <p className="text-xs text-destructive">{fieldErrors.marks || liveErrors.marks}</p>
-          )}
+          <div className="space-y-5 p-5">
+            {saveState === "conflict" && (
+              <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-500/50 bg-amber-50 p-3 text-sm dark:bg-amber-950/30" role="alert">
+                <AlertTriangle className="h-4 w-4 text-amber-700" />
+                <span className="flex-1">This question was changed in another tab or window. Your edits here were not saved.</span>
+                <Button size="sm" variant="outline" onClick={() => {
+                  if (conflict) setQuestions((qs) => ({ ...qs, [qid]: conflict })); else setQuestions((qs) => { const n = { ...qs }; delete n[qid]; return n; });
+                  setQFormat(fmtOf(conflict)); setParts(conflict?.parts ?? emptyParts(fmtOf(conflict), bank.marks)); setRev(conflict?.rev ?? 0); setDirty(false); setConflict(null); setSaveState("idle");
+                }}>Load the saved version</Button>
+              </div>
+            )}
 
-          {parts.map((p, i) => {
-            const pre = `p${i}`;
-            const err = (f: string) => fieldErrors[`parts.${i}.${f}`];
-            return (
-              <fieldset key={i} disabled={Boolean(lockedHere)} className="space-y-3 rounded-lg border p-4">
-                <legend className="px-1 text-sm font-semibold">
-                  {partLabel(qFormat, i)}{" "}
-                  {qFormat === "SINGLE" ? <span className="font-normal text-muted-foreground">· {bank.marks} marks</span> : (
-                    <span className="font-normal text-muted-foreground">
-                      ·{" "}
-                      <input type="number" min={1} max={bank.marks - 1} aria-label={`Marks for ${partLabel(qFormat, i)}`}
-                        value={p.marks ?? ""} onChange={(e) => edit(i, { marks: e.target.value === "" ? 0 : Number(e.target.value) })}
-                        className="h-7 w-14 rounded border border-input bg-background px-1 text-center text-sm" /> marks
-                    </span>
-                  )}
-                </legend>
+            {lockedHere && <p className="flex items-center gap-2 rounded-xl bg-muted/50 p-3 text-sm text-muted-foreground"><Lock className="h-4 w-4" />{lockedHere}</p>}
 
-                <div className="space-y-1.5">
-                  <Label htmlFor={`${pre}-text`}>Question text</Label>
-                  <QuestionTextField id={`${pre}-text`} value={p.text} onChange={(v) => edit(i, { text: v })} invalid={Boolean(err("text"))} describedBy={err("text") ? `${pre}-text-err` : undefined}
-                    placeholder="Type the question here. Use the Formula button to add a formula." />
-                  {err("text") && <p id={`${pre}-text-err`} className="text-xs text-destructive">{err("text")}</p>}
-                </div>
-
-                <div className="space-y-1.5">
-                  <span className="text-sm font-medium">Image (optional)</span>
-                  {p.imageUrl ? (
-                    <div className="flex flex-wrap items-start gap-3">
-                      {/* eslint-disable-next-line @next/next/no-img-element -- Storage URL with a token, not an optimisable asset */}
-                      <img src={p.imageUrl} alt={p.imageCaption || `Image for ${partLabel(qFormat, i)}`} className="max-h-40 rounded border" />
-                      <div className="flex flex-col gap-2">
-                        <label className="inline-flex cursor-pointer items-center text-xs underline">
-                          Replace<input type="file" accept="image/png,image/jpeg" className="sr-only" onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(i, f); e.target.value = ""; }} />
-                        </label>
-                        <button type="button" className="text-left text-xs text-destructive underline" onClick={() => edit(i, { imageUrl: undefined, imageCaption: undefined })}>Remove</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <label className="flex w-fit cursor-pointer items-center gap-2 rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground hover:bg-muted/50 focus-within:ring-2 focus-within:ring-ring">
-                      {uploading === i ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
-                      {uploading === i ? "Uploading…" : "Add image (PNG or JPEG, up to 1 MB)"}
-                      <input type="file" accept="image/png,image/jpeg" className="sr-only" disabled={uploading !== null} onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(i, f); e.target.value = ""; }} />
-                    </label>
-                  )}
-                  {p.imageUrl && (
-                    <Input aria-label="Image caption" placeholder="Caption (optional, up to 150 characters)" maxLength={150} value={p.imageCaption ?? ""} onChange={(e) => edit(i, { imageCaption: e.target.value })} />
-                  )}
-                  {err("imageCaption") && <p className="text-xs text-destructive">{err("imageCaption")}</p>}
-                </div>
-
-                <div className="space-y-1.5">
-                  <span className="text-sm font-medium" id={`${pre}-co-label`}>Course Outcome(s)</span>
-                  <div className="flex flex-wrap gap-1.5" role="group" aria-labelledby={`${pre}-co-label`}>
-                    {outcomes.cos.map((c) => {
-                      const on = p.cos.includes(c.id);
-                      return (
-                        <button key={c.id} type="button" aria-pressed={on} title={c.statement}
-                          onClick={() => edit(i, { cos: on ? p.cos.filter((x) => x !== c.id) : [...p.cos, c.id] })}
-                          className={cn("rounded-full border px-3 py-1 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", on ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted")}>
-                          {c.id}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {err("cos") && <p className="text-xs text-destructive">{err("cos")}</p>}
-                </div>
-
-                <fieldset className="space-y-1.5">
-                  <legend className="text-sm font-medium">Bloom&rsquo;s level</legend>
-                  <div className="flex flex-wrap gap-3">
-                    {BLOOM_LEVELS.map((l) => (
-                      <label key={l} className="flex items-center gap-1.5 text-sm">
-                        <input type="radio" name={`${pre}-bloom`} value={l} checked={p.bloom === l} onChange={() => edit(i, { bloom: l as BloomLevel })} className="h-4 w-4 accent-[hsl(var(--primary))]" />
-                        {BLOOM_LABELS[l]}
+            {(others.length > 0 || bank.format === "EITHER") && !lockedHere && (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                {bank.format === "EITHER" && (
+                  <fieldset className="inline-flex rounded-xl border bg-muted/40 p-1 text-sm">
+                    <legend className="sr-only">Question format</legend>
+                    {(["SINGLE", "PARTS_AB"] as MidQuestionFormat[]).map((f) => (
+                      <label key={f} className={cn("flex cursor-pointer items-center rounded-lg px-3.5 py-1.5 font-medium transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
+                        qFormat === f ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+                        <input type="radio" name="q-format" checked={qFormat === f} onChange={() => changeFormat(f)} className="sr-only" />
+                        {f === "SINGLE" ? `One question · ${bank.marks} marks` : "Parts (a) + (b)"}
                       </label>
                     ))}
+                  </fieldset>
+                )}
+                {others.length > 0 && (
+                  <div className="flex min-w-0 flex-1 items-center justify-end gap-2 sm:max-w-sm">
+                    <Label htmlFor="copy-from" className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground"><Copy className="h-3.5 w-3.5" />Copy from</Label>
+                    <select id="copy-from" className="h-9 min-w-0 flex-1 rounded-lg border border-input bg-background px-2 text-xs" value="" onChange={(e) => { if (e.target.value) copyFrom(e.target.value); }}>
+                      <option value="">Choose a question…</option>
+                      {others.map((q) => <option key={q.id} value={q.id}>Unit {q.unit} Q{q.slot}: {q.parts[0]?.text.slice(0, 70)}</option>)}
+                    </select>
                   </div>
-                  {err("bloom") && <p className="text-xs text-destructive">{err("bloom")}</p>}
-                </fieldset>
-              </fieldset>
-            );
-          })}
+                )}
+              </div>
+            )}
+            {qFormat === "PARTS_AB" && (fieldErrors.marks || (dirty && liveErrors.marks)) && (
+              <p className="text-xs text-destructive">{fieldErrors.marks || liveErrors.marks}</p>
+            )}
 
-          {warnings.length > 0 && (
-            <ul className="space-y-1 rounded-md bg-amber-50 p-3 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
-              {warnings.map((w) => <li key={w}>{w} - check it isn&rsquo;t a repeat.</li>)}
-            </ul>
-          )}
+            {parts.map((p, i) => {
+              const pre = `p${i}`;
+              const err = (f: string) => fieldErrors[`parts.${i}.${f}`];
+              return (
+                <fieldset key={i} disabled={Boolean(lockedHere)} className="space-y-5 rounded-xl border bg-background p-4 sm:p-5">
+                  <legend className="flex items-center gap-2 px-1 text-sm font-semibold">
+                    <span className="grid h-6 min-w-6 place-items-center rounded-md bg-primary px-1.5 text-xs text-primary-foreground">{qFormat === "SINGLE" ? "Q" : i === 0 ? "a" : "b"}</span>
+                    {partLabel(qFormat, i)}
+                    {qFormat === "SINGLE" ? <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">{bank.marks} marks</span> : (
+                      <span className="flex items-center gap-1 text-xs font-normal text-muted-foreground">
+                        <input type="number" min={1} max={bank.marks - 1} aria-label={`Marks for ${partLabel(qFormat, i)}`}
+                          value={p.marks ?? ""} onChange={(e) => edit(i, { marks: e.target.value === "" ? 0 : Number(e.target.value) })}
+                          className="h-7 w-14 rounded-md border border-input bg-background px-1 text-center text-sm font-semibold text-foreground" /> marks
+                      </span>
+                    )}
+                  </legend>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`${pre}-text`} className="text-sm font-medium">Question text</Label>
+                    <QuestionTextField id={`${pre}-text`} value={p.text} onChange={(v) => edit(i, { text: v })} invalid={Boolean(err("text"))} describedBy={err("text") ? `${pre}-text-err` : undefined}
+                      placeholder="Type the question here. Use the Formula button to add a formula." />
+                    {err("text") && <p id={`${pre}-text-err`} className="text-xs text-destructive">{err("text")}</p>}
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <span className="text-sm font-medium">Image <span className="font-normal text-muted-foreground">(optional)</span></span>
+                    {p.imageUrl ? (
+                      <div className="flex flex-wrap items-start gap-3 rounded-xl border bg-muted/20 p-3">
+                        {/* eslint-disable-next-line @next/next/no-img-element -- Storage URL with a token, not an optimisable asset */}
+                        <img src={p.imageUrl} alt={p.imageCaption || `Image for ${partLabel(qFormat, i)}`} className="max-h-40 rounded-lg border bg-white" />
+                        <div className="flex flex-col gap-2">
+                          <label className="inline-flex cursor-pointer items-center rounded-md border bg-background px-2.5 py-1 text-xs font-medium hover:bg-muted">
+                            Replace<input type="file" accept="image/png,image/jpeg" className="sr-only" onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(i, f); e.target.value = ""; }} />
+                          </label>
+                          <button type="button" className="rounded-md px-2.5 py-1 text-left text-xs font-medium text-destructive hover:bg-destructive/10" onClick={() => edit(i, { imageUrl: undefined, imageCaption: undefined })}>Remove</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <label className="flex cursor-pointer items-center gap-3 rounded-xl border-2 border-dashed px-4 py-3 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 focus-within:ring-2 focus-within:ring-ring">
+                        <span className="grid h-9 w-9 place-items-center rounded-lg bg-muted">{uploading === i ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}</span>
+                        <span><span className="font-medium text-foreground">{uploading === i ? "Uploading…" : "Add an image"}</span><span className="block text-xs">PNG or JPEG, up to 1 MB</span></span>
+                        <input type="file" accept="image/png,image/jpeg" className="sr-only" disabled={uploading !== null} onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(i, f); e.target.value = ""; }} />
+                      </label>
+                    )}
+                    {p.imageUrl && (
+                      <Input aria-label="Image caption" placeholder="Caption (optional, up to 150 characters)" maxLength={150} value={p.imageCaption ?? ""} onChange={(e) => edit(i, { imageCaption: e.target.value })} />
+                    )}
+                    {err("imageCaption") && <p className="text-xs text-destructive">{err("imageCaption")}</p>}
+                  </div>
+
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <span className="text-sm font-medium" id={`${pre}-co-label`}>Course Outcome(s)</span>
+                      <div className="flex flex-wrap gap-1.5" role="group" aria-labelledby={`${pre}-co-label`}>
+                        {outcomes.cos.map((c) => {
+                          const on = p.cos.includes(c.id);
+                          return (
+                            <button key={c.id} type="button" aria-pressed={on} title={c.statement}
+                              onClick={() => edit(i, { cos: on ? p.cos.filter((x) => x !== c.id) : [...p.cos, c.id] })}
+                              className={cn("inline-flex h-8 items-center gap-1 rounded-full border px-3 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                on ? "border-primary bg-primary text-primary-foreground shadow-sm" : "bg-background hover:border-primary/50")}>
+                              {on && <Check className="h-3 w-3" />}{c.id}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {err("cos") && <p className="text-xs text-destructive">{err("cos")}</p>}
+                    </div>
+
+                    <fieldset className="space-y-2">
+                      <legend className="text-sm font-medium">Bloom&rsquo;s level</legend>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {BLOOM_LEVELS.map((l) => {
+                          const [code, word] = BLOOM_LABELS[l].split(" - ");
+                          return (
+                            <label key={l} className={cn("flex cursor-pointer flex-col items-center rounded-xl border px-2 py-1.5 text-center transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
+                              p.bloom === l ? "border-primary bg-primary text-primary-foreground shadow-sm" : "bg-background hover:border-primary/50")}>
+                              <input type="radio" name={`${pre}-bloom`} value={l} checked={p.bloom === l} onChange={() => edit(i, { bloom: l as BloomLevel })} className="sr-only" />
+                              <span className="text-sm font-bold">{code}</span>
+                              <span className={cn("text-[11px]", p.bloom === l ? "opacity-90" : "text-muted-foreground")}>{word}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                      {err("bloom") && <p className="text-xs text-destructive">{err("bloom")}</p>}
+                    </fieldset>
+                  </div>
+                </fieldset>
+              );
+            })}
+
+            {warnings.length > 0 && (
+              <ul className="space-y-1 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
+                {warnings.map((w) => <li key={w} className="flex gap-1.5"><AlertTriangle className="h-3.5 w-3.5 shrink-0" />{w} - check it isn&rsquo;t a repeat.</li>)}
+              </ul>
+            )}
+          </div>
 
           {!lockedHere && (
-            <div className="flex flex-wrap justify-end gap-2">
-              {!isComplete && <Button variant="outline" onClick={() => void save("draft")} disabled={!dirty || saveState === "saving"}>Save draft</Button>}
-              <Button variant="outline" onClick={() => void saveQuestion(false)} disabled={saveState === "saving" || parts.every(isBlankPart)}>Save question</Button>
-              <Button onClick={() => void saveQuestion(true)} disabled={saveState === "saving" || parts.every(isBlankPart)}>Save &amp; next</Button>
-            </div>
+            <footer className="flex flex-wrap items-center justify-between gap-2 border-t bg-muted/30 px-5 py-3">
+              <span className="text-xs text-muted-foreground">{isComplete ? "Complete questions save only with Save question" : "Drafts save by themselves as you type"}</span>
+              <div className="flex flex-wrap gap-2">
+                {!isComplete && <Button variant="ghost" onClick={() => void save("draft")} disabled={!dirty || saveState === "saving"}>Save draft</Button>}
+                <Button variant="outline" onClick={() => void saveQuestion(false)} disabled={saveState === "saving" || parts.every(isBlankPart)}>Save question</Button>
+                <Button onClick={() => void saveQuestion(true)} disabled={saveState === "saving" || parts.every(isBlankPart)}>Save &amp; next<ChevronRight className="ml-1 h-4 w-4" /></Button>
+              </div>
+            </footer>
           )}
         </section>
 
         {/* Right: academic details */}
-        <aside aria-label="Question details" className={cn("space-y-4 text-sm", tab !== "info" && "hidden lg:block")}>
-          <div className="rounded-lg border p-3">
-            <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">Unit {cur.unit} Bloom&rsquo;s levels</p>
-            <ul className="space-y-1">
+        <aside aria-label="Question details" className={cn("space-y-4 text-sm lg:sticky lg:top-4 lg:self-start", tab !== "info" && "hidden lg:block")}>
+          <div className="rounded-2xl border bg-card p-4 shadow-sm">
+            <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><BarChart3 className="h-3.5 w-3.5" />Unit {cur.unit} Bloom&rsquo;s levels</p>
+            <ul className="space-y-3">
               {bloomNeeds(unitStatus.bloom).map((b) => (
-                <li key={b.level} className="flex justify-between">
-                  <span>{b.level}: {b.count}</span>
-                  <span className={b.need ? "text-amber-700 dark:text-amber-400" : "text-green-700 dark:text-green-400"}>{b.need ? `Need ${b.need} more` : "Complete"}</span>
+                <li key={b.level}>
+                  <div className="mb-1 flex justify-between text-xs">
+                    <span className="font-medium">{BLOOM_LABELS[b.level as BloomLevel] ?? b.level} <span className="text-muted-foreground">· {b.count}</span></span>
+                    <span className={b.need ? "font-medium text-amber-700 dark:text-amber-400" : "font-medium text-emerald-700 dark:text-emerald-400"}>{b.need ? `Need ${b.need} more` : "Done"}</span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                    <div className={cn("h-full rounded-full", b.need ? "bg-amber-400" : "bg-emerald-500")} style={{ width: `${Math.min(100, (b.count / BLOOM_MIN_PER_UNIT) * 100)}%` }} />
+                  </div>
                 </li>
               ))}
-              <li className="flex justify-between border-t pt-1"><span>Questions</span><span>{unitStatus.completeCount}/{QUESTIONS_PER_UNIT} complete{unitStatus.draftCount ? `, ${unitStatus.draftCount} draft` : ""}</span></li>
             </ul>
+            <p className="mt-3 flex justify-between border-t pt-3 text-xs"><span className="text-muted-foreground">Questions</span><span className="font-semibold">{unitStatus.completeCount}/{QUESTIONS_PER_UNIT} complete{unitStatus.draftCount ? `, ${unitStatus.draftCount} draft` : ""}</span></p>
           </div>
 
-          <div className="rounded-lg border p-3">
-            <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">Outcomes</p>
+          <div className="rounded-2xl border bg-card p-4 shadow-sm">
+            <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><Target className="h-3.5 w-3.5" />Outcomes</p>
             {allCos.length === 0 ? <p className="text-xs text-muted-foreground">Pick a Course Outcome to see its POs and PSOs.</p> : (
               <>
-                <ul className="mb-2 space-y-1">{allCos.map((c) => <li key={c}><span className="font-medium">{c}</span> {outcomes.cos.find((x) => x.id === c)?.statement}</li>)}</ul>
+                <ul className="mb-3 space-y-2">{allCos.map((c) => <li key={c} className="flex gap-2 text-xs"><span className="h-fit shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 font-bold text-primary">{c}</span><span>{outcomes.cos.find((x) => x.id === c)?.statement}</span></li>)}</ul>
                 <div className="flex flex-wrap gap-1">
-                  {poPso.map((x) => <Badge key={x} variant="outline" title={PROGRAM_OUTCOMES.find((p) => p.id === x)?.title ?? "Programme-specific outcome"}>{x}</Badge>)}
+                  {poPso.map((x) => <Badge key={x} variant="secondary" className="rounded-full" title={PROGRAM_OUTCOMES.find((p) => p.id === x)?.title ?? "Programme-specific outcome"}>{x}</Badge>)}
                 </div>
               </>
             )}
           </div>
 
-          <div className="rounded-lg border p-3">
-            <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">Preview</p>
-            <div className="space-y-3">
+          <div className="rounded-2xl border bg-card p-4 shadow-sm">
+            <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><Eye className="h-3.5 w-3.5" />Preview</p>
+            <div className="space-y-3 rounded-xl border bg-white p-3 font-serif text-[15px] text-neutral-900 dark:bg-neutral-50">
               {parts.map((p, i) => (
                 <div key={i}>
-                  {qFormat === "PARTS_AB" && <span className="mr-1 font-medium">({i === 0 ? "a" : "b"})</span>}
-                  {p.text.trim() ? <MathText text={p.text} className="inline" /> : <span className="text-muted-foreground">Nothing written yet</span>}
+                  <div className="flex gap-1.5">
+                    <span className="font-semibold">{qFormat === "PARTS_AB" ? `(${i === 0 ? "a" : "b"})` : `${cur.slot}.`}</span>
+                    <div className="min-w-0 flex-1">
+                      {p.text.trim() ? <MathText text={p.text} /> : <span className="font-sans text-sm italic text-neutral-500">Nothing written yet</span>}
+                    </div>
+                  </div>
                   {/* eslint-disable-next-line @next/next/no-img-element -- Storage URL with a token */}
-                  {p.imageUrl && <figure className="mt-2"><img src={p.imageUrl} alt={p.imageCaption || ""} className="max-h-32 rounded border" />{p.imageCaption && <figcaption className="text-xs text-muted-foreground">{p.imageCaption}</figcaption>}</figure>}
-                  <p className="mt-1 text-xs text-muted-foreground">[{partMarks(p, i, qFormat, bank.marks)} M] {p.cos.join(", ") || "No CO"} · {p.bloom || "No level"}</p>
+                  {p.imageUrl && <figure className="mt-2"><img src={p.imageUrl} alt={p.imageCaption || ""} className="max-h-32 rounded border" />{p.imageCaption && <figcaption className="font-sans text-xs text-neutral-500">{p.imageCaption}</figcaption>}</figure>}
+                  <p className="mt-1.5 font-sans text-[11px] text-neutral-500">[{partMarks(p, i, qFormat, bank.marks)} M] {p.cos.join(", ") || "No CO"} · {p.bloom || "No level"}</p>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="rounded-lg border p-3">
-            <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">To save as complete</p>
+          <div className={cn("rounded-2xl border p-4 shadow-sm", Object.keys(liveErrors).length === 0 ? "border-emerald-300/70 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/20" : "bg-card")}>
+            <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><ListChecks className="h-3.5 w-3.5" />To save as complete</p>
             {Object.keys(liveErrors).length === 0
-              ? <p className="flex items-center gap-1 text-green-700 dark:text-green-400"><CheckCircle2 className="h-4 w-4" />Ready - the server also checks for duplicates</p>
-              : <ul className="space-y-1 text-xs">{Object.entries(liveErrors).map(([k, v]) => <li key={k} className="flex gap-1"><X className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />{v}</li>)}</ul>}
+              ? <p className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-400"><CheckCircle2 className="h-4 w-4" />Ready - the server also checks for duplicates</p>
+              : <ul className="space-y-2 text-xs">{Object.entries(liveErrors).map(([k, v]) => <li key={k} className="flex gap-2"><span className="mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full bg-destructive/10 text-destructive"><X className="h-2.5 w-2.5" /></span>{v}</li>)}</ul>}
           </div>
         </aside>
       </div>
