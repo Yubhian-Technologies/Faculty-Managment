@@ -18,11 +18,15 @@ export function defaultUnits(n: number): number[] {
   return Array.from({ length: PAPER_QUESTIONS }, (_, i) => Math.min(n, Math.floor((i * n) / PAPER_QUESTIONS) + 1));
 }
 export const UNIT_COUNTS = [1, 2, 3, 6];
+/** Regd. No boxes on the paper: real numbers are 10-11 characters (VWU uses 11). */
+export const DEFAULT_REGD_BOXES = 12;
+export const REGD_BOXES_MIN = 6;
+export const REGD_BOXES_MAX = 20;
 
 const isLevel = (x: unknown): x is BloomLevel => BLOOM_LEVELS.includes(x as BloomLevel);
 
 /** The template sent by the settings form, checked. Every unit of a Mid must carry the same number of questions. */
-export function cleanTemplate(raw: { sequences?: unknown; units?: unknown; instruction?: unknown; maxMarks?: unknown }) {
+export function cleanTemplate(raw: { sequences?: unknown; units?: unknown; instruction?: unknown; maxMarks?: unknown; regdBoxes?: unknown }) {
   const errors: string[] = [];
   const seqIn = (raw.sequences ?? {}) as Record<string, unknown>;
   const sequences = {} as Record<BloomLevel, BloomLevel[]>;
@@ -47,7 +51,9 @@ export function cleanTemplate(raw: { sequences?: unknown; units?: unknown; instr
   const instruction = String(raw.instruction ?? "").replace(/\s+/g, " ").trim().slice(0, 300) || DEFAULT_INSTRUCTION;
   const m = raw.maxMarks === null || raw.maxMarks === "" || raw.maxMarks === undefined ? null : Number(raw.maxMarks);
   if (m !== null && (!Number.isInteger(m) || m < 1 || m > 500)) errors.push("Max marks must be a whole number");
-  return { value: { sequences, units, instruction, maxMarks: m }, errors };
+  const boxes = raw.regdBoxes === undefined || raw.regdBoxes === "" || raw.regdBoxes === null ? DEFAULT_REGD_BOXES : Number(raw.regdBoxes);
+  if (!Number.isInteger(boxes) || boxes < REGD_BOXES_MIN || boxes > REGD_BOXES_MAX) errors.push(`Regd. No boxes must be ${REGD_BOXES_MIN} to ${REGD_BOXES_MAX}`);
+  return { value: { sequences, units, instruction, maxMarks: m, regdBoxes: boxes }, errors };
 }
 
 /** A question's level for the paper: the level all its parts share (mixed levels = none). */

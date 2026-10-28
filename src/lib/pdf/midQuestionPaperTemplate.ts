@@ -2,6 +2,7 @@ import { logoSrc } from "@/lib/pdf/logo";
 import { renderMathHtml } from "@/lib/midBank/renderMath";
 import { derivePoPso } from "@/lib/midBank/outcomes";
 import { partMarks } from "@/lib/midBank/validateQuestion";
+import { DEFAULT_REGD_BOXES } from "@/lib/midPaper/rules";
 import type { GeneratedPaper, GeneratedPapers } from "@/lib/midPaper/clientTypes";
 
 // Print-ready HTML (A4 portrait) for one Mid question paper, laid out like the
@@ -11,8 +12,6 @@ import type { GeneratedPaper, GeneratedPapers } from "@/lib/midPaper/clientTypes
 // three OR-pairs with Marks, CO, BL and PO columns.
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
-/** Regd. No boxes: real numbers are 10-11 characters (VWU uses 11) - 12 leaves one spare. */
-const REGD_BOXES = 12;
 export const ROMAN = ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
 const dmy = (d: string) => `${d.slice(8, 10)}-${d.slice(5, 7)}-${d.slice(0, 4)}`;
 
@@ -103,7 +102,7 @@ export function getMidQuestionPaperHTML(d: {
   const sections = shortSections(p);
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8" /><style>${STYLE}</style></head><body><div class="page">
-    <div class="top"><span class="code">${esc(p.subjectCode)}</span><span>${regCode ? `<span class="code">${esc(regCode)}</span>` : ""}</span><span class="regd"><span>Regd. No:</span>${"<i></i>".repeat(REGD_BOXES)}</span></div>
+    <div class="top"><span class="code">${esc(p.subjectCode)}</span><span>${regCode ? `<span class="code">${esc(regCode)}</span>` : ""}</span><span class="regd"><span>Regd. No:</span>${"<i></i>".repeat(p.regdBoxes || DEFAULT_REGD_BOXES)}</span></div>
     <div class="head">
       <img src="${logoSrc(d.college.logoUrl)}" alt="College logo" />
       <div class="center">

@@ -9,7 +9,7 @@ import { loadEffectiveTiming } from "@/lib/college/semester";
 import { courseKeyForSubject, guardError, loadOutcomes, loadQuestions, loadSubject, midBankRefs } from "@/lib/midBank/server";
 import { allowedFormats, formatOf } from "@/lib/midBank/validateQuestion";
 import { BLOOM_LEVELS } from "@/lib/midBank/constants";
-import { DEFAULT_INSTRUCTION, paperSlots, pickPaper } from "@/lib/midPaper/rules";
+import { DEFAULT_INSTRUCTION, DEFAULT_REGD_BOXES, paperSlots, pickPaper } from "@/lib/midPaper/rules";
 import { loadPlan, midTimetableRefs } from "@/lib/midTimetable/server";
 import type { GeneratedPaper, GeneratedPapers, PaperQuestion } from "@/lib/midPaper/clientTypes";
 import type { BloomLevel, Course, Department, MidPaperTemplate, MidQuestionBank, MidTimetable, Subject } from "@/types";
@@ -75,7 +75,7 @@ export async function POST(request: Request) {
       const base = {
         branch: slot.branch, branchCode: codeOf.get(slot.branch) || slot.branch, subjectName: slot.subjectName, subjectCode: slot.subjectCode,
         regulation: "", sections: [] as string[], ownerName: "", slots: [], picked: [], candidates: {}, questions: {}, unitTitles: {}, cos: [], mapping: {},
-        marks: 0, maxMarks: 0, instruction: DEFAULT_INSTRUCTION, startLevel: start,
+        marks: 0, maxMarks: 0, instruction: DEFAULT_INSTRUCTION, regdBoxes: DEFAULT_REGD_BOXES, startLevel: start,
       };
       const mine = banks.filter((b) => b.subjectId === slot.subjectId && b.branch === slot.branch);
       if (mine.length === 0) { papers.push({ ...base, key: `${slot.branch}|${slot.subjectId}`, error: "No question bank has been prepared for this subject in this branch" }); continue; }
@@ -99,7 +99,7 @@ export async function POST(request: Request) {
           questions: Object.fromEntries(questions.filter((q) => ids.has(q.id)).map((q) => [q.id, lite(q)])),
           unitTitles: Object.fromEntries((outcomes?.units ?? []).map((u) => [String(u.no), u.title])),
           cos: outcomes?.cos ?? [], mapping: outcomes?.mapping ?? {},
-          maxMarks: template.maxMarks ?? bank.marks * 3, instruction: template.instruction || DEFAULT_INSTRUCTION,
+          maxMarks: template.maxMarks ?? bank.marks * 3, instruction: template.instruction || DEFAULT_INSTRUCTION, regdBoxes: template.regdBoxes ?? DEFAULT_REGD_BOXES,
           ...(r.shortages.length ? { error: "Not enough questions of the right unit and level", shortages: r.shortages } : {}),
         });
       }

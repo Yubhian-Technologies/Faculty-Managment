@@ -21,6 +21,8 @@ export interface MidPaperTemplate {
   instruction: string;
   /** Printed max marks; absent = 3 x the bank's marks per question. */
   maxMarks?: number | null;
+  /** Boxes printed for the Regd. No (absent = DEFAULT_REGD_BOXES). */
+  regdBoxes?: number;
   updatedBy: string;
   updatedByName: string;
   updatedAt: Timestamp;

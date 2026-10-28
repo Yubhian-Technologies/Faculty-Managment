@@ -31,6 +31,7 @@ export interface GeneratedPaper {
   marks: number;
   maxMarks: number;
   instruction: string;
+  regdBoxes: number;
   startLevel: BloomLevel;
 }
 

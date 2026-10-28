@@ -10,7 +10,7 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { buildCourseGroups } from "@/lib/departments/hodScope";
 import { BLOOM_LEVELS } from "@/lib/midBank/constants";
-import { DEFAULT_INSTRUCTION, DEFAULT_SEQUENCES, defaultUnits, PAPER_QUESTIONS, UNIT_COUNTS } from "@/lib/midPaper/rules";
+import { DEFAULT_INSTRUCTION, DEFAULT_REGD_BOXES, DEFAULT_SEQUENCES, defaultUnits, PAPER_QUESTIONS, REGD_BOXES_MAX, REGD_BOXES_MIN, UNIT_COUNTS } from "@/lib/midPaper/rules";
 import type { BloomLevel, Course, MidPaperTemplate } from "@/types";
 
 // Exam Cell > Mid Configuration > Question paper: the Mid question paper
@@ -34,6 +34,7 @@ export function MidPaperTemplateCard() {
   const [units, setUnits] = useState<Record<string, number[]>>(blankUnits);
   const [instruction, setInstruction] = useState(DEFAULT_INSTRUCTION);
   const [maxMarks, setMaxMarks] = useState("");
+  const [regdBoxes, setRegdBoxes] = useState(String(DEFAULT_REGD_BOXES));
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<MidPaperTemplate | null>(null);
 
@@ -55,12 +56,12 @@ export function MidPaperTemplateCard() {
   }, []);
 
   function reset() {
-    setEditingId(null); setCourseKey(""); setRegulation(""); setSequences(DEFAULT_SEQUENCES); setUnits(blankUnits()); setInstruction(DEFAULT_INSTRUCTION); setMaxMarks("");
+    setEditingId(null); setCourseKey(""); setRegulation(""); setSequences(DEFAULT_SEQUENCES); setUnits(blankUnits()); setInstruction(DEFAULT_INSTRUCTION); setMaxMarks(""); setRegdBoxes(String(DEFAULT_REGD_BOXES));
   }
   function edit(t: MidPaperTemplate) {
     setEditingId(t.id); setCourseKey(t.courseKey); setRegulation(t.regulation === "ALL" ? "" : t.regulation);
     setSequences({ ...DEFAULT_SEQUENCES, ...t.sequences }); setUnits({ ...blankUnits(), ...t.units });
-    setInstruction(t.instruction || DEFAULT_INSTRUCTION); setMaxMarks(t.maxMarks ? String(t.maxMarks) : "");
+    setInstruction(t.instruction || DEFAULT_INSTRUCTION); setMaxMarks(t.maxMarks ? String(t.maxMarks) : ""); setRegdBoxes(String(t.regdBoxes ?? DEFAULT_REGD_BOXES));
   }
 
   async function save() {
@@ -70,7 +71,7 @@ export function MidPaperTemplateCard() {
     try {
       const res = await fetch("/api/college/mid-paper-templates", {
         method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ courseKey, courseName: group.name, regulation: regulation || "ALL", sequences, units, instruction, maxMarks: maxMarks || null }),
+        body: JSON.stringify({ courseKey, courseName: group.name, regulation: regulation || "ALL", sequences, units, instruction, maxMarks: maxMarks || null, regdBoxes: regdBoxes || DEFAULT_REGD_BOXES }),
       });
       const data = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed to save");
@@ -108,7 +109,7 @@ export function MidPaperTemplateCard() {
           <div className="overflow-x-auto rounded-md border">
             <table className="w-full text-sm">
               <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
-                <tr><th className="p-2">Course</th><th className="p-2">Regulation</th><th className="p-2">Starting at L2</th><th className="p-2">Max marks</th><th className="p-2" /></tr>
+                <tr><th className="p-2">Course</th><th className="p-2">Regulation</th><th className="p-2">Starting at L2</th><th className="p-2">Max marks</th><th className="p-2">Regd. No boxes</th><th className="p-2" /></tr>
               </thead>
               <tbody>
                 {templates.map((t) => (
@@ -117,6 +118,7 @@ export function MidPaperTemplateCard() {
                     <td className="p-2">{t.regulation === "ALL" ? <span className="text-muted-foreground">All</span> : t.regulation}</td>
                     <td className="p-2 font-mono text-xs">{(t.sequences.L2 ?? []).join(" · ")}</td>
                     <td className="p-2">{t.maxMarks ?? <span className="text-muted-foreground">3 x question marks</span>}</td>
+                    <td className="p-2">{t.regdBoxes ?? DEFAULT_REGD_BOXES}</td>
                     <td className="whitespace-nowrap p-2 text-right">
                       <Button size="icon" variant="ghost" aria-label={`Edit the template for ${t.courseName}`} onClick={() => edit(t)}><Pencil className="h-4 w-4" /></Button>
                       <Button size="icon" variant="ghost" aria-label={`Delete the template for ${t.courseName}`} onClick={() => setDeleting(t)}><Trash2 className="h-4 w-4" /></Button>
@@ -210,7 +212,7 @@ export function MidPaperTemplateCard() {
           </div>
         </fieldset>
 
-        <div className="grid gap-4 sm:grid-cols-[1fr_12rem]">
+        <div className="grid gap-4 sm:grid-cols-[1fr_12rem_12rem]">
           <div className="space-y-1.5">
             <Label htmlFor="mpt-instr">Instruction printed on the paper</Label>
             <Input id="mpt-instr" value={instruction} maxLength={300} onChange={(e) => setInstruction(e.target.value)} />
@@ -218,6 +220,11 @@ export function MidPaperTemplateCard() {
           <div className="space-y-1.5">
             <Label htmlFor="mpt-max">Max. marks (optional)</Label>
             <Input id="mpt-max" type="number" min={1} max={500} value={maxMarks} placeholder="3 x question marks" onChange={(e) => setMaxMarks(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="mpt-regd">Regd. No boxes</Label>
+            <Input id="mpt-regd" type="number" min={REGD_BOXES_MIN} max={REGD_BOXES_MAX} value={regdBoxes} onChange={(e) => setRegdBoxes(e.target.value)} />
+            <p className="text-xs text-muted-foreground">One box per character of the Regd. No ({REGD_BOXES_MIN}-{REGD_BOXES_MAX}).</p>
           </div>
         </div>
 

@@ -11,6 +11,9 @@ describe("mid question paper", () => {
     expect(defaultUnits(3)).toEqual([1, 1, 2, 2, 3, 3]);
     expect(cleanTemplate({ sequences: { ...DEFAULT_SEQUENCES, L3: ["L2", "L3", "L3", "L4", "L4", "L2"] }, units: { "2": defaultUnits(2) } }).errors).toEqual(["Starting at L3: Question 1 must be L3"]);
     expect(cleanTemplate({ sequences: DEFAULT_SEQUENCES, units: { "2": [1, 1, 1, 1, 2, 2] } }).errors[0]).toContain("same number of questions (now 4 / 2)");
+    expect(ok.value.regdBoxes).toBe(12); // default
+    expect(cleanTemplate({ sequences: DEFAULT_SEQUENCES, units: { "2": defaultUnits(2) }, regdBoxes: 11 }).value.regdBoxes).toBe(11);
+    expect(cleanTemplate({ sequences: DEFAULT_SEQUENCES, units: { "2": defaultUnits(2) }, regdBoxes: 40 }).errors).toEqual(["Regd. No boxes must be 6 to 20"]);
   });
 
   it("a question's level is the one all its parts share", () => {
