@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
 import { BLOOM_LABELS, BLOOM_LEVELS, BLOOM_MIN_PER_UNIT, PROGRAM_OUTCOMES, QUESTIONS_PER_UNIT } from "@/lib/midBank/constants";
@@ -30,6 +31,8 @@ const AUTOSAVE_MS = 1500;
 const emptyParts = (format: MidQuestionFormat, total: number): MidQuestionPart[] =>
   defaultSplit(format, total).map((marks) => ({ text: "", cos: [], bloom: "", marks }));
 const qidOf = (unit: number, slot: number) => `${unit}_${slot}`;
+/** Question text for a one-line list: formulas shown as [formula], spaces folded. */
+const plainText = (t: string) => t.replace(/\$\$[\s\S]*?\$\$|\$[^$]*\$/g, "[formula]").replace(/\s+/g, " ").trim();
 
 function slotState(q: MidQuestion | undefined, attention: boolean): { label: string; cls: string } {
   if (attention) return { label: "Needs attention", cls: "border-destructive bg-destructive/10 text-destructive" };
@@ -68,6 +71,7 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
   const [conflict, setConflict] = useState<MidQuestion | null>(null);
   const [uploading, setUploading] = useState<number | null>(null);
   const [tab, setTab] = useState<Tab>("editor");
+  const [copyOpen, setCopyOpen] = useState(false);
 
   // Serialise saves: one request at a time, edits made meanwhile are saved after it.
   const inFlight = useRef<Promise<boolean> | null>(null);
@@ -401,7 +405,7 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
             {lockedHere && <p className="flex items-center gap-2 rounded-xl bg-muted/50 p-3 text-sm text-muted-foreground"><Lock className="h-4 w-4" />{lockedHere}</p>}
 
             {(others.length > 0 || allowed.length > 1) && !lockedHere && (
-              <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 {allowed.length > 1 && (
                   <fieldset className="inline-flex flex-wrap rounded-xl border bg-muted/40 p-1 text-sm">
                     <legend className="sr-only">Question format</legend>
@@ -415,13 +419,31 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
                   </fieldset>
                 )}
                 {others.length > 0 && (
-                  <div className="flex min-w-0 flex-1 items-center justify-end gap-2 sm:max-w-sm">
-                    <Label htmlFor="copy-from" className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground"><Copy className="h-3.5 w-3.5" />Copy from</Label>
-                    <select id="copy-from" className="h-9 min-w-0 flex-1 rounded-lg border border-input bg-background px-2 text-xs" value="" onChange={(e) => { if (e.target.value) copyFrom(e.target.value); }}>
-                      <option value="">Choose a question…</option>
-                      {others.map((q) => <option key={q.id} value={q.id}>Unit {q.unit} Q{q.slot}: {q.parts[0]?.text.slice(0, 70)}</option>)}
-                    </select>
-                  </div>
+                  <Popover open={copyOpen} onOpenChange={setCopyOpen}>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="sm" className="ml-auto shrink-0"><Copy className="mr-1.5 h-4 w-4" />Copy from…</Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="end" className="w-96 max-w-[calc(100vw-2rem)] p-0">
+                      <div className="border-b px-3 py-2.5">
+                        <p className="text-sm font-semibold">Start from a copy</p>
+                        <p className="text-xs text-muted-foreground">The copy replaces what is in this question; change it before saving - an identical question can&rsquo;t be completed.</p>
+                      </div>
+                      <ul className="max-h-80 overflow-y-auto p-1.5" aria-label="Questions to copy from">
+                        {others.map((q) => (
+                          <li key={q.id}>
+                            <button type="button" onClick={() => { copyFrom(q.id); setCopyOpen(false); }}
+                              className="flex w-full items-start gap-2.5 rounded-lg p-2 text-left hover:bg-muted focus-visible:bg-muted focus-visible:outline-none">
+                              <span className={cn("mt-0.5 shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-bold", q.state === "COMPLETE" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900")}>U{q.unit} · Q{q.slot}</span>
+                              <span className="min-w-0 flex-1">
+                                <span className="line-clamp-2 text-sm">{plainText(q.parts[0]?.text ?? "") || <span className="italic text-muted-foreground">Formula / image only</span>}</span>
+                                <span className="text-[11px] text-muted-foreground">{formatName(fmtOf(q))} · {q.parts.flatMap((p) => p.cos).filter((c, i, a) => a.indexOf(c) === i).join(", ") || "No CO"}</span>
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </PopoverContent>
+                  </Popover>
                 )}
               </div>
             )}
