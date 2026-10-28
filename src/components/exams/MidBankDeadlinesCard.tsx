@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { BarChart3, Lock, Trash2 } from "lucide-react";
+import { BarChart3, History, Lock, Pencil, Trash2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import { buildCourseGroups } from "@/lib/departments/hodScope";
 import { deadlineLabel } from "@/lib/midBank/deadline";
@@ -34,7 +35,8 @@ export function MidBankDeadlinesCard({ midCount }: { midCount: number }) {
   const [deadline, setDeadline] = useState("");
   const [timings, setTimings] = useState<CourseYearTiming[]>([]);
   const [saving, setSaving] = useState(false);
-  const [editing, setEditing] = useState<{ id: string; date: string } | null>(null);
+  const [editing, setEditing] = useState<{ row: Row; date: string } | null>(null);
+  const [savingDate, setSavingDate] = useState(false);
   const [deleting, setDeleting] = useState<Row | null>(null);
 
   const groups = useMemo(() => buildCourseGroups(courses), [courses]);
@@ -88,14 +90,22 @@ export function MidBankDeadlinesCard({ midCount }: { midCount: number }) {
 
   async function saveDate() {
     if (!editing) return;
-    const res = await fetch(`/api/college/mid-bank-deadlines/${encodeURIComponent(editing.id)}`, {
-      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ deadline: editing.date }),
-    });
-    const data = (await res.json()) as { error?: string; notified?: number };
-    if (!res.ok) { toast({ variant: "destructive", title: data.error ?? "Could not change the date" }); return; }
-    toast({ variant: "success", title: "Deadline changed", description: `${data.notified ?? 0} faculty member(s) notified.` });
-    setEditing(null);
-    load();
+    if (editing.date === editing.row.deadline) { setEditing(null); return; }
+    setSavingDate(true);
+    try {
+      const res = await fetch(`/api/college/mid-bank-deadlines/${encodeURIComponent(editing.row.id)}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ deadline: editing.date }),
+      });
+      const data = (await res.json()) as { error?: string; notified?: number };
+      if (!res.ok) { toast({ variant: "destructive", title: data.error ?? "Could not change the date" }); return; }
+      toast({ variant: "success", title: "Deadline changed", description: `${data.notified ?? 0} faculty member(s) notified.` });
+      setEditing(null);
+      load();
+    } catch {
+      toast({ variant: "destructive", title: "Network error - the date was not changed" });
+    } finally {
+      setSavingDate(false);
+    }
   }
 
   async function remove() {
@@ -167,20 +177,11 @@ export function MidBankDeadlinesCard({ midCount }: { midCount: number }) {
                     <td className="p-2">{ordinalYearLabel(r.year)} · Sem {r.semester}</td>
                     <td className="p-2">Mid {r.midNumber}</td>
                     <td className="p-2">
-                      {editing?.id === r.id ? (
-                        <div className="flex items-center gap-2">
-                          <Input type="date" aria-label="New deadline" min={today} value={editing.date} onChange={(e) => setEditing({ id: r.id, date: e.target.value })} className="h-8 w-40" />
-                          <Button size="sm" onClick={() => void saveDate()}>Save</Button>
-                          <Button size="sm" variant="ghost" onClick={() => setEditing(null)}>Cancel</Button>
-                        </div>
-                      ) : (
-                        <button type="button" className="text-left" onClick={() => setEditing({ id: r.id, date: r.deadline })} title="Change the date">
-                          <Badge variant={r.locked ? "secondary" : "outline"}>{r.locked && <Lock className="mr-1 h-3 w-3" />}{deadlineLabel(r.deadline)}</Badge>
-                          {r.extensions?.length ? <span className="ml-1 text-xs text-muted-foreground">(moved {r.extensions.length}x)</span> : null}
-                        </button>
-                      )}
+                      <Badge variant={r.locked ? "secondary" : "outline"}>{r.locked && <Lock className="mr-1 h-3 w-3" />}{deadlineLabel(r.deadline)}</Badge>
+                      {r.extensions?.length ? <span className="ml-1 text-xs text-muted-foreground">(changed {r.extensions.length}x)</span> : null}
                     </td>
                     <td className="whitespace-nowrap p-2 text-right">
+                      <Button size="sm" variant="ghost" aria-label={`Edit the deadline for ${r.courseName} Mid ${r.midNumber}`} onClick={() => setEditing({ row: r, date: r.deadline })}><Pencil className="mr-1 h-4 w-4" />Edit</Button>
                       <Button asChild size="sm" variant="ghost"><Link href={`/exam-cell/question-banks/${encodeURIComponent(r.id)}`}><BarChart3 className="mr-1 h-4 w-4" />Progress</Link></Button>
                       <Button size="icon" variant="ghost" aria-label={`Delete the deadline for ${r.courseName} Mid ${r.midNumber}`} onClick={() => setDeleting(r)}><Trash2 className="h-4 w-4" /></Button>
                     </td>
@@ -191,6 +192,44 @@ export function MidBankDeadlinesCard({ midCount }: { midCount: number }) {
           </div>
         )}
       </CardContent>
+      <Dialog open={editing !== null} onOpenChange={(o) => !o && !savingDate && setEditing(null)}>
+        <DialogContent className="sm:max-w-md">
+          {editing && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Edit question bank deadline</DialogTitle>
+                <DialogDescription>
+                  {editing.row.courseName} · {ordinalYearLabel(editing.row.year)} · Semester {editing.row.semester} · Mid {editing.row.midNumber}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="qbd-edit-date">Deadline (last day to prepare)</Label>
+                  <Input id="qbd-edit-date" type="date" min={today} value={editing.date} onChange={(e) => setEditing({ ...editing, date: e.target.value })} />
+                  <p className="text-xs text-muted-foreground">
+                    Now: {deadlineLabel(editing.row.deadline)}{editing.row.locked ? " - banks are locked; a later date reopens them" : ""}.
+                    The faculty teaching these subjects are notified of the change.
+                  </p>
+                </div>
+                {editing.row.extensions?.length ? (
+                  <div className="rounded-md border bg-muted/30 p-3">
+                    <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground"><History className="h-3.5 w-3.5" />Earlier changes</p>
+                    <ul className="space-y-1 text-xs">
+                      {[...editing.row.extensions].reverse().map((x) => (
+                        <li key={x.at}>{x.from} &rarr; <span className="font-medium">{x.to}</span> <span className="text-muted-foreground">· {x.byName}, {new Date(x.at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span></li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+              <DialogFooter>
+                <Button variant="ghost" onClick={() => setEditing(null)} disabled={savingDate}>Cancel</Button>
+                <Button onClick={() => void saveDate()} loading={savingDate} disabled={!editing.date || editing.date === editing.row.deadline}>Save deadline</Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
       <ConfirmDialog
         open={deleting !== null}
         onOpenChange={(o) => !o && setDeleting(null)}
