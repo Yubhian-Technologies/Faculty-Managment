@@ -7,7 +7,6 @@ import { Armchair, ChevronRight } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -22,7 +21,7 @@ interface PlanRow {
   roomCount: number; studentCount: number; unplacedCount: number;
 }
 
-// Exam Cell: name an exam, pick the sections (in seating order) and rooms,
+// Exam Cell: pick the sections (in seating order) and rooms,
 // optionally handpick which sections may sit in a given room, then let the
 // system place students by Regd. No and review the result.
 export default function ExamSeatingPage() {
@@ -32,15 +31,13 @@ export default function ExamSeatingPage() {
   const [rooms, setRooms] = useState<ExamRoom[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const [name, setName] = useState("");
   const [sectionIds, setSectionIds] = useState<string[]>([]); // click order = seating order
   const [roomIds, setRoomIds] = useState<string[]>([]);
   const [roomSections, setRoomSections] = useState<Record<string, string[]>>({});
   const [creating, setCreating] = useState(false);
 
-  // Bench-wise (layered) plan: just a name and the rooms - sections are
+  // Bench-wise (layered) plan: just the rooms - sections are
   // allotted one at a time on the plan's own page.
-  const [layName, setLayName] = useState("");
   const [layRoomIds, setLayRoomIds] = useState<string[]>([]);
   const [layCreating, setLayCreating] = useState(false);
 
@@ -76,7 +73,7 @@ export default function ExamSeatingPage() {
     try {
       const res = await fetch("/api/college/exam-seating", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, sectionIds, roomIds, roomSections }),
+        body: JSON.stringify({ sectionIds, roomIds, roomSections }),
       });
       const data = (await res.json()) as { id?: string; unplaced?: number; error?: string };
       if (!res.ok || !data.id) throw new Error(data.error ?? "Failed to build the plan");
@@ -97,7 +94,7 @@ export default function ExamSeatingPage() {
     try {
       const res = await fetch("/api/college/exam-seating", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: layName, roomIds: layRoomIds, mode: "LAYERED" }),
+        body: JSON.stringify({ roomIds: layRoomIds, mode: "LAYERED" }),
       });
       const data = (await res.json()) as { id?: string; error?: string };
       if (!res.ok || !data.id) throw new Error(data.error ?? "Failed to create the plan");
@@ -120,11 +117,6 @@ export default function ExamSeatingPage() {
       <Card>
         <CardHeader><CardTitle className="text-base">Quick auto-fill plan</CardTitle></CardHeader>
         <CardContent className="space-y-5">
-          <div className="max-w-sm space-y-1.5">
-            <Label>Exam name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Mid-1 Examinations, Oct 2026" />
-          </div>
-
           <div className="space-y-2">
             <Label>Sections taking this exam (seated in the order you tick them)</Label>
             {sections.length === 0 ? (
@@ -183,7 +175,7 @@ export default function ExamSeatingPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <Button disabled={!name.trim() || sectionIds.length === 0 || roomIds.length === 0} loading={creating} onClick={() => void create()}>
+            <Button disabled={sectionIds.length === 0 || roomIds.length === 0} loading={creating} onClick={() => void create()}>
               <Armchair className="h-4 w-4 mr-1" /> Allot seats
             </Button>
             <p className="text-sm text-muted-foreground">
@@ -203,10 +195,6 @@ export default function ExamSeatingPage() {
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="max-w-sm space-y-1.5">
-            <Label>Exam name</Label>
-            <Input value={layName} onChange={(e) => setLayName(e.target.value)} placeholder="e.g. Semester End Exams, Nov 2026" />
-          </div>
           <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3 max-h-56 overflow-y-auto rounded-lg border p-3">
             {rooms.map((r) => (
               <label key={r.id} className="flex items-center gap-2 text-sm">
@@ -217,7 +205,7 @@ export default function ExamSeatingPage() {
             ))}
             {rooms.length === 0 && <p className="text-sm text-muted-foreground">No rooms yet - College Office adds them under Exam Rooms.</p>}
           </div>
-          <Button disabled={!layName.trim() || layRoomIds.length === 0} loading={layCreating} onClick={() => void createLayered()}>
+          <Button disabled={layRoomIds.length === 0} loading={layCreating} onClick={() => void createLayered()}>
             <Armchair className="h-4 w-4 mr-1" /> Create and start allotting
           </Button>
         </CardContent>

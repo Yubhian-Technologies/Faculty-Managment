@@ -52,10 +52,8 @@ export async function PATCH(request: Request, { params }: Ctx) {
     const plan = snap.data() as ExamSeatingPlan;
 
     const update: Record<string, unknown> = { updatedAt: new Date() };
-    if (body.name !== undefined) {
-      if (!body.name.trim()) return NextResponse.json({ error: "Exam name is required" }, { status: 400 });
-      update.name = body.name.trim();
-    }
+    // A blank name leaves the plan's name as it is (no name is required anywhere).
+    if (body.name !== undefined && body.name.trim()) update.name = body.name.trim();
     if (body.status) update.status = body.status;
 
     if (body.rooms || body.unplaced) {
