@@ -1,7 +1,7 @@
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import { fetchCollegeLogoUrl } from "@/lib/pdf/logo";
-import { getBranchTimetableHTML, getMidTimetableHTML, type MidTimetableSheetPrint } from "@/lib/pdf/midTimetableTemplate";
+import { getBranchTimetableHTML, getMidTimetableHTML, splitBySession, type MidTimetableSheetPrint } from "@/lib/pdf/midTimetableTemplate";
 
 // The Mid timetable PDF: one A4 LANDSCAPE sheet like the college prints (the
 // shared htmlToPdf is portrait-only, so this draws its own page). The sheet is
@@ -62,10 +62,11 @@ async function landscapePdf(htmls: string[], fileName: string): Promise<void> {
 
 /**
  * A Mid timetable as a landscape PDF: `sheet` = the combined sheet (branches x
- * days); `branches` = each branch's own timetable on its own page (Date, Day,
- * Time, Subject) - what students get, and what the Exam Cell hands to branches.
+ * days); `sessions` = one sheet per session (Morning, Afternoon ...) with the
+ * branches writing then; `branches` = one branch's own timetable (Date, Day, Time,
+ * Subject) - what students get.
  */
-export async function downloadMidTimetablePdf(sheet: MidTimetableSheetPrint, fileName: string, mode: "sheet" | "branches" = "sheet"): Promise<void> {
+export async function downloadMidTimetablePdf(sheet: MidTimetableSheetPrint, fileName: string, mode: "sheet" | "branches" | "sessions" = "sheet"): Promise<void> {
   const [info, logoUrl] = await Promise.all([
     fetch("/api/college/info").then((r) => (r.ok ? r.json() : {})).catch(() => ({})) as Promise<{ name?: string; affiliation?: string; address?: string }>,
     fetchCollegeLogoUrl(),
@@ -73,6 +74,7 @@ export async function downloadMidTimetablePdf(sheet: MidTimetableSheetPrint, fil
   const college = { name: info.name || "College", affiliation: info.affiliation, address: info.address, logoUrl };
   const htmls = mode === "branches"
     ? sheet.rows.filter((r) => r.slots.length).map((row) => getBranchTimetableHTML({ college, sheet, row }))
+    : mode === "sessions" ? splitBySession(sheet).map((s) => getMidTimetableHTML({ college, sheet: s }))
     : [getMidTimetableHTML({ college, sheet })];
   if (htmls.length === 0) throw new Error("Nothing to print");
   await landscapePdf(htmls, `${fileName.replace(/[^a-zA-Z0-9-_]+/g, "-")}.pdf`);

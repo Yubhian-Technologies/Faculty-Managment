@@ -46,6 +46,17 @@ export interface MidTimetableSheetPrint {
   courseName: string; year: number; semester: number; midNumber: number;
   days: string[]; sessions: MidExamSession[];
   rows: { branch: string; slots: MidExamSlot[]; usualSessionId?: string }[];
+  /** Session-wise sheets: the session's name, printed beside TIME TABLE. */
+  sessionTitle?: string;
+}
+
+/** One sheet per session: the branches with an exam then, and only those exams (the session's time on top). */
+export function splitBySession(sheet: MidTimetableSheetPrint): MidTimetableSheetPrint[] {
+  return [...sheet.sessions].sort((a, b) => a.from.localeCompare(b.from)).map((s) => ({
+    ...sheet, sessions: [s], sessionTitle: s.label,
+    days: sheet.days.filter((d) => sheet.rows.some((r) => r.slots.some((x) => x.date === d && x.sessionId === s.id))),
+    rows: sheet.rows.map((r) => ({ ...r, usualSessionId: s.id, slots: r.slots.filter((x) => x.sessionId === s.id) })).filter((r) => r.slots.length),
+  })).filter((x) => x.rows.length);
 }
 
 export function getMidTimetableHTML(d: { college: { name: string; affiliation?: string; address?: string; logoUrl?: string }; sheet: MidTimetableSheetPrint }): string {
@@ -79,7 +90,7 @@ export function getMidTimetableHTML(d: { college: { name: string; affiliation?: 
     </div>
     <p class="center branch-office">EXAMINATION BRANCH</p>
     <p class="center exam">${esc(t.courseName)} - ${ROMAN[t.year] ?? t.year} YEAR - SEMESTER ${t.semester} &nbsp; MID-${ROMAN[t.midNumber] ?? t.midNumber} EXAMINATIONS${months ? ` - ${esc(months)}` : ""}</p>
-    <div class="row2"><span></span><span class="tt">TIME TABLE</span><span class="time">${esc(time)}</span></div>
+    <div class="row2"><span></span><span class="tt">TIME TABLE${t.sessionTitle ? ` - ${esc(t.sessionTitle.toUpperCase())} SESSION` : ""}</span><span class="time">${esc(time)}</span></div>
     <table><thead>${head}</thead><tbody>${body}</tbody></table>
     <div class="sign"><span>Controller of Examinations</span><span>Principal</span></div>
   </div></body></html>`;

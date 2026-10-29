@@ -45,9 +45,9 @@ export function MidTimetableViewer({ emptyText }: { emptyText: string }) {
   }, []);
   const sheets = useMemo(() => toSheets(list ?? []), [list]);
 
-  async function pdf(s: Sheet, mode: "sheet" | "branches" = s.rows.length === 1 ? "branches" : "sheet") {
+  async function pdf(s: Sheet, mode: "sheet" | "branches" | "sessions" = s.rows.length === 1 ? "branches" : "sheet") {
     setBusy(`${s.planId}|${mode}`);
-    try { await downloadMidTimetablePdf({ ...s, rows: s.rows.map((r) => ({ branch: r.branch, slots: r.slots, usualSessionId: r.usualSessionId ?? usualSessionOf(r.sessions, undefined, r.slots) })) }, `mid${s.midNumber}-${s.courseName}-year${s.year}-${s.rows.length === 1 ? s.rows[0].branch : mode === "branches" ? "branch-wise" : "timetable"}`, mode); }
+    try { await downloadMidTimetablePdf({ ...s, rows: s.rows.map((r) => ({ branch: r.branch, slots: r.slots, usualSessionId: r.usualSessionId ?? usualSessionOf(r.sessions, undefined, r.slots) })) }, `mid${s.midNumber}-${s.courseName}-year${s.year}-${s.rows.length === 1 ? s.rows[0].branch : mode === "sessions" ? "session-wise" : "timetable"}`, mode); }
     catch { toast({ variant: "destructive", title: "Could not make the PDF" }); }
     finally { setBusy(null); }
   }
@@ -75,7 +75,7 @@ export function MidTimetableViewer({ emptyText }: { emptyText: string }) {
               {s.sessions.length === 1 && <p className="text-sm text-muted-foreground">Time: {timeLabel(s.sessions[0].from)} - {timeLabel(s.sessions[0].to)}</p>}
             </div>
             <div className="flex flex-wrap gap-2">
-              {s.rows.length > 1 && <Button size="sm" variant="outline" loading={busy === `${s.planId}|branches`} onClick={() => void pdf(s, "branches")}><Download className="mr-1.5 h-4 w-4" />Branch-wise PDF</Button>}
+              {s.rows.length > 1 && s.sessions.length > 1 && <Button size="sm" variant="outline" loading={busy === `${s.planId}|sessions`} onClick={() => void pdf(s, "sessions")}><Download className="mr-1.5 h-4 w-4" />Session-wise PDF</Button>}
               <Button size="sm" variant="outline" loading={busy === `${s.planId}|${s.rows.length === 1 ? "branches" : "sheet"}`} onClick={() => void pdf(s)}><Download className="mr-1.5 h-4 w-4" />{s.rows.length > 1 ? "Combined PDF" : "PDF"}</Button>
             </div>
           </div>

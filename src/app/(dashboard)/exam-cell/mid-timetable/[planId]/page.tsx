@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { BranchTimetableList, MidTimetableSheet } from "@/components/midTimetable/MidTimetableSheet";
+import { MidTimetableSheet } from "@/components/midTimetable/MidTimetableSheet";
 import { toast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
 import { ordinalYearLabel } from "@/lib/college/courseYears";
@@ -56,7 +56,7 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
   const [heading, setHeading] = useState("");
   const [everywhere, setEverywhere] = useState(true);
   const [deleting, setDeleting] = useState(false);
-  const [view, setView] = useState<"sheet" | "branches">("sheet");
+  const [view, setView] = useState<"sheet" | "sessions">("sheet");
   const [moveOpen, setMoveOpen] = useState(false);
   const [move, setMove] = useState({ scope: "ALL", fromDate: "", fromSessionId: "", toDate: "", toSessionId: "", reason: "" });
   const [movePreview, setMovePreview] = useState<{ branch: string; subjects: string[]; status: string }[] | null>(null);
@@ -191,12 +191,15 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
   }
 
   /** Combined sheet, or each branch's own timetable (one page each) - optionally for one branch only. */
-  async function printPdf(mode: "sheet" | "branches", only?: Branch) {
+  /** Combined sheet, or one sheet per session (optionally just one session). */
+  async function printPdf(mode: "sheet" | "sessions", onlySession?: string) {
     if (!data || !plan) return;
-    setBusy(only ? `pdf-${only.key}` : `pdf-${mode}`);
+    setBusy(onlySession ? `pdf-${onlySession}` : `pdf-${mode}`);
     try {
-      const rows = (only ? [only] : data.branches).map((b) => ({ branch: b.branch, slots: slotsOf(b), usualSessionId: usualOf(b) }));
-      await downloadMidTimetablePdf({ ...plan, rows }, `mid${plan.midNumber}-${plan.courseName}-year${plan.year}-${only ? only.branch : mode === "branches" ? "branch-wise" : "timetable"}`, mode);
+      const rows = data.branches.map((b) => ({ branch: b.branch, slots: slotsOf(b), usualSessionId: usualOf(b) }));
+      const sessions = onlySession ? plan.sessions.filter((x) => x.id === onlySession) : plan.sessions;
+      const label = onlySession ? sessions[0]?.label ?? "session" : mode === "sessions" ? "session-wise" : "timetable";
+      await downloadMidTimetablePdf({ ...plan, sessions, rows }, `mid${plan.midNumber}-${plan.courseName}-year${plan.year}-${label}`, mode);
     } catch { toast({ variant: "destructive", title: "Could not make the PDF" }); }
     finally { setBusy(null); }
   }
@@ -397,7 +400,7 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
                 setMove({ scope: "ALL", fromDate: "", fromSessionId: plan.sessions[0]?.id ?? "", toDate: "", toSessionId: plan.sessions[0]?.id ?? "", reason: "" });
                 setMovePreview(null); setMoveError(""); setMoveOpen(true);
               }}><CalendarClock className="mr-1.5 h-4 w-4" />Reschedule</Button>
-            <Button variant="outline" size="sm" loading={busy === "pdf-branches"} disabled={placed === 0} onClick={() => void printPdf("branches")}><Download className="mr-1.5 h-4 w-4" />Branch-wise PDF</Button>
+            <Button variant="outline" size="sm" loading={busy === "pdf-sessions"} disabled={placed === 0} onClick={() => void printPdf("sessions")}><Download className="mr-1.5 h-4 w-4" />Session-wise PDF</Button>
             <Button variant="outline" size="sm" loading={busy === "pdf-sheet"} disabled={placed === 0} onClick={() => void printPdf("sheet")}><Download className="mr-1.5 h-4 w-4" />Combined PDF</Button>
           </div>
         </div>
@@ -407,7 +410,7 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
         ) : (
           <>
             <div className="inline-flex rounded-xl border bg-muted/40 p-1 text-sm" role="tablist" aria-label="View">
-              {([["sheet", "Combined sheet"], ["branches", "Branch-wise"]] as const).map(([k, label]) => (
+              {([["sheet", "Combined sheet"], ["sessions", "Session-wise"]] as const).map(([k, label]) => (
                 <button key={k} type="button" role="tab" aria-selected={view === k} onClick={() => setView(k)}
                   className={cn("rounded-lg px-3.5 py-1.5 font-medium", view === k ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}>{label}</button>
               ))}
@@ -415,19 +418,21 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
             {view === "sheet" ? (
               <MidTimetableSheet rows={sheetRows} days={plan.days} sessions={plan.sessions} onCell={setupDirty ? undefined : openCell} cellTitle="Click to choose the subject" />
             ) : (
-              <div className="grid gap-4 lg:grid-cols-2">
-                {data.branches.map((b) => {
-                  const usual = plan.sessions.find((x) => x.id === usualOf(b));
+              <div className="space-y-5">
+                {[...plan.sessions].sort((x, y) => x.from.localeCompare(y.from)).map((ses) => {
+                  const rows = data.branches.map((br) => ({ key: br.key, branch: br.branch, usualSessionId: ses.id, slots: slotsOf(br).filter((x) => x.sessionId === ses.id) })).filter((r) => r.slots.length);
+                  const days = plan.days.filter((d) => rows.some((r) => r.slots.some((x) => x.date === d)));
+                  if (rows.length === 0) return null;
                   return (
-                    <section key={b.key} className="space-y-3 rounded-2xl border bg-card p-4 shadow-sm" aria-label={`${b.branch} timetable`}>
+                    <section key={ses.id} className="space-y-3 rounded-2xl border bg-card p-4 shadow-sm" aria-label={`${ses.label} session`}>
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div>
-                          <h3 className="font-semibold leading-snug">{b.branch}</h3>
-                          <p className="text-xs text-muted-foreground">{usual ? `${usual.label} · ${timeLabel(usual.from)} - ${timeLabel(usual.to)} · ` : ""}{slotsOf(b).length} of {b.subjects.length} placed{b.timetable?.status === "PUBLISHED" ? " · Published" : ""}</p>
+                          <h3 className="font-semibold">{ses.label} session</h3>
+                          <p className="text-xs text-muted-foreground">{timeLabel(ses.from)} - {timeLabel(ses.to)} · {rows.length} branch{rows.length === 1 ? "" : "es"}</p>
                         </div>
-                        <Button size="sm" variant="outline" loading={busy === `pdf-${b.key}`} disabled={slotsOf(b).length === 0} onClick={() => void printPdf("branches", b)}><Download className="mr-1.5 h-4 w-4" />PDF</Button>
+                        <Button size="sm" variant="outline" loading={busy === `pdf-${ses.id}`} onClick={() => void printPdf("sessions", ses.id)}><Download className="mr-1.5 h-4 w-4" />PDF</Button>
                       </div>
-                      <BranchTimetableList slots={slotsOf(b)} sessions={plan.sessions} />
+                      <MidTimetableSheet rows={rows} days={days} sessions={[ses]} />
                     </section>
                   );
                 })}
