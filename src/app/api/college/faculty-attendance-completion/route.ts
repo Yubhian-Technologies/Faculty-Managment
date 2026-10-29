@@ -8,6 +8,7 @@ import { getHodDepartmentScope, canHodEditDepartment, facultyManageableDepartmen
 import { resolveMergedCourseIds } from "@/lib/departments/courseGrouping";
 import { getFacultyPeriodsForDate } from "@/lib/timetable/currentPeriod";
 import { isFacultyAvailable } from "@/types";
+import { whereIn } from "@/lib/firestore/inQuery";
 import { resolvePeriodCompletionStatus } from "@/lib/attendance/periodAttendanceStatus";
 import { aggregateNotPosted, type PeriodSlotWithStatus } from "@/lib/studentAttendance/notPostedAggregation";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
@@ -290,6 +291,21 @@ export async function GET(request: Request) {
       }
       rows.sort((a, b) => a.department.localeCompare(b.department) || a.name.localeCompare(b.name));
       return NextResponse.json({ dates, rows });
+    }
+
+    // An HOD's Edit Attendance picker needs neither: staff edit only their own department's
+    // attendance, so it lists that department tree's available faculty directly.
+    if (!department && !courseId && session.role === "HOD") {
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      const names = facultyManageableDepartmentNames(scope);
+      if (names.length === 0) return NextResponse.json({ faculty: [] });
+      const snap = await whereIn(collegeRef.collection("facultyMembers"), "department", names).get();
+      const faculty = snap.docs
+        .map((d) => ({ ...(d.data() as FacultyMember), id: d.id }))
+        .filter((f) => isFacultyAvailable(f.status))
+        .map((f) => ({ facultyId: f.id, name: facultyDisplayName(f), designation: f.designation }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      return NextResponse.json({ faculty });
     }
 
     if (!department || !courseId) {

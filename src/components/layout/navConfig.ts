@@ -217,7 +217,7 @@ export const NAV_ITEMS: NavItem[] = [
   // still work as direct routes for any existing bookmarks/links.
   { label: "Students", href: "/principal/students", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
   { label: "Timetable View", href: "/principal/timetable", iconName: "CalendarDays", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
-  { label: "Compensatory Sundays", href: "/principal/holidays", iconName: "CalendarDays", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
+  { label: "Holidays", href: "/principal/holiday-calendar", iconName: "CalendarDays", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
   { label: "Internal Marks", href: "/principal/internal-marks", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
   { label: "Results Analysis", href: "/principal/results-analysis", iconName: "BarChart3", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
   { label: "Mentoring", href: "/principal/mentoring", iconName: "UserCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
@@ -352,6 +352,7 @@ export const NAV_ITEMS: NavItem[] = [
   // route for any existing bookmarks/links.
   { label: "Students", href: "/college-office/students", iconName: "GraduationCap", roles: ["COLLEGE_OFFICE"], section: "Students" },
   { label: "Semester Timings", href: "/college-office/timings", iconName: "Clock", roles: ["COLLEGE_OFFICE"] },
+  { label: "Holidays", href: "/college-office/holidays", iconName: "CalendarDays", roles: ["COLLEGE_OFFICE"] },
   { label: "Supporting Staff", href: "/college-office/non-technical-staff", iconName: "UsersRound", roles: ["COLLEGE_OFFICE"], section: "Staff" },
   // Only the first item of a group carries `section` - the sidebar renders a
   // header for every item that sets one, so repeating it printed "STAFF" three

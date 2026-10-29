@@ -50,7 +50,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "ACADEMICS");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "ACADEMICS", "COLLEGE_OFFICE");
     const body = (await readJsonBody(request)) as {
       date?: string; name?: string; type?: HolidayType; appliesTo?: HolidayAudience;
       category?: HolidayCategory; hostelersOutingAllowed?: boolean;
