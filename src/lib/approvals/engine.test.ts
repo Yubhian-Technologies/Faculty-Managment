@@ -51,14 +51,93 @@ describe("engine: happy path", () => {
 });
 
 describe("engine: completeAll (overseer approval)", () => {
-  it("finishes every remaining stage in one decision, recording each, and runs the effects once", async () => {
+  it("closes the request on the first approval - the stages above are not asked - and runs the effects once", async () => {
     const { engine, ctx, raise } = setup();
     const r = await raise(["HOD", "PRINCIPAL"]);
     ctx.approvers.HOD.push("pri1");
     const done = await engine.decide(ctx, { collegeId: "c1", id: r.id, actor: pri, decision: "APPROVE", completeAll: true });
     expect(done).toMatchObject({ status: "APPROVED", pendingKey: null, effectStatus: "APPLIED" });
-    expect(done.history.filter((h) => h.action === "APPROVE").map((h) => h.stage)).toEqual(["HOD", "PRINCIPAL"]);
+    expect(done.history.filter((h) => h.action === "APPROVE").map((h) => h.stage)).toEqual(["HOD"]);
     expect(calls).toEqual(["tx:APPROVED", "after:approved"]);
+  });
+});
+
+describe("engine: escalation after a stage's hours", () => {
+  function clocked() {
+    let now = new Date("2026-10-05T09:00:00.000Z");
+    const s = setup();
+    let n = 0;
+    const events: string[] = [];
+    const engine = createApprovalEngine<P, Ctx, { marker: "memory-tx" }>({
+      kind: { kind: "demo", stageScope: (st, req) => (st === "HOD" ? req.scope : "*"), canDecide: async (c, _r, st, a) => (c.approvers[st] ?? []).includes(a.uid), completesAllOnApprove: () => true },
+      store: s.store, now: () => now, newId: () => `e${++n}`, onEvent: (_c, e) => { events.push(e); },
+    });
+    const ctx: Ctx = { approvers: { HOD: ["hod1"], VICE_PRINCIPAL: ["vp1"], PRINCIPAL: ["pri1"] } };
+    const raise = (stageHours: (number | null)[] = [24, 24, null]) =>
+      engine.submit(ctx, { collegeId: "c1", scope: "CSE", requester: { uid: "stu1", name: "Ravi", type: "STUDENT" }, payload: { what: "x" }, chain: ["HOD", "VICE_PRINCIPAL", "PRINCIPAL"], stageHours });
+    return { engine, ctx, events, raise, store: s.store, advance: (h: number) => { now = new Date(now.getTime() + h * 3_600_000); } };
+  }
+
+  it("moves an unanswered request up a level once its hours pass, and not before", async () => {
+    const { engine, ctx, raise, advance, events, store } = clocked();
+    const r = await raise();
+    expect(r.escalateAt).toBe("2026-10-06T09:00:00.000Z");
+    advance(23);
+    expect(await engine.escalateOverdue(ctx, { collegeId: "c1" })).toEqual([]);
+    advance(2);
+    expect(await engine.escalateOverdue(ctx, { collegeId: "c1" })).toEqual([r.id]);
+    const moved = (await store.get<P>("c1", r.id))!;
+    expect(moved).toMatchObject({ status: "PENDING", pendingKey: "VICE_PRINCIPAL|*", stageIndex: 1 });
+    expect(moved.history.at(-1)).toMatchObject({ action: "ESCALATE", stage: "HOD", actorUid: "system" });
+    expect(moved.escalateAt).toBe("2026-10-07T10:00:00.000Z"); // a fresh 24h from the moment it moved
+    expect(events).toEqual(["SUBMITTED", "ESCALATED"]);
+  });
+
+  it("is idempotent: a second sweep right after changes nothing", async () => {
+    const { engine, ctx, raise, advance } = clocked();
+    await raise();
+    advance(25);
+    expect((await engine.escalateOverdue(ctx, { collegeId: "c1" })).length).toBe(1);
+    expect(await engine.escalateOverdue(ctx, { collegeId: "c1" })).toEqual([]);
+  });
+
+  it("climbs one level at a time and stops at the last level, which has nobody above it", async () => {
+    const { engine, ctx, raise, advance, store } = clocked();
+    const r = await raise([24, 24, 24]);
+    advance(25); await engine.escalateOverdue(ctx, { collegeId: "c1" });
+    advance(25); await engine.escalateOverdue(ctx, { collegeId: "c1" });
+    const top = (await store.get<P>("c1", r.id))!;
+    expect(top).toMatchObject({ pendingKey: "PRINCIPAL|*", escalateAt: null });
+    advance(500);
+    expect(await engine.escalateOverdue(ctx, { collegeId: "c1" })).toEqual([]);
+  });
+
+  it("an approval after escalating is by the level it now waits at, and it closes the request", async () => {
+    const { engine, ctx, raise, advance } = clocked();
+    const r = await raise();
+    advance(25); await engine.escalateOverdue(ctx, { collegeId: "c1" });
+    await expect(engine.decide(ctx, { collegeId: "c1", id: r.id, actor: { uid: "hod1", name: "HOD" }, decision: "APPROVE" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    const done = await engine.decide(ctx, { collegeId: "c1", id: r.id, actor: { uid: "vp1", name: "VP" }, decision: "APPROVE" });
+    expect(done).toMatchObject({ status: "APPROVED", escalateAt: null, pendingKey: null });
+    advance(500);
+    expect(await engine.escalateOverdue(ctx, { collegeId: "c1" })).toEqual([]);
+  });
+
+  it("a rejection closes it too and stops the clock", async () => {
+    const { engine, ctx, raise, advance } = clocked();
+    const r = await raise();
+    const done = await engine.decide(ctx, { collegeId: "c1", id: r.id, actor: { uid: "hod1", name: "HOD" }, decision: "REJECT", remark: "no" });
+    expect(done).toMatchObject({ status: "REJECTED", escalateAt: null });
+    advance(100);
+    expect(await engine.escalateOverdue(ctx, { collegeId: "c1" })).toEqual([]);
+  });
+
+  it("a stage with no hours never escalates", async () => {
+    const { engine, ctx, raise, advance } = clocked();
+    const r = await raise([null, null, null]);
+    expect(r.escalateAt).toBeNull();
+    advance(1000);
+    expect(await engine.escalateOverdue(ctx, { collegeId: "c1" })).toEqual([]);
   });
 });
 

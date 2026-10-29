@@ -68,6 +68,7 @@ const HISTORY_VERB: Record<string, string> = {
   CANCEL: "withdrew request",
   REVOKE: "revoked approval",
   SKIP: "(skipped)",
+  ESCALATE: "moved the request up (no answer in time)",
 };
 
 function Route({ request }: { request: PermissionRequestView }) {
@@ -252,6 +253,14 @@ function RequestCard({
         )}
 
         <Route request={request} />
+
+        {request.status === "PENDING" && request.escalateAt && (
+          <p className="text-xs text-muted-foreground">
+            Waiting for {stageLabel(request.chain[request.stageIndex])}. If nobody decides by{" "}
+            <span className="font-medium text-foreground">{when(request.escalateAt)}</span> it moves up to{" "}
+            {stageLabel(request.chain[request.stageIndex + 1])}.
+          </p>
+        )}
 
         {p.proof.length > 0 && (
           <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs sm:text-sm">

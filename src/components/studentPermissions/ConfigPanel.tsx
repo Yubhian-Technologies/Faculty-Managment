@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/hooks/useToast";
 import { loadConfig, saveConfig, type ConfigPayload } from "./api";
 import { EmptyState, ListSkeleton, LoadError } from "./statusBadge";
-import { addStage, getRoute, isDisabled, moveStage, removeStage, setLimit, setProofForType, setRequestersForType, setRoute, setTypeDisabled, type PermissionRuleSet } from "@/lib/studentPermissions/ruleSetOps";
+import { addStage, getRoute, isDisabled, moveStage, removeStage, setLimit, setProofForType, setRequestersForType, setRoute, setStageHours, setTypeDisabled, type PermissionRuleSet } from "@/lib/studentPermissions/ruleSetOps";
 import type { PermissionConfig, PermissionStage } from "@/lib/studentPermissions/types";
 import { resolveProofRequired } from "@/lib/studentPermissions/rules";
 import { REQUESTER_ROLE_LABELS } from "@/lib/studentPermissions/roles";
@@ -25,14 +25,18 @@ import { REQUESTER_ROLE_LABELS } from "@/lib/studentPermissions/roles";
 // the viewer can't change.
 
 const COLLEGE = "__college__";
+const ESCALATION_HELP =
+  "Order = who is asked first. If a level does not approve or reject within its hours, the request moves up to the next level (and that level is notified). The first approval or rejection from the level it is waiting at closes it - nobody above is asked. Approved requests lock the students' attendance as On Duty. Leave hours empty for no time limit; the last level has nobody above it. Hours apply to that level for every route in this scope.";
 const REQUESTERS: { type: "STUDENT" | "FACULTY"; label: string }[] = [
   { type: "STUDENT", label: "Raised by the student" },
   { type: "FACULTY", label: "Raised by faculty for students" },
 ];
 
-function ChainEditor({ chain, allowed, labels, onChange, placeholder }: {
+function ChainEditor({ chain, allowed, labels, onChange, placeholder, hours, onHours }: {
   chain: string[]; allowed: PermissionStage[]; labels: Record<PermissionStage, string>;
   onChange: (c: string[]) => void; placeholder: string;
+  /** Hours each level may take before the request moves up (stage -> hours). */
+  hours?: Record<string, number>; onHours: (stage: string, hours: number | undefined) => void;
 }) {
   const free = allowed.filter((s) => !chain.includes(s));
   return (
@@ -45,6 +49,21 @@ function ChainEditor({ chain, allowed, labels, onChange, placeholder }: {
         return (
           <span key={stage} className="inline-flex items-center gap-0.5 rounded-md border bg-muted/40 py-0.5 pl-2.5 pr-0.5 text-sm sm:text-xs">
             <span className="text-muted-foreground mr-1">{i + 1}.</span><span className="mr-1">{label}</span>
+            {i < chain.length - 1 ? (
+              <label className="mr-1 inline-flex items-center gap-1 text-muted-foreground">
+                <span className="sr-only">{`Hours ${label} has to respond before it moves up`}</span>
+                <span aria-hidden>answers within</span>
+                <input
+                  type="number" min={1} max={720} inputMode="numeric" placeholder="no limit"
+                  className="h-8 w-16 rounded border bg-background px-1.5 text-center text-sm text-foreground sm:h-6 sm:text-xs"
+                  value={hours?.[stage] ?? ""}
+                  onChange={(e) => onHours(stage, e.target.value === "" ? undefined : Number(e.target.value))}
+                />
+                <span aria-hidden>hrs</span>
+              </label>
+            ) : (
+              i > 0 && <span className="mr-1 text-xs text-muted-foreground">final level</span>
+            )}
             <button type="button" aria-label={`Move ${label} earlier`} disabled={i === 0} onClick={() => onChange(moveStage(chain, i, -1))} className={iconBtn}><ArrowUp className="h-3.5 w-3.5" /></button>
             <button type="button" aria-label={`Move ${label} later`} disabled={i === chain.length - 1} onClick={() => onChange(moveStage(chain, i, 1))} className={iconBtn}><ArrowDown className="h-3.5 w-3.5" /></button>
             <button type="button" aria-label={`Remove ${label}`} onClick={() => onChange(removeStage(chain, stage))} className={`${iconBtn} text-muted-foreground hover:text-destructive`}><X className="h-3.5 w-3.5" /></button>
@@ -85,7 +104,8 @@ function RuleSetEditor({ rs, onChange, data, inherited }: {
         placeholder={key === "*"
           ? (inherited ? "Inherits the college route" : `Built-in: ${data.defaults.route[type].map((s) => data.stageLabels[s]).join(" → ")}`)
           : "Uses the default route"}
-        onChange={(c) => onChange(setRoute(rs, type, key, c))} />
+        onChange={(c) => onChange(setRoute(rs, type, key, c))}
+        hours={rs.limits?.stageHours} onHours={(stage, h) => onChange(setStageHours(rs, stage, h))} />
     </div>
   ));
 
@@ -107,7 +127,7 @@ function RuleSetEditor({ rs, onChange, data, inherited }: {
         </Select>
       </div>
 
-      {!entity && <div className="rounded-md border p-3 space-y-3"><p className="text-sm font-semibold">Default approval route</p>{chains("*", REQUESTERS)}</div>}
+      {!entity && <div className="rounded-md border p-3 space-y-3"><p className="text-sm font-semibold">Default approval route</p>{chains("*", REQUESTERS)}<p className="text-xs text-muted-foreground">{ESCALATION_HELP}</p></div>}
 
       {entity && (
         <div className="rounded-md border p-3 space-y-4">
@@ -137,6 +157,7 @@ function RuleSetEditor({ rs, onChange, data, inherited }: {
           <div className="space-y-1">
             <p className="text-xs font-medium">Who approves, in order</p>
             <div className="space-y-3">{chains(entity.id, REQUESTERS.filter((r) => showType(r.type)))}</div>
+            <p className="text-xs text-muted-foreground">{ESCALATION_HELP}</p>
           </div>
         </div>
       )}

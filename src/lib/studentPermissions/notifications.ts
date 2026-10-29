@@ -51,7 +51,7 @@ export function createPermissionEventSink(db: Firestore): EventSink<PermissionPa
     const p = req.payload;
     const last = req.history[req.history.length - 1];
 
-    if (event === "SUBMITTED" || event === "ADVANCED") {
+    if (event === "SUBMITTED" || event === "ADVANCED" || event === "ESCALATED") {
       const stage = currentStage(req);
       if (!stage) return;
       const link = STAGE_LINK[stage as PermissionStage] ?? "/principal/student-permissions";
@@ -59,7 +59,9 @@ export function createPermissionEventSink(db: Firestore): EventSink<PermissionPa
       for (const uid of await approversOf(db, collegeId, stage, req)) {
         if (uid === req.requesterUid) continue;
         await notify(db, collegeId, uid, "STUDENT_PERMISSION_PENDING", "Permission request awaiting your decision",
-          `${who}: ${summary(p)} - awaiting ${PERMISSION_STAGE_LABELS[stage as PermissionStage] ?? stage}${p.late ? " (short notice)" : ""}.`, link);
+          event === "ESCALATED"
+            ? `${who}: ${summary(p)} - nobody at the level below answered in time, so it now waits for you (${PERMISSION_STAGE_LABELS[stage as PermissionStage] ?? stage}).`
+            : `${who}: ${summary(p)} - awaiting ${PERMISSION_STAGE_LABELS[stage as PermissionStage] ?? stage}${p.late ? " (short notice)" : ""}.`, link);
       }
       return;
     }

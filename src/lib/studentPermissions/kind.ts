@@ -6,7 +6,6 @@ import {
   addOnDutyInTx, applyOnDutyToExistingSessions, releaseOnDutyFromSessions, removeOnDutyInTx,
 } from "@/lib/studentAttendance/onDuty";
 import { canDecideStage } from "./decisionRules";
-import { oversees } from "./roles";
 import { PERMISSION_KIND, type PermissionContext, type PermissionPayload } from "./types";
 
 // The student-permission kind for the approvals engine: its stages, who may
@@ -55,8 +54,8 @@ export const studentPermissionKind: ApprovalKind<PermissionPayload, PermissionCo
     });
   },
 
-  // The Principal / Vice Principal oversee every request: their approval completes it.
-  completesAllOnApprove: (ctx) => oversees(ctx.actorRoles),
+  // The first approval closes the request: whoever decides the stage it is waiting at finishes it (no later stage is asked).
+  completesAllOnApprove: () => true,
 
   // A class with no incharge or delegated faculty assigned would strand the request at that stage.
   isStageActionable: async (_ctx, req, stage) => (stage === "CLASS_INCHARGE" ? !!req.payload.inchargeUid : stage === "DELEGATED_FACULTY" ? !!req.payload.delegatedFacultyUid : true),

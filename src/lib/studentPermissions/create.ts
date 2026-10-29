@@ -9,7 +9,7 @@ import { categoryTypeKeys, findCategory } from "./categories";
 import { headsDepartment, loadStudentByUid, loadStudentsByIds, ownershipOf, type SectionOwner } from "./directory";
 import { loadPermissionConfig } from "./configStore";
 import {
-  buildChain, checkLimits, facultyPermissionInputSchema, hasEarlierPendingOverlap, isLate, isOwnProofUrl, mayRequest, noticeHours, resolveRequesters, permissionInputSchema, resolveProofRequired,
+  buildChain, checkLimits, periodsOverlap, resolveStageHours, facultyPermissionInputSchema, hasEarlierPendingOverlap, isLate, isOwnProofUrl, mayRequest, noticeHours, resolveRequesters, permissionInputSchema, resolveProofRequired,
   type PermissionInput,
 } from "./rules";
 import {
@@ -93,13 +93,19 @@ async function createRequests(
     const limits = { ...resolved, proofRequired };
     const errors = checkLimits(input, limits, { studentCount: g.students.length, typeDisabled: isTypeDisabled(config, department, typeKeys), today: istDateKey() });
     if (errors.length) throw invalid(errors.join(". "));
-    const clash = await findClash(db, user.collegeId, department, g.students, calendarDays);
+    const clash = await findClash(db, user.collegeId, department, g.students, calendarDays, input.periods);
     if (clash) throw invalid(`${clash.name} already has a permission covering ${clash.date}`);
 
     const holds = { isHodOfDepartment: await headsDepartment(db, user, department), isVicePrincipal: user.roles.includes("VICE_PRINCIPAL"), isPrincipal: user.roles.includes("PRINCIPAL") };
     let chain;
-    try { chain = buildChain(resolveRoute(config, defaultRoute, { department, requesterType: type, typeKeys }), holds); }
-    catch (e) { throw invalid(e instanceof Error ? e.message : "No approver available"); }
+    try {
+      // Drop levels that cannot be reached: a class with no incharge, and the retired Designated Faculty level (nobody is ever
+      // recorded for it). If nothing is left the department's HOD decides, so a request is never left with nobody to answer it.
+      const route = resolveRoute(config, defaultRoute, { department, requesterType: type, typeKeys })
+        .filter((s) => s !== "DELEGATED_FACULTY" && (s !== "CLASS_INCHARGE" || !!g.inchargeUid));
+      chain = buildChain(route.length > 0 ? route : ["HOD"], holds);
+    } catch (e) { throw invalid(e instanceof Error ? e.message : "No approver available"); }
+    const stageHours = resolveStageHours(layers, chain);
 
     const customLabel = input.otherCategory?.trim();
     const payload: PermissionPayload = {
@@ -111,19 +117,19 @@ async function createRequests(
       late: isLate(hours, limits.advanceNoticeHours), noticeHours: hours,
       ...(type === "STUDENT" && g.inchargeUid ? { inchargeUid: g.inchargeUid } : {}),
     };
-    prepared.push({ department, chain, payload });
+    prepared.push({ department, chain, stageHours, payload });
   }
 
   const out: PermissionRequest[] = [];
   let duplicate: string | null = null;
   for (const p of prepared) {
     const req = await eng.submit(ctxOf(db, user), {
-      collegeId: user.collegeId, scope: p.department, requester: { uid: user.uid, name: user.name, type }, payload: p.payload, chain: p.chain,
+      collegeId: user.collegeId, scope: p.department, requester: { uid: user.uid, name: user.name, type }, payload: p.payload, chain: p.chain, stageHours: p.stageHours,
     });
     // The "already covered?" check above and the save are separate steps, so a double-click (or two people) can slip two
     // requests through. Re-check now that this one exists: of two racing requests exactly one backs off.
     const pending = await store(db).listByScope<PermissionPayload>(user.collegeId, PERMISSION_KIND, [p.department], { limit: 300 });
-    if (hasEarlierPendingOverlap({ id: req.id, createdAt: req.createdAt, coverageDates: p.payload.coverageDates, studentIds: p.payload.students.map((s) => s.id) }, pending)) {
+    if (hasEarlierPendingOverlap({ id: req.id, createdAt: req.createdAt, coverageDates: p.payload.coverageDates, studentIds: p.payload.students.map((s) => s.id), periods: p.payload.periods }, pending)) {
       await eng.cancel(ctxOf(db, user), { collegeId: user.collegeId, id: req.id, actor: { uid: user.uid, name: user.name }, remark: "Duplicate of an earlier request" });
       duplicate = p.payload.title;
       continue;
@@ -135,15 +141,15 @@ async function createRequests(
 }
 
 /** Is any of these students already covered - approved on duty, or in a pending request - on one of `dates`? */
-async function findClash(db: Firestore, collegeId: string, department: string, students: PermissionStudentRef[], dates: string[]) {
-  const onDuty = await findOnDutyClash(db, collegeId, dates, students.map((s) => s.id));
+async function findClash(db: Firestore, collegeId: string, department: string, students: PermissionStudentRef[], dates: string[], periods: "ALL" | number[]) {
+  const onDuty = await findOnDutyClash(db, collegeId, dates, students.map((s) => s.id), periods);
   if (onDuty) return { name: students.find((s) => s.id === onDuty.studentId)?.name ?? onDuty.studentId, date: onDuty.date };
 
   const ids = new Set(students.map((s) => s.id));
   const wanted = new Set(dates);
   const pending = await store(db).listByScope<PermissionPayload>(collegeId, PERMISSION_KIND, [department], { limit: 300 });
   for (const r of pending) {
-    if (r.status !== "PENDING") continue;
+    if (r.status !== "PENDING" || !periodsOverlap(periods, r.payload.periods)) continue;
     const date = r.payload.coverageDates.find((d) => wanted.has(d));
     const hit = date && r.payload.students.find((s) => ids.has(s.id));
     if (hit) return { name: hit.name, date: date! };
