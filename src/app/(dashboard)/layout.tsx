@@ -12,6 +12,7 @@ import { HolidayReminder } from "@/components/layout/HolidayReminder";
 import { ReadOnlyAccessGate } from "@/components/layout/ReadOnlyAccessGate";
 import { readOnlyHiddenHrefs } from "@/components/layout/readOnlyNav";
 import { isPathHidden } from "@/components/layout/navConfig";
+import { fromCollegeAdminPath, isCollegeAdminRewriteSource, isCollegeAdminRole, toCollegeAdminPath } from "@/lib/auth/collegeAdminPaths";
 import { useAuthStore } from "@/store/authStore";
 import { useUIStore } from "@/store/uiStore";
 import { useNavVisibility } from "@/hooks/useNavVisibility";
@@ -41,7 +42,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [user, isLoading, router]);
 
-  if (isLoading || navLoading) {
+  // A College Admin lives under /college-admin. A link inside a shared Principal / R&D page (or an old
+  // bookmark) that points at /principal/... or /r-and-d/... is moved to the same page there, so the menu
+  // keeps highlighting where they are.
+  const collegeAdmin = isCollegeAdminRole(user?.realRole);
+  const strayPath = collegeAdmin && isCollegeAdminRewriteSource(pathname) ? toCollegeAdminPath(pathname) : null;
+  useEffect(() => {
+    if (strayPath) router.replace(strayPath + window.location.search);
+  }, [strayPath, router]);
+
+  if (isLoading || navLoading || strayPath) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="w-full max-w-4xl px-4">
@@ -53,7 +63,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (!user) return null;
 
-  if (isPathHidden(SUB_PAGE_VISIBILITY_PARENT[pathname] ?? pathname, user.role, hiddenModules, hiddenItems)) {
+  // Nav Visibility is keyed on the pages' own URLs, which a College Admin reaches under /college-admin.
+  const pagePath = collegeAdmin ? fromCollegeAdminPath(pathname) : pathname;
+  if (isPathHidden(SUB_PAGE_VISIBILITY_PARENT[pagePath] ?? pagePath, collegeAdmin ? "COLLEGE_ADMIN" : user.role, hiddenModules, hiddenItems)) {
     notFound();
   }
 

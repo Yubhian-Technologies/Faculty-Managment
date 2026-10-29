@@ -8,6 +8,7 @@ import { useWorkContextStore } from "@/store/workContextStore";
 import { syncActiveHodCookie, useWorkContext } from "@/hooks/useWorkContext";
 import { ROLE_DASHBOARD_PATHS, type UserRole } from "@/types/core";
 import { departmentOfContext } from "@/lib/roles/activeHodDepartment";
+import { dashboardPathFor } from "@/lib/auth/collegeAdminPaths";
 
 // "Working as ..." - only for logins that hold seats. Picking one changes the
 // sidebar to that seat's modules (or the person's own, for "My Work") and opens
@@ -25,7 +26,7 @@ export function WorkContextSwitcher({ compact = false }: { compact?: boolean }) 
     choose(user.uid, key);
     syncActiveHodCookie(user.uid, key);
     const role = key === "ME" ? user.role : departmentOfContext(key) !== null ? "HOD" : (key as UserRole);
-    router.push(ROLE_DASHBOARD_PATHS[role as UserRole] ?? "/");
+    router.push((key === "ME" ? dashboardPathFor(user.role, user.realRole) : undefined) ?? ROLE_DASHBOARD_PATHS[role as UserRole] ?? "/");
   }
 
   if (compact) {
