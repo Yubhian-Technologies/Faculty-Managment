@@ -14,7 +14,7 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { moveStudent, rollRangeBySection } from "@/lib/exams/seatingAllocator";
 import { benchRows, moveStudentLayered } from "@/lib/exams/seatingLayers";
-import { benchPosition, roomRows } from "@/lib/exams/roomLayout";
+import { benchPosition, roomColumns, roomRows } from "@/lib/exams/roomLayout";
 import { AllotSectionPanel } from "@/components/exams/AllotSectionPanel";
 import { SEAT_LETTERS } from "@/lib/exams/seatingPaired";
 import { SeatingTimingCheck } from "@/components/exams/SeatingTimingCheck";
@@ -24,7 +24,7 @@ import { noticeBoardHTML, roomSheetHTML, seatingWhen, signatureSheetsHTML, type 
 import { examLine, type ExamOf } from "@/lib/pdf/examHeader";
 import { ordinalYearLabel } from "@/lib/college/courseYears";
 import type { MidExamPlan, MidTimetable } from "@/types";
-import type { ExamSeatingPlan } from "@/types/examSeating";
+import type { ExamRoom, ExamSeatingPlan } from "@/types/examSeating";
 
 // Review of an automatic allotment: every room with its roll-number ranges,
 // each student movable to another room (capacity enforced), anyone unplaced
@@ -173,7 +173,17 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
       const c = { name: info.name || "College", logoUrl, examLines: [...new Set(exams.map(examLine))], academicYear: info.academicYear, courseCode: exams[0]?.courseCode };
       const base = plan!.name.replace(/[^a-z0-9]+/gi, "-");
       if (kind === "notice") await renderHtmlToPdf(noticeBoardHTML(c, plan!), `${base}-notice-board.pdf`);
-      else if (kind === "rooms") await renderMultiHtmlToPdf(usedRooms.map((r) => roomSheetHTML(c, plan!, r)), `${base}-room-sheets.pdf`);
+      else if (kind === "rooms") {
+        // Columns entered on Exam Rooms after the plan was built still lay the sheet out (bench numbers don't change).
+        const current = await fetch("/api/college/exam-rooms", { cache: "no-store" }).then((r) => (r.ok ? r.json() : {})).catch(() => ({})) as { rooms?: ExamRoom[] };
+        const withColumns = usedRooms.map((r) => {
+          if (r.columns) return r;
+          const room = current.rooms?.find((x) => x.id === r.roomId);
+          const columns = room ? roomColumns({ ...room, benches: r.benches ?? r.capacity }) : undefined;
+          return columns ? { ...r, columns } : r;
+        });
+        await renderMultiHtmlToPdf(withColumns.map((r) => roomSheetHTML(c, plan!, r)), `${base}-room-sheets.pdf`);
+      }
       else await renderMultiHtmlToPdf(signatureSheetsHTML(c, plan!, await examsByGroup()), `${base}-signature-sheets.pdf`);
     } catch {
       toast({ variant: "destructive", title: "Could not make the PDF" });
