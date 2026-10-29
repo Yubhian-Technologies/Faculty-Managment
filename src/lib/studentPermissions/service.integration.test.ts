@@ -5,6 +5,8 @@ import type { Firestore } from "firebase-admin/firestore";
 import { ApprovalError } from "@/lib/approvals";
 import * as svc from "./service";
 import type { ActingUser } from "./service";
+import { istDateKey } from "@/lib/attendance/istTime";
+import { shiftDate } from "./rules";
 import { applyOnDutyToEntries, loadOnDutyDay } from "@/lib/studentAttendance/onDuty";
 import { indexSessions, tallyStudent } from "@/lib/studentAttendance/counting";
 import type { PermissionConfig } from "./types";
@@ -94,8 +96,8 @@ describe.skipIf(!RUN)("student permissions (emulator)", () => {
     await fail(svc.createStudentRequest(db, stu("stu1"), input()), "INVALID");
   });
 
-  it("only the right HOD can decide; others, the student, and the Principal (not at that stage) cannot", async () => {
-    for (const who of [hodEce, principal, vp, faculty, stu("stu1")]) await fail(svc.decide(db, who, studentReqId, "APPROVE"), "FORBIDDEN");
+  it("only the right HOD (or the Principal / Vice Principal, who oversee every request) can decide; other HODs, faculty and the student cannot", async () => {
+    for (const who of [hodEce, faculty, stu("stu1")]) await fail(svc.decide(db, who, studentReqId, "APPROVE"), "FORBIDDEN");
   });
 
   it("approval writes the coverage and flips an already-SUBMITTED session to ON_DUTY, keeping the old mark", async () => {
@@ -127,7 +129,7 @@ describe.skipIf(!RUN)("student permissions (emulator)", () => {
 
   it("the requester sees the outcome; revoking restores the original mark and lifts the coverage", async () => {
     expect((await col("notifications").where("toUid", "==", "stu1").get()).docs.some((d) => d.data().type === "STUDENT_PERMISSION_APPROVED")).toBe(true);
-    await fail(svc.revokeRequest(db, principal, studentReqId, "x"), "FORBIDDEN"); // only whoever decided the final stage
+    await fail(svc.revokeRequest(db, hodEce, studentReqId, "x"), "FORBIDDEN"); // only whoever could decide the final stage
     const rev = await svc.revokeRequest(db, hod, studentReqId, "Event cancelled");
     expect(rev).toMatchObject({ status: "REVOKED", effectStatus: "APPLIED" });
     const sess = (await col("studentAttendance").doc(`asg1_${D1}_2`).get()).data()!;
@@ -163,7 +165,10 @@ describe.skipIf(!RUN)("student permissions (emulator)", () => {
   });
 
   it("is late-flagged (not refused) on short notice and when back-dated", async () => {
-    const r = await svc.createStudentRequest(db, stu("stu2"), input({ fromDate: "2026-01-12", toDate: "2026-01-12" }));
+    // Three class days ago (never a Sunday), so the test stays valid whatever day it is run on.
+    let back = shiftDate(istDateKey(), -3);
+    while (new Date(`${back}T00:00:00Z`).getUTCDay() === 0) back = shiftDate(back, -1);
+    const r = await svc.createStudentRequest(db, stu("stu2"), input({ fromDate: back, toDate: back }));
     expect(r.payload.late).toBe(true);
     expect(r.payload.noticeHours).toBeLessThan(0);
     await svc.cancelRequest(db, stu("stu2"), r.id);
@@ -181,9 +186,9 @@ describe.skipIf(!RUN)("student permissions (emulator)", () => {
     expect(cert.pendingKey).toBe("CLASS_INCHARGE|ci1");
     expect((await svc.listInbox(db, incharge)).map((r) => r.id)).toContain(cert.id);
     await fail(svc.decide(db, hod, cert.id, "APPROVE"), "FORBIDDEN"); // not their stage yet
+    // The first approval closes the request: the HOD above the incharge is not asked.
     const afterCi = await svc.decide(db, incharge, cert.id, "APPROVE");
-    expect(afterCi.pendingKey).toBe("HOD|CSE");
-    await svc.cancelRequest(db, stu("stu1"), cert.id);
+    expect(afterCi).toMatchObject({ status: "APPROVED", pendingKey: null });
 
     // an HOD can't edit until the Principal delegates
     const hodEdit = structuredClone(await svc.readConfig(db, hod));
