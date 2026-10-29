@@ -18,7 +18,7 @@ import type { HolidayAudience, HolidayType } from "@/types";
 // hostellers-outing flag, as long as the Sunday is not already live.
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "ACADEMICS");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "ACADEMICS", "COLLEGE_OFFICE");
     const { id } = await params;
     const body = (await readJsonBody(request)) as {
       compensatoryEnabled?: boolean; compensatoryDateKey?: string; hostelersOutingAllowed?: boolean;
@@ -138,7 +138,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "ACADEMICS");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "ACADEMICS", "COLLEGE_OFFICE");
     const { id } = await params;
 
     const db = getAdminDb();

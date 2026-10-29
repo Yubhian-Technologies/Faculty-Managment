@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CalendarCheck } from "lucide-react";
+import { PrincipalHolidaysTabs } from "@/components/holidays/PrincipalHolidaysTabs";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -61,6 +62,7 @@ export default function PrincipalHolidaysPage() {
 
   return (
     <div className="space-y-6">
+      <PrincipalHolidaysTabs active="compensatory" />
       <PageHeader
         title="Compensatory Sundays"
         description="Compensatory holidays that offer a Sunday in return. Switch one on to make that Sunday a working day for students and faculty, running the bridged day's timetable."

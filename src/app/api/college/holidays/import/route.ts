@@ -34,7 +34,7 @@ for (const code of Object.keys(HOLIDAY_TYPE_LABELS) as HolidayType[]) {
 // Same role gate as the single-add route.
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "ACADEMICS");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "ACADEMICS", "COLLEGE_OFFICE");
     const body = (await readJsonBody(request)) as { records?: ImportRow[] };
     const records = body.records;
 

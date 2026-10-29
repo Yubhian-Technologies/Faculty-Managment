@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { holidaysBaseFor } from "@/lib/college/holidaysBase";
 import { Plus, Trash2, CalendarDays, Pencil, Sun, CalendarCheck, Check, Upload } from "lucide-react";
+import { PrincipalHolidaysTabs } from "@/components/holidays/PrincipalHolidaysTabs";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -73,6 +76,8 @@ function sessionStartYear(label: string): number {
 // column on the Leave History Report (see LeaveHistoryReport.tsx), which
 // used to just show "-" since nothing ever populated this collection.
 export default function AcademicsHolidaysPage() {
+  const holidaysBase = holidaysBaseFor(usePathname());
+  const inPrincipal = holidaysBase.startsWith("/principal");
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [open, setOpen] = useState(false);
@@ -434,13 +439,14 @@ export default function AcademicsHolidaysPage() {
 
   return (
     <div className="space-y-6">
+      {inPrincipal && <PrincipalHolidaysTabs active="holidays" />}
       <PageHeader
         title="Holidays"
         description="Holidays counted in the Leave History Report"
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" asChild>
-              <Link href="/academics/holidays/import"><Upload className="h-4 w-4 mr-2" />Import</Link>
+              <Link href={`${holidaysBase}/import`}><Upload className="h-4 w-4 mr-2" />Import</Link>
             </Button>
             <Button onClick={() => setOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />Add Holiday

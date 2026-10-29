@@ -21,8 +21,8 @@ describe("College Admin menu", () => {
     expect(new Set(items.map((i) => i.label)).size).toBe(items.length);
   });
 
-  it("has Compensatory Sundays (the Principal's) but not the Holidays list, which Academics manages", () => {
-    expect(hrefs).toContain("/college-admin/holidays");
+  it("has the Principal's Holidays module (Compensatory Sundays is a tab inside it), not the Academics URL", () => {
+    expect(hrefs).toContain("/college-admin/holiday-calendar");
     expect(hrefs).not.toContain("/academics/holidays");
   });
 
@@ -97,7 +97,7 @@ describe("College Admin's own Nav Visibility", () => {
   it("applies the College Office's hidden modules to a College Admin only through its own list", () => {
     // "Hiring" hidden under the College Office must not matter: the hook hands a College Admin only its own list.
     const own = filterVisibleNavItems(getCollegeAdminNavItems(), [], [], "COLLEGE_ADMIN", true);
-    expect(own.some((i) => i.href === "/college-admin/holidays")).toBe(true);
+    expect(own.some((i) => i.href === "/college-admin/holiday-calendar")).toBe(true);
   });
 
   it("checks a College Admin's pages against its own list", () => {
