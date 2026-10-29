@@ -148,21 +148,23 @@ export function signatureSheetsHTML(c: College, p: ExamSeatingPlan, examsOf?: (g
   const groupsIn = (r: SeatingRoomAllocation) => [...new Set(seatedIn(r).map(({ s }) => groupOf(s)))];
   const sheet = (r: SeatingRoomAllocation, group: string, exam: SheetExam | null) => {
     const list = seatedIn(r).filter(({ s }) => groupOf(s) === group);
+    // The branch is in the header, so the section(s) are too ("CSBS-A, CSBS-B") - no Section column.
+    const sectionOnly = (label: string) => label.split(" · ").pop() ?? label;
+    const sections = [...new Set(list.map(({ s }) => sectionOnly(s.sectionLabel)))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
     const [from, to] = (exam?.time ?? "").split("-");
     const facts = [
       exam ? ["Subject", exam.subjects.map((x) => `${esc(x.name)} (${esc(x.code)})`).join(" / ")] : null,
       exam ? ["Date &amp; time", `${esc(dayLabel(exam.date))}${from && to ? ` · ${timeLabel(from)} - ${timeLabel(to)}` : ""}`] : null,
       ["Room", esc(roomTitle(r))],
       ["Branch", esc(group)],
+      sections.length ? [sections.length > 1 ? "Sections" : "Section", esc(sections.join(", "))] : null,
     ].filter((x): x is string[] => Boolean(x));
-    // The branch is in the header - the Section column needs only the section ("CSBS-A"), keeping rows one line.
-    const sectionOnly = (label: string) => label.split(" · ").pop() ?? label;
-    const rows = list.map(({ s, seat }, i) => `<tr><td>${i + 1}</td><td>${seat}</td><td><b>${esc(s.rollNumber)}</b></td><td class="l">${esc(s.name)}</td><td>${esc(sectionOnly(s.sectionLabel))}</td><td class="sig"></td></tr>`).join("");
+    const rows = list.map(({ s, seat }, i) => `<tr><td>${i + 1}</td><td>${seat}</td><td><b>${esc(s.rollNumber)}</b></td><td class="l">${esc(s.name)}</td><td class="sig"></td><td></td><td></td></tr>`).join("");
     return `<!DOCTYPE html><html><head><meta charset="utf-8" /><style>${STYLE}</style></head><body><div class="page">
       <div class="pdf-page-header"></div>
       ${examHeaderHTML({ college: c, lines: lines(c, p), academicYear: c.academicYear, title: "Signature Sheet" })}
       <table class="facts"><tbody>${facts.map(([k, v]) => `<tr><th style="width:22%;text-align:left">${k}</th><td class="l"><b>${v}</b></td></tr>`).join("")}</tbody></table>
-      <table class="sheet" style="margin-top:8px"><thead><tr><th style="width:6%">S.No</th><th style="width:7%">Bench</th><th style="width:15%">Regd. No</th><th>Name</th><th style="width:10%">Section</th><th style="width:19%">Signature</th></tr></thead><tbody>${rows}</tbody></table>
+      <table class="sheet" style="margin-top:8px"><thead><tr><th style="width:6%">S.No</th><th style="width:7%">Bench</th><th style="width:14%">Regd. No</th><th>Name</th><th style="width:16%">Signature</th><th style="width:9%">Marks<br>(Figures)</th><th style="width:14%">Marks<br>(Words)</th></tr></thead><tbody>${rows}</tbody></table>
       <div class="sheet-foot"><span>Total: ${list.length} &nbsp;&nbsp; Present: ______ &nbsp;&nbsp; Absent: ______</span></div>
       <div class="sheet-sign"><span>Invigilator</span><span>Chief Superintendent</span></div>
     </div></body></html>`;
