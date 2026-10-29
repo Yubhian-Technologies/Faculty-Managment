@@ -11,6 +11,13 @@ import type { ApprovalEvent, ApprovalRequest, StageId } from "./types";
 
 export interface Actor { uid: string; name: string }
 
+/** When the stage at `index` runs out of time: `at` plus its hours, or null (no limit, or the last stage - nobody is above it). */
+export function deadlineFor(chain: readonly StageId[], stageHours: readonly (number | null)[] | undefined, index: number, at: string): string | null {
+  const hours = stageHours?.[index];
+  if (!hours || hours <= 0 || index >= chain.length - 1) return null;
+  return new Date(Date.parse(at) + hours * 3_600_000).toISOString();
+}
+
 export const pendingKeyFor = (stage: StageId, scope: string) => `${stage}|${scope}`;
 
 function stamp(req: ApprovalRequest, at: string): Pick<ApprovalRequest, "version" | "updatedAt"> {
@@ -37,7 +44,8 @@ export function submit<P>(
   chain: readonly StageId[],
   stageScope: (stage: StageId) => string,
   actor: Actor,
-  at: string
+  at: string,
+  stageHours?: readonly (number | null)[]
 ): ApprovalRequest<P> {
   const stages = assertChain(chain);
   return {
@@ -46,6 +54,8 @@ export function submit<P>(
     chain: stages,
     stageIndex: 0,
     pendingKey: pendingKeyFor(stages[0], stageScope(stages[0])),
+    escalateAt: deadlineFor(stages, stageHours, 0, at),
+    ...(stageHours?.some((h) => !!h) ? { stageHours: [...stageHours] } : {}),
     history: [event("SUBMIT", actor, at)],
     effectStatus: "NONE",
     version: 1,
@@ -71,10 +81,10 @@ export function approve<P>(
   const history = [...req.history, event("APPROVE", actor, at, stage, remark)];
   const nextIndex = req.stageIndex + 1;
   if (nextIndex >= req.chain.length) {
-    return { ...req, ...stamp(req, at), status: "APPROVED", stageIndex: nextIndex, pendingKey: null, history, decidedAt: at };
+    return { ...req, ...stamp(req, at), status: "APPROVED", stageIndex: nextIndex, pendingKey: null, escalateAt: null, history, decidedAt: at };
   }
   const next = req.chain[nextIndex];
-  return { ...req, ...stamp(req, at), stageIndex: nextIndex, pendingKey: pendingKeyFor(next, stageScope(next)), history };
+  return { ...req, ...stamp(req, at), stageIndex: nextIndex, pendingKey: pendingKeyFor(next, stageScope(next)), escalateAt: deadlineFor(req.chain, req.stageHours, nextIndex, at), history };
 }
 
 /** Rejects at the current stage. A reason is required so the requester learns why. */
@@ -82,7 +92,7 @@ export function reject<P>(req: ApprovalRequest<P>, actor: Actor, at: string, rem
   const stage = requirePending(req);
   if (!remark?.trim()) throw new ApprovalError("REMARK_REQUIRED", "Please give a reason for rejecting");
   return {
-    ...req, ...stamp(req, at), status: "REJECTED", pendingKey: null, decidedAt: at,
+    ...req, ...stamp(req, at), status: "REJECTED", pendingKey: null, escalateAt: null, decidedAt: at,
     history: [...req.history, event("REJECT", actor, at, stage, remark)],
   };
 }
@@ -90,7 +100,7 @@ export function reject<P>(req: ApprovalRequest<P>, actor: Actor, at: string, rem
 /** Withdraws a request that is still pending. */
 export function cancel<P>(req: ApprovalRequest<P>, actor: Actor, at: string, remark?: string): ApprovalRequest<P> {
   requirePending(req);
-  return { ...req, ...stamp(req, at), status: "CANCELLED", pendingKey: null, history: [...req.history, event("CANCEL", actor, at, undefined, remark)] };
+  return { ...req, ...stamp(req, at), status: "CANCELLED", pendingKey: null, escalateAt: null, history: [...req.history, event("CANCEL", actor, at, undefined, remark)] };
 }
 
 /** Takes back an already-APPROVED request (its effects are undone by the kind). */
@@ -112,8 +122,40 @@ export function skipStage<P>(
   const history = [...req.history, event("SKIP", actor, at, stage, reason)];
   const nextIndex = req.stageIndex + 1;
   if (nextIndex >= req.chain.length) {
-    return { ...req, ...stamp(req, at), status: "APPROVED", stageIndex: nextIndex, pendingKey: null, history, decidedAt: at };
+    return { ...req, ...stamp(req, at), status: "APPROVED", stageIndex: nextIndex, pendingKey: null, escalateAt: null, history, decidedAt: at };
   }
   const next = req.chain[nextIndex];
-  return { ...req, ...stamp(req, at), stageIndex: nextIndex, pendingKey: pendingKeyFor(next, stageScope(next)), history };
+  return { ...req, ...stamp(req, at), stageIndex: nextIndex, pendingKey: pendingKeyFor(next, stageScope(next)), escalateAt: deadlineFor(req.chain, req.stageHours, nextIndex, at), history };
+}
+
+/**
+ * One approval from whoever can decide the stage the request is waiting at closes the whole request as APPROVED:
+ * the stages above are not asked (a single APPROVE is recorded, at the stage that decided).
+ */
+export function approveAndClose<P>(req: ApprovalRequest<P>, actor: Actor, at: string, remark?: string): ApprovalRequest<P> {
+  const stage = requirePending(req);
+  return {
+    ...req, ...stamp(req, at), status: "APPROVED", stageIndex: req.chain.length, pendingKey: null, escalateAt: null, decidedAt: at,
+    history: [...req.history, event("APPROVE", actor, at, stage, remark)],
+  };
+}
+
+/**
+ * The current stage ran out of time: the request moves up to the next stage (recorded as ESCALATE) with a fresh deadline.
+ * Only legal once the deadline has passed and while a higher stage exists, so a stale sweep can never push a request twice.
+ */
+export function escalate<P>(
+  req: ApprovalRequest<P>, actor: Actor, at: string, stageScope: (stage: StageId) => string
+): ApprovalRequest<P> {
+  const stage = requirePending(req);
+  if (!req.escalateAt || req.escalateAt > at) throw new ApprovalError("NOT_PENDING", "This stage still has time left", 409);
+  const nextIndex = req.stageIndex + 1;
+  if (nextIndex >= req.chain.length) throw new ApprovalError("NOT_PENDING", "There is no higher stage to move this to", 409);
+  const next = req.chain[nextIndex];
+  const hours = req.stageHours?.[req.stageIndex];
+  return {
+    ...req, ...stamp(req, at), stageIndex: nextIndex, pendingKey: pendingKeyFor(next, stageScope(next)),
+    escalateAt: deadlineFor(req.chain, req.stageHours, nextIndex, at),
+    history: [...req.history, event("ESCALATE", actor, at, stage, `No response within ${hours ?? "the set"} hour${hours === 1 ? "" : "s"} - moved up to the next level`)],
+  };
 }

@@ -10,7 +10,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -24,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/useToast";
+import { formatTime12h } from "@/lib/timetable/facultyTimetablePdf";
 import { StudentPicker } from "./StudentPicker";
 import {
   createRequest,
@@ -39,7 +39,8 @@ import { EmptyState, ListSkeleton } from "./statusBadge";
 // whether proof is needed, the longest span - comes from the server, resolved for
 // the department; the server re-checks everything on submit.
 
-const PERIOD_CHOICES = [1, 2, 3, 4, 5, 6, 7, 8];
+// Used only when the class's own periods are not known (faculty raising for students of several classes).
+const FALLBACK_PERIODS = [1, 2, 3, 4, 5, 6, 7, 8].map((number) => ({ number, start: undefined as string | undefined, end: undefined as string | undefined }));
 const todayISO = () =>
   new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 
@@ -99,6 +100,7 @@ export function RequestForm({
   }, []);
 
   const limits = options?.limits;
+  const periodChoices = options?.periods?.length ? options.periods : FALLBACK_PERIODS;
   const hours = hoursUntil(fromDate);
   const short =
     hours !== null && limits ? hours < limits.advanceNoticeHours : false;
@@ -153,7 +155,7 @@ export function RequestForm({
     )
       out.push(`At most ${limits.maxDays} days per request`);
     if (!allPeriods && periods.length === 0)
-      out.push("Choose the periods, or pick all periods");
+      out.push("Choose the periods, or pick Whole day");
     return out;
   }, [
     categoryId,
@@ -176,7 +178,7 @@ export function RequestForm({
     if (!description.trim()) return "Describe the purpose";
     if (!fromDate || !toDate || toDate < fromDate) return "Check the dates";
     if (!allPeriods && periods.length === 0)
-      return "Choose the periods, or pick all periods";
+      return "Choose the periods, or pick Whole day";
     if (needsProof && proof.length === 0)
       return "Attach proof (an invitation, registration or letter)";
     if (mode === "faculty" && students.length === 0)
@@ -456,47 +458,85 @@ export function RequestForm({
           </div>
         )}
 
-        <div className="space-y-2">
+        <div className="space-y-2" role="radiogroup" aria-label="Which periods are you away for?">
           <Label>
-            Periods
+            Which periods are you away for?
             <Required />
           </Label>
-          <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm sm:min-h-10">
-            <Checkbox
-              checked={allPeriods}
-              onCheckedChange={(c) => setAllPeriods(!!c)}
-            />
-            All periods on selected days
-          </label>
-          {!allPeriods && (
-            <div
-              className="grid grid-cols-4 gap-2 pt-1 sm:grid-cols-8"
-              role="group"
-              aria-label="Select periods"
-            >
-              {PERIOD_CHOICES.map((p) => (
-                <label
-                  key={p}
-                  className={`flex min-h-11 cursor-pointer items-center justify-center gap-1.5 rounded-md border text-sm transition-colors sm:min-h-10 ${
-                    periods.includes(p)
-                      ? "border-primary bg-primary/10 font-medium text-primary"
-                      : "hover:bg-muted/50"
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {[
+              { whole: true, title: "Whole day", hint: "Every period on the selected day(s)" },
+              { whole: false, title: "Select periods", hint: "Only the periods I choose" },
+            ].map((o) => {
+              const active = allPeriods === o.whole;
+              return (
+                <button
+                  key={o.title}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => setAllPeriods(o.whole)}
+                  className={`flex min-h-14 flex-col items-start rounded-lg border-2 px-4 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                    active ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-muted/50"
                   }`}
                 >
-                  <Checkbox
-                    checked={periods.includes(p)}
-                    onCheckedChange={(c) =>
-                      setPeriods((cur) =>
-                        c
-                          ? [...cur, p].sort((a, b) => a - b)
-                          : cur.filter((x) => x !== p),
-                      )
-                    }
-                    aria-label={`Period ${p}`}
-                  />
-                  {p}
-                </label>
-              ))}
+                  <span className="text-sm font-semibold">{o.title}</span>
+                  <span className="text-xs text-muted-foreground">{o.hint}</span>
+                </button>
+              );
+            })}
+          </div>
+          {!allPeriods && (
+            <div className="space-y-2 rounded-lg border bg-muted/20 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">
+                  Tap each period you will miss
+                  {fromDate !== toDate ? " - the same periods apply to every day of the request" : ""}.
+                </p>
+                <button
+                  type="button"
+                  className="text-xs font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                  onClick={() =>
+                    setPeriods(periods.length === periodChoices.length ? [] : periodChoices.map((p) => p.number))
+                  }
+                >
+                  {periods.length === periodChoices.length ? "Clear all" : "Select all"}
+                </button>
+              </div>
+              <div
+                className="grid grid-cols-2 gap-2 sm:grid-cols-4"
+                role="group"
+                aria-label="Select periods"
+              >
+                {periodChoices.map((p) => {
+                  const on = periods.includes(p.number);
+                  return (
+                    <button
+                      key={p.number}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() =>
+                        setPeriods((cur) =>
+                          on ? cur.filter((x) => x !== p.number) : [...cur, p.number].sort((x, y) => x - y),
+                        )
+                      }
+                      className={`flex min-h-14 flex-col items-center justify-center rounded-md border-2 px-2 py-1.5 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                        on ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background hover:bg-muted/60"
+                      }`}
+                    >
+                      <span className="text-sm font-semibold">Period {p.number}</span>
+                      {p.start && p.end && (
+                        <span className={`text-[11px] ${on ? "text-primary-foreground/90" : "text-muted-foreground"}`}>
+                          {formatTime12h(p.start)} - {formatTime12h(p.end)}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-muted-foreground" role="status">
+                {periods.length === 0 ? "No period chosen yet." : `Selected: ${periods.map((n) => `P${n}`).join(", ")}`}
+              </p>
             </div>
           )}
         </div>

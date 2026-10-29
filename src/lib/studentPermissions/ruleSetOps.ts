@@ -29,6 +29,13 @@ export function setLimit<K extends keyof PermissionLimits>(rs: PermissionRuleSet
   return next;
 }
 
+/** Sets how many hours one approver level may take before the request moves up; `undefined` (or < 1) removes the limit. */
+export function setStageHours(rs: PermissionRuleSet | undefined, stage: string, hours: number | undefined): PermissionRuleSet {
+  const byStage = { ...(rs?.limits?.stageHours ?? {}) };
+  if (hours === undefined || !Number.isFinite(hours) || hours < 1) delete byStage[stage]; else byStage[stage] = Math.min(720, Math.round(hours));
+  return setLimit(rs, "stageHours", Object.keys(byStage).length ? byStage : undefined);
+}
+
 /** Sets proof required / optional for one permission type (group or item); `undefined` inherits again. */
 export function setProofForType(rs: PermissionRuleSet | undefined, key: string, required: boolean | undefined): PermissionRuleSet {
   const byType = { ...(rs?.limits?.proofByType ?? {}) };
