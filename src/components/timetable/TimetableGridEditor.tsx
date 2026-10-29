@@ -151,6 +151,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
   const [mergeMode, setMergeMode] = useState(false);
   // "Flexible cell": several faculty / batches / mid scopes in one cell (FlexibleCellDialog).
   const [flexOpen, setFlexOpen] = useState(false);
+  const [flexInitial, setFlexInitial] = useState<{ day: DayOfWeek; start: number; end: number } | undefined>();
   const [mergePick, setMergePick] = useState<{ day: DayOfWeek; periods: number[] }>({ day: "MON", periods: [] });
   // "w.e.f" date printed on the timetable, asked for in the publish dialog.
   const [effectiveDate, setEffectiveDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -1182,8 +1183,27 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
           {mode === "draft" && (
             <div className="ml-auto flex flex-wrap items-center gap-2">
               {isEditing && !mergeMode && myAssignmentIds.length > 0 && (
-                <Button size="sm" variant="outline" onClick={() => { setFlexOpen(true); setSelected(null); }}>
+                <Button size="sm" variant="outline" onClick={() => { setFlexInitial(undefined); setFlexOpen(true); setSelected(null); }}>
                   Flexible cell
+                </Button>
+              )}
+              {/* Merge mode doubles as the multi-cell picker: the selected back-to-back periods start the dialog. */}
+              {isEditing && mergeMode && myAssignmentIds.length > 0 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={mergePick.periods.length < 1}
+                  onClick={() => {
+                    const p = [...mergePick.periods].sort((a, b) => a - b);
+                    if (p.some((x, i) => i > 0 && x !== p[i - 1] + 1)) {
+                      toast({ variant: "destructive", title: "Pick back-to-back periods", description: "Select adjacent periods on the same day (a break in between is fine)." });
+                      return;
+                    }
+                    setFlexInitial({ day: mergePick.day, start: p[0], end: p[p.length - 1] });
+                    setFlexOpen(true);
+                  }}
+                >
+                  Flexible cell for selection
                 </Button>
               )}
               {isEditing && (!mergeMode ? (
@@ -1675,7 +1695,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
       </Dialog>
 
       {/* A subject with more than one faculty: all of them in this cell together (co-teaching), or only the one picked. */}
-      <FlexibleCellDialog
+      {flexOpen && <FlexibleCellDialog
         open={flexOpen}
         onOpenChange={setFlexOpen}
         sectionId={sectionId}
@@ -1683,9 +1703,10 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
         assignments={assignments.filter((a) => myAssignmentIds.includes(a.id))}
         days={days}
         numberOfPeriods={timing?.numberOfPeriods ?? 0}
+        initial={flexInitial}
         occupantsAt={(d, p) => rawCellEntriesFor(d, p).map((e) => ({ subjectId: e.slot.subjectId, assignmentId: e.slot.assignmentId }))}
         onApplied={(s) => setDraft((d) => (d ? { ...d, slots: s, status: "DRAFT" } : d))}
-      />
+      />}
 
       <Dialog open={sharePrompt !== null} onOpenChange={(o) => { if (!o && busy === null) setSharePrompt(null); }}>
         <DialogContent className="max-w-md">

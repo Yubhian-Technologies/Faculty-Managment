@@ -11,7 +11,7 @@ import type { DayOfWeek, DraftSlot, TeachingAssignment } from "@/types";
 import { DAY_LABELS } from "@/types";
 
 // Flexible cell: one cell, or several consecutive periods of one day, taken by one or more faculty of a subject -
-// each with their own batch and, if wanted, their own mid exam. Four steps: cells, faculty, batches, scope.
+// each with their own batch and, if wanted, their own mid exam. Five steps: cells, subject, faculty, batches, mid.
 // It places through the draft's ordinary "add" action (so it works on a published timetable the same way every
 // other edit does: Edit, change, Publish); the server validates and a clash comes back as a message.
 
@@ -27,18 +27,21 @@ interface Props {
   assignments: TeachingAssignment[];
   days: DayOfWeek[];
   numberOfPeriods: number;
+  /** Cells already picked on the grid (consecutive periods of one day); the dialog starts from them. */
+  initial?: { day: DayOfWeek; start: number; end: number };
   /** What already sits in a cell, to pick coTeach / allowSplit the way the editor's own Add does. */
   occupantsAt: (day: DayOfWeek, period: number) => { subjectId: string; assignmentId: string }[];
   onApplied: (slots: DraftSlot[]) => void;
 }
 
-const STEPS = ["Cells", "Faculty", "Batches", "Scope"] as const;
+const STEPS = ["Cells", "Subject", "Faculty", "Batches", "Mid"] as const;
 
-export function FlexibleCellDialog({ open, onOpenChange, sectionId, semesterBody, assignments, days, numberOfPeriods, occupantsAt, onApplied }: Props) {
+export function FlexibleCellDialog({ open, onOpenChange, sectionId, semesterBody, assignments, days, numberOfPeriods, initial, occupantsAt, onApplied }: Props) {
   const [step, setStep] = useState(0);
-  const [day, setDay] = useState<DayOfWeek>(days[0] ?? "MON");
-  const [start, setStart] = useState(1);
-  const [end, setEnd] = useState(1);
+  // The editor mounts this fresh on each opening, so these start from the cells picked on the grid, if any.
+  const [day, setDay] = useState<DayOfWeek>(initial?.day ?? days[0] ?? "MON");
+  const [start, setStart] = useState(initial?.start ?? 1);
+  const [end, setEnd] = useState(initial?.end ?? 1);
   const [subjectId, setSubjectId] = useState("");
   const [picked, setPicked] = useState<string[]>([]); // assignment ids
   const [batchBy, setBatchBy] = useState<Record<string, string>>({});
@@ -102,7 +105,7 @@ export function FlexibleCellDialog({ open, onOpenChange, sectionId, semesterBody
     return null;
   }
 
-  const canNext = step === 0 ? count >= 1 : step === 1 ? chosen.length > 0 : true;
+  const canNext = step === 0 ? count >= 1 : step === 1 ? Boolean(subjectId) : step === 2 ? chosen.length > 0 : true;
 
   async function apply() {
     const problem = overlapProblem();
@@ -155,9 +158,10 @@ export function FlexibleCellDialog({ open, onOpenChange, sectionId, semesterBody
           <DialogTitle>Flexible cell - {STEPS[step]} ({step + 1} of {STEPS.length})</DialogTitle>
           <DialogDescription>
             {step === 0 && "Pick the day and the period, or a run of consecutive periods (a break in between is fine)."}
-            {step === 1 && "Pick the subject, then the faculty who take it in these periods."}
-            {step === 2 && "Which batch does each faculty take? Leave it on Whole class if they take everyone."}
-            {step === 3 && "Should a faculty take these periods all semester, or only up to one mid exam? Mid dates come from the Exam Cell."}
+            {step === 1 && "Which subject is taught in these periods?"}
+            {step === 2 && "Which faculty of this subject take these periods?"}
+            {step === 3 && "Which batch does each faculty take? Leave it on Whole class if they take everyone."}
+            {step === 4 && "Should a faculty take these periods all semester, or only up to one mid exam? Mid dates come from the Exam Cell."}
           </DialogDescription>
         </DialogHeader>
 
@@ -188,25 +192,24 @@ export function FlexibleCellDialog({ open, onOpenChange, sectionId, semesterBody
         )}
 
         {step === 1 && (
-          <div className="space-y-3">
-            <Select value={subjectId} onValueChange={pickSubject}>
-              <SelectTrigger><SelectValue placeholder="Select subject" /></SelectTrigger>
-              <SelectContent>{subjects.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
-            </Select>
-            {subjectId && (
-              <div className="space-y-2 rounded-md border p-3">
-                {faculty.map((a) => (
-                  <label key={a.id} className="flex items-center gap-2 text-sm">
-                    <Checkbox checked={picked.includes(a.id)} onCheckedChange={(c) => setPicked((p) => (c ? [...p, a.id] : p.filter((x) => x !== a.id)))} />
-                    {a.facultyName}
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
+          <Select value={subjectId} onValueChange={pickSubject}>
+            <SelectTrigger><SelectValue placeholder="Select subject" /></SelectTrigger>
+            <SelectContent>{subjects.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+          </Select>
         )}
 
         {step === 2 && (
+          <div className="space-y-2 rounded-md border p-3">
+            {faculty.map((a) => (
+              <label key={a.id} className="flex items-center gap-2 text-sm">
+                <Checkbox checked={picked.includes(a.id)} onCheckedChange={(c) => setPicked((p) => (c ? [...p, a.id] : p.filter((x) => x !== a.id)))} />
+                {a.facultyName}
+              </label>
+            ))}
+          </div>
+        )}
+
+        {step === 3 && (
           <div className="space-y-2">
             {chosen.map((a) => (
               <div key={a.id} className="flex items-center justify-between gap-3">
@@ -224,7 +227,7 @@ export function FlexibleCellDialog({ open, onOpenChange, sectionId, semesterBody
           </div>
         )}
 
-        {step === 3 && (
+        {step === 4 && (
           <div className="space-y-3">
             {chosen.map((a) => (
               <div key={a.id} className="flex items-center justify-between gap-3">
