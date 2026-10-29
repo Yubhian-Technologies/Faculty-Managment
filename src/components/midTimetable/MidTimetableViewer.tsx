@@ -5,7 +5,7 @@ import { CalendarClock, CalendarDays, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
 import { ordinalYearLabel } from "@/lib/college/courseYears";
-import { dayLabel, timeLabel } from "@/lib/midTimetable/rules";
+import { dayLabel, timeLabel, usualSessionOf } from "@/lib/midTimetable/rules";
 import { downloadMidTimetablePdf } from "@/lib/pdf/downloadMidTimetable";
 import type { MidExamSession, MidTimetable } from "@/types";
 import { MidTimetableSheet, SheetCell } from "./MidTimetableSheet";
@@ -47,7 +47,7 @@ export function MidTimetableViewer({ emptyText }: { emptyText: string }) {
 
   async function pdf(s: Sheet) {
     setBusy(s.planId);
-    try { await downloadMidTimetablePdf({ ...s, rows: s.rows.map((r) => ({ branch: r.branch, slots: r.slots })) }, `mid${s.midNumber}-${s.courseName}-year${s.year}-timetable`); }
+    try { await downloadMidTimetablePdf({ ...s, rows: s.rows.map((r) => ({ branch: r.branch, slots: r.slots, usualSessionId: r.usualSessionId ?? usualSessionOf(r.sessions, undefined, r.slots) })) }, `mid${s.midNumber}-${s.courseName}-year${s.year}-timetable`); }
     catch { toast({ variant: "destructive", title: "Could not make the PDF" }); }
     finally { setBusy(null); }
   }
@@ -100,7 +100,7 @@ export function MidTimetableViewer({ emptyText }: { emptyText: string }) {
                 ))}
             </ol>
           ) : (
-            <MidTimetableSheet rows={s.rows.map((r) => ({ key: r.id, branch: r.branch, slots: r.slots }))} days={s.days} sessions={s.sessions} />
+            <MidTimetableSheet rows={s.rows.map((r) => ({ key: r.id, branch: r.branch, slots: r.slots, usualSessionId: r.usualSessionId ?? usualSessionOf(r.sessions, undefined, r.slots) }))} days={s.days} sessions={s.sessions} />
           )}
         </section>
       ))}

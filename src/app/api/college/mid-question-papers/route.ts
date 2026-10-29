@@ -72,7 +72,9 @@ export async function POST(request: Request) {
 
     const papers: GeneratedPaper[] = [];
     for (const slot of onDay.sort((a, b) => a.branch.localeCompare(b.branch) || a.subjectName.localeCompare(b.subjectName))) {
+      const ses = plan.sessions.find((x) => x.id === slot.sessionId) ?? slot.sessions.find((x) => x.id === slot.sessionId);
       const base = {
+        minutes: ses ? minutesBetween(ses.from, ses.to) : header.minutes,
         branch: slot.branch, branchCode: codeOf.get(slot.branch) || slot.branch, subjectName: slot.subjectName, subjectCode: slot.subjectCode,
         regulation: "", sections: [] as string[], ownerName: "", slots: [], picked: [], candidates: {}, questions: {}, unitTitles: {}, cos: [], mapping: {},
         marks: 0, maxMarks: 0, instruction: DEFAULT_INSTRUCTION, regdBoxes: DEFAULT_REGD_BOXES, startLevel: start,

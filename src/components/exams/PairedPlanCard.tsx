@@ -18,13 +18,14 @@ import type { ExamRoom } from "@/types/examSeating";
 // order they should fill, and build. Each bench takes the next student of every
 // seat's stream; when a stream runs out its seat stays empty.
 
-interface MidSource { id: string; label: string; midNumber: number; branches: number; days: string[] }
+interface MidSource { id: string; label: string; midNumber: number; branches: number; days: string[]; sessions: { time: string; label: string; branches: number }[] }
 interface Group { key: string; label: string; courseName: string; subjects: string[]; count: number; sections: { id: string; name: string; count: number }[] }
 
 export function PairedPlanCard({ rooms }: { rooms: ExamRoom[] }) {
   const router = useRouter();
   const [mids, setMids] = useState<MidSource[] | null>(null);
   const [planIds, setPlanIds] = useState<string[]>([]);
+  const [time, setTime] = useState(""); // the session seated - one arrangement per session
   const [groups, setGroups] = useState<Group[] | null>(null);
   // seat index (0 = A) per group key; absent = not seated. Order within a seat = `order`.
   const [seatOf, setSeatOf] = useState<Record<string, number>>({});
@@ -35,10 +36,23 @@ export function PairedPlanCard({ rooms }: { rooms: ExamRoom[] }) {
   useEffect(() => {
     fetch("/api/college/exam-seating/paired").then((r) => r.json() as Promise<{ mids?: MidSource[] }>).then((d) => setMids(d.mids ?? [])).catch(() => setMids([]));
   }, []);
+  // The sessions branches of the ticked Mids usually write in.
+  const sessionChoices = useMemo(() => {
+    const m = new Map<string, { time: string; label: string; branches: number }>();
+    for (const x of (mids ?? []).filter((y) => planIds.includes(y.id))) for (const s of x.sessions ?? []) {
+      const e = m.get(s.time) ?? { ...s, branches: 0 };
+      e.branches += s.branches;
+      m.set(s.time, e);
+    }
+    return [...m.values()].sort((a, b) => a.time.localeCompare(b.time));
+  }, [mids, planIds]);
+  const seatTime = sessionChoices.length === 1 ? sessionChoices[0].time : time;
+  const needTime = sessionChoices.length > 1 && !time;
+
   useEffect(() => {
-    if (planIds.length === 0) return;
+    if (planIds.length === 0 || needTime) return;
     let cancelled = false;
-    fetch(`/api/college/exam-seating/paired?planIds=${encodeURIComponent(planIds.join(","))}`)
+    fetch(`/api/college/exam-seating/paired?planIds=${encodeURIComponent(planIds.join(","))}${seatTime ? `&time=${encodeURIComponent(seatTime)}` : ""}`)
       .then((r) => r.json() as Promise<{ groups?: Group[] }>)
       .then((d) => {
         if (cancelled) return;
@@ -51,7 +65,7 @@ export function PairedPlanCard({ rooms }: { rooms: ExamRoom[] }) {
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load the branches for that date" }));
     return () => { cancelled = true; };
-  }, [planIds]);
+  }, [planIds, seatTime, needTime]);
 
   const maxSeats = Math.max(1, ...rooms.map((r) => roomPerBench(r)));
   const streams = useMemo(() => Array.from({ length: maxSeats }, (_, s) => order.filter((k) => seatOf[k] === s)), [order, seatOf, maxSeats]);
@@ -77,7 +91,7 @@ export function PairedPlanCard({ rooms }: { rooms: ExamRoom[] }) {
     try {
       const res = await fetch("/api/college/exam-seating/paired", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planIds, streams: usedStreams, roomIds }),
+        body: JSON.stringify({ planIds, time: seatTime || undefined, streams: usedStreams, roomIds }),
       });
       const data = (await res.json()) as { id?: string; unplaced?: number; error?: string };
       if (!res.ok || !data.id) throw new Error(data.error ?? "Could not build the plan");
@@ -110,7 +124,7 @@ export function PairedPlanCard({ rooms }: { rooms: ExamRoom[] }) {
               {(mids ?? []).map((m) => (
                 <label key={m.id} className="flex items-center gap-2 text-sm">
                   <input type="checkbox" className="h-4 w-4" checked={planIds.includes(m.id)}
-                    onChange={() => { setGroups(null); setPlanIds((l) => (l.includes(m.id) ? l.filter((x) => x !== m.id) : [...l, m.id])); }} />
+                    onChange={() => { setGroups(null); setTime(""); setPlanIds((l) => (l.includes(m.id) ? l.filter((x) => x !== m.id) : [...l, m.id])); }} />
                   <span className="font-medium">{m.label}</span>
                   <span className="text-xs text-muted-foreground">{m.branches} branch{m.branches === 1 ? "" : "es"}{m.days.length ? ` · ${dayLabel(m.days[0])} - ${dayLabel(m.days[m.days.length - 1])}` : ""}</span>
                 </label>
@@ -118,6 +132,20 @@ export function PairedPlanCard({ rooms }: { rooms: ExamRoom[] }) {
             </div>
           </div>
         </div>
+
+        {sessionChoices.length > 1 && (
+          <div className="space-y-1.5">
+            <p className="text-sm font-medium">Session to seat <span className="font-normal text-muted-foreground">- one arrangement per session; only the branches writing then are seated together</span></p>
+            <div className="flex flex-wrap gap-2">
+              {sessionChoices.map((x) => (
+                <button key={x.time} type="button" aria-pressed={time === x.time} onClick={() => { setGroups(null); setTime(x.time); }}
+                  className={cn("rounded-xl border px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", time === x.time ? "border-primary bg-primary text-primary-foreground" : "hover:border-primary/40")}>
+                  <span className="block font-semibold">{x.label}</span><span className="text-xs opacity-80">{x.branches} branch{x.branches === 1 ? "" : "es"}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {groups && (
           <div className="space-y-2">
@@ -189,7 +217,7 @@ export function PairedPlanCard({ rooms }: { rooms: ExamRoom[] }) {
           </p>
         )}
 
-        <Button disabled={planIds.length === 0 || usedStreams.length === 0 || roomIds.length === 0} loading={creating} onClick={() => void create()}>
+        <Button disabled={planIds.length === 0 || needTime || usedStreams.length === 0 || roomIds.length === 0} loading={creating} onClick={() => void create()}>
           <Armchair className="mr-1 h-4 w-4" /> Build paired plan
         </Button>
       </CardContent>

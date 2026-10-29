@@ -3,7 +3,9 @@ import type { MidExamSession, MidExamSlot } from "@/types/midTimetable";
 // Mid Timetable rules, shared by the Exam Cell builder (live hints) and the
 // server (which re-checks every save). Pure - no Firestore, no clock.
 
-export const MAX_SESSIONS = 3;
+export const MAX_SESSIONS = 6;
+/** Exams a branch may sit in one day unless the timetable says otherwise. */
+export const DEFAULT_MAX_PER_DAY = 2;
 export const MAX_DAYS = 31;
 export const MAX_SPAN_DAYS = 92;
 
@@ -90,7 +92,7 @@ export interface BranchSubject { subjectId: string; subjectCode: string; subject
  * electives sharing the cell (its heading is `group`, the same for all of them).
  * Unplaced subjects are simply absent. `complete` = every subject placed.
  */
-export function checkSlots(raw: unknown, subjects: BranchSubject[], days: string[], sessions: MidExamSession[]): { slots: MidExamSlot[]; errors: string[]; complete: boolean } {
+export function checkSlots(raw: unknown, subjects: BranchSubject[], days: string[], sessions: MidExamSession[], maxPerDay: number = DEFAULT_MAX_PER_DAY): { slots: MidExamSlot[]; errors: string[]; complete: boolean } {
   const known = new Map(subjects.map((s) => [s.subjectId, s]));
   const daySet = new Set(days);
   const sessionIds = new Set(sessions.map((s) => s.id));
@@ -119,7 +121,15 @@ export function checkSlots(raw: unknown, subjects: BranchSubject[], days: string
     const h = heading.get(`${sl.date}|${sl.sessionId}`);
     if (h) sl.group = h; else delete sl.group;
   }
-  slots.sort((a, b) => a.date.localeCompare(b.date) || a.sessionId.localeCompare(b.sessionId, undefined, { numeric: true }) || a.subjectCode.localeCompare(b.subjectCode));
+  // A day: at most `maxPerDay` exams (one exam = one session; electives share it), and never two at overlapping times.
+  const byId = new Map(sessions.map((s) => [s.id, s]));
+  for (const day of [...new Set(slots.map((s) => s.date))]) {
+    const used = [...new Set(slots.filter((s) => s.date === day).map((s) => s.sessionId))].map((id) => byId.get(id)!).sort((a, b) => a.from.localeCompare(b.from));
+    if (used.length > maxPerDay) errors.push(`${dayLabel(day)}: ${used.length} exams - at most ${maxPerDay} a day`);
+    for (let i = 1; i < used.length; i++) if (used[i].from < used[i - 1].to) errors.push(`${dayLabel(day)}: ${used[i - 1].label} and ${used[i].label} overlap`);
+  }
+  const order = new Map(sessions.map((s) => [s.id, s.from]));
+  slots.sort((a, b) => a.date.localeCompare(b.date) || (order.get(a.sessionId) ?? "").localeCompare(order.get(b.sessionId) ?? "") || a.subjectCode.localeCompare(b.subjectCode));
   return { slots, errors, complete: errors.length === 0 && subjects.every((s) => seen.has(s.subjectId)) };
 }
 
@@ -128,6 +138,15 @@ export function checkSlots(raw: unknown, subjects: BranchSubject[], days: string
  * day + session, in the subjects' order (one session a day = one subject a day).
  * Placed subjects stay where they are. Subjects left over (not enough slots) stay unplaced.
  */
+/** A branch's usual session: the one set for it, else the one most of its exams are in, else the first. */
+export function usualSessionOf(sessions: MidExamSession[], set: string | undefined, slots: Pick<MidExamSlot, "sessionId">[] = []): string {
+  if (set && sessions.some((s) => s.id === set)) return set;
+  const count = new Map<string, number>();
+  for (const s of slots) count.set(s.sessionId, (count.get(s.sessionId) ?? 0) + 1);
+  const most = [...count.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+  return most && sessions.some((s) => s.id === most) ? most : sessions[0]?.id ?? "";
+}
+
 export function autoFill(subjects: BranchSubject[], placed: MidExamSlot[], days: string[], sessions: MidExamSession[]): { slots: MidExamSlot[]; unplaced: string[] } {
   const keep = placed.filter((p) => subjects.some((s) => s.subjectId === p.subjectId));
   const busy = new Set(keep.map((p) => `${p.date}|${p.sessionId}`));

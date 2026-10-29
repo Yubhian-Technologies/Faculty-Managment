@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { autoFill, checkSlots, cleanDays, cleanSessions, examDaysBetween, rescheduleSlots, timeLabel } from "./rules";
+import { autoFill, checkSlots, usualSessionOf, cleanDays, cleanSessions, examDaysBetween, rescheduleSlots, timeLabel } from "./rules";
 
 const S = [{ id: "S1", label: "Morning", from: "10:00", to: "11:30" }, { id: "S2", label: "Afternoon", from: "14:00", to: "15:30" }];
 const subj = (n: number) => ({ subjectId: `s${n}`, subjectCode: `C${n}`, subjectName: `Subject ${n}` });
@@ -57,5 +57,20 @@ describe("mid timetable rules", () => {
     const back = rescheduleSlots(again.slots, { date: "2026-11-18", sessionId: "S1" }, { date: "2026-11-09", sessionId: "S1" });
     expect(back.moved[0].movedFrom).toBeUndefined();
     expect(rescheduleSlots(slots, { date: "2026-11-09", sessionId: "S1" }, { date: "2026-11-10", sessionId: "S1" }).clash).toEqual(["Subject 3"]);
+  });
+
+  it("two exams a day when the times don't overlap; the day limit is the timetable's", () => {
+    const days = ["2026-11-09"];
+    const both = [{ subjectId: "s1", date: "2026-11-09", sessionId: "S1" }, { subjectId: "s2", date: "2026-11-09", sessionId: "S2" }];
+    expect(checkSlots(both, [subj(1), subj(2)], days, S).errors).toEqual([]);
+    expect(checkSlots(both, [subj(1), subj(2)], days, S, 1).errors).toEqual(["Mon 9 Nov 2026: 2 exams - at most 1 a day"]);
+    const clash = [...S, { id: "S3", label: "Noon", from: "11:00", to: "12:30" }];
+    expect(checkSlots([both[0], { subjectId: "s2", date: "2026-11-09", sessionId: "S3" }], [subj(1), subj(2)], days, clash).errors).toEqual(["Mon 9 Nov 2026: Morning and Noon overlap"]);
+  });
+
+  it("a branch's usual session: set, else the one most used, else the first", () => {
+    expect(usualSessionOf(S, "S2")).toBe("S2");
+    expect(usualSessionOf(S, undefined, [{ sessionId: "S2" }, { sessionId: "S2" }, { sessionId: "S1" }])).toBe("S2");
+    expect(usualSessionOf(S, "gone")).toBe("S1");
   });
 });

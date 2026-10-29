@@ -16,7 +16,7 @@ import { MidTimetableSheet } from "@/components/midTimetable/MidTimetableSheet";
 import { toast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
 import { ordinalYearLabel } from "@/lib/college/courseYears";
-import { autoFill, checkSlots, dayLabel, MAX_SESSIONS, timeLabel, type BranchSubject } from "@/lib/midTimetable/rules";
+import { autoFill, checkSlots, dayLabel, DEFAULT_MAX_PER_DAY, MAX_SESSIONS, timeLabel, usualSessionOf, type BranchSubject } from "@/lib/midTimetable/rules";
 import { downloadMidTimetablePdf } from "@/lib/pdf/downloadMidTimetable";
 import type { MidExamPlan, MidExamSession, MidExamSlot, MidTimetable, MidTimetableChange } from "@/types";
 
@@ -48,6 +48,7 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
   const [edits, setEdits] = useState<Record<string, Row[]>>({}); // unsaved, per branch key
   const [days, setDays] = useState<string[]>([]);
   const [sessions, setSessions] = useState<MidExamSession[]>([]);
+  const [maxPerDay, setMaxPerDay] = useState(String(DEFAULT_MAX_PER_DAY));
   const [setupDirty, setSetupDirty] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [cell, setCell] = useState<CellRef | null>(null);
@@ -63,7 +64,7 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
   const load = useCallback(() => {
     fetch(`/api/college/mid-timetables/${encodeURIComponent(planId)}`)
       .then(async (r) => { const d = (await r.json()) as Data & { error?: string }; if (!r.ok) throw new Error(d.error ?? "Failed to load"); return d; })
-      .then((d) => { setData(d); setDays(d.plan.days); setSessions(d.plan.sessions); setSetupDirty(false); })
+      .then((d) => { setData(d); setDays(d.plan.days); setSessions(d.plan.sessions); setMaxPerDay(String(d.plan.maxPerDay ?? DEFAULT_MAX_PER_DAY)); setSetupDirty(false); })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load"));
   }, [planId]);
   useEffect(() => { load(); }, [load]);
@@ -82,14 +83,33 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
 
   const plan = data?.plan;
   const slotsOf = useCallback((b: Branch): MidExamSlot[] => rowsOf(b).filter((r) => r.date && r.sessionId).map((r) => ({ ...b.subjects.find((s) => s.subjectId === r.subjectId)!, date: r.date, sessionId: r.sessionId, ...(r.group ? { group: r.group } : {}), ...(r.movedFrom ? { movedFrom: r.movedFrom } : {}) })), [rowsOf]);
+  /** A branch's usual session (set on the plan, else the one most of its exams are in). */
+  const usualOf = useCallback((b: Branch) => (plan ? usualSessionOf(plan.sessions, plan.branchSessions?.[b.key], slotsOf(b)) : ""), [plan, slotsOf]);
+
+  async function setUsual(b: Branch, sessionId: string) {
+    if (!plan) return;
+    const branchSessions = { ...(plan.branchSessions ?? {}), [b.key]: sessionId };
+    const res = await fetch(`/api/college/mid-timetables/${encodeURIComponent(planId)}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ days: plan.days, sessions: plan.sessions, branchSessions }),
+    }).catch(() => null);
+    if (!res?.ok) { toast({ variant: "destructive", title: "Could not save the branch's session" }); return; }
+    setData((d) => d && ({ ...d, plan: { ...d.plan, branchSessions } }));
+  }
+
   const sheetRows = useMemo(() => (data?.branches ?? []).map((b) => {
     const slots = slotsOf(b);
     const missing = b.subjects.filter((s) => !slots.some((x) => x.subjectId === s.subjectId));
     const st = b.timetable?.status;
     return {
-      key: b.key, branch: b.branch, slots,
+      key: b.key, branch: b.branch, slots, usualSessionId: usualOf(b),
       aside: (
         <span className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] font-normal">
+          {(data?.plan.sessions.length ?? 0) > 1 && (
+            <select aria-label={`Usual session of ${b.branch}`} className="h-7 w-full rounded-md border border-input bg-background px-1.5 text-[11px]" value={usualOf(b)}
+              onChange={(e) => void setUsual(b, e.target.value)}>
+              {data!.plan.sessions.map((x) => <option key={x.id} value={x.id}>Writes in: {x.label} ({timeLabel(x.from)})</option>)}
+            </select>
+          )}
           <span className={cn("rounded-full px-2 py-0.5 font-semibold", st === "PUBLISHED" ? "bg-emerald-100 text-emerald-800" : st === "DRAFT" ? "bg-amber-100 text-amber-900" : "bg-muted text-muted-foreground")}>
             {st === "PUBLISHED" ? "Published" : st === "DRAFT" ? "Draft" : "Not saved"}{edits[b.key] ? " · changed" : ""}
           </span>
@@ -99,15 +119,19 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
       ),
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- unpublish only reads state at click time
-  }), [data, slotsOf, edits]);
+  }), [data, slotsOf, edits, usualOf]);
 
   const branchOf = (key: string) => data?.branches.find((b) => b.key === key) ?? null;
 
-  function openCell(key: string, date: string, sessionId: string) {
+  /** Open a branch's day at a session: the usual one, unless that day's only exam is at another time. */
+  function openCell(key: string, date: string, sessionId?: string) {
     const b = branchOf(key);
     if (!b) return;
-    const here = rowsOf(b).filter((r) => r.date === date && r.sessionId === sessionId);
-    setCell({ key, date, sessionId });
+    const day = rowsOf(b).filter((r) => r.date === date && r.sessionId);
+    const usual = usualOf(b);
+    const sid = sessionId ?? (day.length && !day.some((r) => r.sessionId === usual) ? day[0].sessionId : usual);
+    const here = day.filter((r) => r.sessionId === sid);
+    setCell({ key, date, sessionId: sid });
     setPicked(new Set(here.map((r) => r.subjectId)));
     setHeading(here.find((r) => r.group)?.group ?? "");
   }
@@ -151,7 +175,9 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
     const short: string[] = [];
     for (const b of data.branches) {
       const kept = slotsOf(b).filter((s) => plan.days.includes(s.date) && plan.sessions.some((x) => x.id === s.sessionId));
-      const { slots, unplaced } = autoFill(b.subjects, kept, plan.days, plan.sessions);
+      // One exam a day in the branch's usual session (a second exam that day is placed by hand).
+      const usual = plan.sessions.filter((x) => x.id === usualOf(b));
+      const { slots, unplaced } = autoFill(b.subjects, kept, plan.days, usual.length ? usual : plan.sessions.slice(0, 1));
       if (unplaced.length) short.push(`${b.branch}: ${unplaced.length}`);
       next[b.key] = b.subjects.map((s) => {
         const x = slots.find((y) => y.subjectId === s.subjectId);
@@ -184,7 +210,7 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
         const changed = Boolean(edits[b.key]);
         if (!publish && !changed) continue;
         if (publish && isPub && !changed) continue;
-        const c = checkSlots(rowsOf(b), b.subjects, plan.days, plan.sessions);
+        const c = checkSlots(rowsOf(b), b.subjects, plan.days, plan.sessions, plan.maxPerDay ?? DEFAULT_MAX_PER_DAY);
         if (c.errors.length) { problems.push(`${b.branch}: ${c.errors[0]}`); continue; }
         // A published branch stays published when saved; it must stay complete.
         const action = publish || isPub ? "publish" : "draft";
@@ -216,7 +242,7 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
     setBusy("setup");
     try {
       const res = await fetch(`/api/college/mid-timetables/${encodeURIComponent(planId)}`, {
-        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ days, sessions }),
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ days, sessions, maxPerDay: Number(maxPerDay) }),
       });
       const json = (await res.json()) as { error?: string };
       if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Could not save" }); return; }
@@ -326,10 +352,16 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
             {sessions.length < MAX_SESSIONS && (
               <Button variant="outline" size="sm" className="self-end" onClick={() => {
                 const used = new Set(sessions.map((s) => s.id));
-                const id = ["S1", "S2", "S3"].find((x) => !used.has(x)) ?? `S${sessions.length + 1}`;
+                const id = ["S1", "S2", "S3", "S4", "S5", "S6"].find((x) => !used.has(x)) ?? `S${sessions.length + 1}`;
                 setSessions((x) => [...x.map((y, j) => (x.length === 1 && j === 0 && y.label === "Session 1" ? { ...y, label: "Morning" } : y)), { id, label: x.length === 1 ? "Afternoon" : `Session ${x.length + 1}`, from: "14:00", to: "15:30" }]);
                 setSetupDirty(true);
-              }}><Plus className="mr-1.5 h-4 w-4" />Add a second session a day</Button>
+              }}><Plus className="mr-1.5 h-4 w-4" />Add a session</Button>
+            )}
+            {sessions.length > 1 && (
+              <div className="flex items-end gap-2 rounded-xl border bg-muted/20 p-2.5">
+                <div className="space-y-1"><Label htmlFor="max-per-day" className="text-xs">Most exams a branch writes in a day</Label>
+                  <Input id="max-per-day" type="number" min={1} max={sessions.length} value={maxPerDay} className="h-9 w-24" onChange={(e) => { setMaxPerDay(e.target.value); setSetupDirty(true); }} /></div>
+              </div>
             )}
           </div>
           {setupDirty && <p className="text-xs text-amber-700">Save the days and time first - the sheet below uses the saved ones.</p>}
@@ -356,7 +388,7 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
             <Button variant="outline" size="sm" loading={busy === "pdf"} disabled={placed === 0}
               onClick={async () => {
                 setBusy("pdf");
-                try { await downloadMidTimetablePdf({ ...plan, rows: data.branches.map((b) => ({ branch: b.branch, slots: slotsOf(b) })) }, `mid${plan.midNumber}-${plan.courseName}-year${plan.year}-timetable`); }
+                try { await downloadMidTimetablePdf({ ...plan, rows: data.branches.map((b) => ({ branch: b.branch, slots: slotsOf(b), usualSessionId: usualOf(b) })) }, `mid${plan.midNumber}-${plan.courseName}-year${plan.year}-timetable`); }
                 catch { toast({ variant: "destructive", title: "Could not make the PDF" }); }
                 finally { setBusy(null); }
               }}><Download className="mr-1.5 h-4 w-4" />PDF</Button>
@@ -464,8 +496,19 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
             <>
               <DialogHeader>
                 <DialogTitle>{cellBranch.branch}</DialogTitle>
-                <DialogDescription>{dayLabel(cell.date)}{plan.sessions.length > 1 ? ` · ${plan.sessions.find((s) => s.id === cell.sessionId)?.label}` : ""} - tick the subject written then. Tick more than one for electives.</DialogDescription>
+                <DialogDescription>{dayLabel(cell.date)} - tick the subject written then. Tick more than one for electives.</DialogDescription>
               </DialogHeader>
+              {plan.sessions.length > 1 && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="cell-session">Session</Label>
+                  <select id="cell-session" className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" value={cell.sessionId} onChange={(e) => openCell(cell.key, cell.date, e.target.value)}>
+                    {plan.sessions.map((x) => <option key={x.id} value={x.id}>{x.label} · {timeLabel(x.from)} - {timeLabel(x.to)}{x.id === usualOf(cellBranch) ? " (usual)" : ""}</option>)}
+                  </select>
+                  {cellRows.some((r) => r.date === cell.date && r.sessionId && r.sessionId !== cell.sessionId) && (
+                    <p className="text-xs text-muted-foreground">Also that day: {cellRows.filter((r) => r.date === cell.date && r.sessionId && r.sessionId !== cell.sessionId).map((r) => `${cellBranch.subjects.find((x) => x.subjectId === r.subjectId)?.subjectName} (${plan.sessions.find((x) => x.id === r.sessionId)?.label})`).join(", ")} - pick another session for a second exam.</p>
+                  )}
+                </div>
+              )}
               <ul className="max-h-80 space-y-1.5 overflow-y-auto">
                 {cellBranch.subjects.map((s) => {
                   const r = cellRows.find((x) => x.subjectId === s.subjectId);

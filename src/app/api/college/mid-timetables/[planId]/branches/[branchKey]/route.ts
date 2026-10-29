@@ -6,7 +6,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { actorName, guardError } from "@/lib/midBank/server";
 import { branchKey } from "@/lib/midBank/sections";
-import { checkSlots } from "@/lib/midTimetable/rules";
+import { checkSlots, DEFAULT_MAX_PER_DAY, usualSessionOf } from "@/lib/midTimetable/rules";
 import { branchSubjects, loadPlan, MID_TIMETABLE_EDITORS, midTimetableRefs } from "@/lib/midTimetable/server";
 import type { MidTimetable } from "@/types";
 
@@ -32,7 +32,7 @@ export async function PUT(request: Request, { params }: Params) {
     if (!branch) return NextResponse.json({ error: "This branch has no Theory subjects taught in this semester" }, { status: 404 });
     const subjects = all.get(branch)!;
 
-    const checked = checkSlots(body.slots, subjects, plan.days, plan.sessions);
+    const checked = checkSlots(body.slots, subjects, plan.days, plan.sessions, plan.maxPerDay ?? DEFAULT_MAX_PER_DAY);
     if (action !== "unpublish") {
       if (checked.errors.length) return NextResponse.json({ error: checked.errors[0], errors: checked.errors }, { status: 400 });
       if (action === "publish" && !checked.complete) {
@@ -50,12 +50,14 @@ export async function PUT(request: Request, { params }: Params) {
       if (Number(body.baseRev ?? 0) !== (cur?.rev ?? 0)) return { status: 409, body: { error: "This timetable was changed in another tab or by someone else - reload it" } };
       const now = new Date();
       const used = new Set(checked.slots.map((s) => s.sessionId));
+      const usual = usualSessionOf(plan.sessions, plan.branchSessions?.[key], action === "unpublish" ? cur?.slots ?? [] : checked.slots);
       const data: Omit<MidTimetable, "id"> = {
         planId, courseName: plan.courseName, courseIds: plan.courseIds, year: plan.year, semester: plan.semester, midNumber: plan.midNumber, branch,
         slots: action === "unpublish" ? (cur?.slots ?? []) : checked.slots,
-        sessions: plan.sessions.filter((s) => action === "publish" ? used.has(s.id) : true),
+        sessions: plan.sessions.filter((s) => action === "publish" ? used.has(s.id) || s.id === usual : true),
         status: action === "publish" ? "PUBLISHED" : "DRAFT",
         rev: (cur?.rev ?? 0) + 1,
+        usualSessionId: usual,
         publishedAt: action === "publish" ? (now as unknown as MidTimetable["publishedAt"]) : null,
         publishedByName: action === "publish" ? name : "",
         updatedBy: session.uid, updatedByName: name, updatedAt: now as unknown as MidTimetable["updatedAt"],

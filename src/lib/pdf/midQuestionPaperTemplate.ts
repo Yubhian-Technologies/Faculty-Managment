@@ -126,7 +126,7 @@ export function getMidQuestionPaperHTML(d: {
       </div><span></span>
     </div>
     <div class="meta"><span>Branch &amp; Sections: <b>${esc(p.branchCode)}${sections.length ? ` - ${esc(sections.join(", "))}` : ""}</b></span><span>Date: <b>${dmy(h.date)}</b></span></div>
-    <div class="meta"><span>Time: <b>${h.minutes ? `${h.minutes}Mins.` : ""}</b></span><span>Max. Marks: <b>${p.maxMarks}</b></span></div>
+    <div class="meta"><span>Time: <b>${(p.minutes ?? h.minutes) ? `${p.minutes ?? h.minutes}Mins.` : ""}</b></span><span>Max. Marks: <b>${p.maxMarks}</b></span></div>
     <hr />
     <p class="instr">${esc(p.instruction)}</p>
     ${coList ? `<p class="cos-title">Course Outcomes:</p><div class="cos"><p>Upon the completion of the course, the student will be able to:</p>${coList}</div>` : ""}

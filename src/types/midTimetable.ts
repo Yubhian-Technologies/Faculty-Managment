@@ -30,6 +30,10 @@ export interface MidExamPlan {
   /** Exam days ("YYYY-MM-DD"), inside that range. */
   days: string[];
   sessions: MidExamSession[];
+  /** Each branch's usual session (branchKey -> session id) - it writes in it for the whole Mid unless an exam says otherwise. */
+  branchSessions?: Record<string, string>;
+  /** Most exams a branch may sit in one day (absent = 2). */
+  maxPerDay?: number;
   createdBy: string;
   createdByName: string;
   updatedBy: string;
@@ -84,6 +88,8 @@ export interface MidTimetable {
   sessions: MidExamSession[];
   status: MidTimetableStatus;
   rev: number;
+  /** The branch's usual session when saved (its timetable shows other sessions' times in the cell). */
+  usualSessionId?: string;
   /** Reschedules, oldest first. */
   changes?: MidTimetableChange[];
   publishedAt?: Timestamp | null;

@@ -32,6 +32,8 @@ export interface GeneratedPaper {
   maxMarks: number;
   instruction: string;
   regdBoxes: number;
+  /** Exam length of this paper's own session (branches may write at different times). */
+  minutes?: number | null;
   startLevel: BloomLevel;
 }
 

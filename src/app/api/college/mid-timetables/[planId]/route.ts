@@ -6,7 +6,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { actorName, guardError } from "@/lib/midBank/server";
 import { branchKey } from "@/lib/midBank/sections";
-import { cleanDays, cleanSessions } from "@/lib/midTimetable/rules";
+import { cleanDays, cleanSessions, DEFAULT_MAX_PER_DAY, MAX_SESSIONS } from "@/lib/midTimetable/rules";
 import { branchSubjects, loadPlan, MID_TIMETABLE_EDITORS, midTimetableRefs, midWindow } from "@/lib/midTimetable/server";
 import type { MidTimetable } from "@/types";
 
@@ -45,7 +45,7 @@ export async function PATCH(request: Request, { params }: Params) {
   try {
     const session = await requireCollegeMember(...MID_TIMETABLE_EDITORS);
     const { planId } = await params;
-    const body = (await readJsonBody(request)) as { days?: unknown; sessions?: unknown };
+    const body = (await readJsonBody(request)) as { days?: unknown; sessions?: unknown; branchSessions?: unknown; maxPerDay?: unknown };
     const db = getAdminDb();
     const refs = midTimetableRefs(db, session.collegeId);
     const plan = await loadPlan(db, session.collegeId, planId);
@@ -64,16 +64,23 @@ export async function PATCH(request: Request, { params }: Params) {
     if (blocked.length) {
       return NextResponse.json({ error: `Published timetables use a day or session you removed (${blocked.map(({ t }) => t.branch).join(", ")}) - unpublish them first` }, { status: 409 });
     }
+    // Each branch's usual session (only sessions that still exist) and the exams-a-day limit.
+    const branchSessions: Record<string, string> = {};
+    for (const [k, v] of Object.entries((body.branchSessions ?? plan.branchSessions ?? {}) as Record<string, unknown>)) {
+      if (typeof v === "string" && sessionIds.has(v)) branchSessions[k] = v;
+    }
+    const maxPerDay = body.maxPerDay === undefined ? plan.maxPerDay ?? DEFAULT_MAX_PER_DAY : Number(body.maxPerDay);
+    if (!Number.isInteger(maxPerDay) || maxPerDay < 1 || maxPerDay > MAX_SESSIONS) return NextResponse.json({ error: `Exams a day must be 1 to ${MAX_SESSIONS}` }, { status: 400 });
     const name = await actorName(db, session.collegeId, session.uid);
     const batch = db.batch();
-    batch.update(refs.plans.doc(planId), { days: d.days, sessions: s.sessions, updatedBy: session.uid, updatedByName: name, updatedAt: new Date() });
+    batch.update(refs.plans.doc(planId), { days: d.days, sessions: s.sessions, branchSessions, maxPerDay, updatedBy: session.uid, updatedByName: name, updatedAt: new Date() });
     for (const { ref, t } of tts) {
       if (t.status !== "DRAFT") continue;
       const kept = t.slots.filter((sl) => days.has(sl.date) && sessionIds.has(sl.sessionId));
       if (kept.length !== t.slots.length) batch.update(ref, { slots: kept, rev: (t.rev ?? 0) + 1, updatedAt: new Date() });
     }
     await batch.commit();
-    return NextResponse.json({ plan: { ...plan, days: d.days, sessions: s.sessions } });
+    return NextResponse.json({ plan: { ...plan, days: d.days, sessions: s.sessions, branchSessions, maxPerDay } });
   } catch (err) {
     const bad = badBodyResponse(err);
     if (bad) return bad;
