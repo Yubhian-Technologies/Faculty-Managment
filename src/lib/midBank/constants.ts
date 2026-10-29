@@ -37,6 +37,7 @@ export const LIMITS = {
   units: 10,
   cos: 10,
   unitTitle: 200,
+  unitSyllabus: 3000,
   statement: 500,
   questionText: 3000,
   imageCaption: 150,

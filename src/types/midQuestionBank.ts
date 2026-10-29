@@ -21,6 +21,8 @@ export type BloomLevel = "L2" | "L3" | "L4";
 export interface SyllabusUnit {
   no: number; // 1..n, in order
   title: string;
+  /** The unit's syllabus - its topics, as in the syllabus copy (optional). */
+  syllabus?: string;
 }
 
 export interface CourseOutcome {

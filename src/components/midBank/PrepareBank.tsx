@@ -25,10 +25,11 @@ import type { OutcomeMapping } from "@/types";
 // entered by whoever prepares first, reused by Mid 2.
 
 export type PrepareStep = 1 | 2 | 3;
-interface Draft { units: string[]; cos: string[]; mapping: OutcomeMapping }
+interface Draft { units: string[]; syllabi: string[]; cos: string[]; mapping: OutcomeMapping }
 
 const fromData = (d: MidBankPrepare): Draft => ({
   units: d.outcomes?.units.map((u) => u.title) ?? Array.from({ length: 5 }, () => ""),
+  syllabi: d.outcomes?.units.map((u) => u.syllabus ?? "") ?? Array.from({ length: 5 }, () => ""),
   cos: d.outcomes?.cos.map((c) => c.statement) ?? Array.from({ length: 5 }, () => ""),
   mapping: d.outcomes?.mapping ?? {},
 });
@@ -119,7 +120,7 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
       method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         deadlineId: deadline.id, subjectId: subject.id, branch, baseVersion: outcomes?.version ?? 0,
-        units: draft.units.map((title) => ({ title })), cos: draft.cos.map((statement) => ({ statement })), mapping: draft.mapping,
+        units: draft.units.map((title, i) => ({ title, syllabus: draft.syllabi[i] ?? "" })), cos: draft.cos.map((statement) => ({ statement })), mapping: draft.mapping,
       }),
     });
     const json = (await res.json()) as { error?: string; errors?: string[] };
@@ -344,7 +345,7 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
                     <h3 id="units-h" className="text-base font-semibold">Syllabus units</h3>
                     <p className="text-xs text-muted-foreground">The unit titles exactly as in the syllabus.</p>
                   </div>
-                  <CountInput id="n-units" label="Number of units" value={draft.units.length} max={LIMITS.units} disabled={readOnly} onChange={(n) => !readOnly && setDraft((d) => ({ ...d, units: resize(d.units, n) }))} />
+                  <CountInput id="n-units" label="Number of units" value={draft.units.length} max={LIMITS.units} disabled={readOnly} onChange={(n) => !readOnly && setDraft((d) => ({ ...d, units: resize(d.units, n), syllabi: resize(d.syllabi, n) }))} />
                 </div>
                 <ol className="grid gap-3 md:grid-cols-2">
                   {draft.units.map((t, i) => {
@@ -362,6 +363,13 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
                         <Input id={`unit-${i}`} value={t} disabled={readOnly} maxLength={LIMITS.unitTitle} placeholder="e.g. Linear data structures"
                           className="border-0 bg-transparent px-0 text-[15px] shadow-none focus-visible:ring-0"
                           onChange={(e) => setDraft((d) => ({ ...d, units: d.units.map((x, j) => (j === i ? e.target.value : x)) }))} />
+                        <div className="mt-2 border-t pt-2">
+                          <Label htmlFor={`unit-syl-${i}`} className="text-xs font-medium text-muted-foreground">Syllabus (topics of this unit)</Label>
+                          <Textarea id={`unit-syl-${i}`} rows={3} value={draft.syllabi[i] ?? ""} disabled={readOnly} maxLength={LIMITS.unitSyllabus}
+                            placeholder="e.g. Arrays, linked lists - singly, doubly, circular; stacks and queues - applications"
+                            className="mt-1 min-h-20 resize-y bg-background text-sm"
+                            onChange={(e) => setDraft((d) => ({ ...d, syllabi: d.units.map((_, j) => (j === i ? e.target.value : d.syllabi[j] ?? "")) }))} />
+                        </div>
                       </li>
                     );
                   })}

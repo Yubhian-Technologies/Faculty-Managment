@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, BarChart3, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck, Cloud, CloudOff, Copy, Eye, ImagePlus, ListChecks, Loader2, Lock, Target, X } from "lucide-react";
+import { AlertTriangle, BarChart3, BookOpen, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck, Cloud, CloudOff, Copy, Eye, ImagePlus, ListChecks, Loader2, Lock, Target, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -584,6 +584,12 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
 
         {/* Right: academic details */}
         <aside aria-label="Question details" className={cn("min-w-0 space-y-4 text-sm lg:sticky lg:top-4 lg:self-start", tab !== "info" && "hidden lg:block")}>
+          {outcomes.units.find((x) => x.no === cur.unit)?.syllabus && (
+            <div className="rounded-2xl border bg-card p-4 shadow-sm">
+              <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><BookOpen className="h-3.5 w-3.5" />Unit {cur.unit} syllabus</p>
+              <p className="max-h-48 overflow-y-auto whitespace-pre-line text-xs leading-relaxed">{outcomes.units.find((x) => x.no === cur.unit)?.syllabus}</p>
+            </div>
+          )}
           <div className="rounded-2xl border bg-card p-4 shadow-sm">
             <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><BarChart3 className="h-3.5 w-3.5" />Unit {cur.unit} Bloom&rsquo;s levels</p>
             <ul className="space-y-3">

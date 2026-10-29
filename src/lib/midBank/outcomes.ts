@@ -26,7 +26,11 @@ export function cleanOutcomes(raw: unknown): { value: OutcomesInput; errors: str
   const errors: string[] = [];
   const list = (v: unknown) => (Array.isArray(v) ? v : []);
 
-  const units = list(r.units).map((u, i) => ({ no: i + 1, title: clean((u as SyllabusUnit)?.title, LIMITS.unitTitle) }));
+  const units = list(r.units).map((u, i) => {
+    // The syllabus keeps its line breaks (one topic per line); only trimmed and capped.
+    const syllabus = String((u as SyllabusUnit)?.syllabus ?? "").replace(/\r\n?/g, "\n").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim().slice(0, LIMITS.unitSyllabus);
+    return { no: i + 1, title: clean((u as SyllabusUnit)?.title, LIMITS.unitTitle), ...(syllabus ? { syllabus } : {}) };
+  });
   const cos = list(r.cos).map((c, i) => ({ id: `CO${i + 1}`, statement: clean((c as CourseOutcome)?.statement, LIMITS.statement) }));
 
   if (units.length === 0) errors.push("Add at least one unit");

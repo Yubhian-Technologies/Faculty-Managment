@@ -15,6 +15,10 @@ const fullUnit = (unit: number) => [
 ];
 
 describe("outcomes", () => {
+  it("a unit may carry its syllabus (line breaks kept, optional)", () => {
+    const { value } = cleanOutcomes({ units: [{ title: "Sets", syllabus: " Sets, subsets\r\n\n\n\nRelations " }, { title: "Graphs" }], cos: [{ statement: "x" }], mapping: { CO1: ["PO1"] } });
+    expect(value.units).toEqual([{ no: 1, title: "Sets", syllabus: "Sets, subsets\n\nRelations" }, { no: 2, title: "Graphs" }]);
+  });
   it("renumbers units and COs; a CO keeps only known POs / PSOs, in PO1..PO11, PSO1, PSO2 order", () => {
     const { value, errors } = cleanOutcomes({
       units: [{ title: " Sets " }, { title: "Relations" }],
