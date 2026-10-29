@@ -12,8 +12,7 @@ import { bankTotals, unitStatuses } from "@/lib/midBank/rules";
 import { setupIssues } from "@/lib/midBank/setup";
 import { bankIdFor, checkSectionPick, claimIdFor, outcomesIdFor, sectionsOf, type TeachingRow } from "@/lib/midBank/sections";
 import {
-  actorName, guardError, loadOutcomes, loadSubject, loginUidsOf, MID_BANK_WRITE_ROLES, midBankRefs, rulesForSubject, teachingFor,
-} from "@/lib/midBank/server";
+  actorName, guardError, loadOutcomes, loadSubject, loginUidsOf, MID_BANK_WRITE_ROLES, midBankRefs, rulesForSubject, teachingFor, subjectSplitFor } from "@/lib/midBank/server";
 import type { MidBankDeadline, MidQuestionBank } from "@/types";
 
 // The faculty Question Bank module.
@@ -105,8 +104,8 @@ export async function POST(request: Request) {
     if (!available.some((s) => s.facultyIds.includes(me))) return NextResponse.json({ error: "You don't teach this subject in this branch" }, { status: 403 });
 
     const outcomesId = outcomesIdFor(subjectId, branch);
-    const [rules, outcomes] = await Promise.all([rulesForSubject(db, session.collegeId, subject), loadOutcomes(db, session.collegeId, outcomesId)]);
-    const { issues, units } = setupIssues(subject, d.midNumber, rules, outcomes);
+    const [rules, outcomes, exception] = await Promise.all([rulesForSubject(db, session.collegeId, subject), loadOutcomes(db, session.collegeId, outcomesId), subjectSplitFor(db, session.collegeId, subjectId)]);
+    const { issues, units } = setupIssues(subject, d.midNumber, rules, outcomes, exception);
     if (issues.length > 0 || !rules) return NextResponse.json({ error: issues[0]?.message ?? "Setup is incomplete", issues }, { status: 400 });
 
     const bankId = bankIdFor(d.id, subjectId, branch, me);

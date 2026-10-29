@@ -188,7 +188,12 @@ describe("setup issues", () => {
     expect(setupIssues(subject, 1, null, null).issues.map((i) => [i.code, i.who])).toEqual([["NO_RULES", "EXAM_CELL"], ["NO_OUTCOMES", "FACULTY"]]);
     const r = setupIssues(subject, 2, rules, { units: [{ no: 1, title: "a" }, { no: 2, title: "b" }, { no: 3, title: "c" }] });
     expect(r.units).toEqual([3, 4, 5]);
-    expect(r.issues[0].message).toBe("Mid 2 covers Unit 4, 5, which the setup doesn't have yet - add the unit(s).");
+    // The default asks for units this 3-unit subject doesn't have: the Exam Cell sets a 3-unit split (or the count is wrong).
+    expect([r.issues[0].who, r.issues[0].message]).toEqual(["EXAM_CELL", "Mid 2 covers Unit 4, 5, but this subject has 3 units - ask the Exam Cell to set the Mid units for 3-unit subjects (Mid Configuration), or check the number of units."]);
+    const bySplit = { mids: { "1": [1, 2, 3], "2": [3, 4, 5] }, unitSplits: { "6": { "2": [4, 5, 6] } } } as never;
+    const six = Array.from({ length: 6 }, (_, i) => ({ no: i + 1, title: "t" }));
+    expect(setupIssues(subject, 2, bySplit, { units: six })).toMatchObject({ units: [4, 5, 6], unitSource: "UNIT_COUNT", issues: [] });
+    expect(setupIssues(subject, 2, bySplit, { units: six }, { "2": [5, 6] })).toMatchObject({ units: [5, 6], unitSource: "SUBJECT" });
     expect(setupIssues(subject, 1, rules, { units: [1, 2, 3].map((no) => ({ no, title: "t" })) }).issues).toEqual([]);
     expect(setupIssues(subject, 1, rules, { units: [1, 2, 3].map((no) => ({ no, title: "t" })), cos: [{ id: "CO1", statement: "x" }], mapping: {} }).issues[0].message)
       .toBe("Map CO1 to at least one PO or PSO (CO-PO Mapping).");

@@ -150,6 +150,12 @@ export async function rulesForSubject(db: Db, collegeId: string, subject: Subjec
   return all.find((r) => reg && r.regulation.toUpperCase() === reg) ?? all.find((r) => r.regulation === "ALL") ?? null;
 }
 
+/** The Exam Cell's Mid-units exception for one subject (Mid number -> units), if any. */
+export async function subjectSplitFor(db: Db, collegeId: string, subjectId: string): Promise<Record<string, number[]> | null> {
+  const s = await midBankRefs(db, collegeId).college.collection("midBankSubjectSplits").doc(subjectId).get();
+  return s.exists ? ((s.get("mids") as Record<string, number[]>) ?? null) : null;
+}
+
 export async function loadSubject(db: Db, collegeId: string, subjectId: string): Promise<Subject | null> {
   const s = await midBankRefs(db, collegeId).college.collection("subjects").doc(subjectId).get();
   return s.exists ? ({ id: s.id, ...(s.data() as Omit<Subject, "id">) }) : null;

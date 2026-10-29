@@ -12,6 +12,7 @@ import { toast } from "@/hooks/useToast";
 import { buildCourseGroups } from "@/lib/departments/hodScope";
 import { Checkbox } from "@/components/ui/checkbox";
 import { allowedFormats, formatName, partsFor, QUESTION_FORMATS } from "@/lib/midBank/validateQuestion";
+import { SPLIT_UNIT_COUNTS, suggestedSplit } from "@/lib/midBank/unitSplit";
 import type { Course, MidBankRules, MidQuestionFormat } from "@/types";
 
 // Exam Cell > Settings: the Mid Question Bank rules per course (+ regulation):
@@ -30,6 +31,8 @@ export function MidBankRulesCard({ midCount }: { midCount: number }) {
   const [courseKey, setCourseKey] = useState("");
   const [regulation, setRegulation] = useState("");
   const [midUnits, setMidUnits] = useState<Record<string, string>>({});
+  // Unit count -> Mid -> "1, 2, 3" (blank = that count uses the default above).
+  const [splits, setSplits] = useState<Record<string, Record<string, string>>>({});
   const [formats, setFormats] = useState<MidQuestionFormat[]>(["SINGLE", "PARTS_AB"]);
   const [marks, setMarks] = useState("10");
   const [saving, setSaving] = useState(false);
@@ -64,6 +67,7 @@ export function MidBankRulesCard({ midCount }: { midCount: number }) {
     setCourseKey("");
     setRegulation("");
     setMidUnits({});
+    setSplits({});
     setFormats(["SINGLE", "PARTS_AB"]);
     setMarks("10");
   }
@@ -73,6 +77,7 @@ export function MidBankRulesCard({ midCount }: { midCount: number }) {
     setCourseKey(r.courseKey);
     setRegulation(r.regulation === "ALL" ? "" : r.regulation);
     setMidUnits(Object.fromEntries(Object.entries(r.mids).map(([m, u]) => [m, u.join(", ")])));
+    setSplits(Object.fromEntries(Object.entries(r.unitSplits ?? {}).map(([n, map]) => [n, Object.fromEntries(Object.entries(map).map(([m, u]) => [m, u.join(", ")]))])));
     setFormats(allowedFormats(r));
     setMarks(String(r.marks));
   }
@@ -83,6 +88,8 @@ export function MidBankRulesCard({ midCount }: { midCount: number }) {
     const payload = {
       courseKey, courseName: group.name, regulation: regulation.trim() || "ALL", formats, marks: Number(marks),
       mids: Object.fromEntries(mids.map((m) => [m, parseUnits(midUnits[m] ?? "")]).filter(([, u]) => (u as number[]).length > 0)),
+      unitSplits: Object.fromEntries(SPLIT_UNIT_COUNTS.map((n) => [String(n), Object.fromEntries(mids.map((m) => [m, parseUnits(splits[String(n)]?.[m] ?? "")]).filter(([, u]) => (u as number[]).length > 0))])
+        .filter(([, map]) => Object.keys(map as object).length > 0)),
     };
     setSaving(true);
     try {
@@ -131,6 +138,7 @@ export function MidBankRulesCard({ midCount }: { midCount: number }) {
                     <td className="p-2">
                       <div className="flex flex-wrap gap-1">
                         {Object.entries(r.mids).sort(([a], [b]) => Number(a) - Number(b)).map(([m, u]) => <Badge key={m} variant="outline">Mid {m}: {u.join(", ")}</Badge>)}
+                        {Object.keys(r.unitSplits ?? {}).length > 0 && <Badge variant="secondary">Own split for {Object.keys(r.unitSplits ?? {}).sort((a, b) => Number(a) - Number(b)).join(", ")} units</Badge>}
                       </div>
                     </td>
                     <td className="p-2">
@@ -176,10 +184,41 @@ export function MidBankRulesCard({ midCount }: { midCount: number }) {
           </div>
           {mids.map((m) => (
             <div key={m} className="space-y-1.5">
-              <Label htmlFor={`mbr-mid-${m}`}>Mid {m} units</Label>
+              <Label htmlFor={`mbr-mid-${m}`}>Mid {m} units <span className="font-normal text-muted-foreground">(default)</span></Label>
               <Input id={`mbr-mid-${m}`} value={midUnits[m] ?? ""} placeholder={m === "1" ? "e.g. 1, 2, 3" : "e.g. 3, 4, 5"} onChange={(e) => setMidUnits((s) => ({ ...s, [m]: e.target.value }))} />
             </div>
           ))}
+          <fieldset className="space-y-2 sm:col-span-2">
+            <legend className="text-sm font-medium">Mid units by the subject&rsquo;s number of units</legend>
+            <p className="text-xs text-muted-foreground">
+              A subject uses the row for its own number of units (entered by the faculty in Course Outcomes); a blank row uses the default above.
+              E.g. 5 units: Mid 1 = 1, 2, 3 and Mid 2 = 3, 4, 5 &middot; 6 units: Mid 1 = 1, 2, 3 and Mid 2 = 4, 5, 6.
+            </p>
+            <div className="overflow-x-auto rounded-md border">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
+                  <tr><th className="p-2">Subject has</th>{mids.map((m) => <th key={m} className="p-2">Mid {m} units</th>)}<th className="p-2" /></tr>
+                </thead>
+                <tbody>
+                  {SPLIT_UNIT_COUNTS.map((n) => (
+                    <tr key={n} className="border-t">
+                      <th scope="row" className="p-2 text-left font-medium">{n} units</th>
+                      {mids.map((m) => (
+                        <td key={m} className="p-1.5">
+                          <Input aria-label={`${n}-unit subjects: Mid ${m} units`} className="h-8" value={splits[String(n)]?.[m] ?? ""} placeholder="default"
+                            onChange={(e) => setSplits((s) => ({ ...s, [String(n)]: { ...(s[String(n)] ?? {}), [m]: e.target.value } }))} />
+                        </td>
+                      ))}
+                      <td className="p-1.5 text-right">
+                        <Button type="button" size="sm" variant="ghost" className="h-8 text-xs"
+                          onClick={() => setSplits((s) => ({ ...s, [String(n)]: Object.fromEntries(Object.entries(suggestedSplit(n)).filter(([m]) => mids.includes(m)).map(([m, u]) => [m, u.join(", ")])) }))}>Suggest</Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </fieldset>
           <div className="space-y-1.5">
             <Label htmlFor="mbr-marks">Marks per question</Label>
             <Input id="mbr-marks" type="number" min={1} max={100} value={marks} onChange={(e) => setMarks(e.target.value)} />

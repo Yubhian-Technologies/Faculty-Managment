@@ -63,6 +63,12 @@ export interface MidBankRules {
   regulation: string;
   /** Mid number -> the unit numbers it covers, in unlock order. */
   mids: Record<string, number[]>;
+  /**
+   * The split for a subject with a given number of units ("5" -> Mid number ->
+   * units), e.g. 5 units: Mid 1 = 1, 2, 3 and Mid 2 = 3, 4, 5. A count with no
+   * split here uses `mids`.
+   */
+  unitSplits?: Record<string, Record<string, number[]>>;
   /** The question types the faculty may pick from, per question (Exam Cell ticks them). */
   formats?: MidQuestionFormat[];
   /** Older rules only - see `allowedFormats`. */
@@ -173,5 +179,18 @@ export interface MidQuestionBank {
   completeCount: number;
   totalCount: number;
   createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+/** Exam Cell exception: one subject's own Mid units, whatever its unit count. colleges/{c}/midBankSubjectSplits/{subjectId} */
+export interface MidBankSubjectSplit {
+  subjectId: string;
+  subjectCode: string;
+  subjectName: string;
+  courseKey: string;
+  regulation: string;
+  mids: Record<string, number[]>;
+  updatedBy: string;
+  updatedByName: string;
   updatedAt: Timestamp;
 }

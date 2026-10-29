@@ -14,6 +14,7 @@ import { formatDate, stripLeadingZeros } from "@/lib/utils";
 import { MidBankRulesCard } from "@/components/exams/MidBankRulesCard";
 import { ExamConfigurationPanel } from "@/components/exams/ExamConfigurationPanel";
 import { MidPaperTemplateCard } from "@/components/exams/MidPaperTemplateCard";
+import { MidSubjectSplitsCard } from "@/components/exams/MidSubjectSplitsCard";
 import { cn } from "@/lib/utils";
 import type { ExamMidSettings } from "@/types";
 
@@ -145,6 +146,7 @@ function MidSettings() {
       </div>
 
       <MidBankRulesCard midCount={settings?.midCount ?? Number(midCount)} />
+      <MidSubjectSplitsCard midCount={settings?.midCount ?? Number(midCount)} />
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { actorName, guardError, midBankRefs, rulesDocId } from "@/lib/midBank/server";
 import { LIMITS } from "@/lib/midBank/constants";
+import { cleanMidMap } from "@/lib/midBank/unitSplit";
 import type { MidBankRules } from "@/types";
 import { allowedFormats, formatName, partsFor, QUESTION_FORMATS } from "@/lib/midBank/validateQuestion";
 
@@ -66,6 +67,16 @@ export async function PUT(request: Request) {
     }
     if (Object.keys(mids).length === 0) return NextResponse.json({ error: "Set the units for at least one Mid" }, { status: 400 });
 
+    // Splits by the subject's number of units (optional; a count left out uses the default above).
+    const unitSplits: Record<string, Record<string, number[]>> = {};
+    for (const [count, map] of Object.entries((body.unitSplits ?? {}) as Record<string, unknown>)) {
+      const n = Number(count);
+      if (!Number.isInteger(n) || n < 1 || n > LIMITS.units) continue;
+      const c = cleanMidMap(map, n);
+      if (c.error) return NextResponse.json({ error: `${n}-unit subjects: ${c.error}` }, { status: 400 });
+      if (Object.keys(c.value).length) unitSplits[String(n)] = c.value;
+    }
+
     const db = getAdminDb();
     // Only a regulation Academics set up for the course (Course Catalog), or ALL.
     if (regulation !== "ALL") {
@@ -75,7 +86,7 @@ export async function PUT(request: Request) {
     }
     const id = rulesDocId(courseKey, regulation);
     const data = {
-      courseKey, courseName, regulation, mids, formats, marks,
+      courseKey, courseName, regulation, mids, unitSplits, formats, marks,
       updatedBy: session.uid, updatedByName: await actorName(db, session.collegeId, session.uid), updatedAt: new Date(),
     };
     await midBankRefs(db, session.collegeId).rules.doc(id).set(data);

@@ -7,7 +7,7 @@ import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { isDeadlineLocked } from "@/lib/midBank/deadline";
 import { setupIssues } from "@/lib/midBank/setup";
 import { bankIdFor, claimIdFor, outcomesIdFor, sectionsOf } from "@/lib/midBank/sections";
-import { guardError, loadDeadline, loadOutcomes, loadSubject, MID_BANK_WRITE_ROLES, midBankRefs, rulesForSubject, teachingFor, usedOutcomeRefs } from "@/lib/midBank/server";
+import { guardError, subjectSplitFor, loadDeadline, loadOutcomes, loadSubject, MID_BANK_WRITE_ROLES, midBankRefs, rulesForSubject, teachingFor, usedOutcomeRefs } from "@/lib/midBank/server";
 
 // What the setup screen needs before (or while changing) a bank for one
 // deadline + subject + branch: the subject, the Exam Cell rules, the branch's
@@ -34,12 +34,13 @@ export async function GET(request: Request) {
     const refs = midBankRefs(db, session.collegeId);
     const outcomesId = outcomesIdFor(subjectId, branch);
     const myBankId = bankIdFor(d.id, subjectId, branch, me);
-    const [rules, outcomes, claimSnaps, myBank, used] = await Promise.all([
+    const [rules, outcomes, claimSnaps, myBank, used, exception] = await Promise.all([
       rulesForSubject(db, session.collegeId, subject),
       loadOutcomes(db, session.collegeId, outcomesId),
       db.getAll(...available.map((s) => refs.claims.doc(claimIdFor(d.id, subjectId, s.sectionId)))),
       refs.banks.doc(myBankId).get(),
       usedOutcomeRefs(db, session.collegeId, outcomesId),
+      subjectSplitFor(db, session.collegeId, subjectId),
     ]);
     const sections = available.map((s, i) => ({
       ...s, mine: s.facultyIds.includes(me),
@@ -55,7 +56,7 @@ export async function GET(request: Request) {
       deadline: { ...d, locked: isDeadlineLocked(d.deadline) },
       subject: { id: subject.id, name: subject.name, code: subject.code, courseName: subject.courseName ?? d.courseName, regulation: subject.regulation ?? "", year: d.year, semester: d.semester },
       branch, outcomesId, outcomes, rules, sections,
-      setup: setupIssues(subject, d.midNumber, rules, outcomes),
+      setup: setupIssues(subject, d.midNumber, rules, outcomes, exception),
       myBankId: myBank.exists ? myBankId : null,
       canEditOutcomes,
     });
