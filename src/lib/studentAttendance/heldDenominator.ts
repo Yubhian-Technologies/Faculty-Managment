@@ -6,6 +6,7 @@ import { matchesCurrentSemester } from "@/lib/college/semester";
 import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
 import { makeLiveSlotPredicate } from "@/lib/timetable/liveSlots";
 import { loadTimingLookup, periodInterval, formatInterval } from "@/lib/timetable/facultyOverlap";
+import { loadMidWindows } from "@/lib/timetable/slotScope";
 import { calcPercent } from "@/lib/studentAttendance/percentage";
 import {
   buildNotPostedIndex, listExpectedPeriods, notPostedOf, postedKeysOf, type Calendar, type ExpectedSlot, type NotPostedIndex,
@@ -103,26 +104,33 @@ export async function loadNotPostedIndex(args: {
 
   const slots: ExpectedSlot[] = [];
   const subjects = new Map<string, { subjectName: string; subjectCode: string }>();
+  let midScopedSemester: number | null | undefined;
   for (const d of slotsSnap.docs) {
     const s = d.data() as {
       subjectName?: string;
-      assignmentId: string; subjectId: string; day: DayOfWeek; periodNumber: number; labBatch?: string;
+      assignmentId: string; subjectId: string; day: DayOfWeek; periodNumber: number; labBatch?: string; midScope?: number;
       semester?: number | null; academicYear?: string | null; courseId: string; year: number; createdAt?: unknown;
     };
     if (!isLive(s)) continue;
     if (args.requestedSemester != null && !matchesCurrentSemester(s.semester, args.requestedSemester)) continue;
     if (!subjects.has(s.subjectId)) subjects.set(s.subjectId, { subjectName: s.subjectName ?? "", subjectCode: "" });
     const interval = periodInterval(lookup(s.courseId, s.year), s.periodNumber);
+    if (s.midScope != null && midScopedSemester === undefined) midScopedSemester = s.semester ?? null;
     slots.push({
       assignmentId: s.assignmentId, subjectId: s.subjectId, day: s.day, periodNumber: s.periodNumber, labBatch: s.labBatch,
       activeFromISO: toISTDate(s.createdAt),
       endTime: interval ? formatInterval(interval).split("-")[1] : null,
+      ...(s.midScope != null ? { midScope: s.midScope } : {}),
     });
   }
   if (slots.length === 0) return { index: EMPTY, unavailable: "NO_TIMETABLE", from, to };
 
   const calendar = await loadClassCalendar(db, collegeId, from, to);
-  const expected = listExpectedPeriods({ slots, from, to, calendar, now });
+  // Mid windows are read only when the section actually has a mid-scoped slot.
+  const midWindows = midScopedSemester === undefined
+    ? undefined
+    : await loadMidWindows(db, collegeId, { courseId: section.courseId, year: section.year, semester: midScopedSemester });
+  const expected = listExpectedPeriods({ slots, from, to, calendar, now, midWindows });
   const notPosted = notPostedOf(expected, postedKeysOf(args.submittedSessions));
   return { index: buildNotPostedIndex(notPosted), subjects, from, to };
 }

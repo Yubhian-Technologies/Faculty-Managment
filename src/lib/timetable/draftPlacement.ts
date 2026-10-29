@@ -36,6 +36,11 @@ export function countSessions(periods: Set<number>): number {
   return sessions;
 }
 
+// Two flexible slots cover the same students when their batches match (an empty batch is the whole class)...
+const batchesOverlap = (a?: string, b?: string) => !a?.trim() || !b?.trim() || a.trim().toLowerCase() === b.trim().toLowerCase();
+// ...and the same period when their mids match (no mid is the whole semester).
+const midsOverlap = (a?: number | null, b?: number | null) => a == null || b == null || a === b;
+
 export function validatePlacement(
   ctx: TimetableContext,
   draft: SlotsHolder,
@@ -67,6 +72,9 @@ export function validatePlacement(
     // type, theory included, unlike allowSplit, which only ever pairs two labs. Needs
     // `subjectId`; the cell may hold only this subject, never a different one.
     coTeach?: boolean;
+    // The flexible-cell dialog's lab batch / mid exam for the placement (see TimetableSlot.labBatch / midScope).
+    labBatch?: string;
+    midScope?: number | null;
   },
 ): string | null {
   const { timing, rules } = ctx;
@@ -110,6 +118,14 @@ export function validatePlacement(
       }
       if (opts.assignmentId && existing.some((s) => s.assignmentId === opts.assignmentId)) {
         return `This faculty is already placed at ${day} period ${p}.`;
+      }
+      // Flexible placements (a lab batch and/or a mid exam, from the flexible-cell dialog) may share a cell only
+      // when they don't cover the same students at the same time: different batches, or different mids. Plain
+      // co-teaching (neither side flexible) is unchanged.
+      if (opts.labBatch || opts.midScope != null) {
+        const clash = sameSubject.find((s) => (s.labBatch || s.midScope != null)
+          && batchesOverlap(s.labBatch, opts.labBatch) && midsOverlap(s.midScope, opts.midScope));
+        if (clash) return `${clash.facultyName} already covers this batch for the same mid at ${day} period ${p}.`;
       }
       if (sameSubject.length >= MAX_FACULTY_PER_SUBJECT) return `Period ${p} on ${day} already has ${sameSubject.length} faculty for this subject.`;
     } else if (occupied.has(key) && opts.allowSplit) {

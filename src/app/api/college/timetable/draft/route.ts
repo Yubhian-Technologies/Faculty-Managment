@@ -216,6 +216,13 @@ export async function PATCH(request: Request) {
       coTeach?: boolean;
       // "add" only - which of the subject's short codes (shortCode / altShortCode) this period shows.
       displayCode?: string;
+      // "add" only - the flexible-cell dialog's fields (see TimetableSlot.labBatch / batchPinned / midScope):
+      // a lab batch for this faculty, whether that batch is pinned over the faculty's default, the mid exam the
+      // period is scoped to, and how many continuous periods to place (overrides the subject's own block size).
+      labBatch?: string;
+      batchPinned?: boolean;
+      midScope?: number;
+      blockSize?: number;
     };
 
     const { sectionId, assignmentId } = body;
@@ -236,6 +243,21 @@ export async function PATCH(request: Request) {
       const semesterResult = await resolveRequestedSemester(db, session.collegeId, section.courseId, section.year, body.semester);
       if (!semesterResult.ok) return NextResponse.json({ error: semesterResult.error }, { status: 400 });
       requestedSemester = semesterResult.semester;
+    }
+
+    // The flexible-cell fields, checked once up front ("add" only).
+    const flexLabBatch = typeof body.labBatch === "string" ? body.labBatch.trim() : "";
+    if (action === "add") {
+      if (flexLabBatch.length > 40) return NextResponse.json({ error: "A lab batch name can be at most 40 characters" }, { status: 400 });
+      if (body.blockSize != null && (!Number.isInteger(body.blockSize) || body.blockSize < 1 || body.blockSize > 8)) {
+        return NextResponse.json({ error: "blockSize must be a whole number from 1 to 8" }, { status: 400 });
+      }
+      if (body.midScope != null) {
+        const midCount = ((await collegeRef.collection("examSettings").doc("mid").get()).data() as { midCount?: number } | undefined)?.midCount ?? 0;
+        if (!Number.isInteger(body.midScope) || body.midScope < 1 || body.midScope > midCount) {
+          return NextResponse.json({ error: midCount > 0 ? `Mid must be a whole number from 1 to ${midCount}` : "The Exam Cell hasn't set up any mid exams yet" }, { status: 400 });
+        }
+      }
     }
 
     const ctx = await loadTimetableContext(db, session.collegeId, sectionId, requestedSemester);
@@ -344,7 +366,7 @@ export async function PATCH(request: Request) {
         const override = subject ? ctx.rules.subjectBlockSizes?.[subjectBlockKey(subject)] : undefined;
         // No theory/lab default any more: a subject takes 1 period unless the
         // Principal set custom continuous slots for it in Settings.
-        const blockSize = Math.max(1, override ?? 1);
+        const blockSize = Math.max(1, body.blockSize ?? override ?? 1);
 
         const placeAt = Number(toPeriod);
         const placementOpts = {
@@ -358,6 +380,8 @@ export async function PATCH(request: Request) {
           allowSplit: body.allowSplit,
           coTeach: body.coTeach,
           assignmentId,
+          labBatch: flexLabBatch || undefined,
+          midScope: body.midScope ?? null,
         };
         const problem = validatePlacement(ctx, draft, placementOpts);
         if (problem) {
@@ -380,6 +404,8 @@ export async function PATCH(request: Request) {
 
         const added: DraftSlot[] = Array.from({ length: blockSize }, (_, i) => ({
           ...(displayCode ? { displayCode } : {}),
+          ...(flexLabBatch ? { labBatch: flexLabBatch, ...(body.batchPinned ? { batchPinned: true } : {}) } : {}),
+          ...(body.midScope != null ? { midScope: body.midScope } : {}),
           assignmentId,
           facultyId: assignment.facultyId,
           facultyName: assignment.facultyName,

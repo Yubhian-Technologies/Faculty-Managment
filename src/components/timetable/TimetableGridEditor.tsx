@@ -1,6 +1,7 @@
 "use client";
 
 import { FacultyTimetableLookup } from "@/components/timetable/FacultyTimetableLookup";
+import { FlexibleCellDialog } from "@/components/timetable/FlexibleCellDialog";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -148,6 +149,8 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
   // they are saved as a single cell (the slots carry mergeWithNext; every view and
   // download draws them merged). `mergePick` is the current selection.
   const [mergeMode, setMergeMode] = useState(false);
+  // "Flexible cell": several faculty / batches / mid scopes in one cell (FlexibleCellDialog).
+  const [flexOpen, setFlexOpen] = useState(false);
   const [mergePick, setMergePick] = useState<{ day: DayOfWeek; periods: number[] }>({ day: "MON", periods: [] });
   // "w.e.f" date printed on the timetable, asked for in the publish dialog.
   const [effectiveDate, setEffectiveDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -1178,6 +1181,11 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
           )}
           {mode === "draft" && (
             <div className="ml-auto flex flex-wrap items-center gap-2">
+              {isEditing && !mergeMode && myAssignmentIds.length > 0 && (
+                <Button size="sm" variant="outline" onClick={() => { setFlexOpen(true); setSelected(null); }}>
+                  Flexible cell
+                </Button>
+              )}
               {isEditing && (!mergeMode ? (
                 <Button size="sm" variant="outline" onClick={() => { setMergeMode(true); setSelected(null); setMergePick({ day: "MON", periods: [] }); }}>
                   Merge cells
@@ -1667,6 +1675,18 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
       </Dialog>
 
       {/* A subject with more than one faculty: all of them in this cell together (co-teaching), or only the one picked. */}
+      <FlexibleCellDialog
+        open={flexOpen}
+        onOpenChange={setFlexOpen}
+        sectionId={sectionId}
+        semesterBody={semesterBody}
+        assignments={assignments.filter((a) => myAssignmentIds.includes(a.id))}
+        days={days}
+        numberOfPeriods={timing?.numberOfPeriods ?? 0}
+        occupantsAt={(d, p) => rawCellEntriesFor(d, p).map((e) => ({ subjectId: e.slot.subjectId, assignmentId: e.slot.assignmentId }))}
+        onApplied={(s) => setDraft((d) => (d ? { ...d, slots: s, status: "DRAFT" } : d))}
+      />
+
       <Dialog open={sharePrompt !== null} onOpenChange={(o) => { if (!o && busy === null) setSharePrompt(null); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>

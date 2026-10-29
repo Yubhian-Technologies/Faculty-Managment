@@ -13,6 +13,7 @@ import { normalizeHHMM, dayOfWeekFromISODate } from "@/lib/timetable/leisureQuer
 import { facultyActiveOn, loadLabWindows } from "@/lib/students/labFacultyWindow";
 import { sectionMatchesDepartmentFilter } from "@/lib/departments/hodScope";
 import { getHodDepartmentScope, ownDepartmentNames } from "@/lib/departments/scope";
+import { activeSlotsOn } from "@/lib/timetable/slotScope";
 import { DEFAULT_TIMETABLE_RULES } from "@/types";
 import type { CourseYearTiming, Department, PeriodTiming, Section, TimetableRules, TimetableSlot } from "@/types";
 
@@ -92,12 +93,12 @@ export async function GET(request: Request) {
     const isLive = makeLiveSlotPredicate(lookup, currentAcademicYear);
     const labWindows = await loadLabWindows(db, session.collegeId, slots);
 
-    const inSession = slots.filter((s) => {
+    const inSession = await activeSlotsOn(db, session.collegeId, slots.filter((s) => {
       if (!isLive({ courseId: s.courseId, year: s.year, semester: s.semester, academicYear: s.academicYear })) return false;
       if (!facultyActiveOn(labWindows, s.sectionId, s.subjectId, s.facultyId, date)) return false;
       const pt = periodsFor(s.courseId, Number(s.year)).find((p) => p.period === s.periodNumber);
       return !!pt && pt.startTime < to && pt.endTime > from;
-    });
+    }), date); // a mid-scoped period only counts inside that mid's teaching stretch
 
     // Non-teaching subjects (Counselling, Library, ... - "Don't include in teaching load" or
     // type NON_TEACHING) are not classes being taught, so they are left out of the list.
