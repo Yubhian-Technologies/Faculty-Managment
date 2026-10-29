@@ -117,7 +117,7 @@ export function roomSheetHTML(c: College, p: ExamSeatingPlan, r: SeatingRoomAllo
     return shell(c, p, roomTitle(r), body);
   }
   const per = r.perBench ?? 1;
-  const rows = benchRows(r).map((row, b) => `<tr><td><b>${b + 1}</b></td>${row.map((s) => `<td>${s ? `<b>${esc(s.rollNumber)}</b> <span class="grp">${esc(shortSection(s.sectionLabel, c.courseCode))}</span>` : "-"}</td>`).join("")}</tr>`).join("");
+  const rows = benchRows(r).map((row, b) => `<tr><td><b>${b + 1}</b></td>${row.map((s) => `<td>${s ? `<b>${esc(s.rollNumber)}</b>` : "-"}</td>`).join("")}</tr>`).join("");
   const body = `${ranges(c, r)}<table><thead><tr><th style="width:12%">Bench</th>${Array.from({ length: per }, (_, i) => `<th>Seat ${SEAT_LETTERS[i] ?? i + 1}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>
     <p class="line" style="margin-top:8px">${r.students.length} students</p>`;
   return shell(c, p, roomTitle(r), body);
