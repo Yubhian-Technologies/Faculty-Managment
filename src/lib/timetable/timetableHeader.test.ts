@@ -69,6 +69,8 @@ describe("faculty timetable header and bottom", () => {
     expect(semesterInYear("—")).toBe("");
     expect(facultyTimetableTitle("2026-27", "5")).toBe("Time Table : 2026-27 I Sem");
     expect(facultyTimetableTitle(undefined, "—")).toBe("Time Table");
-    expect(facultyClassLabel({ courseName: "Bachelor of Technology", year: 4, semester: 7, sectionName: "A" })).toBe("IV B.Tech I Sem - A");
+    expect(facultyClassLabel({ courseName: "Bachelor of Technology", year: 4, semester: 7, sectionName: "A" })).toBe("IV B.Tech-I Sem-A");
+    expect(facultyClassLabel({ courseName: "Bachelor of Technology", year: 3, sectionName: "CSBS-A", departmentName: "Computer Science and Business Systems" })).toBe("III B.Tech-CSBS-A");
+    expect(facultyClassLabel({ courseName: "Bachelor of Technology", year: 3, semester: 5, sectionName: "A", departmentName: "Computer Science and Engineering" })).toBe("III B.Tech-I Sem-CSE-A");
   });
 });
