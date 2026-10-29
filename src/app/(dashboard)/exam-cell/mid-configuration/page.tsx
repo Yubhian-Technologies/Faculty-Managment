@@ -13,7 +13,7 @@ import { toast } from "@/hooks/useToast";
 import { formatDate, stripLeadingZeros } from "@/lib/utils";
 import { MidBankRulesCard } from "@/components/exams/MidBankRulesCard";
 import { ExamConfigurationPanel } from "@/components/exams/ExamConfigurationPanel";
-import { ExamConfigOverridesCard } from "@/components/exams/ExamConfigOverridesCard";
+import { ExamMarksCategoriesCard } from "@/components/exams/ExamMarksCategoriesCard";
 import { MidPaperTemplateCard } from "@/components/exams/MidPaperTemplateCard";
 import { MidSubjectSplitsCard } from "@/components/exams/MidSubjectSplitsCard";
 import { cn } from "@/lib/utils";
@@ -43,7 +43,7 @@ function MidConfigurationTabs() {
             className={cn("rounded-lg px-3.5 py-1.5 font-medium", tab === k ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}>{label}</Link>
         ))}
       </nav>
-      {tab === "marks" ? <div className="space-y-6"><ExamConfigurationPanel embedded /><ExamConfigOverridesCard /></div> : tab === "paper" ? <MidPaperTemplateCard /> : <MidSettings />}
+      {tab === "marks" ? <div className="space-y-6"><ExamConfigurationPanel embedded /><ExamMarksCategoriesCard /></div> : tab === "paper" ? <MidPaperTemplateCard /> : <MidSettings />}
     </div>
   );
 }

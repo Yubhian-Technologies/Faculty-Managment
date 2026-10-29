@@ -1,4 +1,4 @@
-import type { ExamConfiguration, ExamType, InternalExamMarkEntry, InternalExamMarksBatch, Subject, TeachingAssignment } from "@/types";
+import type { ExamConfiguration, ExamMarksCategory, ExamType, InternalExamMarkEntry, InternalExamMarksBatch, Subject, TeachingAssignment } from "@/types";
 
 // == `${courseId}_year${year}_${examType}` — one ExamConfiguration per
 // course+year+examType (branch is implied by courseId, since a Course doc is
@@ -32,34 +32,40 @@ export async function resolveExamTypeForSubject(
   return subjectTypeToExamType(subject?.type);
 }
 
-// ─── Subject exceptions ───────────────────────────────────────────────
-// The Exam Cell may give ONE subject its own internal marks breakdown (e.g. no
-// Quiz, a 25-mark Mid), used in every branch that takes it instead of the
-// branch + year configuration. colleges/{c}/examConfigSubjectOverrides/{subjectId}_{examType}.
+// ─── Marks categories ─────────────────────────────────────────────────
+// The Exam Cell groups subjects whose internal marks differ from their branch's
+// breakdown into named categories (colleges/{c}/examMarksCategories, one
+// breakdown each). A subject in a category uses it in every branch.
 
-export const subjectOverrideId = (subjectId: string, examType: ExamType) => `${subjectId}_${examType}`;
+/** The category a subject belongs to for this exam type, if any. */
+export async function categoryForSubject(
+  collegeRef: FirebaseFirestore.DocumentReference, subjectId: string, examType: ExamType,
+): Promise<ExamMarksCategory | null> {
+  const snap = await collegeRef.collection("examMarksCategories").where("subjectIds", "array-contains", subjectId).get();
+  const hit = snap.docs.map((d) => ({ ...(d.data() as ExamMarksCategory), id: d.id })).find((c) => c.examType === examType);
+  return hit ?? null;
+}
 
 /**
  * The internal marks configuration for a subject taught in a course + year:
- * the subject's exception when the Exam Cell set one, else the branch + year
+ * its marks category's breakdown when it is in one, else the branch + year
  * configuration. Every reader goes through here, so both are honoured alike.
  */
 export async function loadExamConfig(
   collegeRef: FirebaseFirestore.DocumentReference,
   args: { courseId?: string | null; year?: number | null; examType: ExamType; subjectId?: string | null },
 ): Promise<ExamConfiguration | null> {
-  const [override, base] = await Promise.all([
-    args.subjectId ? collegeRef.collection("examConfigSubjectOverrides").doc(subjectOverrideId(args.subjectId, args.examType)).get() : null,
+  const [category, base] = await Promise.all([
+    args.subjectId ? categoryForSubject(collegeRef, args.subjectId, args.examType) : null,
     args.courseId && args.year != null ? collegeRef.collection("examConfigurations").doc(examConfigId(args.courseId, args.year, args.examType)).get() : null,
   ]);
   const baseConfig = base?.exists ? ({ id: base.id, ...base.data() } as ExamConfiguration) : null;
-  if (override?.exists) {
-    const o = override.data() as Pick<ExamConfiguration, "internalMaxMarks" | "externalMaxMarks" | "components" | "status"> & { subjectName?: string };
-    // The branch's identity (course, department, year) with the subject's own marks.
+  if (category) {
+    // The branch's identity (course, department, year) with the category's marks.
     return {
       ...(baseConfig ?? { collegeId: collegeRef.id, courseId: args.courseId ?? "", courseName: "", department: "", year: args.year ?? 0, createdBy: "", createdByName: "" }),
-      id: override.id, examType: args.examType,
-      internalMaxMarks: o.internalMaxMarks, externalMaxMarks: o.externalMaxMarks, components: o.components, status: o.status ?? "ACTIVE",
+      id: `category_${category.id}`, examType: args.examType, status: "ACTIVE",
+      internalMaxMarks: category.internalMaxMarks, externalMaxMarks: category.externalMaxMarks, components: category.components,
     } as unknown as ExamConfiguration;
   }
   return baseConfig;

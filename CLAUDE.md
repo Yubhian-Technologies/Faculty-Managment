@@ -152,11 +152,11 @@ There is **no env switch** (the old `READ_ONLY_FACULTY_COLLEGES` is gone and ign
 - **Editor:** drafts autosave (1.5 s, one request at a time); formulas are LaTeX in `$...$` rendered by KaTeX (`renderMath.ts`, shared by preview, review, PDF); images via `upload/mid-question-image` (owner, real PNG/JPEG, <= 1 MB, 40-2400 px); PDF built in the browser (`lib/pdf/midQuestionBankTemplate.ts`) once every unit is complete.
 - Tests: `midBank.test.ts`; `midBank.emulator.test.ts` (real routes; needs the Firestore emulator).
 
-### Internal marks: subject exceptions
+### Internal marks: marks categories
 
-- Exam Cell > Mid Configuration > Marks > "Subject exceptions" (`ExamConfigOverridesCard`, `GET/PUT/DELETE /api/college/exam-config-overrides`): one subject's own internal / external max and components, stored at `examConfigSubjectOverrides/{subjectId}_{THEORY|LAB}`, used in every branch that takes the subject. Validation `lib/exams/marksBreakdown.ts` (same rules as the branch configuration).
-- **Every reader goes through `loadExamConfig`** (`lib/exams/internalExamMarks.ts`): the subject exception first, else `examConfigurations/{courseId}_year{y}_{type}` - used by `resolveExamConfigForBatch` (mentoring), `internal-exam-marks` GET (`include=config`) and POST, and `exam-configurations` GET `?subjectId`. Never read `examConfigurations` by id directly for a subject.
-- **Locked once marks exist:** PUT / DELETE refuse (409, naming who) when a batch of the subject has `enteredCount > 0` and its teaching assignment isn't `isPast`.
+- Exam Cell > Mid Configuration > Marks > "Marks categories" (`ExamMarksCategoriesCard`, `GET/POST /api/college/exam-marks-categories`, `PATCH/DELETE .../[id]`): a named internal / external max + components shared by a group of subjects (`examMarksCategories/{id}`: `examType`, `components`, `subjectIds`, `subjects` snapshot). Subjects are added many at a time (tick from a course's list, or paste codes resolved within one catalog course); a subject is in at most one category per exam type; skipped ones come back with the reason. Validation `lib/exams/marksBreakdown.ts`.
+- **Every reader goes through `loadExamConfig`** (`lib/exams/internalExamMarks.ts`): the subject's category (`categoryForSubject`, `array-contains` on `subjectIds`) first, else `examConfigurations/{courseId}_year{y}_{type}` - used by `resolveExamConfigForBatch` (mentoring), `internal-exam-marks` GET (`include=config`) and POST, and `exam-configurations` GET `?subjectId`. Never read `examConfigurations` by id directly for a subject.
+- **Locked once marks exist** (`marksEnteredFor`, `lib/exams/marksCategoriesServer.ts`): changing a category's breakdown, deleting it, or adding / removing a subject is refused (409 / skipped, naming who) when a batch of the subject has `enteredCount > 0` and its teaching assignment isn't `isPast`.
 
 ### Mid Timetable (Exam Cell builds, one per branch)
 
