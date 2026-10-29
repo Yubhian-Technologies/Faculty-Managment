@@ -1,5 +1,6 @@
 "use client";
 
+import { groupNavItems } from "./navGroups";
 import { CollegeLogo } from "@/components/shared/CollegeLogo";
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -116,11 +117,7 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
   if (user.readOnlyAccess) navItems = readOnlyNavItems();
 
   // A nav item that starts a `section` opens a new group; the items after it belong to it.
-  const groups: { title: string | null; items: NavItem[] }[] = [];
-  for (const item of navItems) {
-    if (item.section || groups.length === 0) groups.push({ title: item.section ?? null, items: [] });
-    groups[groups.length - 1].items.push(item);
-  }
+  const groups = groupNavItems(navItems);
   const toggleGroup = (title: string) =>
     setClosedGroups((prev) => {
       const next = new Set(prev);

@@ -25,6 +25,16 @@ const nextConfig: NextConfig = {
   },
   // Baseline response headers. A full Content-Security-Policy is trialled report-only below: the app
   // loads map tiles, fonts, Firebase and face-model assets from several hosts. The rest are safe to enforce today.
+  // College Admin's own URL space. Its pages ARE the Principal's (and the R&D office's), so they are served
+  // from the same code under /college-admin/... instead of being copied. The page gate (src/proxy.ts) lets
+  // only a College Admin login in; the API behind every page guards itself as it always has.
+  async rewrites() {
+    return [
+      { source: "/college-admin/r-and-d", destination: "/r-and-d" },
+      { source: "/college-admin/r-and-d/:path*", destination: "/r-and-d/:path*" },
+      { source: "/college-admin/:path*", destination: "/principal/:path*" },
+    ];
+  },
   async headers() {
     return [
       {

@@ -1,4 +1,5 @@
 "use client";
+import { useOwnerRoleLabel } from "@/hooks/useOwnerRoleLabel";
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { CircularCard } from "@/components/circular/CircularCard";
@@ -13,6 +14,7 @@ import { toast } from "@/hooks/useToast";
 
 export default function PrincipalCircularsPage() {
   const router = useRouter();
+  const who = useOwnerRoleLabel();
   const [circulars, setCirculars] = useState<Circular[]>([]);
   const [messageFromOptions, setMessageFromOptions] = useState<string[]>([]);
   const [newOption, setNewOption] = useState("");
@@ -54,7 +56,7 @@ export default function PrincipalCircularsPage() {
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
-          <CardHeader><CardTitle className="text-base">Settings — Message From options (Principal)</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">{`Settings — Message From options (${who})`}</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             <div className="flex flex-wrap gap-2">
               {messageFromOptions.map((o) => (
@@ -73,7 +75,7 @@ export default function PrincipalCircularsPage() {
           <CardContent className="space-y-3">
             <div><Label>Allowed UIDs (comma separated HOD/faculty uids)</Label><Input value={allowedUids} onChange={(e) => setAllowedUids(e.target.value)} placeholder="uid1, uid2" /></div>
             <div><Label>Allowed Roles (comma separated, e.g. HOD,PANEL_MEMBER)</Label><Input value={allowedRoles} onChange={(e) => setAllowedRoles(e.target.value)} placeholder="HOD" /></div>
-            <p className="text-xs text-muted-foreground">Principal/Vice Principal always allowed. Add HOD or specific faculty UIDs to delegate.</p>
+            <p className="text-xs text-muted-foreground">{who === "Principal" ? "Principal/Vice Principal" : "College Admin and the Principal/Vice Principal"} always allowed. Add HOD or specific faculty UIDs to delegate.</p>
             <Button onClick={() => void savePerms()}>Save Permissions</Button>
           </CardContent>
         </Card>

@@ -1,5 +1,6 @@
 "use client";
 
+import { dashboardPathFor } from "@/lib/auth/collegeAdminPaths";
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signInWithEmailAndPassword, signInWithCustomToken, type UserCredential } from "firebase/auth";
@@ -55,6 +56,8 @@ async function completeLogin(
   const sessionData = (await sessionRes.json()) as {
     ok: boolean;
     role?: string;
+    // The pre-normalization role - a College Admin's `role` reads PRINCIPAL; this is what sends it to /college-admin.
+    realRole?: string;
     collegeId?: string;
     locationId?: string;
     name?: string;
@@ -151,7 +154,7 @@ async function completeLogin(
     }
     // A RESIGNED/RETIRED faculty member must not lose their read-only state at the very first screen.
     setUser(sessionData.readOnlyAccess ? { ...profile, readOnlyAccess: true, roles: sessionData.roles as UserRole[] | undefined } : profile);
-    const dashboardPath = ROLE_DASHBOARD_PATHS[profile.role] ?? "/hod";
+    const dashboardPath = dashboardPathFor(profile.role, sessionData.realRole) ?? "/hod";
     router.push(redirect ?? dashboardPath);
   } else {
     throw new Error("Account not configured. Contact your administrator.");
