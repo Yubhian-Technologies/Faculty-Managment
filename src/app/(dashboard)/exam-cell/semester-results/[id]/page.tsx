@@ -116,7 +116,7 @@ export default function SemesterResultBatchPage({ params }: { params: Promise<{ 
       const res = await fetch(`/api/college/exam-results/batches/${encodeURIComponent(id)}`, { method: "DELETE" });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Could not delete" }); return; }
-      toast({ variant: "success", title: "Draft deleted" });
+      toast({ variant: "success", title: isDraft ? "Draft deleted" : "Published results deleted" });
       router.push("/exam-cell/semester-results");
     } finally {
       setBusy(false);
@@ -133,6 +133,9 @@ export default function SemesterResultBatchPage({ params }: { params: Promise<{ 
         actions={
           <>
             <Button variant="outline" asChild><Link href="/exam-cell/semester-results"><ArrowLeft className="mr-1.5 h-4 w-4" />All results</Link></Button>
+            {batch && !isDraft && (
+              <Button variant="outline" className="text-destructive hover:text-destructive" onClick={() => setConfirm("delete")}><Trash2 className="mr-1.5 h-4 w-4" />Delete sheet</Button>
+            )}
             {isDraft && (
               <>
                 <Button variant="outline" asChild><Link href={`/exam-cell/semester-results/import?batchId=${encodeURIComponent(id)}`}><Plus className="mr-1.5 h-4 w-4" />Add rows</Link></Button>
@@ -247,9 +250,11 @@ export default function SemesterResultBatchPage({ params }: { params: Promise<{ 
       <ConfirmDialog
         open={confirm === "delete"}
         onOpenChange={(o) => !o && setConfirm(null)}
-        title="Delete this draft?"
-        description="Removes the draft and every result in it. Nothing published is affected."
-        confirmLabel="Delete draft"
+        title={isDraft ? "Delete this draft?" : "Delete these published results?"}
+        description={isDraft
+          ? "Removes the draft and every result in it. Nothing published is affected."
+          : `Removes this published sheet and its ${records.length} students' results - students no longer see them and their SGPA / CGPA are worked out without them. Refused while a later Supplementary or Revaluation rests on it. Upload it again to put it back.`}
+        confirmLabel={isDraft ? "Delete draft" : "Delete published results"}
         variant="destructive"
         loading={busy}
         onConfirm={remove}
