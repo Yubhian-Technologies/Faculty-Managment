@@ -45,7 +45,7 @@ import { pickEffectiveRole } from "@/lib/roles/seatRoles";
 const EXEMPT = new Set([
   "POST admin/colleges", "PATCH admin/colleges",
   "POST auth/resolve-student-login", "POST auth/employee-login", "POST auth/session", "DELETE auth/session",
-  "POST cron/attendance-not-posted", "POST cron/attendance-tally", "POST cron/od-proof-reminders",
+  "POST cron/attendance-not-posted", "POST cron/attendance-tally", "POST cron/od-proof-reminders", "POST cron/permission-escalation",
   "POST email/send", "POST pdf/generate",
   "POST location/candidates", "PATCH location/candidates/[id]",
   "POST location/departments", "PATCH location/departments/[id]", "DELETE location/departments/[id]",

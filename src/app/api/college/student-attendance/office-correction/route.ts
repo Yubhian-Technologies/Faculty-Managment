@@ -4,7 +4,7 @@ import { effectiveLabBatch, loadLabBatchModes } from "@/lib/students/labBatchMod
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { sortStudentsForList } from "@/lib/students/listOrder";
-import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
+import { resolveAcademicYearForDate } from "@/lib/studentAttendance/academicYearWindow";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
@@ -180,7 +180,7 @@ export async function POST(request: Request) {
       periodNumber
     );
     // The academic year this session belongs to - see student-attendance/route.ts.
-    const academicYear = await resolveCollegeAcademicYear(db, session.collegeId, now);
+    const academicYear = await resolveAcademicYearForDate(db, session.collegeId, date, now);
 
     const attendanceSession = {
       collegeId: session.collegeId,

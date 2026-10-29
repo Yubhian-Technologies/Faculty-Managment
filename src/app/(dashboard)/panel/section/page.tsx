@@ -15,7 +15,7 @@ import { toast } from "@/hooks/useToast";
 import { compareStudentsForList } from "@/lib/students/listOrder";
 import { classRepresentativeCountOf } from "@/lib/sections/classRepresentatives";
 import { sectionTitle, shortCourseName } from "@/lib/sections/sectionTitle";
-import { SUBJECT_TYPE_LABELS } from "@/types";
+import { subjectTypeDisplayLabel } from "@/types";
 import type { Section, StudentRecord, TeachingAssignment } from "@/types";
 
 // The whole section a faculty incharge looks after: who is in it, the subjects and who teaches each, and its
@@ -136,7 +136,7 @@ export default function MySectionPage() {
                       <div>
                         <p className="font-medium">{a.subjectName}</p>
                         <p className="text-xs text-muted-foreground">
-                          {a.subjectCode}{a.subjectType ? ` · ${SUBJECT_TYPE_LABELS[a.subjectType] ?? a.subjectType}` : ""}
+                          {a.subjectCode}{a.subjectType ? ` · ${subjectTypeDisplayLabel(a.subjectType)}` : ""}
                         </p>
                       </div>
                       <span className="text-muted-foreground">{a.facultyName || "Unassigned"}</span>

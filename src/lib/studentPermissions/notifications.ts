@@ -51,7 +51,7 @@ export function createPermissionEventSink(db: Firestore): EventSink<PermissionPa
     const p = req.payload;
     const last = req.history[req.history.length - 1];
 
-    if (event === "SUBMITTED" || event === "ADVANCED") {
+    if (event === "SUBMITTED" || event === "ADVANCED" || event === "ESCALATED") {
       const stage = currentStage(req);
       if (!stage) return;
       const link = STAGE_LINK[stage as PermissionStage] ?? "/principal/student-permissions";
@@ -59,7 +59,9 @@ export function createPermissionEventSink(db: Firestore): EventSink<PermissionPa
       for (const uid of await approversOf(db, collegeId, stage, req)) {
         if (uid === req.requesterUid) continue;
         await notify(db, collegeId, uid, "STUDENT_PERMISSION_PENDING", "Permission request awaiting your decision",
-          `${who}: ${summary(p)} - awaiting ${PERMISSION_STAGE_LABELS[stage as PermissionStage] ?? stage}${p.late ? " (short notice)" : ""}.`, link);
+          event === "ESCALATED"
+            ? `${who}: ${summary(p)} - nobody at the level below answered in time, so it now waits for you (${PERMISSION_STAGE_LABELS[stage as PermissionStage] ?? stage}).`
+            : `${who}: ${summary(p)} - awaiting ${PERMISSION_STAGE_LABELS[stage as PermissionStage] ?? stage}${p.late ? " (short notice)" : ""}.`, link);
       }
       return;
     }
@@ -68,7 +70,7 @@ export function createPermissionEventSink(db: Firestore): EventSink<PermissionPa
       APPROVED: { type: "STUDENT_PERMISSION_APPROVED", title: "Permission approved", verb: "approved - attendance will show On Duty for the covered periods" },
       REJECTED: { type: "STUDENT_PERMISSION_REJECTED", title: "Permission rejected", verb: `rejected${last?.remark ? `: ${last.remark}` : ""}` },
       REVOKED: { type: "STUDENT_PERMISSION_REVOKED", title: "Permission withdrawn", verb: `withdrawn${last?.remark ? `: ${last.remark}` : ""}` },
-      CANCELLED: { type: "STUDENT_PERMISSION_CANCELLED", title: "Permission request withdrawn", verb: "withdrawn by the requester" },
+      CANCELLED: { type: "STUDENT_PERMISSION_CANCELLED", title: "Permission request withdrawn", verb: last && last.actorUid !== req.requesterUid ? `withdrawn by ${last.actorName}${last.remark ? `: ${last.remark}` : ""}` : "withdrawn by the requester" },
     };
     const o = outcome[event];
     if (!o) return;

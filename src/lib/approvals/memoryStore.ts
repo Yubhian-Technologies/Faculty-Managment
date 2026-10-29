@@ -43,6 +43,14 @@ export function createMemoryStore(): ApprovalStore<{ marker: "memory-tx" }> & { 
     async listByPendingKeys<P>(collegeId: string, kind: string, keys: readonly string[], opts?: ListOptions) {
       return page<P>(Array.from(rows.values()).filter((r) => r.collegeId === collegeId && r.kind === kind && r.pendingKey !== null && keys.includes(r.pendingKey)), opts);
     },
+    async listOverdue<P>(collegeId: string, kind: string, nowIso: string, limit: number) {
+      return Array.from(rows.values())
+        .filter((r) => r.collegeId === collegeId && r.kind === kind && r.status === "PENDING" && !!r.escalateAt && r.escalateAt <= nowIso)
+        .sort((a, b) => (a.escalateAt! < b.escalateAt! ? -1 : 1)).slice(0, limit).map((r) => clone(r) as ApprovalRequest<P>);
+    },
+    async listEffectFailed<P>(collegeId: string, kind: string, limit: number) {
+      return Array.from(rows.values()).filter((r) => r.collegeId === collegeId && r.kind === kind && r.effectStatus === "FAILED").slice(0, limit).map((r) => clone(r) as ApprovalRequest<P>);
+    },
     async listByRequester<P>(collegeId: string, kind: string, uid: string, opts?: ListOptions) {
       return page<P>(Array.from(rows.values()).filter((r) => r.collegeId === collegeId && r.kind === kind && r.requesterUid === uid), opts);
     },

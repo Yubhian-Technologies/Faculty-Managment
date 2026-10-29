@@ -4,7 +4,7 @@ import { useFacultyListFilters } from "@/components/faculty/FacultyListFilters";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { Eye, FileDown, LogIn, Pencil, Search, Trash2, Upload, UserPlus, Users, RotateCcw } from "lucide-react";
+import { Eye, FileDown, ScanEye, LogIn, Pencil, Search, Trash2, Upload, UserPlus, Users, RotateCcw } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -30,7 +30,9 @@ import {
 import { toast } from "@/hooks/useToast";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { withReturnTo } from "@/lib/faculty/returnTo";
-import { downloadFacultyResume } from "@/lib/faculty/downloadFacultyResume";
+import { downloadFacultyResume, previewFacultyResumeHtml } from "@/lib/faculty/downloadFacultyResume";
+import { ResumePreviewDialog } from "@/components/faculty/ResumePreviewDialog";
+import { DEFAULT_RESUME_SECTIONS } from "@/lib/pdf/resumeSections";
 import type { ResumeSectionKey } from "@/lib/pdf/resumeSections";
 import type { CollegeType, Department, FacultyMember, FacultyStatus } from "@/types";
 
@@ -74,6 +76,8 @@ function PrincipalFacultyContent() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [resumeTarget, setResumeTarget] = useState<FacultyRow | null>(null);
   const [downloadingResumeId, setDownloadingResumeId] = useState<string | null>(null);
+  // The row whose resume is being previewed on screen (before any download).
+  const [previewTarget, setPreviewTarget] = useState<FacultyRow | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
   useEffect(() => () => { abortControllerRef.current?.abort(); }, []);
@@ -384,6 +388,16 @@ function PrincipalFacultyContent() {
               variant="ghost"
               size="sm"
               className="h-8 w-8 p-0"
+              title="Preview resume"
+              onClick={(e) => { e.stopPropagation(); setPreviewTarget(row); }}
+            >
+              <ScanEye className="h-4 w-4" />
+              <span className="sr-only">Preview resume</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
               title="Download resume PDF"
               loading={downloadingResumeId === (row.id as string)}
               onClick={(e) => {
@@ -613,6 +627,16 @@ function PrincipalFacultyContent() {
         onConfirm={() => void handleDelete()}
         loading={isDeleting}
       />
+
+      {/* Resume preview */}
+      {previewTarget && (
+        <ResumePreviewDialog
+          personName={facultyDisplayName(previewTarget) || "this faculty member"}
+          loadHtml={() => previewFacultyResumeHtml(previewTarget, collegeName, DEFAULT_RESUME_SECTIONS)}
+          onOpenChange={(o) => { if (!o) setPreviewTarget(null); }}
+          onDownload={() => { setResumeTarget(previewTarget); setPreviewTarget(null); }}
+        />
+      )}
 
       {/* Resume Section Picker Dialog */}
       <ResumeSectionsDialog

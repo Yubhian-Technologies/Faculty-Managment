@@ -1,6 +1,6 @@
 import { ApprovalError } from "./types";
 import type { ApprovalRequest, StageId } from "./types";
-import { approve, cancel, currentStage, reject, revoke, skipStage, submit, type Actor } from "./stateMachine";
+import { approve, approveAndClose, cancel, currentStage, escalate, reject, revoke, skipStage, submit, type Actor } from "./stateMachine";
 import type { ApprovalKind, ApprovalStore, EngineEvent, EventSink } from "./ports";
 
 export interface EngineDeps<P, C, Tx> {
@@ -17,6 +17,8 @@ export interface SubmitInput<P> {
   requester: Actor & { type: string };
   payload: P;
   chain: readonly StageId[];
+  /** Hours each stage may take before the request moves up a level, aligned with `chain` (null / 0 = no limit). */
+  stageHours?: readonly (number | null)[];
 }
 
 const SYSTEM: Actor = { uid: "system", name: "System" };
@@ -87,7 +89,7 @@ export function createApprovalEngine<P, C, Tx = unknown>(deps: EngineDeps<P, C, 
         requesterUid: input.requester.uid, requesterName: input.requester.name, requesterType: input.requester.type,
         payload: input.payload,
       };
-      let req = submit(base, input.chain, scopeOf(base), input.requester, iso());
+      let req = submit(base, input.chain, scopeOf(base), input.requester, iso(), input.stageHours);
       req = await skipUnactionable(ctx, req);
       await store.create(req);
       await emit("SUBMITTED", req);
@@ -101,14 +103,14 @@ export function createApprovalEngine<P, C, Tx = unknown>(deps: EngineDeps<P, C, 
     ): Promise<ApprovalRequest<P>> {
       const updated = await store.update<P, ApprovalRequest<P>>(input.collegeId, input.id, async (current, tx) => {
         await authorise(ctx, current, input.actor);
-        let next = input.decision === "APPROVE"
-          ? approve(current, input.actor, iso(), scopeOf(current), input.remark)
-          : reject(current, input.actor, iso(), input.remark ?? "");
-        // `completeAll`: an overseer's approval finishes every remaining stage at once (each is recorded in the history).
+        // `completeAll`: the first approval closes the whole request - the stages above are not asked.
         const completeAll = input.decision === "APPROVE" && (input.completeAll ?? !!(await kind.completesAllOnApprove?.(ctx, current, input.actor)));
-        if (completeAll) {
-          while (next.status === "PENDING") next = approve(next, input.actor, iso(), scopeOf(next), input.remark);
-        } else if (input.decision === "APPROVE" && next.status === "PENDING") next = await skipUnactionable(ctx, next);
+        let next = input.decision === "REJECT"
+          ? reject(current, input.actor, iso(), input.remark ?? "")
+          : completeAll
+            ? approveAndClose(current, input.actor, iso(), input.remark)
+            : approve(current, input.actor, iso(), scopeOf(current), input.remark);
+        if (input.decision === "APPROVE" && next.status === "PENDING") next = await skipUnactionable(ctx, next);
         if (next.status === "APPROVED") {
           next = { ...next, effectStatus: kind.applyInTransaction || kind.afterApproved ? "PENDING" : "NONE" };
           await kind.applyInTransaction?.(tx, ctx, next, "APPROVED");
@@ -124,7 +126,10 @@ export function createApprovalEngine<P, C, Tx = unknown>(deps: EngineDeps<P, C, 
     /** The requester withdraws a pending request. */
     async cancel(ctx: C, input: { collegeId: string; id: string; actor: Actor; remark?: string }): Promise<ApprovalRequest<P>> {
       const updated = await store.update<P, ApprovalRequest<P>>(input.collegeId, input.id, async (current) => {
-        if (current.requesterUid !== input.actor.uid) throw new ApprovalError("FORBIDDEN", "Only the person who raised a request can withdraw it", 403);
+        if (current.requesterUid !== input.actor.uid) {
+          if (!(await kind.canCancel?.(ctx, current, input.actor))) throw new ApprovalError("FORBIDDEN", "Only the person who raised a request, or an approver who oversees it, can withdraw it", 403);
+          if (!input.remark?.trim()) throw new ApprovalError("REMARK_REQUIRED", "Please give a reason for withdrawing this request");
+        }
         const next = cancel(current, input.actor, iso(), input.remark);
         return { next, result: next };
       });
@@ -139,6 +144,8 @@ export function createApprovalEngine<P, C, Tx = unknown>(deps: EngineDeps<P, C, 
         // Whoever could decide the final stage may take the decision back.
         const last = current.chain[current.chain.length - 1];
         if (!(await kind.canDecide(ctx, current, last, input.actor))) throw new ApprovalError("FORBIDDEN", "You can't revoke this request", 403);
+        const blocked = await kind.revokeBlockedReason?.(ctx, current);
+        if (blocked) throw new ApprovalError("INVALID", blocked, 409);
         let next = revoke(current, input.actor, iso(), input.remark);
         next = { ...next, effectStatus: kind.applyInTransaction || kind.afterRevoked ? "PENDING" : "NONE" };
         await kind.applyInTransaction?.(tx, ctx, next, "REVOKED");
@@ -147,6 +154,39 @@ export function createApprovalEngine<P, C, Tx = unknown>(deps: EngineDeps<P, C, 
       const finished = await runAfter(ctx, updated, "afterRevoked");
       await emit("REVOKED", finished);
       return finished;
+    },
+
+    /**
+     * Moves every request of this college whose stage deadline has passed up one level. One range query finds them;
+     * each is moved in its own transaction that re-checks it is still pending and still overdue, so an approval that
+     * lands at the same moment, or a second sweep, can never double-move or undo a decision. Returns the ids moved.
+     */
+    async escalateOverdue(ctx: C, input: { collegeId: string; limit?: number }): Promise<string[]> {
+      const nowIso = iso();
+      const due = await store.listOverdue<P>(input.collegeId, kind.kind, nowIso, input.limit ?? 100);
+      const moved: string[] = [];
+      for (const req of due) {
+        try {
+          const updated = await store.update<P, ApprovalRequest<P>>(input.collegeId, req.id, async (current) => {
+            let next = escalate(current, SYSTEM, iso(), scopeOf(current));
+            next = await skipUnactionable(ctx, next);
+            return { next, result: next };
+          });
+          moved.push(req.id);
+          await emit("ESCALATED", updated);
+        } catch (err) {
+          // Decided, withdrawn or moved by someone else in the meantime - nothing to do.
+          if (!(err instanceof ApprovalError)) throw err;
+        }
+      }
+      return moved;
+    },
+
+    /** Retries (at most `limit`) approved/revoked requests whose after-commit step failed earlier. Returns how many were retried. */
+    async retryFailedEffects(ctx: C, input: { collegeId: string; limit?: number }): Promise<number> {
+      const failed = await store.listEffectFailed<P>(input.collegeId, kind.kind, input.limit ?? 20);
+      for (const req of failed) await this.retryEffects(ctx, { collegeId: input.collegeId, id: req.id });
+      return failed.length;
     },
 
     /** Re-runs the after-commit effects of a request whose last attempt FAILED (idempotent by contract). */

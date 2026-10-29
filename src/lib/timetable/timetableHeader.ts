@@ -29,16 +29,16 @@ export function shortCourse(course: string): string {
  * "A", "CSE-C" or "BSC-CSE-C" - a leading course/group prefix is dropped, and a bare letter or
  * number gets the department's initials in front.
  */
-function sectionCode(sectionName?: string, departmentName?: string): string {
+export function sectionCode(sectionName?: string, departmentName?: string): string {
   const parts = (sectionName ?? "").trim().split(/[-_\s]+/).filter((w) => w && !/^section$/i.test(w));
   let out = parts.length >= 3 ? parts.slice(1) : parts;
-  if (out.length === 1 && !/[A-Za-z]{2,}/.test(out[0]) && departmentName) {
+  if (out.length <= 1 && !/[A-Za-z]{2,}/.test(out[0] ?? "") && departmentName) {
     const initials = departmentName
       .split(/[\s&]+/)
       .filter((w) => /^[A-Za-z]/.test(w) && !/^(and|of|department)$/i.test(w))
       .map((w) => w[0].toUpperCase())
       .join("");
-    if (initials) out = [initials, out[0]];
+    if (initials) out = [initials, ...out];
   }
   return out.join("-");
 }
@@ -178,18 +178,21 @@ export function facultyTimetableTitle(academicYear?: string, semesterLabel?: str
   return tail ? `Time Table : ${tail}` : "Time Table";
 }
 
-/** One line of the faculty timetable's bottom list: "IV B.Tech I Sem" (+ " - section" when the class has one). */
-export function facultyClassLabel(parts: { courseName?: string; year?: number; semester?: number; sectionName?: string }): string {
+/**
+ * A class as the faculty timetable prints it: "III B.Tech-CSBS-A" (year, course, branch and section), and
+ * "III B.Tech-I Sem-CSBS-A" when a semester is given (odd = I, even = II). The same pieces as the section
+ * timetable's "YEAR-SEM-SECTION" line.
+ */
+export function facultyClassLabel(parts: { courseName?: string; year?: number; semester?: number; sectionName?: string; departmentName?: string }): string {
   const course = parts.courseName ? shortCourse(parts.courseName) : "";
   const yearCourse = parts.year != null ? `${toRoman(parts.year)} ${course}`.trim() : course;
   const sem = parts.semester != null ? `${parts.semester % 2 === 1 ? "I" : "II"} Sem` : "";
-  const base = [yearCourse, sem].filter(Boolean).join(" ");
-  return parts.sectionName?.trim() ? `${base} - ${parts.sectionName.trim()}` : base;
+  return [yearCourse, sem, sectionCode(parts.sectionName, parts.departmentName)].filter(Boolean).join("-");
 }
 
 /**
  * The bottom list of a faculty timetable - one row per class + subject the grid shows:
- * "IV B.Tech I Sem - CSE-A" | acronym | subject name. Scoped to the assignments the given slots use.
+ * "IV B.Tech-I Sem-CSE-A" | acronym | subject name. Scoped to the assignments the given slots use.
  */
 export function buildFacultyClassRows(
   slots: Pick<TimetableSlot, "assignmentId" | "semester">[],
@@ -200,7 +203,7 @@ export function buildFacultyClassRows(
   for (const a of assignments) {
     if (!inGrid.has(a.id)) continue;
     const semester = slots.find((sl) => sl.assignmentId === a.id)?.semester ?? a.semester;
-    const cls = facultyClassLabel({ courseName: a.courseName, year: a.year, semester, sectionName: a.sectionName });
+    const cls = facultyClassLabel({ courseName: a.courseName, year: a.year, semester, sectionName: a.sectionName, departmentName: a.department });
     const acr = subjectAbbreviation(a.subjectName, a.shortCode) || "—";
     const name = a.subjectName ?? "—";
     rows.set(`${cls}|${acr}|${name}`, { cls, acr, name });

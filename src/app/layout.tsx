@@ -24,7 +24,8 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.variable} font-sans antialiased`}>
+      {/* suppressHydrationWarning: browser extensions (e.g. custom cursors) add attributes to <body> before React hydrates. */}
+      <body className={`${inter.variable} font-sans antialiased`} suppressHydrationWarning>
         <Providers>{children}</Providers>
         <SpeedInsights />
       </body>
