@@ -12,6 +12,11 @@ export const SUBJECT_TYPE_LABELS: Record<SubjectType, string> = {
   NON_TEACHING: "Non-Teaching / Attendance Only",
 };
 
+/** How a subject type is shown to readers (timetable, section subjects): Attendance Only reads "Co-Curricular". */
+export function subjectTypeDisplayLabel(type: SubjectType | undefined): string {
+  return type === "NON_TEACHING" ? "Co-Curricular" : SUBJECT_TYPE_LABELS[type ?? "THEORY"];
+}
+
 // Standard AICTE model-curriculum categories, used across most Indian
 // engineering colleges' L-T-P-C curriculum tables.
 export type StandardSubjectCategory = "HSMC" | "BSC" | "ESC" | "PCC" | "PEC" | "OEC" | "MC" | "PROJ" | "OTHER";

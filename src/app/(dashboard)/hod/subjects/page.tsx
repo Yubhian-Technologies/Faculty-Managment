@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import type { Course, CourseCatalogItem, CourseYearTiming, Department, Subject, SubjectSemesterAssignment } from "@/types";
-import { SUBJECT_TYPE_LABELS } from "@/types";
+import { subjectTypeDisplayLabel } from "@/types";
 import { regulationsForCourseYearByBatch } from "@/lib/college/academicStructure";
 import { feederOnlyYears, managerEffectiveYears, mergeOwnDepartmentOptions } from "@/lib/departments/hodScope";
 import { parseAcademicYearStart } from "@/lib/college/academicSession";
@@ -534,7 +534,7 @@ export default function HODSubjectsPage() {
                                   <div className="font-medium text-foreground">{a.subjectName}</div>
                                   <div className="flex flex-wrap items-center gap-2 mt-1">
                                     <Badge variant="secondary" className="text-xs font-mono">{a.subjectCode}</Badge>
-                                    <Badge variant="outline" className="text-xs">{SUBJECT_TYPE_LABELS[a.type ?? subject?.type ?? "THEORY"]}</Badge>
+                                    <Badge variant="outline" className="text-xs">{subjectTypeDisplayLabel(a.type ?? subject?.type)}</Badge>
                                     {a.regulation && <Badge variant="secondary" className="text-xs">{a.regulation}</Badge>}
                                     <span className="text-xs text-muted-foreground">{a.hoursPerWeek ?? subject?.hoursPerWeek ?? 0} hrs/week</span>
                                   </div>

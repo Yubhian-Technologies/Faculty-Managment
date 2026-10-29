@@ -17,7 +17,7 @@ import { toast } from "@/hooks/useToast";
 import { classRepresentativeCountOf } from "@/lib/sections/classRepresentatives";
 import { sectionTitle, shortCourseName } from "@/lib/sections/sectionTitle";
 import type { Course, Department, SectionListItem, StudentRecord, Subject, SubjectSemesterAssignment } from "@/types";
-import { SUBJECT_TYPE_LABELS, type SubjectType } from "@/types";
+import { SUBJECT_TYPE_LABELS, subjectTypeDisplayLabel, type SubjectType } from "@/types";
 
 type SectionRow = SectionListItem;
 
@@ -250,7 +250,7 @@ export default function SectionRosterPage() {
                 if (group.length === 0) return null;
                 return (
                   <div key={type}>
-                    <p className="font-semibold mb-1">{SUBJECT_TYPE_LABELS[type]}</p>
+                    <p className="font-semibold mb-1">{subjectTypeDisplayLabel(type)}</p>
                     {group.map((s, i) => (
                       <div key={s.id} className="grid grid-cols-[3rem_1fr_8rem] gap-x-4 py-1">
                         <span className="text-right text-muted-foreground">{i + 1}</span>
