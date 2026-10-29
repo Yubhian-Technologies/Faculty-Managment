@@ -39,7 +39,21 @@ const STYLE = `${EXAM_HEADER_STYLE}
 `;
 
 /** The college plus, for the letterhead, the exam line(s) ("I B.TECH. I SEMESTER MID-1 EXAMINATION") and academic year. */
-type College = { name: string; logoUrl?: string; examLines?: string[]; academicYear?: string };
+type College = { name: string; logoUrl?: string; examLines?: string[]; academicYear?: string; courseCode?: string };
+
+const ROMAN_YEAR = ["", "I", "II", "III", "IV", "V", "VI"];
+/**
+ * A section as the exam documents print it: "I B.TECH. AIDS-A" - year, course code,
+ * the section's own name (which carries the branch code). From the stored label
+ * "Artificial Intelligence and Data Science · 1st Year · AIDS-A".
+ */
+export function shortSection(label: string, courseCode?: string): string {
+  const parts = label.split(" · ");
+  const name = parts[parts.length - 1] ?? label;
+  const year = Number(/(\d+)/.exec(parts[1] ?? "")?.[1]);
+  const code = courseCode ? `${courseCode.toUpperCase().replace(/\.$/, "")}. ` : "";
+  return `${year ? `${ROMAN_YEAR[year] ?? year} ` : ""}${code}${name}`;
+}
 const lines = (c: College, p: ExamSeatingPlan) => (c.examLines?.length ? c.examLines : [p.name]);
 
 /** "Fri 2 Oct 2026 - Thu 8 Oct 2026 · 10:00 AM - 11:30 AM" - the Mid's exam days (one arrangement for all of them). */
@@ -59,21 +73,22 @@ function shell(c: College, p: ExamSeatingPlan, title: string, body: string): str
   </div></body></html>`;
 }
 
-const roomTitle = (r: SeatingRoomAllocation) => `Room ${r.name} · Block ${r.block} · Floor ${r.floor}`;
-const ranges = (r: SeatingRoomAllocation) => `<div class="ranges">${rollRangeBySection(r.students).map((g) => `<span>${esc(g.sectionLabel)}: <b>${esc(g.from)} - ${esc(g.to)}</b> (${g.count})</span>`).join("")}</div>`;
+/** "Block A, Floor 2, Room 201". */
+const roomTitle = (r: SeatingRoomAllocation) => `Block ${r.block}, Floor ${r.floor}, Room ${r.name}`;
+const ranges = (c: College, r: SeatingRoomAllocation) => `<div class="ranges">${rollRangeBySection(r.students).map((g) => `<span>${esc(shortSection(g.sectionLabel, c.courseCode))}: <b>${esc(g.from)} - ${esc(g.to)}</b> (${g.count})</span>`).join("")}</div>`;
 
 export function roomSheetHTML(c: College, p: ExamSeatingPlan, r: SeatingRoomAllocation): string {
   const per = r.perBench ?? 1;
-  const rows = benchRows(r).map((row, b) => `<tr><td><b>${b + 1}</b></td>${row.map((s) => `<td>${s ? `<b>${esc(s.rollNumber)}</b> <span class="grp">${esc(s.group ?? s.sectionLabel)}</span>` : "-"}</td>`).join("")}</tr>`).join("");
-  const body = `${ranges(r)}<table><thead><tr><th style="width:12%">Bench</th>${Array.from({ length: per }, (_, i) => `<th>Seat ${SEAT_LETTERS[i] ?? i + 1}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>
+  const rows = benchRows(r).map((row, b) => `<tr><td><b>${b + 1}</b></td>${row.map((s) => `<td>${s ? `<b>${esc(s.rollNumber)}</b> <span class="grp">${esc(shortSection(s.sectionLabel, c.courseCode))}</span>` : "-"}</td>`).join("")}</tr>`).join("");
+  const body = `${ranges(c, r)}<table><thead><tr><th style="width:12%">Bench</th>${Array.from({ length: per }, (_, i) => `<th>Seat ${SEAT_LETTERS[i] ?? i + 1}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>
     <p class="line" style="margin-top:8px">${r.students.length} students</p>`;
   return shell(c, p, roomTitle(r), body);
 }
 
 export function noticeBoardHTML(c: College, p: ExamSeatingPlan): string {
   const rows = p.rooms.filter((r) => r.students.length).flatMap((r) => rollRangeBySection(r.students).map((g, i, all) =>
-    `<tr>${i === 0 ? `<td rowspan="${all.length}"><b>${esc(r.name)}</b><br/><span style="font-size:10.5px">Block ${esc(r.block)} · Floor ${r.floor}</span></td>` : ""}<td class="l">${esc(g.sectionLabel)}</td><td>${esc(g.from)}</td><td>${esc(g.to)}</td><td>${g.count}</td></tr>`)).join("");
-  return shell(c, p, "Seating Arrangement", `<table><thead><tr><th style="width:18%">Room</th><th>Section</th><th>From Regd. No</th><th>To Regd. No</th><th style="width:9%">Count</th></tr></thead><tbody>${rows}</tbody></table>`);
+    `<tr>${i === 0 ? `<td rowspan="${all.length}"><b>${esc(roomTitle(r))}</b></td>` : ""}<td class="l">${esc(shortSection(g.sectionLabel, c.courseCode))}</td><td>${esc(g.from)}</td><td>${esc(g.to)}</td><td>${g.count}</td></tr>`)).join("");
+  return shell(c, p, "Seating Arrangement", `<table><thead><tr><th style="width:26%">Room</th><th>Section</th><th>From Regd. No</th><th>To Regd. No</th><th style="width:9%">Count</th></tr></thead><tbody>${rows}</tbody></table>`);
 }
 
 /** One exam of one branch on one day (from the Mid timetable): subject(s) and time. */

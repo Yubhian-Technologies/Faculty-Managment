@@ -160,9 +160,9 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
         fetchCollegeLogoUrl(),
       ]);
       // The exam line(s) of the Mid timetable(s) seated: "I B.TECH. I SEMESTER MID-1 EXAMINATION".
-      const examLines = (await Promise.all((plan!.midPlanIds ?? []).map((mid) => fetch(`/api/college/mid-timetables/${encodeURIComponent(mid)}`)
-        .then((r) => (r.ok ? (r.json() as Promise<{ exam?: ExamOf }>) : {})).then((d: { exam?: ExamOf }) => (d.exam ? examLine(d.exam) : "")).catch(() => "")))).filter(Boolean);
-      const c = { name: info.name || "College", logoUrl, examLines: [...new Set(examLines)], academicYear: info.academicYear };
+      const exams = (await Promise.all((plan!.midPlanIds ?? []).map((mid) => fetch(`/api/college/mid-timetables/${encodeURIComponent(mid)}`)
+        .then((r) => (r.ok ? (r.json() as Promise<{ exam?: ExamOf }>) : {})).then((d: { exam?: ExamOf }) => d.exam ?? null).catch(() => null)))).filter((x): x is ExamOf => Boolean(x));
+      const c = { name: info.name || "College", logoUrl, examLines: [...new Set(exams.map(examLine))], academicYear: info.academicYear, courseCode: exams[0]?.courseCode };
       const base = plan!.name.replace(/[^a-z0-9]+/gi, "-");
       if (kind === "notice") await renderHtmlToPdf(noticeBoardHTML(c, plan!), `${base}-notice-board.pdf`);
       else if (kind === "rooms") await renderMultiHtmlToPdf(usedRooms.map((r) => roomSheetHTML(c, plan!, r)), `${base}-room-sheets.pdf`);

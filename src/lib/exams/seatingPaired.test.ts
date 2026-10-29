@@ -30,3 +30,12 @@ describe("paired seating", () => {
     expect(validatePairedRoom(bad)).toContain("two students of CSE");
   });
 });
+
+import { shortSection } from "@/lib/pdf/examSeatingTemplate";
+
+describe("seating documents", () => {
+  it("print a section short: year, course code, section", () => {
+    expect(shortSection("Artificial Intelligence and Data Science · 1st Year · AIDS-A", "B.TECH")).toBe("I B.TECH. AIDS-A");
+    expect(shortSection("Civil Engineering · 2nd Year · CE-A")).toBe("II CE-A");
+  });
+});
