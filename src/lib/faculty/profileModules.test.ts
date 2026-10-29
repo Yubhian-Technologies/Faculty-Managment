@@ -34,7 +34,7 @@ describe("faculty details tab names", () => {
   });
 
   it("every tab keeps its key, icon and a distinct name", () => {
-    expect(Object.keys(PROFILE_MODULES)).toEqual(KEYS);
+    expect(Object.keys(PROFILE_MODULES)).toEqual([...KEYS, "display-name"]);
     for (const k of KEYS) {
       expect(PROFILE_MODULES[k].key).toBe(k);
       expect(PROFILE_MODULES[k].icon).toBeTruthy();

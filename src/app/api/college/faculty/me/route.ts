@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { resolveDisplayName } from "@/lib/faculty/displayName";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -144,6 +145,9 @@ export async function PATCH(request: Request) {
       previousTeachingAssignments: unknown;
       previousTeachingAssignmentsLoadedIds: unknown;
       profilePhotoUrl: string;
+      // "Display Name" tab: surname short form (max 2, capitals) + name (capitals), both required together.
+      displaySurname: unknown;
+      displayName: unknown;
     }> & PersonalDetailsInput;
 
     if (
@@ -190,6 +194,12 @@ export async function PATCH(request: Request) {
         }
         facultyUpdates.honorific = honorificResult.name;
       }
+    }
+    if (body.displaySurname !== undefined || body.displayName !== undefined) {
+      const resolved = resolveDisplayName(body);
+      if (!resolved.ok) return NextResponse.json({ error: resolved.error }, { status: 400 });
+      facultyUpdates.displaySurname = resolved.displaySurname;
+      facultyUpdates.displayName = resolved.displayName;
     }
     if (body.aicteFacultyId !== undefined) facultyUpdates.aicteFacultyId = body.aicteFacultyId.trim();
     if (body.highestQualification?.trim()) facultyUpdates.highestQualification = normalizeHighestQualification(body.highestQualification);

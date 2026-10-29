@@ -6,6 +6,9 @@ import {
   QualificationFields, ExperienceFields, ResearchFields,
   MentorshipFields, FinancialFields, OthersFields,
 } from "@/components/faculty/AcademicProfileModuleFields";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { normalizeDisplayName, normalizeDisplaySurname, DISPLAY_SURNAME_MAX } from "@/lib/faculty/displayName";
 import { PreviousTeachingAssignmentsEditor } from "@/components/faculty/PreviousTeachingAssignmentsEditor";
 import type { ProfileModuleKey } from "@/lib/faculty/profileModules";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
@@ -20,6 +23,8 @@ export interface FacultyEditRecord extends PersonalDetailsValue {
   joiningLetterUrl?: string;
   appointmentLetterUrl?: string;
   resumeUrl?: string;
+  displaySurname?: string;
+  displayName?: string;
 }
 
 interface Props {
@@ -131,6 +136,31 @@ export function FacultyProfileModuleEditor({
         return <PreviousTeachingAssignmentsEditor value={previousTeachingRecords ?? []} onChange={onPreviousTeachingRecordsChange} />;
       }
       return <p className="text-sm text-muted-foreground">Teaching assignments aren&apos;t editable here.</p>;
+    case "display-name":
+      return (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="displaySurname">Surname (short form) <span className="text-destructive">*</span></Label>
+            <Input
+              id="displaySurname"
+              value={record.displaySurname ?? ""}
+              maxLength={DISPLAY_SURNAME_MAX}
+              placeholder="e.g. AV"
+              onChange={(e) => onChange({ displaySurname: normalizeDisplaySurname(e.target.value) })}
+            />
+            <p className="text-xs text-muted-foreground">Up to {DISPLAY_SURNAME_MAX} capital letters.</p>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="displayName">Name <span className="text-destructive">*</span></Label>
+            <Input
+              id="displayName"
+              value={record.displayName ?? ""}
+              placeholder="e.g. VENU GOPAL"
+              onChange={(e) => onChange({ displayName: normalizeDisplayName(e.target.value) })}
+            />
+          </div>
+        </div>
+      );
     default:
       return <p className="text-sm text-muted-foreground">Unknown section.</p>;
   }

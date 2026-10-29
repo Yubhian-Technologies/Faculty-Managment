@@ -1182,6 +1182,8 @@ export interface PreviousTeachingAssignment {
 
 export interface FacultyMember {
   id: string;
+  displaySurname?: string; // "Display Name" tab: surname short form, max 2 capitals
+  displayName?: string; // "Display Name" tab: name as displayed, capitals
   collegeId: string;
   department: string;
   employeeId: string;
