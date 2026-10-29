@@ -395,7 +395,7 @@ export function InstitutionalTimetableTable({
           </div>
           <div className="mt-3 flex flex-wrap items-start justify-between gap-x-6 gap-y-1 text-xs font-bold text-foreground">
             <div className="space-y-0.5 min-w-0">
-              {[headerLines.yearLine, headerLines.branchLine, headerLines.inchargeLine].filter(Boolean).map((l) => (
+              {[headerLines.yearLine, headerLines.branchLine].filter(Boolean).map((l) => (
                 <div key={l} className="break-words">{l}</div>
               ))}
             </div>
@@ -405,6 +405,9 @@ export function InstitutionalTimetableTable({
               ))}
             </div>
           </div>
+          {headerLines.inchargeLine && (
+            <div className="mt-1 text-center text-xs font-bold text-foreground break-words">{headerLines.inchargeLine}</div>
+          )}
         </div>
 
         {/* ── Mobile View Controls (phones & small screens) ── */}
@@ -842,19 +845,20 @@ export function InstitutionalTimetableTable({
         {allocationList.length > 0 && (
           <div className="border-t px-4 py-3 bg-card overflow-x-auto">
             <table className="w-full table-fixed text-xs">
-              <colgroup><col style={{ width: "9%" }} /><col style={{ width: "44%" }} /><col style={{ width: "15%" }} /><col style={{ width: "32%" }} /></colgroup>
+              <colgroup><col style={{ width: "8%" }} /><col style={{ width: "36%" }} /><col style={{ width: "12%" }} /><col style={{ width: "14%" }} /><col style={{ width: "30%" }} /></colgroup>
               <thead>
                 <tr className="text-left font-bold text-foreground">
                   <th className="px-1 py-1 text-center">S.No</th>
                   <th className="px-1 py-1">Subject Name</th>
                   <th className="px-1 py-1">Sub Acr</th>
+                  <th className="px-1 py-1">Subject Code</th>
                   <th className="px-1 py-1">Faculty</th>
                 </tr>
               </thead>
               <tbody>
                 {groupAllocationByType(allocationList).map((g) => (
                   <Fragment key={g.label}>
-                    <tr><td colSpan={4} className="px-1 pt-2 pb-0.5 font-bold text-foreground">{g.label}</td></tr>
+                    <tr><td colSpan={5} className="px-1 pt-2 pb-0.5 font-bold text-foreground">{g.label}</td></tr>
                     {g.entries.map((item, i) => (
                       <tr key={`${g.label}-${i}`} className="text-foreground">
                         <td className="px-1 py-0.5 text-center">{i + 1}</td>
@@ -863,6 +867,7 @@ export function InstitutionalTimetableTable({
                           {item.labBatches.length > 0 && <span> ({item.labBatches.join(", ")})</span>}
                         </td>
                         <td className="px-1 py-0.5 break-words">{item.shortCode}</td>
+                        <td className="px-1 py-0.5 break-words">{item.code}</td>
                         <td className="px-1 py-0.5 break-words">{item.faculty}</td>
                       </tr>
                     ))}

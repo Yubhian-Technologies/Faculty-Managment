@@ -237,7 +237,7 @@ export async function buildSectionTimetableXlsxBuffer(opts: SectionTimetableXlsx
     classInchargeName,
     effectiveDate: opts.effectiveDate ?? latestEffectiveDate(slots),
   });
-  const leftLines = [header.yearLine, header.branchLine, header.inchargeLine].filter(Boolean);
+  const leftLines = [header.yearLine, header.branchLine].filter(Boolean);
   const rightLines = [header.wefLine, header.roomLine].filter(Boolean);
   const split = lastCol >= 2 ? Math.ceil(lastCol / 2) : lastCol;
   for (let i = 0; i < Math.max(leftLines.length, rightLines.length); i++) {
@@ -257,6 +257,15 @@ export async function buildSectionTimetableXlsxBuffer(opts: SectionTimetableXlsx
       if (lastCol > from) sheet.mergeCells(r, from, r, lastCol);
     }
     row.height = 16;
+    r++;
+  }
+  // Class in-charge: centred across the page, straight after the branch line.
+  if (header.inchargeLine) {
+    sheet.getCell(r, 1).value = header.inchargeLine;
+    sheet.getCell(r, 1).font = { bold: true, size: 10 };
+    sheet.getCell(r, 1).alignment = { horizontal: "center", vertical: "middle" };
+    if (lastCol > 1) sheet.mergeCells(r, 1, r, lastCol);
+    sheet.getRow(r).height = 16;
     r++;
   }
 
@@ -375,8 +384,8 @@ export async function buildSectionTimetableXlsxBuffer(opts: SectionTimetableXlsx
   if (allocation.length) {
     r++; // spacer
 
-    const headings = ["S.No", "Subject Name", "Sub Acr", "Faculty"];
-    const groups = splitColumns(lastCol, [1, 4, 1.5, 3.5]);
+    const headings = ["S.No", "Subject Name", "Sub Acr", "Subject Code", "Faculty"];
+    const groups = splitColumns(lastCol, [1, 3.5, 1.5, 1.5, 3]);
     const mergeable = lastCol >= headings.length;
 
     const writeRow = (rowIndex: number, values: (string | number)[], bold: boolean) => {
@@ -405,7 +414,7 @@ export async function buildSectionTimetableXlsxBuffer(opts: SectionTimetableXlsx
       r++;
       group.entries.forEach((a, idx) => {
         const subject = a.labBatches.length ? `${a.name} (${a.labBatches.join(", ")})` : a.name;
-        writeRow(r, [idx + 1, subject, a.shortCode, a.faculty], false);
+        writeRow(r, [idx + 1, subject, a.shortCode, a.code, a.faculty], false);
         sheet.getRow(r).height = 18;
         r++;
       });
