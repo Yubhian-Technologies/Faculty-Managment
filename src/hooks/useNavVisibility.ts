@@ -18,6 +18,7 @@ const TIMETABLE_INCHARGE_HREFS = [
 ];
 const SECTION_INCHARGE_HREFS = ["/panel/students", "/panel/students/batches", "/panel/section", "/panel/students/class-representatives"];
 const QUESTION_BANK_HREFS = ["/panel/mid-bank"];
+const INTERNAL_EXAM_HREFS = ["/panel/internal-exam"];
 // Mid Timetable shows for students and faculty only once a timetable they may see is published.
 const MID_TIMETABLE_HREFS = ["/student/mid-timetable", "/panel/mid-timetable"];
 const MID_TIMETABLE_ROLES: UserRole[] = ["STUDENT", "PANEL_MEMBER"];
@@ -83,6 +84,7 @@ export function useNavVisibility() {
       if (!assignments.timetableIncharge) TIMETABLE_INCHARGE_HREFS.forEach((h) => hrefs.add(h));
       if (!assignments.sectionIncharge) SECTION_INCHARGE_HREFS.forEach((h) => hrefs.add(h));
       if (assignments.questionBank === false) QUESTION_BANK_HREFS.forEach((h) => hrefs.add(h));
+      if (assignments.internalExam === false) INTERNAL_EXAM_HREFS.forEach((h) => hrefs.add(h));
     }
     return Array.from(hrefs);
   }, [raw, primary, seatRoles, assignments, officeAllowed.hrefs, wantsTimetable, hasTimetable]);
