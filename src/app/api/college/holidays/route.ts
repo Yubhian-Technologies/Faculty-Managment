@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
+import { notifyHolidayDeclared } from "@/lib/college/holidayNotify";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { istDateKey } from "@/lib/attendance/istTime";
@@ -138,6 +139,10 @@ export async function POST(request: Request) {
         );
       }
     }
+
+    await notifyHolidayDeclared(db, session.collegeId, {
+      name: body.name.trim(), dateKey, category, appliesTo: category === "BRIDGE" ? "BOTH" : body.appliesTo ?? "BOTH",
+    });
 
     return NextResponse.json({ id: docRef.id }, { status: 201 });
   } catch (err) {
