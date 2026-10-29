@@ -4,20 +4,18 @@ import { useEffect, useMemo, useState } from "react";
 import { FileDown, FileSpreadsheet, Printer } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
-import { HIGHLIGHT_COLORS } from "@/lib/timetable/highlightColors";
-import { SUBJECT_COLORS, isSubjectColor } from "@/lib/timetable/subjectColors";
-import { facultySpans } from "@/lib/timetable/facultySpans";
 import { toast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
+import { useCollegeInfo } from "@/hooks/useCollegeInfo";
 import { formatDMY, currentWeekDates } from "@/lib/utils";
 import { isoDateKey } from "@/lib/leave/dayCounter";
 import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
 import { renderHtmlToPdf } from "@/lib/pdf/htmlToPdf";
-import { buildFacultyTimetablePdfHtml, formatTime12h as format12h } from "@/lib/timetable/facultyTimetablePdf";
+import { buildFacultyTimetablePdfHtml } from "@/lib/timetable/facultyTimetablePdf";
 import { downloadFacultyTimetableXlsx } from "@/lib/timetable/timetableExport";
 import { WeekNavigator } from "@/components/timetable/WeekNavigator";
+import { TimetableSheetPreview } from "@/components/timetable/TimetableSheetPreview";
 import type { TeachingAssignment, TimetableSlot, DayOfWeek, CourseYearTiming, PeriodTiming, Course, Department } from "@/types";
-import { DAY_LABELS } from "@/types";
 
 // Grid instead of a per-subject card list: an HOD who also personally
 // teaches thinks in terms of "what am I teaching on Monday period 3", not a
@@ -31,46 +29,13 @@ import { DAY_LABELS } from "@/types";
 
 const DAYS: DayOfWeek[] = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
 
-function toRomanYear(y: number): string {
-  const ROMAN = ["", "I", "II", "III", "IV", "V", "VI"];
-  return ROMAN[y] ?? String(y);
-}
-
-function shortCourseName(c?: string): string {
-  if (!c) return "";
-  const name = c.trim();
-  if (/^(bachelor of technology|b\.?\s?tech)\b/i.test(name)) return "B.Tech";
-  if (/^(master of technology|m\.?\s?tech)\b/i.test(name)) return "M.Tech";
-  if (/^(bachelor of engineering|b\.?\s?e)\.?$/i.test(name)) return "B.E";
-  if (/^(master of business administration|mba)$/i.test(name)) return "MBA";
-  if (/^(master of computer applications|mca)$/i.test(name)) return "MCA";
-  return name;
-}
-
-function formatTeachingShorthand(parts: {
-  courseName?: string;
-  year?: number;
-  semester?: number | string;
-  sectionName?: string;
-}): string {
-  const yearStr = parts.year != null ? toRomanYear(parts.year) : "";
-  const courseStr = shortCourseName(parts.courseName);
-  const semNum = typeof parts.semester === "number" ? parts.semester : (parts.semester ? Number(parts.semester.toString().match(/\d+/g)?.pop()) || parts.semester : undefined);
-  const semStr = semNum != null ? (typeof semNum === "number" ? `${toRomanYear(Number(semNum))} Sem` : `${semNum} Sem`) : "";
-
-  // Strip BS/BSE/BSC prefix tags (e.g. "BSE-ME-A" -> "ME-A", "BSC-CSE-C" -> "CSE-C")
-  let sec = (parts.sectionName ?? "").trim().replace(/^BS[EC]?[-_]/i, "");
-  if (sec) sec = `Section ${sec}`;
-
-  const classPrefix = [yearStr, courseStr, semStr].filter(Boolean).join(" ");
-  return [classPrefix, sec].filter(Boolean).join(" - ");
-}
-
 export default function HODTeachingPage() {
   const { user } = useAuth();
   const [assignments, setAssignments] = useState<TeachingAssignment[]>([]);
   const [timetableSlots, setTimetableSlots] = useState<TimetableSlot[]>([]);
   const [timings, setTimings] = useState<CourseYearTiming[]>([]);
+  // The longest day anywhere in the college, so every faculty member's grid runs from the college's first period to its last.
+  const [collegePeriodCount, setCollegePeriodCount] = useState(0);
   const [courses, setCourses] = useState<Course[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [typeFilter, setTypeFilter] = useState<"ALL" | "THEORY" | "PRACTICAL">("ALL");
@@ -124,6 +89,14 @@ export default function HODTeachingPage() {
             return Array.from(byKey.values());
           });
         }
+        // The college-wide period count (first to last period of the college day), whatever this faculty teaches.
+        try {
+          const allTimingsRes = await fetch("/api/college/course-year-timings");
+          if (allTimingsRes.ok) {
+            const allJson = await allTimingsRes.json() as { timings?: CourseYearTiming[] };
+            setCollegePeriodCount((allJson.timings ?? []).reduce((max, t) => Math.max(max, t.periods?.length || t.numberOfPeriods || 0), 0));
+          }
+        } catch { /* the faculty's own timings still set the grid */ }
         // Course short codes and department codes - needed only for the
         // downloaded PDF's short "B.TECH II ECE-A" style sub-line, never the
         // on-screen grid (which still shows the full course name/ordinal
@@ -153,9 +126,11 @@ export default function HODTeachingPage() {
   const filteredSlots = timetableSlots.filter(
     (s) => !nonTeachingAssignmentIds.has(s.assignmentId) && s.subjectType !== "NON_TEACHING" && !(s as any).isNonTeachingLoad
   );
-  const maxPeriod = filteredSlots.reduce((max, s) => Math.max(max, s.periodNumber), 0);
+  // Every period of the college day, not just the ones with a class in them: the longest day among the
+  // loaded course-year timings, or a placed slot beyond it.
+  const timingPeriodCount = timings.reduce((max, t) => Math.max(max, t.periods?.length || t.numberOfPeriods || 0), 0);
+  const maxPeriod = filteredSlots.reduce((max, s) => Math.max(max, s.periodNumber), Math.max(timingPeriodCount, collegePeriodCount));
   const periods = Array.from({ length: maxPeriod }, (_, i) => i + 1);
-  const displaySlots = typeFilter === "ALL" ? filteredSlots : filteredSlots.filter((s) => s.subjectType === typeFilter);
 
 
     const periodsByCourseYear = new Map<string, PeriodTiming[]>(
@@ -179,34 +154,42 @@ export default function HODTeachingPage() {
     return set;
   }
 
+  const { collegeInfo } = useCollegeInfo();
+  const college = collegeInfo ?? undefined;
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isExportingXlsx, setIsExportingXlsx] = useState(false);
+
+  // The sheet as it downloads and prints: letterhead, grid, class list and signatures. Also what the page shows.
+  function buildSheetHtml() {
+    const semesterSlots = timetableSlots
+      .filter((s) => !s.id.startsWith("substitute_"))
+      .filter((s) => !nonTeachingAssignmentIds.has(s.assignmentId) && s.subjectType !== "NON_TEACHING" && !(s as { isNonTeachingLoad?: boolean }).isNonTeachingLoad)
+      .filter((s) => typeFilter === "ALL" || s.subjectType === typeFilter);
+    const semesterNums = Array.from(new Set(semesterSlots.map((sl) => sl.semester).filter((n): n is number => n != null))).sort((a, b) => a - b);
+    return buildFacultyTimetablePdfHtml({
+      facultyName: user?.name ?? "",
+      departmentName: user?.department,
+      semesterLabel: semesterNums.length > 0 ? semesterNums.join(", ") : "—",
+      weekStart,
+      weekEnd: weekDates[weekDates.length - 1],
+      days: DAYS,
+      periods,
+      slots: semesterSlots,
+      assignmentById,
+      periodTimeFor,
+      breakAfter: breakAfterFor,
+      courseCodeById: new Map(courses.map((c) => [c.id, c.code || c.name])),
+      departments,
+      formatDMY,
+      college,
+    });
+  }
 
   async function downloadPdf() {
     if (periods.length === 0) return;
     setIsExportingPdf(true);
     try {
-      const semesterSlots = timetableSlots
-        .filter((s) => !s.id.startsWith("substitute_"))
-        .filter((s) => !nonTeachingAssignmentIds.has(s.assignmentId) && s.subjectType !== "NON_TEACHING" && !(s as any).isNonTeachingLoad)
-        .filter((s) => typeFilter === "ALL" || s.subjectType === typeFilter);
-      const courseCodeById = new Map(courses.map((c) => [c.id, c.code || c.name]));
-      const html = buildFacultyTimetablePdfHtml({
-        facultyName: user?.name ?? "",
-        departmentName: user?.department,
-        semesterLabel: semesterLabelOf(semesterSlots),
-        weekStart,
-        weekEnd: weekDates[weekDates.length - 1],
-        days: DAYS,
-        periods,
-        slots: semesterSlots,
-        assignmentById,
-        periodTimeFor,
-        breakAfter: breakAfterFor,
-        courseCodeById,
-        departments,
-        formatDMY,
-      });
+      const html = buildSheetHtml();
       await renderHtmlToPdf(html, `Faculty-Teaching-Load-${isoDateKey(weekStart)}.pdf`);
       toast({ title: "Timetable downloaded", description: "Saved as PDF" });
     } catch (err) {
@@ -240,6 +223,8 @@ export default function HODTeachingPage() {
           courseCodeById,
           departments,
           formatDMY,
+          departmentName: user?.department,
+          college,
         },
         `Semester-Timetable-${isoDateKey(weekStart)}.xlsx`
       );
@@ -254,27 +239,7 @@ export default function HODTeachingPage() {
 
   function handlePrint() {
     if (periods.length === 0) return;
-    const semesterSlots = timetableSlots
-      .filter((s) => !s.id.startsWith("substitute_"))
-      .filter((s) => !nonTeachingAssignmentIds.has(s.assignmentId) && s.subjectType !== "NON_TEACHING" && !(s as any).isNonTeachingLoad)
-      .filter((s) => typeFilter === "ALL" || s.subjectType === typeFilter);
-    const courseCodeById = new Map(courses.map((c) => [c.id, c.code || c.name]));
-    const html = buildFacultyTimetablePdfHtml({
-      facultyName: user?.name ?? "",
-      departmentName: user?.department,
-      semesterLabel: semesterLabelOf(semesterSlots),
-      weekStart,
-      weekEnd: weekDates[weekDates.length - 1],
-      days: DAYS,
-      periods,
-      slots: semesterSlots,
-      assignmentById,
-      periodTimeFor,
-      breakAfter: breakAfterFor,
-      courseCodeById,
-      departments,
-      formatDMY,
-    });
+    const html = buildSheetHtml();
     const printWindow = window.open("", "_blank");
     if (!printWindow) {
       toast({ title: "Popup blocked", description: "Please allow popups to print", variant: "destructive" });
@@ -293,7 +258,7 @@ export default function HODTeachingPage() {
     return (
       <div className="space-y-6">
         <PageHeader
-          title="Teaching Load"
+          title="My Time Table"
           description="Your subject allocations and weekly timetable, period by period"
         />
         <div className="h-96 rounded-lg border bg-muted/30 animate-pulse" />
@@ -304,11 +269,11 @@ export default function HODTeachingPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Teaching Load"
+        title="My Time Table"
         description="Your subject allocations and weekly timetable, period by period"
       />
 
-      {periods.length === 0 ? (
+      {filteredSlots.length === 0 ? (
         <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
           No timetable slots have been published for you yet.
         </div>
@@ -339,108 +304,7 @@ export default function HODTeachingPage() {
              </Button>
            </div>
          </div>
-        <div className="overflow-x-auto md:overflow-x-visible rounded-lg border">
-          <table className="w-full text-xs md:table-fixed border-collapse">
-            <colgroup>
-              <col style={{ width: "90px" }} />
-              {periods.map((period) => (
-                <col key={period} style={{ width: "auto" }} />
-              ))}
-            </colgroup>
-            <thead>
-              <tr className="bg-muted/50">
-                <th className="p-2 text-center font-bold text-muted-foreground border-b w-[90px]">Day</th>
-                {periods.map((period) => (
-                  <th key={period} className="p-1.5 text-center font-bold text-foreground border-b">Period {period}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {DAYS.map((d, di) => {
-                // Cells merged in the class timetable are one wide cell here too.
-                const { spans, skipped } = facultySpans(
-                  periods,
-                  (p) => displaySlots.filter((s) => s.day === d && s.periodNumber === p),
-                  breakAfterFor,
-                );
-                return (
-                <tr key={d} className="border-b last:border-b-0">
-                  <td className="p-2 align-top font-medium text-muted-foreground">
-                    <div className="text-foreground font-bold">{DAY_LABELS[d]}</div>
-                    <div className="text-[9px] font-normal truncate">{formatDMY(weekDates[di])}</div>
-                  </td>
-                  {periods.map((period, pi) => {
-                    if (skipped.has(pi)) return null;
-                    // Every slot in the cell, not the first: one faculty can hold
-                    // two sections in the same period (e.g. a combined class).
-                    const cellSlots = displaySlots.filter((s) => s.day === d && s.periodNumber === period);
-                    return (
-                      <td key={period} colSpan={spans.get(pi) ?? 1} className="p-2 align-top">
-                        {cellSlots.length > 0 ? (
-                          <div className="space-y-1.5">
-                            {cellSlots.map((slot, idx) => {
-                              const assignment = assignmentById.get(slot.assignmentId);
-                              const time = periodTimeFor(slot.courseId, slot.year, slot.periodNumber);
-                              const lastTime = (spans.get(pi) ?? 1) > 1 ? periodTimeFor(slot.courseId, slot.year, periods[pi + (spans.get(pi) ?? 1) - 1]) : undefined;
-                              const courseByIdMap = new Map(courses.map((c) => [c.id, c]));
-                              const resolvedCourseName = assignment?.courseName || courseByIdMap.get(slot.courseId || "")?.name;
-                              const subline = formatTeachingShorthand({
-                                courseName: resolvedCourseName,
-                                year: assignment?.year ?? slot.year,
-                                semester: assignment?.timetableSemester ?? assignment?.semester,
-                                sectionName: assignment?.sectionName,
-                              });
-                              const subjectName = slot.subjectName || assignment?.subjectName || "";
-                              const shortCode = assignment?.shortCode;
-                              const titleDisplay = shortCode ? `${subjectName} (${shortCode})` : subjectName;
-                              const codeKey = (shortCode || assignment?.subjectCode || (slot as any).subjectCode || slot.subjectId || "").toUpperCase().trim();
-                              
-                              const nameKey = (subjectName || "").toUpperCase().trim();
-                              const planned = assignment?.cellColor;
-                              const hl = isSubjectColor(planned) ? null : (assignment?.subjectType === "PRACTICAL" || Boolean(slot.labBatch) || /\b(lab|laboratory|practical)\b/i.test(subjectName)) ? HIGHLIGHT_COLORS.purple : null;
-                              const isSubstitute = Boolean(slot.substituteFacultyName || slot.substituteForName);
-
-                              return (
-                                <div key={`${slot.id ?? idx}`} className={`rounded-md border p-2 transition-all ${isSubstitute ? "bg-amber-50 border-amber-200" : isSubjectColor(planned) ? `font-medium ${SUBJECT_COLORS[planned].cell}` : hl ? "font-medium" : "bg-primary/5 border-primary/20"}`}
-                                  style={!isSubstitute && hl ? { background: hl.bg, borderColor: hl.border, color: hl.text } : undefined}>
-                                  {time && (
-                                    <p className="text-[10px] font-medium text-muted-foreground/80 mb-0.5">
-                                      {format12h(time.startTime)}&ndash;{format12h((lastTime ?? time).endTime)}
-                                    </p>
-                                  )}
-                                  <p className="text-xs font-semibold leading-tight">{titleDisplay}</p>
-                                  {slot.substituteFacultyName ? (
-                                    <p className="text-[11px] font-medium text-amber-700 mt-0.5">
-                                      Covered by {slot.substituteFacultyName}{slot.substituteDate ? ` (${formatDMY(slot.substituteDate)})` : ""}
-                                    </p>
-                                  ) : slot.substituteForName ? (
-                                    <p className="text-[11px] font-medium text-amber-700 mt-0.5">
-                                      Substituting for {slot.substituteForName}{slot.substituteDate ? ` (${formatDMY(slot.substituteDate)})` : ""}
-                                    </p>
-                                  ) : (
-                                    subline && <p className="text-[11px] text-muted-foreground mt-0.5">{subline}</p>
-                                  )}
-                                  {slot.classroom && (
-                                    <p className="text-[11px] text-muted-foreground mt-0.5 font-medium">
-                                      {/^room/i.test(slot.classroom.trim()) ? slot.classroom.trim() : `Room: ${slot.classroom.trim()}`}
-                                    </p>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <div className="rounded-md border border-dashed p-2 text-center text-[11px] text-muted-foreground">-</div>
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <TimetableSheetPreview html={buildSheetHtml()} title="My Time Table" />
         </>
       )}
     </div>

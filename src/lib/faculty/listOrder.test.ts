@@ -47,6 +47,11 @@ describe("compareDefaultFacultyOrder", () => {
     ])).toEqual(["HOD", "PRINCIPAL", "OLDEST", "MIDDLE", "NEWEST"]);
   });
 
+  it("orders by TOTAL experience, so a long career elsewhere counts", () => {
+    const external = { academicProfile: { academicExperience: [{ institutionName: "X", fromDate: "1990-01-01", toDate: "2010-01-01" }] } };
+    expect(order([person("LONG HERE", "2005-01-01"), person("LONG CAREER", "2015-01-01", undefined, external)])).toEqual(["LONG CAREER", "LONG HERE"]);
+  });
+
   it("the HOD stays on top even with less service than everyone else", () => {
     expect(order([person("SENIOR", "1995-01-01"), person("HOD", "2025-01-01", ["HOD"])])[0]).toBe("HOD");
   });
