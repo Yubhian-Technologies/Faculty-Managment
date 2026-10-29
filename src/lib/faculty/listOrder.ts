@@ -38,10 +38,27 @@ export function totalExperienceYears(f: Row): number {
   ).total;
 }
 
-/** Array.sort() comparator: HOD, then Principal, then total experience (highest first), then name. */
+/**
+ * The HOD's own arrangement (lib/faculty/facultyOrder.ts stamps `orderRank` on rows of a department that has one):
+ * arranged rows come first, grouped by department then by position; rows with no rank (a department nobody arranged)
+ * come after, left to the default order. Members the HOD's list doesn't name tie at the end of their department.
+ */
+export function compareOrderRank(a: unknown, b: unknown): number {
+  const x = a as Row;
+  const y = b as Row;
+  const rx = typeof x.orderRank === "number";
+  const ry = typeof y.orderRank === "number";
+  if (!rx || !ry) return rx === ry ? 0 : rx ? -1 : 1;
+  const dept = String(x.department ?? "").localeCompare(String(y.department ?? ""));
+  return dept !== 0 ? dept : (x.orderRank as number) - (y.orderRank as number);
+}
+
+/** Array.sort() comparator: the HOD's arrangement when there is one, else HOD, then Principal, then total experience (highest first), then name. */
 export function compareDefaultFacultyOrder(a: unknown, b: unknown): number {
   const x = a as Row;
   const y = b as Row;
+  const arranged = compareOrderRank(x, y);
+  if (arranged !== 0) return arranged;
   const rank = seatRank(x) - seatRank(y);
   if (rank !== 0) return rank;
   const diff = totalExperienceYears(y) - totalExperienceYears(x);

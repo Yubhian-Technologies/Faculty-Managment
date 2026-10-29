@@ -5,6 +5,7 @@
 // falling back to name for faculty with no joiningDate on file.
 import { toDate } from "./facultyTimeline";
 import { facultyDisplayName } from "./facultyDisplayName";
+import { compareOrderRank } from "./listOrder";
 
 type SortableFaculty = {
   userUid?: unknown;
@@ -21,6 +22,8 @@ export function compareFacultyForList(hodUid?: string | null) {
   return (x: unknown, y: unknown): number => {
     const a = x as SortableFaculty;
     const b = y as SortableFaculty;
+    const arranged = compareOrderRank(a, b); // the HOD's own arrangement wins over every default below
+    if (arranged !== 0) return arranged;
     if (hodUid) {
       const aIsHod = a.userUid === hodUid;
       const bIsHod = b.userUid === hodUid;

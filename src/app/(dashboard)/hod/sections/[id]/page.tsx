@@ -16,7 +16,11 @@ import { Pagination } from "@/components/shared/Pagination";
 import { toast } from "@/hooks/useToast";
 import { classRepresentativeCountOf } from "@/lib/sections/classRepresentatives";
 import { sectionTitle, shortCourseName } from "@/lib/sections/sectionTitle";
-import type { Course, Department, SectionListItem, StudentRecord, Subject, SubjectSemesterAssignment } from "@/types";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { resolveDisplaySemester } from "@/lib/college/semester";
+import { semesterInYearLabel } from "@/lib/academic/format";
+import { toDate } from "@/lib/utils";
+import type { Course, CourseYearTiming, Department, SectionListItem, StudentRecord, Subject, SubjectSemesterAssignment } from "@/types";
 import { SUBJECT_TYPE_LABELS, subjectTypeDisplayLabel, type SubjectType } from "@/types";
 
 type SectionRow = SectionListItem;
@@ -38,6 +42,9 @@ export default function SectionRosterPage() {
   const [section, setSection] = useState<SectionRow | null>(null);
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [assignments, setAssignments] = useState<SubjectSemesterAssignment[]>([]);
+  const [timingSemesters, setTimingSemesters] = useState<NonNullable<CourseYearTiming["semesters"]>>([]);
+  const [pickedSemester, setPickedSemester] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -124,10 +131,29 @@ export default function SectionRosterPage() {
                       : `/api/college/subjects?courseId=${encodeURIComponent(sec.courseId)}`)
                       .then((r) => r.json() as Promise<{ subjects: Subject[] }>),
                   ]).then(([assignData, subjData]) => {
-                    const assignedIds = new Set((assignData.assignments ?? []).map((a) => a.subjectId));
+                    const assigns = assignData.assignments ?? [];
+                    const assignedIds = new Set(assigns.map((a) => a.subjectId));
+                    setAssignments(assigns);
                     setSubjects((subjData.subjects ?? []).filter((s) => assignedIds.has(s.id)));
                   })
                 : Promise.resolve()) // ponytail: no department id = nothing assigned to show
+            : Promise.resolve(),
+          // Which semester is running today (the section's own course-year
+          // timing; the API also hands back a shared first year's timing).
+          sec.courseId
+            ? fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(sec.courseId)}`)
+                .then((r) => r.json() as Promise<{ timings?: CourseYearTiming[] }>)
+                .then((td) => {
+                  const t = (td.timings ?? []).find((x) => Number(x.year) === sec.year);
+                  // Dates come over JSON as {_seconds} - revive them for resolveDisplaySemester.
+                  const semesters = (t?.semesters ?? []).map((s) => ({
+                    ...s,
+                    startDate: toDate(s.startDate as never) as never,
+                    endDate: toDate(s.endDate as never) as never,
+                  }));
+                  setTimingSemesters(semesters);
+                })
+                .catch(() => undefined)
             : Promise.resolve(),
         ]);
       } catch {
@@ -142,12 +168,30 @@ export default function SectionRosterPage() {
   // lenient both ways (a subject with no regulation still matches, and a
   // section with no regulation shows every subject), same filter Teaching
   // Assignments applies to its own subject picker.
-  const sectionSubjects = useMemo(
-    () => sortSubjects(
-      subjects.filter((s) => !section?.regulation || !s.regulation || s.regulation === section.regulation)
-    ),
-    [subjects, section]
+  // Semester filter: options = every semester this course-year has (timing)
+  // or has subjects in; defaults to the one running today.
+  const semesterOptions = useMemo(
+    () => [...new Set([...timingSemesters.map((s) => s.semester), ...assignments.map((a) => a.semester)])]
+      .filter((n) => Number.isFinite(n))
+      .sort((a, b) => a - b),
+    [timingSemesters, assignments]
   );
+  const currentSemester = useMemo(() => {
+    const cur = resolveDisplaySemester({ semesters: timingSemesters });
+    return cur != null && semesterOptions.includes(cur) ? cur : (semesterOptions[0] ?? null);
+  }, [timingSemesters, semesterOptions]);
+  const effectiveSemester = pickedSemester != null && semesterOptions.includes(pickedSemester) ? pickedSemester : currentSemester;
+
+  const sectionSubjects = useMemo(() => {
+    const inSemester = new Set(
+      assignments.filter((a) => effectiveSemester == null || a.semester === effectiveSemester).map((a) => a.subjectId)
+    );
+    return sortSubjects(
+      subjects.filter(
+        (s) => inSemester.has(s.id) && (!section?.regulation || !s.regulation || s.regulation === section.regulation)
+      )
+    );
+  }, [subjects, assignments, effectiveSemester, section]);
 
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -237,6 +281,21 @@ export default function SectionRosterPage() {
           <p className="text-sm font-medium flex items-center gap-1.5">
             <BookOpen className="h-4 w-4" />Subjects
             {section.regulation && <Badge variant="secondary" className="text-xs">{section.regulation}</Badge>}
+            {semesterOptions.length > 0 && (
+              <Select
+                value={effectiveSemester != null ? String(effectiveSemester) : ""}
+                onValueChange={(v) => setPickedSemester(Number(v))}
+              >
+                <SelectTrigger className="h-8 w-28 text-xs ml-2"><SelectValue placeholder="Semester" /></SelectTrigger>
+                <SelectContent>
+                  {semesterOptions.map((s) => (
+                    <SelectItem key={s} value={String(s)}>
+                      {semesterInYearLabel(semesterOptions, s, { format: "short" })}{s === currentSemester ? " (current)" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </p>
           {sectionSubjects.length === 0 ? (
             <p className="text-sm text-muted-foreground">

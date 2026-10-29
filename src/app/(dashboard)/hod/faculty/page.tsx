@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { UserPlus, Eye, Upload, Trash2, LogIn, FileDown, UserCog, History, Pencil, ArrowUp, ArrowDown, X, ScanEye } from "lucide-react";
+import { UserPlus, Eye, Upload, Trash2, LogIn, FileDown, UserCog, History, Pencil, ArrowUp, ArrowDown, X, ScanEye, ListOrdered } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,9 @@ import { Avatar } from "@/components/shared/Avatar";
 import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ExportFacultyDialog } from "@/components/faculty/ExportFacultyDialog";
+import { ArrangeHandle } from "@/components/faculty/ArrangeHandle";
+import { moveToPosition } from "@/lib/faculty/arrangeMove";
+import { useReadOnlyAccess } from "@/hooks/useReadOnlyAccess";
 import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { downloadFacultyResume, previewFacultyResumeHtml } from "@/lib/faculty/downloadFacultyResume";
@@ -183,6 +186,7 @@ function HODFacultyContent() {
   const [collegeName, setCollegeName] = useState("");
   const [collegeType, setCollegeType] = useState<CollegeType | undefined>(undefined);
   const myDepartments = useMyDepartments();
+  const readOnlyAccess = useReadOnlyAccess();
   const [departments, setDepartments] = useState<Department[]>([]);
 
   useEffect(() => {
@@ -442,6 +446,92 @@ function HODFacultyContent() {
 
   const noFilters = !filtersApplied && !sort;
 
+  // Arrange Order: while on, every row of ONE department (the chip picked, or the only department listed) carries a pointer
+  // to drag it to another row; each drop saves that department's whole order (PUT /api/college/faculty-order). Needs the
+  // unfiltered, unsorted list so the order shown is the order saved, and a department this HOD heads or its sub-departments.
+  const [arranging, setArranging] = useState(false);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+  const arrangeDeptName = activeDeptFilter || (departmentChips.length === 1 ? departmentChips[0].name : "");
+  const arrangeDeptId = useMemo(
+    () => departments.find((d) => d.name === arrangeDeptName && (myDepartments.includes(d.name) || subDepartments.some((s) => s.id === d.id)))?.id,
+    [departments, arrangeDeptName, myDepartments, subDepartments]
+  );
+  const canArrange = !readOnlyAccess && noFilters && !!arrangeDeptId;
+  const isArranging = arranging && canArrange;
+  const inArrangeDept = (f: FacultyRow) => (f.department as string | undefined)?.trim() === arrangeDeptName;
+  const arrangeIds = useMemo(
+    () => visibleFaculty.filter(inArrangeDept).map((f) => f.id as string),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- inArrangeDept only reads arrangeDeptName
+    [visibleFaculty, arrangeDeptName]
+  );
+  const hasCustomOrder = visibleFaculty.some((f) => inArrangeDept(f) && typeof f.orderRank === "number");
+
+  async function putOrder(order: string[]) {
+    const res = await fetch("/api/college/faculty-order", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ departmentId: arrangeDeptId, order }),
+    });
+    const json = await res.json().catch(() => ({})) as { error?: string };
+    if (!res.ok) throw new Error(json.error ?? "Failed to save the order");
+  }
+
+  function toggleArrange() {
+    if (isArranging) { setArranging(false); return; }
+    if (!canArrange) {
+      toast({ title: "Pick one department first", description: "Clear the filters and sort, and choose a single department, then arrange its order." });
+      return;
+    }
+    setArranging(true);
+  }
+
+  async function dropOnRow() {
+    const from = dragId, to = overId;
+    setDragId(null);
+    setOverId(null);
+    if (!from || !to || from === to) return;
+    const order = moveToPosition(arrangeIds, from, to);
+    if (order === arrangeIds) return;
+    // Shown at once; the save follows, and a failed save reloads the saved order.
+    setFaculty((prev) => prev.map((f) => (inArrangeDept(f) ? { ...f, orderRank: order.includes(f.id as string) ? order.indexOf(f.id as string) : order.length } : f)));
+    try {
+      await putOrder(order);
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save the order" });
+      void load();
+    }
+  }
+
+  async function resetOrder() {
+    try {
+      await putOrder([]);
+      toast({ variant: "success", title: "Order reset to default" });
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to reset the order" });
+    }
+    void load();
+  }
+
+  const arrangeColumn: Column<FacultyRow> = {
+    key: "arrange",
+    header: "",
+    excludeFromCsv: true,
+    className: "w-10 !px-2",
+    render: (row) => inArrangeDept(row) ? (
+      <ArrangeHandle
+        id={row.id as string}
+        name={facultyDisplayName(row)}
+        dragging={dragId === row.id}
+        over={dragId !== null && overId === row.id && dragId !== row.id}
+        onStart={setDragId}
+        onOver={setOverId}
+        onDrop={() => void dropOnRow()}
+        onCancel={() => { setDragId(null); setOverId(null); }}
+      />
+    ) : null,
+  };
+
   const allSelected = visibleFaculty.length > 0 && visibleFaculty.every((f) => selectedIds.has(f.id as string));
   const someSelected = visibleFaculty.some((f) => selectedIds.has(f.id as string)) && !allSelected;
 
@@ -604,6 +694,16 @@ function HODFacultyContent() {
                 </Button>
               </span>
             )}
+            {!readOnlyAccess && (
+              <>
+                {isArranging && hasCustomOrder && (
+                  <Button variant="ghost" onClick={() => void resetOrder()}>Reset to default</Button>
+                )}
+                <Button variant={isArranging ? "default" : "outline"} onClick={toggleArrange}>
+                  <ListOrdered className="h-4 w-4 mr-2" />{isArranging ? "Done arranging" : "Arrange Order"}
+                </Button>
+              </>
+            )}
             <Button variant="outline" onClick={() => router.push("/hod/faculty/import")}>
               <Upload className="h-4 w-4 mr-2" />Import
             </Button>
@@ -739,13 +839,15 @@ function HODFacultyContent() {
         </Card>
       )}
 
+      {/* While arranging, the row under the pointer is tinted and the dragged one fades (flags set by ArrangeHandle). */}
+      <div className={isArranging ? "[&_tr:has([data-over=true])]:bg-primary/10 [&_tr:has([data-dragging=true])]:opacity-40" : undefined}>
       <DataTable
-        paginate
+        paginate={!isArranging}
         data={visibleFaculty}
-        columns={columns}
+        columns={isArranging ? [arrangeColumn, ...columns] : columns}
         isLoading={isLoading}
         keyExtractor={(r) => r.id as string}
-        onRowClick={(row) => router.push(withListBack(`/hod/faculty/${row.id}`, listUrl, LIST_PATH))}
+        onRowClick={isArranging ? undefined : (row) => router.push(withListBack(`/hod/faculty/${row.id}`, listUrl, LIST_PATH))}
         searchPlaceholder="Search by name, email, employee ID, role..."
         searchKeys={["legalName", "nameAsPerPan", "email", "employeeId", "specialization", "seatLabels"] as (keyof FacultyRow)[]}
         // A separate historical view (date-range filters over Date of
@@ -771,6 +873,7 @@ function HODFacultyContent() {
             : undefined
         }
       />
+      </div>
 
       {/* ── Delete Confirm ── */}
       <ConfirmDialog
