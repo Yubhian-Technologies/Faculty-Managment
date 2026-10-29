@@ -49,7 +49,7 @@ export async function GET() {
 // list) - sets/updates the one range for a given academic year.
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("ACADEMICS");
+    const session = await requireCollegeMember("ACADEMICS", "COLLEGE_OFFICE");
     const body = (await readJsonBody(request)) as { academicYear?: string; fromDate?: string; toDate?: string };
 
     const academicYear = body.academicYear?.trim();

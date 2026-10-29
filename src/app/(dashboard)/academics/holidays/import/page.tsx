@@ -2,6 +2,8 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { holidaysBaseFor } from "@/lib/college/holidaysBase";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,6 +20,7 @@ type ImportResult = {
 };
 
 export default function HolidaysImportPage() {
+  const holidaysBase = holidaysBaseFor(usePathname());
   const fileRef = useRef<HTMLInputElement>(null);
   const [rows, setRows] = useState<ParsedRow[]>([]);
   const [ignoredHeaders, setIgnoredHeaders] = useState<string[]>([]);
@@ -116,7 +119,7 @@ export default function HolidaysImportPage() {
         description="Bulk-add the academic calendar's holidays at once instead of one at a time"
         actions={
           <Button variant="outline" asChild>
-            <Link href="/academics/holidays"><ArrowLeft className="h-4 w-4 mr-1" />Back to Holidays</Link>
+            <Link href={holidaysBase}><ArrowLeft className="h-4 w-4 mr-1" />Back to Holidays</Link>
           </Button>
         }
       />
@@ -281,7 +284,7 @@ export default function HolidaysImportPage() {
             )}
             {result.created > 0 && (
               <Button asChild variant="outline" size="sm">
-                <Link href="/academics/holidays">View Holidays</Link>
+                <Link href={holidaysBase}>View Holidays</Link>
               </Button>
             )}
           </CardContent>
