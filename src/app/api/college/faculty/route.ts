@@ -12,7 +12,8 @@ import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/fir
 import { getHodDepartmentScope, getDepartmentTreeNames, canHodManageFacultyDepartment, facultyManageableDepartmentNames } from "@/lib/departments/scope";
 import { LEGACY_TECHNICAL_DESIGNATIONS } from "@/lib/designations/config";
 import { resolveDesignation } from "@/lib/designations/validate";
-import { resolveHonorific } from "@/lib/honorifics/validate";
+import { resolveHonorific, fetchActiveHonorificNames } from "@/lib/honorifics/validate";
+import { honorificForPhd } from "@/lib/faculty/phdHonorific";
 import { experienceBreakdown, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
 import { normalizePreviousTeachingAssignments } from "@/lib/faculty/previousTeaching";
@@ -21,13 +22,15 @@ import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { mobileNoFromBody } from "@/lib/faculty/mobileNo";
 import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { compareFacultyForList } from "@/lib/faculty/sortFacultyForList";
 import type { Designation, FacultyStatus, EmployeeCategory } from "@/types";
 import {
   EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE, SELECTABLE_FACULTY_STATUS_VALUES, FACULTY_STATUS_ERROR_MESSAGE,
   isFacultyAvailable, FACULTY_STATUS_DATE_FIELD, FACULTY_STATUS_DATE_LABELS,
 } from "@/types";
 import { loadDepartmentIndex, stampDepartmentIds } from "@/lib/departments/stampIds";
-import { loadSeatPhrasesByHolder } from "@/lib/roles/seatLabels";
+import { loadSeatsByHolder } from "@/lib/roles/seatLabels";
+import { compareDefaultFacultyOrder } from "@/lib/faculty/listOrder";
 import { whereIn, type QueryLike } from "@/lib/firestore/inQuery";
 
 export async function GET(request: Request) {
@@ -251,27 +254,40 @@ export async function GET(request: Request) {
     let teachingOnly = faculty.filter((f) => !LEGACY_TECHNICAL_DESIGNATIONS.includes(f.designation as string));
     if (availableOnly) teachingOnly = teachingOnly.filter((f) => isFacultyAvailable(f.status as string));
 
-    teachingOnly.sort((a, b) =>
-      facultyDisplayName(a as { legalName?: string }).localeCompare(
-        facultyDisplayName(b as { legalName?: string })
-      )
-    );
+    // Department's HOD first, then the rest by Date of Joining (seniority) -
+    // an HOD viewing their own roster is always this session; anyone else
+    // (Office/Principal/VP/pickers) asking about one specific department
+    // needs that department's own hodUid looked up.
+    let hodUid: string | undefined = session.role === "HOD" ? session.uid : undefined;
+    if (!hodUid && deptFilter) {
+      const deptSnap = await db
+        .collection("colleges").doc(session.collegeId).collection("departments")
+        .where("name", "==", deptFilter).limit(1).get();
+      hodUid = (deptSnap.docs[0]?.data() as { hodUid?: string } | undefined)?.hodUid;
+    }
     // Opt-in (`?withSeats=1`, the Faculty Register lists only): the seats each person holds, as short phrases
-    // ("HOD of CSE"), so a Principal / HOD can see who holds a position without opening the seat register.
-    // Additive and display-only; the pickers that reuse this route skip the extra read.
+    // ("HOD of CSE") and as role codes, so a Principal / HOD can see who holds a position without opening the seat register
+    // and the list can put the HOD and the Principal first. Additive and display-only; the pickers that reuse this route
+    // skip the extra read (and keep their order: the department's HOD first, then earliest joining).
     if (searchParams.get("withSeats") === "1") {
       try {
-        const phrases = await loadSeatPhrasesByHolder(getAdminDb(), session.collegeId);
-        if (phrases.size > 0) {
-          for (const f of teachingOnly) {
-            const uid = typeof f.userUid === "string" ? f.userUid : "";
-            const held = uid ? phrases.get(uid) : undefined;
-            if (held?.length) f.seatLabels = held;
-          }
+        const seats = await loadSeatsByHolder(getAdminDb(), session.collegeId);
+        for (const f of teachingOnly) {
+          const uid = typeof f.userUid === "string" ? f.userUid : "";
+          const held = uid ? seats.get(uid) : undefined;
+          if (held?.phrases.length) f.seatLabels = held.phrases;
+          const codes = held ? [...held.roles] : [];
+          // the department's own HOD (looked up above) counts as the HOD even if no seat row names them
+          if (hodUid && uid === hodUid && !codes.includes("HOD")) codes.push("HOD");
+          if (codes.length) f.seatRoleCodes = codes;
         }
       } catch (err) {
         console.error("[college/faculty GET] seat labels", err);
       }
+      // HOD, then Principal, then internal experience (highest first) - lib/faculty/listOrder.ts
+      teachingOnly.sort(compareDefaultFacultyOrder);
+    } else {
+      teachingOnly.sort(compareFacultyForList(hodUid));
     }
 
     return NextResponse.json({ faculty: teachingOnly });
@@ -380,7 +396,8 @@ export async function POST(request: Request) {
     // the catalog) - every use of finalName below happens after the
     // honorific-validation block further down, which already returns 400
     // before reaching any of them if it's invalid.
-    const finalName = facultyDisplayName({ legalName: body.legalName, honorific: body.honorific });
+    // (re-worked below once the honorific is resolved - a Ph.D with none given gets the college's "Dr")
+    let finalName = facultyDisplayName({ legalName: body.legalName, honorific: body.honorific });
     // Uploaded before the record exists (under a temp id), so we can only check
     // it came from our own upload endpoint, not that it names this specific id.
     if (profilePhotoUrl !== undefined && !profilePhotoUrl.startsWith("https://firebasestorage.googleapis.com/")) {
@@ -410,6 +427,14 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: honorificResult.error }, { status: 400 });
       }
       resolvedHonorific = honorificResult.name;
+    }
+    // Ph.D with no honorific given -> the college's own "Dr" entry (lib/faculty/phdHonorific.ts); an honorific the caller gave is kept.
+    if (!resolvedHonorific && !body.honorific?.trim()) {
+      const dr = honorificForPhd({ isPhd: normalizeHighestQualification(highestQualification) === "Ph.D", honorific: undefined }, await fetchActiveHonorificNames(db, collegeId));
+      if (dr) {
+        resolvedHonorific = dr;
+        finalName = facultyDisplayName({ legalName: body.legalName, honorific: dr });
+      }
     }
 
     // Resolve the owning department. A parent HOD may add faculty straight into

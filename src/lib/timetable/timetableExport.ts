@@ -461,7 +461,7 @@ export interface FacultyTimetableXlsxOptions {
 }
 
 export async function downloadFacultyTimetableXlsx(opts: FacultyTimetableXlsxOptions, filename: string): Promise<void> {
-  const { facultyName, semesterLabel, days, periods, slots, assignmentById, periodTimeFor, courseCodeById } = opts;
+  const { facultyName, semesterLabel, days, periods, slots, assignmentById, periodTimeFor } = opts;
 
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "Faculty Management System";
@@ -582,11 +582,11 @@ export async function downloadFacultyTimetableXlsx(opts: FacultyTimetableXlsxOpt
       } else {
         const textBlocks = cellSlots.map((slot) => {
           const assignment = assignmentById.get(slot.assignmentId);
-          const courseCode = assignment?.courseId ? courseCodeById.get(assignment.courseId) : undefined;
-          const classStr = [courseCode ?? assignment?.courseName, assignment?.year ? `Yr ${assignment.year}` : null, assignment?.sectionName ? `Sec ${assignment.sectionName}` : null].filter(Boolean).join(" ");
-          const subjStr = subjectAbbreviation(assignment?.subjectName || slot.subjectName, assignment?.shortCode);
+          // The class as "III B.Tech-CSBS-A" (year, course, branch and section) - no subject code in the cell.
+          const classStr = facultyClassLabel({ courseName: assignment?.courseName, year: assignment?.year, sectionName: assignment?.sectionName, departmentName: assignment?.department });
           const roomStr = slot.classroom ? (/^room/i.test(slot.classroom.trim()) ? slot.classroom.trim() : `ROOM NO: ${slot.classroom.trim()}`) : "";
-          return [classStr, subjStr, roomStr].filter(Boolean).join("\n");
+          const acrStr = subjectAbbreviation(assignment?.subjectName || slot.subjectName, assignment?.shortCode);
+          return [classStr, acrStr, roomStr].filter(Boolean).join("\n");
         });
         cell.value = textBlocks.join("\n---\n");
         cell.font = { size: 9, bold: true };
@@ -602,7 +602,7 @@ export async function downloadFacultyTimetableXlsx(opts: FacultyTimetableXlsxOpt
   const classRows = new Map<string, { cls: string; acr: string; name: string }>();
   for (const a of shownAssignments) {
     const semester = slots.find((sl) => sl.assignmentId === a.id)?.semester ?? a.semester;
-    const cls = facultyClassLabel({ courseName: a.courseName, year: a.year, semester, sectionName: a.sectionName });
+    const cls = facultyClassLabel({ courseName: a.courseName, year: a.year, semester, sectionName: a.sectionName, departmentName: a.department });
     const acr = subjectAbbreviation(a.subjectName, a.shortCode) || "—";
     const name = a.subjectName ?? "—";
     classRows.set(`${cls}|${acr}|${name}`, { cls, acr, name });
