@@ -35,6 +35,7 @@ const STYLE = `${EXAM_HEADER_STYLE}
   .sign { display: flex; justify-content: space-between; margin-top: 24px; font-weight: bold; }
   .sig { height: 22px; }
   table.sheet td { padding: 3px 5px; font-size: 11px; }
+  table.sheet th.mk { font-size: 9.5px; padding: 3px 2px; }
   .sheet-foot { display: flex; justify-content: space-between; align-items: baseline; margin-top: 6px; }
   .sheet-sign { display: flex; justify-content: space-between; margin-top: 16px; font-weight: bold; }
   .front { border: 1.2px solid #000; background: #eee; text-align: center; font-weight: bold; padding: 3px; margin-bottom: 4px; letter-spacing: 2px; }
@@ -128,8 +129,11 @@ export function noticeBoardHTML(c: College, p: ExamSeatingPlan): string {
   return shell(c, p, "Seating Arrangement", `<table><thead><tr><th style="width:26%">Room</th><th>Section</th><th>From Regd. No</th><th>To Regd. No</th><th style="width:9%">Count</th></tr></thead><tbody>${rows}</tbody></table>`);
 }
 
-/** One exam of one branch on one day (from the Mid timetable): subject(s) and time. */
-export interface SheetExam { date: string; time: string; subjects: { name: string; code: string }[] }
+/**
+ * One exam of one branch on one day (from the Mid timetable): subject(s), time, and
+ * the marks columns - the subject's components from Mid Configuration > Marks.
+ */
+export interface SheetExam { date: string; time: string; subjects: { name: string; code: string; id?: string }[]; marks?: { name: string; maxMarks: number }[] }
 
 /**
  * Signature sheets - one per exam day + subject x room x branch (paired plans
@@ -159,12 +163,18 @@ export function signatureSheetsHTML(c: College, p: ExamSeatingPlan, examsOf?: (g
       ["Branch", esc(group)],
       sections.length ? [sections.length > 1 ? "Sections" : "Section", esc(sections.join(", "))] : null,
     ].filter((x): x is string[] => Boolean(x));
-    const rows = list.map(({ s, seat }, i) => `<tr><td>${i + 1}</td><td>${seat}</td><td><b>${esc(s.rollNumber)}</b></td><td class="l">${esc(s.name)}</td><td class="sig"></td><td></td><td></td></tr>`).join("");
+    // A column per configured component (+ Total when there are several); none configured = one Marks column.
+    const marks = exam?.marks?.length ? exam.marks : [];
+    const markHeads = marks.length
+      ? [...marks.map((m) => `${esc(m.name)}<br>(${m.maxMarks})`), ...(marks.length > 1 ? [`Total<br>(${marks.reduce((n, m) => n + m.maxMarks, 0)})`] : [])]
+      : ["Marks"];
+    const markWidth = Math.max(6, Math.min(10, Math.floor(36 / markHeads.length)));
+    const rows = list.map(({ s, seat }, i) => `<tr><td>${i + 1}</td><td>${seat}</td><td><b>${esc(s.rollNumber)}</b></td><td class="l">${esc(s.name)}</td><td class="sig"></td>${markHeads.map(() => "<td></td>").join("")}</tr>`).join("");
     return `<!DOCTYPE html><html><head><meta charset="utf-8" /><style>${STYLE}</style></head><body><div class="page">
       <div class="pdf-page-header"></div>
       ${examHeaderHTML({ college: c, lines: lines(c, p), academicYear: c.academicYear, title: "Signature Sheet" })}
       <table class="facts"><tbody>${facts.map(([k, v]) => `<tr><th style="width:22%;text-align:left">${k}</th><td class="l"><b>${v}</b></td></tr>`).join("")}</tbody></table>
-      <table class="sheet" style="margin-top:8px"><thead><tr><th style="width:6%">S.No</th><th style="width:7%">Bench</th><th style="width:14%">Regd. No</th><th>Name</th><th style="width:16%">Signature</th><th style="width:9%">Marks<br>(Figures)</th><th style="width:14%">Marks<br>(Words)</th></tr></thead><tbody>${rows}</tbody></table>
+      <table class="sheet" style="margin-top:8px"><thead><tr><th style="width:6%">S.No</th><th style="width:7%">Bench</th><th style="width:14%">Regd. No</th><th>Name</th><th style="width:15%">Signature</th>${markHeads.map((h) => `<th class="mk" style="width:${markWidth}%">${h}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>
       <div class="sheet-foot"><span>Total: ${list.length} &nbsp;&nbsp; Present: ______ &nbsp;&nbsp; Absent: ______</span></div>
       <div class="sheet-sign"><span>Invigilator</span><span>Chief Superintendent</span></div>
     </div></body></html>`;

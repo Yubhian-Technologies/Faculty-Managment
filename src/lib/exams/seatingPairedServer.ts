@@ -8,6 +8,7 @@ import type { MidExamPlan, MidTimetable, Section } from "@/types";
 import { timeLabel, usualSessionOf } from "@/lib/midTimetable/rules";
 import type { ExamSeatingPlan, SeatingStudent } from "@/types/examSeating";
 import { offSessionExams, roomClashes, roomUses, type GroupExam } from "@/lib/exams/seatingTiming";
+import { loadExamConfig } from "@/lib/exams/internalExamMarks";
 
 // Paired seating, server side: the Mid timetables to seat (one arrangement for
 // every exam day of the Mid), the (branch + year) groups in them, and each
@@ -139,4 +140,40 @@ export async function seatingTimingCheck(db: Firestore, collegeId: string, planI
     return now && now !== me.examTime ? [{ group: g, now }] : [];
   }) : [];
   return { examTime: me.examTime ?? "", clashes: roomClashes(mine, others), offSession: offSessionExams(mine, me.examTime), moved };
+}
+
+/** One marks column of a signature sheet - a component of the subject's internal marks breakdown. */
+export interface SheetMarkColumn { name: string; maxMarks: number }
+
+/**
+ * The marks columns of each branch's subjects in these Mid timetables, from
+ * Mid Configuration > Marks (`loadExamConfig`: the subject's marks category,
+ * else the branch + year Theory configuration) - active components in order.
+ * Keyed `${group}|${subjectId}`, group as the plan names it ("CSE (1st Year)").
+ * A subject with nothing configured is left out.
+ */
+export async function sheetMarkColumns(db: Firestore, collegeId: string, midPlanIds: string[]): Promise<Record<string, SheetMarkColumn[]>> {
+  const collegeRef = db.collection("colleges").doc(collegeId);
+  const tts = (await timetables(db, collegeId)).filter((t) => midPlanIds.includes(t.planId));
+  const out: Record<string, SheetMarkColumn[]> = {};
+  const cache = new Map<string, Promise<SheetMarkColumn[] | null>>();
+  const columnsFor = (courseIds: string[], year: number, subjectId: string) => {
+    const k = `${courseIds.join(",")}|${year}|${subjectId}`;
+    if (!cache.has(k)) cache.set(k, (async () => {
+      // A branch may span several Course docs - the first that has a configuration answers.
+      for (const courseId of courseIds.length ? courseIds : [null]) {
+        const config = await loadExamConfig(collegeRef, { courseId, year, examType: "THEORY", subjectId });
+        if (config) {
+          return config.components.filter((c) => c.isActive).sort((a, b) => a.order - b.order).map((c) => ({ name: c.name, maxMarks: c.maxMarks }));
+        }
+      }
+      return null;
+    })());
+    return cache.get(k)!;
+  };
+  await Promise.all(tts.flatMap((t) => [...new Set(t.slots.map((s) => s.subjectId))].map(async (subjectId) => {
+    const cols = await columnsFor(t.courseIds ?? [], t.year, subjectId);
+    if (cols?.length) out[`${t.branch} (${ordinalYearLabel(t.year)})|${subjectId}`] = cols;
+  })));
+  return out;
 }

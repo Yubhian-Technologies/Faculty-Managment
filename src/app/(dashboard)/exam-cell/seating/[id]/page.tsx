@@ -144,13 +144,20 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
           const ses = d.plan.sessions.find((x) => x.id === sl.sessionId) ?? b.timetable.sessions.find((x) => x.id === sl.sessionId);
           const key = `${sl.date}|${sl.sessionId}`;
           const e = exams.get(key) ?? { date: sl.date, time: ses ? `${ses.from}-${ses.to}` : "", subjects: [] };
-          e.subjects.push({ name: sl.subjectName, code: sl.subjectCode });
+          e.subjects.push({ name: sl.subjectName, code: sl.subjectCode, id: sl.subjectId });
           exams.set(key, e);
         }
         map.set(group, [...(map.get(group) ?? []), ...exams.values()]);
       }
     }
-    return map.size ? (group) => map.get(group) ?? [] : undefined;
+    if (map.size === 0) return undefined;
+    // Each exam's marks columns (Mid Configuration > Marks); electives take the first subject that has them.
+    const { columns } = await fetch(`/api/college/exam-seating/marks?planIds=${encodeURIComponent(ids.join(","))}`)
+      .then((r) => (r.ok ? r.json() : {})).catch(() => ({})) as { columns?: Record<string, SheetExam["marks"]> };
+    for (const [group, exams] of map) for (const e of exams) {
+      e.marks = e.subjects.map((x) => columns?.[`${group}|${x.id}`]).find((m) => m?.length);
+    }
+    return (group) => map.get(group) ?? [];
   }
 
   async function pdf(kind: "rooms" | "notice" | "attendance") {
