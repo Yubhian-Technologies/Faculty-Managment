@@ -23,13 +23,13 @@ function katexCss(): string {
 
 export async function downloadMidQuestionBankPdf(data: Omit<MidBankPdfData, "college" | "katexCss" | "formula">): Promise<void> {
   const [info, logoUrl, formula] = await Promise.all([
-    fetch("/api/college/info").then((r) => (r.ok ? r.json() : {})).catch(() => ({})) as Promise<{ name?: string; affiliation?: string; address?: string }>,
+    fetch("/api/college/info").then((r) => (r.ok ? r.json() : {})).catch(() => ({})) as Promise<{ name?: string; affiliation?: string; address?: string; academicYear?: string }>,
     fetchCollegeLogoUrl(),
     pdfFormulaRenderer(),
   ]);
   const html = getMidQuestionBankHTML({
     ...data,
-    college: { name: info.name || "College", affiliation: info.affiliation, address: info.address, logoUrl },
+    college: { name: info.name || "College", affiliation: info.affiliation, address: info.address, logoUrl, academicYear: info.academicYear },
     katexCss: katexCss(),
     formula,
   });

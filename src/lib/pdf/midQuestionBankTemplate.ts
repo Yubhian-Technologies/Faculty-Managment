@@ -1,4 +1,4 @@
-import { logoSrc } from "@/lib/pdf/logo";
+import { EXAM_HEADER_STYLE, examHeaderHTML } from "@/lib/pdf/examHeader";
 import { renderMathHtml } from "@/lib/midBank/renderMath";
 import { derivePoPso } from "@/lib/midBank/outcomes";
 import { QUESTIONS_PER_UNIT } from "@/lib/midBank/constants";
@@ -42,7 +42,7 @@ const STYLE = `
 `;
 
 export interface MidBankPdfData {
-  college: { name: string; affiliation?: string; address?: string; logoUrl?: string };
+  college: { name: string; affiliation?: string; address?: string; logoUrl?: string; academicYear?: string };
   subject: { name: string; code: string; courseName: string; regulation: string; year: number; semester: number | null; department: string };
   facultyName: string;
   bank: Pick<MidQuestionBank, "midNumber" | "units" | "format" | "marks">;
@@ -80,14 +80,14 @@ export function getMidQuestionBankHTML(d: MidBankPdfData): string {
     <table class="cos"><tbody>${d.outcomes.cos.map((c) => `<tr><td class="narrow"><b>${esc(c.id)}</b></td><td>${esc(c.statement)}</td></tr>`).join("")}</tbody></table>`;
 
   const s = d.subject;
-  return `<!DOCTYPE html><html><head><meta charset="utf-8" /><style>${d.katexCss}</style><style>${STYLE}</style></head><body><div class="page">
-    <div class="pdf-page-header">
-      <img src="${logoSrc(d.college.logoUrl)}" alt="College logo" />
-      <div><p class="college">${esc(d.college.name)}</p>${d.college.affiliation ? `<p class="sub">${esc(d.college.affiliation)}</p>` : ""}${d.college.address ? `<p class="sub">${esc(d.college.address)}</p>` : ""}</div>
-    </div>
-    <h1>Mid ${d.bank.midNumber} Question Bank</h1>
-    <div class="meta">${esc(s.name)} (${esc(s.code)}) · ${esc(s.courseName)}${s.regulation ? ` · ${esc(s.regulation)}` : ""} · Year ${s.year}${s.semester ? `, Sem ${s.semester}` : ""} · ${esc(s.department)}<br/>
-      Units ${d.bank.units.join(", ")} · Prepared by ${esc(d.facultyName)}</div>
+  return `<!DOCTYPE html><html><head><meta charset="utf-8" /><style>${d.katexCss}</style><style>${EXAM_HEADER_STYLE}${STYLE}</style></head><body><div class="page">
+    ${examHeaderHTML({
+      college: d.college,
+      lines: [`${s.courseName}${s.regulation ? ` (${s.regulation})` : ""} - Year ${s.year}${s.semester ? ` - Semester ${s.semester}` : ""} - Mid-${d.bank.midNumber} Examination`.toUpperCase()],
+      academicYear: d.college.academicYear,
+      title: `${s.name} (${s.code}) - Mid ${d.bank.midNumber} Question Bank`,
+      meta: [[`Branch: <b>${esc(s.department)}</b>`, `Units: <b>${d.bank.units.join(", ")}</b>`], ["", `Prepared by: <b>${esc(d.facultyName)}</b>`]],
+    })}
     ${coTable}
     ${unitTables}
   </div></body></html>`;

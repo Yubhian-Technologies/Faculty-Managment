@@ -1,4 +1,4 @@
-import { logoSrc } from "@/lib/pdf/logo";
+import { EXAM_HEADER_STYLE, examHeaderHTML, examLine, type ExamOf } from "@/lib/pdf/examHeader";
 import { timeLabel } from "@/lib/midTimetable/rules";
 import type { MidExamSession, MidExamSlot } from "@/types";
 
@@ -8,11 +8,10 @@ import type { MidExamSession, MidExamSlot } from "@/types";
 // the exam days across the top; electives share a cell under their heading.
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
-const ROMAN = ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
 const WEEKDAY = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const dmy = (d: string) => `${d.slice(8, 10)}-${d.slice(5, 7)}-${d.slice(0, 4)}`;
 
-const STYLE = `
+const STYLE = `${EXAM_HEADER_STYLE}
   body { font-family: Arial, Helvetica, sans-serif; margin: 0; color: #111; font-size: 12.5px; }
   .page { width: 297mm; padding: 10mm 12mm; box-sizing: border-box; }
   .pdf-page-header { display: flex; align-items: center; justify-content: center; gap: 14px; margin-bottom: 4px; }
@@ -48,6 +47,9 @@ export interface MidTimetableSheetPrint {
   rows: { branch: string; slots: MidExamSlot[]; usualSessionId?: string }[];
   /** Session-wise sheets: the session's name, printed beside TIME TABLE. */
   sessionTitle?: string;
+  /** For the exam line ("I B.TECH. I SEMESTER MID-1 EXAMINATION") and the academic year in the header. */
+  exam?: ExamOf;
+  academicYear?: string;
 }
 
 /** One sheet per session: the branches with an exam then, and only those exams (the session's time on top). */
@@ -84,13 +86,13 @@ export function getMidTimetableHTML(d: { college: { name: string; affiliation?: 
   const months = [...new Set(t.days.map((x) => new Date(`${x}T00:00:00Z`).toLocaleDateString("en-IN", { month: "long", year: "numeric", timeZone: "UTC" }).toUpperCase()))].join(" / ");
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8" /><style>${STYLE}</style></head><body><div class="page">
-    <div class="pdf-page-header">
-      <img src="${logoSrc(d.college.logoUrl)}" alt="College logo" />
-      <div class="center"><p class="college">${esc(d.college.name)}</p>${d.college.affiliation ? `<p class="sub">(${esc(d.college.affiliation)})</p>` : ""}</div>
-    </div>
-    <p class="center branch-office">EXAMINATION BRANCH</p>
-    <p class="center exam">${esc(t.courseName)} - ${ROMAN[t.year] ?? t.year} YEAR - SEMESTER ${t.semester} &nbsp; MID-${ROMAN[t.midNumber] ?? t.midNumber} EXAMINATIONS${months ? ` - ${esc(months)}` : ""}</p>
-    <div class="row2"><span></span><span class="tt">TIME TABLE${t.sessionTitle ? ` - ${esc(t.sessionTitle.toUpperCase())} SESSION` : ""}</span><span class="time">${esc(time)}</span></div>
+    ${examHeaderHTML({
+      college: d.college,
+      lines: [t.exam ? examLine(t.exam) : `${t.courseName} - Year ${t.year} - Semester ${t.semester} - Mid-${t.midNumber} Examination`.toUpperCase()],
+      academicYear: t.academicYear,
+      title: `Time Table${t.sessionTitle ? ` - ${t.sessionTitle} Session` : ""}${months ? ` - ${months}` : ""}`,
+      meta: time ? [["", `<b>${esc(time)}</b>`]] : undefined,
+    })}
     <table><thead>${head}</thead><tbody>${body}</tbody></table>
     <div class="sign"><span>Controller of Examinations</span><span>Principal</span></div>
   </div></body></html>`;
@@ -114,13 +116,12 @@ export function getBranchTimetableHTML(d: { college: { name: string; affiliation
     .bt { width: 78%; margin: 0 auto; } .bt td { padding: 8px 10px; } .bt td.l { text-align: left; } .c2 { color: #333; font-size: 0.9em; }
     .brn { text-align: center; font-weight: bold; font-size: 15px; margin: 6px 0 10px; }
   </style></head><body><div class="page">
-    <div class="pdf-page-header">
-      <img src="${logoSrc(d.college.logoUrl)}" alt="College logo" />
-      <div class="center"><p class="college">${esc(d.college.name)}</p>${d.college.affiliation ? `<p class="sub">(${esc(d.college.affiliation)})</p>` : ""}</div>
-    </div>
-    <p class="center branch-office">EXAMINATION BRANCH</p>
-    <p class="center exam">${esc(t.courseName)} - ${ROMAN[t.year] ?? t.year} YEAR - SEMESTER ${t.semester} &nbsp; MID-${ROMAN[t.midNumber] ?? t.midNumber} EXAMINATIONS${months ? ` - ${esc(months)}` : ""}</p>
-    <p class="brn">${esc(r.branch)} &nbsp;-&nbsp; TIME TABLE</p>
+    ${examHeaderHTML({
+      college: d.college,
+      lines: [t.exam ? examLine(t.exam) : `${t.courseName} - Year ${t.year} - Semester ${t.semester} - Mid-${t.midNumber} Examination`.toUpperCase()],
+      academicYear: t.academicYear,
+      title: `${r.branch} - Time Table${months ? ` - ${months}` : ""}`,
+    })}
     <table class="bt"><thead><tr><th style="width:16%">Date</th><th style="width:14%">Day</th><th style="width:22%">Time</th><th>Subject</th></tr></thead><tbody>${rows}</tbody></table>
     <div class="sign"><span>Controller of Examinations</span><span>Principal</span></div>
   </div></body></html>`;

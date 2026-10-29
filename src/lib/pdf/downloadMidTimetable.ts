@@ -68,10 +68,11 @@ async function landscapePdf(htmls: string[], fileName: string): Promise<void> {
  */
 export async function downloadMidTimetablePdf(sheet: MidTimetableSheetPrint, fileName: string, mode: "sheet" | "branches" | "sessions" = "sheet"): Promise<void> {
   const [info, logoUrl] = await Promise.all([
-    fetch("/api/college/info").then((r) => (r.ok ? r.json() : {})).catch(() => ({})) as Promise<{ name?: string; affiliation?: string; address?: string }>,
+    fetch("/api/college/info").then((r) => (r.ok ? r.json() : {})).catch(() => ({})) as Promise<{ name?: string; affiliation?: string; address?: string; academicYear?: string }>,
     fetchCollegeLogoUrl(),
   ]);
   const college = { name: info.name || "College", affiliation: info.affiliation, address: info.address, logoUrl };
+  sheet = { ...sheet, academicYear: sheet.academicYear ?? info.academicYear };
   const htmls = mode === "branches"
     ? sheet.rows.filter((r) => r.slots.length).map((row) => getBranchTimetableHTML({ college, sheet, row }))
     : mode === "sessions" ? splitBySession(sheet).map((s) => getMidTimetableHTML({ college, sheet: s }))

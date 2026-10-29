@@ -7,7 +7,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { actorName, guardError } from "@/lib/midBank/server";
 import { branchKey } from "@/lib/midBank/sections";
 import { cleanDays, cleanSessions, DEFAULT_MAX_PER_DAY, MAX_SESSIONS } from "@/lib/midTimetable/rules";
-import { branchSubjects, loadPlan, MID_TIMETABLE_EDITORS, midTimetableRefs, midWindow } from "@/lib/midTimetable/server";
+import { branchSubjects, examOfPlan, loadPlan, MID_TIMETABLE_EDITORS, midTimetableRefs, midWindow } from "@/lib/midTimetable/server";
 import type { MidTimetable } from "@/types";
 
 // Exam Cell: one Mid's timetable plan - its exam days and sessions, and every
@@ -23,10 +23,11 @@ export async function GET(_request: Request, { params }: Params) {
     const db = getAdminDb();
     const plan = await loadPlan(db, session.collegeId, planId);
     if (!plan) return NextResponse.json({ error: "Timetable not found" }, { status: 404 });
-    const [window, subjects, tts] = await Promise.all([
+    const [window, subjects, tts, exam] = await Promise.all([
       midWindow(db, session.collegeId, plan),
       branchSubjects(db, session.collegeId, plan),
       midTimetableRefs(db, session.collegeId).timetables.where("planId", "==", planId).get(),
+      examOfPlan(db, session.collegeId, plan),
     ]);
     const saved = new Map(tts.docs.map((d) => [d.id, { id: d.id, ...(d.data() as Omit<MidTimetable, "id">) }]));
     const branches = [...subjects.entries()].map(([branch, list]) => {
@@ -35,7 +36,7 @@ export async function GET(_request: Request, { params }: Params) {
     });
     // The range days are picked from: the Mid's published dates, else the plan's own.
     const range = window ? { from: window.from, to: window.to } : plan.from && plan.to ? { from: plan.from, to: plan.to } : null;
-    return NextResponse.json({ plan, window, range, branches });
+    return NextResponse.json({ plan, window, range, branches, exam });
   } catch (err) {
     return guardError(err, "[college/mid-timetables/[planId] GET]");
   }

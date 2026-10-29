@@ -20,6 +20,7 @@ import { SeatingTimingCheck } from "@/components/exams/SeatingTimingCheck";
 import { fetchCollegeLogoUrl } from "@/lib/pdf/logo";
 import { renderHtmlToPdf, renderMultiHtmlToPdf } from "@/lib/pdf/htmlToPdf";
 import { noticeBoardHTML, roomSheetHTML, seatingWhen, signatureSheetsHTML, type SheetExam } from "@/lib/pdf/examSeatingTemplate";
+import { examLine, type ExamOf } from "@/lib/pdf/examHeader";
 import { ordinalYearLabel } from "@/lib/college/courseYears";
 import type { MidExamPlan, MidTimetable } from "@/types";
 import type { ExamSeatingPlan } from "@/types/examSeating";
@@ -155,10 +156,13 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
     setPdfBusy(kind);
     try {
       const [info, logoUrl] = await Promise.all([
-        fetch("/api/college/info").then((r) => (r.ok ? r.json() : {})).catch(() => ({})) as Promise<{ name?: string }>,
+        fetch("/api/college/info").then((r) => (r.ok ? r.json() : {})).catch(() => ({})) as Promise<{ name?: string; academicYear?: string }>,
         fetchCollegeLogoUrl(),
       ]);
-      const c = { name: info.name || "College", logoUrl };
+      // The exam line(s) of the Mid timetable(s) seated: "I B.TECH. I SEMESTER MID-1 EXAMINATION".
+      const examLines = (await Promise.all((plan!.midPlanIds ?? []).map((mid) => fetch(`/api/college/mid-timetables/${encodeURIComponent(mid)}`)
+        .then((r) => (r.ok ? (r.json() as Promise<{ exam?: ExamOf }>) : {})).then((d: { exam?: ExamOf }) => (d.exam ? examLine(d.exam) : "")).catch(() => "")))).filter(Boolean);
+      const c = { name: info.name || "College", logoUrl, examLines: [...new Set(examLines)], academicYear: info.academicYear };
       const base = plan!.name.replace(/[^a-z0-9]+/gi, "-");
       if (kind === "notice") await renderHtmlToPdf(noticeBoardHTML(c, plan!), `${base}-notice-board.pdf`);
       else if (kind === "rooms") await renderMultiHtmlToPdf(usedRooms.map((r) => roomSheetHTML(c, plan!, r)), `${base}-room-sheets.pdf`);

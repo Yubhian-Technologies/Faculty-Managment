@@ -3,6 +3,7 @@ import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { findCurrentSectionDoc } from "@/lib/students/findCurrentSectionDoc";
 import { findOwnStudent } from "@/lib/students/ownContext";
 import { teachingFor } from "@/lib/midBank/server";
+import { loadEffectiveTiming } from "@/lib/college/semester";
 import type { ExamMidSchedule, MidExamPlan, MidTimetable, Section, TeachingAssignment } from "@/types";
 import type { BranchSubject } from "./rules";
 
@@ -98,4 +99,19 @@ export async function visibleTimetables(db: Db, session: Session): Promise<MidTi
   return published.filter((t) =>
     (scope && canHodEditDepartment(scope, t.branch))
     || t.courseIds.some((c) => keys.has(`${c}|${t.year}|${t.branch}`)));
+}
+
+/** What the exam line of a Mid's documents needs: course code and the semester of the year ("I SEMESTER"). */
+export async function examOfPlan(db: Db, collegeId: string, p: Pick<MidExamPlan, "courseIds" | "courseName" | "year" | "semester" | "midNumber">) {
+  const courseId = p.courseIds[0];
+  const [course, timing] = await Promise.all([
+    courseId ? midTimetableRefs(db, collegeId).college.collection("courses").doc(courseId).get() : null,
+    courseId ? loadEffectiveTiming(db, collegeId, courseId, p.year).catch(() => null) : null,
+  ]);
+  const sems = [...new Set((timing?.semesters ?? []).map((s) => s.semester))].sort((a, b) => a - b);
+  return {
+    courseCode: (course?.data() as { code?: string } | undefined)?.code || p.courseName,
+    year: p.year, semester: p.semester, midNumber: p.midNumber,
+    semesterInYear: sems.includes(p.semester) ? sems.indexOf(p.semester) + 1 : null,
+  };
 }

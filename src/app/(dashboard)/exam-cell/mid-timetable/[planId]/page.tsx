@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { ordinalYearLabel } from "@/lib/college/courseYears";
 import { autoFill, checkSlots, dayLabel, DEFAULT_MAX_PER_DAY, MAX_SESSIONS, timeLabel, usualSessionOf, type BranchSubject } from "@/lib/midTimetable/rules";
 import { downloadMidTimetablePdf } from "@/lib/pdf/downloadMidTimetable";
+import type { ExamOf } from "@/lib/pdf/examHeader";
 import type { MidExamPlan, MidExamSession, MidExamSlot, MidTimetable, MidTimetableChange } from "@/types";
 
 // Exam Cell: one Mid's timetable as ONE sheet, like the printed one - branches
@@ -27,7 +28,7 @@ import type { MidExamPlan, MidExamSession, MidExamSlot, MidTimetable, MidTimetab
 // fills the empty days; Save draft / Publish all save every branch.
 
 interface Branch { branch: string; key: string; subjects: BranchSubject[]; timetable: MidTimetable | null }
-interface Data { plan: MidExamPlan; window: { from: string; to: string } | null; range: { from: string; to: string } | null; branches: Branch[] }
+interface Data { plan: MidExamPlan; window: { from: string; to: string } | null; range: { from: string; to: string } | null; branches: Branch[]; exam?: ExamOf }
 type Row = { subjectId: string; date: string; sessionId: string; group?: string; movedFrom?: string };
 type CellRef = { key: string; date: string; sessionId: string };
 
@@ -199,7 +200,7 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
       const rows = data.branches.map((b) => ({ branch: b.branch, slots: slotsOf(b), usualSessionId: usualOf(b) }));
       const sessions = onlySession ? plan.sessions.filter((x) => x.id === onlySession) : plan.sessions;
       const label = onlySession ? sessions[0]?.label ?? "session" : mode === "sessions" ? "session-wise" : "timetable";
-      await downloadMidTimetablePdf({ ...plan, sessions, rows }, `mid${plan.midNumber}-${plan.courseName}-year${plan.year}-${label}`, mode);
+      await downloadMidTimetablePdf({ ...plan, sessions, rows, exam: data.exam }, `mid${plan.midNumber}-${plan.courseName}-year${plan.year}-${label}`, mode);
     } catch { toast({ variant: "destructive", title: "Could not make the PDF" }); }
     finally { setBusy(null); }
   }

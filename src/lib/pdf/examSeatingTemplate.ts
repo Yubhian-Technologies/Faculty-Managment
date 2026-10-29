@@ -1,4 +1,4 @@
-import { logoSrc } from "@/lib/pdf/logo";
+import { EXAM_HEADER_STYLE, examHeaderHTML } from "@/lib/pdf/examHeader";
 import { benchRows } from "@/lib/exams/seatingLayers";
 import { rollRangeBySection } from "@/lib/exams/seatingAllocator";
 import { SEAT_LETTERS } from "@/lib/exams/seatingPaired";
@@ -12,7 +12,7 @@ import type { ExamSeatingPlan, SeatingRoomAllocation } from "@/types/examSeating
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
-const STYLE = `
+const STYLE = `${EXAM_HEADER_STYLE}
   body { font-family: Arial, Helvetica, sans-serif; margin: 0; color: #000; font-size: 12px; }
   .page { width: 210mm; padding: 0 12mm; box-sizing: border-box; }
   .pdf-page-header { height: 8mm; }
@@ -38,7 +38,9 @@ const STYLE = `
   .sheet-sign { display: flex; justify-content: space-between; margin-top: 16px; font-weight: bold; }
 `;
 
-type College = { name: string; logoUrl?: string };
+/** The college plus, for the letterhead, the exam line(s) ("I B.TECH. I SEMESTER MID-1 EXAMINATION") and academic year. */
+type College = { name: string; logoUrl?: string; examLines?: string[]; academicYear?: string };
+const lines = (c: College, p: ExamSeatingPlan) => (c.examLines?.length ? c.examLines : [p.name]);
 
 /** "Fri 2 Oct 2026 - Thu 8 Oct 2026 · 10:00 AM - 11:30 AM" - the Mid's exam days (one arrangement for all of them). */
 export function seatingWhen(p: Pick<ExamSeatingPlan, "examDays" | "examDate" | "examTime">): string {
@@ -53,9 +55,7 @@ const when = seatingWhen;
 function shell(c: College, p: ExamSeatingPlan, title: string, body: string): string {
   return `<!DOCTYPE html><html><head><meta charset="utf-8" /><style>${STYLE}</style></head><body><div class="page">
     <div class="pdf-page-header"></div>
-    <div class="head"><img src="${logoSrc(c.logoUrl)}" alt="" /><div class="center"><p class="college">${esc(c.name)}</p>
-      <p class="line"><b>${esc(p.name)}</b></p>${when(p) ? `<p class="line">${esc(when(p))}</p>` : ""}<p class="big">${esc(title)}</p></div><span></span></div>
-    <hr />${body}
+    ${examHeaderHTML({ college: c, lines: lines(c, p), academicYear: c.academicYear, title, meta: when(p) ? [["", `<b>${esc(when(p))}</b>`]] : undefined })}${body}
   </div></body></html>`;
 }
 
@@ -108,9 +108,7 @@ export function signatureSheetsHTML(c: College, p: ExamSeatingPlan, examsOf?: (g
     const rows = list.map(({ s, seat }, i) => `<tr><td>${i + 1}</td><td>${seat}</td><td><b>${esc(s.rollNumber)}</b></td><td class="l">${esc(s.name)}</td><td>${esc(sectionOnly(s.sectionLabel))}</td><td class="sig"></td></tr>`).join("");
     return `<!DOCTYPE html><html><head><meta charset="utf-8" /><style>${STYLE}</style></head><body><div class="page">
       <div class="pdf-page-header"></div>
-      <div class="head"><img src="${logoSrc(c.logoUrl)}" alt="" /><div class="center"><p class="college">${esc(c.name)}</p>
-        <p class="line"><b>${esc(p.name)}</b></p><p class="big">Signature Sheet</p></div><span></span></div>
-      <hr />
+      ${examHeaderHTML({ college: c, lines: lines(c, p), academicYear: c.academicYear, title: "Signature Sheet" })}
       <table class="facts"><tbody>${facts.map(([k, v]) => `<tr><th style="width:22%;text-align:left">${k}</th><td class="l"><b>${v}</b></td></tr>`).join("")}</tbody></table>
       <table class="sheet" style="margin-top:8px"><thead><tr><th style="width:6%">S.No</th><th style="width:7%">Bench</th><th style="width:15%">Regd. No</th><th>Name</th><th style="width:10%">Section</th><th style="width:19%">Signature</th></tr></thead><tbody>${rows}</tbody></table>
       <div class="sheet-foot"><span>Total: ${list.length} &nbsp;&nbsp; Present: ______ &nbsp;&nbsp; Absent: ______</span></div>
