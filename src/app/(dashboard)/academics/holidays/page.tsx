@@ -36,7 +36,7 @@ const DAY_NAMES: Record<string, string> = {
 };
 const CATEGORY_HINT: Record<HolidayCategory, string> = {
   REGULAR: "The yearly list. Everyone gets the day off.",
-  BRIDGE: "A day between two holidays, so people get a long break. Everyone gets it off. Offering a Sunday in return is optional.",
+  BRIDGE: "A day between two holidays, so people get a long break. Everyone gets it off. Making it up on a Sunday is optional.",
   CLASS_SUSPENDED: "Classes suspended at short notice (a death, bandh, cyclone, flood ...).",
 };
 const MONTH_NAMES = [
@@ -49,7 +49,7 @@ function emptyForm() {
   return {
     date: "", name: "", type: "COLLEGE" as HolidayType, appliesTo: "BOTH" as HolidayAudience,
     category: "REGULAR" as HolidayCategory, hostelersOutingAllowed: false,
-    offerCompensatory: false, compensatoryDateKey: "",
+    offerCompensatory: false, compensatoryDateKey: "", compensatoryFollowsDay: "",
   };
 }
 
@@ -263,7 +263,7 @@ export default function AcademicsHolidaysPage() {
     setForm({
       date: toDateInputValue(h.date), name: h.name, type: h.type, appliesTo: h.appliesTo ?? "BOTH",
       category: h.category ?? "REGULAR", hostelersOutingAllowed: h.hostelersOutingAllowed ?? false,
-      offerCompensatory: false, compensatoryDateKey: "",
+      offerCompensatory: false, compensatoryDateKey: "", compensatoryFollowsDay: "",
     });
     setOpen(true);
   }
@@ -274,7 +274,7 @@ export default function AcademicsHolidaysPage() {
       return;
     }
     if (form.category === "BRIDGE" && form.offerCompensatory && !form.compensatoryDateKey) {
-      toast({ variant: "destructive", title: "Pick the compensatory Sunday" });
+      toast({ variant: "destructive", title: "Pick the Sunday it is shifted to" });
       return;
     }
     setIsSaving(true);
@@ -296,6 +296,7 @@ export default function AcademicsHolidaysPage() {
           category: form.category,
           hostelersOutingAllowed: form.hostelersOutingAllowed,
           compensatoryDateKey: form.category === "BRIDGE" && form.offerCompensatory ? form.compensatoryDateKey : undefined,
+          compensatoryFollowsDay: form.category === "BRIDGE" && form.offerCompensatory && form.compensatoryFollowsDay ? form.compensatoryFollowsDay : undefined,
         }),
       });
       const data = (await res.json()) as { error?: string };
@@ -636,7 +637,7 @@ export default function AcademicsHolidaysPage() {
                         </p>
                         {h.category === "BRIDGE" && h.compensatoryDateKey && (
                           <p>
-                            Sunday {formatDate(h.compensatoryDateKey)} ({DAY_NAMES[h.compensatoryFollowsDay ?? ""] ?? ""} timetable):{" "}
+                            Compensated on Sunday {formatDate(h.compensatoryDateKey)} ({DAY_NAMES[h.compensatoryFollowsDay ?? ""] ?? ""} timetable):{" "}
                             {h.compensatoryEnabled ? "working day" : "awaiting Principal / VP"}
                           </p>
                         )}
@@ -804,20 +805,42 @@ export default function AcademicsHolidaysPage() {
               <div className="space-y-2 rounded-lg border p-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <Label>Offer a compensatory Sunday (optional)</Label>
+                    <Label>Is this holiday compensated?</Label>
                     <p className="text-xs text-muted-foreground">
-                      That Sunday would run {form.date ? "the bridged day's" : "this day's"} timetable for students and faculty. The Principal or Vice Principal decides whether it is worked.
+                      Optional. If yes, a Sunday is worked in its place, running the timetable of the day being compensated. The Principal or Vice Principal decides whether it is actually worked.
                     </p>
                   </div>
-                  <Switch checked={form.offerCompensatory} onCheckedChange={(v) => setForm((f) => ({ ...f, offerCompensatory: v }))} />
+                  <SegmentedTabs
+                    value={form.offerCompensatory ? "YES" : "NO"}
+                    onChange={(v) => setForm((f) => ({ ...f, offerCompensatory: v === "YES" }))}
+                    options={[{ key: "YES", label: "Yes" }, { key: "NO", label: "No" }]}
+                  />
                 </div>
                 {form.offerCompensatory && (
-                  <Input
-                    type="date"
-                    value={form.compensatoryDateKey}
-                    min={form.date || undefined}
-                    onChange={(e) => setForm((f) => ({ ...f, compensatoryDateKey: e.target.value }))}
-                  />
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label>Day being compensated</Label>
+                      <Select
+                        value={form.compensatoryFollowsDay || ALL_SENTINEL}
+                        onValueChange={(v) => setForm((f) => ({ ...f, compensatoryFollowsDay: v === ALL_SENTINEL ? "" : v }))}
+                      >
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={ALL_SENTINEL}>The holiday&rsquo;s own weekday</SelectItem>
+                          {Object.entries(DAY_NAMES).map(([k, label]) => <SelectItem key={k} value={k}>{label}&rsquo;s timetable</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Shifted to (a Sunday)</Label>
+                      <Input
+                        type="date"
+                        value={form.compensatoryDateKey}
+                        min={form.date || undefined}
+                        onChange={(e) => setForm((f) => ({ ...f, compensatoryDateKey: e.target.value }))}
+                      />
+                    </div>
+                  </div>
                 )}
               </div>
             )}

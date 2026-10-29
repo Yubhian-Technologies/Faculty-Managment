@@ -64,8 +64,8 @@ export default function PrincipalHolidaysPage() {
     <div className="space-y-6">
       <PrincipalHolidaysTabs active="compensatory" />
       <PageHeader
-        title="Compensatory Sundays"
-        description="Compensatory holidays that offer a Sunday in return. Switch one on to make that Sunday a working day for students and faculty, running the bridged day's timetable."
+        title="Compensatory Working Days"
+        description="Compensatory holidays that are made up on a Sunday. Switch one on to make that Sunday a working day for students and faculty, running the timetable of the day being compensated."
       />
       <Card>
         <CardContent className="p-0">

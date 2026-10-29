@@ -54,7 +54,7 @@ export async function POST(request: Request) {
     const body = (await readJsonBody(request)) as {
       date?: string; name?: string; type?: HolidayType; appliesTo?: HolidayAudience;
       category?: HolidayCategory; hostelersOutingAllowed?: boolean;
-      compensatoryDateKey?: string; compensatoryEnabled?: boolean;
+      compensatoryDateKey?: string; compensatoryFollowsDay?: string; compensatoryEnabled?: boolean;
     };
 
     const category: HolidayCategory = body.category ?? "REGULAR";
@@ -96,9 +96,13 @@ export async function POST(request: Request) {
         if (!isDateKey(body.compensatoryDateKey) || !isSundayKey(body.compensatoryDateKey) || body.compensatoryDateKey <= dateKey) {
           return NextResponse.json({ error: "The compensatory day must be a Sunday after the holiday" }, { status: 400 });
         }
+        const chosenDay = body.compensatoryFollowsDay;
+        if (chosenDay != null && !["MON", "TUE", "WED", "THU", "FRI", "SAT"].includes(chosenDay)) {
+          return NextResponse.json({ error: "Invalid day being compensated" }, { status: 400 });
+        }
         compensatory = {
           compensatoryDateKey: body.compensatoryDateKey,
-          compensatoryFollowsDay: followsDay,
+          compensatoryFollowsDay: chosenDay ?? followsDay,
           compensatoryEnabled: (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") && body.compensatoryEnabled === true,
         };
       }
@@ -128,7 +132,7 @@ export async function POST(request: Request) {
       for (const role of ["PRINCIPAL", "VICE_PRINCIPAL"]) {
         await notifyRole(
           db, session.collegeId, role, "COMPENSATORY_SUNDAY_PENDING",
-          "Compensatory Sunday needs a decision",
+          "Compensatory working day needs a decision",
           `${body.name.trim()} is a compensatory holiday. Decide whether ${compensatory.compensatoryDateKey} is a working day.`,
           "/principal/holidays"
         );
