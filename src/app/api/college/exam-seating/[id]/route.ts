@@ -6,6 +6,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { validateLayeredRoom } from "@/lib/exams/seatingLayers";
 import { validatePairedRoom } from "@/lib/exams/seatingPaired";
+import { seatingTimingCheck } from "@/lib/exams/seatingPairedServer";
 import type { ExamSeatingPlan, SeatingRoomAllocation, SeatingStudent } from "@/types/examSeating";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -91,6 +92,14 @@ export async function PATCH(request: Request, { params }: Ctx) {
       return NextResponse.json({ error: "Place every student before publishing" }, { status: 400 });
     }
 
+    // A paired plan can't go out while one of its rooms is also in use by another plan at the same time.
+    if (update.status === "PUBLISHED" && plan.mode === "PAIRED") {
+      const check = await seatingTimingCheck(getAdminDb(), session.collegeId, id);
+      if (check?.clashes.length) {
+        const c = check.clashes[0];
+        return NextResponse.json({ error: `Room ${c.room} is also used by "${c.otherPlan}" on ${c.date} (${c.theirs.from}-${c.theirs.to}) - see the timing check` }, { status: 409 });
+      }
+    }
     await ref.update(update);
     return NextResponse.json({ ok: true });
   } catch (err) {

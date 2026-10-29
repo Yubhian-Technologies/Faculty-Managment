@@ -6,7 +6,8 @@ import { sortByRoll } from "@/lib/exams/seatingAllocator";
 import { sectionLabel } from "@/lib/exams/seatingSections";
 import type { MidExamPlan, MidTimetable, Section } from "@/types";
 import { timeLabel, usualSessionOf } from "@/lib/midTimetable/rules";
-import type { SeatingStudent } from "@/types/examSeating";
+import type { ExamSeatingPlan, SeatingStudent } from "@/types/examSeating";
+import { offSessionExams, roomClashes, roomUses, type GroupExam } from "@/lib/exams/seatingTiming";
 
 // Paired seating, server side: the Mid timetables to seat (one arrangement for
 // every exam day of the Mid), the (branch + year) groups in them, and each
@@ -88,4 +89,54 @@ export async function midGroups(db: Firestore, collegeId: string, planIds: strin
 export async function groupStudents(db: Firestore, collegeId: string, g: SittingGroup): Promise<SeatingStudent[]> {
   const lists = await Promise.all(g.sections.map((s) => loadSectionStudents(db, collegeId, s)));
   return lists.flatMap((l, i) => sortByRoll(l).map((st) => ({ ...st, sectionLabel: sectionLabel(g.sections[i]), group: g.label })));
+}
+
+/**
+ * The timing check of a PAIRED plan: room clashes with other paired plans (a
+ * room in use at overlapping times on one day - a branch's second exam at
+ * another time counts, as its students sit in the same seats), the plan's
+ * branches' exams outside its session, and branches whose usual session no
+ * longer is the plan's (the timetable changed after the build).
+ */
+export async function seatingTimingCheck(db: Firestore, collegeId: string, planId: string) {
+  const college = db.collection("colleges").doc(collegeId);
+  const [planSnaps, tts, mids] = await Promise.all([
+    college.collection("examSeatingPlans").where("mode", "==", "PAIRED").get(),
+    timetables(db, collegeId),
+    college.collection("midExamPlans").get(),
+  ]);
+  const midById = new Map(mids.docs.map((d) => [d.id, d.data() as MidExamPlan]));
+  const plans = planSnaps.docs.map((d) => ({ ...(d.data() as ExamSeatingPlan), id: d.id }));
+  const me = plans.find((p) => p.id === planId);
+  if (!me) return null;
+
+  // Each group's (branch + year) exams by date + session, from the timetables, and its usual time.
+  const examsByGroup = new Map<string, GroupExam[]>();
+  const usualByGroup = new Map<string, string>();
+  for (const t of tts) {
+    const mid = midById.get(t.planId);
+    const sessions = mid?.sessions?.length ? mid.sessions : t.sessions;
+    const label = `${t.branch} (${ordinalYearLabel(t.year)})`;
+    const exams = new Map<string, GroupExam>();
+    for (const sl of t.slots) {
+      const s = sessions.find((x) => x.id === sl.sessionId) ?? t.sessions.find((x) => x.id === sl.sessionId);
+      if (!s) continue;
+      const k = `${sl.date}|${s.from}`;
+      const e = exams.get(k) ?? { date: sl.date, from: s.from, to: s.to, subjects: [] };
+      e.subjects.push(sl.subjectName);
+      exams.set(k, e);
+    }
+    examsByGroup.set(`${t.planId}|${label}`, [...exams.values()]);
+    usualByGroup.set(`${t.planId}|${label}`, usualTime(t, mid));
+  }
+  const examsFor = (p: ExamSeatingPlan) => (group: string) => (p.midPlanIds ?? []).flatMap((id) => examsByGroup.get(`${id}|${group}`) ?? []);
+
+  const mine = roomUses(me, examsFor(me));
+  const others = plans.filter((p) => p.id !== me.id && (p.midPlanIds ?? []).length).map((p) => ({ name: p.name, uses: roomUses(p, examsFor(p)) }));
+  const groups = [...new Set(me.rooms.flatMap((r) => r.students.map((s) => s.group).filter((g): g is string => Boolean(g))))];
+  const moved = me.examTime ? groups.flatMap((g) => {
+    const now = (me.midPlanIds ?? []).map((id) => usualByGroup.get(`${id}|${g}`)).find(Boolean);
+    return now && now !== me.examTime ? [{ group: g, now }] : [];
+  }) : [];
+  return { examTime: me.examTime ?? "", clashes: roomClashes(mine, others), offSession: offSessionExams(mine, me.examTime), moved };
 }

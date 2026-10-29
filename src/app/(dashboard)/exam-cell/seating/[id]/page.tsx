@@ -16,6 +16,7 @@ import { moveStudent, rollRangeBySection } from "@/lib/exams/seatingAllocator";
 import { benchRows, moveStudentLayered } from "@/lib/exams/seatingLayers";
 import { AllotSectionPanel } from "@/components/exams/AllotSectionPanel";
 import { SEAT_LETTERS } from "@/lib/exams/seatingPaired";
+import { SeatingTimingCheck } from "@/components/exams/SeatingTimingCheck";
 import { fetchCollegeLogoUrl } from "@/lib/pdf/logo";
 import { renderHtmlToPdf, renderMultiHtmlToPdf } from "@/lib/pdf/htmlToPdf";
 import { noticeBoardHTML, roomSheetHTML, seatingWhen, signatureSheetsHTML, type SheetExam } from "@/lib/pdf/examSeatingTemplate";
@@ -200,6 +201,7 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
         />
 
         {plan.mode === "LAYERED" && !published && <AllotSectionPanel plan={plan} onAllotted={reload} />}
+        {paired && (plan.midPlanIds ?? []).length > 0 && <SeatingTimingCheck planId={plan.id} reloadKey={plan.status} />}
         {paired && plan.streams && (
           <Card>
             <CardContent className="flex flex-wrap gap-x-6 gap-y-1 p-4 text-sm">
