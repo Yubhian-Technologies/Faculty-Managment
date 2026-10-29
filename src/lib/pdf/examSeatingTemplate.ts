@@ -2,6 +2,7 @@ import { EXAM_HEADER_STYLE, examHeaderHTML } from "@/lib/pdf/examHeader";
 import { benchRows } from "@/lib/exams/seatingLayers";
 import { rollRangeBySection } from "@/lib/exams/seatingAllocator";
 import { SEAT_LETTERS } from "@/lib/exams/seatingPaired";
+import { roomRows } from "@/lib/exams/roomLayout";
 import { dayLabel, timeLabel } from "@/lib/midTimetable/rules";
 import type { ExamSeatingPlan, SeatingRoomAllocation } from "@/types/examSeating";
 
@@ -36,6 +37,13 @@ const STYLE = `${EXAM_HEADER_STYLE}
   table.sheet td { padding: 3px 5px; font-size: 11px; }
   .sheet-foot { display: flex; justify-content: space-between; align-items: baseline; margin-top: 6px; }
   .sheet-sign { display: flex; justify-content: space-between; margin-top: 16px; font-weight: bold; }
+  .front { border: 1.2px solid #000; background: #eee; text-align: center; font-weight: bold; padding: 3px; margin-bottom: 4px; letter-spacing: 2px; }
+  table.layout { table-layout: fixed; }
+  table.layout td { padding: 3px 4px; vertical-align: top; text-align: left; }
+  table.layout td.gap { border: 0; width: 3mm; }
+  table.layout .bn { font-size: 9.5px; color: #333; }
+  table.layout .seat { font-size: 11px; white-space: nowrap; }
+  table.layout th { font-size: 10.5px; }
 `;
 
 /** The college plus, for the letterhead, the exam line(s) ("I B.TECH. I SEMESTER MID-1 EXAMINATION") and academic year. */
@@ -77,7 +85,36 @@ function shell(c: College, p: ExamSeatingPlan, title: string, body: string): str
 const roomTitle = (r: SeatingRoomAllocation) => `Block ${r.block}, Floor ${r.floor}, Room ${r.name}`;
 const ranges = (c: College, r: SeatingRoomAllocation) => `<div class="ranges">${rollRangeBySection(r.students).map((g) => `<span>${esc(shortSection(g.sectionLabel, c.courseCode))}: <b>${esc(g.from)} - ${esc(g.to)}</b> (${g.count})</span>`).join("")}</div>`;
 
+/**
+ * The room as it stands (rooms with bench columns): the board at the front,
+ * columns side by side, rows front to back, each bench with its seats' Regd. Nos.
+ * Benches are numbered column by column, as they were filled.
+ */
+function layoutHTML(r: SeatingRoomAllocation, columns: number): string {
+  const per = r.perBench ?? 1;
+  const benches = r.benches ?? r.capacity;
+  const rows = roomRows(benches, columns);
+  const byBench = benchRows(r);
+  const cell = (n: number) => {
+    if (n > benches) return `<td style="border:0"></td>`;
+    const seats = byBench[n - 1] ?? [];
+    const lines = Array.from({ length: per }, (_, l) => {
+      const s = seats[l];
+      return `<div class="seat">${per > 1 ? `${SEAT_LETTERS[l] ?? l + 1}: ` : ""}${s ? `<b>${esc(s.rollNumber)}</b>` : "-"}</div>`;
+    }).join("");
+    return `<td><div class="bn">Bench ${n}</div>${lines}</td>`;
+  };
+  const cols = Array.from({ length: columns }, (_, i) => i + 1);
+  const head = cols.map((k) => `<th>Column ${k}</th>`).join(`<td class="gap"></td>`);
+  const body = Array.from({ length: rows }, (_, i) => `<tr>${cols.map((k) => cell((k - 1) * rows + i + 1)).join(`<td class="gap"></td>`)}</tr>`).join("");
+  return `<div class="front">FRONT (BOARD)</div><table class="layout"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
 export function roomSheetHTML(c: College, p: ExamSeatingPlan, r: SeatingRoomAllocation): string {
+  if (r.columns) {
+    const body = `${ranges(c, r)}${layoutHTML(r, r.columns)}<p class="line" style="margin-top:8px">${r.students.length} students</p>`;
+    return shell(c, p, roomTitle(r), body);
+  }
   const per = r.perBench ?? 1;
   const rows = benchRows(r).map((row, b) => `<tr><td><b>${b + 1}</b></td>${row.map((s) => `<td>${s ? `<b>${esc(s.rollNumber)}</b> <span class="grp">${esc(shortSection(s.sectionLabel, c.courseCode))}</span>` : "-"}</td>`).join("")}</tr>`).join("");
   const body = `${ranges(c, r)}<table><thead><tr><th style="width:12%">Bench</th>${Array.from({ length: per }, (_, i) => `<th>Seat ${SEAT_LETTERS[i] ?? i + 1}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>

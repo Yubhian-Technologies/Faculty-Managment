@@ -14,6 +14,7 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { moveStudent, rollRangeBySection } from "@/lib/exams/seatingAllocator";
 import { benchRows, moveStudentLayered } from "@/lib/exams/seatingLayers";
+import { benchPosition, roomRows } from "@/lib/exams/roomLayout";
 import { AllotSectionPanel } from "@/components/exams/AllotSectionPanel";
 import { SEAT_LETTERS } from "@/lib/exams/seatingPaired";
 import { SeatingTimingCheck } from "@/components/exams/SeatingTimingCheck";
@@ -241,7 +242,7 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
                 <p className="text-xs text-muted-foreground">Block {room.block} · Floor {room.floor} · {plan.name}</p>
               </div>
               <p className="text-sm text-muted-foreground">
-                {room.students.length} / {room.capacity} seats{layered ? ` · ${room.benches ?? room.capacity} benches × ${room.perBench ?? 1}` : ""}
+                {room.students.length} / {room.capacity} seats{layered ? ` · ${room.benches ?? room.capacity} benches × ${room.perBench ?? 1}` : ""}{room.columns ? ` · ${room.columns} columns × ${roomRows(room.benches ?? room.capacity, room.columns)} rows` : ""}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -262,7 +263,10 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
                 <tbody>
                   {benchRows(room).map((row, b) => (
                     <tr key={b} className="border-b last:border-0 align-top">
-                      <td className="py-1.5">{b + 1}</td>
+                      <td className="py-1.5">
+                        {b + 1}
+                        {room.columns && (() => { const at = benchPosition(b + 1, room.benches ?? room.capacity, room.columns); return <span className="block text-[11px] text-muted-foreground">C{at.column} · R{at.row}</span>; })()}
+                      </td>
                       {row.map((s, l) => (
                         <td key={l} className="py-1.5 pr-3">
                           {s ? (

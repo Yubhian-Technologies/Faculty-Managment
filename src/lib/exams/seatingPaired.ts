@@ -9,7 +9,7 @@ import type { SeatingRoomAllocation, SeatingStudent } from "@/types/examSeating"
 
 export const SEAT_LETTERS = "ABC";
 
-export interface PairedRoom { roomId: string; name: string; block: string; floor: number; benches: number; perBench: number }
+export interface PairedRoom { roomId: string; name: string; block: string; floor: number; benches: number; perBench: number; columns?: number }
 
 export function allocatePaired(rooms: PairedRoom[], streams: SeatingStudent[][]): { rooms: SeatingRoomAllocation[]; unplaced: SeatingStudent[] } {
   const next = streams.map(() => 0);
@@ -24,7 +24,7 @@ export function allocatePaired(rooms: PairedRoom[], streams: SeatingStudent[][])
         students.push({ ...streams[s][next[s]++], bench, layer: s + 1 });
       }
     }
-    return { roomId: r.roomId, name: r.name, block: r.block, floor: r.floor, capacity: r.benches * r.perBench, benches: r.benches, perBench: r.perBench, students };
+    return { roomId: r.roomId, name: r.name, block: r.block, floor: r.floor, capacity: r.benches * r.perBench, benches: r.benches, perBench: r.perBench, ...(r.columns ? { columns: r.columns } : {}), students };
   });
   return { rooms: out, unplaced: streams.flatMap((list, s) => list.slice(next[s])) };
 }

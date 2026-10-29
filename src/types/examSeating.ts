@@ -14,6 +14,9 @@ export interface ExamRoom {
   // only `capacity` - see lib/exams/roomLayout.ts for the fallbacks.
   benches?: number;
   studentsPerBench?: number;
+  // Bench columns (the room's layout): benches are numbered column by column -
+  // column 1 front to back, then column 2 - and print as that grid. Absent = a plain list.
+  columns?: number;
   capacity: number;
   isActive: boolean;
   createdAt?: unknown;
@@ -59,6 +62,7 @@ export interface SeatingRoomAllocation {
   capacity: number;
   benches?: number;
   perBench?: number;
+  columns?: number;
   // Sections Exam Cell handpicked for this room. Empty/absent = any section
   // may fill it, in the order the sections were listed.
   allowedSectionIds?: string[];

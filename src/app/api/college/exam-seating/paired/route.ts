@@ -5,7 +5,7 @@ import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { guardError } from "@/lib/midBank/server";
-import { roomBenches, roomPerBench } from "@/lib/exams/roomLayout";
+import { roomBenches, roomPerBench, roomColumns } from "@/lib/exams/roomLayout";
 import { sectionLabel } from "@/lib/exams/seatingSections";
 import { allocatePaired } from "@/lib/exams/seatingPaired";
 import { groupStudents, midGroups, midSources } from "@/lib/exams/seatingPairedServer";
@@ -68,7 +68,7 @@ export async function POST(request: Request) {
     const studentsByKey = new Map(await Promise.all(all.map(async (k) => [k, await groupStudents(db, session.collegeId, byKey.get(k)!)] as const)));
     const streams = streamKeys.map((keys) => keys.flatMap((k) => studentsByKey.get(k)!));
     const allocation = allocatePaired(
-      rooms.map((r) => ({ roomId: r.id, name: r.name, block: r.block, floor: r.floor, benches: roomBenches(r), perBench: roomPerBench(r) })),
+      rooms.map((r) => ({ roomId: r.id, name: r.name, block: r.block, floor: r.floor, benches: roomBenches(r), perBench: roomPerBench(r), columns: roomColumns(r) })),
       streams,
     );
     if (allocation.rooms.every((r) => r.perBench! < streamKeys.length)) {

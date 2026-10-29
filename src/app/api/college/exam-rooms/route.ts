@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { examRoomDocId, sortRoomsForSeating } from "@/lib/exams/seatingAllocator";
+import { columnsError } from "@/lib/exams/roomLayout";
 import type { ExamRoom } from "@/types/examSeating";
 
 const READ_ROLES = ["COLLEGE_OFFICE", "EXAM_CELL", "PRINCIPAL", "VICE_PRINCIPAL"];
@@ -35,7 +36,7 @@ export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("EXAM_CELL");
     const body = (await readJsonBody(request)) as {
-      rooms?: { name?: string; block?: string; floor?: number | string; benches?: number | string; studentsPerBench?: number | string; capacity?: number | string }[];
+      rooms?: { name?: string; block?: string; floor?: number | string; benches?: number | string; studentsPerBench?: number | string; columns?: number | string | null; capacity?: number | string }[];
     };
     const input = body.rooms ?? [];
     if (input.length === 0) return NextResponse.json({ error: "No rooms provided" }, { status: 400 });
@@ -44,7 +45,7 @@ export async function POST(request: Request) {
     }
 
     const errors: string[] = [];
-    const clean = new Map<string, { name: string; block: string; floor: number; benches: number; studentsPerBench: number; capacity: number }>();
+    const clean = new Map<string, { name: string; block: string; floor: number; benches: number; studentsPerBench: number; columns?: number; capacity: number }>();
     input.forEach((r, i) => {
       const name = String(r.name ?? "").trim();
       const block = String(r.block ?? "").trim();
@@ -60,7 +61,15 @@ export async function POST(request: Request) {
         errors.push(`Row ${i + 1}: name, block, floor, benches (at least 1) and students per bench (1 to 3) are required`);
         return;
       }
-      clean.set(examRoomDocId(block, name), { name, block, floor, benches, studentsPerBench, capacity: benches * studentsPerBench });
+      // Columns are optional (blank = the room prints as a plain bench list).
+      const rawColumns = String(r.columns ?? "").trim();
+      const columns = rawColumns ? Number(rawColumns) : undefined;
+      const columnsProblem = columns === undefined ? null : columnsError(columns, benches);
+      if (columnsProblem) {
+        errors.push(`Row ${i + 1}: ${columnsProblem}`);
+        return;
+      }
+      clean.set(examRoomDocId(block, name), { name, block, floor, benches, studentsPerBench, ...(columns ? { columns } : {}), capacity: benches * studentsPerBench });
     });
     if (errors.length > 0) return NextResponse.json({ error: errors.slice(0, 5).join("; ") }, { status: 400 });
 
