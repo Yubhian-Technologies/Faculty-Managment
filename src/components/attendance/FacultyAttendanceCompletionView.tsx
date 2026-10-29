@@ -12,7 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
-import { OfficeCorrectionDialog } from "@/components/attendance/OfficeCorrectionDialog";
+import { OfficeAttendanceEditor } from "@/components/attendance/OfficeAttendanceEditor";
+import { Card, CardContent } from "@/components/ui/card";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import type { Department, Course } from "@/types";
 
@@ -40,6 +41,18 @@ interface PeriodRow {
   subjectName: string;
   status: PeriodStatus;
   submittedAtDisplay: string | null;
+}
+
+// Back-to-back periods of one class (same assignment, next period number) are one card.
+function groupConsecutive(rows: PeriodRow[]): PeriodRow[][] {
+  const groups: PeriodRow[][] = [];
+  for (const p of [...rows].sort((a, b) => a.periodNumber - b.periodNumber)) {
+    const last = groups[groups.length - 1];
+    const prev = last?.[last.length - 1];
+    if (prev && prev.assignmentId === p.assignmentId && p.periodNumber === prev.periodNumber + 1) last.push(p);
+    else groups.push([p]);
+  }
+  return groups;
 }
 
 function statusBadgeClass(status: PeriodStatus): string {
@@ -96,7 +109,7 @@ export function FacultyAttendanceCompletionView({ title, description, hodScoped 
 
   const [periods, setPeriods] = useState<PeriodRow[]>([]);
   const [isLoadingPeriods, setIsLoadingPeriods] = useState(false);
-  const [correctingPeriod, setCorrectingPeriod] = useState<PeriodRow | null>(null);
+  const [editingGroup, setEditingGroup] = useState<PeriodRow[] | null>(null);
 
   async function refetchPeriods() {
     if (!selectedFacultyId || !date) return;
@@ -119,6 +132,8 @@ export function FacultyAttendanceCompletionView({ title, description, hodScoped 
     : null;
 
   useEffect(() => {
+    // An HOD's Edit Attendance has no Department / Course filters - it is their own department only.
+    if (hodScoped) return;
     fetch("/api/college/departments")
       .then((r) => r.json() as Promise<{ departments: Department[] }>)
       .then((d) => {
@@ -170,10 +185,13 @@ export function FacultyAttendanceCompletionView({ title, description, hodScoped 
       setSelectedFacultyId("");
       setFaculty([]);
       setPeriods([]);
-      if (!selectedDepartment || !selectedCourseId || !date) return;
+      if (!date || (!hodScoped && (!selectedDepartment || !selectedCourseId))) return;
       setIsLoadingFaculty(true);
       try {
-        const params = new URLSearchParams({ date, department: selectedDepartment.name, courseId: selectedCourseId });
+        // HOD: the API lists their own department's faculty from the date alone.
+        const params = hodScoped
+          ? new URLSearchParams({ date })
+          : new URLSearchParams({ date, department: selectedDepartment!.name, courseId: selectedCourseId });
         const res = await fetch(`/api/college/faculty-attendance-completion?${params.toString()}`);
         const d = await res.json() as { faculty?: FacultyOption[]; error?: string };
         setFaculty(d.faculty ?? []);
@@ -183,7 +201,7 @@ export function FacultyAttendanceCompletionView({ title, description, hodScoped 
         setIsLoadingFaculty(false);
       }
     })();
-  }, [selectedDepartment, selectedCourseId, date]);
+  }, [selectedDepartment, selectedCourseId, date, hodScoped]);
 
   // Refetch the periods list when the selected faculty/date changes.
   // The async refetch drives the loader; no synchronous setState here.
@@ -201,27 +219,29 @@ export function FacultyAttendanceCompletionView({ title, description, hodScoped 
     <div className="space-y-6">
       <PageHeader title={title} description={description} />
 
-      <div className="flex flex-wrap items-end gap-3">
+      <div className={editingGroup ? "hidden" : "flex flex-wrap items-end gap-3"}>
         <div className="space-y-2">
           <Label htmlFor="completion-date">Date</Label>
           <Input id="completion-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-44" />
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="completion-department">Department</Label>
-          <Select value={selectedDepartmentId} onValueChange={setSelectedDepartmentId}>
-            <SelectTrigger id="completion-department" className="w-64">
-              <SelectValue placeholder="Select Department" />
-            </SelectTrigger>
-            <SelectContent>
-              {departments.map((d) => (
-                <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {!hodScoped && (
+          <div className="space-y-2">
+            <Label htmlFor="completion-department">Department</Label>
+            <Select value={selectedDepartmentId} onValueChange={setSelectedDepartmentId}>
+              <SelectTrigger id="completion-department" className="w-64">
+                <SelectValue placeholder="Select Department" />
+              </SelectTrigger>
+              <SelectContent>
+                {departments.map((d) => (
+                  <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
-        {selectedDepartmentId && (
+        {!hodScoped && selectedDepartmentId && (
           <div className="space-y-2">
             <Label htmlFor="completion-course">Course</Label>
             <Select value={selectedCourseId} onValueChange={setSelectedCourseId} disabled={isLoadingCourses}>
@@ -237,7 +257,7 @@ export function FacultyAttendanceCompletionView({ title, description, hodScoped 
           </div>
         )}
 
-        {selectedCourseId && (
+        {(hodScoped || selectedCourseId) && (
           <div className="space-y-2">
             <Label htmlFor="completion-faculty">Faculty</Label>
             <Select value={selectedFacultyId} onValueChange={setSelectedFacultyId} disabled={isLoadingFaculty}>
@@ -254,14 +274,24 @@ export function FacultyAttendanceCompletionView({ title, description, hodScoped 
         )}
       </div>
 
-      {!selectedDepartmentId ? (
+      {editingGroup && selectedFaculty ? (
+        <OfficeAttendanceEditor
+          facultyId={selectedFaculty.facultyId}
+          date={date}
+          subjectName={editingGroup[0].subjectName}
+          sectionLabel={`Year ${editingGroup[0].year}${editingGroup[0].sectionName ? ` / ${editingGroup[0].sectionName}` : ""}`}
+          periods={editingGroup.map((p) => ({ assignmentId: p.assignmentId, periodNumber: p.periodNumber, startTime: p.startTime, endTime: p.endTime }))}
+          onDone={() => { setEditingGroup(null); void refetchPeriods(); }}
+          onCancel={() => setEditingGroup(null)}
+        />
+      ) : !hodScoped && !selectedDepartmentId ? (
         <EmptyState title="Select a department to get started" />
-      ) : !selectedCourseId ? (
+      ) : !hodScoped && !selectedCourseId ? (
         <EmptyState title="Select a course to see its faculty" />
       ) : isLoadingFaculty ? (
         <TableSkeleton rows={3} cols={3} />
       ) : faculty.length === 0 ? (
-        <EmptyState title="No faculty found for this course" />
+        <EmptyState title={hodScoped ? "No faculty found in your department" : "No faculty found for this course"} />
       ) : !selectedFacultyId ? (
         <EmptyState title="Select a faculty member to view their periods for this date" />
       ) : isLoadingPeriods ? (
@@ -277,6 +307,46 @@ export function FacultyAttendanceCompletionView({ title, description, hodScoped 
             <CheckCircle2 className="h-4 w-4 text-green-600" />
             {markedOnTimeCount} of {periods.length} periods marked on time
           </div>
+          {hodScoped ? (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {groupConsecutive(periods).map((group) => {
+                const first = group[0];
+                const last = group[group.length - 1];
+                const pending = group.some((p) => p.status === "PENDING");
+                const sameStatus = group.every((p) => p.status === first.status);
+                const badge = (status: PeriodStatus, text: string) => (
+                  <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass(status)}`}>{text}</span>
+                );
+                return (
+                  <Card key={first.periodNumber}>
+                    <CardContent className="space-y-2 p-4 text-sm">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="font-medium">{group.length > 1 ? `Periods ${first.periodNumber}-${last.periodNumber}` : `Period ${first.periodNumber}`}</p>
+                        <span className="whitespace-nowrap text-xs text-muted-foreground">{first.startTime}–{last.endTime}</span>
+                      </div>
+                      <p>{first.subjectName}</p>
+                      <p className="text-xs text-muted-foreground">Year {first.year}{first.sectionName ? ` / ${first.sectionName}` : ""}</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {sameStatus
+                          ? badge(first.status, STATUS_LABELS[first.status])
+                          : group.map((p) => <span key={p.periodNumber}>{badge(p.status, `P${p.periodNumber}: ${STATUS_LABELS[p.status]}`)}</span>)}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full"
+                        disabled={pending}
+                        title={pending ? "Available once the period has ended" : undefined}
+                        onClick={() => setEditingGroup(group)}
+                      >
+                        Edit Attendance
+                      </Button>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          ) : (
           <div className="rounded-lg border overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -288,7 +358,6 @@ export function FacultyAttendanceCompletionView({ title, description, hodScoped 
                     <th className="px-4 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Year / Section</th>
                     <th className="px-4 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Status</th>
                     <th className="px-4 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Submitted</th>
-                    <th className="px-4 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -304,35 +373,14 @@ export function FacultyAttendanceCompletionView({ title, description, hodScoped 
                         </span>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">{p.submittedAtDisplay ?? "—"}</td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {hodScoped && (p.status === "NOT_MARKED" || p.status === "ON_TIME" || p.status === "LATE") && (
-                          <Button size="sm" variant="outline" onClick={() => setCorrectingPeriod(p)}>
-                            {p.status === "NOT_MARKED" ? "Post on Behalf" : "Edit"}
-                          </Button>
-                        )}
-                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           </div>
+          )}
         </div>
-      )}
-
-      {correctingPeriod && selectedFaculty && (
-        <OfficeCorrectionDialog
-          open={!!correctingPeriod}
-          onOpenChange={(next) => { if (!next) setCorrectingPeriod(null); }}
-          facultyId={selectedFaculty.facultyId}
-          facultyName={selectedFaculty.name}
-          assignmentId={correctingPeriod.assignmentId}
-          date={date}
-          periodNumber={correctingPeriod.periodNumber}
-          subjectName={correctingPeriod.subjectName}
-          sectionLabel={`Year ${correctingPeriod.year}${correctingPeriod.sectionName ? ` / ${correctingPeriod.sectionName}` : ""}`}
-          onSubmitted={() => void refetchPeriods()}
-        />
       )}
     </div>
   );

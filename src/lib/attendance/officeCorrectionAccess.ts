@@ -8,14 +8,13 @@ import { istDateKey, istTimeHHMM } from "./istTime";
 //     (departmentOfficeAccess/{department}.editStudentAttendance). Off by default,
 //     so the office head - who otherwise holds the HOD's authority - gets this one
 //     only by the HOD's explicit choice.
-//   - When: once the faculty's own posting window has closed - any earlier day, or
-//     today after that course-year's college end time. Never while the faculty can
-//     still post it themselves.
+//   - When: once the period has ended - any earlier day, or today after that
+//     period's own end time. Never while the period is still running.
 
 export const OFFICE_ATTENDANCE_DENIED_MESSAGE =
   "The Head of Department hasn't enabled student-attendance editing for the Department Office.";
 export const FACULTY_WINDOW_OPEN_MESSAGE =
-  "The faculty member can still post this themselves - it can be edited here for a past day, or today once the college day has ended.";
+  "This period hasn't ended yet - attendance can be edited here once it has, today or on any earlier day.";
 
 export const officeAccessRef = (db: Firestore, collegeId: string, department: string) =>
   db.collection("colleges").doc(collegeId).collection("departmentOfficeAccess").doc(encodeURIComponent(department));
@@ -44,13 +43,13 @@ export async function departmentOfficeBlocked(
 }
 
 /**
- * Whether the faculty's own window to post this period is over: the date is before
- * today (IST), or it is today and the close time ("HH:MM") has passed. With no close
- * time known, today counts as still open.
+ * Whether the period is over: the date is before today (IST), or it is today and the
+ * period's end time ("HH:MM") has passed. With no end time known, today counts as
+ * still running. (Name kept: it is the gate for office edits of that period.)
  */
-export function facultyWindowClosed(dateISO: string, closeTime: string | undefined, now: Date = new Date()): boolean {
+export function facultyWindowClosed(dateISO: string, endTime: string | undefined, now: Date = new Date()): boolean {
   const today = istDateKey(now);
   if (dateISO < today) return true;
   if (dateISO > today) return false;
-  return !!closeTime && istTimeHHMM(now) >= closeTime;
+  return !!endTime && istTimeHHMM(now) >= endTime;
 }

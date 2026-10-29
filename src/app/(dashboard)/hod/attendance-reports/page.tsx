@@ -52,7 +52,7 @@ export default function HodAttendanceReportsPage() {
       ) : active === "edit" ? (
         <FacultyAttendanceCompletionView
           title="Edit Attendance"
-          description="Pick a past day and a faculty member to post or correct your department's student attendance. Every change is recorded with the reason you give."
+          description="Pick a day and a faculty member to edit your department's student attendance once a period has ended. Every change is recorded with the reason you give."
           hodScoped
         />
       ) : (
