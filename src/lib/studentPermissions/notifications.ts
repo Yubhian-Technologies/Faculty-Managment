@@ -70,7 +70,7 @@ export function createPermissionEventSink(db: Firestore): EventSink<PermissionPa
       APPROVED: { type: "STUDENT_PERMISSION_APPROVED", title: "Permission approved", verb: "approved - attendance will show On Duty for the covered periods" },
       REJECTED: { type: "STUDENT_PERMISSION_REJECTED", title: "Permission rejected", verb: `rejected${last?.remark ? `: ${last.remark}` : ""}` },
       REVOKED: { type: "STUDENT_PERMISSION_REVOKED", title: "Permission withdrawn", verb: `withdrawn${last?.remark ? `: ${last.remark}` : ""}` },
-      CANCELLED: { type: "STUDENT_PERMISSION_CANCELLED", title: "Permission request withdrawn", verb: "withdrawn by the requester" },
+      CANCELLED: { type: "STUDENT_PERMISSION_CANCELLED", title: "Permission request withdrawn", verb: last && last.actorUid !== req.requesterUid ? `withdrawn by ${last.actorName}${last.remark ? `: ${last.remark}` : ""}` : "withdrawn by the requester" },
     };
     const o = outcome[event];
     if (!o) return;

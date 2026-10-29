@@ -126,7 +126,10 @@ export function createApprovalEngine<P, C, Tx = unknown>(deps: EngineDeps<P, C, 
     /** The requester withdraws a pending request. */
     async cancel(ctx: C, input: { collegeId: string; id: string; actor: Actor; remark?: string }): Promise<ApprovalRequest<P>> {
       const updated = await store.update<P, ApprovalRequest<P>>(input.collegeId, input.id, async (current) => {
-        if (current.requesterUid !== input.actor.uid) throw new ApprovalError("FORBIDDEN", "Only the person who raised a request can withdraw it", 403);
+        if (current.requesterUid !== input.actor.uid) {
+          if (!(await kind.canCancel?.(ctx, current, input.actor))) throw new ApprovalError("FORBIDDEN", "Only the person who raised a request, or an approver who oversees it, can withdraw it", 403);
+          if (!input.remark?.trim()) throw new ApprovalError("REMARK_REQUIRED", "Please give a reason for withdrawing this request");
+        }
         const next = cancel(current, input.actor, iso(), input.remark);
         return { next, result: next };
       });
@@ -141,6 +144,8 @@ export function createApprovalEngine<P, C, Tx = unknown>(deps: EngineDeps<P, C, 
         // Whoever could decide the final stage may take the decision back.
         const last = current.chain[current.chain.length - 1];
         if (!(await kind.canDecide(ctx, current, last, input.actor))) throw new ApprovalError("FORBIDDEN", "You can't revoke this request", 403);
+        const blocked = await kind.revokeBlockedReason?.(ctx, current);
+        if (blocked) throw new ApprovalError("INVALID", blocked, 409);
         let next = revoke(current, input.actor, iso(), input.remark);
         next = { ...next, effectStatus: kind.applyInTransaction || kind.afterRevoked ? "PENDING" : "NONE" };
         await kind.applyInTransaction?.(tx, ctx, next, "REVOKED");

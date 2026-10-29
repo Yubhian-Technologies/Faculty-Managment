@@ -61,6 +61,8 @@ const when = (iso: string) =>
     minute: "2-digit",
   });
 
+const todayIST = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+
 const HISTORY_VERB: Record<string, string> = {
   SUBMIT: "raised request",
   APPROVE: "approved",
@@ -332,6 +334,15 @@ function RequestCard({
                 Withdraw
               </Button>
             )}
+            {view === "oversight" && request.status === "PENDING" && !mine && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => onAct({ request, action: "CANCEL", needsRemark: true })}
+              >
+                Withdraw
+              </Button>
+            )}
             {(view === "inbox" || (view === "oversight" && overseer)) &&
               request.status === "PENDING" &&
               !mine && (
@@ -356,7 +367,7 @@ function RequestCard({
                   </Button>
                 </>
               )}
-            {view === "oversight" && request.status === "APPROVED" && !mine && (
+            {view === "oversight" && request.status === "APPROVED" && !mine && request.payload.fromDate >= todayIST() && (
               <Button
                 size="sm"
                 variant="outline"
@@ -422,6 +433,7 @@ const COPY: Record<
     confirm: "Withdraw",
     done: "Request withdrawn",
     remarkLabel: "Note (optional)",
+    warning: "If this is not your own request, the student is told it was withdrawn and why.",
   },
   REVOKE: {
     title: "Revoke this approval?",
@@ -607,7 +619,7 @@ export function RequestList({
           {copy?.remarkLabel ? (
             <div className="space-y-1.5">
               <Label htmlFor="act-remark">
-                {copy.remarkLabel}
+                {pending?.needsRemark && pending.action === "CANCEL" ? "Reason (required)" : copy.remarkLabel}
                 {pending?.needsRemark && (
                   <span className="text-destructive ml-1" aria-hidden>
                     *

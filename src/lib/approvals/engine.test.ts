@@ -260,3 +260,22 @@ describe("store contract (memory reference)", () => {
     expect(await store.listByPendingKeys("c2", "demo", ["HOD|CSE"])).toHaveLength(0);
   });
 });
+
+describe("engine: withdrawing on someone's behalf, and revoking too late", () => {
+  it("an approver the kind allows can withdraw a stuck request, but only with a reason; others still can't", async () => {
+    const { engine, ctx, raise } = setup({ canCancel: async (_c, _r, actor) => actor.uid === "hod1" });
+    const r = await raise();
+    await expect(engine.cancel(ctx, { collegeId: "c1", id: r.id, actor: pri })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(engine.cancel(ctx, { collegeId: "c1", id: r.id, actor: hod })).rejects.toMatchObject({ code: "REMARK_REQUIRED" });
+    const c = await engine.cancel(ctx, { collegeId: "c1", id: r.id, actor: hod, remark: "Student left the college" });
+    expect(c).toMatchObject({ status: "CANCELLED", pendingKey: null });
+    expect(c.history.at(-1)).toMatchObject({ action: "CANCEL", actorUid: "hod1", remark: "Student left the college" });
+  });
+
+  it("a revoke the kind blocks is refused with its reason, and nothing changes", async () => {
+    const { engine, ctx, raise } = setup({ revokeBlockedReason: () => "Already started" });
+    const r = await raise(["HOD"]);
+    await engine.decide(ctx, { collegeId: "c1", id: r.id, actor: hod, decision: "APPROVE" });
+    await expect(engine.revoke(ctx, { collegeId: "c1", id: r.id, actor: hod, remark: "oops" })).rejects.toMatchObject({ code: "INVALID", message: "Already started" });
+  });
+});
