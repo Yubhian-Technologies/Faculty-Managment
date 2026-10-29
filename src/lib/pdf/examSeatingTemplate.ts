@@ -169,12 +169,12 @@ export function signatureSheetsHTML(c: College, p: ExamSeatingPlan, examsOf?: (g
       ? [...marks.map((m) => `${esc(m.name)}<br>(${m.maxMarks})`), ...(marks.length > 1 ? [`Total<br>(${marks.reduce((n, m) => n + m.maxMarks, 0)})`] : [])]
       : ["Marks"];
     const markWidth = Math.max(6, Math.min(10, Math.floor(36 / markHeads.length)));
-    const rows = list.map(({ s, seat }, i) => `<tr><td>${i + 1}</td><td>${seat}</td><td><b>${esc(s.rollNumber)}</b></td><td class="l">${esc(s.name)}</td><td class="sig"></td>${markHeads.map(() => "<td></td>").join("")}</tr>`).join("");
+    const rows = list.map(({ s }, i) => `<tr><td>${i + 1}</td><td><b>${esc(s.rollNumber)}</b></td><td class="l">${esc(s.name)}</td><td></td><td class="sig"></td>${markHeads.map(() => "<td></td>").join("")}</tr>`).join("");
     return `<!DOCTYPE html><html><head><meta charset="utf-8" /><style>${STYLE}</style></head><body><div class="page">
       <div class="pdf-page-header"></div>
       ${examHeaderHTML({ college: c, lines: lines(c, p), academicYear: c.academicYear, title: "Signature Sheet" })}
       <table class="facts"><tbody>${facts.map(([k, v]) => `<tr><th style="width:22%;text-align:left">${k}</th><td class="l"><b>${v}</b></td></tr>`).join("")}</tbody></table>
-      <table class="sheet" style="margin-top:8px"><thead><tr><th style="width:6%">S.No</th><th style="width:7%">Bench</th><th style="width:14%">Regd. No</th><th>Name</th><th style="width:15%">Signature</th>${markHeads.map((h) => `<th class="mk" style="width:${markWidth}%">${h}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>
+      <table class="sheet" style="margin-top:8px"><thead><tr><th style="width:6%">S.No</th><th style="width:14%">Regd. No</th><th>Name</th><th class="mk" style="width:9%">No. of<br>Additional<br>Sheets</th><th style="width:15%">Signature</th>${markHeads.map((h) => `<th class="mk" style="width:${markWidth}%">${h}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>
       <div class="sheet-foot"><span>Total: ${list.length} &nbsp;&nbsp; Present: ______ &nbsp;&nbsp; Absent: ______</span></div>
       <div class="sheet-sign"><span>Invigilator</span><span>Chief Superintendent</span></div>
     </div></body></html>`;
