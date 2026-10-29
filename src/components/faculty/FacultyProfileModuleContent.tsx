@@ -1,5 +1,6 @@
 "use client";
 
+import type { ComponentProps } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { PersonalDetailsView } from "@/components/shared/PersonalDetailsView";
 import {
@@ -13,6 +14,7 @@ import { isModuleEmpty } from "@/lib/faculty/moduleEmpty";
 import { buildTeachingLoadRows } from "@/lib/teaching/buildTeachingLoadRows";
 import { readPreviousTeachingAssignments } from "@/lib/faculty/previousTeaching";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
 import type { PersonalDetailsSource } from "@/components/shared/PersonalDetailsView";
 import type { ProfileModuleKey } from "@/lib/faculty/profileModules";
 import type { FacultyProfileFields, TeachingAssignment, CollegeType, ResearchPublication } from "@/types";
@@ -73,6 +75,18 @@ interface Props {
   editHref?: string;
 }
 
+// Settings > Website Display Name > "Teaching load": the load downloads print the Display Name. A component of its own
+// so the names are only looked up while the Teaching Load tab is open.
+function TeachingLoadWithDisplayName({ faculty, ...rest }: { faculty: FacultyProfileSource } & Omit<ComponentProps<typeof TeachingLoadTable>, "facultyName">) {
+  const { nameFor } = useFacultyDisplayNames();
+  return (
+    <TeachingLoadTable
+      {...rest}
+      facultyName={nameFor("teachingLoad", { facultyId: (faculty as { id?: string }).id, uid: faculty.userUid }, facultyDisplayName(faculty))}
+    />
+  );
+}
+
 // Renders exactly one module's content for the per-module View pages - the
 // hub (FacultyProfileHub) links here per tile. Reuses the same read-only
 // pieces as the old single-scroll views (ProfileFieldsView's per-module
@@ -106,9 +120,15 @@ export function FacultyProfileModuleContent({ moduleKey, faculty, teachingAssign
         {moduleKey === "mentorship" && <MentorshipModule profile={faculty.academicProfile} ownerName={facultyDisplayName(faculty)} hideHeader />}
         {moduleKey === "financial" && <FinancialModule profile={faculty.academicProfile} hideHeader />}
         {moduleKey === "others" && <OthersModule profile={faculty.academicProfile} />}
+        {moduleKey === "display-name" && (
+          <dl className="grid gap-4 sm:grid-cols-2">
+            <div><dt className="text-xs text-muted-foreground">Surname (short form)</dt><dd className="text-sm font-medium">{(faculty as { displaySurname?: string }).displaySurname || "—"}</dd></div>
+            <div><dt className="text-xs text-muted-foreground">Name</dt><dd className="text-sm font-medium">{(faculty as { displayName?: string }).displayName || "—"}</dd></div>
+          </dl>
+        )}
         {moduleKey === "teaching-load" && (
-          <TeachingLoadTable
-            facultyName={facultyDisplayName(faculty)}
+          <TeachingLoadWithDisplayName
+            faculty={faculty}
             department={faculty.department}
             previous={readPreviousTeachingAssignments(faculty as { previousTeachingAssignments?: unknown })}
             groups={buildTeachingLoadRows({

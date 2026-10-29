@@ -12,6 +12,8 @@ import { downloadSectionTimetableXlsx } from "@/lib/timetable/timetableExport";
 import { resolveLogoUrl } from "@/lib/timetable/logoAsset";
 import { renderHtmlToPdf } from "@/lib/pdf/htmlToPdf";
 import { yearSemesterLabelIn } from "@/lib/academic/format";
+import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
+import { slotsWithDisplayNames, assignmentsWithDisplayNames } from "@/lib/faculty/displayNameApply";
 import { SUBJECT_COLORS, isSubjectColor } from "@/lib/timetable/subjectColors";
 import {
   buildAllocationList,
@@ -75,7 +77,7 @@ export interface InstitutionalTimetableTableProps {
 export function InstitutionalTimetableTable({
   section,
   timing,
-  slots,
+  slots: slotsProp,
   courseName = section?.courseName ?? "",
   departmentName = section?.department ?? "",
   collegeName,
@@ -84,13 +86,13 @@ export function InstitutionalTimetableTable({
   address,
   phone,
   logoUrl,
-  academicYear = slots[0]?.academicYear ?? "",
+  academicYear = slotsProp[0]?.academicYear ?? "",
   semesterLabel: semesterLabelProp,
   effectiveDate: effectiveDateProp,
   classroom,
-  classInchargeName,
+  classInchargeName: classInchargeNameProp,
   subjects = [],
-  assignments = [],
+  assignments: assignmentsProp = [],
   workingDays,
   weekStart,
   onWeekChange,
@@ -101,6 +103,15 @@ export function InstitutionalTimetableTable({
   className = "",
 }: InstitutionalTimetableTableProps) {
   const { collegeInfo, loading: collegeLoading, failed: collegeFailed } = useCollegeInfo();
+  // Settings > Website Display Name > "Section timetable": faculty (in the cells, subject list and the Class I/C line)
+  // shown by Display Name, on screen and in the PDF / print / Excel built from these same values. Display-only copies.
+  const { nameFor } = useFacultyDisplayNames();
+  const slots = useMemo(() => slotsWithDisplayNames(slotsProp, "sectionTimetable", nameFor), [slotsProp, nameFor]);
+  const assignments = useMemo(() => assignmentsWithDisplayNames(assignmentsProp, "sectionTimetable", nameFor), [assignmentsProp, nameFor]);
+  const classInchargeName = useMemo(() => {
+    const usual = (classInchargeNameProp && classInchargeNameProp !== "—" ? classInchargeNameProp : section?.facultyInchargeName) || "";
+    return usual ? nameFor("sectionTimetable", { uid: section?.facultyInchargeUid }, usual) : classInchargeNameProp;
+  }, [classInchargeNameProp, section?.facultyInchargeName, section?.facultyInchargeUid, nameFor]);
   const activeCollegeName = collegeName || collegeInfo?.name || "";
   const activeCollegeCode = collegeCode ?? (collegeInfo?.code || "");
   const activeAffiliation = affiliation ?? (collegeInfo?.affiliation || "");

@@ -20,6 +20,7 @@ import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
 import { useFacultyListFilters } from "@/components/faculty/FacultyListFilters";
 import { toast } from "@/hooks/useToast";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
 import { downloadFacultyResume, previewFacultyResumeHtml } from "@/lib/faculty/downloadFacultyResume";
 import { ResumePreviewDialog } from "@/components/faculty/ResumePreviewDialog";
 import { DEFAULT_RESUME_SECTIONS } from "@/lib/pdf/resumeSections";
@@ -43,6 +44,10 @@ type FacultyRow = FacultyListRow;
 
 function PrincipalDepartmentFacultyContent() {
   const router = useRouter();
+  // Settings > Website Display Name > "Faculty lists": the list shows each person's Display Name (display only).
+  const { nameFor } = useFacultyDisplayNames();
+  const shownName = (row: { id?: unknown; userUid?: unknown } & Parameters<typeof facultyDisplayName>[0]) =>
+    nameFor("facultyLists", { facultyId: row.id as string | undefined, uid: row.userUid as string | undefined }, facultyDisplayName(row));
   const queryClient = useQueryClient();
   const { deptId } = useParams<{ deptId: string }>();
   // The page's own URL, carried to the profile pages in `?from=` so their Back button returns here.
@@ -270,9 +275,9 @@ function PrincipalDepartmentFacultyContent() {
       className: "whitespace-normal min-w-[13rem]",
       render: (row) => (
         <div className="flex items-start gap-3 min-w-0">
-          <Avatar name={facultyDisplayName(row)} photoUrl={row.profilePhotoUrl} size="sm" className="mt-0.5" />
+          <Avatar name={shownName(row)} photoUrl={row.profilePhotoUrl} size="sm" className="mt-0.5" />
           <div className="space-y-0.5 min-w-0">
-            <p className="font-medium leading-tight">{facultyDisplayName(row)}</p>
+            <p className="font-medium leading-tight">{shownName(row)}</p>
             <p className="text-xs text-muted-foreground">ID: {row.employeeId}</p>
             <JoiningLine row={row} />
           </div>

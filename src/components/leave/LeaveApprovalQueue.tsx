@@ -1,5 +1,6 @@
 "use client";
 
+import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
 import { useEffect, useState, useCallback } from "react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Avatar } from "@/components/shared/Avatar";
@@ -48,6 +49,8 @@ function intersectCandidates(periods: PeriodCoverageEntry[]): { facultyId: strin
 // Principal then sees that tag read-only and gives the real final decision
 // (status PENDING_PRINCIPAL).
 export function LeaveApprovalQueue() {
+  // Settings > Website Display Name > "Attendance and leave": names shown (and exported) as Display Names - display only.
+  const { nameFor } = useFacultyDisplayNames();
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [remarksById, setRemarksById] = useState<Record<string, string>>({});
@@ -620,7 +623,7 @@ export function LeaveApprovalQueue() {
                                   <SelectContent>
                                     {replacementCandidates.map((c) => (
                                       <SelectItem key={c.facultyId} value={c.facultyId}>
-                          {c.facultyName}
+                          {nameFor("attendanceLeave", { facultyId: c.facultyId }, c.facultyName)}
                           {c.facultyDepartment && (
                             <span className="text-muted-foreground"> · {c.facultyDepartment}</span>
                           )}
@@ -666,7 +669,7 @@ export function LeaveApprovalQueue() {
                                     <SelectContent>
                                       {p.candidates.map((c) => (
                                         <SelectItem key={c.facultyId} value={c.facultyId}>
-                                          {c.facultyName}
+                                          {nameFor("attendanceLeave", { facultyId: c.facultyId }, c.facultyName)}
                                           {c.facultyDepartment && (
                                             <span className="text-muted-foreground"> · {c.facultyDepartment}</span>
                                           )}

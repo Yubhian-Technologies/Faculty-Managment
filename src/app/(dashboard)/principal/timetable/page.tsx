@@ -14,6 +14,8 @@ import { InstitutionalTimetableTable } from "@/components/timetable/Institutiona
 import { ordinalYear, resolveTimetableDays, latestEffectiveDate } from "@/lib/timetable/gridModel";
 import { buildSectionTimetablePdfHtml } from "@/lib/timetable/sectionTimetablePdf";
 import { buildSectionTimetableXlsxBuffer } from "@/lib/timetable/timetableExport";
+import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
+import { slotsWithDisplayNames } from "@/lib/faculty/displayNameApply";
 import { renderMultiHtmlToPdf } from "@/lib/pdf/htmlToPdf";
 import type { Course, Department, Section, CourseYearTiming, TimetableSlot, Subject, DayOfWeek } from "@/types";
 import { DepartmentPickSelect } from "@/components/shared/DepartmentPickSelect";
@@ -35,6 +37,7 @@ interface BulkSectionEntry {
   regulation?: string;
   classroomNumber?: string;
   facultyInchargeName?: string;
+  facultyInchargeUid?: string;
   currentSemester: number | null;
   timing: CourseYearTiming;
   slots: TimetableSlot[];
@@ -61,6 +64,8 @@ const PAGE_STEP = 10;
 
 export default function PrincipalTimetablePage() {
   const { user } = useAuth();
+  // Settings > Website Display Name > "Section timetable": the all-sections PDF / Excel print faculty by Display Name.
+  const { nameFor } = useFacultyDisplayNames();
   const canSeeLeisure = !NO_LEISURE_ROLES.includes(user?.role ?? "");
   const canSeeTeachingNow = !!user && !NO_TEACHING_NOW_ROLES.includes(user.role);
   const [panel, setPanel] = useState<"" | "leisure" | "teaching">("");
@@ -203,12 +208,12 @@ export default function PrincipalTimetablePage() {
       effectiveDate: latestEffectiveDate(entry.slots),
       regulation: entry.regulation,
       classroom: entry.classroomNumber,
-      classInchargeName: entry.facultyInchargeName,
+      classInchargeName: entry.facultyInchargeName ? nameFor("sectionTimetable", { uid: entry.facultyInchargeUid }, entry.facultyInchargeName) : entry.facultyInchargeName,
       days: visibleDays.length > 0 ? visibleDays : days,
       periods: Array.from({ length: entry.timing.numberOfPeriods }, (_, i) => i + 1),
       periodTimings: entry.timing.periods ?? [],
       timing: entry.timing,
-      slots: entry.slots,
+      slots: slotsWithDisplayNames(entry.slots, "sectionTimetable", nameFor),
       lunchBreak: entry.timing.lunchBreak,
       shortBreaks: entry.timing.shortBreaks,
       subjects: bulkSubjects,
@@ -394,7 +399,7 @@ export default function PrincipalTimetablePage() {
                         {entry.courseName} · {entry.departmentName} · {ordinalYear(entry.year)} · Section {entry.sectionName}
                       </h4>
                       <InstitutionalTimetableTable
-                        section={{ name: entry.sectionName, department: entry.departmentName, year: entry.year, courseName: entry.courseName, classroomNumber: entry.classroomNumber, facultyInchargeName: entry.facultyInchargeName } as unknown as Section}
+                        section={{ name: entry.sectionName, department: entry.departmentName, year: entry.year, courseName: entry.courseName, classroomNumber: entry.classroomNumber, facultyInchargeName: entry.facultyInchargeName, facultyInchargeUid: entry.facultyInchargeUid } as unknown as Section}
                         timing={entry.timing}
                         slots={entry.slots}
                         courseName={entry.courseName}

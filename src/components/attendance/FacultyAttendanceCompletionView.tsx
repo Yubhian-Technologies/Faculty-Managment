@@ -1,5 +1,6 @@
 "use client";
 
+import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2 } from "lucide-react";
@@ -70,6 +71,8 @@ interface FacultyAttendanceCompletionViewProps {
 }
 
 export function FacultyAttendanceCompletionView({ title, description, hodScoped }: FacultyAttendanceCompletionViewProps) {
+  // Settings > Website Display Name > "Attendance and leave": names shown (and exported) as Display Names - display only.
+  const { nameFor } = useFacultyDisplayNames();
   const { user } = useAuth();
   const router = useRouter();
 
@@ -246,7 +249,7 @@ export function FacultyAttendanceCompletionView({ title, description, hodScoped 
               </SelectTrigger>
               <SelectContent>
                 {faculty.map((f) => (
-                  <SelectItem key={f.facultyId} value={f.facultyId}>{f.name}</SelectItem>
+                  <SelectItem key={f.facultyId} value={f.facultyId}>{nameFor("attendanceLeave", { facultyId: f.facultyId }, f.name)}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -269,7 +272,7 @@ export function FacultyAttendanceCompletionView({ title, description, hodScoped 
       ) : periods.length === 0 ? (
         <EmptyState
           title="No scheduled periods"
-          description={`${selectedFaculty?.name ?? "This faculty member"} has no published timetable periods on ${date}.`}
+          description={`${selectedFaculty ? nameFor("attendanceLeave", { facultyId: selectedFaculty.facultyId }, selectedFaculty.name) : "This faculty member"} has no published timetable periods on ${date}.`}
         />
       ) : (
         <div className="space-y-3">
@@ -325,7 +328,7 @@ export function FacultyAttendanceCompletionView({ title, description, hodScoped 
           open={!!correctingPeriod}
           onOpenChange={(next) => { if (!next) setCorrectingPeriod(null); }}
           facultyId={selectedFaculty.facultyId}
-          facultyName={selectedFaculty.name}
+          facultyName={nameFor("attendanceLeave", { facultyId: selectedFaculty.facultyId }, selectedFaculty.name)}
           assignmentId={correctingPeriod.assignmentId}
           date={date}
           periodNumber={correctingPeriod.periodNumber}

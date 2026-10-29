@@ -30,6 +30,7 @@ import { FacultyDesignationCell, FacultyExperienceCell, FacultyStatusCell, Joini
 import type { ResumeSectionKey } from "@/lib/pdf/resumeSections";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
 import { toDate } from "@/lib/utils";
 import { allPreviousExperienceEntries, experienceBreakdown } from "@/lib/faculty/experienceCalc";
 import { compareDefaultFacultyOrder } from "@/lib/faculty/listOrder";
@@ -148,6 +149,10 @@ function SortPill({ label, active, onChange }: { label: string; active: "desc" |
 
 function HODFacultyContent() {
   const router = useRouter();
+  // Settings > Website Display Name > "Faculty lists": the list shows each person's Display Name (display only).
+  const { nameFor } = useFacultyDisplayNames();
+  const shownName = (row: { id?: unknown; userUid?: unknown } & Parameters<typeof facultyDisplayName>[0]) =>
+    nameFor("facultyLists", { facultyId: row.id as string | undefined, uid: row.userUid as string | undefined }, facultyDisplayName(row));
   const pathname = usePathname();
   // The status tab and department chip this register was showing when a profile
   // was opened from it, or when the page was refreshed - read once, on arrival;
@@ -491,7 +496,18 @@ function HODFacultyContent() {
     setDragId(null);
     setOverId(null);
     if (!from || !to || from === to) return;
-    const order = moveToPosition(arrangeIds, from, to);
+    await applyOrder(moveToPosition(arrangeIds, from, to));
+  }
+
+  // One step up / down: swaps the person with the neighbour in this department's order.
+  async function moveStep(id: string, dir: -1 | 1) {
+    const i = arrangeIds.indexOf(id);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= arrangeIds.length) return;
+    await applyOrder(moveToPosition(arrangeIds, id, arrangeIds[j]));
+  }
+
+  async function applyOrder(order: string[]) {
     if (order === arrangeIds) return;
     // Shown at once; the save follows, and a failed save reloads the saved order.
     setFaculty((prev) => prev.map((f) => (inArrangeDept(f) ? { ...f, orderRank: order.includes(f.id as string) ? order.indexOf(f.id as string) : order.length } : f)));
@@ -517,8 +533,9 @@ function HODFacultyContent() {
     key: "arrange",
     header: "",
     excludeFromCsv: true,
-    className: "w-10 !px-2",
+    className: "w-24 !px-2",
     render: (row) => inArrangeDept(row) ? (
+      <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
       <ArrangeHandle
         id={row.id as string}
         name={facultyDisplayName(row)}
@@ -529,6 +546,24 @@ function HODFacultyContent() {
         onDrop={() => void dropOnRow()}
         onCancel={() => { setDragId(null); setOverId(null); }}
       />
+      {([-1, 1] as const).map((dir) => {
+        const idx = arrangeIds.indexOf(row.id as string);
+        const disabled = dir === -1 ? idx <= 0 : idx < 0 || idx >= arrangeIds.length - 1;
+        const Icon = dir === -1 ? ArrowUp : ArrowDown;
+        return (
+          <button
+            key={dir}
+            type="button"
+            disabled={disabled}
+            aria-label={`Move ${facultyDisplayName(row)} one step ${dir === -1 ? "up" : "down"}`}
+            className="rounded p-1.5 text-muted-foreground hover:bg-muted disabled:opacity-30 disabled:hover:bg-transparent"
+            onClick={() => void moveStep(row.id as string, dir)}
+          >
+            <Icon className="h-4 w-4" aria-hidden />
+          </button>
+        );
+      })}
+      </div>
     ) : null,
   };
 
@@ -568,10 +603,10 @@ function HODFacultyContent() {
       header: "Faculty Member",
       render: (row) => (
         <div className="flex items-start gap-3 min-w-0">
-          <Avatar name={facultyDisplayName(row)} photoUrl={row.profilePhotoUrl as string | undefined} size="sm" className="mt-0.5" />
+          <Avatar name={shownName(row)} photoUrl={row.profilePhotoUrl as string | undefined} size="sm" className="mt-0.5" />
           <div className="space-y-0.5 min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <p className="font-medium leading-tight">{facultyDisplayName(row)}</p>
+              <p className="font-medium leading-tight">{shownName(row)}</p>
               {/* Which department this faculty member actually belongs to -
                   now that the roster spans sub-departments/managed branches
                   too (not just this HOD's own), without this a faculty added

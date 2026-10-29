@@ -1,5 +1,6 @@
 "use client";
 
+import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,6 +42,8 @@ export function FacultyNotPostedView({
   description?: string;
   hodScoped?: boolean;
 }) {
+  // Settings > Website Display Name > "Attendance and leave": names shown (and exported) as Display Names - display only.
+  const { nameFor } = useFacultyDisplayNames();
   const [date, setDate] = useState("");
   const [departments, setDepartments] = useState<Department[]>([]);
   const [selectedDepartmentId, setSelectedDepartmentId] = useState("");
@@ -164,7 +167,7 @@ export function FacultyNotPostedView({
     return {
       title: "Faculty not posted", subtitle: `${scope} - ${range}${onlyNotPosted ? " - only faculty with not-posted periods" : ""}`,
       headers: ["Faculty", "Department", "Periods", "On time", "Late", "Not posted", "Pending"],
-      rows: rows.map((r) => [r.name, r.department || "-", r.totalPeriods, r.onTime, r.late, r.notMarked, r.pending]),
+      rows: rows.map((r) => [nameFor("attendanceLeave", { facultyId: r.facultyId }, r.name), r.department || "-", r.totalPeriods, r.onTime, r.late, r.notMarked, r.pending]),
     };
   }
 
@@ -312,7 +315,7 @@ export function FacultyNotPostedView({
                 <tbody className="divide-y">
                   {rows.map((r) => (
                     <tr key={r.facultyId}>
-                      <td className="px-3 py-2 font-medium">{r.name}</td>
+                      <td className="px-3 py-2 font-medium">{nameFor("attendanceLeave", { facultyId: r.facultyId }, r.name)}</td>
                       <td className="px-3 py-2">{r.department || "—"}</td>
                       <td className="px-3 py-2 text-center">{r.totalPeriods}</td>
                       <td className="px-3 py-2 text-center">{r.onTime}</td>

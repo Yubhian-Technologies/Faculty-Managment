@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
+import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
 import { useCollegeInfo } from "@/hooks/useCollegeInfo";
 import { formatDMY, currentWeekDates } from "@/lib/utils";
 import { isoDateKey } from "@/lib/leave/dayCounter";
@@ -32,6 +33,8 @@ const DAYS: DayOfWeek[] = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
 
 export default function TeachingLoadPage() {
   const { user } = useAuth();
+  // Settings > Website Display Name > "Individual faculty timetable": the downloads print the Display Name.
+  const { nameFor } = useFacultyDisplayNames();
   const [assignments, setAssignments] = useState<TeachingAssignment[]>([]);
   const [timetableSlots, setTimetableSlots] = useState<TimetableSlot[]>([]);
   const [timings, setTimings] = useState<CourseYearTiming[]>([]);
@@ -163,7 +166,7 @@ export default function TeachingLoadPage() {
       .filter((s) => typeFilter === "ALL" || s.subjectType === typeFilter);
     const semesterNums = Array.from(new Set(semesterSlots.map((sl) => sl.semester).filter((n): n is number => n != null))).sort((a, b) => a - b);
     return buildFacultyTimetablePdfHtml({
-      facultyName: user?.name ?? "",
+      facultyName: nameFor("individualTimetable", { uid: user?.uid }, user?.name ?? ""),
       departmentName: user?.department,
       semesterLabel: semesterNums.length > 0 ? semesterNums.join(", ") : "—",
       weekStart,
@@ -208,7 +211,7 @@ export default function TeachingLoadPage() {
       const courseCodeById = new Map(courses.map((c) => [c.id, c.code || c.name]));
       await downloadFacultyTimetableXlsx(
         {
-          facultyName: user?.name ?? "",
+          facultyName: nameFor("individualTimetable", { uid: user?.uid }, user?.name ?? ""),
           semesterLabel: semesterNums.length > 0 ? semesterNums.join(", ") : "—",
           weekStart,
           weekEnd: weekDates[weekDates.length - 1],

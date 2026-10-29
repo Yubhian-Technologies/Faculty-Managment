@@ -13,6 +13,10 @@ import type { FacultyMember } from "@/types";
 
 export function isModuleEmpty(moduleKey: ProfileModuleKey, faculty: unknown, opts: { teachingEmpty?: boolean } = {}): boolean {
   if (moduleKey === "research") return false;
+  if (moduleKey === "display-name") {
+    const f = (faculty ?? {}) as { displaySurname?: unknown; displayName?: unknown };
+    return !String(f.displaySurname ?? "").trim() && !String(f.displayName ?? "").trim();
+  }
   if (moduleKey === "teaching-load") return opts.teachingEmpty === true;
   if (typeof faculty !== "object" || faculty === null) return false;
   try {

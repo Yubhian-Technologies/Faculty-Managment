@@ -14,6 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FacultySearchSelect } from "@/components/timetable/FacultySearchSelect";
 import { toast } from "@/hooks/useToast";
+import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
 import { MAX_FACULTY_PER_SUBJECT } from "@/lib/teaching/facultyCap";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { sectionDisplayLabel, departmentCode } from "@/lib/sections/sectionLabel";
@@ -67,6 +68,8 @@ export default function TeachingAssignmentsPage() {
     for (const c of scopeCourses) byId.set(c.id, c);
     return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [ownCourses, scopeCourses]);
+  // Settings > Website Display Name > "Teaching load": names shown/printed as Display Names (display only; saves still send the stored name).
+  const { nameFor } = useFacultyDisplayNames();
   const [faculty, setFaculty] = useState<FacultyRow[]>([]);
   const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
   const [assignmentRequests, setAssignmentRequests] = useState<FacultyAssignmentRequest[]>([]);
@@ -1052,14 +1055,14 @@ const effectiveSemester = semesterOptions.length === 0
         sectionName: a.sectionName ?? "",
         subjectCode: a.subjectCode,
         subjectName: a.subjectName ?? "",
-        facultyName: a.facultyName ?? "",
+        facultyName: nameFor("teachingLoad", { facultyId: a.facultyId }, a.facultyName ?? ""),
         hoursPerWeek: a.hoursPerWeek ?? 0,
       }));
 
       const wlMap = new Map<string, FacultyWorkloadExportRow>();
       for (const f of faculty) {
         wlMap.set(f.id, {
-          facultyName: f.name,
+          facultyName: nameFor("teachingLoad", { facultyId: f.id }, f.name),
           designation: f.designation,
           department: f.department,
           assignedSubjects: "",
@@ -1115,14 +1118,14 @@ const effectiveSemester = semesterOptions.length === 0
         sectionName: a.sectionName ?? "",
         subjectCode: a.subjectCode,
         subjectName: a.subjectName ?? "",
-        facultyName: a.facultyName ?? "",
+        facultyName: nameFor("teachingLoad", { facultyId: a.facultyId }, a.facultyName ?? ""),
         hoursPerWeek: a.hoursPerWeek ?? 0,
       }));
 
       const wlMap = new Map<string, FacultyWorkloadExportRow>();
       for (const f of faculty) {
         wlMap.set(f.id, {
-          facultyName: f.name,
+          facultyName: nameFor("teachingLoad", { facultyId: f.id }, f.name),
           designation: f.designation,
           department: f.department,
           assignedSubjects: "",
@@ -1559,7 +1562,7 @@ const effectiveSemester = semesterOptions.length === 0
                             {a.timetableSemester != null && <Badge variant="outline" className="text-xs">Sem {a.timetableSemester}</Badge>}
                             {a.accessLevel === "secondary" && <Badge variant="secondary" className="text-xs">View only</Badge>}
                           </p>
-                          <p className="text-xs text-muted-foreground">{a.facultyName} · {a.hoursPerWeek} hrs/wk</p>
+                          <p className="text-xs text-muted-foreground">{nameFor("teachingLoad", { facultyId: a.facultyId }, a.facultyName)} · {a.hoursPerWeek} hrs/wk</p>
                         </div>
                         {a.accessLevel !== "secondary" && (
                           <Button size="sm" variant="ghost" onClick={() => setRemoveTarget(a)}>
@@ -1584,7 +1587,7 @@ const effectiveSemester = semesterOptions.length === 0
                             {a.accessLevel === "secondary" && <Badge variant="secondary" className="text-xs">View only</Badge>}
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            {a.facultyName}
+                            {nameFor("teachingLoad", { facultyId: a.facultyId }, a.facultyName)}
                             {a.academicYear ? ` · ${a.academicYear}` : ""}
                             {a.semester ? ` · Sem ${a.semester}` : ""}
                             {a.section ? ` · Sec ${a.section}` : ""}
