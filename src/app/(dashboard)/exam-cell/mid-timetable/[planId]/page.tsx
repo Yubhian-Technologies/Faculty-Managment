@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { MidTimetableSheet } from "@/components/midTimetable/MidTimetableSheet";
+import { BranchTimetableList, MidTimetableSheet } from "@/components/midTimetable/MidTimetableSheet";
 import { toast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
 import { ordinalYearLabel } from "@/lib/college/courseYears";
@@ -56,6 +56,7 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
   const [heading, setHeading] = useState("");
   const [everywhere, setEverywhere] = useState(true);
   const [deleting, setDeleting] = useState(false);
+  const [view, setView] = useState<"sheet" | "branches">("sheet");
   const [moveOpen, setMoveOpen] = useState(false);
   const [move, setMove] = useState({ scope: "ALL", fromDate: "", fromSessionId: "", toDate: "", toSessionId: "", reason: "" });
   const [movePreview, setMovePreview] = useState<{ branch: string; subjects: string[]; status: string }[] | null>(null);
@@ -187,6 +188,17 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
     setEdits(next);
     if (short.length) toast({ variant: "destructive", title: "Not enough exam days for some branches", description: `Not placed - ${short.join("; ")}. Add an exam day or a session, or put electives together in one cell.` });
     else toast({ title: "Every branch filled", description: "Check the sheet, move anything by clicking its cell, then Save draft or Publish all." });
+  }
+
+  /** Combined sheet, or each branch's own timetable (one page each) - optionally for one branch only. */
+  async function printPdf(mode: "sheet" | "branches", only?: Branch) {
+    if (!data || !plan) return;
+    setBusy(only ? `pdf-${only.key}` : `pdf-${mode}`);
+    try {
+      const rows = (only ? [only] : data.branches).map((b) => ({ branch: b.branch, slots: slotsOf(b), usualSessionId: usualOf(b) }));
+      await downloadMidTimetablePdf({ ...plan, rows }, `mid${plan.midNumber}-${plan.courseName}-year${plan.year}-${only ? only.branch : mode === "branches" ? "branch-wise" : "timetable"}`, mode);
+    } catch { toast({ variant: "destructive", title: "Could not make the PDF" }); }
+    finally { setBusy(null); }
   }
 
   async function put(b: Branch, action: "draft" | "publish" | "unpublish"): Promise<MidTimetable | string> {
@@ -385,20 +397,43 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
                 setMove({ scope: "ALL", fromDate: "", fromSessionId: plan.sessions[0]?.id ?? "", toDate: "", toSessionId: plan.sessions[0]?.id ?? "", reason: "" });
                 setMovePreview(null); setMoveError(""); setMoveOpen(true);
               }}><CalendarClock className="mr-1.5 h-4 w-4" />Reschedule</Button>
-            <Button variant="outline" size="sm" loading={busy === "pdf"} disabled={placed === 0}
-              onClick={async () => {
-                setBusy("pdf");
-                try { await downloadMidTimetablePdf({ ...plan, rows: data.branches.map((b) => ({ branch: b.branch, slots: slotsOf(b), usualSessionId: usualOf(b) })) }, `mid${plan.midNumber}-${plan.courseName}-year${plan.year}-timetable`); }
-                catch { toast({ variant: "destructive", title: "Could not make the PDF" }); }
-                finally { setBusy(null); }
-              }}><Download className="mr-1.5 h-4 w-4" />PDF</Button>
+            <Button variant="outline" size="sm" loading={busy === "pdf-branches"} disabled={placed === 0} onClick={() => void printPdf("branches")}><Download className="mr-1.5 h-4 w-4" />Branch-wise PDF</Button>
+            <Button variant="outline" size="sm" loading={busy === "pdf-sheet"} disabled={placed === 0} onClick={() => void printPdf("sheet")}><Download className="mr-1.5 h-4 w-4" />Combined PDF</Button>
           </div>
         </div>
 
         {data.branches.length === 0 ? (
           <p className="rounded-2xl border border-dashed p-8 text-center text-sm text-muted-foreground">No branch of this year has Theory subjects with teaching assignments in semester {plan.semester} yet.</p>
         ) : (
-          <MidTimetableSheet rows={sheetRows} days={plan.days} sessions={plan.sessions} onCell={setupDirty ? undefined : openCell} cellTitle="Click to choose the subject" />
+          <>
+            <div className="inline-flex rounded-xl border bg-muted/40 p-1 text-sm" role="tablist" aria-label="View">
+              {([["sheet", "Combined sheet"], ["branches", "Branch-wise"]] as const).map(([k, label]) => (
+                <button key={k} type="button" role="tab" aria-selected={view === k} onClick={() => setView(k)}
+                  className={cn("rounded-lg px-3.5 py-1.5 font-medium", view === k ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}>{label}</button>
+              ))}
+            </div>
+            {view === "sheet" ? (
+              <MidTimetableSheet rows={sheetRows} days={plan.days} sessions={plan.sessions} onCell={setupDirty ? undefined : openCell} cellTitle="Click to choose the subject" />
+            ) : (
+              <div className="grid gap-4 lg:grid-cols-2">
+                {data.branches.map((b) => {
+                  const usual = plan.sessions.find((x) => x.id === usualOf(b));
+                  return (
+                    <section key={b.key} className="space-y-3 rounded-2xl border bg-card p-4 shadow-sm" aria-label={`${b.branch} timetable`}>
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <h3 className="font-semibold leading-snug">{b.branch}</h3>
+                          <p className="text-xs text-muted-foreground">{usual ? `${usual.label} · ${timeLabel(usual.from)} - ${timeLabel(usual.to)} · ` : ""}{slotsOf(b).length} of {b.subjects.length} placed{b.timetable?.status === "PUBLISHED" ? " · Published" : ""}</p>
+                        </div>
+                        <Button size="sm" variant="outline" loading={busy === `pdf-${b.key}`} disabled={slotsOf(b).length === 0} onClick={() => void printPdf("branches", b)}><Download className="mr-1.5 h-4 w-4" />PDF</Button>
+                      </div>
+                      <BranchTimetableList slots={slotsOf(b)} sessions={plan.sessions} />
+                    </section>
+                  );
+                })}
+              </div>
+            )}
+          </>
         )}
 
         <div className="sticky bottom-3 z-20 flex flex-wrap items-center justify-between gap-2 rounded-2xl border bg-card/95 p-3 shadow-md backdrop-blur">

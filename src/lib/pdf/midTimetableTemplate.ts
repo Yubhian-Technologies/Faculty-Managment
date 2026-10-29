@@ -84,3 +84,33 @@ export function getMidTimetableHTML(d: { college: { name: string; affiliation?: 
     <div class="sign"><span>Controller of Examinations</span><span>Principal</span></div>
   </div></body></html>`;
 }
+
+/** One branch's own Mid timetable (a page of its own): Date, Day, Time, Subject - electives together. */
+export function getBranchTimetableHTML(d: { college: { name: string; affiliation?: string; logoUrl?: string }; sheet: MidTimetableSheetPrint; row: MidTimetableSheetPrint["rows"][number] }): string {
+  const t = d.sheet, r = d.row;
+  const ses = (id?: string) => t.sessions.find((x) => x.id === id);
+  const exams = [...new Set(r.slots.map((x) => `${x.date}|${x.sessionId}`))]
+    .map((k) => { const [date, sid] = k.split("|"); return { date, s: ses(sid), slots: r.slots.filter((x) => x.date === date && x.sessionId === sid) }; })
+    .sort((a, b) => a.date.localeCompare(b.date) || (a.s?.from ?? "").localeCompare(b.s?.from ?? ""));
+  const rows = exams.map(({ date, s, slots }) => {
+    const group = slots.find((x) => x.group)?.group;
+    const moved = slots.find((x) => x.movedFrom)?.movedFrom;
+    const subj = `${moved ? `<span class="moved">Rescheduled (was ${dmy(moved)})</span>` : ""}${group ? `<span class="grp">${esc(group)}</span>` : ""}${slots.map((x) => `${esc(x.subjectName)} <span class="c2">(${esc(x.subjectCode)})</span>`).join(" / ")}`;
+    return `<tr><td><b>${dmy(date)}</b></td><td>${WEEKDAY[new Date(`${date}T00:00:00Z`).getUTCDay()]}</td><td>${s ? `${timeLabel(s.from)} - ${timeLabel(s.to)}` : ""}</td><td class="l">${subj}</td></tr>`;
+  }).join("");
+  const months = [...new Set(exams.map((x) => new Date(`${x.date}T00:00:00Z`).toLocaleDateString("en-IN", { month: "long", year: "numeric", timeZone: "UTC" }).toUpperCase()))].join(" / ");
+  return `<!DOCTYPE html><html><head><meta charset="utf-8" /><style>${STYLE}
+    .bt { width: 78%; margin: 0 auto; } .bt td { padding: 8px 10px; } .bt td.l { text-align: left; } .c2 { color: #333; font-size: 0.9em; }
+    .brn { text-align: center; font-weight: bold; font-size: 15px; margin: 6px 0 10px; }
+  </style></head><body><div class="page">
+    <div class="pdf-page-header">
+      <img src="${logoSrc(d.college.logoUrl)}" alt="College logo" />
+      <div class="center"><p class="college">${esc(d.college.name)}</p>${d.college.affiliation ? `<p class="sub">(${esc(d.college.affiliation)})</p>` : ""}</div>
+    </div>
+    <p class="center branch-office">EXAMINATION BRANCH</p>
+    <p class="center exam">${esc(t.courseName)} - ${ROMAN[t.year] ?? t.year} YEAR - SEMESTER ${t.semester} &nbsp; MID-${ROMAN[t.midNumber] ?? t.midNumber} EXAMINATIONS${months ? ` - ${esc(months)}` : ""}</p>
+    <p class="brn">${esc(r.branch)} &nbsp;-&nbsp; TIME TABLE</p>
+    <table class="bt"><thead><tr><th style="width:16%">Date</th><th style="width:14%">Day</th><th style="width:22%">Time</th><th>Subject</th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="sign"><span>Controller of Examinations</span><span>Principal</span></div>
+  </div></body></html>`;
+}

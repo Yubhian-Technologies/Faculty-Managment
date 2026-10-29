@@ -8,7 +8,7 @@ import { ordinalYearLabel } from "@/lib/college/courseYears";
 import { dayLabel, timeLabel, usualSessionOf } from "@/lib/midTimetable/rules";
 import { downloadMidTimetablePdf } from "@/lib/pdf/downloadMidTimetable";
 import type { MidExamSession, MidTimetable } from "@/types";
-import { MidTimetableSheet, SheetCell } from "./MidTimetableSheet";
+import { BranchTimetableList, MidTimetableSheet } from "./MidTimetableSheet";
 
 // Read-only Mid exam timetables: the published ones the viewer may see (the API
 // decides - a student's own branch, a faculty member's branches, every branch
@@ -45,9 +45,9 @@ export function MidTimetableViewer({ emptyText }: { emptyText: string }) {
   }, []);
   const sheets = useMemo(() => toSheets(list ?? []), [list]);
 
-  async function pdf(s: Sheet) {
-    setBusy(s.planId);
-    try { await downloadMidTimetablePdf({ ...s, rows: s.rows.map((r) => ({ branch: r.branch, slots: r.slots, usualSessionId: r.usualSessionId ?? usualSessionOf(r.sessions, undefined, r.slots) })) }, `mid${s.midNumber}-${s.courseName}-year${s.year}-timetable`); }
+  async function pdf(s: Sheet, mode: "sheet" | "branches" = s.rows.length === 1 ? "branches" : "sheet") {
+    setBusy(`${s.planId}|${mode}`);
+    try { await downloadMidTimetablePdf({ ...s, rows: s.rows.map((r) => ({ branch: r.branch, slots: r.slots, usualSessionId: r.usualSessionId ?? usualSessionOf(r.sessions, undefined, r.slots) })) }, `mid${s.midNumber}-${s.courseName}-year${s.year}-${s.rows.length === 1 ? s.rows[0].branch : mode === "branches" ? "branch-wise" : "timetable"}`, mode); }
     catch { toast({ variant: "destructive", title: "Could not make the PDF" }); }
     finally { setBusy(null); }
   }
@@ -74,7 +74,10 @@ export function MidTimetableViewer({ emptyText }: { emptyText: string }) {
               <h2 className="text-lg font-semibold">Mid {s.midNumber} timetable{s.rows.length === 1 ? ` · ${s.rows[0].branch}` : ""}</h2>
               {s.sessions.length === 1 && <p className="text-sm text-muted-foreground">Time: {timeLabel(s.sessions[0].from)} - {timeLabel(s.sessions[0].to)}</p>}
             </div>
-            <Button size="sm" variant="outline" loading={busy === s.planId} onClick={() => void pdf(s)}><Download className="mr-1.5 h-4 w-4" />PDF</Button>
+            <div className="flex flex-wrap gap-2">
+              {s.rows.length > 1 && <Button size="sm" variant="outline" loading={busy === `${s.planId}|branches`} onClick={() => void pdf(s, "branches")}><Download className="mr-1.5 h-4 w-4" />Branch-wise PDF</Button>}
+              <Button size="sm" variant="outline" loading={busy === `${s.planId}|${s.rows.length === 1 ? "branches" : "sheet"}`} onClick={() => void pdf(s)}><Download className="mr-1.5 h-4 w-4" />{s.rows.length > 1 ? "Combined PDF" : "PDF"}</Button>
+            </div>
           </div>
           {(() => {
             const last = s.rows.flatMap((r) => r.changes ?? []).sort((a, b) => b.at.localeCompare(a.at))[0];
@@ -86,19 +89,7 @@ export function MidTimetableViewer({ emptyText }: { emptyText: string }) {
             ) : null;
           })()}
           {s.rows.length === 1 ? (
-            <ol className="divide-y rounded-xl border">
-              {s.days.flatMap((d) => s.sessions.map((ses) => ({ d, ses, slots: s.rows[0].slots.filter((x) => x.date === d && x.sessionId === ses.id) })))
-                .filter((x) => x.slots.length)
-                .map(({ d, ses, slots }) => (
-                  <li key={`${d}|${ses.id}`} className="flex flex-wrap items-center gap-x-6 gap-y-2 p-3 sm:p-4">
-                    <div className="w-44 shrink-0">
-                      <p className="font-semibold">{dayLabel(d)}</p>
-                      <p className="text-xs text-muted-foreground">{s.sessions.length > 1 ? `${ses.label} · ` : ""}{timeLabel(ses.from)} - {timeLabel(ses.to)}</p>
-                    </div>
-                    <div className="min-w-0 flex-1 text-left [&_div]:text-left"><SheetCell slots={slots} /></div>
-                  </li>
-                ))}
-            </ol>
+            <BranchTimetableList slots={s.rows[0].slots} sessions={s.sessions} />
           ) : (
             <MidTimetableSheet rows={s.rows.map((r) => ({ key: r.id, branch: r.branch, slots: r.slots, usualSessionId: r.usualSessionId ?? usualSessionOf(r.sessions, undefined, r.slots) }))} days={s.days} sessions={s.sessions} />
           )}

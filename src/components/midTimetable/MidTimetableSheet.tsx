@@ -107,3 +107,24 @@ export function MidTimetableSheet({ rows, days, sessions, onCell, cellTitle }: {
     </div>
   );
 }
+
+/** One branch's own timetable as a list: each exam's day, time and subject(s). */
+export function BranchTimetableList({ slots, sessions }: { slots: MidExamSlot[]; sessions: MidExamSession[] }) {
+  const exams = [...new Set(slots.map((x) => `${x.date}|${x.sessionId}`))]
+    .map((k) => { const [d, sid] = k.split("|"); return { d, ses: sessions.find((x) => x.id === sid), list: slots.filter((x) => x.date === d && x.sessionId === sid) }; })
+    .sort((a, b) => a.d.localeCompare(b.d) || (a.ses?.from ?? "").localeCompare(b.ses?.from ?? ""));
+  if (exams.length === 0) return <p className="rounded-xl border border-dashed p-4 text-center text-sm text-muted-foreground">No exams placed yet.</p>;
+  return (
+    <ol className="divide-y rounded-xl border">
+      {exams.map(({ d, ses, list }) => (
+        <li key={`${d}|${ses?.id}`} className="flex flex-wrap items-center gap-x-6 gap-y-2 p-3 sm:p-4">
+          <div className="w-44 shrink-0">
+            <p className="font-semibold">{dayLabel(d)}</p>
+            {ses && <p className="text-xs text-muted-foreground">{sessions.length > 1 ? `${ses.label} · ` : ""}{timeLabel(ses.from)} - {timeLabel(ses.to)}</p>}
+          </div>
+          <div className="min-w-0 flex-1 text-left [&_div]:text-left"><SheetCell slots={list} /></div>
+        </li>
+      ))}
+    </ol>
+  );
+}
