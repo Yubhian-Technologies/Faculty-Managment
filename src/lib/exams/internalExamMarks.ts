@@ -32,6 +32,39 @@ export async function resolveExamTypeForSubject(
   return subjectTypeToExamType(subject?.type);
 }
 
+// ─── Subject exceptions ───────────────────────────────────────────────
+// The Exam Cell may give ONE subject its own internal marks breakdown (e.g. no
+// Quiz, a 25-mark Mid), used in every branch that takes it instead of the
+// branch + year configuration. colleges/{c}/examConfigSubjectOverrides/{subjectId}_{examType}.
+
+export const subjectOverrideId = (subjectId: string, examType: ExamType) => `${subjectId}_${examType}`;
+
+/**
+ * The internal marks configuration for a subject taught in a course + year:
+ * the subject's exception when the Exam Cell set one, else the branch + year
+ * configuration. Every reader goes through here, so both are honoured alike.
+ */
+export async function loadExamConfig(
+  collegeRef: FirebaseFirestore.DocumentReference,
+  args: { courseId?: string | null; year?: number | null; examType: ExamType; subjectId?: string | null },
+): Promise<ExamConfiguration | null> {
+  const [override, base] = await Promise.all([
+    args.subjectId ? collegeRef.collection("examConfigSubjectOverrides").doc(subjectOverrideId(args.subjectId, args.examType)).get() : null,
+    args.courseId && args.year != null ? collegeRef.collection("examConfigurations").doc(examConfigId(args.courseId, args.year, args.examType)).get() : null,
+  ]);
+  const baseConfig = base?.exists ? ({ id: base.id, ...base.data() } as ExamConfiguration) : null;
+  if (override?.exists) {
+    const o = override.data() as Pick<ExamConfiguration, "internalMaxMarks" | "externalMaxMarks" | "components" | "status"> & { subjectName?: string };
+    // The branch's identity (course, department, year) with the subject's own marks.
+    return {
+      ...(baseConfig ?? { collegeId: collegeRef.id, courseId: args.courseId ?? "", courseName: "", department: "", year: args.year ?? 0, createdBy: "", createdByName: "" }),
+      id: override.id, examType: args.examType,
+      internalMaxMarks: o.internalMaxMarks, externalMaxMarks: o.externalMaxMarks, components: o.components, status: o.status ?? "ACTIVE",
+    } as unknown as ExamConfiguration;
+  }
+  return baseConfig;
+}
+
 export function activeComponentIds(config: ExamConfiguration): string[] {
   return config.components.filter((c) => c.isActive).map((c) => c.id);
 }
@@ -79,8 +112,7 @@ export async function resolveExamConfigForBatch(
 
   const examType = await resolveExamTypeForSubject(collegeRef, batch.subjectId);
 
-  const configSnap = await collegeRef.collection("examConfigurations").doc(examConfigId(courseId, year, examType)).get();
-  if (!configSnap.exists) return null;
-  const config = { id: configSnap.id, ...configSnap.data() } as ExamConfiguration;
+  const config = await loadExamConfig(collegeRef, { courseId, year, examType, subjectId: batch.subjectId });
+  if (!config) return null;
   return { config, courseId, courseName: courseName ?? config.courseName };
 }
