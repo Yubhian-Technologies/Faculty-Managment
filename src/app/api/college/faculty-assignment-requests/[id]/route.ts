@@ -289,35 +289,22 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (requestAllocations(reqData).some((a) => a.facultyId === body.facultyId)) {
       return NextResponse.json({ error: "This faculty is already allocated to this request" }, { status: 409 });
     }
-
-    const existing = await collegeRef.collection("teachingAssignments")
-      .where("facultyId", "==", body.facultyId)
-      .where("sectionId", "==", reqData.sectionId)
-      .where("subjectId", "==", reqData.subjectId)
-      .get();
-    if (existing.docs.some((d) => !(d.data() as { isPast?: boolean }).isPast)) {
-      return NextResponse.json({ error: "This faculty is already assigned to this subject for this section" }, { status: 409 });
-    }
-
     if (body.action === "reallocate") {
-      // Changes one faculty member already on the request. Their teaching
-      // assignment and its timetable slots are pointed at the new faculty member,
-      // and only that entry in `allocations` changes. Refuses if the new faculty
-      // member already has a class in one of those periods.
-      const allocs = requestAllocations(reqData);
-      const old = allocs.find((a) => a.facultyId === body.fromFacultyId);
-      if (!old || !old.teachingAssignmentId) {
-        return NextResponse.json({ error: "That faculty member isn't allocated to this request" }, { status: 404 });
+      // Swaps ONE allocated faculty member (oldFacultyId) for the new one: the
+      // same teaching assignment and its timetable slots are pointed at the new
+      // faculty, so the timetable and both sides' views stay in step. Busy
+      // periods declared for the old faculty don't carry over.
+      const current = requestAllocations(reqData);
+      const oldFacultyId = body.fromFacultyId ?? "";
+      const target = current.find((a) => a.facultyId === oldFacultyId);
+      if (!target || !target.teachingAssignmentId) {
+        return NextResponse.json({ error: "Pick which allocated faculty member to change" }, { status: 400 });
       }
-      if (allocs.some((a) => a.facultyId === body.facultyId)) {
-        return NextResponse.json({ error: "That faculty member is already allocated to this request" }, { status: 409 });
-      }
-      const taRefExisting = collegeRef.collection("teachingAssignments").doc(old.teachingAssignmentId);
-      const slotSnaps = await collegeRef.collection("timetableSlots").where("assignmentId", "==", old.teachingAssignmentId).get();
+      const slotSnaps = await collegeRef.collection("timetableSlots").where("assignmentId", "==", target.teachingAssignmentId).get();
       const newFacultySlots = await collegeRef.collection("timetableSlots").where("facultyId", "==", body.facultyId).get();
       const busyKeys = new Set(
         newFacultySlots.docs
-          .filter((d) => d.data().assignmentId !== old.teachingAssignmentId)
+          .filter((d) => d.data().assignmentId !== target.teachingAssignmentId)
           .map((d) => { const s = d.data() as { day: string; periodNumber: number; year?: number }; return `${s.day}|${s.periodNumber}|${s.year ?? ""}`; })
       );
       const clash = slotSnaps.docs.find((d) => {
@@ -328,54 +315,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         return NextResponse.json({ error: "That faculty member already has a class in one of this subject's periods" }, { status: 409 });
       }
       const newName = allocatedName || body.facultyName || "";
-      // The busy periods declared for the replaced faculty member don't carry
-      // over - the new one has to declare their own.
-      const nextAllocations = allocs.map((a) =>
-        a.facultyId === body.fromFacultyId
-          ? { ...a, facultyId: body.facultyId as string, facultyName: newName, busyPeriods: [], allocatedBy: session.uid }
-          : a
-      );
+      const nextAllocations = current.map((a) => (a.facultyId === oldFacultyId
+        ? { facultyId: body.facultyId as string, facultyName: newName, teachingAssignmentId: a.teachingAssignmentId, busyPeriods: [], allocatedBy: session.uid }
+        : a));
       const batch = db.batch();
-      // The teaching assignment can be gone already (deleted on its own); then the
-      // new faculty member gets a fresh one for this section and subject, the same
-      // as Allocate, and the slots move onto it.
-      const taSnap = await taRefExisting.get();
-      let teachingAssignmentId = old.teachingAssignmentId;
-      if (taSnap.exists) {
-        batch.update(taRefExisting, { facultyId: body.facultyId, facultyName: newName, updatedAt: now });
-      } else {
-        const freshRef = collegeRef.collection("teachingAssignments").doc();
-        teachingAssignmentId = freshRef.id;
-        batch.set(freshRef, {
-          collegeId: session.collegeId,
-          facultyId: body.facultyId,
-          facultyName: newName,
-          department: reqData.requestingDepartment,
-          departmentId: course?.departmentId ?? "",
-          courseId: reqData.courseId,
-          courseName: reqData.courseName,
-          year: reqData.year,
-          sectionId: reqData.sectionId,
-          sectionName: reqData.sectionName,
-          subjectId: reqData.subjectId,
-          subjectName: reqData.subjectName,
-          subjectCode: reqData.subjectCode,
-          hoursPerWeek: reqData.hoursPerWeek,
-          assignedBy: session.uid,
-          assignedByName: session.role,
-          createdAt: now,
-          updatedAt: now,
-          assignmentAcademicYear: "",
-          assignmentSemester: "",
-        });
-      }
-      for (const s of slotSnaps.docs) {
-        batch.update(s.ref, {
-          facultyId: body.facultyId, facultyName: newName, updatedAt: now,
-          ...(taSnap.exists ? {} : { assignmentId: teachingAssignmentId }),
-        });
-      }
-      batch.update(reqRef, { ...allocationFields(nextAllocations.map((a) => a.facultyId === body.facultyId ? { ...a, teachingAssignmentId } : a)), updatedAt: now });
+      batch.update(collegeRef.collection("teachingAssignments").doc(target.teachingAssignmentId), { facultyId: body.facultyId, facultyName: newName, updatedAt: now });
+      for (const s of slotSnaps.docs) batch.update(s.ref, { facultyId: body.facultyId, facultyName: newName, updatedAt: now });
+      batch.update(reqRef, { ...allocationFields(nextAllocations), updatedAt: now });
       await batch.commit();
       await collegeRef.collection("auditLogs").add({
         collegeId: session.collegeId,
@@ -383,16 +329,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         performedBy: session.uid,
         performedByName: session.role,
         targetId: id,
-        details: { subjectName: reqData.subjectName, sectionName: reqData.sectionName, replacedFacultyId: body.fromFacultyId, facultyName: newName },
+        details: { subjectName: reqData.subjectName, sectionName: reqData.sectionName, from: target.facultyName, to: newName },
         timestamp: now,
       });
       await notify(
         db, session.collegeId, reqData.requestedBy, "FACULTY_ASSIGNMENT_ALLOCATED",
         "Faculty for your requested subject changed",
-        `${reqData.targetDepartmentName} changed the faculty member for ${reqData.subjectName} (Section ${reqData.sectionName}) to ${newName || "a new faculty member"}`,
+        `${reqData.targetDepartmentName} changed ${target.facultyName || "the faculty member"} to ${newName || "a new faculty member"} for ${reqData.subjectName} (Section ${reqData.sectionName})`,
         requesterRequestsLink(requesterRole)
       );
-      return NextResponse.json({ ok: true, teachingAssignmentId });
+      return NextResponse.json({ ok: true, teachingAssignmentId: target.teachingAssignmentId });
     }
 
     const taRef = collegeRef.collection("teachingAssignments").doc();

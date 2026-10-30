@@ -33,7 +33,7 @@ import type { StudentListItem, Department, AcademicYear, Course } from "@/types"
 import { selectableYears } from "@/lib/college/courseYears";
 import { DepartmentPickSelect } from "@/components/shared/DepartmentPickSelect";
 import {
-  buildDepartmentPickOptions, DEPARTMENT_PICK_ALL, departmentPickValue, isDepartmentPickOffered, parseDepartmentPick,
+  buildDepartmentPickOptions, DEPARTMENT_PICK_ALL, departmentPickValue, dropEmptyFeederGroups, isDepartmentPickOffered, parseDepartmentPick,
 } from "@/lib/departments/departmentPickTree";
 import { sectionDepartmentNames, useCollegeSectionList } from "@/hooks/useSectionDepartments";
 import { rollupDepartmentNamesForPick } from "@/lib/departments/departmentTree";
@@ -74,6 +74,7 @@ interface StudentListFilters {
   years: string;
   course: string;
   year: string;
+  /** "Regular" / "Lateral" filter studentType; "Detained" / "Discontinued" filter status instead. */
   studentType: string;
   rollFrom: string;
   rollTo: string;
@@ -89,7 +90,9 @@ function filtersToParams(f: StudentListFilters): URLSearchParams {
   if (f.year === "all" && f.years) params.set("years", f.years);
   if (f.course !== "all") params.set("course", f.course);
   if (f.year !== "all") params.set("year", f.year);
-  if (f.studentType !== "all") params.set("studentType", f.studentType);
+  if (f.studentType === "Detained") params.set("status", "DETAINED");
+  else if (f.studentType === "Discontinued") params.set("status", "DISCONTINUED");
+  else if (f.studentType !== "all") params.set("studentType", f.studentType);
   if (f.rollFrom) params.set("rollFrom", f.rollFrom);
   if (f.rollTo) params.set("rollTo", f.rollTo);
   if (f.section !== "all") params.set("section", f.section);
@@ -143,7 +146,7 @@ function OfficeStudentsContent() {
       years: /^\d+(,\d+)*$/.test(yearsParam) ? yearsParam : "",
       course: readListString(searchParams, "course", "all"),
       year: /^\d+$/.test(yearParam) ? yearParam : "all",
-      studentType: readListChoice<string>(searchParams, "studentType", ["Regular", "Lateral"], "all"),
+      studentType: readListChoice<string>(searchParams, "studentType", ["Regular", "Lateral", "Detained", "Discontinued"], "all"),
       rollFrom: readListString(searchParams, "rollFrom", ""),
       rollTo: readListString(searchParams, "rollTo", ""),
       section: readListString(searchParams, "section", "all"),
@@ -363,7 +366,7 @@ function OfficeStudentsContent() {
         const offeringIds = new Set(departmentsOfferingCourse(departments, courses, courseFilter).map((d) => d.id));
         return activeDepartments.filter((d) => offeringIds.has(d.id));
       })();
-    return buildDepartmentPickOptions(offered, departments, sectionDepartments);
+    return dropEmptyFeederGroups(buildDepartmentPickOptions(offered, departments, sectionDepartments), sectionDepartments);
   }, [courseFilter, activeDepartments, departments, courses, sectionDepartments]);
 
   const yearFilterOptions = useMemo(() => {
@@ -479,7 +482,10 @@ function OfficeStudentsContent() {
     const nextDeptOptions = value === "all"
       ? activeDepartments
       : activeDepartments.filter((d) => new Set(departmentsOfferingCourse(departments, courses, value).map((o) => o.id)).has(d.id));
-    const deptStillValid = isDepartmentPickOffered(buildDepartmentPickOptions(nextDeptOptions, departments, sectionDepartments), deptPick);
+    const deptStillValid = isDepartmentPickOffered(
+      dropEmptyFeederGroups(buildDepartmentPickOptions(nextDeptOptions, departments, sectionDepartments), sectionDepartments),
+      deptPick
+    );
     const nextDept = deptStillValid ? deptFilter : "all";
     if (!deptStillValid) setDeptPick(DEPARTMENT_PICK_ALL);
     const nextYearOptions = nextDept === "all"
@@ -855,6 +861,8 @@ function OfficeStudentsContent() {
             <SelectItem value="all">All types</SelectItem>
             <SelectItem value="Regular">Regular</SelectItem>
             <SelectItem value="Lateral">Lateral</SelectItem>
+            <SelectItem value="Detained">Detained</SelectItem>
+            <SelectItem value="Discontinued">Discontinued</SelectItem>
           </SelectContent>
         </Select>
         <Button onClick={handleLoad} loading={isFetching}>

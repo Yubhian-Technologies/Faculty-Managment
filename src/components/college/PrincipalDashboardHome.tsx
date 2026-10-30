@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { useAuthStore } from "@/store/authStore";
 import { useCollegeInfo } from "@/hooks/useCollegeInfo";
+import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
 import { ROLE_LABELS } from "@/types";
 import { useNavVisibility } from "@/hooks/useNavVisibility";
 import { isPathHidden } from "@/components/layout/navConfig";
@@ -20,7 +21,6 @@ import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { formatDate } from "@/lib/utils";
 import type { VacancyRequest, HiringBatch, Department } from "@/types";
 
-import { CollegeBrandingDashboardCard } from "@/components/college/CollegeBrandingDashboardCard";
 
 // Shared home dashboard for /principal and /vice-principal - the two roles
 // carry equal authority and already share every /principal/* page (see
@@ -30,6 +30,7 @@ import { CollegeBrandingDashboardCard } from "@/components/college/CollegeBrandi
 // live stats and pending-approval lists.
 export function PrincipalDashboardHome({ fallbackName }: { fallbackName: string }) {
   const user = useAuthStore((s) => s.user);
+  const { nameFor } = useFacultyDisplayNames();
   const { collegeInfo } = useCollegeInfo();
   const { hiddenModules, hiddenItems } = useNavVisibility();
   const isHidden = (href: string) => !!user?.role && isPathHidden(href, user.role, hiddenModules, hiddenItems);
@@ -67,11 +68,10 @@ export function PrincipalDashboardHome({ fallbackName }: { fallbackName: string 
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Hello, ${user?.name?.split(" ")[0] ?? fallbackName}`}
+        title={`Hello, ${user ? nameFor("dashboardName", { uid: user.uid }, user.name?.split(" ")[0] ?? fallbackName) : fallbackName}`}
         description={[user?.role ? ROLE_LABELS[user.role] : fallbackName, collegeInfo?.name].filter(Boolean).join(" - ")}
       />
 
-      <CollegeBrandingDashboardCard />
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         {[

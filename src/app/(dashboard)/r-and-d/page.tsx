@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { RESEARCH_MODULES } from "@/lib/research/modules";
 import { useAuthStore } from "@/store/authStore";
+import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
 import { useNavVisibility } from "@/hooks/useNavVisibility";
 import { isPathHidden } from "@/components/layout/navConfig";
 import { ROLE_LABELS } from "@/types";
@@ -30,6 +31,7 @@ const MODULES = Object.values(RESEARCH_MODULES);
 
 export default function RAndDDashboard() {
   const user = useAuthStore((s) => s.user);
+  const { nameFor } = useFacultyDisplayNames();
   const { hiddenModules, hiddenItems } = useNavVisibility();
   const isHidden = (href: string) => !!user?.role && isPathHidden(href, user.role, hiddenModules, hiddenItems);
 
@@ -65,7 +67,7 @@ export default function RAndDDashboard() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Hello, ${user?.name ?? "there"}`}
+        title={`Hello, ${user ? nameFor("dashboardName", { uid: user.uid }, user.name) : "there"}`}
         description={ROLE_LABELS.R_AND_D}
       />
 

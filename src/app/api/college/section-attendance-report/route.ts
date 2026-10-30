@@ -7,8 +7,8 @@ import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/s
 import { fetchSectionStudents } from "@/lib/students/sectionRoster";
 import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
 import { calcPercent } from "@/lib/studentAttendance/percentage";
-import { effectiveJoiningDate } from "@/lib/studentAttendance/joiningDate";
-import { countFullyAbsentDays, indexSessions, tallyStudentBySubject } from "@/lib/studentAttendance/counting";
+import { countsFromJoining, effectiveJoiningDate } from "@/lib/studentAttendance/joiningDate";
+import { countFullyAbsentDays, indexSessions, isOnDutyMark, tallyStudentBySubject } from "@/lib/studentAttendance/counting";
 import { isShortageByPercent } from "@/lib/studentAttendance/shortage";
 import { matchesCurrentSemester } from "@/lib/college/semester";
 import { compareStudentsForList } from "@/lib/students/listOrder";
@@ -335,12 +335,13 @@ export async function GET(request: Request) {
       // Every submitted session is one period (see lib/studentAttendance/counting.ts).
       const indexedInRange = indexSessions(inRange);
 
-      const roster = await fetchSectionStudents(collegeRef, {
+      let roster = await fetchSectionStudents(collegeRef, {
         department: section.department,
         sectionName: section.name,
         year: section.year,
         courseId: section.courseId,
       });
+      roster = filterByHosteller(roster as unknown as { hosteller?: boolean }[]) as typeof roster;
 
       let students = roster
         .map((stu) => {
@@ -593,22 +594,26 @@ export async function GET(request: Request) {
 
       let students = roster
         .map((stu) => {
+          const joinedOn = effectiveJoiningDate(stu);
           const bySubject: Record<string, { weeks: (number | null)[]; monthPresent: number; monthTotal: number; monthPercent: number | null }> = {};
           for (const sub of subjects) {
             const weekPresent = new Array(weekRanges.length).fill(0) as number[];
             const weekTotal = new Array(weekRanges.length).fill(0) as number[];
             for (const { session: r, marks } of indexedBySubject.get(sub.subjectId) ?? []) {
               if (!marks.has(stu.id)) continue; // not on this session's roster (other lab batch / joined later)
+              if (!countsFromJoining(r.date, joinedOn)) continue;
+              if (isOnDutyMark(marks.get(stu.id))) continue; // on duty: neither held nor attended (counting.ts)
               const wi = weekIndexForDate(r.date);
               weekTotal[wi] += 1;
               if (marks.get(stu.id) === "PRESENT") weekPresent[wi] += 1;
             }
-            const weeks = weekPresent.map((p, i) => (weekTotal[i] > 0 ? Math.round((p / weekTotal[i]) * 100) : null));
+            // calcPercent (2 decimals), like every other report: a whole-number round turned 74.6% into 75% and hid a shortage.
+            const weeks = weekPresent.map((p, i) => calcPercent(p, weekTotal[i]));
             const monthTotal = weekTotal.reduce((a, b) => a + b, 0);
             const monthPresent = weekPresent.reduce((a, b) => a + b, 0);
             bySubject[sub.subjectId] = {
               weeks, monthPresent, monthTotal,
-              monthPercent: monthTotal > 0 ? Math.round((monthPresent / monthTotal) * 100) : null,
+              monthPercent: calcPercent(monthPresent, monthTotal),
             };
           }
           return { id: stu.id, rollNumber: stu.rollNumber, name: stu.name, bySubject };
@@ -658,10 +663,17 @@ export async function GET(request: Request) {
 
     const dayRecords = inMonth.filter((r) => r.date === dateParam);
     const indexedDay = indexSessions(dayRecords);
-    const sessionBySubject = new Map<string, StudentAttendanceSession>();
-    for (const r of dayRecords) {
-      if (!sessionBySubject.has(r.subjectId)) sessionBySubject.set(r.subjectId, r);
+    // Every period of a subject that day (a 3-period lab is three sessions), in period order -
+    // numerically, not by id text, where "_10" would sort before "_9".
+    const sessionsBySubjectDay = new Map<string, StudentAttendanceSession[]>();
+    for (const r of [...dayRecords].sort((a, b) => (a.periodNumber ?? 0) - (b.periodNumber ?? 0))) {
+      const list = sessionsBySubjectDay.get(r.subjectId) ?? [];
+      list.push(r);
+      sessionsBySubjectDay.set(r.subjectId, list);
     }
+    const sessionBySubject = new Map<string, StudentAttendanceSession>(
+      Array.from(sessionsBySubjectDay.entries()).map(([id, list]) => [id, list[0]])
+    );
 
     const classwork = subjects
       .filter((s) => sessionBySubject.has(s.subjectId))
@@ -682,9 +694,13 @@ export async function GET(request: Request) {
       .map((stu) => {
         const statusBySubject: Record<string, StudentAttendanceMark | null> = {};
         for (const s of subjects) {
-          const r = sessionBySubject.get(s.subjectId);
-          const entry = r?.entries.find((e) => e.studentId === stu.id);
-          statusBySubject[s.subjectId] = entry?.status ?? null;
+          // One cell per subject, but over ALL its periods that day: absent in any period shows ABSENT
+          // (so "absent only" finds a student who missed period 2 of a lab), else PRESENT, else ON_DUTY.
+          const marks = (sessionsBySubjectDay.get(s.subjectId) ?? [])
+            .map((r) => r.entries.find((e) => e.studentId === stu.id)?.status ?? null)
+            .filter((m): m is NonNullable<typeof m> => m !== null);
+          statusBySubject[s.subjectId] =
+            marks.includes("ABSENT") ? "ABSENT" : marks.includes("PRESENT") ? "PRESENT" : marks.includes("ON_DUTY") ? "ON_DUTY" : null;
         }
         // also compute percent per subject for this single day (1 held if session exists)
         const bySubjectDaily: Record<string, { held: number; attend: number; percent: number | null }> = {};

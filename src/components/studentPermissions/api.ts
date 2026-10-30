@@ -31,9 +31,15 @@ export const actOnRequest = async (id: string, action: RequestAction, remark?: s
 export interface FormOptions {
   enabled: boolean;
   department: string;
+  /** Students only: is this student a Class Representative of their section (the Section Feed is theirs alone). */
+  isClassRepresentative?: boolean;
   studentInfo?: { name: string; rollNumber: string; department: string; year: number; section: string };
   groups: { id: string; label: string; items: { id: string; label: string; enabled: boolean }[] }[];
   limits: PermissionLimits;
+  /** Students only: the periods of the student's own class with their times (absent = unknown, the form offers 1-8). */
+  periods?: { number: number; start?: string; end?: string }[];
+  /** Is proof required for each permission type, for the requester's department (server re-checks on submit). */
+  proofRequiredByCategory: Record<string, boolean>;
 }
 export const loadOptions = (department?: string) => call<FormOptions>(`${BASE}/options${department ? `?department=${encodeURIComponent(department)}` : ""}`);
 

@@ -10,12 +10,13 @@ import { actorName, batchesCol, loadResultRules, recordsCol } from "@/lib/examRe
 import { studentStanding, type StudentStanding } from "@/lib/examResults/gpa";
 import { batchMatches, effectiveBatch } from "@/lib/examResults/importRows";
 import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
+import { dependentSheets } from "@/lib/examResults/deleteSheet";
 import type { ExamResultBatch, ExamResultRecord } from "@/types/examResults";
 
 // One results sheet: GET (with every student's record and their SGPA / CGPA
 // as of this semester - from their PUBLISHED results of every semester up to
 // it plus this sheet itself, under the college's Result Rules), PATCH { action:
-// "publish" } and DELETE (drafts only). A published sheet is locked - later
+// "publish" } and DELETE (a draft; or a published sheet no later sitting rests on). A published sheet is locked - later
 // corrections (revaluation) get their own audited edit, not a re-import.
 
 type Params = { params: Promise<{ id: string }> };
@@ -161,20 +162,39 @@ export async function DELETE(_request: Request, { params }: Params) {
     const snap = await ref.get();
     if (!snap.exists) return NextResponse.json({ error: "Results sheet not found" }, { status: 404 });
     const batch = snap.data() as ExamResultBatch;
-    if (batch.status !== "DRAFT") return NextResponse.json({ error: "Published results cannot be deleted" }, { status: 409 });
-
     const records = await recordsCol(db, session.collegeId).where("batchId", "==", id).get();
+    const published = batch.status !== "DRAFT";
+    if (published) {
+      // Refused while a later Supplementary / Revaluation of its students rests on it (delete that first).
+      const own = records.docs.map((d) => d.data() as ExamResultRecord);
+      const ids = [...new Set(own.map((r) => r.studentId))];
+      const others: ExamResultRecord[] = [];
+      for (let i = 0; i < ids.length; i += 30) {
+        const snap = await recordsCol(db, session.collegeId).where("studentId", "in", ids.slice(i, i + 30)).get();
+        others.push(...snap.docs.map((d) => d.data() as ExamResultRecord));
+      }
+      const blocking = dependentSheets({ ...batch, id }, own, others);
+      if (blocking.length) {
+        const snaps = await db.getAll(...blocking.slice(0, 10).map((b) => batchesCol(db, session.collegeId).doc(b)));
+        const titles = snaps.map((x) => (x.data() as ExamResultBatch | undefined)?.title ?? x.id);
+        return NextResponse.json({
+          error: `Later results rest on this sheet - delete them first: ${titles.join("; ")}${blocking.length > 10 ? ` and ${blocking.length - 10} more` : ""}`,
+          blocking,
+        }, { status: 409 });
+      }
+    }
+
     const writer = new ChunkedBatch(db);
     for (const d of records.docs) writer.delete(d.ref);
     await writer.commit();
     await ref.delete();
 
     await writeAuditLogSafe(db, session.collegeId, {
-      action: "SEMESTER_RESULTS_DRAFT_DELETED",
+      action: published ? "SEMESTER_RESULTS_PUBLISHED_DELETED" : "SEMESTER_RESULTS_DRAFT_DELETED",
       performedBy: session.uid,
       performedByName: await actorName(db, session.collegeId, session.uid),
       targetId: id,
-      details: { title: batch.title, students: records.size },
+      details: { title: batch.title, students: records.size, ...(published ? { publishedByName: batch.publishedByName ?? "" } : {}) },
     });
     return NextResponse.json({ ok: true });
   } catch (err) {

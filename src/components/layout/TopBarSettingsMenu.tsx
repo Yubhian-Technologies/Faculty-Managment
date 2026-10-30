@@ -10,6 +10,7 @@ import { CollegeAdminAccountMenu } from "@/components/layout/CollegeAdminAccount
 import { getSettingsHref, getNavItemsForRole, isSettingsNavItem } from "@/components/layout/navConfig";
 import { useWorkContext } from "@/hooks/useWorkContext";
 import { departmentOfContext } from "@/lib/roles/activeHodDepartment";
+import { toCollegeAdminPath } from "@/lib/auth/collegeAdminPaths";
 import type { UserRole } from "@/types";
 import { useAuthStore } from "@/store/authStore";
 
@@ -47,6 +48,8 @@ export function TopBarSettingsMenu({ hiddenItems = [] }: { hiddenItems?: string[
   const seatSettingsHref = activeSeat ? getNavItemsForRole(activeSeat).find(isSettingsNavItem)?.href ?? null : null;
   const settingsHref = seatSettingsHref ?? getSettingsHref(user.role, user.roles ?? user.seatRoles ?? []);
   const showSettings = !!settingsHref && !hiddenItems.includes(settingsHref);
+  // A College Admin opens the same Settings page under its own /college-admin URL.
+  const settingsLink = settingsHref && isCollegeAdmin ? toCollegeAdminPath(settingsHref) : settingsHref;
 
   if (!showSettings && !isCollegeAdmin && !isSuperAdmin) return null;
 
@@ -60,7 +63,7 @@ export function TopBarSettingsMenu({ hiddenItems = [] }: { hiddenItems?: string[
         </PopoverTrigger>
         <PopoverContent align="end" className="w-52 p-1">
           {showSettings && (
-            <Link href={settingsHref} onClick={() => setMenuOpen(false)} className={ITEM_CLASS}>
+            <Link href={settingsLink ?? settingsHref} onClick={() => setMenuOpen(false)} className={ITEM_CLASS}>
               <Settings2 className="h-4 w-4" />
               Settings
             </Link>

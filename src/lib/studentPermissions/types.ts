@@ -1,4 +1,4 @@
-import type { KindConfig } from "@/lib/approvals";
+import type { ApprovalRequest, KindConfig } from "@/lib/approvals";
 import type { StageId } from "@/lib/approvals";
 
 export const PERMISSION_KIND = "STUDENT_PERMISSION";
@@ -12,9 +12,11 @@ export const PERMISSION_STAGE_LABELS: Record<PermissionStage, string> = {
 
 /** Stages a route may use, per who raised the request. A class incharge only makes sense for one student's own request. */
 export function allowedStages(requesterType: string): PermissionStage[] {
+  // DELEGATED_FACULTY is no longer offered: nothing ever recorded a designated person for it, so a request routed there
+  // could not reach anyone. Routes saved earlier that still list it have it dropped when a request is raised (see create.ts).
   return requesterType === "STUDENT"
-    ? ["CLASS_INCHARGE", "DELEGATED_FACULTY", "HOD", "VICE_PRINCIPAL", "PRINCIPAL"]
-    : ["DELEGATED_FACULTY", "HOD", "VICE_PRINCIPAL", "PRINCIPAL"];
+    ? ["CLASS_INCHARGE", "HOD", "VICE_PRINCIPAL", "PRINCIPAL"]
+    : ["HOD", "VICE_PRINCIPAL", "PRINCIPAL"];
 }
 
 /** Used until the Principal (or a delegated HOD) configures something else. */
@@ -25,12 +27,24 @@ export interface PermissionLimits extends Record<string, unknown> {
   maxDays: number;
   /** Must a request carry at least one proof document? */
   proofRequired: boolean;
+  /** Per permission type (a category id or a group id): is proof required? Beats `proofRequired`; see resolveProofRequired. */
+  proofByType?: Record<string, boolean>;
+  /** Per permission type: the roles that may raise it (see REQUESTER_ROLES). Absent = anyone who can raise requests. */
+  requestersByType?: Record<string, string[]>;
   /** Preferred notice before the first day. Advisory: a shorter one is flagged "late", not refused. */
   advanceNoticeHours: number;
   maxStudentsPerRequest: number;
+  /** How many days before today a request may start. Past days are real attendance already taken, so this stays short. */
+  maxBackdateDays: number;
+  /**
+   * Hours each approver level may take before the request moves up to the next level (stage -> hours).
+   * A level with no entry has no time limit. The first approval or rejection from the level the request is
+   * waiting at closes it; the last level has nobody above it, so its time limit is ignored.
+   */
+  stageHours?: Record<string, number>;
 }
 
-export const DEFAULT_LIMITS: PermissionLimits = { maxDays: 15, proofRequired: true, advanceNoticeHours: 24, maxStudentsPerRequest: 100 };
+export const DEFAULT_LIMITS: PermissionLimits = { maxDays: 15, proofRequired: true, advanceNoticeHours: 24, maxStudentsPerRequest: 100, maxBackdateDays: 7 };
 
 export type PermissionConfig = KindConfig<PermissionLimits>;
 
@@ -75,6 +89,10 @@ export interface PermissionPayload {
   delegatedFacultyUid?: string;
   delegatedFacultyName?: string;
 }
+
+/** The login performing an action, with its CURRENT roles (primary + seats). */
+export interface ActingUser { uid: string; name: string; collegeId: string; roles: readonly string[] }
+export type PermissionRequest = ApprovalRequest<PermissionPayload>;
 
 /** Approvals-engine context: who is acting, with which roles. */
 export interface PermissionContext {

@@ -1,5 +1,6 @@
 "use client";
 
+import { CollegeLogo } from "@/components/shared/CollegeLogo";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -8,14 +9,17 @@ import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
 import { useUIStore } from "@/store/uiStore";
 import { useAuth } from "@/hooks/useAuth";
+import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
 import { useAssignedInterviews } from "@/hooks/useAssignedInterviews";
 import { useAssignedCoordinator } from "@/hooks/useAssignedCoordinator";
 import { useIsSubDepartmentHod } from "@/hooks/useIsSubDepartmentHod";
 import { usePrincipalPendingHiring } from "@/hooks/usePrincipalPendingHiring";
 import { useCollegeType } from "@/hooks/useCollegeType";
+import { INCIDENT_RECORD_HREFS, useIncidentUnread } from "@/hooks/useIncidentUnread";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { isNavItemActive, filterVisibleNavItems, isPathHidden, ROLES_WITH_EMBEDDED_PANEL_ACCESS, type NavItem } from "./navConfig";
 import { NavIcon } from "./NavIcon";
+import { groupNavItems } from "./navGroups";
 import { useCustomNav } from "@/hooks/useCustomNav";
 import { WorkContextSwitcher } from "./WorkContextSwitcher";
 import { readOnlyNavItems } from "./readOnlyNav";
@@ -47,12 +51,14 @@ interface SidebarProps {
 
 export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
   const user = useAuthStore((s) => s.user);
+  const { nameFor } = useFacultyDisplayNames();
   const { logout } = useAuth();
   const pathname = usePathname();
   const { hasInterviews } = useAssignedInterviews();
   const { coordinatorBatchId } = useAssignedCoordinator();
   const { hideSubDepartmentsLink } = useIsSubDepartmentHod();
   const { pendingCount: pendingHiringCount } = usePrincipalPendingHiring();
+  const incidentUnread = useIncidentUnread();
   const { collegeType } = useCollegeType();
   const { items: contextItems, active: activeContext } = useWorkContext();
   const { apply: applyCustomNav } = useCustomNav();
@@ -62,6 +68,7 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
   const [closedGroups, setClosedGroups] = useState<Set<string>>(new Set());
 
   if (!user) return null;
+  const shownName = nameFor("dashboardName", { uid: user.uid }, user.name);
 
   // "Sub-Departments" is hidden unless the HOD's own department both isn't
   // itself a sub-department and has sub-departments enabled by the Principal
@@ -114,11 +121,7 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
   if (user.readOnlyAccess) navItems = readOnlyNavItems();
 
   // A nav item that starts a `section` opens a new group; the items after it belong to it.
-  const groups: { title: string | null; items: NavItem[] }[] = [];
-  for (const item of navItems) {
-    if (item.section || groups.length === 0) groups.push({ title: item.section ?? null, items: [] });
-    groups[groups.length - 1].items.push(item);
-  }
+  const groups = groupNavItems(navItems);
   const toggleGroup = (title: string) =>
     setClosedGroups((prev) => {
       const next = new Set(prev);
@@ -147,7 +150,7 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
 
       {/* Logo */}
       <div className={cn("h-16 flex items-center gap-3 border-b shrink-0 overflow-hidden", collapsed ? "justify-center px-0" : "px-4")}>
-        <img src="https://res.cloudinary.com/dl88qtudz/image/upload/v1781675822/vishnulogo_r2jsjl.png" alt="Vishnu Logo" className="h-9 w-9 rounded-md object-contain shrink-0" />
+        <CollegeLogo className="h-9 w-9 rounded-md object-contain shrink-0" />
         {!collapsed && (
           <div className="flex-1 min-w-0">
             <p className="text-sm font-bold truncate">Vishnu People</p>
@@ -207,6 +210,13 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
                               {pendingHiringCount > 99 ? "99+" : pendingHiringCount}
                             </span>
                           ))}
+                          {incidentUnread > 0 && INCIDENT_RECORD_HREFS.includes(item.href) && (
+                            <span
+                              className={cn("h-2.5 w-2.5 rounded-full bg-red-500", collapsed ? "absolute top-1 right-1" : "ml-auto")}
+                              role="img"
+                              aria-label="New incident records"
+                            />
+                          )}
                         </Link>
                       );
                     })}
@@ -241,17 +251,17 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
         <div className={cn("flex items-center rounded-lg", collapsed ? "flex-col gap-2 py-1" : "gap-3 px-3 py-2")}>
           <div
             className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-sm font-semibold shrink-0 overflow-hidden"
-            title={collapsed ? user.name : undefined}
+            title={collapsed ? shownName : undefined}
           >
             {user.profilePhotoUrl ? (
-              <img src={user.profilePhotoUrl} alt={user.name} className="h-full w-full object-cover" />
+              <img src={user.profilePhotoUrl} alt={shownName} className="h-full w-full object-cover" />
             ) : (
-              getInitials(user.name)
+              getInitials(shownName)
             )}
           </div>
           {!collapsed && (
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{user.name}</p>
+              <p className="text-sm font-medium truncate">{shownName}</p>
               <UserCardSubtitle user={user} />
             </div>
           )}

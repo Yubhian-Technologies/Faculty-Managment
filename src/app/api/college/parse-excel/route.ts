@@ -53,28 +53,37 @@ export async function POST(request: Request) {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(buffer);
 
+    const readSheet = (sheet: ExcelJS.Worksheet) => {
+      const rows: string[][] = [];
+      // Each kept row's real sheet row number (1-based), parallel to `rows` -
+      // blank rows are skipped above, so an importer that reports "Row N"
+      // needs this to point at the row the user actually sees in Excel.
+      const rowNumbers: number[] = [];
+      sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+        const cells: string[] = [];
+        for (let i = 1; i <= row.cellCount; i++) {
+          cells.push(cellToString(row.getCell(i).value));
+        }
+        if (cells.some((c) => c.trim())) {
+          rows.push(cells);
+          rowNumbers.push(rowNumber);
+        }
+      });
+      return { rows, rowNumbers };
+    };
+
+    // allSheets=1: every non-empty sheet, by name (one section per sheet, e.g. an attendance register).
+    // The default stays the first sheet only, exactly as before.
+    if (formData.get("allSheets") === "1") {
+      const sheets = workbook.worksheets.map((s) => ({ name: s.name, ...readSheet(s) })).filter((s) => s.rows.length > 0);
+      return NextResponse.json({ sheets });
+    }
+
     const sheet = workbook.worksheets[0];
     if (!sheet) {
       return NextResponse.json({ rows: [], rowNumbers: [] });
     }
-
-    const rows: string[][] = [];
-    // Each kept row's real sheet row number (1-based), parallel to `rows` -
-    // blank rows are skipped above, so an importer that reports "Row N"
-    // needs this to point at the row the user actually sees in Excel.
-    const rowNumbers: number[] = [];
-    sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-      const cells: string[] = [];
-      for (let i = 1; i <= row.cellCount; i++) {
-        cells.push(cellToString(row.getCell(i).value));
-      }
-      if (cells.some((c) => c.trim())) {
-        rows.push(cells);
-        rowNumbers.push(rowNumber);
-      }
-    });
-
-    return NextResponse.json({ rows, rowNumbers });
+    return NextResponse.json(readSheet(sheet));
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

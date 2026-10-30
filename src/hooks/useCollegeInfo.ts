@@ -19,6 +19,8 @@ export interface CollegeInfo {
   timetableSignatureRows?: string[][];
   /** Ticked Teaching Load signature groups (Principal > Settings), one row of designations each. */
   teachingLoadSignatureRows?: string[][];
+  /** Settings > Website Display Name: which places show a faculty Display Name instead of the Full Name. */
+  displayNameSurfaces?: Record<string, boolean>;
 }
 
 export function useCollegeInfo() {

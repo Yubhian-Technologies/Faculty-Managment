@@ -10,6 +10,7 @@ import { getRelatedDepartmentIds } from "@/lib/departments/scope";
 import { fedYears, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { ensureAssignedYearsOpen } from "@/lib/departments/courseScopeValidation";
 import { deriveHodScope } from "@/lib/departments/hodScope";
+import { findBranchManager } from "@/lib/departments/managedBranches";
 import { groupCoursesByIdentity } from "@/lib/departments/courseGrouping";
 import { filterSubDepartmentCourses } from "@/lib/departments/subDepartmentCourses";
 import type { Department, Course } from "@/types";
@@ -28,6 +29,13 @@ export async function GET(request: Request) {
     // (never their own department or a real child/sub-department) - populated
     // below, consumed by the post-filter after the query runs (see there for why).
     const managedOnlyDeptIds: Set<string> = new Set();
+    // The REVERSE relationship: a department whose course doc is reached only
+    // because it manages one of ownDeptNames' shared first years (e.g. BASIC
+    // SCIENCE - MATHS reached from AIML/AIDS, whose own parent ARTIFICIAL
+    // INTELLIGENCE has no sections/course of its own) - mapped to the branch
+    // name to check it against (see the post-filter below for why this is a
+    // separate map from managedOnlyDeptIds rather than merged into it).
+    const managerDeptIdToBranchName: Map<string, string> = new Map();
     // Every department in the college - only fetched for an HOD (see below);
     // hoisted to this scope so the post-filter after the query can reuse it
     // too, rather than fetching it a third time.
@@ -93,6 +101,28 @@ export async function GET(request: Request) {
             // never replaces it, so that shape keeps working unchanged.
             const scope = deriveHodScope(allDepartments, name);
             for (const d of scope.deptOptions) courseDeptIdSet.add(d.id);
+
+            // Additionally union in whoever MANAGES this department's own
+            // shared first year (the reverse direction from the union just
+            // above) - e.g. AIML/AIDS's Year-1 curriculum lives on their
+            // parent ARTIFICIAL INTELLIGENCE's own feeder, BASIC SCIENCE -
+            // MATHS, never on AI's or AIML's own Course doc.
+            // findBranchManager already walks the "sub-dept -> parent -> the
+            // parent's manager" chain (managedBranches.ts, the same "no own
+            // sections" parent rule sections/route.ts's POST already relies
+            // on). Without this, a sub-department of such a branch could
+            // never see (or Assign subjects against, or have its Academics
+            // Subjects dashboard show) the one Course doc its shared Year 1
+            // is actually configured on - Teaching Assignments, looked up by
+            // raw department/year rather than through this resolution, kept
+            // showing fine, which is what made the gap look like missing
+            // data rather than a missing query.
+            const manager = findBranchManager(allDepartments, name);
+            if (manager) {
+              const managerCourseDeptId = manager.department.parentDepartmentId ?? manager.department.id;
+              courseDeptIdSet.add(managerCourseDeptId);
+              managerDeptIdToBranchName.set(managerCourseDeptId, name);
+            }
           }
           if (courseDeptIdSet.size > 0) {
             unionDepartmentIds = Array.from(courseDeptIdSet).slice(0, 30);
@@ -198,9 +228,15 @@ export async function GET(request: Request) {
     // managedDepartments. See fedYears' own doc-comment (academicStructure.ts)
     // for why this has to be checked per-catalogId rather than by department
     // name alone.
-    if (managedOnlyDeptIds.size > 0) {
+    if (managedOnlyDeptIds.size > 0 || managerDeptIdToBranchName.size > 0) {
       const deptNameById = new Map(allDepartments.map((d) => [d.id, d.name]));
       rawCourses = rawCourses.filter((c) => {
+        // Reverse direction (a manager's course doc, reached from one of the
+        // branches it feeds) - checked against the BRANCH name that reached
+        // it, not the manager's own name, since it's the branch's
+        // cross-listing that makes this course doc legitimately reachable.
+        const reachedViaBranch = managerDeptIdToBranchName.get(c.departmentId);
+        if (reachedViaBranch) return fedYears({ name: reachedViaBranch }, allDepartments, c.catalogId).length > 0;
         if (!managedOnlyDeptIds.has(c.departmentId)) return true;
         const deptName = deptNameById.get(c.departmentId);
         if (!deptName) return false;

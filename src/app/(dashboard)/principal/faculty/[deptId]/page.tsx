@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, BookOpen, ChevronRight, Eye, FileDown, LogIn, Pencil, Trash2, Upload, UserPlus, UsersRound, History } from "lucide-react";
+import { ArrowLeft, BookOpen, ChevronRight, Eye, FileDown, ScanEye, LogIn, Pencil, Trash2, Upload, UserPlus, UsersRound, History } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,10 @@ import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
 import { useFacultyListFilters } from "@/components/faculty/FacultyListFilters";
 import { toast } from "@/hooks/useToast";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
-import { downloadFacultyResume } from "@/lib/faculty/downloadFacultyResume";
+import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
+import { downloadFacultyResume, previewFacultyResumeHtml } from "@/lib/faculty/downloadFacultyResume";
+import { ResumePreviewDialog } from "@/components/faculty/ResumePreviewDialog";
+import { DEFAULT_RESUME_SECTIONS } from "@/lib/pdf/resumeSections";
 import type { ResumeSectionKey } from "@/lib/pdf/resumeSections";
 import { isFacultyDestination } from "@/lib/departments/facultyDepartmentOptions";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
@@ -41,6 +44,10 @@ type FacultyRow = FacultyListRow;
 
 function PrincipalDepartmentFacultyContent() {
   const router = useRouter();
+  // Settings > Website Display Name > "Faculty lists": the list shows each person's Display Name (display only).
+  const { nameFor } = useFacultyDisplayNames();
+  const shownName = (row: { id?: unknown; userUid?: unknown } & Parameters<typeof facultyDisplayName>[0]) =>
+    nameFor("facultyLists", { facultyId: row.id as string | undefined, uid: row.userUid as string | undefined }, facultyDisplayName(row));
   const queryClient = useQueryClient();
   const { deptId } = useParams<{ deptId: string }>();
   // The page's own URL, carried to the profile pages in `?from=` so their Back button returns here.
@@ -59,6 +66,8 @@ function PrincipalDepartmentFacultyContent() {
   // section picker against the row, and generation waits for the choice.
   const [resumeTarget, setResumeTarget] = useState<FacultyRow | null>(null);
   const [downloadingResumeId, setDownloadingResumeId] = useState<string | null>(null);
+  // The row whose resume is being previewed on screen (before any download).
+  const [previewTarget, setPreviewTarget] = useState<FacultyRow | null>(null);
 
   const { data: collegeInfo } = useQuery({
     queryKey: ["college-info"],
@@ -266,9 +275,9 @@ function PrincipalDepartmentFacultyContent() {
       className: "whitespace-normal min-w-[13rem]",
       render: (row) => (
         <div className="flex items-start gap-3 min-w-0">
-          <Avatar name={facultyDisplayName(row)} photoUrl={row.profilePhotoUrl} size="sm" className="mt-0.5" />
+          <Avatar name={shownName(row)} photoUrl={row.profilePhotoUrl} size="sm" className="mt-0.5" />
           <div className="space-y-0.5 min-w-0">
-            <p className="font-medium leading-tight">{facultyDisplayName(row)}</p>
+            <p className="font-medium leading-tight">{shownName(row)}</p>
             <p className="text-xs text-muted-foreground">ID: {row.employeeId}</p>
             <JoiningLine row={row} />
           </div>
@@ -345,6 +354,15 @@ function PrincipalDepartmentFacultyContent() {
             variant="ghost"
             size="sm"
             className="h-8 w-8 p-0"
+            title="Preview resume"
+            onClick={(e) => { e.stopPropagation(); setPreviewTarget(row); }}
+          >
+            <ScanEye className="h-4 w-4" /><span className="sr-only">Preview resume</span>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0"
             title="Download resume PDF"
             loading={downloadingResumeId === (row.id as string)}
             onClick={(e) => { e.stopPropagation(); setResumeTarget(row); }}
@@ -412,6 +430,7 @@ function PrincipalDepartmentFacultyContent() {
           options={[
             { key: "faculty", label: "Teaching Staff", href: "/principal/faculty" },
             { key: "supporting", label: "Supporting Staff", href: "/principal/faculty/supporting-staff" },
+            { key: "staff", label: "Staff", href: "/principal/faculty/staff" },
           ]}
         />
       )}
@@ -541,6 +560,15 @@ function PrincipalDepartmentFacultyContent() {
         <p className="text-sm text-muted-foreground flex items-center gap-2">
           <UsersRound className="h-4 w-4" /> Resolving department…
         </p>
+      )}
+
+      {previewTarget && (
+        <ResumePreviewDialog
+          personName={facultyDisplayName(previewTarget) || "this faculty member"}
+          loadHtml={() => previewFacultyResumeHtml(previewTarget, collegeName, DEFAULT_RESUME_SECTIONS)}
+          onOpenChange={(o) => { if (!o) setPreviewTarget(null); }}
+          onDownload={() => { setResumeTarget(previewTarget); setPreviewTarget(null); }}
+        />
       )}
 
       {resumeTarget && (

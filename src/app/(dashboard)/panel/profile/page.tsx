@@ -77,7 +77,7 @@ export default function FacultyProfilePage() {
         </CardContent>
       </Card>
 
-      <MyProfileModuleTiles basePath="/panel/profile" />
+      <MyProfileModuleTiles basePath="/panel/profile" includeDisplayName />
     </div>
   );
 }

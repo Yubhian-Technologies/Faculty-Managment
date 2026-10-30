@@ -4,7 +4,7 @@ import { useFacultyListFilters } from "@/components/faculty/FacultyListFilters";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { Eye, FileDown, LogIn, Pencil, Search, Trash2, Upload, UserPlus, Users, RotateCcw } from "lucide-react";
+import { Eye, FileDown, ScanEye, LogIn, Pencil, Search, Trash2, Upload, UserPlus, Users, RotateCcw } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -27,12 +27,13 @@ import {
   JoiningLine,
   type FacultyListRow,
 } from "@/components/faculty/facultyListCells";
-import { useCollegeType } from "@/hooks/useCollegeType";
-import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { toast } from "@/hooks/useToast";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
 import { withReturnTo } from "@/lib/faculty/returnTo";
-import { downloadFacultyResume } from "@/lib/faculty/downloadFacultyResume";
+import { downloadFacultyResume, previewFacultyResumeHtml } from "@/lib/faculty/downloadFacultyResume";
+import { ResumePreviewDialog } from "@/components/faculty/ResumePreviewDialog";
+import { DEFAULT_RESUME_SECTIONS } from "@/lib/pdf/resumeSections";
 import type { ResumeSectionKey } from "@/lib/pdf/resumeSections";
 import type { CollegeType, Department, FacultyMember, FacultyStatus } from "@/types";
 
@@ -59,8 +60,11 @@ type FacultyRow = FacultyListRow;
 
 function PrincipalFacultyContent() {
   const router = useRouter();
+  // Settings > Website Display Name > "Faculty lists": the list shows each person's Display Name (display only).
+  const { nameFor } = useFacultyDisplayNames();
+  const shownName = (row: { id?: unknown; userUid?: unknown } & Parameters<typeof facultyDisplayName>[0]) =>
+    nameFor("facultyLists", { facultyId: row.id as string | undefined, uid: row.userUid as string | undefined }, facultyDisplayName(row));
   const searchParams = useSearchParams();
-  const { collegeType, loading: collegeTypeLoading } = useCollegeType();
 
   // Filters state
   const [selectedDept, setSelectedDept] = useState<string>(searchParams.get("department") || ALL_DEPTS);
@@ -77,6 +81,8 @@ function PrincipalFacultyContent() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [resumeTarget, setResumeTarget] = useState<FacultyRow | null>(null);
   const [downloadingResumeId, setDownloadingResumeId] = useState<string | null>(null);
+  // The row whose resume is being previewed on screen (before any download).
+  const [previewTarget, setPreviewTarget] = useState<FacultyRow | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
   useEffect(() => () => { abortControllerRef.current?.abort(); }, []);
@@ -291,9 +297,9 @@ function PrincipalFacultyContent() {
       className: "whitespace-normal min-w-[13rem]",
       render: (row) => (
         <div className="flex items-start gap-3 min-w-0">
-          <Avatar name={facultyDisplayName(row)} photoUrl={row.profilePhotoUrl} size="sm" className="mt-0.5" />
+          <Avatar name={shownName(row)} photoUrl={row.profilePhotoUrl} size="sm" className="mt-0.5" />
           <div className="space-y-0.5 min-w-0">
-            <p className="font-medium leading-tight">{facultyDisplayName(row)}</p>
+            <p className="font-medium leading-tight">{shownName(row)}</p>
             <p className="text-xs text-muted-foreground">ID: {row.employeeId || "-"}</p>
             <JoiningLine row={row} />
           </div>
@@ -387,6 +393,16 @@ function PrincipalFacultyContent() {
               variant="ghost"
               size="sm"
               className="h-8 w-8 p-0"
+              title="Preview resume"
+              onClick={(e) => { e.stopPropagation(); setPreviewTarget(row); }}
+            >
+              <ScanEye className="h-4 w-4" />
+              <span className="sr-only">Preview resume</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
               title="Download resume PDF"
               loading={downloadingResumeId === (row.id as string)}
               onClick={(e) => {
@@ -462,16 +478,14 @@ function PrincipalFacultyContent() {
         }
       />
 
-      {/* Supporting Staff segmented tabs for colleges with split */}
-      {!collegeTypeLoading && hasSupportingStaffSplit(collegeType) && (
-        <SegmentedTabs
-          value="faculty"
-          options={[
-            { key: "faculty", label: "Teaching Staff", href: "/principal/faculty" },
-            { key: "supporting", label: "Supporting Staff", href: "/principal/faculty/supporting-staff" },
-          ]}
-        />
-      )}
+      <SegmentedTabs
+        value="faculty"
+        options={[
+          { key: "faculty", label: "Teaching Staff", href: "/principal/faculty" },
+          { key: "supporting", label: "Supporting Staff", href: "/principal/faculty/supporting-staff" },
+          { key: "staff", label: "Staff", href: "/principal/faculty/staff" },
+        ]}
+      />
 
       <PeopleNotOnRoster departments={departments} />
 
@@ -618,6 +632,16 @@ function PrincipalFacultyContent() {
         onConfirm={() => void handleDelete()}
         loading={isDeleting}
       />
+
+      {/* Resume preview */}
+      {previewTarget && (
+        <ResumePreviewDialog
+          personName={facultyDisplayName(previewTarget) || "this faculty member"}
+          loadHtml={() => previewFacultyResumeHtml(previewTarget, collegeName, DEFAULT_RESUME_SECTIONS)}
+          onOpenChange={(o) => { if (!o) setPreviewTarget(null); }}
+          onDownload={() => { setResumeTarget(previewTarget); setPreviewTarget(null); }}
+        />
+      )}
 
       {/* Resume Section Picker Dialog */}
       <ResumeSectionsDialog

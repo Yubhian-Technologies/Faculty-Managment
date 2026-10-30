@@ -15,7 +15,14 @@ export function effectiveJoiningDate(
   return undefined;
 }
 
-/** Whether a session held on `sessionDate` ("YYYY-MM-DD") counts for a student who joined on `joinedOn`. */
-export function countsFromJoining(sessionDate: string | undefined, joinedOn: string | undefined): boolean {
-  return !joinedOn || !sessionDate || sessionDate >= joinedOn;
+/**
+ * Whether a session held on `sessionDate` ("YYYY-MM-DD") counts for a student who joined on `joinedOn`.
+ *
+ * Always true: a student's attendance counts on every day the register has it, including days before their recorded
+ * joining or admission date (those dates are often entered late, so they are not trusted to cut attendance off). The
+ * function and its callers are kept so the rule can be switched back in one place.
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- kept for the callers' signature, see above
+export function countsFromJoining(_sessionDate: string | undefined, _joinedOn: string | undefined): boolean {
+  return true;
 }

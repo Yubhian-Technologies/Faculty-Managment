@@ -67,10 +67,13 @@ const ROLE_PATH_MAP: Record<string, string[]> = {
   // Vice Principal mirrors Principal's authority (see AGENTS.md) - full access
   // to /principal/* alongside its own /vice-principal home.
   VICE_PRINCIPAL: ["/vice-principal", "/principal", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH, LEAVE_ADJUSTMENTS_PATH],
-  // College Admin mirrors Principal's authority exactly - same dashboard, no
-  // separate home path of its own (role is normalized to PRINCIPAL for auth,
-  // see src/app/api/auth/session/route.ts and src/hooks/useAuth.ts).
-  COLLEGE_ADMIN: ["/principal", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH, LEAVE_ADJUSTMENTS_PATH],
+  // College Admin has its own dashboard under /college-admin (its pages are the Principal's, served at
+  // this prefix by next.config.ts rewrites, plus the R&D modules at /college-admin/r-and-d). Its role is
+  // still normalized to PRINCIPAL for auth (src/app/api/auth/session/route.ts, src/hooks/useAuth.ts), so
+  // this entry is reached through the cookie's realRole - see the heldRoles line below. "/principal"
+  // stays reachable so a link inside a shared page never dead-ends; the dashboard layout moves such a
+  // visit back under /college-admin.
+  COLLEGE_ADMIN: ["/college-admin", "/principal", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH, LEAVE_ADJUSTMENTS_PATH],
   // Director mirrors Principal's authority exactly, same as College Admin
   // above - normalized to PRINCIPAL for auth (api/auth/session, useAuth.ts).
   DIRECTOR: ["/principal", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH, LEAVE_ADJUSTMENTS_PATH],
@@ -139,7 +142,7 @@ export async function proxy(request: NextRequest) {
   }
 
   try {
-    const payload = await readSession<{ role?: string; roles?: string[]; exp?: number }>(sessionCookie);
+    const payload = await readSession<{ role?: string; realRole?: string; roles?: string[]; exp?: number }>(sessionCookie);
     if (!payload) throw new Error("invalid session");
 
     if (payload.exp && Date.now() / 1000 > payload.exp) {
@@ -155,7 +158,9 @@ export async function proxy(request: NextRequest) {
       // A login can hold several roles at once (its own plus any seats - see
       // types/roleSeats.ts): page access is the union of each role's paths.
       // The API guards do the real, live check; this is coarse gating only.
-      const heldRoles = Array.from(new Set([role, ...(payload.roles ?? [])]));
+      // realRole is the pre-normalization role (a College Admin's `role` reads PRINCIPAL), so its own
+      // dashboard paths apply; it only ever adds the paths of the role the login really is.
+      const heldRoles = Array.from(new Set([role, ...(payload.realRole ? [payload.realRole] : []), ...(payload.roles ?? [])]));
       const allowedPaths = Array.from(new Set(heldRoles.flatMap((r) => allowedPathsForRole(r))));
       // /pages/<id> are Super-Admin-built tabs (lib/customNav): open to every
       // signed-in role here, because who may open a given page is enforced by

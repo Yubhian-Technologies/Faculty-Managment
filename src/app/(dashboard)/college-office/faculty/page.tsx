@@ -11,6 +11,7 @@ import { Avatar } from "@/components/shared/Avatar";
 import { toast } from "@/hooks/useToast";
 import { ChangeCollegeEmailDialog } from "@/components/faculty/ChangeCollegeEmailDialog";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
 import { DESIGNATION_LABELS } from "@/types";
 import type { FacultyMember, Designation } from "@/types";
 
@@ -26,6 +27,10 @@ type FacultyRow = Record<string, unknown> & FacultyMember;
 // edit the faculty roster.
 export default function CollegeOfficeFacultyPage() {
   const router = useRouter();
+  // Settings > Website Display Name > "Faculty lists": the list shows each person's Display Name (display only).
+  const { nameFor } = useFacultyDisplayNames();
+  const shownName = (row: { id?: unknown; userUid?: unknown } & Parameters<typeof facultyDisplayName>[0]) =>
+    nameFor("facultyLists", { facultyId: row.id as string | undefined, uid: row.userUid as string | undefined }, facultyDisplayName(row));
   const [faculty, setFaculty] = useState<FacultyRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [researchFilter, setResearchFilter] = useState("");
@@ -53,9 +58,9 @@ export default function CollegeOfficeFacultyPage() {
       header: "Faculty Member",
       render: (row) => (
         <div className="flex items-start gap-3 min-w-0">
-          <Avatar name={facultyDisplayName(row)} photoUrl={row.profilePhotoUrl as string | undefined} size="sm" className="mt-0.5" />
+          <Avatar name={shownName(row)} photoUrl={row.profilePhotoUrl as string | undefined} size="sm" className="mt-0.5" />
           <div className="space-y-0.5 min-w-0">
-            <p className="font-medium leading-tight">{facultyDisplayName(row) || "-"}</p>
+            <p className="font-medium leading-tight">{shownName(row) || "-"}</p>
             <p className="text-xs text-muted-foreground">ID: {row.employeeId as string}</p>
           </div>
         </div>

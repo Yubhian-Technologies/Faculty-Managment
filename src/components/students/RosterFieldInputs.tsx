@@ -13,6 +13,8 @@ import {
 } from "@/lib/students/rosterFields";
 import { resolveDepartmentCourseScope, resolveCatalogId, freshmanPickerDepartmentNames, getFreshmanDepartmentIds, isValidYear1LandingDepartment, isValidYear1LandingDepartmentForPicker, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { managerEffectiveYears } from "@/lib/departments/hodScope";
+import { findBranchManager } from "@/lib/departments/managedBranches";
+import { orderDepartmentsByParent } from "@/lib/departments/departmentTree";
 import { CASTE_LABELS, SUB_CASTES_BY_CASTE } from "@/types";
 import type { Department, Course, Caste } from "@/types";
 
@@ -513,7 +515,9 @@ function FieldInputBody({ field, values, onChange, departments, courseNames, cou
         >
           <SelectTrigger><SelectValue placeholder={values.course ? "Select department" : "Select a course first"} /></SelectTrigger>
           <SelectContent>
-            {options.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
+            {orderDepartmentsByParent(options).map(({ department: d, depth }) => (
+              <SelectItem key={d.id} value={d.name} className={depth === 1 ? "pl-8" : undefined}>{d.name}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>

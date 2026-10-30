@@ -69,6 +69,8 @@ export interface StudentListQuery {
   years?: number[];
   /** Exact studentType ("Regular"/"Lateral"). "" means no filter. */
   studentType: string;
+  /** Exact status (e.g. "DETAINED"). ""/absent means no filter. */
+  status?: string;
   /**
    * Inclusive roll-number range, compared upper-cased as strings (the same rule
    * as the HOD page's range - hodPagedList.fetchHodStudentsMatching). Either end
@@ -108,8 +110,9 @@ export function rollInRange(roll: unknown, range: RollRange): boolean {
 
 function matchesRemaining(
   data: FirebaseFirestore.DocumentData,
-  opts: Pick<StudentListQuery, "search" | "course" | "year" | "years" | "studentType" | "rollFrom" | "rollTo" | "coreDepartment" | "section">
+  opts: Pick<StudentListQuery, "search" | "course" | "year" | "years" | "studentType" | "status" | "rollFrom" | "rollTo" | "coreDepartment" | "section">
 ): boolean {
+  if (opts.status && data.status !== opts.status) return false;
   if (opts.year !== null && Number(data.year) !== opts.year) return false;
   if (opts.section && !sectionMatchesFilter(data.section, opts.section)) return false;
   if (opts.years && opts.years.length > 0 && !opts.years.includes(Number(data.year))) return false;
@@ -150,7 +153,7 @@ function dedupeAndSortByName(docs: Doc[]): Doc[] {
 
 async function resolveCandidates(
   studentsColl: FirebaseFirestore.CollectionReference,
-  params: Pick<StudentListQuery, "departments" | "year" | "course" | "section">
+  params: Pick<StudentListQuery, "departments" | "year" | "course" | "status" | "section">
 ): Promise<Doc[]> {
   if (params.departments.length > 0) {
     // "in" only when there's more than one name to match (the rollup case) -
@@ -175,7 +178,10 @@ async function resolveCandidates(
   if (params.course) {
     return dedupeAndSortByName((await studentsColl.where("course", "==", params.course).get()).docs);
   }
-  // A section name alone (no department / year / course) is a bare equality too.
+  if (params.status) {
+    return dedupeAndSortByName((await studentsColl.where("status", "==", params.status).get()).docs);
+  }
+  // A section name alone (no department / year / course / status) is a bare equality too.
   // "Unassigned" can't be: a student saved without the field has no value to
   // match, so that one falls through to the full read below and is judged in
   // memory by matchesRemaining.
@@ -197,7 +203,7 @@ export async function fetchStudentsPage(
 ): Promise<{ students: StudentListItem[]; total: number }> {
   // Every request - filtered or not - reads its candidates and sorts them in
   // memory. The unfiltered "just browse" request used to be a Firestore
-  // `orderBy("name")` page, which can't express Section-then-Regd. No (and
+  // `orderBy("name")` page, which can't express Year-Section-Regd. No order (and
   // silently leaves out any student saved without a `name`); one order for
   // every request also keeps pages consistent when filters change.
   const candidates = await resolveCandidates(studentsColl, params);
@@ -215,7 +221,7 @@ export async function fetchStudentsPage(
  */
 export async function fetchMatchingStudentIds(
   studentsColl: FirebaseFirestore.CollectionReference,
-  params: Pick<StudentListQuery, "departments" | "year" | "years" | "course" | "search" | "studentType" | "rollFrom" | "rollTo" | "coreDepartment" | "section">
+  params: Pick<StudentListQuery, "departments" | "year" | "years" | "course" | "search" | "studentType" | "status" | "rollFrom" | "rollTo" | "coreDepartment" | "section">
 ): Promise<string[]> {
   const candidates = await resolveCandidates(studentsColl, params);
   return candidates.filter((d) => matchesRemaining(d.data(), params)).map((d) => d.id);

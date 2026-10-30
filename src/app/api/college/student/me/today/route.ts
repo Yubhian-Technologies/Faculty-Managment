@@ -8,6 +8,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { findOwnStudent, isLiveAcademicYear, loadOwnSectionContext, slotVisibleToStudent } from "@/lib/students/ownContext";
 import { getActiveSubstitutionsForDates } from "@/lib/leave/periodCoverage";
 import { matchesCurrentSemester } from "@/lib/college/semester";
+import { activeSlotsOn } from "@/lib/timetable/slotScope";
 import { istDateKey, istDayOfWeek } from "@/lib/attendance/istTime";
 import { formatAcademicShortNotation } from "@/lib/academic/format";
 import { buildTimetableColumns } from "@/lib/timetable/gridModel";
@@ -56,14 +57,19 @@ export async function GET() {
       .where("sectionId", "==", section.id)
       .where("day", "==", day)
       .get();
-    const liveSlots = slotsSnap.docs
-      .map((d) => ({ id: d.id, ...d.data() }) as TimetableSlot & { id: string })
-      .filter((s) => isLiveAcademicYear(s, ctx.academicYear) && matchesCurrentSemester(s.semester, ctx.currentSemester));
+    // A period scoped to one mid exam shows only within that mid's teaching stretch (lib/timetable/slotScope.ts).
+    const liveSlots = await activeSlotsOn(
+      db, session.collegeId,
+      slotsSnap.docs
+        .map((d) => ({ id: d.id, ...d.data() }) as TimetableSlot & { id: string })
+        .filter((s) => isLiveAcademicYear(s, ctx.academicYear) && matchesCurrentSemester(s.semester, ctx.currentSemester)),
+      today,
+    );
     // A lab the section's faculty incharge set to "no batch" is for the whole section, so every
     // student sees it; otherwise a split lab period is shown only to its own batch.
     const labModes = await loadLabBatchModes(db, session.collegeId, liveSlots.map((s) => ({ sectionId: section.id, subjectId: s.subjectId })));
     const slots = liveSlots.filter((s) =>
-      slotVisibleToStudent({ labBatch: effectiveLabBatch(s.labBatch, labModes, section.id, s.subjectId, s.facultyId) }, student.labBatch));
+      slotVisibleToStudent({ labBatch: effectiveLabBatch(s.labBatch, labModes, section.id, s.subjectId, s.facultyId, s.batchPinned) }, student.labBatch));
 
     // A substitution belongs to one calendar date - only today's applies to today's list.
     const subs = slots.length > 0 ? await getActiveSubstitutionsForDates(db, session.collegeId, [today]) : [];
@@ -98,7 +104,7 @@ export async function GET() {
           faculty: sub?.substituteFacultyName || s.facultyName || "",
           isSubstitute: Boolean(sub),
           room: s.classroom ?? "",
-          labBatch: effectiveLabBatch(s.labBatch, labModes, section.id, s.subjectId, s.facultyId) ?? "",
+          labBatch: effectiveLabBatch(s.labBatch, labModes, section.id, s.subjectId, s.facultyId, s.batchPinned) ?? "",
           subjectId: s.subjectId,
         };
       });

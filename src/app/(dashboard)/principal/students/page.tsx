@@ -21,7 +21,7 @@ import type { StudentListItem, Department, AcademicYear, Course } from "@/types"
 import { selectableYears } from "@/lib/college/courseYears";
 import { DepartmentPickSelect } from "@/components/shared/DepartmentPickSelect";
 import {
-  buildDepartmentPickOptions, DEPARTMENT_PICK_ALL, departmentPickValue, isDepartmentPickOffered, parseDepartmentPick,
+  buildDepartmentPickOptions, DEPARTMENT_PICK_ALL, departmentPickValue, dropEmptyFeederGroups, isDepartmentPickOffered, parseDepartmentPick,
 } from "@/lib/departments/departmentPickTree";
 import { sectionDepartmentNames, useCollegeSectionList } from "@/hooks/useSectionDepartments";
 import { rollupDepartmentNamesForPick } from "@/lib/departments/departmentTree";
@@ -226,7 +226,7 @@ function PrincipalStudentsContent() {
         const offeringIds = new Set(departmentsOfferingCourse(departments, courses, courseFilter).map((d) => d.id));
         return activeDepartments.filter((d) => offeringIds.has(d.id));
       })();
-    return buildDepartmentPickOptions(offered, departments, sectionDepartments);
+    return dropEmptyFeederGroups(buildDepartmentPickOptions(offered, departments, sectionDepartments), sectionDepartments);
   }, [courseFilter, activeDepartments, departments, courses, sectionDepartments]);
 
   const yearFilterOptions = useMemo(() => {
@@ -256,7 +256,7 @@ function PrincipalStudentsContent() {
     const nextOptions = value === "all"
       ? activeDepartments
       : activeDepartments.filter((d) => new Set(departmentsOfferingCourse(departments, courses, value).map((o) => o.id)).has(d.id));
-    const nextPickOptions = buildDepartmentPickOptions(nextOptions, departments, sectionDepartments);
+    const nextPickOptions = dropEmptyFeederGroups(buildDepartmentPickOptions(nextOptions, departments, sectionDepartments), sectionDepartments);
     const pickStillValid = isDepartmentPickOffered(nextPickOptions, deptPick);
     if (!pickStillValid) setDeptPick(DEPARTMENT_PICK_ALL);
     const nextDept = pickStillValid ? deptFilter : "all";

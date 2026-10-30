@@ -15,7 +15,7 @@ import { getNoClassReason } from "@/lib/studentAttendance/classDay";
 import { applyOnDutyToEntries, loadOnDutyDay, presentCountOf } from "@/lib/studentAttendance/onDuty";
 import { fetchSectionStudentsCached } from "@/lib/students/sectionRosterCache";
 import { sortStudentsForList } from "@/lib/students/listOrder";
-import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
+import { resolveAcademicYearForDate } from "@/lib/studentAttendance/academicYearWindow";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { FacultyMember, Section, StudentAttendanceEntry, StudentAttendanceSession, TeachingAssignment } from "@/types";
 
@@ -176,7 +176,7 @@ export async function POST(request: Request) {
     // ...unless the section's faculty incharge set this lab to "no batch" - then the whole section attends together.
     const labBatch = effectiveLabBatch(
       windowCheck.slot.labBatch, await loadLabBatchModes(db, session.collegeId, [{ sectionId, subjectId: assignment.subjectId }]),
-      sectionId, assignment.subjectId, assignment.facultyId,
+      sectionId, assignment.subjectId, assignment.facultyId, windowCheck.slot.batchPinned,
     );
 
     // Resolve the roster BEFORE starting the transaction: the DRAFT-reconcile
@@ -190,7 +190,7 @@ export async function POST(request: Request) {
     // together (the roster is the long pole, the other two ride along for free).
     const [rosterDocs, academicYear, onDutyDay] = await Promise.all([
       fetchSectionStudentsCached(collegeRef, { department, sectionName, year, courseId, labBatch }),
-      resolveCollegeAcademicYear(db, session.collegeId, now),
+      resolveAcademicYearForDate(db, session.collegeId, date, now),
       loadOnDutyDay(db, session.collegeId, date),
     ]);
     const students = sortStudentsForList(rosterDocs);

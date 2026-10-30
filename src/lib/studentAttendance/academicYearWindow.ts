@@ -1,4 +1,5 @@
 import type { Firestore } from "firebase-admin/firestore";
+import { istDateKey } from "@/lib/attendance/istTime";
 import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
 import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
 import {
@@ -74,6 +75,20 @@ export function academicYearOfDate(dateISO: string, start: AcademicYearStart): s
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateISO);
   if (!m) return null;
   return academicSessionLabel(currentAcademicStartYear(new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])), start));
+}
+
+/**
+ * The academic year to stamp on a session held on `dateISO`. Today's (or any date in today's year) keeps
+ * the college's current year, pinned session included; a date in an EARLIER year - a late office
+ * correction made after the year rolled over - gets the year its own date falls in, so the period
+ * stays with the year it was taught in instead of the year it was posted in.
+ */
+export async function resolveAcademicYearForDate(db: Firestore, collegeId: string, dateISO: string, now: Date = new Date()): Promise<string> {
+  const [current, settings] = await Promise.all([resolveCollegeAcademicYear(db, collegeId, now), loadCollegeSettings(db, collegeId)]);
+  const start = resolveAcademicYearStart(settings);
+  const ofDate = academicYearOfDate(dateISO, start);
+  const ofToday = academicYearOfDate(istDateKey(now), start);
+  return ofDate && ofToday && ofDate !== ofToday ? ofDate : current;
 }
 
 /**

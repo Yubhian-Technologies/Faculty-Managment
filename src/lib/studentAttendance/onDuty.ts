@@ -83,6 +83,24 @@ export async function loadOnDutyDay(db: Firestore, collegeId: string, date: stri
   return snap.exists ? { byStudent: (snap.data()?.byStudent ?? {}) as OnDutyDay["byStudent"] } : null;
 }
 
+/**
+ * The first of `studentIds` already on duty (under any source) on one of `dates`, or null. One read per day.
+ * With `periods`, only an overlap counts: a student on duty for period 1 can still be given period 5 the same day.
+ */
+export async function findOnDutyClash(
+  db: Firestore, collegeId: string, dates: readonly string[], studentIds: readonly string[], periods: OnDutyPeriods = "ALL"
+): Promise<{ studentId: string; date: string } | null> {
+  const days = await db.getAll(...dates.map((d) => onDutyDayRef(db, collegeId, d)));
+  for (const snap of days) {
+    const by = (snap.data()?.byStudent ?? {}) as OnDutyDay["byStudent"];
+    for (const studentId of studentIds) {
+      const sources = Object.values(by[studentId] ?? {});
+      if (sources.some((p) => p === "ALL" || periods === "ALL" || periods.some((n) => p.includes(n)))) return { studentId, date: snap.id };
+    }
+  }
+  return null;
+}
+
 // ── writes (a source's own coverage) ─────────────────────────────────────────
 
 /** Records `studentIds` as on duty for `periods` on each of `dates`, under `sourceId`. Safe to repeat. */

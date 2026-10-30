@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CalendarClock, Info, Lock, Pencil, RefreshCw, Clock, CloudOff, CloudUpload, Check, X } from "lucide-react";
+import { OnDutyTag } from "@/components/attendance/OnDutyDetailsDialog";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/useToast";
 import { enqueueSubmission, getQueue, trySyncQueue, type QueuedSubmission } from "@/lib/attendance/offlineSubmitQueue";
+import { checkedMeaningFor, defaultFillFor, type AttendanceMode } from "@/lib/studentAttendance/markMode";
 import type { StudentAttendanceMark, StudentAttendanceSession } from "@/types";
 
 const PERIOD_POLL_MS = 60_000;
@@ -218,16 +220,6 @@ export function groupTodayPeriods(periods: TodayPeriod[]): TodayPeriodGroup[] {
   return groups;
 }
 
-type AttendanceMode = "ABSENTEES" | "PRESENTEES";
-
-function checkedMeaningFor(mode: AttendanceMode | null): StudentAttendanceMark {
-  return mode === "ABSENTEES" ? "ABSENT" : "PRESENT";
-}
-
-function defaultFillFor(mode: AttendanceMode): StudentAttendanceMark {
-  return mode === "ABSENTEES" ? "PRESENT" : "ABSENT";
-}
-
 function updatedAtIso(s: StudentAttendanceSession | null): string | undefined {
   const u = (s as unknown as { updatedAt?: unknown })?.updatedAt;
   if (!u) return undefined;
@@ -240,10 +232,6 @@ function updatedAtIso(s: StudentAttendanceSession | null): string | undefined {
     if (typeof (o as unknown as Date).toISOString === "function") return (o as unknown as Date).toISOString();
   }
   try { return new Date(u as string).toISOString(); } catch { return undefined; }
-}
-
-function OnDutyTag() {
-  return <span title="Approved permission - locked" className="inline-flex items-center rounded-full border border-blue-300 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-800">On Duty</span>;
 }
 
 export default function MarkAttendancePage() {
@@ -556,6 +544,8 @@ export default function MarkAttendancePage() {
 
   const isReadOnly = isAllGroupSubmitted || isQueuedPending;
   const isExpandedOpen = expandedGroup?.isOpen ?? false;
+  // The per-student "all periods" buttons only make sense when this page holds more than one period.
+  const showRowBulk = !isReadOnly && isExpandedOpen && !!mode && (expandedGroup?.periodNumbers.length ?? 0) > 1;
 
   const totalPossibleMarks = (expandedGroup?.periodNumbers.length ?? 0) * studentRoster.length;
 
@@ -896,6 +886,7 @@ export default function MarkAttendancePage() {
                         </th>
                       );
                     })}
+                    {showRowBulk && <th className="px-3 py-3 text-center border-l">All periods</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -913,7 +904,7 @@ export default function MarkAttendancePage() {
                         return (
                           <td key={pNum} className="px-3 py-2.5 text-center border-l whitespace-nowrap">
                             {isOnDuty ? (
-                              <OnDutyTag />
+                              <OnDutyTag studentId={st.studentId} studentName={st.name} date={dateStr} periodNumber={pNum} />
                             ) : (
                               <Switch
                                 checked={isChecked}
@@ -925,6 +916,26 @@ export default function MarkAttendancePage() {
                           </td>
                         );
                       })}
+                      {showRowBulk && (
+                        <td className="px-3 py-2.5 text-center border-l whitespace-nowrap">
+                          {(() => {
+                            // One switch for every period of the card, following the status picked above
+                            // (Check Absentees / Check Presentees); On Duty periods are kept as they are.
+                            const open = expandedGroup.periodNumbers.filter((n: number) => draft[st.studentId]?.[n] !== "ON_DUTY");
+                            if (open.length === 0) return <span className="text-xs text-muted-foreground">On Duty</span>;
+                            const meaning = checkedMeaningFor(mode);
+                            const opposite: StudentAttendanceMark = meaning === "PRESENT" ? "ABSENT" : "PRESENT";
+                            return (
+                              <Switch
+                                checked={open.every((n: number) => draft[st.studentId]?.[n] === meaning)}
+                                onCheckedChange={(c) => handleRowBulkSet(st.studentId, c ? meaning : opposite)}
+                                title={`Applies to Periods ${open.join(", ")}. On Duty periods are kept.`}
+                                aria-label={`Mark ${st.name} ${meaning === "PRESENT" ? "present" : "absent"} for all periods`}
+                              />
+                            );
+                          })()}
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

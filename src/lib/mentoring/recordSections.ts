@@ -89,7 +89,7 @@ export const ENTRY_SECTIONS: EntrySection[] = [
   // ── Student information (booklet p.1) ──────────────────────────────────────
   {
     key: "siblings",
-    title: "Brother / sister in Sri Vishnu Educational Society",
+    title: "Brother / Sister in Sri Vishnu Educational Society",
     hint: "Studying or studied in any college of the Society.",
     layout: "table",
     columns: [

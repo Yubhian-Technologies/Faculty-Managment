@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { CalendarRange, Clock, Info, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { MidBankDeadlinesCard } from "@/components/exams/MidBankDeadlinesCard";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -90,11 +91,14 @@ export default function ExamCellMidTimingsPage() {
             <Info className="h-4 w-4 shrink-0" />
             <span>
               Set how many Mid exams this college runs in{" "}
-              <Link href="/exam-cell/settings" className="font-medium underline">Settings</Link> before publishing timings.
+              <Link href="/exam-cell/mid-configuration" className="font-medium underline">Mid Configuration</Link> before publishing timings.
             </span>
           </CardContent>
         </Card>
       )}
+
+      {/* The question bank deadline comes first: banks are prepared before the Mid's timings. */}
+      <MidBankDeadlinesCard midCount={midCount} />
 
       {isLoading ? (
         <div className="space-y-3">{[1, 2].map((i) => <div key={i} className="h-20 bg-muted animate-pulse rounded-lg" />)}</div>

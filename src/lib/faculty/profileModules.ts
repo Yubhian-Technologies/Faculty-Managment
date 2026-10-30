@@ -1,6 +1,6 @@
 import {
   IdCard, GraduationCap, Briefcase, FlaskConical,
-  Users, Wallet, FileQuestion, BookOpen,
+  Users, Wallet, FileQuestion, BookOpen, Type,
   type LucideIcon,
 } from "lucide-react";
 
@@ -11,7 +11,7 @@ import {
 // (/hod/faculty/[id]/[module]).
 export type ProfileModuleKey =
   | "personal" | "qualification" | "experience" | "research"
-  | "mentorship" | "financial" | "others" | "teaching-load";
+  | "mentorship" | "financial" | "others" | "teaching-load" | "display-name";
 
 export interface ProfileModuleDef {
   key: ProfileModuleKey;
@@ -56,6 +56,10 @@ export const PROFILE_MODULES: Record<ProfileModuleKey, ProfileModuleDef> = {
     key: "teaching-load", label: "Teaching & Academic Responsibilities", icon: BookOpen, emptyNoun: "teaching",
     description: "Courses handled, subjects, timetable, teaching hours, workload allocation, mentoring responsibilities, and academic duties.",
   },
+  "display-name": {
+    key: "display-name", label: "Display Name", icon: Type, emptyNoun: "display name",
+    description: "Your surname (short form) and name as they should be displayed.",
+  },
 };
 
 // Self-profile modules a person never edits themselves - financial standing
@@ -77,12 +81,14 @@ export function isSelfEditDisabled(moduleKey: ProfileModuleKey, hasFacultyRecord
 // Supporting Staff module instead, see src/lib/designations/config.ts), so
 // every FacultyMember gets the full Academic Profile module set.
 export function getFacultyProfileModules(
-  opts: { hideFinancialModule?: boolean; excludeModules?: ProfileModuleKey[] } = {}
+  opts: { hideFinancialModule?: boolean; excludeModules?: ProfileModuleKey[]; includeDisplayName?: boolean } = {}
 ): ProfileModuleDef[] {
   const keys: ProfileModuleKey[] = [
     "personal", "qualification", "experience", "research", "mentorship",
     ...(opts.hideFinancialModule ? [] : (["financial"] as ProfileModuleKey[])),
     "teaching-load", "others",
+    // Only where the viewer's page can save it (a faculty member's own profile).
+    ...(opts.includeDisplayName ? (["display-name"] as ProfileModuleKey[]) : []),
   ];
   return keys.filter((k) => !opts.excludeModules?.includes(k)).map((k) => PROFILE_MODULES[k]);
 }

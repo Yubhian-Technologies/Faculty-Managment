@@ -15,6 +15,13 @@ export const labBatchSettingId = (sectionId: string, subjectId: string) => `${se
 
 export const normalizeBatch = (value: string | null | undefined) => (value ?? "").trim().toLowerCase();
 
+/** A faculty -> batch mapping without the faculty who were on `label` (a deleted batch). Same object if none were. */
+export function withoutBatch(batchByFaculty: Record<string, string>, label: string): Record<string, string> {
+  const key = normalizeBatch(label);
+  const kept = Object.entries(batchByFaculty).filter(([, b]) => normalizeBatch(b) !== key);
+  return kept.length === Object.keys(batchByFaculty).length ? batchByFaculty : Object.fromEntries(kept);
+}
+
 export interface LabBatchMode {
   batchWise: boolean;
   /** facultyMembers doc id -> batch label. */
@@ -48,7 +55,9 @@ export async function loadLabBatchModes(
  * The batch a period's roster / visibility should actually use, for the faculty
  * the period belongs to (`facultyId` = the assignment's own faculty, not a
  * substitute): none when its lab is set to "no batch"; the faculty's own batch when
- * the lab is batch-wise and gave them one; else the period's own label.
+ * the lab is batch-wise and gave them one; else the period's own label. A period whose
+ * label was pinned (`pinned`, set by the flexible-cell dialog) always uses its own
+ * label, so one faculty can take Batch 1 one day and Batch 2 on another.
  */
 export function effectiveLabBatch(
   slotLabBatch: string | null | undefined,
@@ -56,7 +65,9 @@ export function effectiveLabBatch(
   sectionId: string | undefined,
   subjectId: string | undefined,
   facultyId?: string,
+  pinned?: boolean,
 ): string | undefined {
+  if (pinned && slotLabBatch) return slotLabBatch;
   const mode = sectionId && subjectId ? modes.get(labBatchSettingId(sectionId, subjectId)) : undefined;
   if (!mode) return slotLabBatch || undefined;
   if (!mode.batchWise) return undefined;

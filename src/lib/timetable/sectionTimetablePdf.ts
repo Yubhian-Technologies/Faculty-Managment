@@ -169,10 +169,11 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
 
   <table class="meta-header-table" cellspacing="0" cellpadding="0">
     <tr>
-      <td class="meta-left">${metaLines([header.yearLine, header.branchLine, header.inchargeLine])}</td>
+      <td class="meta-left">${metaLines([header.yearLine, header.branchLine])}</td>
       <td class="meta-right"><div class="meta-block">${metaLines([header.wefLine, header.roomLine])}</div></td>
     </tr>
-  </table>`;
+  </table>${header.inchargeLine ? `
+  <div class="incharge-line">${escapeHtml(header.inchargeLine)}</div>` : ""}`;
 
   // ── Grid ──────────────────────────────────────────────────────────────────
   // Two header rows, like the printed timetable: PERIOD | 1 2 3 ... and DAY | clock times.
@@ -268,19 +269,20 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
   const allocationHtml = allocation.length
     ? `
   <table class="allocation" cellspacing="0" cellpadding="0">
-    <colgroup><col style="width:9%"><col style="width:44%"><col style="width:15%"><col style="width:32%"></colgroup>
+    <colgroup><col style="width:6%"><col style="width:30%"><col style="width:10%"><col style="width:25%"><col style="width:29%"></colgroup>
     <thead>
-      <tr><th class="num">S.No</th><th>Subject Name</th><th>Sub Acr</th><th>Faculty</th></tr>
+      <tr><th class="num">S.No</th><th>Subject Name</th><th>Sub Acr</th><th>Subject Code</th><th>Faculty</th></tr>
     </thead>
     <tbody>
       ${groupAllocationByType(allocation)
         .map(
-          (g) => `<tr><td class="grp" colspan="4">${escapeHtml(g.label)}</td></tr>${g.entries
+          (g) => `<tr><td class="grp" colspan="5">${escapeHtml(g.label)}</td></tr>${g.entries
             .map(
               (a, i) => `<tr>
         <td class="num">${i + 1}</td>
         <td>${escapeHtml(a.name)}${a.labBatches.length ? ` (${escapeHtml(a.labBatches.join(", "))})` : ""}</td>
         <td>${escapeHtml(a.shortCode)}</td>
+        <td>${escapeHtml(a.code)}</td>
         <td>${escapeHtml(a.faculty)}</td>
       </tr>`
             )
@@ -301,7 +303,7 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
   const signatureHtml = rows
     .map(
       (row) => `
-  <div class="signature-row" style="margin-top:48px;margin-bottom:16px;padding-top:16px;display:flex;justify-content:space-between;align-items:flex-end;width:100%;page-break-inside:avoid;">
+  <div class="signature-row" style="margin-top:44px;margin-bottom:6px;padding-top:0;display:flex;justify-content:space-between;align-items:flex-end;width:100%;page-break-inside:avoid;">
     ${row.map((label) => `<div class="signature-block" style="flex:1;text-align:center;font-weight:700;font-size:9.5pt;">${escapeHtml(label)}</div>`).join("\n    ")}
   </div>`
     )
@@ -318,7 +320,7 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: Arial, Helvetica, sans-serif; color: #000; background: #fff; font-size: 11px; line-height: 1.3; }
     /* The PDF renderer captures .page edge to edge, so the page margin lives inside it as padding. */
-    .page { width: 210mm; margin: 0 auto; padding: 10mm 10mm 14mm; }
+    .page { width: 210mm; margin: 0 auto; padding: 8mm 6mm 8mm; }
     .content-area { width: 100%; }
 
     .letterhead { width: 100%; border: 0; margin-bottom: 0; }
@@ -355,7 +357,7 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
        geometric, so it lands where the layout puts it. The td itself carries
        no vertical padding. A cell with more lines just grows past min-height. */
     .cell { padding: 0; text-align: center; vertical-align: middle; line-height: 1.2; overflow-wrap: anywhere; }
-    .fx { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; min-height: 36px; padding: 0 3px; }
+    .fx { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; min-height: 30px; padding: 0 3px; }
     th.cell { font-weight: 700; font-size: 8.5pt; background: #fff; }
     th.cell > .fx { min-height: 22px; }
     .head-label { font-size: 9pt; font-weight: 700; }
@@ -366,8 +368,8 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
     td.break-cell { position: relative; background: #fff; }
     .vtext { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-90deg); white-space: nowrap; font-size: 9pt; font-weight: 700; letter-spacing: 0.2em; }
 
-    .col-day { width: 19mm; }
-    .col-break { width: 13mm; }
+    .col-day { width: 15mm; }
+    .col-break { width: 11mm; }
     th.day-cell { font-size: 9pt; }
     .grid td.cell > .fx { padding: 0 1px; }
     /* Font is sized so the longest code fits its column; if even the smallest
@@ -378,10 +380,11 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
     .slot-code { font-size: ${slotPt.toFixed(1)}pt; overflow-wrap: anywhere; word-break: break-word; line-height: 1.2; }
     .slot-note { font-size: 7pt; color: #333; overflow-wrap: anywhere; line-height: 1.2; }
 
-    table.allocation { width: 100%; table-layout: fixed; border-collapse: collapse; margin-top: 18px; font-size: 10pt; }
+    .incharge-line { text-align: center; font-weight: 700; margin-top: 2px; }
+    table.allocation { width: 100%; table-layout: fixed; border-collapse: collapse; margin-top: 10px; font-size: 9pt; }
     table.allocation th { font-weight: 700; text-align: left; padding: 2px 4px; }
     table.allocation th.num { text-align: center; }
-    table.allocation td { text-align: left; padding: 2px 4px; overflow-wrap: anywhere; }
+    table.allocation td { text-align: left; padding: 1px 4px; overflow-wrap: anywhere; line-height: 1.2; }
     table.allocation td.num { text-align: center; }
     table.allocation td.grp { font-weight: 700; padding-top: 6px; }
 

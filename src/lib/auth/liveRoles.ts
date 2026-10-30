@@ -7,6 +7,7 @@ import {
   isAllowedReadOnlyRequest, isFacultyCapableRole, isReadMethod, METHOD_HEADER, PATH_HEADER,
 } from "@/lib/auth/readOnlyAccess";
 import { isFacultyExited } from "@/lib/auth/readOnlyFacultyLookup";
+import { withCollegeAdminRoles } from "@/lib/auth/collegeAdminRoles";
 
 // The roles a login can act as RIGHT NOW: its primary role plus the role of
 // every seat it holds (see types/roleSeats.ts). The session cookie carries a
@@ -81,7 +82,7 @@ async function resolveLiveRoleInfo(session: SessionLike): Promise<CacheEntry> {
       // the College Admin seat overrides even that - see SessionPayload.realRole.
       let realRole = rawRole === "COLLEGE_ADMIN" || rawRole === "DEPARTMENT_OFFICE" ? rawRole : session.role;
       if ((u.seatRoles ?? []).includes("COLLEGE_ADMIN")) realRole = "COLLEGE_ADMIN";
-      const entry: CacheEntry = { at: Date.now(), held, realRole, ...(typeof u.sessionsValidAfter === "number" ? { validAfter: u.sessionsValidAfter } : {}) };
+      const entry: CacheEntry = { at: Date.now(), held: withCollegeAdminRoles(realRole, held), realRole, ...(typeof u.sessionsValidAfter === "number" ? { validAfter: u.sessionsValidAfter } : {}) };
       // Read-only faculty (every college): the account is active and can be a faculty login. Any
       // other login skips this entirely - no extra read.
       if (held.length > 0 && isFacultyCapableRole(rawRole)) {

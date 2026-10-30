@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Briefcase, GraduationCap, Printer, Users, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { entrySection } from "@/lib/mentoring/recordSections";
+import { STUDENT_HIDDEN_ENTRY_SECTIONS } from "@/lib/mentoring/studentView";
 import type { MentoringEntry, MentoringSemesterOption } from "@/types/mentoring";
 import { EntrySectionView, type EntryEditor } from "./EntrySection";
 import { MeetingsPage } from "./MeetingsPage";
@@ -37,8 +38,18 @@ function PartHeading({ children }: { children: React.ReactNode }) {
   return <h2 className="text-lg font-semibold pt-2 border-t first:border-t-0 first:pt-0">{children}</h2>;
 }
 
-export function MenteeRecord({ studentId, studentName, rollNumber }: { studentId: string; studentName: string; rollNumber: string }) {
-  const api = `/api/college/mentoring/students/${studentId}`;
+export function MenteeRecord({
+  studentId, studentName, rollNumber, readOnly, apiBase,
+}: {
+  studentId?: string;
+  studentName: string;
+  rollNumber: string;
+  /** The student's own view: nothing can be added or edited, and what is for the mentor and HOD alone is left out. */
+  readOnly?: boolean;
+  /** Overrides the mentor-side endpoint (the student's page passes /api/college/student/me/mentoring). */
+  apiBase?: string;
+}) {
+  const api = apiBase ?? `/api/college/mentoring/students/${studentId}`;
   const [view, setView] = useState<View>("profile");
   const [meetingSemester, setMeetingSemester] = useState<number | null>(null);
   const [semesterPick, setSemesterPick] = useState<number | null>(null);
@@ -72,8 +83,8 @@ export function MenteeRecord({ studentId, studentName, rollNumber }: { studentId
     <div className="space-y-4">
       {keys.map((k) => {
         const s = entrySection(k);
-        if (!s) return null;
-        return <EntrySectionView key={k} section={numbered ? { ...s, title: `${numbered[k]}. ${s.title}` } : s} entries={list} api={api} editor={editor} />;
+        if (!s || (readOnly && STUDENT_HIDDEN_ENTRY_SECTIONS.has(k))) return null;
+        return <EntrySectionView key={k} section={numbered ? { ...s, title: `${numbered[k]}. ${s.title}` } : s} entries={list} api={api} editor={editor} readOnly={readOnly} />;
       })}
     </div>
   );
@@ -119,7 +130,7 @@ export function MenteeRecord({ studentId, studentName, rollNumber }: { studentId
 
         {view === "profile" && (
           <>
-            <StudentInfoPage api={api} entries={list} editor={editor} />
+            <StudentInfoPage api={api} entries={list} editor={editor} readOnly={readOnly} />
             <PartHeading>Previous record</PartHeading>
             {renderSections(PREVIOUS, PREVIOUS_NUMBER)}
           </>
@@ -143,7 +154,7 @@ export function MenteeRecord({ studentId, studentName, rollNumber }: { studentId
                     </button>
                   ))}
                 </div>
-                <SemesterPage key={shownSemester} api={api} semester={shownSemester} onOpenMeetings={openMeetings} />
+                <SemesterPage key={shownSemester} api={api} semester={shownSemester} onOpenMeetings={openMeetings} readOnly={readOnly} />
               </>
             )
         )}
@@ -158,7 +169,7 @@ export function MenteeRecord({ studentId, studentName, rollNumber }: { studentId
         {view === "meetings" && (
           <>
             <PartHeading>Mentor meetings</PartHeading>
-            <MeetingsPage api={api} entries={list} editor={editor} semesters={semesters} semester={meetingSemester ?? current} onPickSemester={setMeetingSemester} />
+            <MeetingsPage api={api} entries={list} editor={editor} semesters={semesters} semester={meetingSemester ?? current} onPickSemester={setMeetingSemester} readOnly={readOnly} />
             <PartHeading>Follow-up</PartHeading>
             {renderSections(FOLLOW_UP)}
           </>

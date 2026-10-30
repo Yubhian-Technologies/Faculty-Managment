@@ -64,6 +64,13 @@ describe("applyConfigEdit", () => {
     expect(next.departments.ECE.hodCanConfigure).toBe(true);
     expect(next.college.routes!.STUDENT["*"]).toEqual(["PRINCIPAL"]);
   });
+  it("stops the Principal editing a delegated department until the delegation is withdrawn", () => {
+    expectForbidden(() => applyConfigEdit(cfg, edit(cfg, (x) => { x.departments.CSE.override = { limits: { maxDays: 1 } }; }), principal, allowed));
+    expectForbidden(() => applyConfigEdit(cfg, edit(cfg, (x) => { x.departments.CSE.hodCanConfigure = false; x.departments.CSE.override = {}; }), principal, allowed));
+    const revoked = applyConfigEdit(cfg, edit(cfg, (x) => { x.departments.CSE.hodCanConfigure = false; }), principal, allowed);
+    expect(revoked.departments.CSE.hodCanConfigure).toBe(false);
+    expect(applyConfigEdit(revoked, edit(revoked, (x) => { x.departments.CSE.override = { limits: { maxDays: 1 } }; }), principal, allowed).departments.CSE.override).toEqual({ limits: { maxDays: 1 } });
+  });
   it("lets a delegated HOD edit only their own department's override", () => {
     const next = applyConfigEdit(cfg, edit(cfg, (x) => { x.departments.CSE.override!.routes!.STUDENT["*"] = ["HOD"]; }), hodCse, allowed);
     expect(next.departments.CSE.override!.routes!.STUDENT["*"]).toEqual(["HOD"]);

@@ -1,10 +1,12 @@
 import type { Firestore } from "firebase-admin/firestore";
-import { DEFAULT_TIMETABLE_RULES, type DayOfWeek } from "@/types";
-import { istDateFromParts, istDateKey } from "@/lib/attendance/istTime";
+import type { DayOfWeek } from "@/types";
+import { istDateKey } from "@/lib/attendance/istTime";
+import { loadClassCalendar as loadCalendar } from "@/lib/studentAttendance/classDay";
 import { matchesCurrentSemester } from "@/lib/college/semester";
 import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
 import { makeLiveSlotPredicate } from "@/lib/timetable/liveSlots";
 import { loadTimingLookup, periodInterval, formatInterval } from "@/lib/timetable/facultyOverlap";
+import { loadMidWindows } from "@/lib/timetable/slotScope";
 import { calcPercent } from "@/lib/studentAttendance/percentage";
 import {
   buildNotPostedIndex, listExpectedPeriods, notPostedOf, postedKeysOf, type Calendar, type ExpectedSlot, type NotPostedIndex,
@@ -64,30 +66,7 @@ function toISTDate(value: unknown): string | null {
   return d ? istDateKey(d) : null;
 }
 
-export async function loadClassCalendar(db: Firestore, collegeId: string, fromISO: string, toISO: string): Promise<Calendar> {
-  const [fy, fm, fd] = fromISO.split("-").map(Number);
-  const [ty, tm, td] = toISO.split("-").map(Number);
-  const start = istDateFromParts(fy, fm, fd);
-  const endExclusive = new Date(istDateFromParts(ty, tm, td).getTime() + 86400000);
-  const collegeRef = db.collection("colleges").doc(collegeId);
-  const [rulesSnap, holidaySnap, summerSnap] = await Promise.all([
-    collegeRef.collection("settings").doc("timetableRules").get(),
-    collegeRef.collection("holidays").where("date", ">=", start).where("date", "<", endExclusive).get(),
-    collegeRef.collection("summerHolidays").where("toDate", ">=", start).get(),
-  ]);
-  const rules = rulesSnap.exists ? (rulesSnap.data() as { workingDays?: DayOfWeek[] }) : null;
-  return {
-    workingDays: rules?.workingDays?.length ? rules.workingDays : DEFAULT_TIMETABLE_RULES.workingDays,
-    holidays: holidaySnap.docs.map((d) => {
-      const data = d.data() as { date: unknown; name?: string };
-      return { dateKey: toISTDate(data.date) ?? "", name: data.name ?? "" };
-    }),
-    summerBreaks: summerSnap.docs.map((d) => {
-      const data = d.data() as { fromDate: unknown; toDate: unknown };
-      return { fromKey: toISTDate(data.fromDate) ?? "", toKey: toISTDate(data.toDate) ?? "" };
-    }),
-  };
-}
+export const loadClassCalendar: (db: Firestore, collegeId: string, fromISO: string, toISO: string) => Promise<Calendar> = loadCalendar;
 
 /**
  * The not-posted periods of ONE section in [from, to] (clipped to today and,
@@ -125,26 +104,33 @@ export async function loadNotPostedIndex(args: {
 
   const slots: ExpectedSlot[] = [];
   const subjects = new Map<string, { subjectName: string; subjectCode: string }>();
+  let midScopedSemester: number | null | undefined;
   for (const d of slotsSnap.docs) {
     const s = d.data() as {
       subjectName?: string;
-      assignmentId: string; subjectId: string; day: DayOfWeek; periodNumber: number; labBatch?: string;
+      assignmentId: string; subjectId: string; day: DayOfWeek; periodNumber: number; labBatch?: string; midScope?: number;
       semester?: number | null; academicYear?: string | null; courseId: string; year: number; createdAt?: unknown;
     };
     if (!isLive(s)) continue;
     if (args.requestedSemester != null && !matchesCurrentSemester(s.semester, args.requestedSemester)) continue;
     if (!subjects.has(s.subjectId)) subjects.set(s.subjectId, { subjectName: s.subjectName ?? "", subjectCode: "" });
     const interval = periodInterval(lookup(s.courseId, s.year), s.periodNumber);
+    if (s.midScope != null && midScopedSemester === undefined) midScopedSemester = s.semester ?? null;
     slots.push({
       assignmentId: s.assignmentId, subjectId: s.subjectId, day: s.day, periodNumber: s.periodNumber, labBatch: s.labBatch,
       activeFromISO: toISTDate(s.createdAt),
       endTime: interval ? formatInterval(interval).split("-")[1] : null,
+      ...(s.midScope != null ? { midScope: s.midScope } : {}),
     });
   }
   if (slots.length === 0) return { index: EMPTY, unavailable: "NO_TIMETABLE", from, to };
 
   const calendar = await loadClassCalendar(db, collegeId, from, to);
-  const expected = listExpectedPeriods({ slots, from, to, calendar, now });
+  // Mid windows are read only when the section actually has a mid-scoped slot.
+  const midWindows = midScopedSemester === undefined
+    ? undefined
+    : await loadMidWindows(db, collegeId, { courseId: section.courseId, year: section.year, semester: midScopedSemester });
+  const expected = listExpectedPeriods({ slots, from, to, calendar, now, midWindows });
   const notPosted = notPostedOf(expected, postedKeysOf(args.submittedSessions));
   return { index: buildNotPostedIndex(notPosted), subjects, from, to };
 }

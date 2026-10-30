@@ -120,6 +120,12 @@ export function divideIntoGroups(
 // One row per bench, one cell per layer - what the review table and the print
 // sheet show.
 export function benchRows(room: SeatingRoomAllocation): (SeatingStudent | null)[][] {
+  // Paired plans carry each student's bench number - seat them exactly there.
+  if (room.students.length && room.students.every((s) => s.bench)) {
+    const perBench = perBenchOf(room);
+    const count = Math.max(...room.students.map((s) => s.bench!));
+    return Array.from({ length: count }, (_, b) => Array.from({ length: perBench }, (_, l) => room.students.find((s) => s.bench === b + 1 && (s.layer ?? 1) === l + 1) ?? null));
+  }
   const layers = Array.from({ length: perBenchOf(room) }, (_, i) => sortByRoll(layerStudents(room, i + 1)));
   const count = Math.max(0, ...layers.map((l) => l.length));
   return Array.from({ length: count }, (_, b) => layers.map((l) => l[b] ?? null));

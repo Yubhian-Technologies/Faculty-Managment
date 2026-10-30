@@ -23,16 +23,37 @@ const namesOf = (names: Iterable<string>) =>
 /** The departments a department manages that themselves hold sections. */
 type DepartmentRef = Pick<Department, "name"> & Partial<Pick<Department, "hasSubDepartments" | "managedDepartments">>;
 
+/** A department reference carrying enough of the hierarchy to resolve one level of children. */
+type DepartmentWithHierarchy = Pick<Department, "name"> & Partial<Pick<Department, "id" | "parentDepartmentId">>;
+
+/**
+ * True when `name` has sections filed directly under it, OR - when `name` is
+ * itself a container split into sub-departments (e.g. a managed branch like
+ * ARTIFICIAL INTELLIGENCE that holds nothing of its own because it's split
+ * into CSE [AI & DATA SCIENCE] / CSE [AI & MACHINE LEARNING]) - under one of
+ * ITS children. Without this, a department that manages such a branch (e.g.
+ * BASIC SCIENCE - MATHS managing ARTIFICIAL INTELLIGENCE) was judged to have
+ * no sections at all and dropped from filters, even though its branch's
+ * sections plainly exist, just one hierarchy level deeper.
+ */
+function managedNameHasSections(name: string, have: Set<string>, all: DepartmentWithHierarchy[]): boolean {
+  if (have.has(name)) return true;
+  const dept = all.find((d) => (d.name ?? "").trim() === name);
+  if (!dept?.id) return false;
+  return all.some((d) => d.parentDepartmentId === dept.id && have.has((d.name ?? "").trim()));
+}
+
 export function coreDepartmentsWithSections(
   department: DepartmentRef | undefined,
-  sectionDepartmentNames: Iterable<string>
+  sectionDepartmentNames: Iterable<string>,
+  all: DepartmentWithHierarchy[] = []
 ): string[] {
   if (!department) return [];
   const have = namesOf(sectionDepartmentNames);
   return Array.from(
     new Set((department.managedDepartments ?? []).map((n) => (n ?? "").trim()).filter(Boolean))
   )
-    .filter((n) => have.has(n))
+    .filter((n) => managedNameHasSections(n, have, all))
     .sort((a, b) => a.localeCompare(b));
 }
 
@@ -47,12 +68,13 @@ export function coreDepartmentsWithSections(
  */
 export function departmentHasSections(
   department: DepartmentRef,
-  sectionDepartmentNames: Iterable<string>
+  sectionDepartmentNames: Iterable<string>,
+  all: DepartmentWithHierarchy[] = []
 ): boolean {
   const have = namesOf(sectionDepartmentNames);
   if (have.has((department.name ?? "").trim())) return true;
   if (department.hasSubDepartments) return false;
-  return coreDepartmentsWithSections(department, have).length > 0;
+  return coreDepartmentsWithSections(department, have, all).length > 0;
 }
 
 /**
@@ -71,6 +93,6 @@ export function departmentsWithSections(
 ): Department[] {
   const have = namesOf(sectionDepartmentNames);
   const active = departments.filter((d) => d.isActive !== false);
-  const withSections = active.filter((d) => departmentHasSections(d, have));
+  const withSections = active.filter((d) => departmentHasSections(d, have, departments));
   return withSections.length > 0 ? withSections : active;
 }

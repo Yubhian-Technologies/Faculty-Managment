@@ -97,6 +97,38 @@ describe("validatePlacement - labs sharing a period", () => {
   });
 });
 
+describe("validatePlacement - flexible cells (lab batch / mid scope)", () => {
+  const subj = (id: string) => ({ id, type: "THEORY" }) as unknown as import("@/types").Subject;
+  const ctx = makeContext({ subjectsById: new Map([["s1", subj("s1")]]) });
+  const placed = (assignmentId: string, extra: Record<string, unknown> = {}) =>
+    ({ assignmentId, facultyId: assignmentId, facultyName: `Faculty ${assignmentId}`, subjectId: "s1", subjectName: "s1", subjectType: "THEORY", day: "MON", periodNumber: 1, ...extra }) as unknown as import("@/types").DraftSlot;
+  const add = (draft: { slots: import("@/types").DraftSlot[] }, assignmentId: string, extra: { labBatch?: string; midScope?: number | null } = {}) =>
+    validatePlacement(ctx, draft, { ...placementOpts, facultyId: assignmentId, assignmentId, coTeach: true, ...extra });
+
+  it("lets two faculty of one subject take different mids in the same cell", () => {
+    expect(add({ slots: [placed("f1", { midScope: 1 })] }, "f2", { midScope: 2 })).toBeNull();
+  });
+
+  it("refuses two faculty on the same mid and the same (whole) class", () => {
+    expect(add({ slots: [placed("f1", { midScope: 1 })] }, "f2", { midScope: 1 })).toMatch(/already covers this batch for the same mid/);
+  });
+
+  it("lets two faculty split a lab by batch in the same cell, even on the same mid", () => {
+    const draft = { slots: [placed("f1", { labBatch: "Batch 1", midScope: 1 })] };
+    expect(add(draft, "f2", { labBatch: "Batch 2", midScope: 1 })).toBeNull();
+    expect(add(draft, "f3", { labBatch: "batch 1", midScope: 1 })).toMatch(/already covers/); // same batch, any letter case
+  });
+
+  it("treats a whole-class faculty as overlapping every batch of the same mid", () => {
+    expect(add({ slots: [placed("f1", { midScope: 1 })] }, "f2", { labBatch: "Batch 2", midScope: 1 })).toMatch(/already covers/);
+  });
+
+  it("leaves plain co-teaching (neither side flexible) untouched", () => {
+    expect(add({ slots: [placed("f1")] }, "f2")).toBeNull();
+    expect(add({ slots: [placed("f1", { labBatch: "Batch 1" })] }, "f2")).toBeNull();
+  });
+});
+
 describe("validatePlacement - non-teaching subjects sharing a period", () => {
   const nonTeaching = (id: string) => ({ id, type: "NON_TEACHING" }) as unknown as import("@/types").Subject;
   const slot = (subjectId: string, facultyId: string, assignmentId: string) =>

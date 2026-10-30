@@ -29,6 +29,7 @@ export interface AllocatorRoom {
   block: string;
   floor: number;
   capacity: number;
+  columns?: number;
   allowedSectionIds?: string[];
 }
 

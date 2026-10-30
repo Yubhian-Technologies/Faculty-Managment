@@ -239,7 +239,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
     })();
   }, [extendId, leaveTypeCode, summerHoliday, toDate]);
 
-  // Working Day overrides (see college-office/holidays/page.tsx) that name
+  // Working Day overrides (see academics/holidays/page.tsx) that name
   // this requester's own role - the inverse of holidayDates above: a Sunday
   // they're specifically required to work on still counts toward the
   // preview, same as the server (applications/route.ts) does via

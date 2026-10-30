@@ -77,6 +77,14 @@ describe("publishSectionDraft", () => {
     expect((first as { slotIds: string[] }).slotIds[0]).toBe(publishedSlotId("s1", "2026-27", null, { day: "MON", periodNumber: 1, assignmentId: "a1" }));
   });
 
+  it("the same assignment recorded twice in one cell publishes once instead of failing", async () => {
+    const fake = new FakeFirestore();
+    section(fake, "s1", 1, [ds("a1", "f1", "MON", 1), ds("a1", "f1", "MON", 1)]);
+    const out = await publishSectionDraft(input(fake, "s1", 1));
+    expect(out.ok).toBe(true);
+    expect(slotsIn(fake, "s1")).toHaveLength(1);
+  });
+
   it("a failed commit changes nothing: old slots intact, draft still a draft", async () => {
     const fake = new FakeFirestore();
     section(fake, "s1", 1, [ds("a1", "f1", "MON", 1)]);

@@ -164,6 +164,23 @@ export const HOLIDAY_AUDIENCE_LABELS: Record<HolidayAudience, string> = {
   BOTH: "Faculty & Students",
 };
 
+// What kind of holiday a record is. Absent = "REGULAR" (every holiday created
+// before categories existed).
+//   REGULAR          the yearly list (national / regional / college ...). Everyone.
+//   BRIDGE           a day between two holidays (Mon + Wed -> Tue) so people get a
+//                    long break. Everyone. May carry a compensatory Sunday that
+//                    runs the bridged weekday's timetable - the Principal decides
+//                    whether that Sunday is actually worked.
+//   CLASS_SUSPENDED  classes suspended at short notice (a death, bandh, cyclone,
+//                    flood ...). Students always; faculty only when `appliesTo` is BOTH.
+export type HolidayCategory = "REGULAR" | "BRIDGE" | "CLASS_SUSPENDED";
+
+export const HOLIDAY_CATEGORY_LABELS: Record<HolidayCategory, string> = {
+  REGULAR: "Regular Holiday",
+  BRIDGE: "Compensatory Holiday",
+  CLASS_SUSPENDED: "Classwork Suspended",
+};
+
 export interface Holiday {
   id: string;
   collegeId: string;
@@ -173,8 +190,54 @@ export interface Holiday {
   // Absent on holidays created before this field existed - treat as "BOTH"
   // everywhere it's read (holidaysCount.ts), matching their prior behavior.
   appliesTo?: HolidayAudience;
+  category?: HolidayCategory;
+  // May hostellers go out (outing) on this day? Absent = not stated.
+  hostelersOutingAllowed?: boolean;
+  // BRIDGE only. The Sunday (YYYY-MM-DD) that makes up for this day and the
+  // weekday whose timetable it runs; `compensatoryEnabled` is the Principal's
+  // switch - until it is on, the Sunday stays an ordinary day off.
+  compensatoryDateKey?: string;
+  compensatoryFollowsDay?: "MON" | "TUE" | "WED" | "THU" | "FRI" | "SAT";
+  compensatoryEnabled?: boolean;
   academicYear: string;       // "2025-26"
   createdAt: Timestamp;
+}
+
+// One line of the login "tomorrow" pop-up (GET /api/college/holidays/upcoming).
+export interface UpcomingNotice {
+  id: string;
+  kind: HolidayCategory | "SEM_BREAK" | "COMPENSATORY_WORKING_DAY";
+  label: string;
+  title: string;
+  // Sem break only: the last day of the break (YYYY-MM-DD).
+  untilKey?: string;
+  hostelersOutingAllowed?: boolean;
+  // Compensatory working day only: the weekday whose timetable runs.
+  followsDay?: string;
+}
+
+// ─── Sem Break (students only) ────────────────────────────────────────────────
+// A winter or summer semester break for students. Faculty keep working. doc id
+// = `${academicYear}_${kind}`, so setting it again overwrites. Separate from
+// the all-roles SummerHoliday below, which is left as it was.
+export type SemBreakKind = "WINTER" | "SUMMER";
+
+export const SEM_BREAK_LABELS: Record<SemBreakKind, string> = {
+  WINTER: "Winter Sem Break",
+  SUMMER: "Summer Sem Break",
+};
+
+export interface SemBreak {
+  id: string;
+  collegeId: string;
+  academicYear: string;
+  kind: SemBreakKind;
+  fromDate: Timestamp;
+  toDate: Timestamp;
+  hostelersOutingAllowed?: boolean;
+  createdBy: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
 }
 
 // ─── Summer Holidays (one continuous break period per academic year) ──────────
@@ -201,7 +264,7 @@ export interface SummerHoliday {
 // Flips a normally-off Sunday into a working day for specific roles - e.g.
 // the Principal alone, or a subset of faculty, coming in for an inspection or
 // event. Maintained in the same Office/Principal/VP-only Settings screen as
-// Holidays (see college-office/holidays/page.tsx) but kept as its own
+// Holidays (see academics/holidays/page.tsx) but kept as its own
 // collection since it targets specific roles rather than everyone, and
 // exempts nobody by default - only the listed roles are affected; anyone else
 // still gets the day off as usual. See lib/attendance/workingDays.ts for how

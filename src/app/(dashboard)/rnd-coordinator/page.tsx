@@ -18,6 +18,7 @@ import { RESEARCH_FIELD_LABELS } from "@/lib/research/fieldLabels";
 import { toast } from "@/hooks/useToast";
 import { ROLE_LABELS } from "@/types";
 import { useAuthStore } from "@/store/authStore";
+import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
 import type { UserRole } from "@/types";
 
 // The R&D Coordinator's review queue: every Research & Innovation submission
@@ -77,6 +78,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 export default function RndCoordinatorPage() {
   const user = useAuthStore((s) => s.user);
+  const { nameFor } = useFacultyDisplayNames();
   const qc = useQueryClient();
   const [tab, setTab] = useState<"review" | "done">("review");
   const [open, setOpen] = useState<Item | null>(null);
@@ -180,7 +182,7 @@ export default function RndCoordinatorPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Hello, ${user?.name ?? "there"}`}
+        title={`Hello, ${user ? nameFor("dashboardName", { uid: user.uid }, user.name) : "there"}`}
         description={departments.length > 0 ? `${ROLE_LABELS.RND_COORDINATOR} - ${departments.join(", ")}` : ROLE_LABELS.RND_COORDINATOR}
       />
 

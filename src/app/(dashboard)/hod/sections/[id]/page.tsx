@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { resolveListBack, withListBack } from "@/lib/listReturn";
 import Link from "next/link";
-import { ArrowLeft, Users, UserCog, BookOpen, Search, Pencil } from "lucide-react";
+import { ArrowLeft, Users, BookOpen, Search, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,11 +16,15 @@ import { Pagination } from "@/components/shared/Pagination";
 import { toast } from "@/hooks/useToast";
 import { classRepresentativeCountOf } from "@/lib/sections/classRepresentatives";
 import { sectionTitle, shortCourseName } from "@/lib/sections/sectionTitle";
-import type { Course, CourseYearTiming, Department, SectionListItem, StudentRecord, Subject, SubjectSemesterAssignment, TeachingAssignment } from "@/types";
-import { SUBJECT_TYPE_LABELS } from "@/types";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { resolveDisplaySemester } from "@/lib/college/semester";
+import { semesterInYearLabel } from "@/lib/academic/format";
+import { toDate } from "@/lib/utils";
+import type { Course, CourseYearTiming, Department, SectionListItem, StudentRecord, Subject, SubjectSemesterAssignment } from "@/types";
+import { SUBJECT_TYPE_LABELS, subjectTypeDisplayLabel, type SubjectType } from "@/types";
+import { useFacultyDesignations, withDesignation } from "@/hooks/useFacultyDesignations";
 
 type SectionRow = SectionListItem;
-type AssignmentRow = TeachingAssignment & { id: string };
 
 function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
@@ -37,9 +41,12 @@ export default function SectionRosterPage() {
   // The Sections list as this page was opened from (filters, page).
   const listHref = resolveListBack(useSearchParams(), "/hod/sections");
   const [section, setSection] = useState<SectionRow | null>(null);
+  const designationOf = useFacultyDesignations([section?.facultyInchargeUid]);
   const [students, setStudents] = useState<StudentRecord[]>([]);
-  const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [assignments, setAssignments] = useState<SubjectSemesterAssignment[]>([]);
+  const [timingSemesters, setTimingSemesters] = useState<NonNullable<CourseYearTiming["semesters"]>>([]);
+  const [pickedSemester, setPickedSemester] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -86,13 +93,6 @@ export default function SectionRosterPage() {
         // SubjectSemesterAssignment's own doc-comment in types/teaching.ts),
         // so there's nothing to scope by there and the master-subject list
         // stays the only source, same as before this fix.
-        const yearTiming = sec.courseId
-          ? await fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(sec.courseId)}`)
-              .then((r) => r.json() as Promise<{ timings?: CourseYearTiming[] }>)
-              .then((d) => (d.timings ?? []).find((t) => t.year === sec.year))
-              .catch(() => undefined)
-          : undefined;
-        const hasSemesters = (yearTiming?.semesters?.length ?? 0) > 0;
 
         await Promise.all([
           // Students API scopes by section NAME + year, not id - section names
@@ -108,9 +108,6 @@ export default function SectionRosterPage() {
             .then((sd) => setStudents((sd.students ?? []).filter(
               (s) => s.department === sec.department || s.secondaryDepartment === sec.department
             ))),
-          fetch(`/api/college/teaching-assignments?sectionId=${id}`)
-            .then((r) => r.json() as Promise<{ assignments: AssignmentRow[] }>)
-            .then((ad) => setAssignments(ad.assignments ?? [])),
           // Master subjects have no per-year field at all on new data (see
           // Subject.year's own "legacy" doc-comment in types/teaching.ts) -
           // querying by courseId/catalogId alone (the previous behavior here)
@@ -127,7 +124,7 @@ export default function SectionRosterPage() {
           // full course subject list only when this course-year genuinely
           // has no semesters configured (see hasSemesters above).
           sec.courseId
-            ? (hasSemesters && departmentId
+            ? (departmentId
                 ? Promise.all([
                     fetch(`/api/college/subject-semester-assignments?courseId=${encodeURIComponent(sec.courseId)}&departmentId=${encodeURIComponent(departmentId)}&year=${sec.year}`)
                       .then((r) => r.json() as Promise<{ assignments?: SubjectSemesterAssignment[] }>),
@@ -136,14 +133,29 @@ export default function SectionRosterPage() {
                       : `/api/college/subjects?courseId=${encodeURIComponent(sec.courseId)}`)
                       .then((r) => r.json() as Promise<{ subjects: Subject[] }>),
                   ]).then(([assignData, subjData]) => {
-                    const assignedIds = new Set((assignData.assignments ?? []).map((a) => a.subjectId));
+                    const assigns = assignData.assignments ?? [];
+                    const assignedIds = new Set(assigns.map((a) => a.subjectId));
+                    setAssignments(assigns);
                     setSubjects((subjData.subjects ?? []).filter((s) => assignedIds.has(s.id)));
                   })
-                : fetch(catalogId
-                    ? `/api/college/subjects?catalogId=${encodeURIComponent(catalogId)}`
-                    : `/api/college/subjects?courseId=${encodeURIComponent(sec.courseId)}`)
-                    .then((r) => r.json() as Promise<{ subjects: Subject[] }>)
-                    .then((sd) => setSubjects(sd.subjects ?? [])))
+                : Promise.resolve()) // ponytail: no department id = nothing assigned to show
+            : Promise.resolve(),
+          // Which semester is running today (the section's own course-year
+          // timing; the API also hands back a shared first year's timing).
+          sec.courseId
+            ? fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(sec.courseId)}`)
+                .then((r) => r.json() as Promise<{ timings?: CourseYearTiming[] }>)
+                .then((td) => {
+                  const t = (td.timings ?? []).find((x) => Number(x.year) === sec.year);
+                  // Dates come over JSON as {_seconds} - revive them for resolveDisplaySemester.
+                  const semesters = (t?.semesters ?? []).map((s) => ({
+                    ...s,
+                    startDate: toDate(s.startDate as never) as never,
+                    endDate: toDate(s.endDate as never) as never,
+                  }));
+                  setTimingSemesters(semesters);
+                })
+                .catch(() => undefined)
             : Promise.resolve(),
         ]);
       } catch {
@@ -158,24 +170,30 @@ export default function SectionRosterPage() {
   // lenient both ways (a subject with no regulation still matches, and a
   // section with no regulation shows every subject), same filter Teaching
   // Assignments applies to its own subject picker.
-  const sectionSubjects = useMemo(
-    () => sortSubjects(
-      subjects.filter((s) => !section?.regulation || !s.regulation || s.regulation === section.regulation)
-    ),
-    [subjects, section]
+  // Semester filter: options = every semester this course-year has (timing)
+  // or has subjects in; defaults to the one running today.
+  const semesterOptions = useMemo(
+    () => [...new Set([...timingSemesters.map((s) => s.semester), ...assignments.map((a) => a.semester)])]
+      .filter((n) => Number.isFinite(n))
+      .sort((a, b) => a - b),
+    [timingSemesters, assignments]
   );
-  const assignmentBySubjectId = useMemo(
-    () => new Map(assignments.map((a) => [a.subjectId, a])),
-    [assignments]
-  );
-  // How many of THIS section's own year/semester subjects (sectionSubjects,
-  // now correctly scoped above) have nobody assigned yet - previously this
-  // would have counted every subject in the whole course across every year,
-  // wildly overstating the gap.
-  const unassignedSubjectsCount = useMemo(
-    () => sectionSubjects.filter((s) => !assignmentBySubjectId.has(s.id)).length,
-    [sectionSubjects, assignmentBySubjectId]
-  );
+  const currentSemester = useMemo(() => {
+    const cur = resolveDisplaySemester({ semesters: timingSemesters });
+    return cur != null && semesterOptions.includes(cur) ? cur : (semesterOptions[0] ?? null);
+  }, [timingSemesters, semesterOptions]);
+  const effectiveSemester = pickedSemester != null && semesterOptions.includes(pickedSemester) ? pickedSemester : currentSemester;
+
+  const sectionSubjects = useMemo(() => {
+    const inSemester = new Set(
+      assignments.filter((a) => effectiveSemester == null || a.semester === effectiveSemester).map((a) => a.subjectId)
+    );
+    return sortSubjects(
+      subjects.filter(
+        (s) => inSemester.has(s.id) && (!section?.regulation || !s.regulation || s.regulation === section.regulation)
+      )
+    );
+  }, [subjects, assignments, effectiveSemester, section]);
 
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -248,7 +266,7 @@ export default function SectionRosterPage() {
 
       <dl className="space-y-1.5 text-sm">
         <div className="flex gap-2"><dt className="text-muted-foreground">Total No of students enrolled -</dt><dd className="font-medium">{students.length}</dd></div>
-        <div className="flex gap-2"><dt className="text-muted-foreground">Class I/c -</dt><dd className="font-medium">{section.facultyInchargeName || "Not assigned"}</dd></div>
+        <div className="flex gap-2"><dt className="text-muted-foreground">Class I/c -</dt><dd className="font-medium">{section.facultyInchargeName ? withDesignation(section.facultyInchargeName, designationOf(section.facultyInchargeUid)) : "Not assigned"}</dd></div>
         {Array.from({ length: classRepresentativeCountOf(section) }, (_, i) => (
           <div key={i} className="flex gap-2">
             <dt className="text-muted-foreground">Class representative-{i + 1} -</dt>
@@ -265,10 +283,20 @@ export default function SectionRosterPage() {
           <p className="text-sm font-medium flex items-center gap-1.5">
             <BookOpen className="h-4 w-4" />Subjects
             {section.regulation && <Badge variant="secondary" className="text-xs">{section.regulation}</Badge>}
-            {unassignedSubjectsCount > 0 && (
-              <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
-                {unassignedSubjectsCount} unassigned faculty
-              </Badge>
+            {semesterOptions.length > 0 && (
+              <Select
+                value={effectiveSemester != null ? String(effectiveSemester) : ""}
+                onValueChange={(v) => setPickedSemester(Number(v))}
+              >
+                <SelectTrigger className="h-8 w-28 text-xs ml-2"><SelectValue placeholder="Semester" /></SelectTrigger>
+                <SelectContent>
+                  {semesterOptions.map((s) => (
+                    <SelectItem key={s} value={String(s)}>
+                      {semesterInYearLabel(semesterOptions, s, { format: "short" })}{s === currentSemester ? " (current)" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
           </p>
           {sectionSubjects.length === 0 ? (
@@ -277,40 +305,24 @@ export default function SectionRosterPage() {
               {section.regulation ? ` · ${section.regulation}` : ""}.
             </p>
           ) : (
-            <Card className="overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/50 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    <tr>
-                      <th className="px-4 py-2.5">Subject</th>
-                      <th className="px-4 py-2.5">Faculty</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {sectionSubjects.map((s) => {
-                      const assignment = assignmentBySubjectId.get(s.id);
-                      return (
-                        <tr key={s.id}>
-                          <td className="px-4 py-2.5">
-                            <div className="font-medium text-foreground">{s.name}</div>
-                            <div className="flex flex-wrap items-center gap-2 mt-1">
-                              <Badge variant="secondary" className="text-xs font-mono">{s.code}</Badge>
-                              <Badge variant="outline" className="text-xs">{SUBJECT_TYPE_LABELS[s.type]}</Badge>
-                            </div>
-                          </td>
-                          <td className="px-4 py-2.5">
-                            <span className="flex items-center gap-1.5">
-                              <UserCog className="h-3.5 w-3.5 text-muted-foreground" />
-                              {assignment?.facultyName || <span className="text-muted-foreground">Unassigned</span>}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
+            <div className="space-y-4 text-sm">
+              {(Object.keys(SUBJECT_TYPE_LABELS) as SubjectType[]).map((type) => {
+                const group = sectionSubjects.filter((s) => s.type === type);
+                if (group.length === 0) return null;
+                return (
+                  <div key={type}>
+                    <p className="font-semibold mb-1">{subjectTypeDisplayLabel(type)}</p>
+                    {group.map((s, i) => (
+                      <div key={s.id} className="grid grid-cols-[3rem_1fr_8rem] gap-x-4 py-1">
+                        <span className="text-right text-muted-foreground">{i + 1}</span>
+                        <span>{s.name}</span>
+                        <span>{s.shortCode || s.code}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       )}

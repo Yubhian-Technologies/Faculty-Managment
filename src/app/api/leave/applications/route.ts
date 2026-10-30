@@ -538,7 +538,7 @@ export async function POST(request: Request) {
     // to begin with, so they don't draw down balance - see countWorkingDays.
     // workingDayWeights is the inverse exception: a Sunday this requester's
     // own role is specifically required to work on (see Working Days in
-    // college-office/holidays/page.tsx) still draws down balance like any
+    // academics/holidays/page.tsx) still draws down balance like any
     // other working day - at full weight, or half if that override is itself
     // a half day.
     const [holidayDates, workingDayWeights] = await Promise.all([
