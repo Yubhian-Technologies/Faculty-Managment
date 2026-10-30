@@ -200,6 +200,8 @@ export interface AllocationEntry {
   shortCode: string;
   name: string;
   subjectType?: string;
+  /** "Not in teaching load" on the subject: listed under Co-Curricular whatever its type says. */
+  isNonTeachingLoad?: boolean;
   hoursPerWeek?: number;
   faculty: string;
   classroom?: string;
@@ -243,6 +245,7 @@ export function buildAllocationList(
         shortCode: slotShortCode(slot, opts.subjects),
         name: subject?.name ?? slot.subjectName ?? "",
         subjectType: subject?.type ?? assign?.subjectType,
+        ...(subject?.isNonTeachingLoad ? { isNonTeachingLoad: true } : {}),
         hoursPerWeek: undefined,
         faculty: "",
         classroom: slot.classroom,
