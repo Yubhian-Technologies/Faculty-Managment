@@ -1,5 +1,6 @@
 import type { StudentListItem, StudentRecord } from "@/types";
-import { compareStudentsForList } from "@/lib/students/listOrder";
+import { compareStudentsBySectionThenRoll } from "@/lib/students/listOrder";
+import { sectionMatchesFilter, UNASSIGNED_SECTION } from "@/lib/students/sectionFilter";
 import { compareGraduates, graduateBatchLabel, graduateCourseLabel, graduateFacets } from "@/lib/students/graduates";
 
 // Server-side pagination for the College Office / Principal-tier Students
@@ -20,13 +21,12 @@ import { compareGraduates, graduateBatchLabel, graduateCourseLabel, graduateFace
 // forces one - the mistake an earlier version of this file made, which
 // surfaced as a 500 the moment a course/department/year filter was used).
 // Everything else - the other structural filters, the free-text search
-// Firestore can't do natively, and the name ordering itself - is applied
-// in-route, in memory, over that already-narrowed candidate set. Only when
-// NO structural filter or search is active at all - the common "just browse
-// the roster" case - is this a true, un-narrowed LIMIT/OFFSET query straight
-// against Firestore (a bare `.orderBy("name")` with no filter is likewise
-// servable by the automatic single-field index, so that branch alone was
-// never at risk of this).
+// Firestore can't do natively, and the display order itself (Year, Section, then
+// Regd. No - see compareStudentsBySectionThenRoll) - is applied in-route, in
+// memory, over that already-narrowed candidate set. With NO filter at all the
+// candidate set is the whole roster: the order can't be a Firestore orderBy
+// (mixed-case Regd. Nos, "natural" 2-before-10 order, blank sections last), so
+// that request reads everything and pages it in memory too.
 //
 // The response sent to the browser is always exactly one page, regardless of
 // which path was taken - the client never downloads the full roster.
@@ -80,15 +80,18 @@ export interface StudentListQuery {
    */
   rollFrom?: string;
   rollTo?: string;
+  /**
+   * Section name ("A"), or UNASSIGNED_SECTION for students placed in none -
+   * see lib/students/sectionFilter.ts. "" / absent means no filter. Narrows
+   * whatever the other filters picked; a name is pushed down to Firestore only
+   * when no other structural filter is active (below).
+   */
+  section?: string;
 }
 
 type Doc = FirebaseFirestore.QueryDocumentSnapshot;
 
 type RollRange = Pick<StudentListQuery, "rollFrom" | "rollTo">;
-
-function hasRollRange(range: RollRange): boolean {
-  return !!(range.rollFrom?.trim() || range.rollTo?.trim());
-}
 
 /** Whether `roll` lies inside the (possibly open-ended) inclusive range. */
 export function rollInRange(roll: unknown, range: RollRange): boolean {
@@ -105,9 +108,10 @@ export function rollInRange(roll: unknown, range: RollRange): boolean {
 
 function matchesRemaining(
   data: FirebaseFirestore.DocumentData,
-  opts: Pick<StudentListQuery, "search" | "course" | "year" | "years" | "studentType" | "rollFrom" | "rollTo" | "coreDepartment">
+  opts: Pick<StudentListQuery, "search" | "course" | "year" | "years" | "studentType" | "rollFrom" | "rollTo" | "coreDepartment" | "section">
 ): boolean {
   if (opts.year !== null && Number(data.year) !== opts.year) return false;
+  if (opts.section && !sectionMatchesFilter(data.section, opts.section)) return false;
   if (opts.years && opts.years.length > 0 && !opts.years.includes(Number(data.year))) return false;
   if (opts.coreDepartment && data.secondaryDepartment !== opts.coreDepartment) return false;
   if (opts.course && data.course !== opts.course) return false;
@@ -135,15 +139,18 @@ function dedupeAndSortByName(docs: Doc[]): Doc[] {
     out.push(d);
   }
   return out.sort((a, b) => {
-    const da = a.data() as { rollNumber?: string; name?: string };
-    const db = b.data() as { rollNumber?: string; name?: string };
-    return compareStudentsForList({ id: a.id, rollNumber: da.rollNumber, name: da.name }, { id: b.id, rollNumber: db.rollNumber, name: db.name });
+    const da = a.data() as { rollNumber?: string; name?: string; section?: string; year?: number };
+    const db = b.data() as { rollNumber?: string; name?: string; section?: string; year?: number };
+    return compareStudentsBySectionThenRoll(
+      { id: a.id, year: da.year, section: da.section, rollNumber: da.rollNumber, name: da.name },
+      { id: b.id, year: db.year, section: db.section, rollNumber: db.rollNumber, name: db.name }
+    );
   });
 }
 
 async function resolveCandidates(
   studentsColl: FirebaseFirestore.CollectionReference,
-  params: Pick<StudentListQuery, "departments" | "year" | "course">
+  params: Pick<StudentListQuery, "departments" | "year" | "course" | "section">
 ): Promise<Doc[]> {
   if (params.departments.length > 0) {
     // "in" only when there's more than one name to match (the rollup case) -
@@ -168,6 +175,13 @@ async function resolveCandidates(
   if (params.course) {
     return dedupeAndSortByName((await studentsColl.where("course", "==", params.course).get()).docs);
   }
+  // A section name alone (no department / year / course) is a bare equality too.
+  // "Unassigned" can't be: a student saved without the field has no value to
+  // match, so that one falls through to the full read below and is judged in
+  // memory by matchesRemaining.
+  if (params.section && params.section !== UNASSIGNED_SECTION) {
+    return dedupeAndSortByName((await studentsColl.where("section", "==", params.section).get()).docs);
+  }
   // Search-only, no structural filter - the one case Firestore genuinely
   // can't narrow server-side (no field to key an equality filter off).
   return dedupeAndSortByName((await studentsColl.get()).docs);
@@ -181,16 +195,11 @@ export async function fetchStudentsPage(
   studentsColl: FirebaseFirestore.CollectionReference,
   params: StudentListQuery
 ): Promise<{ students: StudentListItem[]; total: number }> {
-  const hasFilter = params.departments.length > 0 || params.year !== null || !!params.course || !!params.search || !!params.studentType || !!params.coreDepartment || (params.years?.length ?? 0) > 0 || hasRollRange(params);
-
-  if (!hasFilter) {
-    const [countSnap, pageSnap] = await Promise.all([
-      studentsColl.count().get(),
-      studentsColl.orderBy("name").offset((params.page - 1) * params.pageSize).limit(params.pageSize).get(),
-    ]);
-    return { students: pageSnap.docs.map(toListItem), total: countSnap.data().count };
-  }
-
+  // Every request - filtered or not - reads its candidates and sorts them in
+  // memory. The unfiltered "just browse" request used to be a Firestore
+  // `orderBy("name")` page, which can't express Section-then-Regd. No (and
+  // silently leaves out any student saved without a `name`); one order for
+  // every request also keeps pages consistent when filters change.
   const candidates = await resolveCandidates(studentsColl, params);
   const filtered = candidates.filter((d) => matchesRemaining(d.data(), params));
   const start = (params.page - 1) * params.pageSize;
@@ -206,7 +215,7 @@ export async function fetchStudentsPage(
  */
 export async function fetchMatchingStudentIds(
   studentsColl: FirebaseFirestore.CollectionReference,
-  params: Pick<StudentListQuery, "departments" | "year" | "years" | "course" | "search" | "studentType" | "rollFrom" | "rollTo" | "coreDepartment">
+  params: Pick<StudentListQuery, "departments" | "year" | "years" | "course" | "search" | "studentType" | "rollFrom" | "rollTo" | "coreDepartment" | "section">
 ): Promise<string[]> {
   const candidates = await resolveCandidates(studentsColl, params);
   return candidates.filter((d) => matchesRemaining(d.data(), params)).map((d) => d.id);

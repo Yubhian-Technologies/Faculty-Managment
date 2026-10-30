@@ -369,6 +369,19 @@ describe("HOD paged list", () => {
     expect(narrow.truncated).toBe(false);
   });
 
+  it("narrows the paged list itself to a roll-number range, either end optional", async () => {
+    const { collection } = fakeStudentsCollection(roster);
+    const both = await fetchHodStudentsPage(collection, ctx, primaryFilters, { ...opts, rollFrom: "r3", rollTo: "r1" });
+    expect(both.students.map((s) => s.id)).toEqual(["s2", "s1", "s3"]);
+    expect(both.total).toBe(3);
+    const narrow = await fetchHodStudentsPage(collection, ctx, primaryFilters, { ...opts, rollFrom: "R2", rollTo: "R2" });
+    expect(narrow.students.map((s) => s.id)).toEqual(["s1"]);
+    expect(narrow.total).toBe(1);
+    expect(narrow.orderedIds).toHaveLength(1);
+    const openEnded = await fetchHodStudentsPage(collection, ctx, primaryFilters, { ...opts, rollFrom: "R2" });
+    expect(openEnded.students.map((s) => s.id)).not.toContain("s2");
+  });
+
   it("reports the filter options without reading any student", async () => {
     const { collection, stats } = fakeStudentsCollection(roster);
     const meta = await fetchHodMeta(collection, hodContext({ own: ["CSE"], child: ["Cyber"], managed: ["IT"] }));

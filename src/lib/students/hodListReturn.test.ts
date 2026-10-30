@@ -26,6 +26,8 @@ describe("hod students list state <-> url", () => {
       courseFilter: "B.Tech (Hons)",
       yearFilter: "2",
       search: "23471a04/ x&y=z",
+      rollFrom: "26BV1A08081",
+      rollTo: "26BV1A08120",
       page: 3,
       pageSize: 50,
     };
