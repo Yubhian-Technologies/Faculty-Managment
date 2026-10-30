@@ -31,6 +31,7 @@ import {
 import { loadDepartmentIndex, stampDepartmentIds } from "@/lib/departments/stampIds";
 import { loadSeatsByHolder } from "@/lib/roles/seatLabels";
 import { compareDefaultFacultyOrder } from "@/lib/faculty/listOrder";
+import { stampFacultyOrderRanks } from "@/lib/faculty/facultyOrder";
 import { whereIn, type QueryLike } from "@/lib/firestore/inQuery";
 
 export async function GET(request: Request) {
@@ -265,6 +266,10 @@ export async function GET(request: Request) {
         .where("name", "==", deptFilter).limit(1).get();
       hodUid = (deptSnap.docs[0]?.data() as { hodUid?: string } | undefined)?.hodUid;
     }
+    // The HOD's own arrangement of a department (Arrange order): stamps `orderRank`, which both sorts below
+    // and the pages' own default sort put first. Skipped for a lookup of one person by login uid.
+    if (!userUidFilter) await stampFacultyOrderRanks(db, session.collegeId, teachingOnly);
+
     // Opt-in (`?withSeats=1`, the Faculty Register lists only): the seats each person holds, as short phrases
     // ("HOD of CSE") and as role codes, so a Principal / HOD can see who holds a position without opening the seat register
     // and the list can put the HOD and the Principal first. Additive and display-only; the pickers that reuse this route

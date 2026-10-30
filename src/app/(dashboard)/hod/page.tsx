@@ -1,5 +1,6 @@
 "use client";
 
+import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
@@ -58,6 +59,7 @@ const PERSONAL_MODULES = [
 
 export default function HODDashboard() {
   const user = useAuthStore((s) => s.user);
+  const { nameFor } = useFacultyDisplayNames();
   const myDepartments = useMyDepartments();
   const { hiddenModules, hiddenItems } = useNavVisibility();
   const { collegeType } = useCollegeType();
@@ -125,7 +127,7 @@ export default function HODDashboard() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Welcome, ${user?.name ?? "HOD"}`}
+        title={`Welcome, ${user ? nameFor("dashboardName", { uid: user.uid }, user.name) : "HOD"}`}
         description={`Head of the Department - ${departmentLabel.replace(/ and /gi, " & ")}`}
         actions={
           !isHiringHidden && (

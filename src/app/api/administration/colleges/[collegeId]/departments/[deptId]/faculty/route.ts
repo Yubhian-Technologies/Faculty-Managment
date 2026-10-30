@@ -5,6 +5,7 @@ import { requireLocationMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { migrateFacultyDoc } from "@/lib/faculty/fieldRenames";
 import { compareFacultyForList } from "@/lib/faculty/sortFacultyForList";
+import { stampFacultyOrderRanks } from "@/lib/faculty/facultyOrder";
 
 // Read-only: faculty of one department of a college in the caller's location.
 export async function GET(_request: Request, { params }: { params: Promise<{ collegeId: string; deptId: string }> }) {
@@ -23,9 +24,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ col
     const deptName = deptData.name ?? "";
 
     const facultySnap = await collegeRef.collection("facultyMembers").where("department", "==", deptName).get();
-    const faculty = facultySnap.docs
-      .map((d) => ({ id: d.id, ...migrateFacultyDoc(d.data()) }))
-      .sort(compareFacultyForList(deptData.hodUid));
+    const faculty: { id: string; orderRank?: number }[] = facultySnap.docs
+      .map((d) => ({ id: d.id, ...migrateFacultyDoc(d.data()) }));
+    await stampFacultyOrderRanks(db, collegeId, faculty);
+    faculty.sort(compareFacultyForList(deptData.hodUid));
 
     return NextResponse.json({ faculty, collegeName: college.name ?? "", departmentName: deptName });
   } catch (err) {

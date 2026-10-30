@@ -4,11 +4,11 @@ import { effectiveLabBatch, loadLabBatchModes } from "@/lib/students/labBatchMod
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { sortStudentsForList } from "@/lib/students/listOrder";
-import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
+import { resolveAcademicYearForDate } from "@/lib/studentAttendance/academicYearWindow";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
-import { isManualEditWindowOpen, MANUAL_EDIT_WINDOW_CLOSED_MESSAGE } from "@/lib/attendance/attendanceWindow";
+import { isStudentAttendanceEditOpen, STUDENT_EDIT_WINDOW_CLOSED_MESSAGE } from "@/lib/studentAttendance/editWindow";
 import { getFacultyPeriodsForDate } from "@/lib/timetable/currentPeriod";
 import {
   departmentOfficeBlocked, facultyWindowClosed, FACULTY_WINDOW_OPEN_MESSAGE, OFFICE_ATTENDANCE_DENIED_MESSAGE,
@@ -56,9 +56,8 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    if (!reason) {
-      return NextResponse.json({ error: "A reason is required to post attendance on a faculty member's behalf" }, { status: 400 });
-    }
+    // The reason is asked for when the change is saved (PATCH [id], mandatory and audited there) - opening the
+    // roster to edit needs none.
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
@@ -86,9 +85,6 @@ export async function POST(request: Request) {
     if (docDate > istMidnightUTC(new Date())) {
       return NextResponse.json({ error: "Cannot post attendance for a future date" }, { status: 400 });
     }
-    if (!isManualEditWindowOpen(docDate)) {
-      return NextResponse.json({ error: MANUAL_EDIT_WINDOW_CLOSED_MESSAGE }, { status: 403 });
-    }
 
     const assignmentSnap = await collegeRef.collection("teachingAssignments").doc(assignmentId).get();
     if (!assignmentSnap.exists) {
@@ -115,8 +111,8 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    // Only once the faculty's own window is over: a past day, or today after the college day ended.
-    if (!facultyWindowClosed(date, matchedPeriod.closeTime)) {
+    // Only once the period is over: a past day, or today after the period's own end time.
+    if (!facultyWindowClosed(date, matchedPeriod.endTime)) {
       return NextResponse.json({ error: FACULTY_WINDOW_OPEN_MESSAGE }, { status: 403 });
     }
 
@@ -142,6 +138,10 @@ export async function POST(request: Request) {
     }
     if (hodScope && !canHodManageFacultyDepartment(hodScope, department)) {
       return NextResponse.json({ error: "That class is not in your department" }, { status: 403 });
+    }
+    // Checked here, not earlier: the semester rule needs the section's course-year (see editWindow.ts).
+    if (!(await isStudentAttendanceEditOpen(db, session.collegeId, { sectionId, year }, docDate))) {
+      return NextResponse.json({ error: STUDENT_EDIT_WINDOW_CLOSED_MESSAGE }, { status: 403 });
     }
 
     const id = `${assignmentId}_${date}_${periodNumber}`;
@@ -179,7 +179,7 @@ export async function POST(request: Request) {
       periodNumber
     );
     // The academic year this session belongs to - see student-attendance/route.ts.
-    const academicYear = await resolveCollegeAcademicYear(db, session.collegeId, now);
+    const academicYear = await resolveAcademicYearForDate(db, session.collegeId, date, now);
 
     const attendanceSession = {
       collegeId: session.collegeId,
@@ -214,7 +214,7 @@ export async function POST(request: Request) {
       postedBy: "OFFICE" as const,
       correctedByUid: session.uid,
       correctedByName: markerName,
-      correctionReason: reason,
+      ...(reason ? { correctionReason: reason } : {}),
       createdAt: now,
       updatedAt: now,
     };

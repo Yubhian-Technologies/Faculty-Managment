@@ -6,10 +6,11 @@ import { useAuthStore } from "@/store/authStore";
 // sessionStorage, so reloads and tab switches don't repeat the request. `null`
 // means "not known yet" - callers keep tabs visible rather than flash them away.
 
-export interface MyAssignments { timetableIncharge: boolean; sectionIncharge: boolean; midPaperSetter: boolean }
+export interface MyAssignments { timetableIncharge: boolean; sectionIncharge: boolean; questionBank: boolean; internalExam: boolean }
 
 const TTL_MS = 5 * 60 * 1000;
-const key = (uid: string) => `fms-my-assignments:${uid}`;
+// v3: `questionBank` now waits for a published deadline, `internalExam` added - older cached answers are ignored.
+const key = (uid: string) => `fms-my-assignments:v3:${uid}`;
 
 function readCache(uid: string): MyAssignments | null {
   try {
@@ -38,7 +39,7 @@ export function useMyAssignments(enabled: boolean): MyAssignments | null {
         try { sessionStorage.setItem(key(uid), JSON.stringify({ at: Date.now(), value: d })); } catch { /* private mode */ }
       })
       // Can't tell -> show everything rather than lock a real assignee out.
-      .catch(() => { if (!cancelled) setValue({ timetableIncharge: true, sectionIncharge: true, midPaperSetter: true }); });
+      .catch(() => { if (!cancelled) setValue({ timetableIncharge: true, sectionIncharge: true, questionBank: true, internalExam: true }); });
     return () => { cancelled = true; };
   }, [enabled, uid]);
 

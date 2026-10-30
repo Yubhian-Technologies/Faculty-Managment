@@ -2,19 +2,15 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Eye, UsersRound } from "lucide-react";
+import { Eye } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { Avatar } from "@/components/shared/Avatar";
-import { EmptyState } from "@/components/shared/EmptyState";
 import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
 import { FACULTY_STATUS_VARIANTS, JoiningLine, type FacultyListRow } from "@/components/faculty/facultyListCells";
 import { toast } from "@/hooks/useToast";
-import { useCollegeType } from "@/hooks/useCollegeType";
-import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { supportingStaffDisplayName } from "@/lib/supportingStaff/supportingStaffDisplayName";
 import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS, FACULTY_STATUS_LABELS, STAFF_CATEGORY_LABELS } from "@/types";
 import type { FacultyStatus, SupportingStaffCategory, SupportingStaffMember } from "@/types";
@@ -22,14 +18,14 @@ import { useListUrlSync } from "@/hooks/useListUrlSync";
 import { buildListUrl, readListChoice, withListBack } from "@/lib/listReturn";
 
 // Principal / College Admin's READ-ONLY view of the college's Supporting
-// Staff, reached from the Faculty section's "Supporting Staff" tab (shown only
-// for colleges that keep supporting staff separate - hasSupportingStaffSplit).
+// Staff, reached from the Faculty section's "Supporting Staff" tab. Staff
+// accounts (College Office, HOD, ...) live in the sibling "Staff" tab.
 //
 // Deliberately no Add / Import / Export / Set Login / Edit / Delete here, and
 // no edit route exists under this path: creating and maintaining supporting
 // staff stays with their owners (Technical -> the department's HOD,
-// Non-Technical -> College Office), and Principal's existing management of
-// them lives in the Staff menu (principal/staff). This page only lets the
+// Non-Technical -> College Office), and Principal's management of
+// staff accounts is the Staff tab. This page only lets the
 // Principal look at the records and open a profile.
 
 type StaffRow = Record<string, unknown> & SupportingStaffMember;
@@ -53,7 +49,6 @@ function PrincipalSupportingStaffViewContent() {
   // when the page was refreshed - read once, on arrival; the page then mirrors it
   // back into the URL (listUrl below) and carries it to the profile in `?back=`.
   const searchParams = useSearchParams();
-  const { collegeType, loading: collegeTypeLoading } = useCollegeType();
   const [staff, setStaff] = useState<StaffRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [category, setCategory] = useState<"" | SupportingStaffCategory>(() =>
@@ -137,25 +132,6 @@ function PrincipalSupportingStaffViewContent() {
     },
   ];
 
-  // A college type that keeps no separate supporting-staff register (a
-  // School) has nothing to show here - point at the Staff menu instead.
-  if (!collegeTypeLoading && !hasSupportingStaffSplit(collegeType)) {
-    return (
-      <div className="space-y-6">
-        <PageHeader title="Supporting Staff" description="Supporting staff for your college is managed from the Staff menu" />
-        <Card>
-          <CardContent className="py-16">
-            <EmptyState
-              title="Managed from Staff"
-              description="This college type doesn't keep a separate supporting staff register. Use the Staff menu."
-              icon={<UsersRound className="h-8 w-8" />}
-            />
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -168,6 +144,7 @@ function PrincipalSupportingStaffViewContent() {
         options={[
           { key: "faculty", label: "Teaching Staff", href: "/principal/faculty" },
           { key: "supporting", label: "Supporting Staff", href: "/principal/faculty/supporting-staff" },
+          { key: "staff", label: "Staff", href: "/principal/faculty/staff" },
         ]}
       />
 
@@ -197,6 +174,7 @@ function PrincipalSupportingStaffViewContent() {
         emptyTitle="No Supporting Staff records"
         emptyDescription="Supporting staff added by College Office or the department HODs will appear here."
       />
+
     </div>
   );
 }

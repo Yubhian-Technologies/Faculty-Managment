@@ -209,6 +209,20 @@ export function managedBranchYearsMap(departments: Department[], catalogId?: str
 }
 
 /**
+ * The years a feeder claims for `dept` that `dept` does NOT claim itself - the
+ * only years the pickers may subtract. A core department with its own Years
+ * Taught (e.g. 1-4) owns every one of them even while Basic Science still
+ * lists it as a feeder for year 1: ownership of the records stays with the
+ * core department, the feeder only staffs/schedules (the same "own claim wins"
+ * rule the server applies - departmentOwnsYearDirectly, managedBranches.ts).
+ * A department with no Years Taught of its own is unchanged: fedYears alone.
+ */
+export function feederOnlyYears(dept: Department, allDepartments: Department[], catalogId: string | undefined | null): number[] {
+  const own = new Set(resolveDepartmentCourseScope(dept, catalogId).assignedYears);
+  return fedYears(dept, allDepartments, catalogId).filter((y) => !own.has(y));
+}
+
+/**
  * The years to offer for a course: the "Years Taught" the Principal assigned
  * across the departments in play - per-course override when one exists for
  * `catalogId`, else the flat fields (resolveDepartmentCourseScope) -
@@ -243,7 +257,7 @@ export function yearsInScope(
   const assigned = new Set<number>();
   const excluded = new Set<number>();
   for (const d of relevantDepartments) {
-    for (const y of fedYears(d, allDepartments, catalogId)) excluded.add(y);
+    for (const y of feederOnlyYears(d, allDepartments, catalogId)) excluded.add(y);
     if (!managedOnlyNames?.has(d.name)) {
       for (const y of resolveDepartmentCourseScope(d, catalogId).assignedYears) assigned.add(y);
     }

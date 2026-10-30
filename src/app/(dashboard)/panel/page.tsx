@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuthStore } from "@/store/authStore";
 import { useNavVisibility } from "@/hooks/useNavVisibility";
+import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
 import { isPathHidden } from "@/components/layout/navConfig";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { formatDate } from "@/lib/utils";
@@ -122,6 +123,7 @@ const INTERVIEW_MODULE = {
 
 export default function FacultyDashboard() {
   const user = useAuthStore((s) => s.user);
+  const { nameFor } = useFacultyDisplayNames();
   const { hiddenModules, hiddenItems } = useNavVisibility();
   const isHidden = (href: string) => !!user?.role && isPathHidden(href, user.role, hiddenModules, hiddenItems);
   const [batches, setBatches] = useState<HiringBatch[]>([]);
@@ -154,7 +156,7 @@ export default function FacultyDashboard() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Hello, ${user?.name ?? "Faculty"}`}
+        title={`Hello, ${user ? nameFor("dashboardName", { uid: user.uid }, user.name) : "Faculty"}`}
         description={user?.department ? `${user.department} Department` : "Faculty Portal"}
       />
 

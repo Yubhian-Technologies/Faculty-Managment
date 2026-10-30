@@ -1,5 +1,6 @@
 "use client";
 
+import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
 import { useState, Fragment } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
@@ -245,6 +246,8 @@ const MODE_TABS = [
 // register itself. Shared by Principal (per department, HOD row included)
 // and HOD (own department only, HOD row excluded - see the API route).
 export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTitle, showCategoryFilter = true }: LeaveHistoryReportProps) {
+  // Settings > Website Display Name > "Attendance and leave": names shown (and exported) as Display Names - display only.
+  const { nameFor } = useFacultyDisplayNames();
   const now = new Date();
   const [mode, setMode] = useState<"month" | "year">("month");
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -306,7 +309,7 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
           exportRow({
             sno: i + 1,
             employeeId: row.employeeId,
-            name: row.name,
+            name: nameFor("attendanceLeave", { uid: row.uid }, row.name),
             department,
             dateOfJoining: row.dateOfJoining,
             payrollMonth: formatPayrollMonth(shownYear, shownMonth),
@@ -322,7 +325,7 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
             exportRow({
               sno: i + 1,
               employeeId: row.employeeId,
-              name: row.name,
+              name: nameFor("attendanceLeave", { uid: row.uid }, row.name),
               department,
               dateOfJoining: row.dateOfJoining,
               payrollMonth: formatPayrollMonth(shownYear, m.month),
@@ -336,7 +339,7 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
           exportRow({
             sno: i + 1,
             employeeId: row.employeeId,
-            name: row.name,
+            name: nameFor("attendanceLeave", { uid: row.uid }, row.name),
             department,
             dateOfJoining: row.dateOfJoining,
             payrollMonth: "Total",
@@ -485,7 +488,7 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
                           <td className={td}>{row.employeeId}</td>
                           <td className={`${td} text-left`}>
                             <Link href={`${employeeHrefBase}/${row.uid}`} className="text-primary hover:underline font-medium">
-                              {row.name}
+                              {nameFor("attendanceLeave", { uid: row.uid }, row.name)}
                             </Link>
                             {roleTag(row.role) && <span className="text-xs text-muted-foreground"> ({roleTag(row.role)})</span>}
                           </td>
@@ -503,7 +506,7 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
                                   <td rowSpan={13} className={td}>{row.employeeId}</td>
                                   <td rowSpan={13} className={`${td} text-left`}>
                                     <Link href={`${employeeHrefBase}/${row.uid}`} className="text-primary hover:underline font-medium">
-                                      {row.name}
+                                      {nameFor("attendanceLeave", { uid: row.uid }, row.name)}
                                     </Link>
                                     {roleTag(row.role) && <span className="text-xs text-muted-foreground"> ({roleTag(row.role)})</span>}
                                   </td>

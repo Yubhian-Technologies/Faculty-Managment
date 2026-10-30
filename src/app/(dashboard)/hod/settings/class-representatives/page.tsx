@@ -8,12 +8,14 @@ import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
 import { classRepresentativeCountOf, MAX_CLASS_REPRESENTATIVES } from "@/lib/sections/classRepresentatives";
 import type { SectionListItem } from "@/types";
+import { useFacultyDesignations, withDesignation } from "@/hooks/useFacultyDesignations";
 
 // The HOD decides how many Class Representatives the department's sections have (0-2) - one number for the whole
 // department. Each section's class incharge then picks that many students from the section's roster
 // (Students > Class Representatives).
 export default function ClassRepresentativesSettingsPage() {
   const [sections, setSections] = useState<SectionListItem[]>([]);
+  const designationOf = useFacultyDesignations(sections.map((x) => x.facultyInchargeUid));
   const [isLoading, setIsLoading] = useState(true);
   const [savingDept, setSavingDept] = useState<string | null>(null);
 
@@ -100,7 +102,7 @@ export default function ClassRepresentativesSettingsPage() {
                         <p className="font-medium">Section {s.name}</p>
                         <p className="text-xs text-muted-foreground">{s.courseName ? `${s.courseName} · ` : ""}Year {s.year} · {s.batch}</p>
                       </div>
-                      <span className="hidden sm:block text-muted-foreground">Class I/c: {s.facultyInchargeName || "Not assigned"}</span>
+                      <span className="hidden sm:block text-muted-foreground">Class I/c: {s.facultyInchargeName ? withDesignation(s.facultyInchargeName, designationOf(s.facultyInchargeUid)) : "Not assigned"}</span>
                       <span className="text-muted-foreground text-right">{(s.classRepresentatives ?? []).length} of {classRepresentativeCountOf(s)} picked</span>
                     </div>
                   ))}

@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
-import { isManualEditWindowOpen, MANUAL_EDIT_WINDOW_CLOSED_MESSAGE } from "@/lib/attendance/attendanceWindow";
+import { isStudentAttendanceEditOpen, STUDENT_EDIT_WINDOW_CLOSED_MESSAGE } from "@/lib/studentAttendance/editWindow";
 import { getFacultyPeriodsForDate } from "@/lib/timetable/currentPeriod";
 import {
   departmentOfficeBlocked, facultyWindowClosed, FACULTY_WINDOW_OPEN_MESSAGE, OFFICE_ATTENDANCE_DENIED_MESSAGE,
@@ -72,13 +72,12 @@ export async function PATCH(
 
     const [y, m, d] = existing.date.split("-").map(Number);
     const docDate = istDateFromParts(y, m, d);
-    if (!isManualEditWindowOpen(docDate)) {
-      return NextResponse.json({ error: MANUAL_EDIT_WINDOW_CLOSED_MESSAGE }, { status: 403 });
+    if (!(await isStudentAttendanceEditOpen(db, session.collegeId, existing, docDate))) {
+      return NextResponse.json({ error: STUDENT_EDIT_WINDOW_CLOSED_MESSAGE }, { status: 403 });
     }
-    // Only once the faculty's own window is over: a past day, or today after the college day
-    // ended. A session whose period is no longer on the timetable has no close time, so for
-    // such a session only a past day qualifies.
-    let closeTime: string | undefined;
+    // Only once the period is over: a past day, or today after its own end time. A session whose
+    // period is no longer on the timetable has no end time, so for such a session only a past day qualifies.
+    let endTime: string | undefined;
     if (existing.periodNumber != null) {
       // existing.facultyId is the login uid (see office-correction/route.ts's
       // own comment), but getFacultyPeriodsForDate keys off the FacultyMember
@@ -90,9 +89,9 @@ export async function PATCH(
       const matchedPeriod = periodsForDate.find(
         (p) => p.slot.assignmentId === existing.assignmentId && p.slot.periodNumber === existing.periodNumber
       );
-      closeTime = matchedPeriod?.closeTime;
+      endTime = matchedPeriod?.endTime;
     }
-    if (!facultyWindowClosed(existing.date, closeTime)) {
+    if (!facultyWindowClosed(existing.date, endTime)) {
       return NextResponse.json({ error: FACULTY_WINDOW_OPEN_MESSAGE }, { status: 403 });
     }
 
@@ -150,7 +149,7 @@ export async function PATCH(
         }
         const reason = body.reason?.trim() || fresh.correctionReason;
         if (!reason) {
-          return { error: { message: "A reason is required to post attendance on a faculty member's behalf", status: 400 } };
+          return { error: { message: "A reason is required to save an office edit of attendance", status: 400 } };
         }
         update.status = "SUBMITTED";
         // A corrected record keeps the faculty's original submission time/attribution.

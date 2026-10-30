@@ -12,7 +12,7 @@ import type { UserRole } from "@/types";
 
 // Whether today is a declared holiday, the hardcoded Sunday rule (unless a
 // Working Day override names this caller's own role - see
-// college-office/holidays/page.tsx and lib/attendance/workingDays.ts), or
+// academics/holidays/page.tsx and lib/attendance/workingDays.ts), or
 // covered by the signed-in user's own approved leave - feeds the
 // self-attendance pages' pre-Check-In banner (see SelfAttendancePage.tsx and
 // its hod/panel/principal near-duplicates). check-in/route.ts re-checks all

@@ -4,7 +4,7 @@ import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { examConfigId, subjectTypeToExamType } from "@/lib/exams/internalExamMarks";
+import { examConfigId, subjectTypeToExamType, loadExamConfig } from "@/lib/exams/internalExamMarks";
 import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
 import { notConfiguredMessage } from "@/lib/college/taughtYears";
 import type { DepartmentCourseScope, ExamConfigComponent, ExamType, Subject } from "@/types";
@@ -43,8 +43,9 @@ export async function GET(request: Request) {
         return NextResponse.json({ configuration: null });
       }
       const examType = subjectTypeToExamType(subject.type);
-      const snap = await coll.doc(examConfigId(subject.courseId, subject.year, examType)).get();
-      return NextResponse.json({ configuration: snap.exists ? { id: snap.id, ...snap.data() } : null });
+      // The subject's own exception first, else the branch + year configuration.
+      const configuration = await loadExamConfig(db.collection("colleges").doc(session.collegeId), { courseId: subject.courseId, year: subject.year, examType, subjectId });
+      return NextResponse.json({ configuration });
     }
 
     // Single-document lookup requires all three dimensions - courseId+year

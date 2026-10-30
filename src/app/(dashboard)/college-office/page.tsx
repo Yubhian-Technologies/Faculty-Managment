@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { MyDashboardOverview } from "@/components/dashboard/MyDashboardOverview";
 import { useAuthStore } from "@/store/authStore";
+import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
 import { useNavVisibility } from "@/hooks/useNavVisibility";
 import { isPathHidden } from "@/components/layout/navConfig";
 import type { Candidate, CandidateApplication } from "@/types";
@@ -18,6 +19,7 @@ type CandidateRow = { id: string; name: string; position: string; department: st
 
 export default function CollegeOfficeDashboard() {
   const user = useAuthStore((s) => s.user);
+  const { nameFor } = useFacultyDisplayNames();
   const { hiddenModules, hiddenItems } = useNavVisibility();
   const isHidden = (href: string) => !!user?.role && isPathHidden(href, user.role, hiddenModules, hiddenItems);
   const [candidates, setCandidates] = useState<CandidateRow[]>([]);
@@ -45,7 +47,7 @@ export default function CollegeOfficeDashboard() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Hello, ${user?.name ?? "Office"}`}
+        title={`Hello, ${user ? nameFor("dashboardName", { uid: user.uid }, user.name) : "Office"}`}
         description="Principal-approved candidates sent to Accounts"
       />
 

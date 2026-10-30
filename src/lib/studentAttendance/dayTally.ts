@@ -1,5 +1,5 @@
 import { FieldPath, FieldValue } from "firebase-admin/firestore";
-import type { Firestore, Transaction } from "firebase-admin/firestore";
+import type { Firestore, Transaction, WriteBatch } from "firebase-admin/firestore";
 import { isOnDutyMark } from "./counting";
 
 // Per-student, per-day attendance tally - what the student dashboard reads
@@ -87,10 +87,13 @@ export function sessionTallyDelta(before: TallySession | null | undefined, after
  * transaction's own reads. Does nothing when the counted result is unchanged.
  */
 export function applyTallyDeltaInTx(
-  tx: Transaction, db: Firestore, collegeId: string,
+  txOrBatch: Transaction | WriteBatch, db: Firestore, collegeId: string,
   before: TallySession | null | undefined, after: TallySession
 ): void {
   if (!tallyWritesEnabled()) return;
+  // A WriteBatch works too (the past-attendance import writes a session and its tally in one atomic batch);
+  // both only use set(ref, data, { merge }).
+  const tx = txOrBatch as WriteBatch;
   const delta = sessionTallyDelta(before, after);
   if (delta.size === 0) return;
   const section = tallySectionKey(after);

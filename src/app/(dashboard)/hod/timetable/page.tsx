@@ -12,6 +12,7 @@ import { TimetableInchargePanel } from "@/components/timetable/TimetableIncharge
 import { TimetableGridEditor } from "@/components/timetable/TimetableGridEditor";
 import { FacultyLeisureFilter } from "@/components/timetable/FacultyLeisureFilter";
 import { TeachingNowFilter } from "@/components/timetable/TeachingNowFilter";
+import { IndividualTimetablePanel } from "@/components/timetable/IndividualTimetablePanel";
 import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import {
@@ -428,7 +429,7 @@ function SectionTimetable() {
 }
 
 export default function HODTimetablePage() {
-  const [panel, setPanel] = useState<"" | "leisure" | "teaching">("");
+  const [panel, setPanel] = useState<"" | "leisure" | "teaching" | "individual">("");
 
   return (
     <div className="space-y-6">
@@ -442,6 +443,7 @@ export default function HODTimetablePage() {
           ["", "Section timetable"],
           ["leisure", "Show leisure faculty"],
           ["teaching", "Teaching at this time"],
+          ["individual", "Individual timetable"],
         ] as [typeof panel, string][]).map(([key, label]) => (
           <button
             key={key || "timetable"}
@@ -460,6 +462,7 @@ export default function HODTimetablePage() {
 
       {panel === "leisure" && <FacultyLeisureFilter scopeLabel="in your department" />}
       {panel === "teaching" && <TeachingNowFilter scopeLabel="in your department" />}
+      {panel === "individual" && <IndividualTimetablePanel scopeLabel="in your department" />}
       {panel === "" && <SectionTimetable />}
     </div>
   );

@@ -1,5 +1,6 @@
 import { downloadResumePdf, fetchResumeHtml } from "@/lib/pdf/downloadResume";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { displayNameFor, readDisplayNameSettings } from "@/lib/faculty/displayNameSettings";
 import type { ResumeSectionKey } from "@/lib/pdf/resumeSections";
 
 /**
@@ -33,7 +34,15 @@ async function buildResumeRecord(row: ResumeRow, collegeName: string, sections: 
 
   const currentAcademicYear = await fetchCurrentAcademicYear();
 
-  return { ...row, teachingAssignments, researchPublications, collegeName, currentAcademicYear, sections };
+  // Settings > Website Display Name: the heading shows the Display Name when the college ticked "Resume".
+  let displayNameOverride: string | undefined;
+  try {
+    const info = (await (await fetch("/api/college/info")).json()) as { displayNameSurfaces?: Record<string, boolean> };
+    const shown = displayNameFor(row as { displaySurname?: unknown; displayName?: unknown }, readDisplayNameSettings({ surfaces: info.displayNameSurfaces }), "resume", "");
+    displayNameOverride = shown || undefined;
+  } catch { /* the Full Name is printed */ }
+
+  return { ...row, teachingAssignments, researchPublications, collegeName, currentAcademicYear, sections, displayNameOverride };
 }
 
 export async function downloadFacultyResume(row: ResumeRow, collegeName: string, sections: ResumeSectionKey[]): Promise<void> {

@@ -1,5 +1,6 @@
 "use client";
 
+import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -80,6 +81,8 @@ interface AssignSection { id: string; name: string; year: number; department: st
 // a mentor shows only when the filter asks for them, and cannot be ticked: remove that mentor first
 // (the mentoring record stays).
 function AssignView({ onChanged }: { onChanged: () => void }) {
+  // Settings > Website Display Name > "Student mentoring": the mentor shown by Display Name - display only.
+  const { nameFor } = useFacultyDisplayNames();
   const [sections, setSections] = useState<AssignSection[]>([]);
   const [courseKey, setCourseKey] = useState("");
   const [yearKey, setYearKey] = useState("");
@@ -160,7 +163,7 @@ function AssignView({ onChanged }: { onChanged: () => void }) {
   const allTicked = pickable.length > 0 && pickable.every((s) => picked.has(s.id));
   const teachingMentors = mentors.filter((m) => m.teaches);
   const otherMentors = mentors.filter((m) => !m.teaches);
-  const mentorLabel = (m: MentorOption) => `${m.name}${m.isSelf ? " (You)" : ""} · ${m.menteeCount} mentee${m.menteeCount === 1 ? "" : "s"}`;
+  const mentorLabel = (m: MentorOption) => `${nameFor("mentoring", { uid: m.uid }, m.name)}${m.isSelf ? " (You)" : ""} · ${m.menteeCount} mentee${m.menteeCount === 1 ? "" : "s"}`;
 
   function toggle(id: string) {
     setPicked((prev) => {
@@ -328,7 +331,7 @@ function AssignView({ onChanged }: { onChanged: () => void }) {
                         <td className="py-2">
                           {s.mentorName ? (
                             <span className="inline-flex items-center gap-2">
-                              <Badge variant="secondary">{s.mentorName}</Badge>
+                              <Badge variant="secondary">{nameFor("mentoring", { uid: s.mentorUid }, s.mentorName)}</Badge>
                               <button type="button" disabled={removing} onClick={() => void removeMentor(s.id)} className="text-xs text-destructive hover:underline disabled:opacity-50">Remove</button>
                             </span>
                           ) : <span className="text-muted-foreground">Not assigned</span>}
@@ -350,6 +353,8 @@ function AssignView({ onChanged }: { onChanged: () => void }) {
 // by assigned / not assigned, or just search a name or Regd. No. Every row opens the student's
 // mentoring details. Shows any student the HOD may view (the shared first year included).
 function BrowseView({ mentors }: { mentors: MentorOption[] }) {
+  // Settings > Website Display Name > "Student mentoring": the mentor shown by Display Name - display only.
+  const { nameFor } = useFacultyDisplayNames();
   const [sections, setSections] = useState<AssignSection[]>([]);
   const [courseKey, setCourseKey] = useState("all");
   const [yearKey, setYearKey] = useState("all");
@@ -456,7 +461,7 @@ function BrowseView({ mentors }: { mentors: MentorOption[] }) {
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Any mentor</SelectItem>
-                  {mentors.map((m) => <SelectItem key={m.uid} value={m.uid}>{`${m.name}${m.isSelf ? " (You)" : ""} · ${m.menteeCount}`}</SelectItem>)}
+                  {mentors.map((m) => <SelectItem key={m.uid} value={m.uid}>{`${nameFor("mentoring", { uid: m.uid }, m.name)}${m.isSelf ? " (You)" : ""} · ${m.menteeCount}`}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -508,7 +513,7 @@ function BrowseView({ mentors }: { mentors: MentorOption[] }) {
                         <td className="py-2 pr-3">{s.department}</td>
                         <td className="py-2 pr-3">{s.year}</td>
                         <td className="py-2 pr-3">{s.section || "—"}</td>
-                        <td className="py-2">{s.mentorName ? <Badge variant="secondary">{s.mentorName}</Badge> : <span className="text-muted-foreground">Not assigned</span>}</td>
+                        <td className="py-2">{s.mentorName ? <Badge variant="secondary">{nameFor("mentoring", { uid: s.mentorUid }, s.mentorName)}</Badge> : <span className="text-muted-foreground">Not assigned</span>}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -523,6 +528,8 @@ function BrowseView({ mentors }: { mentors: MentorOption[] }) {
 }
 
 function MyMenteesView() {
+  // Settings > Website Display Name > "Student mentoring": the mentor shown by Display Name - display only.
+  const { nameFor } = useFacultyDisplayNames();
   const [students, setStudents] = useState<MenteeSummary[] | null>(null);
   useEffect(() => {
     getJson<{ students: MenteeSummary[] }>("/api/college/mentoring/my-mentees")

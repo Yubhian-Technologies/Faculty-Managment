@@ -8,9 +8,10 @@ import { EntrySectionView, type EntryEditor } from "./EntrySection";
 // Pages 13-16 of the booklet: the mentor's meetings with the student, semester by semester.
 
 export function MeetingsPage({
-  api, entries, editor, semesters, semester, onPickSemester, readOnly,
+  api, entries, editor, semesters, semester, onPickSemester, readOnly, newestFirst,
 }: {
   readOnly?: boolean;
+  newestFirst?: boolean;
   api: string;
   entries: MentoringEntry[];
   editor: EntryEditor;
@@ -56,7 +57,7 @@ export function MeetingsPage({
         </div>
       </div>
 
-      <EntrySectionView section={section} entries={entries} api={api} editor={editor} semester={semester} hideTitle readOnly={readOnly} />
+      <EntrySectionView section={section} entries={entries} api={api} editor={editor} semester={semester} hideTitle readOnly={readOnly} newestFirst={newestFirst} />
     </div>
   );
 }

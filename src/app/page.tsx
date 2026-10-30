@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
-import { ROLE_DASHBOARD_PATHS } from "@/types";
+import { dashboardPathFor } from "@/lib/auth/collegeAdminPaths";
 import { DashboardSkeleton } from "@/components/shared/SkeletonLoader";
 import { LandingPage } from "@/components/landing/LandingPage";
 
@@ -14,7 +14,7 @@ export default function RootPage() {
   useEffect(() => {
     if (isLoading) return;
     if (user) {
-      router.replace(ROLE_DASHBOARD_PATHS[user.role] ?? "/hod");
+      router.replace(dashboardPathFor(user.role, user.realRole) ?? "/hod");
     }
   }, [user, isLoading, router]);
 

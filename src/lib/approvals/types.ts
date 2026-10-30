@@ -10,7 +10,7 @@ export type StageId = string;
 
 export type RequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED" | "REVOKED";
 
-export type ApprovalAction = "SUBMIT" | "APPROVE" | "REJECT" | "CANCEL" | "REVOKE" | "SKIP";
+export type ApprovalAction = "SUBMIT" | "APPROVE" | "REJECT" | "CANCEL" | "REVOKE" | "SKIP" | "ESCALATE";
 
 export interface ApprovalEvent {
   action: ApprovalAction;
@@ -39,6 +39,14 @@ export interface ApprovalRequest<P = unknown> {
    * (or `in`) query on this field answers "what is waiting for me".
    */
   pendingKey: string | null;
+  /**
+   * When the stage now waiting for a decision runs out of time and the request moves up a level (ISO), or null
+   * when that stage has no time limit (or is the last one). Indexed on its own: the escalation sweep asks only
+   * "which requests are overdue?" with one range query, so it reads nothing else.
+   */
+  escalateAt?: string | null;
+  /** Hours each stage may take before escalating, aligned with `chain` (null / 0 = no limit). Fixed when the request is raised. */
+  stageHours?: (number | null)[];
   /** Opaque grouping the kind's stage resolvers use (usually the department). */
   scope: string;
   requesterUid: string;

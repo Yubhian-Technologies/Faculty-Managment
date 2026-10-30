@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/useToast";
 import { enqueueSubmission, getQueue, trySyncQueue, type QueuedSubmission } from "@/lib/attendance/offlineSubmitQueue";
+import { checkedMeaningFor, defaultFillFor, type AttendanceMode } from "@/lib/studentAttendance/markMode";
 import type { StudentAttendanceMark, StudentAttendanceSession } from "@/types";
 
 const PERIOD_POLL_MS = 60_000;
@@ -217,16 +218,6 @@ export function groupTodayPeriods(periods: TodayPeriod[]): TodayPeriodGroup[] {
   }
 
   return groups;
-}
-
-type AttendanceMode = "ABSENTEES" | "PRESENTEES";
-
-function checkedMeaningFor(mode: AttendanceMode | null): StudentAttendanceMark {
-  return mode === "ABSENTEES" ? "ABSENT" : "PRESENT";
-}
-
-function defaultFillFor(mode: AttendanceMode): StudentAttendanceMark {
-  return mode === "ABSENTEES" ? "PRESENT" : "ABSENT";
 }
 
 function updatedAtIso(s: StudentAttendanceSession | null): string | undefined {
@@ -928,14 +919,20 @@ export default function MarkAttendancePage() {
                       {showRowBulk && (
                         <td className="px-3 py-2.5 text-center border-l whitespace-nowrap">
                           {(() => {
+                            // One switch for every period of the card, following the status picked above
+                            // (Check Absentees / Check Presentees); On Duty periods are kept as they are.
                             const open = expandedGroup.periodNumbers.filter((n: number) => draft[st.studentId]?.[n] !== "ON_DUTY");
-                            const label = open.length ? `Periods ${open.join(", ")}` : "No periods to change (On Duty)";
-                            return (["PRESENT", "ABSENT"] as const).map((m) => (
-                              <Button key={m} type="button" size="sm" variant="outline" className="h-7 px-2 mx-0.5 text-xs" disabled={open.length === 0}
-                                title={`Mark ${m === "PRESENT" ? "present" : "absent"}: ${label}. On Duty periods are kept.`}
-                                aria-label={`Mark ${st.name} ${m === "PRESENT" ? "present" : "absent"} for all periods`}
-                                onClick={() => handleRowBulkSet(st.studentId, m)}>{m === "PRESENT" ? "Present" : "Absent"}</Button>
-                            ));
+                            if (open.length === 0) return <span className="text-xs text-muted-foreground">On Duty</span>;
+                            const meaning = checkedMeaningFor(mode);
+                            const opposite: StudentAttendanceMark = meaning === "PRESENT" ? "ABSENT" : "PRESENT";
+                            return (
+                              <Switch
+                                checked={open.every((n: number) => draft[st.studentId]?.[n] === meaning)}
+                                onCheckedChange={(c) => handleRowBulkSet(st.studentId, c ? meaning : opposite)}
+                                title={`Applies to Periods ${open.join(", ")}. On Duty periods are kept.`}
+                                aria-label={`Mark ${st.name} ${meaning === "PRESENT" ? "present" : "absent"} for all periods`}
+                              />
+                            );
                           })()}
                         </td>
                       )}

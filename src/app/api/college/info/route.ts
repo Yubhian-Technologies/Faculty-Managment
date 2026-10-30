@@ -1,8 +1,10 @@
 export const dynamic = "force-dynamic";
 
+import { effectiveDisplayNameSettings } from "@/lib/faculty/displayNameSettings";
 import { NextResponse } from "next/server";
 import { requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
 
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
@@ -25,10 +27,11 @@ export async function GET(request: Request) {
     );
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
-    const [snap, sigSnap, loadSigSnap] = await Promise.all([
+    const [snap, sigSnap, loadSigSnap, displayNameSnap] = await Promise.all([
       collegeRef.get(),
       collegeRef.collection("settings").doc("timetableSignatures").get(),
       collegeRef.collection("settings").doc("teachingLoadSignatures").get(),
+      collegeRef.collection("settings").doc("displayName").get(),
     ]);
     const sigGroups = readSignatureGroups(sigSnap.exists ? sigSnap.data()?.groups : []);
     const loadSigGroups = readSignatureGroups(loadSigSnap.exists ? loadSigSnap.data()?.groups : []);
@@ -61,8 +64,13 @@ export async function GET(request: Request) {
     const isCustom = Boolean(rawLogo && rawLogo !== "/vishnulogo.png");
     const logoUrl = isCustom ? rawLogo : "/vishnulogo.png";
 
+    // The college's current academic year ("2026-27") - printed on exam documents.
+    let academicYear = "";
+    try { academicYear = await resolveCollegeAcademicYear(db, session.collegeId); } catch { /* left blank */ }
+
     return NextResponse.json({
       name: data?.name ?? "",
+      academicYear,
       code: data?.code ?? "",
       affiliation: data?.affiliation ?? "",
       phone: data?.contactPhone || data?.phone || "",
@@ -75,6 +83,8 @@ export async function GET(request: Request) {
       rawLogoUrl: rawLogo,
       timetableSignatureRows: selectedSignatureRows(sigGroups),
       teachingLoadSignatureRows: selectedSignatureRows(loadSigGroups),
+      // Settings > Website Display Name: which places show a faculty Display Name (see lib/faculty/displayNameSettings.ts).
+      displayNameSurfaces: effectiveDisplayNameSettings(displayNameSnap.data()),
     });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {

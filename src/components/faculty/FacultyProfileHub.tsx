@@ -203,16 +203,17 @@ interface ProfileModuleTilesProps {
   hideFinancialModule?: boolean;
   excludeModules?: ProfileModuleKey[];
   linkQuery?: string;
+  includeDisplayName?: boolean;
 }
 
 // Just the tile grid, no identity header - for self-profile pages (My Profile)
 // that already render their own account-details card above it.
-export function ProfileModuleTiles({ basePath, hideFinancialModule, excludeModules, linkQuery }: ProfileModuleTilesProps) {
-  const modules = getFacultyProfileModules({ hideFinancialModule, excludeModules });
+export function ProfileModuleTiles({ basePath, hideFinancialModule, excludeModules, linkQuery, includeDisplayName }: ProfileModuleTilesProps) {
+  const modules = getFacultyProfileModules({ hideFinancialModule, excludeModules, includeDisplayName });
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {modules.map((m) => (
-        <Link key={m.key} href={`${basePath}/${m.key}${linkQuery ?? ""}`}>
+        <Link key={m.key} href={`${basePath}/${m.key}${m.key === "display-name" ? "/edit" : ""}${linkQuery ?? ""}`}>
           <Card className="cursor-pointer hover:border-primary hover:shadow-md transition-all duration-200">
             <CardContent className="p-5 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -333,6 +334,6 @@ export function FacultyProfileHub({
 
 // Self-profile counterpart to ProfileModuleTiles - the account-details card on
 // My Profile pages already shows identity.
-export function MyProfileModuleTiles({ basePath }: { basePath: string }) {
-  return <ProfileModuleTiles basePath={basePath} />;
+export function MyProfileModuleTiles({ basePath, includeDisplayName }: { basePath: string; includeDisplayName?: boolean }) {
+  return <ProfileModuleTiles basePath={basePath} includeDisplayName={includeDisplayName} />;
 }

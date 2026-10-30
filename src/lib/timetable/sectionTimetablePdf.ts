@@ -169,10 +169,11 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
 
   <table class="meta-header-table" cellspacing="0" cellpadding="0">
     <tr>
-      <td class="meta-left">${metaLines([header.yearLine, header.branchLine, header.inchargeLine])}</td>
+      <td class="meta-left">${metaLines([header.yearLine, header.branchLine])}</td>
       <td class="meta-right"><div class="meta-block">${metaLines([header.wefLine, header.roomLine])}</div></td>
     </tr>
-  </table>`;
+  </table>${header.inchargeLine ? `
+  <div class="incharge-line">${escapeHtml(header.inchargeLine)}</div>` : ""}`;
 
   // ── Grid ──────────────────────────────────────────────────────────────────
   // Two header rows, like the printed timetable: PERIOD | 1 2 3 ... and DAY | clock times.
@@ -268,19 +269,20 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
   const allocationHtml = allocation.length
     ? `
   <table class="allocation" cellspacing="0" cellpadding="0">
-    <colgroup><col style="width:9%"><col style="width:44%"><col style="width:15%"><col style="width:32%"></colgroup>
+    <colgroup><col style="width:8%"><col style="width:36%"><col style="width:12%"><col style="width:14%"><col style="width:30%"></colgroup>
     <thead>
-      <tr><th class="num">S.No</th><th>Subject Name</th><th>Sub Acr</th><th>Faculty</th></tr>
+      <tr><th class="num">S.No</th><th>Subject Name</th><th>Sub Acr</th><th>Subject Code</th><th>Faculty</th></tr>
     </thead>
     <tbody>
       ${groupAllocationByType(allocation)
         .map(
-          (g) => `<tr><td class="grp" colspan="4">${escapeHtml(g.label)}</td></tr>${g.entries
+          (g) => `<tr><td class="grp" colspan="5">${escapeHtml(g.label)}</td></tr>${g.entries
             .map(
               (a, i) => `<tr>
         <td class="num">${i + 1}</td>
         <td>${escapeHtml(a.name)}${a.labBatches.length ? ` (${escapeHtml(a.labBatches.join(", "))})` : ""}</td>
         <td>${escapeHtml(a.shortCode)}</td>
+        <td>${escapeHtml(a.code)}</td>
         <td>${escapeHtml(a.faculty)}</td>
       </tr>`
             )
@@ -378,6 +380,7 @@ export function buildSectionTimetablePdfHtml(opts: SectionTimetablePdfOptions): 
     .slot-code { font-size: ${slotPt.toFixed(1)}pt; overflow-wrap: anywhere; word-break: break-word; line-height: 1.2; }
     .slot-note { font-size: 7pt; color: #333; overflow-wrap: anywhere; line-height: 1.2; }
 
+    .incharge-line { text-align: center; font-weight: 700; margin-top: 2px; }
     table.allocation { width: 100%; table-layout: fixed; border-collapse: collapse; margin-top: 18px; font-size: 10pt; }
     table.allocation th { font-weight: 700; text-align: left; padding: 2px 4px; }
     table.allocation th.num { text-align: center; }

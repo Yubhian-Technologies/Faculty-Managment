@@ -148,7 +148,7 @@ function EntryForm({
 }
 
 export function EntrySectionView({
-  section, entries, api, editor, semester, heading = "h3", hideTitle, readOnly,
+  section, entries, api, editor, semester, heading = "h3", hideTitle, readOnly, newestFirst,
 }: {
   /** The student's own view: rows are shown, never added, edited or removed. */
   readOnly?: boolean;
@@ -161,6 +161,8 @@ export function EntrySectionView({
   semester?: number;
   heading?: "h2" | "h3";
   hideTitle?: boolean;
+  /** List the newest row first (default: oldest first). */
+  newestFirst?: boolean;
 }) {
   const [editing, setEditing] = useState<string | "new" | null>(null);
   const [saving, setSaving] = useState(false);
@@ -172,6 +174,7 @@ export function EntrySectionView({
       const db = typeof b.values.date === "string" ? b.values.date : "";
       return da && db ? da.localeCompare(db) : (a.createdAt ?? "").localeCompare(b.createdAt ?? "");
     });
+  if (newestFirst) rows.reverse();
   const full = rows.length >= section.maxEntries;
   const Title = heading;
 

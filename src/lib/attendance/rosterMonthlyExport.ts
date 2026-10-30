@@ -176,7 +176,7 @@ export async function buildRosterMonthlySummary(
     )
   );
 
-  // Working Day overrides (see college-office/holidays/page.tsx), fetched
+  // Working Day overrides (see academics/holidays/page.tsx), fetched
   // once per DISTINCT role in the roster rather than once per member - a
   // college-wide export can have hundreds of members but only a handful of
   // distinct roles, so this keeps the query count small.

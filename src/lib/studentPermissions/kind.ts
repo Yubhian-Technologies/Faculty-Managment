@@ -5,6 +5,7 @@ import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
 import {
   addOnDutyInTx, applyOnDutyToExistingSessions, releaseOnDutyFromSessions, removeOnDutyInTx,
 } from "@/lib/studentAttendance/onDuty";
+import { istDateKey } from "@/lib/attendance/istTime";
 import { canDecideStage } from "./decisionRules";
 import { oversees } from "./roles";
 import { PERMISSION_KIND, type PermissionContext, type PermissionPayload } from "./types";
@@ -55,8 +56,23 @@ export const studentPermissionKind: ApprovalKind<PermissionPayload, PermissionCo
     });
   },
 
-  // The Principal / Vice Principal oversee every request: their approval completes it.
-  completesAllOnApprove: (ctx) => oversees(ctx.actorRoles),
+  // A stuck request can be withdrawn on the student's behalf by the department's HOD or the Principal / Vice Principal.
+  async canCancel(ctx, req, actor) {
+    if (actor.uid === req.requesterUid) return false;
+    if (oversees(ctx.actorRoles)) return true;
+    if (!ctx.actorRoles.includes("HOD")) return false;
+    return canHodEditDepartment(await getHodDepartmentScope(ctx.db, ctx.collegeId, actor.uid, { activeOnly: false }), req.scope);
+  },
+
+  // Once the first covered day has passed, attendance has really been taken under this approval: undoing it would rewrite
+  // history (entries would flip to Absent), so it can no longer be revoked. Before that it can, freely.
+  revokeBlockedReason: (_ctx, req) =>
+    req.payload.fromDate < istDateKey()
+      ? "This permission has already started, so its attendance has been recorded and it can no longer be revoked. Ask the College Office to correct any individual mark."
+      : null,
+
+  // The first approval closes the request: whoever decides the stage it is waiting at finishes it (no later stage is asked).
+  completesAllOnApprove: () => true,
 
   // A class with no incharge or delegated faculty assigned would strand the request at that stage.
   isStageActionable: async (_ctx, req, stage) => (stage === "CLASS_INCHARGE" ? !!req.payload.inchargeUid : stage === "DELEGATED_FACULTY" ? !!req.payload.delegatedFacultyUid : true),

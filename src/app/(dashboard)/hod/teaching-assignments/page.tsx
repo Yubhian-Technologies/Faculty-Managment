@@ -14,11 +14,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FacultySearchSelect } from "@/components/timetable/FacultySearchSelect";
 import { toast } from "@/hooks/useToast";
+import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
 import { MAX_FACULTY_PER_SUBJECT } from "@/lib/teaching/facultyCap";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { sectionDisplayLabel, departmentCode } from "@/lib/sections/sectionLabel";
-import { deriveHodScope, buildCourseGroups, managerEffectiveYears } from "@/lib/departments/hodScope";
-import { fedYears } from "@/lib/college/academicStructure";
+import { deriveHodScope, buildCourseGroups, managerEffectiveYears, feederOnlyYears } from "@/lib/departments/hodScope";
 import { matchesCurrentSemester } from "@/lib/college/semester";
 import { departmentPickNames } from "@/lib/departments/subjectCoverage";
 import { assignmentsForFilter } from "@/lib/teaching/assignmentView";
@@ -68,6 +68,8 @@ export default function TeachingAssignmentsPage() {
     for (const c of scopeCourses) byId.set(c.id, c);
     return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [ownCourses, scopeCourses]);
+  // Settings > Website Display Name > "Teaching load": names shown/printed as Display Names (display only; saves still send the stored name).
+  const { nameFor } = useFacultyDisplayNames();
   const [faculty, setFaculty] = useState<FacultyRow[]>([]);
   const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
   const [assignmentRequests, setAssignmentRequests] = useState<FacultyAssignmentRequest[]>([]);
@@ -258,21 +260,16 @@ export default function TeachingAssignmentsPage() {
       ? subDepartmentOptions
       : scope.ownDept ? [scope.ownDept] : [];
     const assigned = new Set<number>();
-    // A year some OTHER department already claims as a feeder FOR a given
-    // department in `relevant` (e.g. Basic Science owning year 1 of a
-    // shared-first-year B.Tech) is never THAT department's own to staff - see
-    // fedYears. Checked PER department, not merged into one global exclusion
-    // set across all of `relevant`: now that `relevant` can hold both the
-    // shared-year manager (Basic Science, via subDepartmentOptions including
-    // managed branches) and the branch itself (CSE), CSE's own exclusion of
-    // year 1 (correctly - it doesn't own that year directly) must not cancel
-    // out Basic Science's own legitimate claim to it. A global set did
-    // exactly that: year 1 ended up in both `assigned` (from Basic Science)
-    // and `excluded` (from CSE), and the shared exclusion check hid it from
-    // everyone. Nothing assigned means no years (never "every year":
+    // A year some OTHER department claims as a feeder FOR a department in
+    // `relevant` is dropped only when that department does not claim the year
+    // itself - see feederOnlyYears: a core department with its own Years Taught
+    // (1-4) keeps year 1 even while Basic Science still lists it as a feeder.
+    // Checked PER department, not merged into one global exclusion set, so one
+    // department's exclusion can't cancel out another's legitimate claim.
+    // Nothing assigned means no years (never "every year":
     // lib/college/taughtYears.ts).
     for (const d of relevant) {
-      const excludedForD = new Set(fedYears(d, departments, course.catalogId));
+      const excludedForD = new Set(feederOnlyYears(d, departments, course.catalogId));
       for (const y of managerEffectiveYears(d, departments, course.catalogId)) {
         if (!excludedForD.has(y)) assigned.add(y);
       }
@@ -1058,14 +1055,14 @@ const effectiveSemester = semesterOptions.length === 0
         sectionName: a.sectionName ?? "",
         subjectCode: a.subjectCode,
         subjectName: a.subjectName ?? "",
-        facultyName: a.facultyName ?? "",
+        facultyName: nameFor("teachingLoad", { facultyId: a.facultyId }, a.facultyName ?? ""),
         hoursPerWeek: a.hoursPerWeek ?? 0,
       }));
 
       const wlMap = new Map<string, FacultyWorkloadExportRow>();
       for (const f of faculty) {
         wlMap.set(f.id, {
-          facultyName: f.name,
+          facultyName: nameFor("teachingLoad", { facultyId: f.id }, f.name),
           designation: f.designation,
           department: f.department,
           assignedSubjects: "",
@@ -1121,14 +1118,14 @@ const effectiveSemester = semesterOptions.length === 0
         sectionName: a.sectionName ?? "",
         subjectCode: a.subjectCode,
         subjectName: a.subjectName ?? "",
-        facultyName: a.facultyName ?? "",
+        facultyName: nameFor("teachingLoad", { facultyId: a.facultyId }, a.facultyName ?? ""),
         hoursPerWeek: a.hoursPerWeek ?? 0,
       }));
 
       const wlMap = new Map<string, FacultyWorkloadExportRow>();
       for (const f of faculty) {
         wlMap.set(f.id, {
-          facultyName: f.name,
+          facultyName: nameFor("teachingLoad", { facultyId: f.id }, f.name),
           designation: f.designation,
           department: f.department,
           assignedSubjects: "",
@@ -1565,7 +1562,7 @@ const effectiveSemester = semesterOptions.length === 0
                             {a.timetableSemester != null && <Badge variant="outline" className="text-xs">Sem {a.timetableSemester}</Badge>}
                             {a.accessLevel === "secondary" && <Badge variant="secondary" className="text-xs">View only</Badge>}
                           </p>
-                          <p className="text-xs text-muted-foreground">{a.facultyName} · {a.hoursPerWeek} hrs/wk</p>
+                          <p className="text-xs text-muted-foreground">{nameFor("teachingLoad", { facultyId: a.facultyId }, a.facultyName)} · {a.hoursPerWeek} hrs/wk</p>
                         </div>
                         {a.accessLevel !== "secondary" && (
                           <Button size="sm" variant="ghost" onClick={() => setRemoveTarget(a)}>
@@ -1590,7 +1587,7 @@ const effectiveSemester = semesterOptions.length === 0
                             {a.accessLevel === "secondary" && <Badge variant="secondary" className="text-xs">View only</Badge>}
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            {a.facultyName}
+                            {nameFor("teachingLoad", { facultyId: a.facultyId }, a.facultyName)}
                             {a.academicYear ? ` · ${a.academicYear}` : ""}
                             {a.semester ? ` · Sem ${a.semester}` : ""}
                             {a.section ? ` · Sec ${a.section}` : ""}
