@@ -75,6 +75,10 @@ export async function POST(request: Request) {
         periodNumber: s.periodNumber,
         isBlockContinuation: periodsByKey.get(`${s.assignmentId}|${s.day}`)?.has(s.periodNumber - 1) ?? false,
         ...(s.displayCode ? { displayCode: s.displayCode } : {}),
+        // A pinned period keeps its lab batch / mid scope when it is adopted into the draft (republishing used to drop them).
+        ...(s.labBatch ? { labBatch: s.labBatch } : {}),
+        ...(s.batchPinned ? { batchPinned: true } : {}),
+        ...(s.midScope != null ? { midScope: s.midScope } : {}),
       });
 
       if (draftSnap.exists) {

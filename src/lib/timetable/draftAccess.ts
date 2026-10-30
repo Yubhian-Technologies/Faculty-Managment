@@ -141,6 +141,10 @@ export async function buildSeededDraft(
     periodNumber: s.periodNumber,
     isBlockContinuation: continuationKeys.has(`${s.assignmentId}|${s.day}|${s.periodNumber}`),
     ...(s.displayCode ? { displayCode: s.displayCode } : {}),
+    // Flexible-cell fields stay with the period when an already-published timetable is opened for editing.
+    ...(s.labBatch ? { labBatch: s.labBatch } : {}),
+    ...(s.batchPinned ? { batchPinned: true } : {}),
+    ...(s.midScope != null ? { midScope: s.midScope } : {}),
   }));
 
   return {

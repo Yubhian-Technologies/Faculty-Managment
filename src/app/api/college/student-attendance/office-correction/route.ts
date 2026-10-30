@@ -165,7 +165,7 @@ export async function POST(request: Request) {
     // student-attendance/route.ts's own POST).
     const labBatch = effectiveLabBatch(
       matchedPeriod.slot.labBatch, await loadLabBatchModes(db, session.collegeId, [{ sectionId, subjectId: assignment.subjectId }]),
-      sectionId, assignment.subjectId, assignment.facultyId,
+      sectionId, assignment.subjectId, assignment.facultyId, matchedPeriod.slot.batchPinned,
     );
     const students = sortStudentsForList(await fetchSectionStudents(collegeRef, { department, sectionName, year, courseId, labBatch }));
 

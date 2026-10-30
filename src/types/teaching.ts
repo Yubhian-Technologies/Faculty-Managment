@@ -365,6 +365,13 @@ export interface TimetableSlot {
   // MANUAL slots carry through untouched. Never set by the generator/publish
   // flow, which has no concept of batches.
   labBatch?: string;
+  // Set only by the flexible-cell dialog: this slot's own `labBatch` wins over the faculty's default batch
+  // (sectionLabBatchSettings.batchByFaculty), so one faculty can take Batch 1 one day and Batch 2 on another.
+  batchPinned?: boolean;
+  // Set only by the flexible-cell dialog: the mid exam (1, 2, ...) whose teaching stretch this slot is in force
+  // for - from the end of the previous mid (or the semester start) to the day before this mid begins (see
+  // lib/timetable/slotScope.ts). Absent = the whole semester, as every slot always was.
+  midScope?: number;
   // The "w.e.f" date entered when this slot was published (YYYY-MM-DD); printed
   // on the timetable's title line. Absent on slots published before it was asked.
   effectiveDate?: string;
@@ -500,6 +507,10 @@ export interface DraftSlot {
   mergeWithNext?: boolean;
   /** Which of the subject's short codes this period shows (picked when it was placed). */
   displayCode?: string;
+  /** Lab batch / mid scope of this period - see the same fields on TimetableSlot. Carried through publish. */
+  labBatch?: string;
+  batchPinned?: boolean;
+  midScope?: number;
 }
 
 export interface TimetableDraft {

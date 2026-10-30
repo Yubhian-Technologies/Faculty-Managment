@@ -14,6 +14,7 @@ import {
 } from "@/lib/timetable/draftAccess";
 import { getHodDepartmentScope, canHodEditDepartment, ownDepartmentNames } from "@/lib/departments/scope";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
+import { MAX_FACULTY_PER_SUBJECT } from "@/lib/teaching/facultyCap";
 import { resolveRequestedSemester, draftDocId } from "@/lib/college/semester";
 import type { DayOfWeek, DraftSlot, TimetableDraft } from "@/types";
 
@@ -201,7 +202,12 @@ export async function PATCH(request: Request) {
       sectionId?: string;
       // "merge" / "unmerge": draw back-to-back periods (fromPeriod..toPeriod on fromDay)
       // of ONE subject as a single cell, or undo that.
-      action?: "move" | "add" | "remove" | "merge" | "unmerge";
+      action?: "move" | "add" | "remove" | "merge" | "unmerge" | "assign";
+      // "assign" only - the attendance-assignee dialog: for the picked cells, who takes `subjectId` (one entry per
+      // faculty, each with an optional batch and mid). `assignmentId` above is the first entry's, for the access check.
+      subjectId?: string;
+      cells?: { day: string; period: number }[];
+      entries?: { assignmentId: string; labBatch?: string; midScope?: number | null }[];
       assignmentId?: string;
       fromDay?: string;
       fromPeriod?: number;
@@ -216,6 +222,13 @@ export async function PATCH(request: Request) {
       coTeach?: boolean;
       // "add" only - which of the subject's short codes (shortCode / altShortCode) this period shows.
       displayCode?: string;
+      // "add" only - the flexible-cell dialog's fields (see TimetableSlot.labBatch / batchPinned / midScope):
+      // a lab batch for this faculty, whether that batch is pinned over the faculty's default, the mid exam the
+      // period is scoped to, and how many continuous periods to place (overrides the subject's own block size).
+      labBatch?: string;
+      batchPinned?: boolean;
+      midScope?: number;
+      blockSize?: number;
     };
 
     const { sectionId, assignmentId } = body;
@@ -236,6 +249,42 @@ export async function PATCH(request: Request) {
       const semesterResult = await resolveRequestedSemester(db, session.collegeId, section.courseId, section.year, body.semester);
       if (!semesterResult.ok) return NextResponse.json({ error: semesterResult.error }, { status: 400 });
       requestedSemester = semesterResult.semester;
+    }
+
+    // The flexible-cell fields, checked once up front ("add" only).
+    const flexLabBatch = typeof body.labBatch === "string" ? body.labBatch.trim() : "";
+    if (action === "add") {
+      if (flexLabBatch.length > 40) return NextResponse.json({ error: "A lab batch name can be at most 40 characters" }, { status: 400 });
+      if (body.blockSize != null && (!Number.isInteger(body.blockSize) || body.blockSize < 1 || body.blockSize > 8)) {
+        return NextResponse.json({ error: "blockSize must be a whole number from 1 to 8" }, { status: 400 });
+      }
+      if (body.midScope != null) {
+        const midCount = ((await collegeRef.collection("examSettings").doc("mid").get()).data() as { midCount?: number } | undefined)?.midCount ?? 0;
+        if (!Number.isInteger(body.midScope) || body.midScope < 1 || body.midScope > midCount) {
+          return NextResponse.json({ error: midCount > 0 ? `Mid must be a whole number from 1 to ${midCount}` : "The Exam Cell hasn't set up any mid exams yet" }, { status: 400 });
+        }
+      }
+    }
+
+    // The attendance-assignee fields, checked once up front ("assign" only).
+    if (action === "assign") {
+      const { cells, entries, subjectId } = body;
+      if (!subjectId || !Array.isArray(cells) || !Array.isArray(entries) || cells.length < 1 || cells.length > 80 || entries.length < 1 || entries.length > MAX_FACULTY_PER_SUBJECT) {
+        return NextResponse.json({ error: `Pick a subject, 1-80 cells and 1-${MAX_FACULTY_PER_SUBJECT} faculty` }, { status: 400 });
+      }
+      if (cells.some((c) => typeof c?.day !== "string" || !Number.isInteger(c.period)) || new Set(cells.map((c) => cellKey(c.day, c.period))).size !== cells.length) {
+        return NextResponse.json({ error: "The picked cells are not valid" }, { status: 400 });
+      }
+      if (entries.some((e) => typeof e?.assignmentId !== "string" || (e.labBatch != null && (typeof e.labBatch !== "string" || e.labBatch.trim().length > 40)))
+        || new Set(entries.map((e) => e.assignmentId)).size !== entries.length) {
+        return NextResponse.json({ error: "The picked faculty are not valid" }, { status: 400 });
+      }
+      if (entries.some((e) => e.midScope != null)) {
+        const midCount = ((await collegeRef.collection("examSettings").doc("mid").get()).data() as { midCount?: number } | undefined)?.midCount ?? 0;
+        if (entries.some((e) => e.midScope != null && (!Number.isInteger(e.midScope) || e.midScope < 1 || e.midScope > midCount))) {
+          return NextResponse.json({ error: midCount > 0 ? `Mid must be a whole number from 1 to ${midCount}` : "The Exam Cell hasn't set up any mid exams yet" }, { status: 400 });
+        }
+      }
     }
 
     const ctx = await loadTimetableContext(db, session.collegeId, sectionId, requestedSemester);
@@ -307,6 +356,39 @@ export async function PATCH(request: Request) {
         return { ok: true, slots, adjustedNote: null };
       }
 
+      if (action === "assign") {
+        // Cell by cell, the subject's own slots in the picked cells are swapped for one slot per chosen faculty
+        // (each with its batch / mid). Block structure (isBlockContinuation, mergeWithNext) is kept per cell.
+        if (callerIsLender) return { ok: false, status: 403, error: "Only the section's own department can assign attendance faculty" };
+        const cells = body.cells ?? [];
+        const originals = draft.slots.filter((s) => s.subjectId === body.subjectId && cells.some((c) => c.day === s.day && c.period === s.periodNumber));
+        const picked = (body.entries ?? []).map((e) => ({ e, a: ctx.assignments.find((x) => x.id === e.assignmentId && !x.isPast && x.subjectId === body.subjectId) }));
+        if (picked.some((p) => !p.a)) return { ok: false, status: 404, error: "That teaching assignment is not on this section" };
+        let work = draft.slots.filter((s) => !originals.includes(s));
+        for (const c of cells) {
+          const orig = originals.find((o) => o.day === c.day && o.periodNumber === c.period);
+          if (!orig) return { ok: false, status: 400, error: "Every picked cell must hold this subject" };
+          for (const { e, a } of picked) {
+            const batch = e.labBatch?.trim() ?? "";
+            const problem = validatePlacement(ctx, { slots: work }, {
+              facultyId: a!.facultyId, facultyName: a!.facultyName, subjectId: a!.subjectId, day: c.day, startPeriod: c.period,
+              blockSize: 1, ignore: new Set<string>(), coTeach: true, assignmentId: a!.id, labBatch: batch || undefined, midScope: e.midScope ?? null,
+            });
+            if (problem) return { ok: false, status: 409, error: problem };
+            work = [...work, {
+              ...(orig.displayCode ? { displayCode: orig.displayCode } : {}),
+              ...(orig.mergeWithNext ? { mergeWithNext: true } : {}),
+              ...(batch ? { labBatch: batch, batchPinned: true } : {}),
+              ...(e.midScope != null ? { midScope: e.midScope } : {}),
+              assignmentId: a!.id, facultyId: a!.facultyId, facultyName: a!.facultyName,
+              subjectId: a!.subjectId, subjectName: a!.subjectName || orig.subjectName, subjectType: orig.subjectType,
+              day: c.day as DayOfWeek, periodNumber: c.period, isBlockContinuation: Boolean(orig.isBlockContinuation),
+            }];
+          }
+        }
+        return { ok: true, slots: work, adjustedNote: null };
+      }
+
       if (action === "remove") {
         const { fromDay, fromPeriod } = body;
         if (!fromDay || !fromPeriod) {
@@ -344,7 +426,7 @@ export async function PATCH(request: Request) {
         const override = subject ? ctx.rules.subjectBlockSizes?.[subjectBlockKey(subject)] : undefined;
         // No theory/lab default any more: a subject takes 1 period unless the
         // Principal set custom continuous slots for it in Settings.
-        const blockSize = Math.max(1, override ?? 1);
+        const blockSize = Math.max(1, body.blockSize ?? override ?? 1);
 
         const placeAt = Number(toPeriod);
         const placementOpts = {
@@ -358,6 +440,8 @@ export async function PATCH(request: Request) {
           allowSplit: body.allowSplit,
           coTeach: body.coTeach,
           assignmentId,
+          labBatch: flexLabBatch || undefined,
+          midScope: body.midScope ?? null,
         };
         const problem = validatePlacement(ctx, draft, placementOpts);
         if (problem) {
@@ -380,6 +464,8 @@ export async function PATCH(request: Request) {
 
         const added: DraftSlot[] = Array.from({ length: blockSize }, (_, i) => ({
           ...(displayCode ? { displayCode } : {}),
+          ...(flexLabBatch ? { labBatch: flexLabBatch, ...(body.batchPinned ? { batchPinned: true } : {}) } : {}),
+          ...(body.midScope != null ? { midScope: body.midScope } : {}),
           assignmentId,
           facultyId: assignment.facultyId,
           facultyName: assignment.facultyName,

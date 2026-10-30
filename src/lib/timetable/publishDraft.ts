@@ -192,6 +192,10 @@ export async function publishSectionDraft(input: PublishInput): Promise<PublishO
         ...(input.effectiveDate ? { effectiveDate: input.effectiveDate } : {}),
         ...(s.mergeWithNext ? { mergeWithNext: true } : {}),
         ...(s.displayCode ? { displayCode: s.displayCode } : {}),
+        // Flexible-cell fields (lab batch, pinned batch, mid scope) ride along; absent on every ordinary period.
+        ...(s.labBatch ? { labBatch: s.labBatch } : {}),
+        ...(s.batchPinned ? { batchPinned: true } : {}),
+        ...(s.midScope != null ? { midScope: s.midScope } : {}),
         createdAt: now,
         updatedAt: now,
       });

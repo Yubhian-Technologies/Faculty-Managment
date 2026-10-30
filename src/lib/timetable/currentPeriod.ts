@@ -5,6 +5,7 @@ import { loadEffectiveTiming, resolveCurrentSemester, matchesCurrentSemester } f
 import { resolveSubstituteSlotsForDate } from "@/lib/leave/periodCoverage";
 import { istDateFromParts } from "@/lib/attendance/istTime";
 import { getTimetableDay } from "@/lib/studentAttendance/classDay";
+import { activeSlotsOn } from "@/lib/timetable/slotScope";
 
 // Exported for callers that need to map an arbitrary calendar date (not just
 // "now") to a DayOfWeek against published timetableSlots - e.g. backfilling
@@ -253,7 +254,8 @@ export async function getFacultyPeriodsForDate(
       if (snap.exists) subSlots.push({ id: snap.id, ...snap.data() } as TimetableSlot & { id: string });
     }
   }
-  const daySlots = [...ownDaySlots, ...subSlots];
+  // A slot scoped to one mid exam is only in force within that mid's teaching stretch (lib/timetable/slotScope.ts).
+  const daySlots = await activeSlotsOn(db, collegeId, [...ownDaySlots, ...subSlots], dateISO);
 
   const resolved: FacultyPeriodOnDate[] = [];
   const windows = await Promise.all(daySlots.map((slot) => resolvePeriodWindow(collegeRef, slot, timingCache, options.lenient, options.semesterOnDate ? istDateFromParts(y, m, d) : undefined)));
@@ -351,6 +353,8 @@ export async function checkFacultyPeriodWindow(
         .filter((s) => s.day === day && substituted.has(s.id));
     }
   }
+  // A slot scoped to one mid exam is only in force within that mid's teaching stretch (lib/timetable/slotScope.ts).
+  todaySlots = await activeSlotsOn(db, collegeId, todaySlots, dateISO);
   if (todaySlots.length === 0) return { ok: false, reason: "NOT_SCHEDULED" };
 
   const resolved: { slot: TimetableSlot & { id: string }; startTime: string; endTime: string; closeTime: string }[] = [];
