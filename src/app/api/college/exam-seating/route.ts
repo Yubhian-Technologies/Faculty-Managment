@@ -7,7 +7,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { allocateSeating, sortRoomsForSeating } from "@/lib/exams/seatingAllocator";
 import { sectionLabel } from "@/lib/exams/seatingSections";
 import { loadSectionStudents } from "@/lib/exams/seatingStudents";
-import { roomBenches, roomPerBench } from "@/lib/exams/roomLayout";
+import { roomBenches, roomPerBench, roomColumns } from "@/lib/exams/roomLayout";
 import type { Section } from "@/types";
 import type { ExamRoom, ExamSeatingPlan, SeatingRoomAllocation, SeatingSectionRef } from "@/types/examSeating";
 
@@ -58,8 +58,8 @@ export async function POST(request: Request) {
       // LAYERED starts empty (sections are allotted one by one afterwards).
       mode?: "QUICK" | "LAYERED";
     };
-    const name = body.name?.trim();
-    if (!name) return NextResponse.json({ error: "Exam name is required" }, { status: 400 });
+    // No exam name is asked for - a plan without one is named by its date.
+    const name = body.name?.trim() || `Exam Seating · ${new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })}`;
     const layered = body.mode === "LAYERED";
     if (!layered && !body.sectionIds?.length) return NextResponse.json({ error: "Pick at least one section" }, { status: 400 });
     if (!body.roomIds?.length) return NextResponse.json({ error: "Pick at least one room" }, { status: 400 });
@@ -85,6 +85,7 @@ export async function POST(request: Request) {
       rooms.map((r) => ({
         // Quick fill seats one student per bench - a lone branch never sits two to a bench.
         roomId: r.id, name: r.name, block: r.block, floor: r.floor, capacity: roomBenches(r),
+        ...(roomColumns(r) ? { columns: roomColumns(r) } : {}),
         allowedSectionIds: (body.roomSections?.[r.id] ?? []).filter((id) => validSectionIds.has(id)),
       })),
       // Listed order = seating order, so use the order Exam Cell sent.
@@ -114,7 +115,8 @@ export async function POST(request: Request) {
       rooms: layered
         ? sortRoomsForSeating(rooms).map((r): SeatingRoomAllocation => ({
             roomId: r.id, name: r.name, block: r.block, floor: r.floor,
-            capacity: roomBenches(r) * roomPerBench(r), benches: roomBenches(r), perBench: roomPerBench(r), students: [],
+            capacity: roomBenches(r) * roomPerBench(r), benches: roomBenches(r), perBench: roomPerBench(r),
+            ...(roomColumns(r) ? { columns: roomColumns(r) } : {}), students: [],
           }))
         : allocation.rooms.map((r) => (r.allowedSectionIds?.length ? r : { ...r, allowedSectionIds: [] })),
       unplaced: allocation.unplaced,

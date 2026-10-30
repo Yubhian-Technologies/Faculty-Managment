@@ -5,6 +5,8 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { validateLayeredRoom } from "@/lib/exams/seatingLayers";
+import { validatePairedRoom } from "@/lib/exams/seatingPaired";
+import { seatingTimingCheck } from "@/lib/exams/seatingPairedServer";
 import type { ExamSeatingPlan, SeatingRoomAllocation, SeatingStudent } from "@/types/examSeating";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -51,10 +53,8 @@ export async function PATCH(request: Request, { params }: Ctx) {
     const plan = snap.data() as ExamSeatingPlan;
 
     const update: Record<string, unknown> = { updatedAt: new Date() };
-    if (body.name !== undefined) {
-      if (!body.name.trim()) return NextResponse.json({ error: "Exam name is required" }, { status: 400 });
-      update.name = body.name.trim();
-    }
+    // A blank name leaves the plan's name as it is (no name is required anywhere).
+    if (body.name !== undefined && body.name.trim()) update.name = body.name.trim();
     if (body.status) update.status = body.status;
 
     if (body.rooms || body.unplaced) {
@@ -73,6 +73,11 @@ export async function PATCH(request: Request, { params }: Ctx) {
         if (r.students.length > cap) {
           return NextResponse.json({ error: `Room ${r.name} exceeds its capacity of ${cap}` }, { status: 400 });
         }
+        if (plan.mode === "PAIRED") {
+          const orig = plan.rooms.find((o) => o.roomId === r.roomId)!;
+          const problem = validatePairedRoom({ ...orig, students: r.students });
+          if (problem) return NextResponse.json({ error: problem }, { status: 400 });
+        }
         if (plan.mode === "LAYERED") {
           const orig = plan.rooms.find((o) => o.roomId === r.roomId)!;
           const problem = validateLayeredRoom({ ...orig, students: r.students }, (sid) => deptBySection.get(sid) ?? "");
@@ -87,6 +92,14 @@ export async function PATCH(request: Request, { params }: Ctx) {
       return NextResponse.json({ error: "Place every student before publishing" }, { status: 400 });
     }
 
+    // A paired plan can't go out while one of its rooms is also in use by another plan at the same time.
+    if (update.status === "PUBLISHED" && plan.mode === "PAIRED") {
+      const check = await seatingTimingCheck(getAdminDb(), session.collegeId, id);
+      if (check?.clashes.length) {
+        const c = check.clashes[0];
+        return NextResponse.json({ error: `Room ${c.room} is also used by "${c.otherPlan}" on ${c.date} (${c.theirs.from}-${c.theirs.to}) - see the timing check` }, { status: 409 });
+      }
+    }
     await ref.update(update);
     return NextResponse.json({ ok: true });
   } catch (err) {

@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { AggregateField } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { countEntered, examConfigId, resolveExamTypeForSubject } from "@/lib/exams/internalExamMarks";
+import { countEntered, examConfigId, resolveExamTypeForSubject, loadExamConfig } from "@/lib/exams/internalExamMarks";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { getHodDepartmentScope, editableDepartmentNames } from "@/lib/departments/scope";
 import type { ExamConfiguration, ExamType, InternalExamMarkEntry, InternalExamMarksBatch, Section, StudentRecord, TeachingAssignment } from "@/types";
@@ -118,10 +118,10 @@ export async function GET(request: Request) {
       if (!b.courseId || b.year == null) { configurations[b.id] = null; return; }
       if (!examTypeBySubject.has(b.subjectId)) examTypeBySubject.set(b.subjectId, resolveExamTypeForSubject(collegeRef, b.subjectId));
       const examType = await examTypeBySubject.get(b.subjectId)!;
-      const id = examConfigId(b.courseId, b.year, examType);
+      // Keyed by subject too: a subject may carry its own exception.
+      const id = `${examConfigId(b.courseId, b.year, examType)}|${b.subjectId}`;
       if (!configByKey.has(id)) {
-        configByKey.set(id, collegeRef.collection("examConfigurations").doc(id).get()
-          .then((c) => (c.exists ? ({ id: c.id, ...c.data() } as ExamConfiguration) : null)));
+        configByKey.set(id, loadExamConfig(collegeRef, { courseId: b.courseId, year: b.year, examType, subjectId: b.subjectId }));
       }
       configurations[b.id] = await configByKey.get(id)!;
     }));
@@ -197,14 +197,14 @@ export async function POST(request: Request) {
       );
     }
     const examType = await resolveExamTypeForSubject(collegeRef, assignment.subjectId);
-    const configSnap = await collegeRef.collection("examConfigurations").doc(examConfigId(assignment.courseId, year, examType)).get();
-    if (!configSnap.exists) {
+    const loaded = await loadExamConfig(collegeRef, { courseId: assignment.courseId, year, examType, subjectId: assignment.subjectId });
+    if (!loaded) {
       return NextResponse.json(
         { error: "This course/year/branch's internal exam has not been configured yet. Contact your Exam Cell." },
         { status: 404 }
       );
     }
-    const config = { id: configSnap.id, ...configSnap.data() } as ExamConfiguration;
+    const config = loaded;
     if (config.status !== "ACTIVE") {
       return NextResponse.json(
         { error: "This course/year/branch's internal exam configuration is currently inactive. Contact your Exam Cell." },
