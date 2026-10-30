@@ -5,7 +5,7 @@ import { ordinalYearLabel } from "@/lib/college/courseYears";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
 import { makeLiveSlotPredicate } from "@/lib/timetable/liveSlots";
-import { loadTimingLookup } from "@/lib/timetable/facultyOverlap";
+import { loadTimingLookup, type TimingLookup } from "@/lib/timetable/facultyOverlap";
 import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
 import { dayOfWeekFromISODate } from "@/lib/timetable/leisureQuery";
 import { getActiveSubstitutionsForDates } from "@/lib/leave/periodCoverage";
@@ -143,9 +143,15 @@ const normalizePeriods = (arr: PeriodTiming[]): PeriodTiming[] =>
  * ones writing that day) are left out when the rule says so. `withTimetable`
  * = faculty with any live period at all.
  */
-export async function dayClasses(db: Firestore, c: string, date: string, suspended: { courseIds: string[]; year: number }[]) {
+// The whole teaching timetable is one big read (every slot + draft), and the
+// assignment screen asks for it on every duty clicked - kept for a short while
+// per college. A timetable edit shows up within TIMETABLE_TTL_MS.
+const TIMETABLE_TTL_MS = 2 * 60_000;
+type TimetableBase = { slots: (TimetableSlot & { id: string })[]; drafts: TimetableDraft[]; off: Set<string>; lookup: TimingLookup; isLive: ReturnType<typeof makeLiveSlotPredicate> };
+const timetableCache = new Map<string, { at: number; value: Promise<TimetableBase> }>();
+
+async function readTimetable(db: Firestore, c: string): Promise<TimetableBase> {
   const ref = college(db, c);
-  const day = dayOfWeekFromISODate(date);
   const [timingsSnap, slotsSnap, draftsSnap, offSnap] = await Promise.all([
     ref.collection("courseYearTimings").get(),
     ref.collection("timetableSlots").get(),
@@ -159,6 +165,21 @@ export async function dayClasses(db: Firestore, c: string, date: string, suspend
   const needed = [...slots, ...drafts].filter((x) => x.courseId && x.year != null).map((x) => ({ courseId: x.courseId, year: Number(x.year) }));
   const { lookup } = await loadTimingLookup(db, c, needed, timings);
   const isLive = makeLiveSlotPredicate(lookup, await resolveCollegeAcademicYear(db, c));
+  return { slots, drafts, off, lookup, isLive };
+}
+
+function timetableBase(db: Firestore, c: string): Promise<TimetableBase> {
+  const hit = timetableCache.get(c);
+  if (hit && Date.now() - hit.at < TIMETABLE_TTL_MS) return hit.value;
+  const value = readTimetable(db, c);
+  timetableCache.set(c, { at: Date.now(), value });
+  value.catch(() => { if (timetableCache.get(c)?.value === value) timetableCache.delete(c); });
+  return value;
+}
+
+export async function dayClasses(db: Firestore, c: string, date: string, suspended: { courseIds: string[]; year: number }[]) {
+  const day = dayOfWeekFromISODate(date);
+  const { slots, drafts, off, lookup, isLive } = await timetableBase(db, c);
   const periodRange = (courseId: string, year: number, n: number): [string, string] | null => {
     const t = lookup(courseId, year);
     if (!t) return null;
