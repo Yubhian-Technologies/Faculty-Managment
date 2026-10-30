@@ -31,7 +31,7 @@ export const DISPLAY_NAME_SURFACES: DisplayNameSurface[] = [
   { key: "attendanceLeave", module: "Attendance and leave", label: "Attendance and leave", ready: true,
     description: "Faculty names in the Leave History Register (and its export), leave profiles, leave approval cover lists, Faculty Not Posted and Faculty Attendance Completion reports." },
   { key: "dashboardName", module: "Dashboard", label: "Dashboard greeting and sidebar name", ready: true,
-    description: "The faculty member's own name in the \"Hello, ...\" / \"Welcome, ...\" greeting on their dashboard (faculty and HOD) and in the name card at the bottom of the sidebar / mobile menu." },
+    description: "The faculty member's own name in the \"Hello, ...\" / \"Welcome, ...\" greeting on their dashboard (every role that has a dashboard greeting - Faculty, HOD, Principal, Vice Principal, College Office and the other college roles) and in the name card at the bottom of the sidebar / mobile menu." },
   { key: "mentoring", module: "Mentoring", label: "Student mentoring", ready: true,
     description: "The mentor's name on the HOD mentoring pages (assign, browse, my mentees) and the Principal's student finder." },
 ];
@@ -44,6 +44,16 @@ export type DisplayNameSettings = Record<string, boolean>;
 export function readDisplayNameSettings(raw: unknown): DisplayNameSettings {
   const surfaces = (typeof raw === "object" && raw !== null ? (raw as { surfaces?: unknown }).surfaces : undefined) as Record<string, unknown> | undefined;
   return Object.fromEntries(DISPLAY_NAME_SURFACES.map((s) => [s.key, surfaces?.[s.key] === true && s.ready]));
+}
+
+/**
+ * What the app actually applies: the college's own choice is "ticking any place turns the Display Name on in every
+ * place", so one tick expands to all ready places. The Settings card keeps showing the stored ticks (readDisplayNameSettings).
+ */
+export function effectiveDisplayNameSettings(raw: unknown): DisplayNameSettings {
+  const stored = readDisplayNameSettings(raw);
+  const anyOn = Object.values(stored).some(Boolean);
+  return Object.fromEntries(DISPLAY_NAME_SURFACES.map((x) => [x.key, anyOn && x.ready]));
 }
 
 /** A request body's `surfaces` -> the booleans to store; an unknown key or non-boolean is an error. */
@@ -60,9 +70,10 @@ export function normalizeDisplayNameSettings(raw: unknown): { ok: true; surfaces
   return { ok: true, surfaces: Object.fromEntries(DISPLAY_NAME_SURFACES.map((s) => [s.key, input[s.key] === true])) };
 }
 
-/** "AV" + "VENU GOPAL" -> "AV VENU GOPAL"; with the person's honorific "Dr" -> "Dr.AV VENU GOPAL" (same "Dr.Name" form as facultyDisplayName). */
+/** "AV" + "VENU GOPAL" -> "AV.VENU GOPAL"; with the person's honorific "Dr" -> "Dr.AV.VENU GOPAL" (same "Dr.Name" form as facultyDisplayName). */
 export function formatDisplayName(surname: string, name: string, honorific?: unknown): string {
-  const base = `${surname.trim()} ${name.trim()}`.trim();
+  const s = surname.trim().replace(/\.+$/, ""), n = name.trim();
+  const base = s && n ? `${s}.${n}` : s || n;
   const raw = typeof honorific === "string" ? honorific.trim().replace(/\.+$/, "") : "";
   if (!base || !raw) return base;
   return `${raw.charAt(0).toUpperCase()}${raw.slice(1).toLowerCase()}.${base}`;

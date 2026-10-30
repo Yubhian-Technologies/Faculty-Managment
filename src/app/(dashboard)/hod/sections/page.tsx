@@ -22,6 +22,7 @@ import { getFreshmanDepartmentIds, type DepartmentWithId } from "@/lib/college/a
 import type { SectionListItem, Course, Department } from "@/types";
 import { useListUrlSync } from "@/hooks/useListUrlSync";
 import { buildListUrl, readListInt, readListString, withListBack } from "@/lib/listReturn";
+import { useFacultyDesignations, withDesignation } from "@/hooks/useFacultyDesignations";
 
 type SectionRow = SectionListItem;
 
@@ -81,6 +82,7 @@ function HODSectionsContent() {
   // single-root-at-a-time shape - see mergeOwnDepartmentOptions.
   const isMultiDept = myDepartments.length > 1;
   const [sections, setSections] = useState<SectionRow[]>([]);
+  const designationOf = useFacultyDesignations(sections.map((x) => x.facultyInchargeUid));
   const [courses, setCourses] = useState<Course[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -923,7 +925,7 @@ function HODSectionsContent() {
                         <UserCog className="h-4 w-4 opacity-50 shrink-0" />
                         <span className="text-sm">
                           {sec.facultyInchargeName
-                            ? <strong>{sec.facultyInchargeName}</strong>
+                            ? <strong>{withDesignation(sec.facultyInchargeName, designationOf(sec.facultyInchargeUid))}</strong>
                             : <span className="opacity-50 italic">No incharge assigned</span>
                           }
                         </span>

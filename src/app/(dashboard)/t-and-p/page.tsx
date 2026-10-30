@@ -3,15 +3,17 @@
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuthStore } from "@/store/authStore";
+import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
 import { ROLE_LABELS } from "@/types";
 
 export default function TAndPDashboard() {
   const user = useAuthStore((s) => s.user);
+  const { nameFor } = useFacultyDisplayNames();
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Hello, ${user?.name ?? "there"}`}
+        title={`Hello, ${user ? nameFor("dashboardName", { uid: user.uid }, user.name) : "there"}`}
         description={ROLE_LABELS.T_AND_P}
       />
       <Card>

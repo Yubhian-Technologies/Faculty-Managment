@@ -22,6 +22,7 @@ import { semesterInYearLabel } from "@/lib/academic/format";
 import { toDate } from "@/lib/utils";
 import type { Course, CourseYearTiming, Department, SectionListItem, StudentRecord, Subject, SubjectSemesterAssignment } from "@/types";
 import { SUBJECT_TYPE_LABELS, subjectTypeDisplayLabel, type SubjectType } from "@/types";
+import { useFacultyDesignations, withDesignation } from "@/hooks/useFacultyDesignations";
 
 type SectionRow = SectionListItem;
 
@@ -40,6 +41,7 @@ export default function SectionRosterPage() {
   // The Sections list as this page was opened from (filters, page).
   const listHref = resolveListBack(useSearchParams(), "/hod/sections");
   const [section, setSection] = useState<SectionRow | null>(null);
+  const designationOf = useFacultyDesignations([section?.facultyInchargeUid]);
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [assignments, setAssignments] = useState<SubjectSemesterAssignment[]>([]);
@@ -264,7 +266,7 @@ export default function SectionRosterPage() {
 
       <dl className="space-y-1.5 text-sm">
         <div className="flex gap-2"><dt className="text-muted-foreground">Total No of students enrolled -</dt><dd className="font-medium">{students.length}</dd></div>
-        <div className="flex gap-2"><dt className="text-muted-foreground">Class I/c -</dt><dd className="font-medium">{section.facultyInchargeName || "Not assigned"}</dd></div>
+        <div className="flex gap-2"><dt className="text-muted-foreground">Class I/c -</dt><dd className="font-medium">{section.facultyInchargeName ? withDesignation(section.facultyInchargeName, designationOf(section.facultyInchargeUid)) : "Not assigned"}</dd></div>
         {Array.from({ length: classRepresentativeCountOf(section) }, (_, i) => (
           <div key={i} className="flex gap-2">
             <dt className="text-muted-foreground">Class representative-{i + 1} -</dt>
