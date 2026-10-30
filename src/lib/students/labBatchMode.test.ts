@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { effectiveLabBatch, labBatchSettingId, loadLabBatchModes, type LabBatchMode, type LabBatchModes } from "@/lib/students/labBatchMode";
+import { effectiveLabBatch, labBatchSettingId, loadLabBatchModes, withoutBatch, type LabBatchMode, type LabBatchModes } from "@/lib/students/labBatchMode";
 import { FakeFirestore } from "@/lib/testing/fakeFirestore.testutil";
 
 const modes: LabBatchModes = new Map<string, LabBatchMode>([
@@ -29,6 +29,16 @@ describe("effectiveLabBatch", () => {
   it("is scoped to the section", () => {
     expect(effectiveLabBatch("Batch 1", modes, "s2", "physLab", "facA")).toBe("Batch 1");
     expect(effectiveLabBatch(undefined, modes, "s2", "chemLab", "facA")).toBeUndefined();
+  });
+});
+
+describe("withoutBatch", () => {
+  const map = { facA: "Batch 1", facB: "Batch 2", facC: " batch 1 " };
+  it("drops every faculty on the deleted batch, case/whitespace-insensitively", () => {
+    expect(withoutBatch(map, "BATCH 1")).toEqual({ facB: "Batch 2" });
+  });
+  it("returns the same object when nobody was on it", () => {
+    expect(withoutBatch(map, "Batch 9")).toBe(map);
   });
 });
 

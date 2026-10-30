@@ -15,6 +15,13 @@ export const labBatchSettingId = (sectionId: string, subjectId: string) => `${se
 
 export const normalizeBatch = (value: string | null | undefined) => (value ?? "").trim().toLowerCase();
 
+/** A faculty -> batch mapping without the faculty who were on `label` (a deleted batch). Same object if none were. */
+export function withoutBatch(batchByFaculty: Record<string, string>, label: string): Record<string, string> {
+  const key = normalizeBatch(label);
+  const kept = Object.entries(batchByFaculty).filter(([, b]) => normalizeBatch(b) !== key);
+  return kept.length === Object.keys(batchByFaculty).length ? batchByFaculty : Object.fromEntries(kept);
+}
+
 export interface LabBatchMode {
   batchWise: boolean;
   /** facultyMembers doc id -> batch label. */
