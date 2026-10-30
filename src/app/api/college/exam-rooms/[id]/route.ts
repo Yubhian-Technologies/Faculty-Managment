@@ -3,7 +3,9 @@ export const dynamic = "force-dynamic";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
+import { FieldValue } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { columnsError } from "@/lib/exams/roomLayout";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -15,7 +17,7 @@ export async function PATCH(request: Request, { params }: Ctx) {
   try {
     const session = await requireCollegeMember("EXAM_CELL");
     const { id } = await params;
-    const body = (await readJsonBody(request)) as { name?: string; block?: string; floor?: number; benches?: number; studentsPerBench?: number; isActive?: boolean };
+    const body = (await readJsonBody(request)) as { name?: string; block?: string; floor?: number; benches?: number; studentsPerBench?: number; columns?: number | string | null; isActive?: boolean };
     const update: Record<string, unknown> = { updatedAt: new Date() };
     if (body.name !== undefined) {
       if (!body.name.trim()) return NextResponse.json({ error: "Name is required" }, { status: 400 });
@@ -47,8 +49,21 @@ export async function PATCH(request: Request, { params }: Ctx) {
     const ref = getAdminDb().collection("colleges").doc(session.collegeId).collection("examRooms").doc(id);
     const existing = await ref.get();
     if (!existing.exists) return NextResponse.json({ error: "Room not found" }, { status: 404 });
+    const cur = existing.data() as { benches?: number; studentsPerBench?: number; columns?: number; capacity?: number };
+    // Columns: blank / null clears them; otherwise 1 .. the room's benches (checked against new benches too).
+    const benchesNow = Number(update.benches ?? cur.benches ?? cur.capacity ?? 1);
+    if (body.columns !== undefined) {
+      const raw = String(body.columns ?? "").trim();
+      if (!raw) update.columns = FieldValue.delete();
+      else {
+        const problem = columnsError(Number(raw), benchesNow);
+        if (problem) return NextResponse.json({ error: problem }, { status: 400 });
+        update.columns = Number(raw);
+      }
+    } else if (update.benches !== undefined && cur.columns && cur.columns > benchesNow) {
+      return NextResponse.json({ error: "Columns can't be more than the benches" }, { status: 400 });
+    }
     if (update.benches !== undefined || update.studentsPerBench !== undefined) {
-      const cur = existing.data() as { benches?: number; studentsPerBench?: number; capacity?: number };
       update.capacity = Number(update.benches ?? cur.benches ?? cur.capacity ?? 1) * Number(update.studentsPerBench ?? cur.studentsPerBench ?? 1);
     }
     await ref.update(update);

@@ -51,6 +51,7 @@ const SUB_PAGE_PARENT: Record<string, string> = {
   "/hod/supporting-staff": "/hod/faculty", // tab of the Faculty page
   "/hod/assignment-requests": "/hod/teaching-assignments", // button on the Teaching Assignments page
   "/academics/course-structure": "/principal/courses", // Assign-subjects deep link from a department's semester chip
+  "/exam-cell/question-banks": "/exam-cell/question-banks", // a deadline's progress / one bank (else "/exam-cell" Dashboard also prefix-matches)
 };
 
 export function isNavItemActive(item: NavItem, pathname: string, allItems: NavItem[]): boolean {
@@ -156,27 +157,31 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "My Profile", href: "/college-accounts/profile", iconName: "UserCircle", roles: ["COLLEGE_ACCOUNTS"], section: "Personal" },
   { label: "My Leave", href: "/college-accounts/leave", iconName: "CalendarClock", roles: ["COLLEGE_ACCOUNTS"] },
 
-  // Exam Cell
+  // Exam Cell - grouped by job (was one ungrouped "General" list; `legacyModule`
+  // carries a module the Super Admin hid across the split).
   { label: "Dashboard", href: "/exam-cell", iconName: "LayoutDashboard", roles: ["EXAM_CELL"] },
-  { label: "Exam Configuration", href: "/exam-cell/configure", iconName: "ClipboardList", roles: ["EXAM_CELL"] },
-  { label: "Exam Seating", href: "/exam-cell/seating", iconName: "Armchair", roles: ["EXAM_CELL"] },
-  { label: "Exam Rooms", href: "/exam-cell/exam-rooms", iconName: "DoorOpen", roles: ["EXAM_CELL"] },
-  { label: "Semester Results", href: "/exam-cell/semester-results", iconName: "GraduationCap", roles: ["EXAM_CELL"] },
-  { label: "Result Rules", href: "/exam-cell/result-rules", iconName: "Settings2", roles: ["EXAM_CELL"] },
-  { label: "Results Analysis", href: "/exam-cell/results-analysis", iconName: "BarChart3", roles: ["EXAM_CELL"] },
-  { label: "Exam Cell Guidelines", href: "/exam-cell/guidelines", iconName: "BookOpen", roles: ["EXAM_CELL"] },
-  { label: "Mid Timings & Dates", href: "/exam-cell/mid-timings", iconName: "CalendarRange", roles: ["EXAM_CELL"] },
-  { label: "Timetable View", href: "/exam-cell/timetable-view", iconName: "CalendarDays", roles: ["EXAM_CELL"] },
-  { label: "PC & CMM Requests", href: "/exam-cell/certificate-requests", iconName: "FileCheck", roles: ["EXAM_CELL"] },
-  { label: "Settings", href: "/exam-cell/settings", iconName: "Settings2", roles: ["EXAM_CELL"] },
-  { label: "Circulars", href: "/exam-cell/circulars", iconName: "ScrollText", roles: ["EXAM_CELL"] },
-  { label: "Attendance Reports", href: "/exam-cell/attendance-report", iconName: "BarChart3", roles: ["EXAM_CELL"] },
-  { label: "Staff Attendance", href: "/exam-cell/staff-attendance", iconName: "ClipboardCheck", roles: ["EXAM_CELL"] },
-  { label: "Import Attendance", href: "/exam-cell/attendance-import", iconName: "Upload", roles: ["EXAM_CELL"] },
+  { label: "Mid Configuration", href: "/exam-cell/mid-configuration", iconName: "Settings2", roles: ["EXAM_CELL"], section: "Mid Exams", legacyModule: "General" },
+  { label: "Mid Timings & Dates", href: "/exam-cell/mid-timings", iconName: "CalendarRange", roles: ["EXAM_CELL"], legacyModule: "General" },
+  { label: "Mid Timetable", href: "/exam-cell/mid-timetable", iconName: "CalendarDays", roles: ["EXAM_CELL"], legacyModule: "General" },
+  { label: "Mid Question Bank", href: "/exam-cell/question-banks", iconName: "BookOpenCheck", roles: ["EXAM_CELL"], legacyModule: "General" },
+  { label: "Mid Question Paper", href: "/exam-cell/mid-question-paper", iconName: "FileText", roles: ["EXAM_CELL"], legacyModule: "General" },
+  { label: "Exam Rooms", href: "/exam-cell/exam-rooms", iconName: "DoorOpen", roles: ["EXAM_CELL"], section: "Exam Conduct", legacyModule: "General" },
+  { label: "Exam Seating", href: "/exam-cell/seating", iconName: "Armchair", roles: ["EXAM_CELL"], legacyModule: "General" },
+  { label: "Invigilation", href: "/exam-cell/invigilation", iconName: "UserCheck", roles: ["EXAM_CELL"], legacyModule: "General" },
+  { label: "Timetable View", href: "/exam-cell/timetable-view", iconName: "CalendarDays", roles: ["EXAM_CELL"], legacyModule: "General" },
+  { label: "Semester Results", href: "/exam-cell/semester-results", iconName: "GraduationCap", roles: ["EXAM_CELL"], section: "Results", legacyModule: "General" },
+  { label: "Result Rules", href: "/exam-cell/result-rules", iconName: "Settings2", roles: ["EXAM_CELL"], legacyModule: "General" },
+  { label: "Results Analysis", href: "/exam-cell/results-analysis", iconName: "BarChart3", roles: ["EXAM_CELL"], legacyModule: "General" },
+  { label: "PC & CMM Requests", href: "/exam-cell/certificate-requests", iconName: "FileCheck", roles: ["EXAM_CELL"], section: "Student Services", legacyModule: "General" },
+  { label: "Attendance Reports", href: "/exam-cell/attendance-report", iconName: "BarChart3", roles: ["EXAM_CELL"], section: "Attendance", legacyModule: "General" },
+  { label: "Import Attendance", href: "/exam-cell/attendance-import", iconName: "Upload", roles: ["EXAM_CELL"], legacyModule: "General" },
+  { label: "Staff Attendance", href: "/exam-cell/staff-attendance", iconName: "ClipboardCheck", roles: ["EXAM_CELL"], legacyModule: "General" },
+  { label: "Circulars", href: "/exam-cell/circulars", iconName: "ScrollText", roles: ["EXAM_CELL"], section: "Communication", legacyModule: "General" },
+  { label: "Exam Cell Guidelines", href: "/exam-cell/guidelines", iconName: "BookOpen", roles: ["EXAM_CELL"], legacyModule: "General" },
   { label: "My Profile", href: "/exam-cell/profile", iconName: "UserCircle", roles: ["EXAM_CELL"], section: "Personal" },
   { label: "My Leave", href: "/exam-cell/leave", iconName: "CalendarClock", roles: ["EXAM_CELL"] },
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["EXAM_CELL"] },
-  { label: "My Attendance", href: "/exam-cell/attendance", iconName: "ClipboardCheck", roles: ["EXAM_CELL"], section: "My Work" },
+  { label: "My Attendance", href: "/exam-cell/attendance", iconName: "ClipboardCheck", roles: ["EXAM_CELL"], legacyModule: "My Work" },
 
   // Location Staff Admin
   { label: "Dashboard", href: "/location-staff-admin", iconName: "LayoutDashboard", roles: ["LOCATION_STAFF_ADMIN"] },
@@ -220,6 +225,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Holidays", href: "/principal/holiday-calendar", iconName: "CalendarDays", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
   { label: "Internal Marks", href: "/principal/internal-marks", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
   { label: "Results Analysis", href: "/principal/results-analysis", iconName: "BarChart3", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
+  { label: "Mid Timetable", href: "/principal/mid-timetable", iconName: "CalendarRange", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
   { label: "Mentoring", href: "/principal/mentoring", iconName: "UserCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
   { label: "Faculty", href: "/principal/faculty", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Staff & HR", legacyModule: "Staff & HR Management" },
   { label: "Profile Completion Statistics", href: "/principal/faculty/profile-completion", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Staff & HR Management" },
@@ -452,7 +458,9 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "My Time Table", href: "/panel/teaching", iconName: "BookOpen", roles: ["PANEL_MEMBER"], section: "My Work", module: "teaching-load" },
   { label: "Faculty Timetable", href: "/panel/faculty-timetable", iconName: "CalendarSearch", roles: ["PANEL_MEMBER"], module: "assignment-requests" },
   { label: "Internal Exam", href: "/panel/internal-exam", iconName: "ClipboardList", roles: ["PANEL_MEMBER"] },
-  { label: "Add Mid Bank", href: "/panel/mid-bank", iconName: "BookOpen", roles: ["PANEL_MEMBER"] },
+  { label: "Question Bank", href: "/panel/mid-bank", iconName: "BookOpen", roles: ["PANEL_MEMBER"] },
+  { label: "Mid Timetable", href: "/panel/mid-timetable", iconName: "CalendarRange", roles: ["PANEL_MEMBER"] },
+  { label: "Invigilation Duties", href: "/panel/invigilation", iconName: "UserCheck", roles: ["PANEL_MEMBER"] },
   { label: "My Feedback", href: "/panel/feedback", iconName: "MessageSquare", roles: ["PANEL_MEMBER"] },
   { label: "Student Attendance", href: "/panel/mark-attendance", iconName: "CalendarCheck", roles: ["PANEL_MEMBER"], section: "Students & Attendance", module: "attendance", legacyModule: "My Work" },
   { label: "Attendance Report", href: "/panel/monthly-records", iconName: "CalendarRange", roles: ["PANEL_MEMBER"], module: "attendance", legacyModule: "My Work" },
@@ -521,6 +529,7 @@ export const NAV_ITEMS: NavItem[] = [
   // Student
   { label: "Dashboard", href: "/student", iconName: "LayoutDashboard", roles: ["STUDENT"] },
   { label: "Timetable", href: "/student/timetable", iconName: "CalendarDays", roles: ["STUDENT"], section: "Academics" },
+  { label: "Mid Timetable", href: "/student/mid-timetable", iconName: "CalendarRange", roles: ["STUDENT"] },
   { label: "Holidays", href: "/student/holidays", iconName: "CalendarDays", roles: ["STUDENT"] },
   { label: "Attendance", href: "/student/attendance", iconName: "TrendingUp", roles: ["STUDENT"] },
   { label: "Results", href: "/student/results", iconName: "GraduationCap", roles: ["STUDENT"] },
@@ -1018,7 +1027,7 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   ],
   EXAM_CELL: [
     { label: "Home", href: "/exam-cell", iconName: "LayoutDashboard", roles: ["EXAM_CELL"] },
-    { label: "Configure", href: "/exam-cell/configure", iconName: "ClipboardList", roles: ["EXAM_CELL"] },
+    { label: "Configure", href: "/exam-cell/mid-configuration", iconName: "ClipboardList", roles: ["EXAM_CELL"] },
     { label: "Attendance", href: "/exam-cell/attendance", iconName: "ClipboardCheck", roles: ["EXAM_CELL"] },
     { label: "Staff", href: "/exam-cell/staff-attendance", iconName: "ClipboardCheck", roles: ["EXAM_CELL"] },
     { label: "Profile", href: "/exam-cell/profile", iconName: "UserCircle", roles: ["EXAM_CELL"] },

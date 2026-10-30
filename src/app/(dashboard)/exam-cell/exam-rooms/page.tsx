@@ -12,11 +12,11 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
-import { roomBenches, roomPerBench } from "@/lib/exams/roomLayout";
+import { columnsError, roomBenches, roomColumns, roomPerBench, roomRows } from "@/lib/exams/roomLayout";
 import type { ExamRoom } from "@/types/examSeating";
 
-interface RoomForm { name: string; block: string; floor: string; benches: string; studentsPerBench: string }
-const EMPTY: RoomForm = { name: "", block: "", floor: "", benches: "", studentsPerBench: "1" };
+interface RoomForm { name: string; block: string; floor: string; benches: string; studentsPerBench: string; columns: string }
+const EMPTY: RoomForm = { name: "", block: "", floor: "", benches: "", studentsPerBench: "1", columns: "" };
 
 // Header names accepted in an uploaded sheet (case-insensitive).
 const COLUMN_ALIASES: Record<keyof RoomForm, string[]> = {
@@ -25,6 +25,7 @@ const COLUMN_ALIASES: Record<keyof RoomForm, string[]> = {
   floor: ["floor"],
   benches: ["benches", "no of benches", "number of benches", "capacity", "seats"],
   studentsPerBench: ["students per bench", "per bench", "students/bench", "seats per bench"],
+  columns: ["columns", "bench columns", "no of columns", "number of columns", "rows of benches"],
 };
 
 function parseCsv(text: string): string[][] {
@@ -35,12 +36,13 @@ function rowsToRooms(rows: string[][]): RoomForm[] {
   if (rows.length < 2) return [];
   const header = rows[0].map((h) => h.trim().toLowerCase());
   const col = (key: keyof RoomForm) => header.findIndex((h) => COLUMN_ALIASES[key].includes(h));
-  const idx = { name: col("name"), block: col("block"), floor: col("floor"), benches: col("benches"), perBench: col("studentsPerBench") };
+  const idx = { name: col("name"), block: col("block"), floor: col("floor"), benches: col("benches"), perBench: col("studentsPerBench"), columns: col("columns") };
   // Students per bench is optional (older sheets: Capacity only = one per bench).
   if ([idx.name, idx.block, idx.floor, idx.benches].some((i) => i < 0)) throw new Error("Sheet needs Room, Block, Floor and Benches columns");
   return rows.slice(1).filter((r) => r.some((c) => c.trim())).map((r) => ({
     name: r[idx.name] ?? "", block: r[idx.block] ?? "", floor: r[idx.floor] ?? "", benches: r[idx.benches] ?? "",
     studentsPerBench: (idx.perBench >= 0 ? r[idx.perBench] : "") || "1",
+    columns: idx.columns >= 0 ? r[idx.columns] ?? "" : "",
   }));
 }
 
@@ -72,7 +74,7 @@ export default function ExamRoomsPage() {
       const res = editingId
         ? await fetch(`/api/college/exam-rooms/${editingId}`, {
             method: "PATCH", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name: form.name, block: form.block, floor: Number(form.floor), benches: Number(form.benches), studentsPerBench: Number(form.studentsPerBench) }),
+            body: JSON.stringify({ name: form.name, block: form.block, floor: Number(form.floor), benches: Number(form.benches), studentsPerBench: Number(form.studentsPerBench), columns: form.columns.trim() || null }),
           })
         : await fetch("/api/college/exam-rooms", {
             method: "POST", headers: { "Content-Type": "application/json" },
@@ -149,8 +151,11 @@ export default function ExamRoomsPage() {
   }
 
   const set = (k: keyof RoomForm) => (e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
-  const canSave = form.name.trim() && form.block.trim() && form.floor !== "" && Number(form.benches) >= 1;
+  const columnsProblem = form.columns.trim() && Number(form.benches) >= 1 ? columnsError(Number(form.columns), Number(form.benches)) : null;
+  const canSave = form.name.trim() && form.block.trim() && form.floor !== "" && Number(form.benches) >= 1 && !columnsProblem;
   const seats = Number(form.benches) * Number(form.studentsPerBench);
+  const layout = !columnsProblem && Number(form.columns) >= 1 && Number(form.benches) >= 1
+    ? `${form.columns} columns × ${roomRows(Number(form.benches), Number(form.columns))} rows. ` : "";
 
   return (
     <div className="space-y-6">
@@ -172,7 +177,7 @@ export default function ExamRoomsPage() {
 
       <Card>
         <CardContent className="p-4 space-y-3">
-          <div className="grid gap-3 sm:grid-cols-5">
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
             <div className="space-y-1.5"><Label>Room</Label><Input value={form.name} onChange={set("name")} placeholder="201" /></div>
             <div className="space-y-1.5"><Label>Block</Label><Input value={form.block} onChange={set("block")} placeholder="A" /></div>
             <div className="space-y-1.5"><Label>Floor</Label><Input type="number" value={form.floor} onChange={set("floor")} placeholder="2" /></div>
@@ -186,6 +191,11 @@ export default function ExamRoomsPage() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-1.5">
+              <Label>Bench columns</Label>
+              <Input type="number" min={1} value={form.columns} onChange={set("columns")} placeholder="4" aria-invalid={!!columnsProblem} />
+              {columnsProblem && <p className="text-xs text-destructive">{columnsProblem}</p>}
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <Button size="sm" disabled={!canSave} loading={saving} onClick={() => void save()}>
@@ -193,7 +203,7 @@ export default function ExamRoomsPage() {
             </Button>
             {editingId && <Button size="sm" variant="ghost" onClick={() => { setEditingId(null); setForm(EMPTY); }}>Cancel</Button>}
             <p className="text-xs text-muted-foreground ml-auto">
-              {seats > 0 ? `${seats} seats. ` : ""}Upload columns: Room, Block, Floor, Benches, Students per Bench. Re-uploading updates existing rooms.
+              {seats > 0 ? `${seats} seats. ` : ""}{layout}Benches are numbered and filled column by column (column 1 front to back, then column 2). Upload columns: Room, Block, Floor, Benches, Students per Bench, Columns. Re-uploading updates existing rooms.
             </p>
           </div>
         </CardContent>
@@ -208,7 +218,7 @@ export default function ExamRoomsPage() {
           <CardContent className="p-0 overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-left text-xs text-muted-foreground border-b">
-                <tr><th className="p-3">Room</th><th className="p-3">Block</th><th className="p-3">Floor</th><th className="p-3">Benches</th><th className="p-3">Per bench</th><th className="p-3">Seats</th><th className="p-3">Status</th><th className="p-3" /></tr>
+                <tr><th className="p-3">Room</th><th className="p-3">Block</th><th className="p-3">Floor</th><th className="p-3">Benches</th><th className="p-3">Per bench</th><th className="p-3">Columns × rows</th><th className="p-3">Seats</th><th className="p-3">Status</th><th className="p-3" /></tr>
               </thead>
               <tbody>
                 {rooms.map((r) => (
@@ -216,7 +226,8 @@ export default function ExamRoomsPage() {
                     <td className="p-3 font-medium">{r.name}</td>
                     <td className="p-3">{r.block}</td>
                     <td className="p-3">{r.floor}</td>
-                    <td className="p-3">{roomBenches(r)}</td><td className="p-3">{roomPerBench(r)}</td><td className="p-3">{r.capacity}</td>
+                    <td className="p-3">{roomBenches(r)}</td><td className="p-3">{roomPerBench(r)}</td>
+                    <td className="p-3">{roomColumns(r) ? `${roomColumns(r)} × ${roomRows(roomBenches(r), roomColumns(r)!)}` : <span className="text-muted-foreground">-</span>}</td><td className="p-3">{r.capacity}</td>
                     <td className="p-3">
                       <button onClick={() => void toggleActive(r)}>
                         <Badge variant={r.isActive ? "approved" : "outline"}>{r.isActive ? "In use" : "Inactive"}</Badge>
@@ -225,7 +236,7 @@ export default function ExamRoomsPage() {
                     <td className="p-3 text-right whitespace-nowrap">
                       <Button size="icon" variant="ghost" aria-label="Edit" onClick={() => {
                         setEditingId(r.id);
-                        setForm({ name: r.name, block: r.block, floor: String(r.floor), benches: String(roomBenches(r)), studentsPerBench: String(roomPerBench(r)) });
+                        setForm({ name: r.name, block: r.block, floor: String(r.floor), benches: String(roomBenches(r)), studentsPerBench: String(roomPerBench(r)), columns: roomColumns(r) ? String(roomColumns(r)) : "" });
                       }}><Pencil className="h-4 w-4" /></Button>
                       <Button size="icon" variant="ghost" aria-label="Delete" onClick={() => setDeleteTarget(r)}><Trash2 className="h-4 w-4" /></Button>
                     </td>

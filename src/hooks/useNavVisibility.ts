@@ -18,8 +18,14 @@ const TIMETABLE_INCHARGE_HREFS = [
   "/college-staff/timetable-incharge", "/college-staff/assignment-requests", "/college-staff/faculty-timetable",
 ];
 const SECTION_INCHARGE_HREFS = ["/panel/students", "/panel/students/batches", "/panel/section", "/panel/students/class-representatives"];
-const MID_PAPER_HREFS = ["/panel/mid-bank"];
+const QUESTION_BANK_HREFS = ["/panel/mid-bank"];
+const INTERNAL_EXAM_HREFS = ["/panel/internal-exam"];
+// Mid Timetable shows for students and faculty only once a timetable they may see is published.
+const MID_TIMETABLE_HREFS = ["/student/mid-timetable", "/panel/mid-timetable"];
+const MID_TIMETABLE_ROLES: UserRole[] = ["STUDENT", "PANEL_MEMBER"];
 const DUTY_ROLES: UserRole[] = ["PANEL_MEMBER", "COLLEGE_STAFF"];
+// Invigilation Duties shows once the Exam Cell has published a duty for them.
+const INVIGILATION_HREFS = ["/panel/invigilation"];
 
 export function useNavVisibility() {
   const user = useAuthStore((s) => s.user);
@@ -50,6 +56,22 @@ export function useNavVisibility() {
   });
   const loading = Boolean(user?.collegeId) && isLoading;
 
+  const wantsTimetable = !!primary && !!user?.collegeId && [primary, ...(seatRoles ?? [])].some((r) => MID_TIMETABLE_ROLES.includes(r));
+  const { data: hasTimetable } = useQuery({
+    queryKey: ["mid-timetable-exists", user?.collegeId, user?.uid],
+    queryFn: () => fetch("/api/college/mid-timetables/published?exists=1").then((r) => (r.ok ? r.json() : { exists: false })).then((d: { exists?: boolean }) => Boolean(d.exists)),
+    enabled: wantsTimetable,
+    staleTime: 5 * 60_000,
+  });
+
+  const wantsDuties = !!primary && !!user?.collegeId && [primary, ...(seatRoles ?? [])].includes("PANEL_MEMBER");
+  const { data: hasDuties } = useQuery({
+    queryKey: ["invigilation-exists", user?.collegeId, user?.uid],
+    queryFn: () => fetch("/api/college/invigilation/my?exists=1").then((r) => (r.ok ? r.json() : { exists: false })).then((d: { exists?: boolean }) => Boolean(d.exists)),
+    enabled: wantsDuties,
+    staleTime: 5 * 60_000,
+  });
+
   const hiddenItems = useMemo(() => {
     if (!primary) return [];
     // The Super Admin configures rules per role, but a login can act as several
@@ -70,13 +92,17 @@ export function useNavVisibility() {
       }
     }
     if (officeAllowed.hrefs) officeHiddenHrefs(officeAllowed.hrefs).forEach((h) => hrefs.add(h));
+    // Hidden until known to exist (no flash of a menu item that leads nowhere).
+    if (wantsTimetable && hasTimetable !== true) MID_TIMETABLE_HREFS.forEach((h) => hrefs.add(h));
+    if (hasDuties !== true) INVIGILATION_HREFS.forEach((h) => hrefs.add(h));
     if (assignments) {
       if (!assignments.timetableIncharge) TIMETABLE_INCHARGE_HREFS.forEach((h) => hrefs.add(h));
       if (!assignments.sectionIncharge) SECTION_INCHARGE_HREFS.forEach((h) => hrefs.add(h));
-      if (!assignments.midPaperSetter) MID_PAPER_HREFS.forEach((h) => hrefs.add(h));
+      if (assignments.questionBank === false) QUESTION_BANK_HREFS.forEach((h) => hrefs.add(h));
+      if (assignments.internalExam === false) INTERNAL_EXAM_HREFS.forEach((h) => hrefs.add(h));
     }
     return Array.from(hrefs);
-  }, [raw, primary, seatRoles, collegeAdmin, assignments, officeAllowed.hrefs]);
+  }, [raw, primary, seatRoles, collegeAdmin, assignments, officeAllowed.hrefs, wantsTimetable, hasTimetable, hasDuties]);
 
   const hiddenModules = useMemo(() => {
     if (!primary) return [];

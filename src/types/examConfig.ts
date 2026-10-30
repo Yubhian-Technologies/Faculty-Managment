@@ -51,3 +51,21 @@ export interface ExamConfiguration {
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
+
+// A named internal marks breakdown shared by a group of subjects (e.g. "Theory
+// - no Quiz": Mid 25 + Assignment 5), used for those subjects in every branch
+// instead of the branch + year configuration. A subject belongs to at most one
+// category per exam type. colleges/{c}/examMarksCategories/{id}
+export interface ExamMarksCategory {
+  id: string;
+  name: string;
+  examType: ExamType;
+  internalMaxMarks: number;
+  externalMaxMarks: number;
+  components: ExamConfigComponent[];
+  subjectIds: string[];
+  subjects: { id: string; code: string; name: string; regulation: string }[];
+  updatedBy: string;
+  updatedByName: string;
+  updatedAt: Timestamp;
+}

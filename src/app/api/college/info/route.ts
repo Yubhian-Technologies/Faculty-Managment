@@ -4,6 +4,7 @@ import { readDisplayNameSettings } from "@/lib/faculty/displayNameSettings";
 import { NextResponse } from "next/server";
 import { requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
 
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
@@ -63,8 +64,13 @@ export async function GET(request: Request) {
     const isCustom = Boolean(rawLogo && rawLogo !== "/vishnulogo.png");
     const logoUrl = isCustom ? rawLogo : "/vishnulogo.png";
 
+    // The college's current academic year ("2026-27") - printed on exam documents.
+    let academicYear = "";
+    try { academicYear = await resolveCollegeAcademicYear(db, session.collegeId); } catch { /* left blank */ }
+
     return NextResponse.json({
       name: data?.name ?? "",
+      academicYear,
       code: data?.code ?? "",
       affiliation: data?.affiliation ?? "",
       phone: data?.contactPhone || data?.phone || "",
