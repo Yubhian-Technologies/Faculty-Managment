@@ -48,7 +48,7 @@ export async function GET(request: Request) {
     const chunks: string[][] = [];
     for (let i = 0; i < ids.length; i += 30) chunks.push(ids.slice(i, i + 30));
 
-    const [sectionDocs, coursesSnap, deptsSnap, timingsSnap, rulesSnap, currentAcademicYear, ...slotSnaps] =
+    const [sectionDocs, coursesSnap, deptsSnap, timingsSnap, rulesSnap, currentAcademicYear, assignmentSnaps, ...slotSnaps] =
       await Promise.all([
         db.getAll(...ids.map((id) => collegeRef.collection("sections").doc(id))),
         collegeRef.collection("courses").get(),
@@ -56,6 +56,8 @@ export async function GET(request: Request) {
         collegeRef.collection("courseYearTimings").get(),
         collegeRef.collection("settings").doc("timetableRules").get(),
         resolveCollegeAcademicYear(db, session.collegeId),
+        // Only for the on-screen per-subject cell colour (the downloads don't use it).
+        Promise.all(chunks.map((c) => collegeRef.collection("teachingAssignments").where("sectionId", "in", c).select("cellColor").get())),
         ...chunks.map((c) => collegeRef.collection("timetableSlots").where("sectionId", "in", c).get()),
       ]);
 
@@ -80,10 +82,15 @@ export async function GET(request: Request) {
       return inheritedId ? (timingsByDocId.get(`${inheritedId}_year${year}`) ?? null) : null;
     }
 
+    const colorByAssignment = new Map<string, string | undefined>();
+    for (const snap of assignmentSnaps) {
+      for (const d of snap.docs) colorByAssignment.set(d.id, (d.data() as { cellColor?: string }).cellColor);
+    }
+
     const slotsBySection = new Map<string, (TimetableSlot & { id: string })[]>();
     for (const snap of slotSnaps) {
       for (const d of snap.docs) {
-        const slot = { id: d.id, ...d.data() } as TimetableSlot & { id: string };
+        const slot = { id: d.id, ...d.data(), cellColor: colorByAssignment.get(d.get("assignmentId")) } as TimetableSlot & { id: string };
         const list = slotsBySection.get(slot.sectionId) ?? [];
         list.push(slot);
         slotsBySection.set(slot.sectionId, list);

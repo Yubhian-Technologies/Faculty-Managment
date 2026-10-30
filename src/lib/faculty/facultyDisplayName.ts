@@ -19,18 +19,16 @@ export function facultyDisplayName(
 ): string {
   const name = f?.legalName?.trim() || "";
   if (!name) return "";
-  const honorific = f?.honorific?.trim().replace(/\.+$/, "");
+  const raw = f?.honorific?.trim().replace(/\.+$/, "");
+  // Shown as "Mrs" / "Mr" / "Dr", whatever case it was typed or stored in.
+  const honorific = raw ? raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase() : "";
   return honorific ? `${honorific}.${name}` : name;
 }
 
-const NAME_TITLES = ["mr", "mrs", "ms", "miss", "mx", "dr", "prof", "er", "sri", "smt", "shri", "kum"];
-
-// Leading titles in a login's name show as "Mrs" / "Dr", not "MRS" / "DR".
-// Only the first word is touched, and only when it is a known title (with or
-// without a trailing period); the rest of the name is left exactly as typed.
+// A name already saved with its title baked in ("MRS.ANITHA", "DR. RAVI" - the
+// login's mirrored `name`) shown with that title as "Mrs" / "Dr": first capital,
+// then small letters. Only a leading, well-known title is touched.
+const LEADING_TITLE = /^(mrs|mr|ms|miss|dr|prof|smt|sri|shri)(?=[.\s])/i;
 export function normalizeNameTitle(name: string): string {
-  const m = /^(\w+)(\.?)(?=\s|$)/.exec(name);
-  if (!m || !NAME_TITLES.includes(m[1].toLowerCase())) return name;
-  const title = m[1][0].toUpperCase() + m[1].slice(1).toLowerCase();
-  return title + m[2] + name.slice(m[0].length);
+  return name.replace(LEADING_TITLE, (t) => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase());
 }
