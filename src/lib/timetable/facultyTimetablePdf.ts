@@ -193,7 +193,7 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
   const signatureHtml = resolveSignatureRows(opts.college?.teachingLoadSignatureRows, resolvedDept)
     .map(
       (row) => `
-  <div class="signature-row" style="margin-top:48px;margin-bottom:16px;padding-top:16px;display:flex;justify-content:space-between;align-items:flex-end;width:100%;page-break-inside:avoid;">
+  <div class="signature-row" style="margin-top:44px;margin-bottom:6px;padding-top:0;display:flex;justify-content:space-between;align-items:flex-end;width:100%;page-break-inside:avoid;">
     ${row.map((label) => `<div class="signature-block" style="flex:1;text-align:center;font-weight:700;font-size:9.5pt;">${escapeHtml(label)}</div>`).join("\n    ")}
   </div>`
     )
@@ -208,7 +208,7 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
     @page { size: A4 portrait; margin: 0; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: Arial, Helvetica, sans-serif; color: #000; background: #fff; font-size: 11px; line-height: 1.3; }
-    .page { width: 210mm; margin: 0 auto; padding: 10mm 10mm 14mm; }
+    .page { width: 210mm; margin: 0 auto; padding: 8mm 6mm 8mm; }
 
     .letterhead { width: 100%; border: 0; margin-bottom: 0; }
     .logo-cell { width: 26mm; vertical-align: middle; text-align: center; }
@@ -222,13 +222,13 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
 
     table.grid, table.allocation { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; border-top: 1px solid #555; border-left: 1px solid #555; margin-top: 8px; }
     .cell { border-right: 1px solid #555; border-bottom: 1px solid #555; padding: 0; text-align: center; vertical-align: middle; line-height: 1.2; overflow-wrap: anywhere; }
-    .fx { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; min-height: 36px; padding: 2px 3px; }
+    .fx { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; min-height: 30px; padding: 2px 3px; }
     .fx-left { align-items: flex-start; text-align: left; padding: 2px 6px; }
     th.cell { font-weight: 700; font-size: 8.5pt; background: #fff; }
     th.cell > .fx { min-height: 30px; }
     .head-label { font-size: 8.5pt; font-weight: 700; }
 
-    .col-day { width: 24mm; }
+    .col-day { width: 18mm; }
     th.day-cell { font-weight: 700; font-size: 8.5pt; }
     th.day-cell > .fx { min-height: 36px; padding-left: 5px; }
 
@@ -240,9 +240,9 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
     .slot-note { font-size: 6.5pt; color: #333; margin-top: 1px; overflow-wrap: anywhere; line-height: 1.2; }
 
     table.allocation { border: 0; }
-    table.workload { width: 100%; table-layout: fixed; border-collapse: collapse; margin-top: 18px; font-size: 10pt; }
+    table.workload { width: 100%; table-layout: fixed; border-collapse: collapse; margin-top: 10px; font-size: 9pt; }
     table.workload th { font-weight: 700; text-align: left; padding: 2px 4px; }
-    table.workload td { text-align: left; padding: 2px 4px; overflow-wrap: anywhere; }
+    table.workload td { text-align: left; padding: 1px 4px; overflow-wrap: anywhere; line-height: 1.2; }
     table.workload th.num, table.workload td.num { text-align: center; }
   </style>
 </head>

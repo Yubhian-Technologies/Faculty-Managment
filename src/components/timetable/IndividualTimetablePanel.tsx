@@ -130,7 +130,7 @@ export function IndividualTimetablePanel({ scopeLabel = "in your department" }: 
         college: collegeInfo ?? undefined,
       });
       const safeName = facultyDisplayName(f).replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "") || "Faculty";
-      await renderHtmlToPdf(html, `Timetable-${safeName}.pdf`);
+      await renderHtmlToPdf(html, `Timetable-${safeName}.pdf`, { fitOnePage: true });
       toast({ title: "Timetable downloaded", description: `${facultyDisplayName(f)} - saved as PDF` });
     } catch (err) {
       console.error(err);

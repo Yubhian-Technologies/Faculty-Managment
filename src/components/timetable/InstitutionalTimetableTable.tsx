@@ -10,7 +10,7 @@ import { WeekNavigator } from "@/components/timetable/WeekNavigator";
 import { buildSectionTimetablePdfHtml } from "@/lib/timetable/sectionTimetablePdf";
 import { downloadSectionTimetableXlsx } from "@/lib/timetable/timetableExport";
 import { resolveLogoUrl } from "@/lib/timetable/logoAsset";
-import { renderHtmlToPdf } from "@/lib/pdf/htmlToPdf";
+import { renderHtmlToPdf, fitPrintWindowToOnePage } from "@/lib/pdf/htmlToPdf";
 import { yearSemesterLabelIn } from "@/lib/academic/format";
 import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
 import { useFacultyDesignations, withDesignation } from "@/hooks/useFacultyDesignations";
@@ -256,7 +256,7 @@ export function InstitutionalTimetableTable({
     try {
       const html = buildSectionTimetablePdfHtml(exportMeta);
       const filename = `${fileBase}.pdf`;
-      await renderHtmlToPdf(html, filename);
+      await renderHtmlToPdf(html, filename, { fitOnePage: true });
       toast({ title: "Timetable downloaded", description: `Saved as ${filename}` });
     } catch (err) {
       console.error(err);
@@ -300,6 +300,7 @@ export function InstitutionalTimetableTable({
     printWindow.document.close();
     printWindow.focus();
     setTimeout(() => {
+      fitPrintWindowToOnePage(printWindow);
       printWindow.print();
     }, 400);
   }
