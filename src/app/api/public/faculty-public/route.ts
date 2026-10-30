@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { qualifiedExamName } from "@/lib/faculty/qualifiedExams";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
-import { displayNameFor, readDisplayNameSettings } from "@/lib/faculty/displayNameSettings";
+import { displayNameFor, effectiveDisplayNameSettings } from "@/lib/faculty/displayNameSettings";
 import { collegeCategoryOf } from "@/lib/colleges/category";
 import { experienceBreakdown, allPreviousExperienceEntries } from "@/lib/faculty/experienceCalc";
 import { normalizeAcademicProfile } from "@/lib/faculty/academicProfileCompat";
@@ -110,10 +110,10 @@ export async function GET(request: Request) {
         .filter(Boolean)
     );
     // An optional setting: the public page never fails because it could not be read (the usual name is shown).
-    let displaySettings = readDisplayNameSettings(undefined);
+    let displaySettings = effectiveDisplayNameSettings(undefined);
     try {
       const snap = await collegeRef?.collection("settings").doc("displayName").get();
-      displaySettings = readDisplayNameSettings(snap?.data());
+      displaySettings = effectiveDisplayNameSettings(snap?.data());
     } catch { /* keep the usual name */ }
     const ap = normalizeAcademicProfile(faculty.academicProfile);
     const joiningDate = isUserDoc ? (faculty as FMSUser).dateOfJoining : (faculty as FacultyMember).joiningDate;

@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
+import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
 import { ROLE_LABELS } from "@/types";
 import { Library, ArrowRight, BookOpen, ShieldCheck, AlertTriangle, CheckCircle2, Info } from "lucide-react";
 import type { HealthIssue } from "@/lib/subjects/health";
@@ -21,6 +22,7 @@ const QUICK_ACTIONS = [
 
 export default function AcademicsDashboard() {
   const user = useAuthStore((s) => s.user);
+  const { nameFor } = useFacultyDisplayNames();
   const router = useRouter();
   const [courseCount, setCourseCount] = useState<number | null>(null);
 
@@ -56,7 +58,7 @@ export default function AcademicsDashboard() {
       {/* Welcome header */}
       <div>
         <PageHeader
-          title={`Hello, ${user?.name ?? "there"}`}
+          title={`Hello, ${user ? nameFor("dashboardName", { uid: user.uid }, user.name) : "there"}`}
           description={ROLE_LABELS.ACADEMICS}
         />
 

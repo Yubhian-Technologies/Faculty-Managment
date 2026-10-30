@@ -200,6 +200,8 @@ export interface AllocationEntry {
   shortCode: string;
   name: string;
   subjectType?: string;
+  /** "Not in teaching load" on the subject: listed under Co-Curricular whatever its type says. */
+  isNonTeachingLoad?: boolean;
   hoursPerWeek?: number;
   faculty: string;
   classroom?: string;
@@ -212,15 +214,22 @@ export interface AllocationEntry {
  * previous copy kept only the first slot's `facultyName`, so a subject taught
  * by two faculty across sections, or split into lab batches, lost the second
  * one), plus the room and batch labels a split lab needs to be legible.
+ *
+ * `hoursPerWeek` is counted directly from the PUBLISHED slots passed in
+ * (distinct day+period pairs, so a lab split into parallel batches on the
+ * same period is one period, not two) - never the Teaching Assignment's own
+ * stored `hoursPerWeek` snapshot, which drifts the moment someone adds,
+ * removes, or merges a period on the timetable itself without separately
+ * re-editing the assignment. The published grid is the source of truth here.
  */
 export function buildAllocationList(
   slots: TimetableSlot[],
   opts: {
     subjects?: Map<string, Subject> | Subject[];
-    assignments?: { subjectId?: string; facultyName?: string; hoursPerWeek?: number; subjectType?: string }[];
+    assignments?: { subjectId?: string; facultyName?: string; subjectType?: string }[];
   } = {},
 ): AllocationEntry[] {
-  const byKey = new Map<string, AllocationEntry & { facultySet: Set<string> }>();
+  const byKey = new Map<string, AllocationEntry & { facultySet: Set<string>; periodKeys: Set<string> }>();
 
   for (const slot of slots) {
     const key = slot.subjectId || slot.subjectName;
@@ -236,17 +245,20 @@ export function buildAllocationList(
         shortCode: slotShortCode(slot, opts.subjects),
         name: subject?.name ?? slot.subjectName ?? "",
         subjectType: subject?.type ?? assign?.subjectType,
-        hoursPerWeek: assign?.hoursPerWeek,
+        ...(subject?.isNonTeachingLoad ? { isNonTeachingLoad: true } : {}),
+        hoursPerWeek: undefined,
         faculty: "",
         classroom: slot.classroom,
         labBatches: [],
         facultySet: new Set<string>(),
+        periodKeys: new Set<string>(),
       };
       byKey.set(key, entry);
     }
     if (slot.labBatch && !entry.labBatches.includes(slot.labBatch)) {
       entry.labBatches.push(slot.labBatch);
     }
+    entry.periodKeys.add(`${slot.day}|${slot.periodNumber}`);
     // The assigned faculty, not a one-day substitute - the allocation table
     // describes who owns the subject, and a leave cover would otherwise be
     // listed as a permanent second teacher.
@@ -254,8 +266,9 @@ export function buildAllocationList(
     if (name) entry.facultySet.add(name);
   }
 
-  return Array.from(byKey.values()).map(({ facultySet, ...rest }) => ({
+  return Array.from(byKey.values()).map(({ facultySet, periodKeys, ...rest }) => ({
     ...rest,
+    hoursPerWeek: periodKeys.size,
     // "Not assigned" only when genuinely nobody is - previously the literal
     // "Unassigned" was baked in, uppercase, whether or not that was true.
     faculty: Array.from(facultySet).join(" / ") || "Not assigned",
@@ -492,8 +505,14 @@ interface MergeableSlot {
   substituteForName?: string;
   substituteDate?: string;
   labBatch?: string;
+  /** The mid exam this period is scoped to (flexible cell) - shown after the faculty's name as "(Mid 1)". */
+  midScope?: number;
   cellColor?: string;
 }
+
+// "A. Kumar" -> "A. Kumar (Mid 1)" for a period scoped to one mid exam; unchanged otherwise.
+const withMid = (name: string | undefined, midScope: number | undefined) =>
+  name && midScope != null ? `${name} (Mid ${midScope})` : name;
 
 /**
  * Several faculty of ONE subject in the same cell (co-teaching, or a lab split into batches
@@ -510,9 +529,12 @@ export function mergeCoTaughtSlots<T extends MergeableSlot>(cellSlots: T[]): T[]
     groups.set(key, [...(groups.get(key) ?? []), s]);
   }
   return Array.from(groups.values()).map((group) => {
-    if (group.length === 1) return group[0];
+    if (group.length === 1) {
+      const only = group[0];
+      return only.midScope != null && !only.substituteFacultyName ? { ...only, facultyName: withMid(only.facultyName, only.midScope) } : only;
+    }
     const unique = (values: (string | undefined)[]) => Array.from(new Set(values.filter((v): v is string => !!v)));
-    const faculty = unique(group.map((g) => (g.substituteFacultyName ? `Sub: ${g.substituteFacultyName}` : g.facultyName)));
+    const faculty = unique(group.map((g) => (g.substituteFacultyName ? `Sub: ${g.substituteFacultyName}` : withMid(g.facultyName, g.midScope))));
     const batches = unique(group.map((g) => g.labBatch));
     // Only one half of a split subject may have been given a colour (the
     // picker sets it one teaching-assignment at a time) - a plain group[0]

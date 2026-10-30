@@ -5,7 +5,6 @@ import { AlertTriangle, CheckCircle2, Download, FileSpreadsheet, Loader2, Printe
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import { toCSV, downloadCSV } from "@/lib/utils/csv";
@@ -66,7 +65,6 @@ export function StudentStrengthDashboard() {
   const [loadedAt, setLoadedAt] = useState(0);
 
   const [filters, setFilters] = useState<StrengthFilters>({ status: "ENROLLED" });
-  const [showEmpty, setShowEmpty] = useState(false);
   const [search, setSearch] = useState("");
   const [isExporting, setIsExporting] = useState(false);
 
@@ -123,7 +121,7 @@ export function StudentStrengthDashboard() {
   const f = useMemo(() => (options ? sanitizeFilters(filters, options) : filters), [filters, options]);
 
   const summary = useMemo(() => (cells && meta ? summarize(cells, meta, f.status) : null), [cells, meta, f.status]);
-  const report = useMemo(() => (cells && meta ? buildReport(cells, meta, f, { includeEmptyDepartments: showEmpty }) : null), [cells, meta, f, showEmpty]);
+  const report = useMemo(() => (cells && meta ? buildReport(cells, meta, f) : null), [cells, meta, f]);
   const answer = useMemo(() => (cells ? totalFor(cells, f) : 0), [cells, f]);
   // Each course with its years, for the answer card - read from the same report
   // logic (configured-but-empty courses included, as an exact 0).
@@ -325,10 +323,6 @@ export function StudentStrengthDashboard() {
           <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-base font-semibold">Strength report - Department × Year</h2>
-              <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Checkbox checked={showEmpty} onCheckedChange={(v) => setShowEmpty(v === true)} />
-                Show departments with no students
-              </label>
             </div>
             {scoped && (
               <p className="text-xs text-muted-foreground">

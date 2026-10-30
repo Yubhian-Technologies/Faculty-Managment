@@ -3,6 +3,7 @@ import { noClassReason, timetableDayFor, type ClassDayInputs } from "@/lib/stude
 import { resolvePeriodCompletionStatus } from "@/lib/attendance/periodAttendanceStatus";
 import { istDateKey } from "@/lib/attendance/istTime";
 import { countsFromJoining } from "@/lib/studentAttendance/joiningDate";
+import { slotActiveOn, type MidWindows } from "@/lib/timetable/slotScope";
 
 // The timetable-based "classes held" denominator (audit F-25).
 //
@@ -39,6 +40,8 @@ export interface ExpectedSlot {
   activeFromISO?: string | null;
   /** Clock end of this slot's period ("HH:MM"), if its timing could be resolved. */
   endTime?: string | null;
+  /** The mid exam this slot is scoped to (see lib/timetable/slotScope.ts); absent = the whole semester. */
+  midScope?: number | null;
 }
 
 export interface ExpectedPeriod {
@@ -77,6 +80,8 @@ export function listExpectedPeriods(args: {
   to: string;
   calendar: Calendar;
   now?: Date;
+  /** Mid windows of the section's course-year, needed only when some slot has a midScope. */
+  midWindows?: MidWindows;
 }): ExpectedPeriod[] {
   const now = args.now ?? new Date();
   const today = istDateKey(now);
@@ -89,6 +94,8 @@ export function listExpectedPeriods(args: {
     for (const slot of args.slots) {
       if (slot.day !== day) continue;
       if (slot.activeFromISO && date < slot.activeFromISO) continue;
+      // A slot scoped to one mid only counts inside that mid's teaching stretch.
+      if (slot.midScope != null && !slotActiveOn({ midScope: slot.midScope }, date, args.midWindows ?? {})) continue;
       // Today's periods only count once they have ended - the same rule the
       // faculty "not posted" report and the cron use, so none of them disagree.
       if (date === today) {

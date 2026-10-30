@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { formatDisplayName, readDisplayNameSettings } from "@/lib/faculty/displayNameSettings";
+import { formatDisplayName, effectiveDisplayNameSettings } from "@/lib/faculty/displayNameSettings";
 
 // The faculty Display Names a screen or download swaps in for the Full Name (Settings > Website Display Name).
 // { names: { [facultyMemberId | loginUid]: "AV VENU GOPAL" } } - only people who filled in BOTH parts, and only when
@@ -20,19 +20,23 @@ export async function GET(request: Request) {
     );
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
-    const settings = readDisplayNameSettings((await collegeRef.collection("settings").doc("displayName").get()).data());
+    const settings = effectiveDisplayNameSettings((await collegeRef.collection("settings").doc("displayName").get()).data());
     if (!Object.values(settings).some(Boolean)) return NextResponse.json({ names: {} });
 
     const snap = await collegeRef.collection("facultyMembers").where("displaySurname", ">", "").get();
     const names: Record<string, string> = {};
+    const ownEmail = session.email?.trim().toLowerCase();
     for (const d of snap.docs) {
-      const f = d.data() as { displaySurname?: string; displayName?: string; honorific?: string; userUid?: string };
+      const f = d.data() as { displaySurname?: string; displayName?: string; honorific?: string; userUid?: string; collegeEmail?: string };
       const surname = f.displaySurname?.trim();
       const name = f.displayName?.trim();
       if (!surname || !name) continue;
       const shown = formatDisplayName(surname, name, f.honorific);
       names[d.id] = shown;
       if (f.userUid) names[f.userUid] = shown;
+      // A login whose faculty record is not linked by userUid (older HOD / Principal setups) is still matched by its college email,
+      // so the caller finds their own name under their login uid.
+      if (ownEmail && f.collegeEmail?.trim().toLowerCase() === ownEmail && !names[session.uid]) names[session.uid] = shown;
     }
     return NextResponse.json({ names });
   } catch (err) {

@@ -91,7 +91,16 @@ export async function publishSectionDraft(input: PublishInput): Promise<PublishO
     // here, the one place every draft->live transition goes through,
     // regardless of how the draft ended up stale.
     const validAssignmentIds = new Set(assignmentsSnap.docs.map((d) => d.id));
-    const publishable = draft.slots.filter((s) => validAssignmentIds.has(s.assignmentId));
+    // The same assignment twice in one cell is one placement recorded twice (it would get the
+    // same slot id), so keep the first rather than refusing the whole publish over it.
+    const seenPlacements = new Set<string>();
+    const publishable = draft.slots.filter((s) => {
+      if (!validAssignmentIds.has(s.assignmentId)) return false;
+      const key = `${cellOf(s.day, s.periodNumber)}:${s.assignmentId}`;
+      if (seenPlacements.has(key)) return false;
+      seenPlacements.add(key);
+      return true;
+    });
     const droppedCount = draft.slots.length - publishable.length;
     if (publishable.length === 0) {
       return {
@@ -183,6 +192,10 @@ export async function publishSectionDraft(input: PublishInput): Promise<PublishO
         ...(input.effectiveDate ? { effectiveDate: input.effectiveDate } : {}),
         ...(s.mergeWithNext ? { mergeWithNext: true } : {}),
         ...(s.displayCode ? { displayCode: s.displayCode } : {}),
+        // Flexible-cell fields (lab batch, pinned batch, mid scope) ride along; absent on every ordinary period.
+        ...(s.labBatch ? { labBatch: s.labBatch } : {}),
+        ...(s.batchPinned ? { batchPinned: true } : {}),
+        ...(s.midScope != null ? { midScope: s.midScope } : {}),
         createdAt: now,
         updatedAt: now,
       });

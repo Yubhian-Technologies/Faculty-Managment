@@ -21,7 +21,8 @@ import { mobileNoFromBody } from "@/lib/faculty/mobileNo";
 import { FieldValue } from "firebase-admin/firestore";
 import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
-import { resolveHonorific } from "@/lib/honorifics/validate";
+import { resolveHonorific, fetchActiveHonorificNames } from "@/lib/honorifics/validate";
+import { honorificForPhd } from "@/lib/faculty/phdHonorific";
 import { isSingleSourceCollege } from "@/lib/faculty/singleSource";
 import { resolvePreviousTeachingUpdate } from "@/lib/faculty/previousTeaching";
 import type { TrainingEntry } from "@/types";
@@ -203,6 +204,15 @@ export async function PATCH(request: Request) {
     }
     if (body.aicteFacultyId !== undefined) facultyUpdates.aicteFacultyId = body.aicteFacultyId.trim();
     if (body.highestQualification?.trim()) facultyUpdates.highestQualification = normalizeHighestQualification(body.highestQualification);
+    // Ph.D -> "Dr." (lib/faculty/phdHonorific.ts): only when this save sets the Highest Qualification, sends no honorific of its
+    // own, and none is stored yet. The display-name cascade below then carries it like any honorific.
+    if (body.honorific === undefined && typeof facultyUpdates.highestQualification === "string") {
+      const dr = honorificForPhd(
+        { isPhd: facultyUpdates.highestQualification === "Ph.D", honorific: (facultyDoc.data() as { honorific?: string }).honorific },
+        await fetchActiveHonorificNames(db, session.collegeId),
+      );
+      if (dr) facultyUpdates.honorific = dr;
+    }
     if (body.specialization !== undefined) facultyUpdates.specialization = body.specialization;
     if (body.additionalPhoneNumbers !== undefined) {
       facultyUpdates.additionalPhoneNumbers = body.additionalPhoneNumbers.filter((p) => p.number?.trim());

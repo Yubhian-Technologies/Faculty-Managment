@@ -176,7 +176,7 @@ export async function POST(request: Request) {
     // ...unless the section's faculty incharge set this lab to "no batch" - then the whole section attends together.
     const labBatch = effectiveLabBatch(
       windowCheck.slot.labBatch, await loadLabBatchModes(db, session.collegeId, [{ sectionId, subjectId: assignment.subjectId }]),
-      sectionId, assignment.subjectId, assignment.facultyId,
+      sectionId, assignment.subjectId, assignment.facultyId, windowCheck.slot.batchPinned,
     );
 
     // Resolve the roster BEFORE starting the transaction: the DRAFT-reconcile

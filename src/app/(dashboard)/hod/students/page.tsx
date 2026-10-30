@@ -101,12 +101,13 @@ function HodStudentsContent() {
   const [search, setSearch] = useState(restored.search);
   // The pickers below are a DRAFT; nothing is read until Load. `applied` is what the last Load asked
   // for (and what the table and the URL show); `nonce` makes a repeat Load re-read.
-  type Applied = { view: string; dept: string; core: string; course: string; year: string; search: string; nonce: number };
+  type Applied = { view: string; dept: string; core: string; course: string; year: string; search: string; rollFrom: string; rollTo: string; nonce: number };
   const [applied, setApplied] = useState<Applied | null>(() =>
     restored.load
       ? {
         view: restored.freshmanView, dept: restored.deptFilter, core: restored.coreDeptFilter, course: restored.courseFilter,
-        year: restored.yearFilter, search: restored.search.trim().toLowerCase(), nonce: 0,
+        year: restored.yearFilter, search: restored.search.trim().toLowerCase(),
+        rollFrom: restored.rollFrom, rollTo: restored.rollTo, nonce: 0,
       }
       : null
   );
@@ -206,16 +207,19 @@ function HodStudentsContent() {
   const [bulkPlan, setBulkPlan] = useState<BulkPlan | null>(null);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isBulkApplying, setIsBulkApplying] = useState(false);
-  // "Select by roll number range" - adds every currently-visible (filtered)
+  // "Select by Regd. No range" - adds every currently-visible (filtered)
   // student whose rollNumber falls between these two, inclusive, to the
   // existing selection (never replaces it, so it composes with ticking
   // individual rows or a previous range). Plain string comparison, not
-  // numeric - a real roll number is an alphanumeric code (e.g.
+  // numeric - a real Regd. No is an alphanumeric code (e.g.
   // "23471A0427"), and as long as the two ends share the same prefix/width
   // (the normal case for one section's contiguous block), lexicographic
   // order matches numeric order on the varying suffix.
-  const [rollFrom, setRollFrom] = useState("");
-  const [rollTo, setRollTo] = useState("");
+  // The same two boxes also narrow the list itself: "View Range" (or Load /
+  // Refresh) applies them as `applied.rollFrom/rollTo`, so only that block of
+  // Regd. Nos is listed. Either end may be left blank for an open range.
+  const [rollFrom, setRollFrom] = useState(restored.rollFrom);
+  const [rollTo, setRollTo] = useState(restored.rollTo);
 
   // Filter options and the Freshman's Department switch - the small
   // collections plus one cheap hodMeta request. No student is read here: the
@@ -268,6 +272,8 @@ function HodStudentsContent() {
   const filterQuery = useCallback((): URLSearchParams => {
     const params = new URLSearchParams();
     if (!applied) return params;
+    if (applied.rollFrom) params.set("rollFrom", applied.rollFrom);
+    if (applied.rollTo) params.set("rollTo", applied.rollTo);
     if (applied.view !== "none") {
       params.set("incoming", applied.view);
       return params;
@@ -324,7 +330,8 @@ function HodStudentsContent() {
   const listUrl = useMemo(
     () => buildHodStudentsListUrl({
       load: hasLoaded, freshmanView: appliedView, deptFilter: applied?.dept ?? "all", coreDeptFilter: applied?.core ?? "all",
-      courseFilter: applied?.course ?? "all", yearFilter: applied?.year ?? "all", search: applied?.search ?? "", page, pageSize,
+      courseFilter: applied?.course ?? "all", yearFilter: applied?.year ?? "all", search: applied?.search ?? "",
+      rollFrom: applied?.rollFrom ?? "", rollTo: applied?.rollTo ?? "", page, pageSize,
     }),
     [hasLoaded, appliedView, applied, page, pageSize]
   );
@@ -368,17 +375,22 @@ function HodStudentsContent() {
 
   const filtersChanged = applied !== null && (
     applied.view !== freshmanView || applied.search !== search.trim().toLowerCase()
+    || applied.rollFrom !== rollFrom.trim() || applied.rollTo !== rollTo.trim()
     || (freshmanView === "none" && (applied.dept !== deptFilter || applied.core !== coreDeptFilter
       || applied.course !== courseFilter || applied.year !== yearFilter))
   );
 
   // The only thing that reads: freeze the pickers as `applied`; the effect above fetches the first page.
-  function handleLoad() {
+  function handleLoad(range?: { rollFrom: string; rollTo: string }) {
     // The sections (for the Assign / Move / Distribute dialogs) are read once,
     // then again after a change - not on every Refresh.
     if (!sectionsLoaded.current) void loadSections();
     restorePageRef.current = 1;
+    const from = (range?.rollFrom ?? rollFrom).trim();
+    const to = (range?.rollTo ?? rollTo).trim();
     setApplied((prev) => ({
+      rollFrom: from,
+      rollTo: to,
       view: freshmanView,
       dept: freshmanView === "none" ? deptFilter : "all",
       core: freshmanView === "none" ? coreDeptFilter : "all",
@@ -851,15 +863,15 @@ function HodStudentsContent() {
     try {
       const { students: matches, truncated } = await fetchMatching({ rollFrom: lo, rollTo: hi });
       if (matches.length === 0) {
-        toast({ variant: "destructive", title: `No students found with roll numbers between ${lo} and ${hi}` });
+        toast({ variant: "destructive", title: `No students found with Regd. Nos between ${lo} and ${hi}` });
         return;
       }
       setAllSelected(matches, true);
       toast({
         variant: truncated ? "destructive" : "success",
         title: truncated
-          ? `Only the first ${matches.length} students in roll ${lo} - ${hi} were selected`
-          : `${matches.length} student${matches.length === 1 ? "" : "s"} selected (roll ${lo} - ${hi})`,
+          ? `Only the first ${matches.length} students with Regd. No ${lo} - ${hi} were selected`
+          : `${matches.length} student${matches.length === 1 ? "" : "s"} selected (Regd. No ${lo} - ${hi})`,
       });
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to select students" });
@@ -1022,7 +1034,7 @@ function HodStudentsContent() {
   }
 
   // Removes a student from their current section back to "Unassigned" -
-  // keeps the student record (roll number, department, course intact),
+  // keeps the student record (Regd. No, department, course intact),
   // unlike the row's separate delete action which removes them outright.
   async function handleUnassign() {
     if (!assignTarget) return;
@@ -1147,7 +1159,7 @@ function HodStudentsContent() {
         </div>
       ),
     },
-    { key: "rollNumber", header: "Roll No", render: (r) => <span className="font-medium">{r.rollNumber || "—"}</span> },
+    { key: "rollNumber", header: "Regd. No", render: (r) => <span className="font-medium">{r.rollNumber || "—"}</span> },
     { key: "name", header: "Name" },
     { key: "department", header: "Department", hideOnMobile: true, render: (r) => <span className="text-sm text-muted-foreground">{r.department}</span> },
     {
@@ -1161,18 +1173,6 @@ function HodStudentsContent() {
       // can exist under two different courses).
       render: (r) => r.course
         ? <span className="text-sm text-muted-foreground">{r.course}</span>
-        : <span className="text-sm text-muted-foreground/40">—</span>,
-    },
-    {
-      key: "secondaryDepartment",
-      header: "Core Dept",
-      hideOnMobile: true,
-      // Only ever set for a shared-first-year student pre-registered to their
-      // real branch (e.g. "cse" under "BS-Mathematics") - a plain department's
-      // students, and a first-year already sectioned into their branch, carry
-      // none, so this reads as a blank dash for them.
-      render: (r) => r.secondaryDepartment
-        ? <span className="text-sm text-muted-foreground">{r.secondaryDepartment}</span>
         : <span className="text-sm text-muted-foreground/40">—</span>,
     },
     {
@@ -1218,7 +1218,7 @@ function HodStudentsContent() {
           <Button variant="ghost" size="sm" onClick={() => openAssign(r)} title={r.section ? "Move to a different section" : "Assign to a section"}>
             <ArrowRightLeft className="h-3.5 w-3.5" />
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => openEdit(r)} title="Set roll number / status / lab batch">
+          <Button variant="ghost" size="sm" onClick={() => openEdit(r)} title="Set Regd. No / status / lab batch">
             <Pencil className="h-3.5 w-3.5" />
           </Button>
         </div>
@@ -1234,7 +1234,7 @@ function HodStudentsContent() {
   const studentsHeader = (
     <PageHeader
       title="Students"
-      description="Your department's students, plus every branch grouped under it."
+      description="View and manage student records across your department and its associated branches."
       actions={<StudentsViewTabs tabs={HOD_VIEWS} value={view} onChange={setView} />}
     />
   );
@@ -1282,7 +1282,7 @@ function HodStudentsContent() {
                 surname (first word of their name) and split evenly across those sections, earliest surnames
                 first. Re-running this can move a student who was already in one of the picked sections to
                 another, so the whole group stays in surname order as new students are imported later.
-                Sections you don&apos;t pick, and roll numbers, are left untouched.
+                Sections you don&apos;t pick, and Regd. Nos, are left untouched.
               </p>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
@@ -1460,7 +1460,7 @@ function HodStudentsContent() {
           ) : (
             <>
               <span className="text-xs text-muted-foreground">
-                Tick students below to move or assign several to a section at once.
+                Select students to move or assign multiple records to a section at once.
               </span>
               {hasLoaded && unassignedTotal > 0 && (
                 <Button size="sm" variant="outline" className="ml-auto" onClick={() => void selectAllUnassigned()} disabled={isSelecting}>
@@ -1470,23 +1470,49 @@ function HodStudentsContent() {
             </>
           )}
           <div className="flex w-full flex-wrap items-center gap-2 border-t pt-2 mt-1">
-            <span className="text-xs text-muted-foreground shrink-0">Select by roll no. range:</span>
+            <span className="text-xs text-muted-foreground shrink-0">Select by Regd. No. range:</span>
             <Input
-              placeholder="From roll no."
+              placeholder="From Regd. No."
               value={rollFrom}
               onChange={(e) => setRollFrom(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleLoad(); }}
               className="h-8 w-36"
             />
             <span className="text-xs text-muted-foreground">to</span>
             <Input
-              placeholder="To roll no."
+              placeholder="To Regd. No."
               value={rollTo}
               onChange={(e) => setRollTo(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleLoad(); }}
               className="h-8 w-36"
             />
+            {/* View Range lists only that block of Regd. Nos (either end may be
+                blank); Select Range ticks them in the list as before. */}
+            <Button size="sm" disabled={(!rollFrom.trim() && !rollTo.trim()) || isFetching || isLoading} onClick={() => handleLoad()}>
+              View Range
+            </Button>
             <Button size="sm" variant="outline" disabled={!rollFrom.trim() || !rollTo.trim() || isSelecting} onClick={() => void selectRollRange()}>
               Select Range
             </Button>
+            {(rollFrom || rollTo) && (
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={isFetching || isLoading}
+                onClick={() => {
+                  setRollFrom("");
+                  setRollTo("");
+                  if (applied?.rollFrom || applied?.rollTo) handleLoad({ rollFrom: "", rollTo: "" });
+                }}
+              >
+                Clear range
+              </Button>
+            )}
+            {(applied?.rollFrom || applied?.rollTo) && (
+              <span className="text-xs text-muted-foreground">
+                Showing Regd. No {applied.rollFrom || "start"} - {applied.rollTo || "end"}
+              </span>
+            )}
           </div>
         </div>
       )}
@@ -1498,7 +1524,7 @@ function HodStudentsContent() {
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search by roll number or name..."
+              placeholder="Search by Regd. No or name..."
               value={search}
               onChange={(e) => onSearchChange(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") handleLoad(); }}
@@ -1527,7 +1553,7 @@ function HodStudentsContent() {
                 </Select>
               </div>
             )}
-            <Button type="button" onClick={handleLoad} disabled={isFetching || isLoading} className="whitespace-nowrap">
+            <Button type="button" onClick={() => handleLoad()} disabled={isFetching || isLoading} className="whitespace-nowrap">
               {isFetching ? "Loading…" : filtersChanged ? "Apply filters" : hasLoaded ? "Refresh" : "Load"}
             </Button>
           </div>
@@ -1536,9 +1562,9 @@ function HodStudentsContent() {
         {!hasLoaded ? (
           <div className="flex flex-col items-center justify-center py-20 text-center border rounded-lg bg-card">
             <Users className="h-10 w-10 text-muted-foreground mb-3" />
-            <p className="font-medium text-base">Click Load to view students</p>
+            <p className="font-medium text-base">No Student Records Loaded</p>
             <p className="text-sm text-muted-foreground mt-1 max-w-sm">
-              Pick a course, department or year above (or leave them as all) and click Load. Students come in pages, so only the ones you look at are fetched.
+              Select the required filters and click Load to view student records.
             </p>
           </div>
         ) : isFetching && students.length === 0 ? (

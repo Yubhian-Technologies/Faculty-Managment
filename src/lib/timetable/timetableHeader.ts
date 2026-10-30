@@ -149,7 +149,9 @@ const TYPE_ORDER: SubjectType[] = ["THEORY", "PRACTICAL", "TUTORIAL", "PROJECT",
 export function groupAllocationByType(allocation: AllocationEntry[]): { label: string; entries: AllocationEntry[] }[] {
   const byType = new Map<SubjectType, AllocationEntry[]>();
   for (const a of allocation) {
-    const type = (TYPE_ORDER as string[]).includes(a.subjectType ?? "")
+    const type = a.isNonTeachingLoad
+      ? "NON_TEACHING"
+      : (TYPE_ORDER as string[]).includes(a.subjectType ?? "")
       ? (a.subjectType as SubjectType)
       : /\b(lab|laboratory|practical)\b/i.test(a.name) ? "PRACTICAL" : "THEORY";
     byType.set(type, [...(byType.get(type) ?? []), a]);

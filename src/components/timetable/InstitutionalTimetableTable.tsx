@@ -10,9 +10,10 @@ import { WeekNavigator } from "@/components/timetable/WeekNavigator";
 import { buildSectionTimetablePdfHtml } from "@/lib/timetable/sectionTimetablePdf";
 import { downloadSectionTimetableXlsx } from "@/lib/timetable/timetableExport";
 import { resolveLogoUrl } from "@/lib/timetable/logoAsset";
-import { renderHtmlToPdf } from "@/lib/pdf/htmlToPdf";
+import { renderHtmlToPdf, fitPrintWindowToOnePage } from "@/lib/pdf/htmlToPdf";
 import { yearSemesterLabelIn } from "@/lib/academic/format";
 import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
+import { useFacultyDesignations, withDesignation } from "@/hooks/useFacultyDesignations";
 import { slotsWithDisplayNames, assignmentsWithDisplayNames } from "@/lib/faculty/displayNameApply";
 import { SUBJECT_COLORS, isSubjectColor } from "@/lib/timetable/subjectColors";
 import {
@@ -108,10 +109,13 @@ export function InstitutionalTimetableTable({
   const { nameFor } = useFacultyDisplayNames();
   const slots = useMemo(() => slotsWithDisplayNames(slotsProp, "sectionTimetable", nameFor), [slotsProp, nameFor]);
   const assignments = useMemo(() => assignmentsWithDisplayNames(assignmentsProp, "sectionTimetable", nameFor), [assignmentsProp, nameFor]);
+  // The Class I/C's designation is fetched from the faculty data and printed beside the name: "Mrs.M.SRILAKSHMI (Assistant Professor)".
+  const designationOf = useFacultyDesignations([section?.facultyInchargeUid]);
+  const inchargeDesignation = designationOf(section?.facultyInchargeUid);
   const classInchargeName = useMemo(() => {
     const usual = (classInchargeNameProp && classInchargeNameProp !== "—" ? classInchargeNameProp : section?.facultyInchargeName) || "";
-    return usual ? nameFor("sectionTimetable", { uid: section?.facultyInchargeUid }, usual) : classInchargeNameProp;
-  }, [classInchargeNameProp, section?.facultyInchargeName, section?.facultyInchargeUid, nameFor]);
+    return usual ? withDesignation(nameFor("sectionTimetable", { uid: section?.facultyInchargeUid }, usual), inchargeDesignation) : classInchargeNameProp;
+  }, [classInchargeNameProp, section?.facultyInchargeName, section?.facultyInchargeUid, nameFor, inchargeDesignation]);
   const activeCollegeName = collegeName || collegeInfo?.name || "";
   const activeCollegeCode = collegeCode ?? (collegeInfo?.code || "");
   const activeAffiliation = affiliation ?? (collegeInfo?.affiliation || "");
@@ -252,7 +256,7 @@ export function InstitutionalTimetableTable({
     try {
       const html = buildSectionTimetablePdfHtml(exportMeta);
       const filename = `${fileBase}.pdf`;
-      await renderHtmlToPdf(html, filename);
+      await renderHtmlToPdf(html, filename, { fitOnePage: true });
       toast({ title: "Timetable downloaded", description: `Saved as ${filename}` });
     } catch (err) {
       console.error(err);
@@ -296,6 +300,7 @@ export function InstitutionalTimetableTable({
     printWindow.document.close();
     printWindow.focus();
     setTimeout(() => {
+      fitPrintWindowToOnePage(printWindow);
       printWindow.print();
     }, 400);
   }

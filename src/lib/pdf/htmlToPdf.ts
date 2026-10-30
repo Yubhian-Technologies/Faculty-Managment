@@ -367,6 +367,12 @@ function repeatTableHeaders(target: HTMLElement, pageHeightPx: number, laterPage
   }
 }
 
+export interface PdfRenderOptions {
+  /** Keep the whole document on ONE A4 page: when it is taller than a page it is scaled down (never cut, never split),
+   *  centred, instead of continuing on a second page. A document that already fits is left at full size. */
+  fitOnePage?: boolean;
+}
+
 /** Renders `html` off-screen, captures it as a canvas, and slices it into A4
  *  pages inside a jsPDF document. Shared core for both renderHtmlToPdf (saves
  *  to disk) and renderHtmlToPdfBlob (returns bytes, e.g. to attach to an email) —
@@ -376,7 +382,7 @@ function repeatTableHeaders(target: HTMLElement, pageHeightPx: number, laterPage
  *  of starting a fresh one (see renderMultiHtmlToPdf below) - every page this
  *  call adds, including its first, goes through pdf.addPage() in that case,
  *  since the passed-in document already has at least one page of its own. */
-async function renderHtmlToPdfDocument(html: string, existingPdf?: jsPDF): Promise<jsPDF> {
+async function renderHtmlToPdfDocument(html: string, existingPdf?: jsPDF, opts: PdfRenderOptions = {}): Promise<jsPDF> {
   const container = document.createElement("div");
   container.style.position = "fixed";
   container.style.top = "0";
@@ -418,13 +424,13 @@ async function renderHtmlToPdfDocument(html: string, existingPdf?: jsPDF): Promi
     const pageHeaderEl = target.querySelector<HTMLElement>(".pdf-page-header");
     const pageHeaderPx = pageHeaderEl ? Math.ceil(pageHeaderEl.getBoundingClientRect().height) * RENDER_SCALE : 0;
     const laterPageHeightPx = pageHeightPx - pageHeaderPx;
-    repeatTableHeaders(target, pageHeightPx, laterPageHeightPx);
+    if (!opts.fitOnePage) repeatTableHeaders(target, pageHeightPx, laterPageHeightPx);
     const totalCss = Math.ceil(target.getBoundingClientRect().height);
     iframe.style.height = `${totalCss + 40}px`;
 
     // Canvas-px (CSS px x RENDER_SCALE) geometry, as the break helpers expect.
     const totalHeight = totalCss * RENDER_SCALE;
-    const breaks = computePageBreaks(totalHeight, pageHeightPx, atomicRanges(target, pageHeightPx), laterPageHeightPx);
+    const breaks = opts.fitOnePage ? [totalHeight] : computePageBreaks(totalHeight, pageHeightPx, atomicRanges(target, pageHeightPx), laterPageHeightPx);
 
     // Extract link positions while the iframe is still in the DOM - before
     // the finally block removes it.
@@ -470,7 +476,13 @@ async function renderHtmlToPdfDocument(html: string, existingPdf?: jsPDF): Promi
       if (existingPdf || i > 0) pdf.addPage();
       const offsetMm = i > 0 && pageHeaderImg ? pageHeaderMm : 0;
       if (offsetMm > 0 && pageHeaderImg) pdf.addImage(pageHeaderImg, "JPEG", 0, 0, A4_WIDTH_MM, pageHeaderMm);
-      pdf.addImage(imgData, "JPEG", 0, offsetMm, A4_WIDTH_MM, sliceHeightPx / pxPerMm);
+      if (opts.fitOnePage && sliceHeightPx > pageHeightPx) {
+        // Taller than one page: shrink uniformly so every line still shows, centred across the page width.
+        const f = pageHeightPx / sliceHeightPx;
+        pdf.addImage(imgData, "JPEG", (A4_WIDTH_MM - A4_WIDTH_MM * f) / 2, 0, A4_WIDTH_MM * f, A4_HEIGHT_MM);
+      } else {
+        pdf.addImage(imgData, "JPEG", 0, offsetMm, A4_WIDTH_MM, sliceHeightPx / pxPerMm);
+      }
 
       // Stamp invisible clickable hyperlink rectangles over each link on this page
       for (const ann of linkAnnotations) {
@@ -489,8 +501,8 @@ async function renderHtmlToPdfDocument(html: string, existingPdf?: jsPDF): Promi
 }
 
 /** Renders `html` to a PDF and saves it to disk as `filename` (should end in .pdf). */
-export async function renderHtmlToPdf(html: string, filename: string): Promise<void> {
-  const pdf = await renderHtmlToPdfDocument(html);
+export async function renderHtmlToPdf(html: string, filename: string, opts?: PdfRenderOptions): Promise<void> {
+  const pdf = await renderHtmlToPdfDocument(html, undefined, opts);
   pdf.save(filename);
 }
 
@@ -498,11 +510,11 @@ export async function renderHtmlToPdf(html: string, filename: string): Promise<v
  *  combined PDF (each document's own pages land back-to-back, in order) - e.g.
  *  every department's section timetable bundled into a single downloadable
  *  file instead of one PDF per section. */
-export async function renderMultiHtmlToPdf(htmls: string[], filename: string): Promise<void> {
+export async function renderMultiHtmlToPdf(htmls: string[], filename: string, opts?: PdfRenderOptions): Promise<void> {
   if (htmls.length === 0) throw new Error("Nothing to export.");
   let pdf: jsPDF | undefined;
   for (const html of htmls) {
-    pdf = await renderHtmlToPdfDocument(html, pdf);
+    pdf = await renderHtmlToPdfDocument(html, pdf, opts);
   }
   pdf!.save(filename);
 }
@@ -512,4 +524,14 @@ export async function renderMultiHtmlToPdf(htmls: string[], filename: string): P
 export async function renderHtmlToPdfBlob(html: string): Promise<Blob> {
   const pdf = await renderHtmlToPdfDocument(html);
   return pdf.output("blob");
+}
+
+/** The browser's Print route for a one-page document (window opened on the HTML): keeps a short page as it is,
+ *  and shrinks (CSS zoom) a tall one so it still prints on ONE sheet. Call before window.print(). */
+export function fitPrintWindowToOnePage(win: Window): void {
+  const doc = win.document;
+  const target = (doc.querySelector(".page") as HTMLElement | null) ?? doc.body;
+  const a4Css = (A4_HEIGHT_MM / 25.4) * 96;
+  const h = target.getBoundingClientRect().height;
+  if (h > a4Css - 2) doc.body.style.zoom = String((a4Css - 2) / h);
 }
