@@ -1,7 +1,7 @@
 "use client";
 
 import { FacultyTimetableLookup } from "@/components/timetable/FacultyTimetableLookup";
-import { FlexibleCellDialog } from "@/components/timetable/FlexibleCellDialog";
+import { AttendanceAssigneeDialog } from "@/components/timetable/AttendanceAssigneeDialog";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -149,9 +149,11 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
   // they are saved as a single cell (the slots carry mergeWithNext; every view and
   // download draws them merged). `mergePick` is the current selection.
   const [mergeMode, setMergeMode] = useState(false);
-  // "Flexible cell": several faculty / batches / mid scopes in one cell (FlexibleCellDialog).
-  const [flexOpen, setFlexOpen] = useState(false);
-  const [flexInitial, setFlexInitial] = useState<{ day: DayOfWeek; start: number; end: number } | undefined>();
+  // "Attendance assignee": pick cells on the grid (assignMode), press Done, then the dialog (assignOpen) asks
+  // subject -> faculty -> batch -> mid for those cells.
+  const [assignMode, setAssignMode] = useState(false);
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [assignPick, setAssignPick] = useState<{ day: DayOfWeek; period: number }[]>([]);
   const [mergePick, setMergePick] = useState<{ day: DayOfWeek; periods: number[] }>({ day: "MON", periods: [] });
   // "w.e.f" date printed on the timetable, asked for in the publish dialog.
   const [effectiveDate, setEffectiveDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -348,6 +350,22 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
           : Array.from(new Set([...p.periods, ...covered])).sort((a, b) => a - b),
       };
     });
+  }
+
+  // A merged (wide) cell covers several periods; picking it picks all of them.
+  function toggleAssignPick(d: DayOfWeek, firstPeriod: number, span: number) {
+    const covered = Array.from({ length: span }, (_, i) => ({ day: d, period: firstPeriod + i }));
+    setAssignPick((p) => {
+      const has = covered.every((c) => p.some((x) => x.day === c.day && x.period === c.period));
+      return has ? p.filter((x) => !covered.some((c) => c.day === x.day && c.period === x.period)) : [...p, ...covered.filter((c) => !p.some((x) => x.day === c.day && x.period === c.period))];
+    });
+  }
+
+  // Subjects held by EVERY picked cell (a draft slot), so the chosen one can be re-assigned in all of them.
+  function assignSubjectsOf(cells: { day: DayOfWeek; period: number }[]) {
+    const per = cells.map((c) => new Map(rawCellEntriesFor(c.day, c.period).filter((e) => !e.isPinned).map((e) => [e.slot.subjectId, e.slot.subjectName] as const)));
+    if (per.length === 0) return [];
+    return Array.from(per[0], ([id, name]) => ({ id, name })).filter((s) => per.every((m) => m.has(s.id)));
   }
 
   async function patchMerge(action: "merge" | "unmerge", day: DayOfWeek, assignmentId: string, from: number, to: number): Promise<boolean> {
@@ -1182,31 +1200,20 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
           )}
           {mode === "draft" && (
             <div className="ml-auto flex flex-wrap items-center gap-2">
-              {isEditing && !mergeMode && myAssignmentIds.length > 0 && (
-                <Button size="sm" variant="outline" onClick={() => { setFlexInitial(undefined); setFlexOpen(true); setSelected(null); }}>
-                  Flexible cell
+              {isEditing && !mergeMode && myAssignmentIds.length > 0 && (!assignMode ? (
+                <Button size="sm" variant="outline" onClick={() => { setAssignMode(true); setAssignPick([]); setSelected(null); }}>
+                  Attendance assignee
                 </Button>
-              )}
-              {/* Merge mode doubles as the multi-cell picker: the selected back-to-back periods start the dialog. */}
-              {isEditing && mergeMode && myAssignmentIds.length > 0 && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={mergePick.periods.length < 1}
-                  onClick={() => {
-                    const p = [...mergePick.periods].sort((a, b) => a - b);
-                    if (p.some((x, i) => i > 0 && x !== p[i - 1] + 1)) {
-                      toast({ variant: "destructive", title: "Pick back-to-back periods", description: "Select adjacent periods on the same day (a break in between is fine)." });
-                      return;
-                    }
-                    setFlexInitial({ day: mergePick.day, start: p[0], end: p[p.length - 1] });
-                    setFlexOpen(true);
-                  }}
-                >
-                  Flexible cell for selection
-                </Button>
-              )}
-              {isEditing && (!mergeMode ? (
+              ) : (
+                <>
+                  <span className="text-xs text-muted-foreground">
+                    Click the cells{assignPick.length > 0 ? ` (${assignPick.length} selected)` : ""}, then press Done
+                  </span>
+                  <Button size="sm" disabled={assignPick.length < 1} onClick={() => setAssignOpen(true)}>Done</Button>
+                  <Button size="sm" variant="ghost" onClick={() => { setAssignMode(false); setAssignPick([]); }}>Cancel</Button>
+                </>
+              ))}
+              {isEditing && !assignMode && (!mergeMode ? (
                 <Button size="sm" variant="outline" onClick={() => { setMergeMode(true); setSelected(null); setMergePick({ day: "MON", periods: [] }); }}>
                   Merge cells
                 </Button>
@@ -1439,15 +1446,21 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
                         key={`period_${row.period}`}
                         colSpan={spans.get(idx) ?? 1}
                         // In "Merge cells" mode a click on an occupied cell picks it for merging.
-                        onClick={mergeMode && isEditing && entries.length > 0 ? () => toggleMergePick(d, row.period, spans.get(idx) ?? 1) : undefined}
+                        onClick={
+                          mergeMode && isEditing && entries.length > 0 ? () => toggleMergePick(d, row.period, spans.get(idx) ?? 1)
+                            : assignMode && isEditing && entries.length > 0 ? () => toggleAssignPick(d, row.period, spans.get(idx) ?? 1)
+                            : undefined
+                        }
                         className={[
                           "p-2 align-top",
-                          mergeMode && entries.length > 0 ? "cursor-pointer" : "",
+                          (mergeMode || assignMode) && entries.length > 0 ? "cursor-pointer" : "",
+                          assignMode && Array.from({ length: spans.get(idx) ?? 1 }, (_, i) => row.period + i).every((x) => assignPick.some((c) => c.day === d && c.period === x))
+                            ? "bg-primary/15 ring-2 ring-inset ring-primary" : "",
                           mergeMode && mergePick.day === d && Array.from({ length: spans.get(idx) ?? 1 }, (_, i) => row.period + i).every((x) => mergePick.periods.includes(x))
                             ? "bg-primary/15 ring-2 ring-inset ring-primary" : "",
                         ].join(" ")}
                       >
-                        <div className={mergeMode ? "space-y-1 pointer-events-none" : "space-y-1"}>
+                        <div className={mergeMode || assignMode ? "space-y-1 pointer-events-none" : "space-y-1"}>
                             {entries.map((entry, entryIdx) => {
                               // Faculty of one subject sharing this cell: one block, subject once.
                               const sameSubject = entries.filter((e) => e.slot.subjectId === entry.slot.subjectId);
@@ -1694,18 +1707,15 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
         </DialogContent>
       </Dialog>
 
-      {/* A subject with more than one faculty: all of them in this cell together (co-teaching), or only the one picked. */}
-      {flexOpen && <FlexibleCellDialog
-        open={flexOpen}
-        onOpenChange={setFlexOpen}
+      {/* Attendance assignee: who takes the picked cells - subject, faculty, batch, mid. Mounted fresh on each opening. */}
+      {assignOpen && <AttendanceAssigneeDialog
+        onOpenChange={setAssignOpen}
         sectionId={sectionId}
         semesterBody={semesterBody}
+        cells={assignPick}
+        subjects={assignSubjectsOf(assignPick)}
         assignments={assignments.filter((a) => myAssignmentIds.includes(a.id))}
-        days={days}
-        numberOfPeriods={timing?.numberOfPeriods ?? 0}
-        initial={flexInitial}
-        occupantsAt={(d, p) => rawCellEntriesFor(d, p).map((e) => ({ subjectId: e.slot.subjectId, assignmentId: e.slot.assignmentId }))}
-        onApplied={(s) => setDraft((d) => (d ? { ...d, slots: s, status: "DRAFT" } : d))}
+        onApplied={(s) => { setDraft((d) => (d ? { ...d, slots: s, status: "DRAFT" } : d)); setAssignMode(false); setAssignPick([]); }}
       />}
 
       <Dialog open={sharePrompt !== null} onOpenChange={(o) => { if (!o && busy === null) setSharePrompt(null); }}>
