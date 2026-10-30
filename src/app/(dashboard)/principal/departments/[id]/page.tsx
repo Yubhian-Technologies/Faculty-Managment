@@ -7,7 +7,6 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,7 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { FreshmanDepartmentBadge } from "@/components/shared/FreshmanDepartmentBadge";
 import { DepartmentChipList } from "@/components/shared/DepartmentChipList";
-import { resolveDepartmentCourseScope, getFreshmanDepartmentIds, type DepartmentWithId } from "@/lib/college/academicStructure";
+import { resolveDepartmentCourseScope, type DepartmentWithId } from "@/lib/college/academicStructure";
+import { deriveRoleOnly } from "@/lib/departments/departmentRole";
 import { DepartmentCourseCard } from "@/components/academics/DepartmentCourseCard";
 import { SemesterSubjectsDialog } from "@/components/academics/SemesterSubjectsDialog";
 import { CourseYearTimingForm } from "@/components/academics/CourseYearTimingForm";
@@ -52,15 +52,16 @@ export default function DepartmentDetailPage() {
   const [subjectAssignments, setSubjectAssignments] = useState<SubjectSemesterAssignment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // "Managed By" - the id of the sub-department (e.g. "BS-E") that manages
-  // THIS department (e.g. "CSE") via the sub-department's own
-  // Department.managedDepartments, and the years it manages it for (the
-  // sub-department's own assignedYears - see managerTeachingYears,
-  // lib/departments/managedBranches.ts). "" means unmanaged. Hydrated from the
-  // current manager (if any) in load() below, same pattern as every other
-  // field on this page.
+  // "Managed By" - the id of the neighbour department (e.g. "BS-E") connected
+  // to THIS department (e.g. "CSE") via PATCH .../neighbour (src/lib/
+  // departments/neighbourConnection.ts). "" means unconnected. Hydrated from
+  // the current manager (if any) in load() below, same pattern as every other
+  // field on this page. The YEARS it manages for are that neighbour's own
+  // Years Taught (configured on the neighbour's own Edit Department page, not
+  // here) - shown read-only below, never editable from this card, since
+  // changing them would silently change every OTHER branch that same
+  // neighbour already manages too.
   const [managerDeptId, setManagerDeptId] = useState("");
-  const [managerYears, setManagerYears] = useState<number[]>([]);
   const [isSavingManager, setIsSavingManager] = useState(false);
 
   const [deletingCourse, setDeletingCourse] = useState<Course | null>(null);
@@ -146,7 +147,6 @@ export default function DepartmentDetailPage() {
       // one, if any - see the Managed By card below.
       const manager = dept ? allDepts.find((d) => (d.managedDepartments ?? []).includes(dept.name)) ?? null : null;
       setManagerDeptId(manager?.id ?? "");
-      setManagerYears(manager?.assignedYears ?? []);
       // The courses API also merges in a *feeder's* courses (a department that
       // cross-lists this one via secondaryDepartments, e.g. Basic Science
       // feeding AIDS for the shared first year) - useful for an HOD picker
@@ -392,72 +392,52 @@ export default function DepartmentDetailPage() {
     }
   }
 
-  // The pool "Managed By" picks from: every real sub-department
-  // (Department.parentDepartmentId set - the VIT shape, "Basic Science" split
-  // into "Basic Science - Maths" etc) PLUS every standalone Freshman
-  // department (isCommonYearDepartment, no parent - the VWU shape, e.g.
-  // "Basic Science - Physics" independently cross-listing branches). Without
-  // the second half, a college using only the standalone shape could never
-  // reach this card's manager picker at all - every qualifying department
-  // would be filtered out for lacking a parentDepartmentId it was never meant
-  // to have. Deliberately college-wide, not limited to a pre-configured pool
-  // on either side: the whole point of this card is to replace the old
-  // two-screen, pool-gated checkbox flow with one direct connection made here.
+  // The pool "Managed By" picks from: every department actually classified
+  // NEIGHBOUR or NEIGHBOUR_SUB (deriveRoleOnly, src/lib/departments/
+  // departmentRole.ts) - i.e. a department already feeder-shaped (it
+  // manages/cross-lists at least one OTHER department). Deliberately NOT
+  // every department with a parentDepartmentId - that would also offer a
+  // true CHILD (e.g. "CSE[Cyber Security]", "AIML"), which is never a
+  // legitimate manager of anything. Deliberately college-wide, not limited
+  // to a pre-configured pool: the whole point of this card is to replace the
+  // old two-screen, pool-gated checkbox flow with one direct connection made
+  // here.
   const subDepartmentOptions = useMemo(() => {
-    const freshmanIds = getFreshmanDepartmentIds(allDepartments as DepartmentWithId[]);
     return allDepartments
-      .filter((d) => d.id !== id && (d.parentDepartmentId || freshmanIds.has(d.id)))
+      .filter((d) => d.id !== id)
+      .filter((d) => {
+        const role = deriveRoleOnly(d, allDepartments);
+        return role === "NEIGHBOUR" || role === "NEIGHBOUR_SUB";
+      })
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [allDepartments, id]);
 
-  // Years offered below - this department's own longest course, same bound
-  // YearsTaughtAndSecondaryFields uses, so a 5-year course isn't capped at 4.
-  const managerYearOptions = useMemo(() => {
-    const maxYear = Math.max(4, ...courses.map((c) => c.durationYears || 0));
-    return Array.from({ length: maxYear }, (_, i) => i + 1);
-  }, [courses]);
-
-  function toggleManagerYear(year: number, checked: boolean) {
-    setManagerYears((prev) => (checked ? [...prev, year].sort((a, b) => a - b) : prev.filter((y) => y !== year)));
-  }
+  // The selected neighbour's OWN Years Taught - read-only here. Years belong
+  // to the neighbour itself (every branch it manages shares the same years),
+  // so they're configured on ITS OWN Edit Department page, never from here.
+  const selectedManagerYears = useMemo(() => {
+    const manager = allDepartments.find((d) => d.id === managerDeptId);
+    return manager?.assignedYears ?? [];
+  }, [allDepartments, managerDeptId]);
 
   async function handleSaveManager() {
     if (!department) return;
     setIsSavingManager(true);
     try {
-      const oldManager = allDepartments.find((d) => (d.managedDepartments ?? []).includes(department.name)) ?? null;
+      const res = await fetch(`/api/college/departments/${department.id}/neighbour`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ neighbourDepartmentId: managerDeptId || null }),
+      });
+      const json = await res.json() as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Failed to save");
+
       const newManager = managerDeptId ? allDepartments.find((d) => d.id === managerDeptId) ?? null : null;
-
-      // Unclaim from the previous manager FIRST when it's changing - the
-      // server's branch-claim check (findBranchClaimConflicts) would otherwise
-      // reject the new manager's claim while the old one still lists it.
-      if (oldManager && oldManager.id !== newManager?.id) {
-        const res = await fetch("/api/college/departments", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            deptId: oldManager.id,
-            managedDepartments: (oldManager.managedDepartments ?? []).filter((n) => n !== department.name),
-          }),
-        });
-        if (!res.ok) throw new Error(((await res.json()) as { error?: string }).error ?? "Failed to unlink previous manager");
-      }
-
-      if (newManager) {
-        const names = Array.from(new Set([...(newManager.managedDepartments ?? []), department.name]));
-        const res = await fetch("/api/college/departments", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ deptId: newManager.id, managedDepartments: names, assignedYears: managerYears }),
-        });
-        if (!res.ok) throw new Error(((await res.json()) as { error?: string }).error ?? "Failed to connect managing department");
-      }
-
       toast({
         variant: "success",
         title: newManager
-          ? `${department.name} is now managed by ${newManager.name}`
-          : `${department.name} is no longer managed by another department`,
+          ? `${department.name} is now connected to ${newManager.name}`
+          : `${department.name} is no longer connected to a neighbour`,
       });
       await load();
     } catch (err) {
@@ -566,14 +546,14 @@ export default function DepartmentDetailPage() {
           <CardHeader>
             <CardTitle className="text-base">Managed By</CardTitle>
             <CardDescription>
-              Connect {department.name} to a sub-department (e.g. a shared first-year Basic Science branch) that
-              will create and manage its sections, students, subjects, teaching assignments and timetable for the
-              years picked below. {department.name}&apos;s own HOD keeps every other year.
+              Connect {department.name} to a neighbour department (e.g. a shared first-year Basic Science branch)
+              that will create and manage its sections, students, subjects, teaching assignments and timetable for
+              the years it teaches. {department.name}&apos;s own HOD keeps every other year.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label>Managing sub-department</Label>
+              <Label>Neighbour department</Label>
               <Select value={managerDeptId || "none"} onValueChange={(v) => setManagerDeptId(v === "none" ? "" : v)}>
                 <SelectTrigger>
                   <SelectValue placeholder="— None —" />
@@ -592,20 +572,11 @@ export default function DepartmentDetailPage() {
               </Select>
             </div>
             {managerDeptId && (
-              <div className="space-y-2">
-                <Label>Years it manages</Label>
-                <div className="flex flex-wrap gap-3 border rounded-md px-3 py-2">
-                  {managerYearOptions.map((year) => (
-                    <label key={year} className="flex items-center gap-1.5 text-sm">
-                      <Checkbox checked={managerYears.includes(year)} onCheckedChange={(checked) => toggleManagerYear(year, !!checked)} />
-                      {yearOrdinalLabel(year)}
-                    </label>
-                  ))}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {department.name}&apos;s own HOD keeps every year not picked here.
-                </p>
-              </div>
+              <p className="text-xs text-muted-foreground">
+                {selectedManagerYears.length > 0
+                  ? `Teaches year${selectedManagerYears.length > 1 ? "s" : ""} ${selectedManagerYears.map(yearOrdinalLabel).join(", ")} - set on that neighbour's own Edit Department page, applies to every branch it manages.`
+                  : "This neighbour has no Years Taught configured yet - set it on its own Edit Department page."}
+              </p>
             )}
             <div className="flex justify-end">
               <Button onClick={handleSaveManager} loading={isSavingManager} size="sm">Save</Button>

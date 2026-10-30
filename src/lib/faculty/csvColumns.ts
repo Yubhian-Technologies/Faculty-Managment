@@ -264,7 +264,7 @@ export const HINTS = [
   "Status: Active, On Leave, Resigned, Retired (defaults to Active if left blank)",
   "Gender: Male, Female, Other",
   "Marital Status: Single, Married",
-  "Ratification Status: Ratified, Not Ratified",
+  "Ratification Status: Ratified, Not Ratified (attended, not ratified), Not Yet Attended",
   "Has PhD: Yes or No",
   "AICTE Eligible: Yes or No",
   "Funded Project Role: PI or Co-PI",
@@ -359,7 +359,7 @@ export function getFacultyImportColumns(designationOptions: string[], honorificO
   { key: "nameAsPerAadhar",   label: "Name (as per Aadhar)",         required: false, sample: "Optional; text" },
   { key: "aadharNo",          label: "Aadhar No",                    required: true, sample: "Required; exactly 12 digits" },
   { key: "panNo",             label: "PAN No",                       required: true, sample: "Required; 5 letters + 4 digits + 1 letter, e.g. ABCDE1234F" },
-  { key: "ratificationStatus",label: "Ratification Status",          required: true, sample: "Required: Ratified / Not Ratified" },
+  { key: "ratificationStatus",label: "Ratification Status",          required: true, sample: "Required: Ratified / Not Ratified / Not Yet Attended" },
   ];
 }
 
@@ -412,7 +412,7 @@ export function getFacultyImportSampleRows(designationOptions: string[], honorif
     gender: "Female", dateOfBirth: "30-01-1995",
     nameAsPerAadhar: "Divya Nair",
     aadharNo: "345678901234", panNo: "CDEFG3456H",
-    ratificationStatus: "Not Ratified",
+    ratificationStatus: "Not Yet Attended",
   },
   {
     employeeId: "FAC004", honorific: honorific(3), departmentCode: "ECE", legalName: "IMRAN SHAIK", nameAsPerPan: "Dr. Imran Shaik",
