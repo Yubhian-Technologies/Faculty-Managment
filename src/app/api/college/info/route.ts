@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic";
 
-import { readDisplayNameSettings } from "@/lib/faculty/displayNameSettings";
+import { effectiveDisplayNameSettings } from "@/lib/faculty/displayNameSettings";
 import { NextResponse } from "next/server";
 import { requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -78,7 +78,7 @@ export async function GET(request: Request) {
       timetableSignatureRows: selectedSignatureRows(sigGroups),
       teachingLoadSignatureRows: selectedSignatureRows(loadSigGroups),
       // Settings > Website Display Name: which places show a faculty Display Name (see lib/faculty/displayNameSettings.ts).
-      displayNameSurfaces: readDisplayNameSettings(displayNameSnap.data()),
+      displayNameSurfaces: effectiveDisplayNameSettings(displayNameSnap.data()),
     });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {

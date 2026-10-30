@@ -74,7 +74,7 @@ export function DisplayNameSettingsCard() {
         <CardTitle className="text-base">Website Display Name</CardTitle>
         <CardDescription>
           Tick a faculty module (it saves as soon as you tick) to show each faculty member&apos;s Display Name (surname short form + name, entered on their own profile)
-          there instead of their Full Name. A faculty member who has not entered one keeps their usual name.
+          there instead of their Full Name. Ticking any one place turns the Display Name on in every place. A faculty member who has not entered one keeps their usual name.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

@@ -46,6 +46,6 @@ describe("display name settings round trip", () => {
     expect(got.surfaces.publicProfile).toBe(false);
     expect(got.filled).toBe(1); // f2 has only the surname
 
-    expect(await (await names.GET(new Request("http://x"))).json()).toEqual({ names: { f1: "Mrs.MS SRI LAKSHMI", u1: "Mrs.MS SRI LAKSHMI" } });
+    expect(await (await names.GET(new Request("http://x"))).json()).toEqual({ names: { f1: "Mrs.MS.SRI LAKSHMI", u1: "Mrs.MS.SRI LAKSHMI" } });
   });
 });
