@@ -17,6 +17,7 @@ import { classRepresentativeCountOf } from "@/lib/sections/classRepresentatives"
 import { sectionTitle, shortCourseName } from "@/lib/sections/sectionTitle";
 import { subjectTypeDisplayLabel } from "@/types";
 import type { Section, StudentRecord, TeachingAssignment } from "@/types";
+import { useFacultyDesignations, withDesignation } from "@/hooks/useFacultyDesignations";
 
 // The whole section a faculty incharge looks after: who is in it, the subjects and who teaches each, and its
 // students. Read-only; the Class Representatives are picked in Section Settings.
@@ -24,6 +25,7 @@ export default function MySectionPage() {
   const router = useRouter();
   const [sections, setSections] = useState<Section[]>([]);
   const [sectionId, setSectionId] = useState("");
+  const designationOf = useFacultyDesignations(sections.map((x) => x.facultyInchargeUid));
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [assignments, setAssignments] = useState<TeachingAssignment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -115,7 +117,7 @@ export default function MySectionPage() {
         <>
           <dl className="space-y-1.5 text-sm">
             <div className="flex gap-2"><dt className="text-muted-foreground">Total No of students enrolled -</dt><dd className="font-medium">{students.length}</dd></div>
-            <div className="flex gap-2"><dt className="text-muted-foreground">Class I/c -</dt><dd className="font-medium">{section.facultyInchargeName || "Not assigned"}</dd></div>
+            <div className="flex gap-2"><dt className="text-muted-foreground">Class I/c -</dt><dd className="font-medium">{section.facultyInchargeName ? withDesignation(section.facultyInchargeName, designationOf(section.facultyInchargeUid)) : "Not assigned"}</dd></div>
             {Array.from({ length: classRepresentativeCountOf(section) }, (_, i) => (
               <div key={i} className="flex gap-2">
                 <dt className="text-muted-foreground">Class representative-{i + 1} -</dt>

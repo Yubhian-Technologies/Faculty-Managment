@@ -15,6 +15,7 @@ import { ordinalYear, resolveTimetableDays, latestEffectiveDate } from "@/lib/ti
 import { buildSectionTimetablePdfHtml } from "@/lib/timetable/sectionTimetablePdf";
 import { buildSectionTimetableXlsxBuffer } from "@/lib/timetable/timetableExport";
 import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
+import { useFacultyDesignations, withDesignation } from "@/hooks/useFacultyDesignations";
 import { slotsWithDisplayNames } from "@/lib/faculty/displayNameApply";
 import { renderMultiHtmlToPdf } from "@/lib/pdf/htmlToPdf";
 import type { Course, Department, Section, CourseYearTiming, TimetableSlot, Subject, DayOfWeek } from "@/types";
@@ -79,6 +80,7 @@ export default function PrincipalTimetablePage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [optionsError, setOptionsError] = useState(false);
   const [bulkSections, setBulkSections] = useState<BulkSectionEntry[]>([]);
+  const designationOf = useFacultyDesignations(bulkSections.map((e) => e.facultyInchargeUid));
   const [bulkSubjects, setBulkSubjects] = useState<Subject[]>([]);
   const [bulkWorkingDays, setBulkWorkingDays] = useState<DayOfWeek[]>([]);
   const [isLoadingTimetables, setIsLoadingTimetables] = useState(false);
@@ -208,7 +210,7 @@ export default function PrincipalTimetablePage() {
       effectiveDate: latestEffectiveDate(entry.slots),
       regulation: entry.regulation,
       classroom: entry.classroomNumber,
-      classInchargeName: entry.facultyInchargeName ? nameFor("sectionTimetable", { uid: entry.facultyInchargeUid }, entry.facultyInchargeName) : entry.facultyInchargeName,
+      classInchargeName: entry.facultyInchargeName ? withDesignation(nameFor("sectionTimetable", { uid: entry.facultyInchargeUid }, entry.facultyInchargeName), designationOf(entry.facultyInchargeUid)) : entry.facultyInchargeName,
       days: visibleDays.length > 0 ? visibleDays : days,
       periods: Array.from({ length: entry.timing.numberOfPeriods }, (_, i) => i + 1),
       periodTimings: entry.timing.periods ?? [],
