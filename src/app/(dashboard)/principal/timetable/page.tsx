@@ -233,7 +233,7 @@ export default function PrincipalTimetablePage() {
           section: { name: entry.sectionName, department: entry.departmentName, year: entry.year, courseName: entry.courseName, classroomNumber: entry.classroomNumber, facultyInchargeName: entry.facultyInchargeName },
         })
       );
-      await renderMultiHtmlToPdf(htmls, `All_Departments_Timetables_${isoDateKey(new Date())}.pdf`);
+      await renderMultiHtmlToPdf(htmls, `All_Departments_Timetables_${isoDateKey(new Date())}.pdf`, { fitOnePage: true });
       toast({ title: "Downloaded", description: `${shownSections.length} sections combined into one PDF` });
     } catch (err) {
       console.error(err);
