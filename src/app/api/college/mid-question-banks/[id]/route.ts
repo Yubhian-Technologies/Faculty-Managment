@@ -7,7 +7,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { notify } from "@/lib/notify";
 import { checkSectionPick, claimIdFor, sectionsOf } from "@/lib/midBank/sections";
 import {
-  bankAccess, guardError, loadOutcomes, loadQuestions, loadSubject, loginUidsOf, MID_BANK_READ_ROLES, MID_BANK_WRITE_ROLES, midBankRefs, rulesForSubject, teachingFor,
+  bankAccess, guardError, writeRefusal, loadOutcomes, loadQuestions, loadSubject, loginUidsOf, MID_BANK_READ_ROLES, MID_BANK_WRITE_ROLES, midBankRefs, rulesForSubject, teachingFor,
 } from "@/lib/midBank/server";
 
 // One question bank.
@@ -40,7 +40,7 @@ export async function GET(_request: Request, { params }: Params) {
         id: bank.subjectId, name: bank.subjectName, code: bank.subjectCode, courseName: bank.courseName,
         regulation: subject?.regulation ?? "", year: bank.year, semester: bank.semester, branch: bank.branch,
       },
-      access: { isOwner: access.isOwner, isIncluded: access.isIncluded, canWrite: access.canWrite, locked: access.locked },
+      access: { isOwner: access.isOwner, isIncluded: access.isIncluded, canWrite: access.canWrite, locked: access.locked, isHod: access.isHod, frozen: access.frozen },
     });
   } catch (err) {
     return guardError(err, "[college/mid-question-banks/[id] GET]");
@@ -56,7 +56,7 @@ export async function PATCH(request: Request, { params }: Params) {
     const access = await bankAccess(db, session, id);
     if (!access) return NextResponse.json({ error: "Question bank not found" }, { status: 404 });
     if (!access.isOwner) return NextResponse.json({ error: "Only the faculty preparing this bank can change its sections" }, { status: 403 });
-    if (!access.canWrite || !access.deadline) return NextResponse.json({ error: "The deadline has passed - ask the Exam Cell to extend it" }, { status: 403 });
+    if (!access.canWrite || !access.deadline) return NextResponse.json({ error: writeRefusal(access) }, { status: 403 });
     const { bank, deadline } = access;
     const refs = midBankRefs(db, session.collegeId);
     const available = sectionsOf(await teachingFor(db, session.collegeId, deadline), bank.subjectId, bank.branch);

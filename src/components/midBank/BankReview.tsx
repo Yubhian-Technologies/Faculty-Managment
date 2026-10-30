@@ -16,6 +16,7 @@ import { allowedFormats, formatOf, partLetter, partMarks, questionErrors } from 
 import { downloadMidQuestionBankPdf } from "@/lib/pdf/downloadMidQuestionBank";
 import type { MidBankDetail } from "@/lib/midBank/clientTypes";
 import { MathText } from "./MathText";
+import { ApprovalPanel } from "./ApprovalPanel";
 
 // Stage 5: the whole bank at a glance - what is done, what is still missing
 // (each issue links to its question), a full preview, and the PDF once every
@@ -28,6 +29,7 @@ export function BankReview({ id, editHref, writeHref, autoDownload }: { id: stri
   const [error, setError] = useState("");
   const [downloading, setDownloading] = useState(false);
   const autoDone = useRef(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     fetch(`/api/college/mid-question-banks/${encodeURIComponent(id)}`)
@@ -37,7 +39,7 @@ export function BankReview({ id, editHref, writeHref, autoDownload }: { id: stri
         setDetail(d);
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load the question bank"));
-  }, [id]);
+  }, [id, reloadKey]);
 
   const bank = detail?.bank ?? null;
   const ready = bank?.status === "COMPLETE";
@@ -109,6 +111,8 @@ export function BankReview({ id, editHref, writeHref, autoDownload }: { id: stri
         {!detail.access.canWrite && <Badge variant="outline">Read-only</Badge>}
         {detail.access.canWrite && writeHref && <Button asChild size="sm" variant="outline" className="ml-auto"><Link href={writeHref}>Continue writing</Link></Button>}
       </p>
+
+      <ApprovalPanel bank={bank} isOwner={detail.access.isOwner} isHod={Boolean(detail.access.isHod)} onChanged={() => setReloadKey((k) => k + 1)} />
 
       <div className="grid gap-3 sm:grid-cols-4">
         {[

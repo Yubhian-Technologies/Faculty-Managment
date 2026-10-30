@@ -16,8 +16,8 @@ import type { BloomLevel, Course, Department, MidPaperTemplate, MidQuestionBank,
 
 // Exam Cell: generate the Mid question papers of one exam day. Every subject the
 // Mid timetable puts on that date (each branch) is matched to its question bank
-// (same course + year + semester + Mid, subject, branch); only a COMPLETE bank
-// gives a paper. The template (Mid Configuration > Question paper) decides each
+// (same course + year + semester + Mid, subject, branch); only a COMPLETE bank the
+// branch HOD APPROVED gives a paper. The template (Mid Configuration > Question paper) decides each
 // question's unit and level from the level picked for Question 1. Nothing is
 // written - the papers are reviewed, swapped and downloaded in the browser.
 
@@ -85,6 +85,11 @@ export async function POST(request: Request) {
         const key = bank.id;
         const b = { ...base, sections: bank.sections.map((s) => s.sectionName), ownerName: bank.ownerName, marks: bank.marks };
         if (bank.status !== "COMPLETE") { papers.push({ ...b, key, error: `The question bank isn't complete yet (${bank.completeCount} of ${bank.totalCount} questions)` }); continue; }
+        // Only a bank the branch's HOD approved goes into a paper.
+        if (bank.approval !== "APPROVED") {
+          papers.push({ ...b, key, error: bank.approval === "SUBMITTED" ? `${bank.ownerName}'s question bank is waiting for the HOD's approval` : bank.approval === "RETURNED" ? `${bank.ownerName}'s question bank was returned by the HOD for changes` : `${bank.ownerName}'s question bank is complete but not yet submitted to the HOD` });
+          continue;
+        }
         const [subject, outcomes, questions] = await Promise.all([loadSubject(db, session.collegeId, bank.subjectId), loadOutcomes(db, session.collegeId, bank.outcomesId), loadQuestions(db, session.collegeId, bank.id)]);
         const template = subject ? await templateFor(db, session.collegeId, subject) : null;
         if (!template) { papers.push({ ...b, key, regulation: subject?.regulation ?? "", error: `No question paper template for ${plan.courseName}${subject?.regulation ? ` (${subject.regulation})` : ""} - set it in Mid Configuration > Question paper` }); continue; }

@@ -319,6 +319,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Internal Exam", href: "/hod/internal-exam", iconName: "ClipboardCheck", roles: ["HOD"], legacyModule: "Department" },
   { label: "Results Analysis", href: "/hod/results-analysis", iconName: "BarChart3", roles: ["HOD"], legacyModule: "Department" },
   { label: "Mid Paper Setter", href: "/hod/mid-paper-setter", iconName: "UserCog", roles: ["HOD"], legacyModule: "Department" },
+  { label: "Mid Question Bank", href: "/hod/question-banks", iconName: "BookOpenCheck", roles: ["HOD"], legacyModule: "Department" },
   { label: "Leave Approvals", href: "/hod/leave-approvals", iconName: "CalendarClock", roles: ["HOD"], section: "Approvals", module: "leave-approvals" },
   { label: "Leave History", href: "/hod/leave-history", iconName: "History", roles: ["HOD"], module: "leave-approvals" },
   { label: "Student Permissions", href: "/hod/student-permissions", iconName: "ShieldCheck", roles: ["HOD"] },

@@ -119,6 +119,14 @@ export interface MidUnitStatus {
 export type MidQuestionBankStatus = "IN_PROGRESS" | "COMPLETE";
 
 /**
+ * HOD approval of a complete bank: the faculty submits it, the branch's HOD
+ * approves it (it then goes to the Exam Cell's question papers) or returns it
+ * with remarks (the faculty can edit and submit again). Absent = not submitted.
+ */
+export type MidBankApproval = "SUBMITTED" | "APPROVED" | "RETURNED";
+export interface MidBankApprovalEntry { at: string; byUid: string; byName: string; action: MidBankApproval | "WITHDRAWN"; remarks?: string }
+
+/**
  * Exam Cell: the question bank deadline for one Course + Year + Semester + Mid.
  * Publishing it opens the Question Bank module for every faculty member teaching
  * a subject of that semester; banks lock when the deadline day ends (IST).
@@ -178,6 +186,8 @@ export interface MidQuestionBank {
   status: MidQuestionBankStatus;
   completeCount: number;
   totalCount: number;
+  approval?: MidBankApproval;
+  approvalHistory?: MidBankApprovalEntry[];
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

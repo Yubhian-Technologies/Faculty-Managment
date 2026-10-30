@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { actorName, bankAccess, guardError, loadOutcomes, loadSubject, MID_BANK_WRITE_ROLES, midBankRefs, rulesForSubject } from "@/lib/midBank/server";
+import { actorName, bankAccess, guardError, loadOutcomes, loadSubject, MID_BANK_WRITE_ROLES, midBankRefs, rulesForSubject, writeRefusal } from "@/lib/midBank/server";
 import { allowedFormats, bankFormats, cleanParts, formatOf, formatsFor, isBlankPart, partLabel, questionErrors, questionFormat } from "@/lib/midBank/validateQuestion";
 import { findDuplicates, textKey } from "@/lib/midBank/duplicates";
 import { bankTotals, breaksCompletedUnit, lockReason, unitStatus } from "@/lib/midBank/rules";
@@ -39,7 +39,7 @@ export async function PATCH(request: Request, { params }: Params) {
     const access = await bankAccess(db, session, id);
     if (!access) return NextResponse.json({ error: "Question bank not found" }, { status: 404 });
     if (!access.isOwner) return NextResponse.json({ error: "Only the faculty preparing this question bank can edit it" }, { status: 403 });
-    if (!access.canWrite) return NextResponse.json({ error: "The deadline has passed - this question bank is locked. Ask the Exam Cell to extend it." }, { status: 403 });
+    if (!access.canWrite) return NextResponse.json({ error: writeRefusal(access) }, { status: 403 });
     const [outcomes, subject] = await Promise.all([
       loadOutcomes(db, session.collegeId, access.bank.outcomesId),
       loadSubject(db, session.collegeId, access.bank.subjectId),
@@ -60,6 +60,8 @@ export async function PATCH(request: Request, { params }: Params) {
       const bankSnap = await tx.get(bankRef);
       if (!bankSnap.exists) return { status: 400, body: { error: "Start the question bank first" } };
       const bank = bankSnap.data() as MidQuestionBank;
+      // Submitted / approved meanwhile (another tab) - read-only until returned.
+      if (bank.approval === "SUBMITTED" || bank.approval === "APPROVED") return { status: 409, body: { error: writeRefusal({ frozen: true, bank }) } };
       if (!bank.units.includes(unit)) return { status: 400, body: { error: `Mid ${bank.midNumber} doesn't cover Unit ${unit}` } };
       const locked = lockReason(bank.units, bank.unitStatus, unit);
       if (locked) return { status: 403, body: { error: `Unit ${unit} is locked - ${locked.toLowerCase()}` } };
