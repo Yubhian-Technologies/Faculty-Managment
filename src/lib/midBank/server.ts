@@ -101,8 +101,20 @@ export interface BankAccess {
   /** Teaches a section the bank covers (read-only unless also the owner). */
   isIncluded: boolean;
   canRead: boolean;
-  /** Owner, and the deadline not passed. */
+  /** The branch's HOD (approves / returns it). */
+  isHod: boolean;
+  /** Submitted to / approved by the HOD - nobody edits it until it is returned. */
+  frozen: boolean;
+  /** Owner, the deadline not passed, and not submitted / approved. */
   canWrite: boolean;
+}
+
+/** Why the owner can't write (for the 403). */
+export function writeRefusal(a: Pick<BankAccess, "frozen" | "bank">): string {
+  if (a.frozen) return a.bank.approval === "APPROVED"
+    ? "This question bank is approved by the HOD - it can't be changed"
+    : "This question bank is with the HOD for approval - withdraw it or wait for it to be returned to make changes";
+  return "The deadline has passed - this question bank is locked. Ask the Exam Cell to extend it.";
 }
 
 export async function bankAccess(db: Db, session: Session, bankId: string): Promise<BankAccess | null> {
@@ -118,10 +130,11 @@ export async function bankAccess(db: Db, session: Session, bankId: string): Prom
   let isHod = false;
   if (session.role === "HOD") isHod = canHodEditDepartment(await getHodDepartmentScope(db, session.collegeId, session.uid), bank.branch);
   const locked = !deadline || isDeadlineLocked(deadline.deadline);
+  const frozen = bank.approval === "SUBMITTED" || bank.approval === "APPROVED";
   return {
-    bank, deadline, locked, isOwner, isIncluded,
+    bank, deadline, locked, isOwner, isIncluded, isHod, frozen,
     canRead: isOwner || isIncluded || isHod || MID_BANK_OVERSEERS.includes(session.role),
-    canWrite: isOwner && !locked,
+    canWrite: isOwner && !locked && !frozen,
   };
 }
 

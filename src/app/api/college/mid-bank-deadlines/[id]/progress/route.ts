@@ -42,7 +42,8 @@ export async function GET(_request: Request, { params }: Params) {
         ...k,
         sections: sectionsOf(rows, k.subjectId, k.branch).map((s) => ({ ...s, bankId: heldBy.get(s.sectionId)?.id ?? null, ownerName: heldBy.get(s.sectionId)?.ownerName ?? null })),
         banks: mine.map((b) => ({
-          id: b.id, ownerName: b.ownerName, sections: b.sections.map((s) => s.sectionName), status: b.status,
+          id: b.id, ownerName: b.ownerName, sections: b.sections.map((s) => s.sectionName), status: b.status, approval: b.approval ?? null,
+          lastApproval: b.approvalHistory?.length ? b.approvalHistory[b.approvalHistory.length - 1] : null,
           completeCount: b.completeCount, totalCount: b.totalCount,
           updatedAt: (b.updatedAt as unknown as { toDate?: () => Date })?.toDate?.()?.toISOString() ?? null,
         })),

@@ -89,6 +89,7 @@ const EXPECTED: Record<string, string[]> = {
     "/hod/results-analysis",
     "/hod/faculty/profile-completion",
     "/hod/mid-paper-setter",
+    "/hod/question-banks",
     "/hod/timetable",
     "/hod/leave-approvals",
     "/hod/leave-history",

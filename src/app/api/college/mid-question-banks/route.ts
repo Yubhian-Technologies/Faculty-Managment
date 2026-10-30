@@ -65,7 +65,7 @@ export async function GET() {
           branch: g.branch,
           sections,
           myBank: own && {
-            id: own.id, status: own.status, completeCount: own.completeCount, totalCount: own.totalCount,
+            id: own.id, status: own.status, approval: own.approval ?? null, completeCount: own.completeCount, totalCount: own.totalCount,
             sections: own.sections.map((s) => s.sectionName),
             updatedAt: (own.updatedAt as unknown as { toDate?: () => Date })?.toDate?.()?.toISOString() ?? null,
           },
