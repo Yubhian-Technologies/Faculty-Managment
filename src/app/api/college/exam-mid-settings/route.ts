@@ -7,7 +7,8 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import type { ExamMidSettings } from "@/types";
 
 // colleges/{collegeId}/examSettings/mid - single college-wide doc.
-const READ_ROLES = ["EXAM_CELL", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN"];
+// HOD / timetable incharges read the mid count for the flexible-cell dialog (read-only; saving stays with the Exam Cell).
+const READ_ROLES = ["EXAM_CELL", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD", "PANEL_MEMBER", "COLLEGE_STAFF"];
 
 export async function GET() {
   try {

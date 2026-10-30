@@ -502,8 +502,14 @@ interface MergeableSlot {
   substituteForName?: string;
   substituteDate?: string;
   labBatch?: string;
+  /** The mid exam this period is scoped to (flexible cell) - shown after the faculty's name as "(Mid 1)". */
+  midScope?: number;
   cellColor?: string;
 }
+
+// "A. Kumar" -> "A. Kumar (Mid 1)" for a period scoped to one mid exam; unchanged otherwise.
+const withMid = (name: string | undefined, midScope: number | undefined) =>
+  name && midScope != null ? `${name} (Mid ${midScope})` : name;
 
 /**
  * Several faculty of ONE subject in the same cell (co-teaching, or a lab split into batches
@@ -520,9 +526,12 @@ export function mergeCoTaughtSlots<T extends MergeableSlot>(cellSlots: T[]): T[]
     groups.set(key, [...(groups.get(key) ?? []), s]);
   }
   return Array.from(groups.values()).map((group) => {
-    if (group.length === 1) return group[0];
+    if (group.length === 1) {
+      const only = group[0];
+      return only.midScope != null && !only.substituteFacultyName ? { ...only, facultyName: withMid(only.facultyName, only.midScope) } : only;
+    }
     const unique = (values: (string | undefined)[]) => Array.from(new Set(values.filter((v): v is string => !!v)));
-    const faculty = unique(group.map((g) => (g.substituteFacultyName ? `Sub: ${g.substituteFacultyName}` : g.facultyName)));
+    const faculty = unique(group.map((g) => (g.substituteFacultyName ? `Sub: ${g.substituteFacultyName}` : withMid(g.facultyName, g.midScope))));
     const batches = unique(group.map((g) => g.labBatch));
     // Only one half of a split subject may have been given a colour (the
     // picker sets it one teaching-assignment at a time) - a plain group[0]

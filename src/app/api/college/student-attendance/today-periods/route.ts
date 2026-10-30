@@ -148,7 +148,7 @@ export async function GET(request: Request) {
           sessionStatus: sess?.status ?? null,
           isOpen,
           phase,
-          labBatch: effectiveLabBatch(slot.labBatch, labModes, slot.sectionId, slot.subjectId, slot.facultyId) ?? null,
+          labBatch: effectiveLabBatch(slot.labBatch, labModes, slot.sectionId, slot.subjectId, slot.facultyId, slot.batchPinned) ?? null,
           allocated,
         };
       })
