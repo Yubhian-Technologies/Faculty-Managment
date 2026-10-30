@@ -101,12 +101,13 @@ function HodStudentsContent() {
   const [search, setSearch] = useState(restored.search);
   // The pickers below are a DRAFT; nothing is read until Load. `applied` is what the last Load asked
   // for (and what the table and the URL show); `nonce` makes a repeat Load re-read.
-  type Applied = { view: string; dept: string; core: string; course: string; year: string; search: string; nonce: number };
+  type Applied = { view: string; dept: string; core: string; course: string; year: string; search: string; rollFrom: string; rollTo: string; nonce: number };
   const [applied, setApplied] = useState<Applied | null>(() =>
     restored.load
       ? {
         view: restored.freshmanView, dept: restored.deptFilter, core: restored.coreDeptFilter, course: restored.courseFilter,
-        year: restored.yearFilter, search: restored.search.trim().toLowerCase(), nonce: 0,
+        year: restored.yearFilter, search: restored.search.trim().toLowerCase(),
+        rollFrom: restored.rollFrom, rollTo: restored.rollTo, nonce: 0,
       }
       : null
   );
@@ -214,8 +215,11 @@ function HodStudentsContent() {
   // "23471A0427"), and as long as the two ends share the same prefix/width
   // (the normal case for one section's contiguous block), lexicographic
   // order matches numeric order on the varying suffix.
-  const [rollFrom, setRollFrom] = useState("");
-  const [rollTo, setRollTo] = useState("");
+  // The same two boxes also narrow the list itself: "View Range" (or Load /
+  // Refresh) applies them as `applied.rollFrom/rollTo`, so only that block of
+  // Regd. Nos is listed. Either end may be left blank for an open range.
+  const [rollFrom, setRollFrom] = useState(restored.rollFrom);
+  const [rollTo, setRollTo] = useState(restored.rollTo);
 
   // Filter options and the Freshman's Department switch - the small
   // collections plus one cheap hodMeta request. No student is read here: the
@@ -268,6 +272,8 @@ function HodStudentsContent() {
   const filterQuery = useCallback((): URLSearchParams => {
     const params = new URLSearchParams();
     if (!applied) return params;
+    if (applied.rollFrom) params.set("rollFrom", applied.rollFrom);
+    if (applied.rollTo) params.set("rollTo", applied.rollTo);
     if (applied.view !== "none") {
       params.set("incoming", applied.view);
       return params;
@@ -324,7 +330,8 @@ function HodStudentsContent() {
   const listUrl = useMemo(
     () => buildHodStudentsListUrl({
       load: hasLoaded, freshmanView: appliedView, deptFilter: applied?.dept ?? "all", coreDeptFilter: applied?.core ?? "all",
-      courseFilter: applied?.course ?? "all", yearFilter: applied?.year ?? "all", search: applied?.search ?? "", page, pageSize,
+      courseFilter: applied?.course ?? "all", yearFilter: applied?.year ?? "all", search: applied?.search ?? "",
+      rollFrom: applied?.rollFrom ?? "", rollTo: applied?.rollTo ?? "", page, pageSize,
     }),
     [hasLoaded, appliedView, applied, page, pageSize]
   );
@@ -368,17 +375,22 @@ function HodStudentsContent() {
 
   const filtersChanged = applied !== null && (
     applied.view !== freshmanView || applied.search !== search.trim().toLowerCase()
+    || applied.rollFrom !== rollFrom.trim() || applied.rollTo !== rollTo.trim()
     || (freshmanView === "none" && (applied.dept !== deptFilter || applied.core !== coreDeptFilter
       || applied.course !== courseFilter || applied.year !== yearFilter))
   );
 
   // The only thing that reads: freeze the pickers as `applied`; the effect above fetches the first page.
-  function handleLoad() {
+  function handleLoad(range?: { rollFrom: string; rollTo: string }) {
     // The sections (for the Assign / Move / Distribute dialogs) are read once,
     // then again after a change - not on every Refresh.
     if (!sectionsLoaded.current) void loadSections();
     restorePageRef.current = 1;
+    const from = (range?.rollFrom ?? rollFrom).trim();
+    const to = (range?.rollTo ?? rollTo).trim();
     setApplied((prev) => ({
+      rollFrom: from,
+      rollTo: to,
       view: freshmanView,
       dept: freshmanView === "none" ? deptFilter : "all",
       core: freshmanView === "none" ? coreDeptFilter : "all",
@@ -1463,6 +1475,7 @@ function HodStudentsContent() {
               placeholder="From Regd. No."
               value={rollFrom}
               onChange={(e) => setRollFrom(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleLoad(); }}
               className="h-8 w-36"
             />
             <span className="text-xs text-muted-foreground">to</span>
@@ -1470,11 +1483,36 @@ function HodStudentsContent() {
               placeholder="To Regd. No."
               value={rollTo}
               onChange={(e) => setRollTo(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleLoad(); }}
               className="h-8 w-36"
             />
+            {/* View Range lists only that block of Regd. Nos (either end may be
+                blank); Select Range ticks them in the list as before. */}
+            <Button size="sm" disabled={(!rollFrom.trim() && !rollTo.trim()) || isFetching || isLoading} onClick={() => handleLoad()}>
+              View Range
+            </Button>
             <Button size="sm" variant="outline" disabled={!rollFrom.trim() || !rollTo.trim() || isSelecting} onClick={() => void selectRollRange()}>
               Select Range
             </Button>
+            {(rollFrom || rollTo) && (
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={isFetching || isLoading}
+                onClick={() => {
+                  setRollFrom("");
+                  setRollTo("");
+                  if (applied?.rollFrom || applied?.rollTo) handleLoad({ rollFrom: "", rollTo: "" });
+                }}
+              >
+                Clear range
+              </Button>
+            )}
+            {(applied?.rollFrom || applied?.rollTo) && (
+              <span className="text-xs text-muted-foreground">
+                Showing Regd. No {applied.rollFrom || "start"} - {applied.rollTo || "end"}
+              </span>
+            )}
           </div>
         </div>
       )}
@@ -1515,7 +1553,7 @@ function HodStudentsContent() {
                 </Select>
               </div>
             )}
-            <Button type="button" onClick={handleLoad} disabled={isFetching || isLoading} className="whitespace-nowrap">
+            <Button type="button" onClick={() => handleLoad()} disabled={isFetching || isLoading} className="whitespace-nowrap">
               {isFetching ? "Loading…" : filtersChanged ? "Apply filters" : hasLoaded ? "Refresh" : "Load"}
             </Button>
           </div>

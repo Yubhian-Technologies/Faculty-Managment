@@ -23,6 +23,9 @@ export interface HodStudentsListState {
   courseFilter: string;
   yearFilter: string;
   search: string;
+  /** Regd. No range the list was narrowed to ("" = open end). */
+  rollFrom: string;
+  rollTo: string;
   page: number;
   pageSize: number;
 }
@@ -35,6 +38,8 @@ export const EMPTY_HOD_STUDENTS_LIST_STATE: HodStudentsListState = {
   courseFilter: "all",
   yearFilter: "all",
   search: "",
+  rollFrom: "",
+  rollTo: "",
   page: 1,
   pageSize: HOD_STUDENTS_DEFAULT_PAGE_SIZE,
 };
@@ -56,6 +61,8 @@ export function parseHodStudentsListState(params: ParamReader | null | undefined
     courseFilter: params.get("course") || d.courseFilter,
     yearFilter: year && /^\d+$/.test(year) ? year : d.yearFilter,
     search: params.get("q") ?? d.search,
+    rollFrom: (params.get("rollFrom") ?? d.rollFrom).trim(),
+    rollTo: (params.get("rollTo") ?? d.rollTo).trim(),
     page: Number.isInteger(page) && page >= 1 ? page : d.page,
     pageSize: PAGE_SIZES.includes(pageSize) ? pageSize : d.pageSize,
   };
@@ -73,6 +80,8 @@ export function buildHodStudentsListUrl(state: HodStudentsListState): string {
   if (state.courseFilter !== d.courseFilter) p.set("course", state.courseFilter);
   if (state.yearFilter !== d.yearFilter) p.set("year", state.yearFilter);
   if (state.search) p.set("q", state.search);
+  if (state.rollFrom) p.set("rollFrom", state.rollFrom);
+  if (state.rollTo) p.set("rollTo", state.rollTo);
   if (state.page !== d.page) p.set("page", String(state.page));
   if (state.pageSize !== d.pageSize) p.set("pageSize", String(state.pageSize));
   return `${HOD_STUDENTS_LIST_PATH}?${p.toString()}`;

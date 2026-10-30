@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Plus, Trash2, Upload, Download, Search, Users, Pencil, KeyRound, FileText } from "lucide-react";
@@ -35,7 +35,9 @@ import { DepartmentPickSelect } from "@/components/shared/DepartmentPickSelect";
 import {
   buildDepartmentPickOptions, DEPARTMENT_PICK_ALL, departmentPickValue, dropEmptyFeederGroups, isDepartmentPickOffered, parseDepartmentPick,
 } from "@/lib/departments/departmentPickTree";
-import { useSectionDepartments } from "@/hooks/useSectionDepartments";
+import { sectionDepartmentNames, useCollegeSectionList } from "@/hooks/useSectionDepartments";
+import { rollupDepartmentNamesForPick } from "@/lib/departments/departmentTree";
+import { keepSectionPick, sectionFilterOptions, UNASSIGNED_SECTION } from "@/lib/students/sectionFilter";
 import { useListUrlSync } from "@/hooks/useListUrlSync";
 import { buildListUrl, readListChoice, readListInt, readListString, withListBack } from "@/lib/listReturn";
 
@@ -76,6 +78,8 @@ interface StudentListFilters {
   studentType: string;
   rollFrom: string;
   rollTo: string;
+  /** A section name, UNASSIGNED_SECTION, or "all". */
+  section: string;
 }
 
 function filtersToParams(f: StudentListFilters): URLSearchParams {
@@ -91,6 +95,7 @@ function filtersToParams(f: StudentListFilters): URLSearchParams {
   else if (f.studentType !== "all") params.set("studentType", f.studentType);
   if (f.rollFrom) params.set("rollFrom", f.rollFrom);
   if (f.rollTo) params.set("rollTo", f.rollTo);
+  if (f.section !== "all") params.set("section", f.section);
   return params;
 }
 
@@ -144,6 +149,7 @@ function OfficeStudentsContent() {
       studentType: readListChoice<string>(searchParams, "studentType", ["Regular", "Lateral", "Detained", "Discontinued"], "all"),
       rollFrom: readListString(searchParams, "rollFrom", ""),
       rollTo: readListString(searchParams, "rollTo", ""),
+      section: readListString(searchParams, "section", "all"),
     };
     return {
       load: searchParams.get("load") === "1",
@@ -186,6 +192,7 @@ function OfficeStudentsContent() {
   const [studentTypeFilter, setStudentTypeFilter] = useState<string>(restored.filters.studentType);
   const [rollFrom, setRollFrom] = useState(restored.filters.rollFrom);
   const [rollTo, setRollTo] = useState(restored.filters.rollTo);
+  const [sectionPick, setSectionPick] = useState<string>(restored.filters.section);
   const [appliedFilters, setAppliedFilters] = useState<StudentListFilters | null>(restored.load ? restored.filters : null);
   const loadSeq = useRef(0);
   const [page, setPage] = useState(restored.page);
@@ -321,9 +328,10 @@ function OfficeStudentsContent() {
         q: appliedFilters?.search, department: appliedFilters?.department, coreDepartment: appliedFilters?.coreDepartment,
         years: appliedFilters?.years, course: appliedFilters?.course, year: appliedFilters?.year,
         studentType: appliedFilters?.studentType, rollFrom: appliedFilters?.rollFrom, rollTo: appliedFilters?.rollTo,
+        section: appliedFilters?.section,
         page, pageSize,
       },
-      { tab: "roster", department: "all", coreDepartment: "all", course: "all", year: "all", studentType: "all", page: 1, pageSize: DEFAULT_PAGE_SIZE }
+      { tab: "roster", department: "all", coreDepartment: "all", course: "all", year: "all", studentType: "all", section: "all", page: 1, pageSize: DEFAULT_PAGE_SIZE }
     ),
     [activeTab, appliedFilters, page, pageSize]
   );
@@ -331,7 +339,8 @@ function OfficeStudentsContent() {
 
   // Which departments a section is actually filed under - the Department
   // filter's options are drawn from these, not from the whole department list.
-  const sectionDepartments = useSectionDepartments();
+  const { sections: collegeSections, loaded: sectionsLoaded } = useCollegeSectionList();
+  const sectionDepartments = useMemo(() => sectionDepartmentNames(collegeSections), [collegeSections]);
 
   const activeDepartments = useMemo(
     () => departments.filter((d) => d.isActive).sort((a, b) => a.name.localeCompare(b.name)),
@@ -369,6 +378,18 @@ function OfficeStudentsContent() {
     // than falling all the way back to every college-configured year.
     return yearOptionsForCourse(courses, courseFilter === "all" ? undefined : courseFilter, years);
   }, [deptFilter, courseFilter, departments, courses, years]);
+
+  // Section names to offer: every section of the college, narrowed only by the
+  // picked Department (rolled up like the list's own Department filter) and
+  // Year. A pick the narrowing no longer offers drops back to "All sections".
+  const sectionOptions = useMemo(
+    () => sectionFilterOptions(collegeSections, {
+      departments: !sectionsLoaded || deptFilter === "all" ? [] : rollupDepartmentNamesForPick(departments, deptFilter, sectionDepartments),
+      year: yearFilter,
+    }),
+    [collegeSections, sectionsLoaded, deptFilter, departments, sectionDepartments, yearFilter]
+  );
+  const sectionFilter = keepSectionPick(sectionPick, sectionOptions, sectionsLoaded);
 
   // Same Course -> Department -> Year cascade as the filter bar above, but
   // multi-select: each group's options are the UNION of what's valid across
@@ -438,7 +459,8 @@ function OfficeStudentsContent() {
     studentType: studentTypeFilter,
     rollFrom: rollFrom.trim(),
     rollTo: rollTo.trim(),
-  }), [search, deptFilter, coreDeptValue, yearFilterOptions, courseFilter, yearFilter, studentTypeFilter, rollFrom, rollTo]);
+    section: sectionFilter,
+  }), [search, deptFilter, coreDeptValue, yearFilterOptions, courseFilter, yearFilter, studentTypeFilter, rollFrom, rollTo, sectionFilter]);
 
   // True once a list is on screen and the filter bar has been edited since -
   // the table still shows the previous Load's results until Load is pressed.
@@ -817,12 +839,20 @@ function OfficeStudentsContent() {
             {courseNames.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
           </SelectContent>
         </Select>
-        <DepartmentPickSelect value={deptPick} onChange={onDeptPickChange} options={departmentPickOptions} className="sm:w-56" />
         <Select value={yearFilter} onValueChange={onYearFilterChange}>
           <SelectTrigger className="sm:w-40"><SelectValue placeholder="All years" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All years</SelectItem>
             {yearFilterOptions.map((y) => <SelectItem key={y} value={String(y)}>{ordinalYear(y)}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <DepartmentPickSelect value={deptPick} onChange={onDeptPickChange} options={departmentPickOptions} className="sm:w-56" />
+        <Select value={sectionFilter} onValueChange={setSectionPick}>
+          <SelectTrigger className="sm:w-40"><SelectValue placeholder="All sections" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All sections</SelectItem>
+            <SelectItem value={UNASSIGNED_SECTION}>Unassigned</SelectItem>
+            {sectionOptions.map((s) => <SelectItem key={s} value={s}>Section {s}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={studentTypeFilter} onValueChange={onStudentTypeFilterChange}>
@@ -944,7 +974,10 @@ function OfficeStudentsContent() {
                     </th>
                     <th className="p-3 font-medium">S.No</th>
                     {LIST_ROSTER_FIELDS.map((f) => (
-                      <th key={f.key} className="p-3 font-medium whitespace-nowrap">{f.label}</th>
+                      <Fragment key={f.key}>
+                        <th className="p-3 font-medium whitespace-nowrap">{f.label}</th>
+                        {f.key === "department" && <th className="p-3 font-medium whitespace-nowrap">Section</th>}
+                      </Fragment>
                     ))}
                     <th className="p-3 font-medium text-right">Actions</th>
                   </tr>
@@ -968,11 +1001,18 @@ function OfficeStudentsContent() {
                       {LIST_ROSTER_FIELDS.map((f) => {
                         const value = rosterFieldDisplay(f, s);
                         return (
-                          <td key={f.key} className={`p-3 whitespace-nowrap ${f.key === "name" ? "font-medium" : ""}`}>
-                            {f.key === "department"
-                              ? <StudentDepartmentCell department={value} coreDepartment={s.secondaryDepartment} />
-                              : value || <span className="text-muted-foreground/50">—</span>}
-                          </td>
+                          <Fragment key={f.key}>
+                            <td className={`p-3 whitespace-nowrap ${f.key === "name" ? "font-medium" : ""}`}>
+                              {f.key === "department"
+                                ? <StudentDepartmentCell department={value} coreDepartment={s.secondaryDepartment} />
+                                : value || <span className="text-muted-foreground/50">—</span>}
+                            </td>
+                            {f.key === "department" && (
+                              <td className="p-3 whitespace-nowrap">
+                                {s.section?.trim() || <span className="text-muted-foreground/50">—</span>}
+                              </td>
+                            )}
+                          </Fragment>
                         );
                       })}
                       {/* stopPropagation so the row's own "open details" click

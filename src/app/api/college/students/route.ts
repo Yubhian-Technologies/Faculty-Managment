@@ -18,6 +18,7 @@ import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
 import { resolveDepartmentCourseScope, resolveCatalogId, freshmanLandingDepartmentNames, departmentClaimsYearItself, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { resolveRollupDepartmentNames } from "@/lib/students/departmentRollup";
 import { fetchStudentsPage, fetchMatchingStudentIds, fetchStudentsForExport, fetchGraduatesPage, fetchGraduatesByIds } from "@/lib/students/paginatedList";
+import { normalizeSectionFilter } from "@/lib/students/sectionFilter";
 import { fetchPanelStudentsPage } from "@/lib/students/panelPagedList";
 import { handleHodStudentsRequest, isHodOnDemandRequest } from "@/lib/students/hodPagedList";
 import { isLikelySameUnassignedStudent } from "@/lib/students/duplicateDetection";
@@ -158,6 +159,8 @@ export async function GET(request: Request) {
       const status = (searchParams.get("status") ?? "").trim();
       const rollFrom = (searchParams.get("rollFrom") ?? "").trim();
       const rollTo = (searchParams.get("rollTo") ?? "").trim();
+      // A section name, or the "unassigned" marker - narrows the other filters.
+      const section = normalizeSectionFilter(searchParams.get("section"));
 
       let departments: string[] = [];
       if (pickedDepartment) {
@@ -167,14 +170,14 @@ export async function GET(request: Request) {
       }
 
       if (searchParams.get("idsOnly") === "1") {
-        const ids = await fetchMatchingStudentIds(studentsColl, { departments, coreDepartment, course, year, years, search, studentType, status, rollFrom, rollTo });
+        const ids = await fetchMatchingStudentIds(studentsColl, { departments, coreDepartment, course, year, years, search, studentType, status, rollFrom, rollTo, section });
         return NextResponse.json({ ids, total: ids.length });
       }
 
       const page = Math.max(1, Number(searchParams.get("page")) || 1);
       const pageSizeRaw = Number(searchParams.get("pageSize"));
       const pageSize = PAGE_SIZES.includes(pageSizeRaw) ? pageSizeRaw : 20;
-      const { students, total } = await fetchStudentsPage(studentsColl, { page, pageSize, search, departments, coreDepartment, course, year, years, studentType, status, rollFrom, rollTo });
+      const { students, total } = await fetchStudentsPage(studentsColl, { page, pageSize, search, departments, coreDepartment, course, year, years, studentType, status, rollFrom, rollTo, section });
       return NextResponse.json({ students: projectStudentsForRole(session.role, students), total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) });
     }
 

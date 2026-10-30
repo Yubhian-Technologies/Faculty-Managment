@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Search, Users } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -23,7 +23,9 @@ import { DepartmentPickSelect } from "@/components/shared/DepartmentPickSelect";
 import {
   buildDepartmentPickOptions, DEPARTMENT_PICK_ALL, departmentPickValue, dropEmptyFeederGroups, isDepartmentPickOffered, parseDepartmentPick,
 } from "@/lib/departments/departmentPickTree";
-import { useSectionDepartments } from "@/hooks/useSectionDepartments";
+import { sectionDepartmentNames, useCollegeSectionList } from "@/hooks/useSectionDepartments";
+import { rollupDepartmentNamesForPick } from "@/lib/departments/departmentTree";
+import { keepSectionPick, sectionFilterOptions, UNASSIGNED_SECTION } from "@/lib/students/sectionFilter";
 import { useListUrlSync } from "@/hooks/useListUrlSync";
 import { buildListUrl, readListChoice, readListInt, readListString, withListBack } from "@/lib/listReturn";
 
@@ -70,6 +72,7 @@ function PrincipalStudentsContent() {
     coreDepartment: readListString(searchParams, "coreDepartment", "all"),
     course: readListString(searchParams, "course", "all"),
     year: /^\d+$/.test(searchParams.get("year") ?? "") ? (searchParams.get("year") as string) : "all",
+    section: readListString(searchParams, "section", "all"),
     page: readListInt(searchParams, "page", 1),
     pageSize: readListInt(searchParams, "pageSize", DEFAULT_PAGE_SIZE, { allowed: PAGE_SIZES }),
   }));
@@ -97,10 +100,11 @@ function PrincipalStudentsContent() {
   const coreDeptFilter = pickedCore || "all";
   const [yearFilter, setYearFilter] = useState<string>(restored.year);
   const [courseFilter, setCourseFilter] = useState<string>(restored.course);
-  type Applied = { search: string; dept: string; core: string; course: string; year: string; nonce: number };
+  const [sectionPick, setSectionPick] = useState<string>(restored.section);
+  type Applied = { search: string; dept: string; core: string; course: string; year: string; section: string; nonce: number };
   const [applied, setApplied] = useState<Applied | null>(() =>
     restored.load
-      ? { search: restored.search.trim().toLowerCase(), dept: restored.department, core: restored.coreDepartment, course: restored.course, year: restored.year, nonce: 0 }
+      ? { search: restored.search.trim().toLowerCase(), dept: restored.department, core: restored.coreDepartment, course: restored.course, year: restored.year, section: restored.section, nonce: 0 }
       : null
   );
   const hasLoaded = applied !== null;
@@ -141,6 +145,7 @@ function PrincipalStudentsContent() {
       if (applied.dept !== "all") params.set("department", applied.dept);
       if (applied.core !== "all") params.set("coreDepartment", applied.core);
       if (applied.course !== "all") params.set("course", applied.course);
+      if (applied.section !== "all") params.set("section", applied.section);
       if (applied.year !== "all") params.set("year", applied.year);
       // "All years" for a department means the years it actually teaches - a
       // department filter matches Core Department too, so without this a branch
@@ -193,9 +198,9 @@ function PrincipalStudentsContent() {
       LIST_PATH,
       {
         tab: activeTab, load: hasLoaded, department: applied?.dept ?? "all", coreDepartment: applied?.core ?? "all", course: applied?.course ?? "all",
-        year: applied?.year ?? "all", q: applied?.search ?? "", page, pageSize,
+        year: applied?.year ?? "all", section: applied?.section ?? "all", q: applied?.search ?? "", page, pageSize,
       },
-      { tab: "roster", department: "all", coreDepartment: "all", course: "all", year: "all", page: 1, pageSize: DEFAULT_PAGE_SIZE }
+      { tab: "roster", department: "all", coreDepartment: "all", course: "all", year: "all", section: "all", page: 1, pageSize: DEFAULT_PAGE_SIZE }
     ),
     [activeTab, hasLoaded, applied, page, pageSize]
   );
@@ -203,7 +208,8 @@ function PrincipalStudentsContent() {
 
   // Which departments a section is actually filed under - the Department filter
   // is drawn from these, not from the whole department list.
-  const sectionDepartments = useSectionDepartments();
+  const { sections: collegeSections, loaded: sectionsLoaded } = useCollegeSectionList();
+  const sectionDepartments = useMemo(() => sectionDepartmentNames(collegeSections), [collegeSections]);
 
   const activeDepartments = useMemo(
     () => departments.filter((d) => d.isActive).sort((a, b) => a.name.localeCompare(b.name)),
@@ -229,6 +235,18 @@ function PrincipalStudentsContent() {
     }
     return yearOptionsForCourse(courses, courseFilter === "all" ? undefined : courseFilter, years);
   }, [deptFilter, courseFilter, departments, courses, years]);
+
+  // Section names to offer: every section of the college, narrowed only by the
+  // picked Department (rolled up like the list's own Department filter) and
+  // Year. A pick the narrowing no longer offers drops back to "All sections".
+  const sectionOptions = useMemo(
+    () => sectionFilterOptions(collegeSections, {
+      departments: !sectionsLoaded || deptFilter === "all" ? [] : rollupDepartmentNamesForPick(departments, deptFilter, sectionDepartments),
+      year: yearFilter,
+    }),
+    [collegeSections, sectionsLoaded, deptFilter, departments, sectionDepartments, yearFilter]
+  );
+  const sectionFilter = keepSectionPick(sectionPick, sectionOptions, sectionsLoaded);
 
   function onSearchChange(value: string) {
     setSearch(value);
@@ -273,14 +291,14 @@ function PrincipalStudentsContent() {
 
   const filtersChanged = applied !== null && (
     applied.search !== search.trim().toLowerCase() || applied.dept !== deptFilter || applied.core !== coreDeptFilter
-    || applied.course !== courseFilter || applied.year !== yearFilter
+    || applied.course !== courseFilter || applied.year !== yearFilter || applied.section !== sectionFilter
   );
 
   // The only thing that reads: freeze the pickers as `applied`; the effect above fetches.
   function handleLoad() {
     setPage(1);
     setApplied((prev) => ({
-      search: search.trim().toLowerCase(), dept: deptFilter, core: coreDeptFilter, course: courseFilter, year: yearFilter,
+      search: search.trim().toLowerCase(), dept: deptFilter, core: coreDeptFilter, course: courseFilter, year: yearFilter, section: sectionFilter,
       nonce: (prev?.nonce ?? 0) + 1,
     }));
   }
@@ -340,12 +358,20 @@ function PrincipalStudentsContent() {
                 {courseNames.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
               </SelectContent>
             </Select>
-            <DepartmentPickSelect value={deptPick} onChange={onDeptPickChange} options={departmentPickOptions} className="sm:w-56" />
             <Select value={yearFilter} onValueChange={onYearFilterChange}>
               <SelectTrigger className="sm:w-36"><SelectValue placeholder="All years" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All years</SelectItem>
                 {yearFilterOptions.map((y) => <SelectItem key={y} value={String(y)}>{ordinalYear(y)}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <DepartmentPickSelect value={deptPick} onChange={onDeptPickChange} options={departmentPickOptions} className="sm:w-56" />
+            <Select value={sectionFilter} onValueChange={setSectionPick}>
+              <SelectTrigger className="sm:w-40"><SelectValue placeholder="All sections" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All sections</SelectItem>
+                <SelectItem value={UNASSIGNED_SECTION}>Unassigned</SelectItem>
+                {sectionOptions.map((s) => <SelectItem key={s} value={s}>Section {s}</SelectItem>)}
               </SelectContent>
             </Select>
             <Button
@@ -387,7 +413,10 @@ function PrincipalStudentsContent() {
                       <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
                         <th className="p-3 font-medium">S.No</th>
                         {LIST_ROSTER_FIELDS.map((f) => (
-                          <th key={f.key} className="p-3 font-medium whitespace-nowrap">{f.label}</th>
+                          <Fragment key={f.key}>
+                            <th className="p-3 font-medium whitespace-nowrap">{f.label}</th>
+                            {f.key === "department" && <th className="p-3 font-medium whitespace-nowrap">Section</th>}
+                          </Fragment>
                         ))}
                       </tr>
                     </thead>
@@ -402,11 +431,18 @@ function PrincipalStudentsContent() {
                           {LIST_ROSTER_FIELDS.map((f) => {
                             const value = rosterFieldDisplay(f, s);
                             return (
-                              <td key={f.key} className={`p-3 whitespace-nowrap ${f.key === "name" ? "font-medium" : ""}`}>
-                                {f.key === "department"
-                              ? <StudentDepartmentCell department={value} coreDepartment={s.secondaryDepartment} />
-                              : value || <span className="text-muted-foreground/50">—</span>}
-                              </td>
+                              <Fragment key={f.key}>
+                                <td className={`p-3 whitespace-nowrap ${f.key === "name" ? "font-medium" : ""}`}>
+                                  {f.key === "department"
+                                    ? <StudentDepartmentCell department={value} coreDepartment={s.secondaryDepartment} />
+                                    : value || <span className="text-muted-foreground/50">—</span>}
+                                </td>
+                                {f.key === "department" && (
+                                  <td className="p-3 whitespace-nowrap">
+                                    {s.section?.trim() || <span className="text-muted-foreground/50">—</span>}
+                                  </td>
+                                )}
+                              </Fragment>
                             );
                           })}
                         </tr>

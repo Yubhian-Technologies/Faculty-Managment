@@ -10,6 +10,7 @@ import { resolveRollupDepartmentNames } from "@/lib/students/departmentRollup";
 import { sortStudentsForList } from "@/lib/students/listOrder";
 import { signStudentId, verifySignedStudentId } from "@/lib/students/signedIds";
 import { projectStudentsForRole } from "@/lib/students/listProjection";
+import { rollInRange } from "@/lib/students/paginatedList";
 
 // Paged / on-demand reads of the HOD Students page - the opt-in shapes of
 // college/students GET for role HOD (`page`, `ids`, `selectAll`, `hodMeta`).
@@ -199,9 +200,11 @@ export async function fetchHodStudentsPage(
   studentsColl: FirebaseFirestore.CollectionReference,
   ctx: HodStudentsContext,
   f: HodListFilters,
-  opts: { page: number; pageSize: number; search: string; binding: string }
+  opts: { page: number; pageSize: number; search: string; binding: string; rollFrom?: string; rollTo?: string }
 ): Promise<HodPage> {
-  const candidates = await loadCandidates(studentsColl, ctx, f);
+  // A Regd. No range narrows the list itself (inclusive, either end may be
+  // left open), so the total, the pages and "unassigned" all describe it.
+  const candidates = (await loadCandidates(studentsColl, ctx, f)).filter((s) => rollInRange(s.rollNumber, opts));
   const unassignedTotal = candidates.filter((s) => !s.section && s.status !== "DISCONTINUED").length;
   const matching = candidates.filter((s) => matchesSearch(s, opts.search));
   const totalPages = Math.max(1, Math.ceil(matching.length / opts.pageSize));
@@ -231,16 +234,7 @@ export async function fetchHodStudentsMatching(
   f: HodListFilters,
   range: { rollFrom: string; rollTo: string }
 ): Promise<{ students: HodStudent[]; truncated: boolean }> {
-  let rows = await loadCandidates(studentsColl, ctx, f);
-  if (range.rollFrom && range.rollTo) {
-    const from = range.rollFrom.trim().toUpperCase();
-    const to = range.rollTo.trim().toUpperCase();
-    const [lo, hi] = from <= to ? [from, to] : [to, from];
-    rows = rows.filter((s) => {
-      const roll = (s.rollNumber ?? "").toUpperCase();
-      return roll >= lo && roll <= hi;
-    });
-  }
+  const rows = (await loadCandidates(studentsColl, ctx, f)).filter((s) => rollInRange(s.rollNumber, range));
   const truncated = rows.length > SELECT_ALL_CAP;
   return { students: truncated ? rows.slice(0, SELECT_ALL_CAP) : rows, truncated };
 }
@@ -369,6 +363,8 @@ export async function handleHodStudentsRequest(
     pageSize: HOD_PAGE_SIZES.includes(pageSizeRaw) ? pageSizeRaw : 20,
     search: (params.get("search") ?? "").trim().toLowerCase(),
     binding,
+    rollFrom: (params.get("rollFrom") ?? "").trim(),
+    rollTo: (params.get("rollTo") ?? "").trim(),
   });
   return { status: 200, body: { ...result, students: projectStudentsForRole("HOD", result.students) } };
 }
