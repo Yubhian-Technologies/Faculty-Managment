@@ -201,3 +201,28 @@ describe("who can request a permission type", () => {
     expect(clampLimits({ requestersByType: { "external-participation": ["STUDENT", "ADMIN"], bogus: ["HOD"], "certifications.nptel": [] } })).toEqual({ requestersByType: { "external-participation": ["STUDENT"] } });
   });
 });
+
+describe("stage hours and periods", () => {
+  it("resolveStageHours: the department's setting beats the college's, per stage; unset = no limit", async () => {
+    const { resolveStageHours } = await import("./rules");
+    expect(resolveStageHours([{ stageHours: { HOD: 12 } }, { stageHours: { HOD: 48, VICE_PRINCIPAL: 24 } }], ["HOD", "VICE_PRINCIPAL", "PRINCIPAL"])).toEqual([12, 24, null]);
+    expect(resolveStageHours([undefined, undefined], ["HOD"])).toEqual([null]);
+  });
+
+  it("clampLimits keeps only known stages with at least 1 hour, capped at 720", async () => {
+    const { clampLimits } = await import("./rules");
+    expect(clampLimits({ stageHours: { HOD: 24, PRINCIPAL: 0, BOGUS: 5, VICE_PRINCIPAL: 9999 } })?.stageHours).toEqual({ HOD: 24, VICE_PRINCIPAL: 720 });
+    expect(clampLimits({ stageHours: { HOD: 0 } })?.stageHours).toBeUndefined();
+  });
+
+  it("periodsOverlap: ALL overlaps everything, lists only when they share a period", async () => {
+    const { periodsOverlap, hasEarlierPendingOverlap } = await import("./rules");
+    expect(periodsOverlap("ALL", [3])).toBe(true);
+    expect(periodsOverlap([1, 2], [3, 4])).toBe(false);
+    expect(periodsOverlap([1, 2], [2, 5])).toBe(true);
+    const other = { id: "a", status: "PENDING", createdAt: "2026-10-01T00:00:00Z", payload: { coverageDates: ["2026-10-05"], students: [{ id: "s1" }], periods: [1] as number[] } };
+    const own = { id: "b", createdAt: "2026-10-02T00:00:00Z", coverageDates: ["2026-10-05"], studentIds: ["s1"] };
+    expect(hasEarlierPendingOverlap({ ...own, periods: [5] }, [other])).toBe(false); // different period, same day: both stand
+    expect(hasEarlierPendingOverlap({ ...own, periods: [1] }, [other])).toBe(true);
+  });
+});

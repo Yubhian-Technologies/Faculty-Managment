@@ -8,7 +8,8 @@ import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
 import { buildCourseGroups } from "@/lib/departments/hodScope";
 import { sectionIsOfCore, sectionMatchesPick } from "@/lib/departments/sectionDepartmentPick";
-import { buildDepartmentPickOptions, DEPARTMENT_PICK_ALL, isDepartmentPickOffered, parseDepartmentPick } from "@/lib/departments/departmentPickTree";
+import { buildDepartmentPickOptions, DEPARTMENT_PICK_ALL, dropEmptyFeederGroups, isDepartmentPickOffered, parseDepartmentPick } from "@/lib/departments/departmentPickTree";
+import { useSectionDepartments } from "@/hooks/useSectionDepartments";
 import { DepartmentPickSelect } from "@/components/shared/DepartmentPickSelect";
 import { departmentsOfferingCourse, yearOptionsForCourse, yearOptionsForDepartment } from "@/components/students/RosterFieldInputs";
 import { SectionRoster } from "@/components/academics/SectionRoster";
@@ -100,6 +101,8 @@ export function SectionsPanel() {
   const [applied, setApplied] = useState<{ courseKey: string; deptPick: string; year: number | typeof ALL } | null>(null);
   const [openSectionId, setOpenSectionId] = useState<string | null>(null);
   const hasLoaded = applied !== null;
+  // Which departments a section is actually filed under - the Department filter drops a feeder group that holds none.
+  const sectionDepartments = useSectionDepartments();
 
   useEffect(() => {
     void (async () => {
@@ -131,8 +134,8 @@ export function SectionsPanel() {
         return activeDepartments.filter((d) => ids.has(d.id));
       })()
       : activeDepartments;
-    return buildDepartmentPickOptions(offered, departments, []);
-  }, [pickedCourseName, activeDepartments, departments, courses]);
+    return dropEmptyFeederGroups(buildDepartmentPickOptions(offered, departments, []), sectionDepartments);
+  }, [pickedCourseName, activeDepartments, departments, courses, sectionDepartments]);
   const fallbackYears = useMemo(
     // The years of the longest course the college runs, not an assumed 1-4.
     () => courseYearNumbers(courses.reduce((max, c) => Math.max(max, Number(c.durationYears) || 0), 0)),
@@ -155,7 +158,10 @@ export function SectionsPanel() {
         return activeDepartments.filter((d) => ids.has(d.id));
       })()
       : activeDepartments;
-    const stillOffered = isDepartmentPickOffered(buildDepartmentPickOptions(offered, departments, []), deptPick);
+    const stillOffered = isDepartmentPickOffered(
+      dropEmptyFeederGroups(buildDepartmentPickOptions(offered, departments, []), sectionDepartments),
+      deptPick
+    );
     const nextDept = stillOffered ? pickedDept : "";
     if (!stillOffered) setDeptPick(DEPARTMENT_PICK_ALL);
     const nextYears = nextDept

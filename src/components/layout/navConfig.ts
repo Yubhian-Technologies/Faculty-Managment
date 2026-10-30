@@ -1,6 +1,7 @@
 import { departmentOfContext, hodContextKey } from "@/lib/roles/activeHodDepartment";
 import type { UserRole } from "@/types";
 import { ROLE_LABELS } from "@/types";
+import { isCollegeAdminRole, toCollegeAdminPath } from "@/lib/auth/collegeAdminPaths";
 
 // ─── Location-level nav ────────────────────────────────────────────────────
 
@@ -221,18 +222,18 @@ export const NAV_ITEMS: NavItem[] = [
   // still work as direct routes for any existing bookmarks/links.
   { label: "Students", href: "/principal/students", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
   { label: "Timetable View", href: "/principal/timetable", iconName: "CalendarDays", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
+  { label: "Holidays", href: "/principal/holiday-calendar", iconName: "CalendarDays", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
   { label: "Internal Marks", href: "/principal/internal-marks", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
   { label: "Results Analysis", href: "/principal/results-analysis", iconName: "BarChart3", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
   { label: "Mid Timetable", href: "/principal/mid-timetable", iconName: "CalendarRange", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
   { label: "Mentoring", href: "/principal/mentoring", iconName: "UserCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
   { label: "Faculty", href: "/principal/faculty", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Staff & HR", legacyModule: "Staff & HR Management" },
   { label: "Profile Completion Statistics", href: "/principal/faculty/profile-completion", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Staff & HR Management" },
-  { label: "Staff", href: "/principal/staff", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Staff & HR Management" },
   { label: "Circulars", href: "/principal/circulars", iconName: "Megaphone", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Staff & HR Management" },
   // Deciding a leave request is Principal/VP authority, not College Admin's -
   // see the matching guard in api/leave/applications/[id]/route.ts.
   { label: "Leave Approvals", href: "/principal/leave-approvals", iconName: "CalendarClock", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Leave & Attendance", hideForRealRoles: ["COLLEGE_ADMIN"], legacyModule: "Staff & HR Management" },
-  { label: "Leave History", href: "/principal/leave-history", iconName: "History", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Staff & HR Management" },
+  { label: "Leave History", href: "/principal/leave-history", iconName: "History", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], hideForRealRoles: ["COLLEGE_ADMIN"], legacyModule: "Staff & HR Management" },
   { label: "Student Permissions", href: "/principal/student-permissions", iconName: "ShieldCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
   // Was 7 separate sidebar items (Student Attendance History, Attendance
   // Report, Attendance Completion, Absent Report, Shortage Report, Faculty
@@ -262,11 +263,11 @@ export const NAV_ITEMS: NavItem[] = [
   // authority, not College Admin's - see the matching guards in
   // api/college/budget-cycles/[id] and api/college/budget-requests/[id].
   { label: "Budget", href: "/principal/budget", iconName: "PiggyBank", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Budget & Purchase", hideForRealRoles: ["COLLEGE_ADMIN"], legacyModule: "Payroll & Budget" },
-  { label: "Budget Report", href: "/principal/budget/report", iconName: "FileText", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Payroll & Budget" },
+  { label: "Budget Report", href: "/principal/budget/report", iconName: "FileText", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], hideForRealRoles: ["COLLEGE_ADMIN"], legacyModule: "Payroll & Budget" },
   // Only ever shows the Principal/VP's OWN emergency purchase requests - not
   // something College Admin should be raising on the college's behalf either.
   { label: "Purchase Clearance", href: "/principal/purchase-clearance", iconName: "Receipt", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], hideForRealRoles: ["COLLEGE_ADMIN"], legacyModule: "Payroll & Budget" },
-  { label: "Budget History", href: "/principal/indents", iconName: "ClipboardList", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Payroll & Budget" },
+  { label: "Budget History", href: "/principal/indents", iconName: "ClipboardList", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], hideForRealRoles: ["COLLEGE_ADMIN"], legacyModule: "Payroll & Budget" },
   // College Admin is a role-login, not one continuous employee (see
   // administration/college-people): no personal HR profile, attendance, or
   // leave to track, unlike every other seat here (a real Principal/VP is
@@ -357,6 +358,7 @@ export const NAV_ITEMS: NavItem[] = [
   // route for any existing bookmarks/links.
   { label: "Students", href: "/college-office/students", iconName: "GraduationCap", roles: ["COLLEGE_OFFICE"], section: "Students" },
   { label: "Semester Timings", href: "/college-office/timings", iconName: "Clock", roles: ["COLLEGE_OFFICE"] },
+  { label: "Holidays", href: "/college-office/holidays", iconName: "CalendarDays", roles: ["COLLEGE_OFFICE"] },
   { label: "Supporting Staff", href: "/college-office/non-technical-staff", iconName: "UsersRound", roles: ["COLLEGE_OFFICE"], section: "Staff" },
   // Only the first item of a group carries `section` - the sidebar renders a
   // header for every item that sets one, so repeating it printed "STAFF" three
@@ -369,7 +371,6 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Leave History", href: "/college-office/leave-history", iconName: "History", roles: ["COLLEGE_OFFICE"] },
   { label: "Leave Profiles", href: "/college-office/leave/profiles", iconName: "ClipboardList", roles: ["COLLEGE_OFFICE"] },
   // Arrange cover for supporting staff who have other work on a date or range.
-  { label: "Holidays", href: "/college-office/holidays", iconName: "CalendarDays", roles: ["COLLEGE_OFFICE"] },
   { label: "Staff Attendance", href: "/college-office/staff-attendance", iconName: "ClipboardCheck", roles: ["COLLEGE_OFFICE"] },
   { label: "Import Attendance", href: "/college-office/attendance-import", iconName: "Upload", roles: ["COLLEGE_OFFICE"] },
   { label: "Certificate Issuance", href: "/college-office/certificates", iconName: "FileCheck", roles: ["COLLEGE_OFFICE"], section: "Certificates" },
@@ -407,6 +408,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/academics", iconName: "LayoutDashboard", roles: ["ACADEMICS"] },
   { label: "Curriculum", href: "/academics/course-structure", iconName: "Library", roles: ["ACADEMICS"], section: "Academics" },
   { label: "Timetable View", href: "/academics/timetable-view", iconName: "CalendarDays", roles: ["ACADEMICS"], section: "Academics" },
+  { label: "Holidays", href: "/academics/holidays", iconName: "CalendarDays", roles: ["ACADEMICS"], section: "Academics" },
   { label: "Incident Record", href: "/academics/incident-record", iconName: "ClipboardList", roles: ["ACADEMICS"] },
   { label: "My Profile", href: "/academics/profile", iconName: "UserCircle", roles: ["ACADEMICS"], section: "Personal" },
   { label: "My Leave", href: "/academics/leave", iconName: "CalendarClock", roles: ["ACADEMICS"] },
@@ -528,6 +530,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/student", iconName: "LayoutDashboard", roles: ["STUDENT"] },
   { label: "Timetable", href: "/student/timetable", iconName: "CalendarDays", roles: ["STUDENT"], section: "Academics" },
   { label: "Mid Timetable", href: "/student/mid-timetable", iconName: "CalendarRange", roles: ["STUDENT"] },
+  { label: "Holidays", href: "/student/holidays", iconName: "CalendarDays", roles: ["STUDENT"] },
   { label: "Attendance", href: "/student/attendance", iconName: "TrendingUp", roles: ["STUDENT"] },
   { label: "Results", href: "/student/results", iconName: "GraduationCap", roles: ["STUDENT"] },
   { label: "Mentoring", href: "/student/mentoring", iconName: "UserCheck", roles: ["STUDENT"] },
@@ -560,6 +563,10 @@ export const NAV_ITEMS: NavItem[] = [
 ];
 
 export function getNavItemsForRole(role: UserRole): NavItem[] {
+  // College Admin has no items of its own in NAV_ITEMS: its menu is assembled from the Principal's, the
+  // College Office's and the R&D office's (see getCollegeAdminNavItems), so that one list is what its Nav
+  // Visibility settings and page checks use too.
+  if (role === "COLLEGE_ADMIN") return getCollegeAdminNavItems();
   return NAV_ITEMS.filter((item) => item.roles.includes(role));
 }
 
@@ -773,6 +780,8 @@ export function getRolesWithNavModules(): UserRole[] {
       item.roles.forEach((r) => roles.add(r));
     }
   });
+  // College Admin is configured on its own (its list is assembled, not declared in NAV_ITEMS).
+  roles.add("COLLEGE_ADMIN");
   return Array.from(roles);
 }
 
@@ -835,13 +844,63 @@ export function filterVisibleNavItems(
   });
 
   let lastModule: string | null = null;
-  return kept.map(({ item, module }) => {
+  const visible = kept.map(({ item, module }) => {
     const isNewModule = module !== lastModule;
     lastModule = module;
     return isNewModule && module !== "General"
       ? { ...item, section: module }
       : { ...item, section: undefined };
   });
+  return isCollegeAdminRole(realRole) ? forCollegeAdmin(visible) : visible;
+}
+
+// Keeps the items `keep` allows, and hands the heading of a dropped item that opened a module on to the next
+// item kept, so a module never loses its heading because its first item was dropped.
+function keepWithHeadings(items: NavItem[], keep: (i: NavItem) => boolean, heading: (section: string) => string = (s) => s): NavItem[] {
+  const out: NavItem[] = [];
+  let carried: string | undefined;
+  for (const item of items) {
+    if (item.section) carried = heading(item.section);
+    if (!keep(item)) continue;
+    out.push({ ...item, section: carried });
+    carried = undefined;
+  }
+  return out;
+}
+
+// The full menu of a College Admin login. Its own role is College Office with the College Admin seat on top,
+// so it is both the Principal's side of the college and the College Office's, plus the R&D office:
+//   1. the Principal's modules a College Admin may use (the decision pages - leave, budget, hiring - are not
+//      its to decide, see NavItem.hideForRealRoles),
+//   2. the College Office's work modules not already there under the same name,
+//   3. the R&D modules (every one, but not the R&D office's own profile / leave).
+// No personal items (profile, attendance, leave) and no "My Work" heading: a College Admin is a role-login,
+// not a person. This is also the list the Super Admin hides things from under "College Admin" (Nav
+// Visibility), so the hrefs here are the pages' own URLs; forCollegeAdmin moves them under /college-admin
+// when the menu is drawn.
+export function getCollegeAdminNavItems(): NavItem[] {
+  const principal = keepWithHeadings(NAV_ITEMS.filter((i) => i.roles.includes("PRINCIPAL")), (i) => !i.hideForRealRoles?.includes("COLLEGE_ADMIN"));
+  const have = new Set(principal.map((i) => i.label));
+  const office = keepWithHeadings(
+    NAV_ITEMS.filter((i) => i.roles.includes("COLLEGE_OFFICE")),
+    (i) => i.href !== "/college-office" && !isPersonalNavItem(i) && !isProfileNavItem(i) && !have.has(i.label),
+    (s) => (s === "My Work" || s === "Personal" ? "Administration" : s)
+  );
+  const rnd = NAV_ITEMS
+    .filter((i) => i.roles.includes("R_AND_D") && i.href.startsWith("/r-and-d") && !isProfileNavItem(i) && !/\/leave$/.test(i.href))
+    .map((i, idx) => ({
+      ...i,
+      label: i.href === "/r-and-d" ? "R&D Overview" : i.label,
+      roles: ["PRINCIPAL" as UserRole],
+      section: idx === 0 ? "Research & Development" : undefined,
+    }));
+  return [...principal, ...office, ...rnd];
+}
+
+// A College Admin's menu: the same items under its own /college-admin URLs (the Principal's and the R&D
+// office's pages are served there - see next.config.ts). The College Office's pages keep their own URLs.
+function forCollegeAdmin(items: NavItem[]): NavItem[] {
+  return items.map((i) => ({ ...i, href: toCollegeAdminPath(i.href) }));
 }
 
 // "My Profile" lives behind the avatar in the top bar, not in the sidebar.

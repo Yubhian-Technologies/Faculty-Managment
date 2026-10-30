@@ -382,7 +382,7 @@ export default function StudentAttendanceImportPage() {
       )}
 
       {sheets.length > 0 && (
-        <div className="sticky bottom-0 z-20 border-t bg-background/95 backdrop-blur">
+        <div className="sticky bottom-0 z-20 border-t bg-background shadow-[0_-4px_8px_-6px_rgba(0,0,0,0.15)]">
           <div className="flex flex-wrap items-center gap-3 py-3">
             {stage === 2 && (
               <>
@@ -440,7 +440,8 @@ function SheetResult({ sheet }: { sheet: SheetState }) {
 
       {notes.length > 0 && (
         <Note>
-          The timetable took effect after {plural(notes.length, "of these days")} (for example {notes[0].date}), so the subjects shown for them may not be what actually ran.
+          {notes.length} of these {notes.length === 1 ? "day is" : "days are"} dated before the current timetable took effect. Every day is saved against the
+          current timetable, so the subject and faculty shown follow it - overall attendance is not affected.
         </Note>
       )}
       {r.unmatchedRolls.length > 0 && <Note tone="error">Regd. Nos not in this section (ignored): {r.unmatchedRolls.join(", ")}</Note>}
@@ -463,12 +464,11 @@ function SheetResult({ sheet }: { sheet: SheetState }) {
             <tbody>
               {r.days.map((d) => (
                 <tr key={d.date} className="border-b align-top">
-                  <th scope="row" className="p-2 text-left font-normal tabular-nums">{d.date}</th>
+                  <th scope="row" className="whitespace-nowrap p-2 text-left font-normal tabular-nums">{d.date}</th>
                   <td className="p-2">
                     {d.status === "SKIPPED" ? <Badge variant="pending">Skipped</Badge> : d.skippedPeriods.length ? <Badge variant="modified">Partly</Badge> : <Badge variant="approved">OK</Badge>}
                     {d.reason && <span className="ml-2 text-muted-foreground">{d.reason}</span>}
                     {d.skippedPeriods.length > 0 && <div className="mt-1 text-xs text-muted-foreground">{d.skippedPeriods.join("; ")}</div>}
-                    {d.timetableNote && <div className="mt-1 text-xs text-amber-700">{d.timetableNote}</div>}
                     {d.detail.length > 0 && <ul className="mt-1 text-xs text-muted-foreground">{d.detail.map((x) => <li key={x}>{x}</li>)}</ul>}
                   </td>
                   <td className="p-2 text-right tabular-nums">{d.periods}</td>

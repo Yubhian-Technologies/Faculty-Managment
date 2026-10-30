@@ -31,6 +31,15 @@ export interface ApprovalKind<P, C, Tx = unknown> {
   completesAllOnApprove?(ctx: C, req: ApprovalRequest<P>, actor: Actor): Promise<boolean> | boolean;
 
   /**
+   * Optional: may `actor`, who did NOT raise the request, withdraw it while pending (e.g. the department's HOD on behalf
+   * of a stuck request)? Without this hook only the requester can. A reason is then required.
+   */
+  canCancel?(ctx: C, req: ApprovalRequest<P>, actor: Actor): Promise<boolean>;
+
+  /** Optional: a plain-words reason an APPROVED request can no longer be revoked (e.g. it has already started), or null. */
+  revokeBlockedReason?(ctx: C, req: ApprovalRequest<P>): Promise<string | null> | string | null;
+
+  /**
    * Writes that must commit atomically with the decision itself - small and
    * idempotent (e.g. recording coverage that other modules read). Runs inside
    * the store's transaction.
@@ -65,11 +74,15 @@ export interface ApprovalStore<Tx = unknown> {
   listByPendingKeys<P>(collegeId: string, kind: string, keys: readonly string[], opts?: ListOptions): Promise<ApprovalRequest<P>[]>;
   listByRequester<P>(collegeId: string, kind: string, requesterUid: string, opts?: ListOptions): Promise<ApprovalRequest<P>[]>;
   listByScope<P>(collegeId: string, kind: string, scopes: readonly string[], opts?: ListOptions): Promise<ApprovalRequest<P>[]>;
+  /** PENDING requests whose stage deadline (`escalateAt`) has passed, oldest deadline first. One single-field range query. */
+  listOverdue<P>(collegeId: string, kind: string, nowIso: string, limit: number): Promise<ApprovalRequest<P>[]>;
+  /** Requests whose after-approval step FAILED and is waiting for a retry. One single-field equality query. */
+  listEffectFailed<P>(collegeId: string, kind: string, limit: number): Promise<ApprovalRequest<P>[]>;
   /** Requests whose `payload.<field>` array contains `value` (e.g. every request that covers a given student). */
   listByPayloadArray<P>(collegeId: string, kind: string, field: string, value: string, opts?: ListOptions): Promise<ApprovalRequest<P>[]>;
 }
 
-export type EngineEvent = "SUBMITTED" | "ADVANCED" | "APPROVED" | "REJECTED" | "CANCELLED" | "REVOKED";
+export type EngineEvent = "SUBMITTED" | "ADVANCED" | "ESCALATED" | "APPROVED" | "REJECTED" | "CANCELLED" | "REVOKED";
 
 /** Told after something happened; must never throw into the workflow (best-effort). */
 export type EventSink<P> = (collegeId: string, event: EngineEvent, req: ApprovalRequest<P>) => Promise<void> | void;

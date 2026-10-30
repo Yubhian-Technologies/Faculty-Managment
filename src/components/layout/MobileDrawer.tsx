@@ -1,5 +1,6 @@
 "use client";
 
+import { groupNavItems } from "./navGroups";
 import { CollegeLogo } from "@/components/shared/CollegeLogo";
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -9,6 +10,7 @@ import { cn, getInitials } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
 import { useUIStore } from "@/store/uiStore";
 import { useAuth } from "@/hooks/useAuth";
+import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
 import { useAssignedInterviews } from "@/hooks/useAssignedInterviews";
 import { useAssignedCoordinator } from "@/hooks/useAssignedCoordinator";
 import { useIsSubDepartmentHod } from "@/hooks/useIsSubDepartmentHod";
@@ -41,6 +43,7 @@ interface MobileDrawerProps {
 
 export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) {
   const user = useAuthStore((s) => s.user);
+  const { nameFor } = useFacultyDisplayNames();
   const { sidebarOpen, setSidebarOpen } = useUIStore();
   const { logout } = useAuth();
   const pathname = usePathname();
@@ -74,6 +77,7 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
   }, [sidebarOpen, setSidebarOpen]);
 
   if (!user || user.role === "CLASS_LEADER" || pathname?.startsWith("/class-leader")) return null;
+  const shownName = nameFor("dashboardName", { uid: user.uid }, user.name);
 
   const baseNavItems = filterVisibleNavItems(contextItems, hiddenModules, hiddenItems, user.realRole, true)
     .filter((item) => !hideSubDepartmentsLink || item.href !== "/hod/settings/sub-departments");
@@ -116,11 +120,7 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
   if (user.readOnlyAccess) navItems = readOnlyNavItems();
 
   // A nav item that starts a `section` opens a new group; the items after it belong to it.
-  const groups: { title: string | null; items: NavItem[] }[] = [];
-  for (const item of navItems) {
-    if (item.section || groups.length === 0) groups.push({ title: item.section ?? null, items: [] });
-    groups[groups.length - 1].items.push(item);
-  }
+  const groups = groupNavItems(navItems);
   const toggleGroup = (title: string) =>
     setClosedGroups((prev) => {
       const next = new Set(prev);
@@ -227,13 +227,13 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
           <div className="flex items-center gap-3 mb-3">
             <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold shrink-0 overflow-hidden">
               {user.profilePhotoUrl ? (
-                <img src={user.profilePhotoUrl} alt={user.name} className="h-full w-full object-cover" />
+                <img src={user.profilePhotoUrl} alt={shownName} className="h-full w-full object-cover" />
               ) : (
-                getInitials(user.name)
+                getInitials(shownName)
               )}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{user.name}</p>
+              <p className="text-sm font-medium truncate">{shownName}</p>
               <UserCardSubtitle user={user} />
             </div>
           </div>

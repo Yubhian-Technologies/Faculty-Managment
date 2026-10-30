@@ -206,11 +206,11 @@ function HodStudentsContent() {
   const [bulkPlan, setBulkPlan] = useState<BulkPlan | null>(null);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isBulkApplying, setIsBulkApplying] = useState(false);
-  // "Select by Regd. No range" - adds every currently-visible (filtered)
+  // "Select by roll number range" - adds every currently-visible (filtered)
   // student whose rollNumber falls between these two, inclusive, to the
   // existing selection (never replaces it, so it composes with ticking
   // individual rows or a previous range). Plain string comparison, not
-  // numeric - a real Regd. No is an alphanumeric code (e.g.
+  // numeric - a real roll number is an alphanumeric code (e.g.
   // "23471A0427"), and as long as the two ends share the same prefix/width
   // (the normal case for one section's contiguous block), lexicographic
   // order matches numeric order on the varying suffix.
@@ -851,15 +851,15 @@ function HodStudentsContent() {
     try {
       const { students: matches, truncated } = await fetchMatching({ rollFrom: lo, rollTo: hi });
       if (matches.length === 0) {
-        toast({ variant: "destructive", title: `No students found with Regd. Nos between ${lo} and ${hi}` });
+        toast({ variant: "destructive", title: `No students found with roll numbers between ${lo} and ${hi}` });
         return;
       }
       setAllSelected(matches, true);
       toast({
         variant: truncated ? "destructive" : "success",
         title: truncated
-          ? `Only the first ${matches.length} students with Regd. No ${lo} - ${hi} were selected`
-          : `${matches.length} student${matches.length === 1 ? "" : "s"} selected (Regd. No ${lo} - ${hi})`,
+          ? `Only the first ${matches.length} students in roll ${lo} - ${hi} were selected`
+          : `${matches.length} student${matches.length === 1 ? "" : "s"} selected (roll ${lo} - ${hi})`,
       });
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to select students" });
@@ -1022,7 +1022,7 @@ function HodStudentsContent() {
   }
 
   // Removes a student from their current section back to "Unassigned" -
-  // keeps the student record (Regd. No, department, course intact),
+  // keeps the student record (roll number, department, course intact),
   // unlike the row's separate delete action which removes them outright.
   async function handleUnassign() {
     if (!assignTarget) return;
@@ -1147,7 +1147,7 @@ function HodStudentsContent() {
         </div>
       ),
     },
-    { key: "rollNumber", header: "Regd. No", render: (r) => <span className="font-medium">{r.rollNumber || "—"}</span> },
+    { key: "rollNumber", header: "Roll No", render: (r) => <span className="font-medium">{r.rollNumber || "—"}</span> },
     { key: "name", header: "Name" },
     { key: "department", header: "Department", hideOnMobile: true, render: (r) => <span className="text-sm text-muted-foreground">{r.department}</span> },
     {
@@ -1161,6 +1161,18 @@ function HodStudentsContent() {
       // can exist under two different courses).
       render: (r) => r.course
         ? <span className="text-sm text-muted-foreground">{r.course}</span>
+        : <span className="text-sm text-muted-foreground/40">—</span>,
+    },
+    {
+      key: "secondaryDepartment",
+      header: "Core Dept",
+      hideOnMobile: true,
+      // Only ever set for a shared-first-year student pre-registered to their
+      // real branch (e.g. "cse" under "BS-Mathematics") - a plain department's
+      // students, and a first-year already sectioned into their branch, carry
+      // none, so this reads as a blank dash for them.
+      render: (r) => r.secondaryDepartment
+        ? <span className="text-sm text-muted-foreground">{r.secondaryDepartment}</span>
         : <span className="text-sm text-muted-foreground/40">—</span>,
     },
     {
@@ -1206,7 +1218,7 @@ function HodStudentsContent() {
           <Button variant="ghost" size="sm" onClick={() => openAssign(r)} title={r.section ? "Move to a different section" : "Assign to a section"}>
             <ArrowRightLeft className="h-3.5 w-3.5" />
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => openEdit(r)} title="Set Regd. No / status / lab batch">
+          <Button variant="ghost" size="sm" onClick={() => openEdit(r)} title="Set roll number / status / lab batch">
             <Pencil className="h-3.5 w-3.5" />
           </Button>
         </div>
@@ -1222,7 +1234,7 @@ function HodStudentsContent() {
   const studentsHeader = (
     <PageHeader
       title="Students"
-      description="View and manage student records across your department and its associated branches."
+      description="Your department's students, plus every branch grouped under it."
       actions={<StudentsViewTabs tabs={HOD_VIEWS} value={view} onChange={setView} />}
     />
   );
@@ -1270,7 +1282,7 @@ function HodStudentsContent() {
                 surname (first word of their name) and split evenly across those sections, earliest surnames
                 first. Re-running this can move a student who was already in one of the picked sections to
                 another, so the whole group stays in surname order as new students are imported later.
-                Sections you don&apos;t pick, and Regd. Nos, are left untouched.
+                Sections you don&apos;t pick, and roll numbers, are left untouched.
               </p>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
@@ -1448,7 +1460,7 @@ function HodStudentsContent() {
           ) : (
             <>
               <span className="text-xs text-muted-foreground">
-                Select students to move or assign multiple records to a section at once.
+                Tick students below to move or assign several to a section at once.
               </span>
               {hasLoaded && unassignedTotal > 0 && (
                 <Button size="sm" variant="outline" className="ml-auto" onClick={() => void selectAllUnassigned()} disabled={isSelecting}>
@@ -1458,16 +1470,16 @@ function HodStudentsContent() {
             </>
           )}
           <div className="flex w-full flex-wrap items-center gap-2 border-t pt-2 mt-1">
-            <span className="text-xs text-muted-foreground shrink-0">Select by Regd. No. range:</span>
+            <span className="text-xs text-muted-foreground shrink-0">Select by roll no. range:</span>
             <Input
-              placeholder="From Regd. No."
+              placeholder="From roll no."
               value={rollFrom}
               onChange={(e) => setRollFrom(e.target.value)}
               className="h-8 w-36"
             />
             <span className="text-xs text-muted-foreground">to</span>
             <Input
-              placeholder="To Regd. No."
+              placeholder="To roll no."
               value={rollTo}
               onChange={(e) => setRollTo(e.target.value)}
               className="h-8 w-36"
@@ -1486,7 +1498,7 @@ function HodStudentsContent() {
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search by Regd. No or name..."
+              placeholder="Search by roll number or name..."
               value={search}
               onChange={(e) => onSearchChange(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") handleLoad(); }}
@@ -1524,9 +1536,9 @@ function HodStudentsContent() {
         {!hasLoaded ? (
           <div className="flex flex-col items-center justify-center py-20 text-center border rounded-lg bg-card">
             <Users className="h-10 w-10 text-muted-foreground mb-3" />
-            <p className="font-medium text-base">No Student Records Loaded</p>
+            <p className="font-medium text-base">Click Load to view students</p>
             <p className="text-sm text-muted-foreground mt-1 max-w-sm">
-              Select the required filters and click Load to view student records.
+              Pick a course, department or year above (or leave them as all) and click Load. Students come in pages, so only the ones you look at are fetched.
             </p>
           </div>
         ) : isFetching && students.length === 0 ? (

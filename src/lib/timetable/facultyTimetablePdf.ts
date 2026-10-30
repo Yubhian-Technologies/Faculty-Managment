@@ -1,11 +1,10 @@
 import { subjectAbbreviation } from "@/lib/timetable/subjectAbbreviation";
 import type { Department, DayOfWeek, PeriodTiming, TeachingAssignment, TimetableSlot } from "@/types";
 import { DAY_LABELS } from "@/types";
-import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
 import { resolveLogoUrl } from "./logoAsset";
 import { facultySpans } from "./facultySpans";
 import { resolveSignatureRows } from "./signatureAuthority";
-import { collegeHeading, departmentHeading, buildFacultyClassRows, facultyTimetableTitle } from "./timetableHeader";
+import { collegeHeading, departmentHeading, buildFacultyClassRows, facultyClassLabel, facultyTimetableTitle } from "./timetableHeader";
 
 // Shared by hod/teaching and panel/teaching's own "Download"/"Print" buttons -
 // both pages lay a faculty member's own slots out identically and, until this
@@ -75,7 +74,7 @@ export interface FacultyTimetablePdfOptions {
 }
 
 export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): string {
-  const { facultyName, departmentName, semesterLabel, weekStart, weekEnd, days, periods, slots, assignmentById, periodTimeFor, breakAfter, courseCodeById, departments, formatDMY, title } = opts;
+  const { facultyName, departmentName, semesterLabel, days, periods, slots, assignmentById, periodTimeFor, breakAfter, title } = opts;
 
   // ── Letterhead: college :: city, affiliation, department, "Time Table : <year> <sem>", faculty ──
   const nameLine = opts.college?.name
@@ -147,24 +146,19 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
       }
       const inner = cellSlots.map((slot, i) => {
         const assignment = assignmentById.get(slot.assignmentId);
-        const courseCode = assignment?.courseId ? courseCodeById.get(assignment.courseId) : undefined;
-        const sectionLabel = assignment?.sectionName
-          ? sectionDisplayLabel({ department: assignment.department, name: assignment.sectionName, secondaryDepartments: [] }, departments)
-          : null;
-        const subline = [courseCode ?? assignment?.courseName, assignment?.year ? romanYear(assignment.year) : null, sectionLabel]
-          .filter(Boolean)
-          .join(" · ");
-        const subjectDisplay = subjectAbbreviation(assignment?.subjectName || slot.subjectName, assignment?.shortCode) || "—";
+        // The class as "III B.Tech-CSBS-A" (year, course, branch and section) and the subject acronym under it; no subject code.
+        const subAcr = subjectAbbreviation(assignment?.subjectName || slot.subjectName, assignment?.shortCode);
+        const classCode = facultyClassLabel({ courseName: assignment?.courseName, year: assignment?.year ?? slot.year, sectionName: assignment?.sectionName, departmentName: assignment?.department }) || "—";
         const room = slot.classroom ? `Room: ${slot.classroom}` : null;
         const sub = slot.substituteFacultyName ? `Sub: ${slot.substituteFacultyName}` : null;
         const time = periodTimeFor(slot.courseId, slot.year, period);
         const lastTime = span > 1 ? periodTimeFor(slot.courseId, slot.year, periods[pi + span - 1]) : undefined;
         const timeLine = time ? `<div class="slot-time">${escapeHtml(formatTime12h(time.startTime))}&ndash;${escapeHtml(formatTime12h((lastTime ?? time).endTime))}</div>` : "";
-        const codePt = codeFontSize(subjectDisplay, periodMm * span);
+        const codePt = codeFontSize(classCode, periodMm * span);
         return `<div class="slot"${i > 0 ? ' style="border-top:1px dashed #999;margin-top:3px;padding-top:3px;"' : ""}>
           ${timeLine}
-          ${subline ? `<div class="slot-class">${escapeHtml(subline)}</div>` : ""}
-          <div class="slot-code" style="font-size:${codePt.toFixed(1)}pt;white-space:nowrap;">${escapeHtml(subjectDisplay)}</div>
+          <div class="slot-code" style="font-size:${codePt.toFixed(1)}pt;white-space:nowrap;">${escapeHtml(classCode)}</div>
+          ${subAcr ? `<div class="slot-code" style="font-size:${codePt.toFixed(1)}pt;white-space:nowrap;">${escapeHtml(subAcr)}</div>` : ""}
           ${room ? `<div class="slot-note">${escapeHtml(room)}</div>` : ""}
           ${sub ? `<div class="slot-note">${escapeHtml(sub)}</div>` : ""}
         </div>`;

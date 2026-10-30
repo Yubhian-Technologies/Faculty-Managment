@@ -1,5 +1,6 @@
 "use client";
 
+import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,8 @@ function FilterSelect({ label, value, onChange, options, disabled }: { label: st
 // year / section / mentor) and only that slice is read, 50 at a time; or type a Regd. No for a
 // direct lookup. Each row opens the student's read-only Mentoring Record.
 export function StudentFinder({ byDepartment, byMentor }: { byDepartment: MentoringOverviewRow[]; byMentor: MentoringOverviewRow[] }) {
+  // Settings > Website Display Name > "Student mentoring": the mentor shown by Display Name - display only.
+  const { nameFor } = useFacultyDisplayNames();
   const allMentors = useMemo(() => byMentor.map((m) => ({ uid: m.key, name: m.label })).sort((a, b) => a.name.localeCompare(b.name)), [byMentor]);
   const [options, setOptions] = useState<FinderOptions | null>(null);
   const [department, setDepartment] = useState(ANY);
@@ -132,7 +135,7 @@ export function StudentFinder({ byDepartment, byMentor }: { byDepartment: Mentor
           <FilterSelect label="Section" value={section} disabled={department === ANY} onChange={setSection}
             options={[{ value: ANY, label: "All sections" }, ...sections.map((n) => ({ value: n, label: n }))]} />
           <FilterSelect label="Mentor" value={mentor} onChange={setMentor}
-            options={[{ value: ANY, label: "All mentors" }, ...mentors.map((m) => ({ value: `uid:${m.uid}`, label: m.name }))]} />
+            options={[{ value: ANY, label: "All mentors" }, ...mentors.map((m) => ({ value: `uid:${m.uid}`, label: nameFor("mentoring", { uid: m.uid }, m.name) }))]} />
           <div className="min-w-[12rem] flex-1 max-w-xs">
             <label className="text-xs text-muted-foreground mb-1 block">{department === ANY ? "Regd. No" : "Name or Regd. No (optional)"}</label>
             <Input className="h-9" value={q} onChange={(e) => setQ(e.target.value)} placeholder={department === ANY ? "e.g. 22A91A05" : "Narrow the list"} />
@@ -159,7 +162,7 @@ export function StudentFinder({ byDepartment, byMentor }: { byDepartment: Mentor
                       <span className="text-muted-foreground"> · {s.rollNumber || "No Regd. No"}</span>
                       <span className="block text-xs text-muted-foreground">{[s.department, `Year ${s.year}`, s.section && `Section ${s.section}`].filter(Boolean).join(" · ")}</span>
                     </span>
-                    <span className="text-xs text-muted-foreground">{s.mentorName ? `Mentor: ${s.mentorName}` : "No mentor"}</span>
+                    <span className="text-xs text-muted-foreground">{s.mentorName ? `Mentor: ${nameFor("mentoring", { uid: s.mentorUid }, s.mentorName)}` : "No mentor"}</span>
                   </Link>
                 </li>
               ))}

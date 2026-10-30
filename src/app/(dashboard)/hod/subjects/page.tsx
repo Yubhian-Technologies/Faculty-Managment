@@ -11,9 +11,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import type { Course, CourseCatalogItem, CourseYearTiming, Department, Subject, SubjectSemesterAssignment } from "@/types";
-import { SUBJECT_TYPE_LABELS } from "@/types";
-import { fedYears, regulationsForCourseYearByBatch } from "@/lib/college/academicStructure";
-import { managerEffectiveYears, mergeOwnDepartmentOptions } from "@/lib/departments/hodScope";
+import { subjectTypeDisplayLabel } from "@/types";
+import { regulationsForCourseYearByBatch } from "@/lib/college/academicStructure";
+import { feederOnlyYears, managerEffectiveYears, mergeOwnDepartmentOptions } from "@/lib/departments/hodScope";
 import { parseAcademicYearStart } from "@/lib/college/academicSession";
 import { resolveCurrentSemester } from "@/lib/college/semester";
 import { yearSemesterLabelIn, semesterInYearLabel } from "@/lib/academic/format";
@@ -183,19 +183,17 @@ export default function HODSubjectsPage() {
   // actually assigned this HOD's own scope for this course (per-course
   // override included, via managerEffectiveYears). Nothing assigned means no
   // years - never "every year of the course" (lib/college/taughtYears.ts). A
-  // year some OTHER department already claims as a feeder for this scope
-  // (fedYears) is excluded.
+  // year some OTHER department claims as a feeder for this scope is excluded
+  // only when the department doesn't claim it itself (feederOnlyYears).
   const yearOptions = useMemo(() => {
     if (!selectedCourse) return [];
     const courseYears = Array.from({ length: selectedCourse.durationYears }, (_, i) => i + 1);
     const assigned = new Set<number>();
-    // Checked PER department, not merged into one global exclusion set: a
-    // managed branch's own self-exclusion from a shared year (e.g. CSE's
-    // fedYears correctly dropping year 1) must never cancel out the shared
-    // year's actual manager (e.g. Basic Science) claiming that same year -
-    // see hod/teaching-assignments/page.tsx's yearOptions for the same fix.
+    // Checked PER department, not merged into one global exclusion set, so one
+    // department's exclusion never cancels out another's claim - see
+    // hod/teaching-assignments/page.tsx's yearOptions.
     for (const d of ownScopeDepartments) {
-      const excludedForD = new Set(fedYears(d, departments, selectedCourse.catalogId));
+      const excludedForD = new Set(feederOnlyYears(d, departments, selectedCourse.catalogId));
       for (const y of managerEffectiveYears(d, departments, selectedCourse.catalogId)) {
         if (!excludedForD.has(y)) assigned.add(y);
       }
@@ -536,7 +534,7 @@ export default function HODSubjectsPage() {
                                   <div className="font-medium text-foreground">{a.subjectName}</div>
                                   <div className="flex flex-wrap items-center gap-2 mt-1">
                                     <Badge variant="secondary" className="text-xs font-mono">{a.subjectCode}</Badge>
-                                    <Badge variant="outline" className="text-xs">{SUBJECT_TYPE_LABELS[a.type ?? subject?.type ?? "THEORY"]}</Badge>
+                                    <Badge variant="outline" className="text-xs">{subjectTypeDisplayLabel(a.type ?? subject?.type)}</Badge>
                                     {a.regulation && <Badge variant="secondary" className="text-xs">{a.regulation}</Badge>}
                                     <span className="text-xs text-muted-foreground">{a.hoursPerWeek ?? subject?.hoursPerWeek ?? 0} hrs/week</span>
                                   </div>

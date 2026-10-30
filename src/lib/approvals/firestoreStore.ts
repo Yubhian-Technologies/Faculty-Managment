@@ -109,6 +109,18 @@ export function createFirestoreStore(db: Firestore): ApprovalStore<Transaction> 
         .slice(0, opts?.limit ?? DEFAULT_LIMIT);
     },
 
+    // Single-field range on `escalateAt` (auto-indexed): documents without the field - finished requests, stages with
+    // no time limit - are never matched, so the sweep reads only requests that really are overdue.
+    async listOverdue<P>(collegeId: string, kind: string, nowIso: string, limit: number) {
+      const snap = await col(db, collegeId).where("escalateAt", "<=", nowIso).orderBy("escalateAt").limit(limit).get();
+      return snap.docs.map((d) => d.data() as ApprovalRequest<P>).filter((r) => r.kind === kind && r.status === "PENDING");
+    },
+
+    async listEffectFailed<P>(collegeId: string, kind: string, limit: number) {
+      const snap = await col(db, collegeId).where("effectStatus", "==", "FAILED").limit(limit).get();
+      return snap.docs.map((d) => d.data() as ApprovalRequest<P>).filter((r) => r.kind === kind);
+    },
+
     listByPendingKeys: (collegeId, kind, keys, opts) => listIn(collegeId, kind, "pendingKey", keys, opts),
     listByScope: (collegeId, kind, scopes, opts) => listIn(collegeId, kind, "scope", scopes, opts),
     listByRequester: (collegeId, kind, requesterUid, opts) => listIn(collegeId, kind, "requesterUid", [requesterUid], opts),

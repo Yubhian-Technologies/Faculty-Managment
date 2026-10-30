@@ -3,7 +3,7 @@ import { istDateFromParts } from "@/lib/attendance/istTime";
 import type { StageId } from "@/lib/approvals";
 import { findCategory, PERMISSION_GROUPS } from "./categories";
 import { REQUESTER_ROLE_LABELS } from "./roles";
-import { DEFAULT_LIMITS, type PermissionLimits, type PermissionStage } from "./types";
+import { DEFAULT_LIMITS, PERMISSION_STAGE_LABELS, type PermissionLimits, type PermissionStage } from "./types";
 
 // Pure rules for a permission request: input shape, limits, notice, the
 // approval chain, and which days it covers. No I/O - the service feeds these
@@ -59,14 +59,15 @@ export const shiftDate = (key: string, days: number) => new Date(utcMs(key) + da
  * because "first" is a strict order (createdAt, then id) exactly one of them backs off.
  */
 export function hasEarlierPendingOverlap(
-  own: { id: string; createdAt: string; coverageDates: readonly string[]; studentIds: readonly string[] },
-  others: readonly { id: string; status: string; createdAt: string; payload: { coverageDates: readonly string[]; students: readonly { id: string }[] } }[]
+  own: { id: string; createdAt: string; coverageDates: readonly string[]; studentIds: readonly string[]; periods?: "ALL" | readonly number[] },
+  others: readonly { id: string; status: string; createdAt: string; payload: { coverageDates: readonly string[]; students: readonly { id: string }[]; periods?: "ALL" | readonly number[] } }[]
 ): boolean {
   const days = new Set(own.coverageDates);
   const students = new Set(own.studentIds);
   return others.some((r) =>
     r.id !== own.id && r.status === "PENDING"
     && (r.createdAt < own.createdAt || (r.createdAt === own.createdAt && r.id < own.id))
+    && periodsOverlap(own.periods ?? "ALL", r.payload.periods ?? "ALL")
     && r.payload.coverageDates.some((d) => days.has(d)) && r.payload.students.some((s) => students.has(s.id)));
 }
 
@@ -97,6 +98,27 @@ export function resolveProofRequired(layers: readonly (Partial<PermissionLimits>
 export function resolveRequesters(layers: readonly (Partial<PermissionLimits> | undefined)[], typeKeys: readonly string[]): string[] | null {
   for (const l of layers) for (const k of typeKeys) if (l?.requestersByType?.[k]?.length) return l.requestersByType[k];
   return null;
+}
+
+/**
+ * Hours each stage of `chain` may take, aligned with it (null = no limit). Per stage the department's setting wins over the
+ * college's; `layers` is [department limits, college limits].
+ */
+export function resolveStageHours(layers: readonly (Partial<PermissionLimits> | undefined)[], chain: readonly string[]): (number | null)[] {
+  return chain.map((stage) => {
+    for (const l of layers) {
+      const h = l?.stageHours?.[stage];
+      if (typeof h === "number" && h >= 1) return h;
+    }
+    return null;
+  });
+}
+
+/** Do two period choices share at least one period? "ALL" overlaps with anything. */
+export function periodsOverlap(a: "ALL" | readonly number[], b: "ALL" | readonly number[]): boolean {
+  if (a === "ALL" || b === "ALL") return true;
+  const set = new Set(a);
+  return b.some((p) => set.has(p));
 }
 
 export const mayRequest = (allowed: readonly string[] | null, actorRoles: readonly string[]) => !allowed || allowed.some((r) => actorRoles.includes(r));
@@ -183,6 +205,13 @@ export function clampLimits(l: Partial<PermissionLimits> | undefined): Partial<P
   if (l.proofByType !== undefined) {
     const byType = Object.fromEntries(Object.entries(l.proofByType ?? {}).filter(([k, v]) => typeKeyKnown(k) && typeof v === "boolean"));
     if (Object.keys(byType).length > 0) out.proofByType = byType;
+  }
+  if (l.stageHours !== undefined) {
+    const hours: Record<string, number> = {};
+    for (const [stage, h] of Object.entries(l.stageHours ?? {})) {
+      if (stage in PERMISSION_STAGE_LABELS && typeof h === "number" && Number.isFinite(h) && h >= 1) hours[stage] = clamp(h, 1, 720, 24);
+    }
+    if (Object.keys(hours).length > 0) out.stageHours = hours;
   }
   if (l.requestersByType !== undefined) {
     const out2: Record<string, string[]> = {};

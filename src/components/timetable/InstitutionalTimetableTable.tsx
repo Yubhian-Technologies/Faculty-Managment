@@ -12,6 +12,8 @@ import { downloadSectionTimetableXlsx } from "@/lib/timetable/timetableExport";
 import { resolveLogoUrl } from "@/lib/timetable/logoAsset";
 import { renderHtmlToPdf } from "@/lib/pdf/htmlToPdf";
 import { yearSemesterLabelIn } from "@/lib/academic/format";
+import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
+import { slotsWithDisplayNames, assignmentsWithDisplayNames } from "@/lib/faculty/displayNameApply";
 import { SUBJECT_COLORS, isSubjectColor } from "@/lib/timetable/subjectColors";
 import {
   buildAllocationList,
@@ -65,6 +67,8 @@ export interface InstitutionalTimetableTableProps {
   weekStart?: Date;
   onWeekChange?: (d: Date) => void;
   showWeekNav?: boolean;
+  /** Leave out the course/department/section line when the page already shows it above the table. */
+  hideTitle?: boolean;
   typeFilter?: "ALL" | "THEORY" | "PRACTICAL";
   onTypeFilterChange?: (t: "ALL" | "THEORY" | "PRACTICAL") => void;
   className?: string;
@@ -73,7 +77,7 @@ export interface InstitutionalTimetableTableProps {
 export function InstitutionalTimetableTable({
   section,
   timing,
-  slots,
+  slots: slotsProp,
   courseName = section?.courseName ?? "",
   departmentName = section?.department ?? "",
   collegeName,
@@ -82,22 +86,32 @@ export function InstitutionalTimetableTable({
   address,
   phone,
   logoUrl,
-  academicYear = slots[0]?.academicYear ?? "",
+  academicYear = slotsProp[0]?.academicYear ?? "",
   semesterLabel: semesterLabelProp,
   effectiveDate: effectiveDateProp,
   classroom,
-  classInchargeName,
+  classInchargeName: classInchargeNameProp,
   subjects = [],
-  assignments = [],
+  assignments: assignmentsProp = [],
   workingDays,
   weekStart,
   onWeekChange,
   showWeekNav = false,
+  hideTitle = false,
   typeFilter = "ALL",
   onTypeFilterChange,
   className = "",
 }: InstitutionalTimetableTableProps) {
   const { collegeInfo, loading: collegeLoading, failed: collegeFailed } = useCollegeInfo();
+  // Settings > Website Display Name > "Section timetable": faculty (in the cells, subject list and the Class I/C line)
+  // shown by Display Name, on screen and in the PDF / print / Excel built from these same values. Display-only copies.
+  const { nameFor } = useFacultyDisplayNames();
+  const slots = useMemo(() => slotsWithDisplayNames(slotsProp, "sectionTimetable", nameFor), [slotsProp, nameFor]);
+  const assignments = useMemo(() => assignmentsWithDisplayNames(assignmentsProp, "sectionTimetable", nameFor), [assignmentsProp, nameFor]);
+  const classInchargeName = useMemo(() => {
+    const usual = (classInchargeNameProp && classInchargeNameProp !== "—" ? classInchargeNameProp : section?.facultyInchargeName) || "";
+    return usual ? nameFor("sectionTimetable", { uid: section?.facultyInchargeUid }, usual) : classInchargeNameProp;
+  }, [classInchargeNameProp, section?.facultyInchargeName, section?.facultyInchargeUid, nameFor]);
   const activeCollegeName = collegeName || collegeInfo?.name || "";
   const activeCollegeCode = collegeCode ?? (collegeInfo?.code || "");
   const activeAffiliation = affiliation ?? (collegeInfo?.affiliation || "");
@@ -292,6 +306,8 @@ export function InstitutionalTimetableTable({
       <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-2.5">
         {showWeekNav && weekStart && onWeekChange ? (
           <WeekNavigator weekStart={weekStart} onChange={onWeekChange} />
+        ) : hideTitle ? (
+          <div />
         ) : (
           <div className="text-sm font-semibold text-foreground min-w-0 truncate">
             {[courseName || section?.courseName, departmentName || section?.department, section ? `Section ${section.name}` : null]
@@ -390,7 +406,7 @@ export function InstitutionalTimetableTable({
           </div>
           <div className="mt-3 flex flex-wrap items-start justify-between gap-x-6 gap-y-1 text-xs font-bold text-foreground">
             <div className="space-y-0.5 min-w-0">
-              {[headerLines.yearLine, headerLines.branchLine, headerLines.inchargeLine].filter(Boolean).map((l) => (
+              {[headerLines.yearLine, headerLines.branchLine].filter(Boolean).map((l) => (
                 <div key={l} className="break-words">{l}</div>
               ))}
             </div>
@@ -400,6 +416,9 @@ export function InstitutionalTimetableTable({
               ))}
             </div>
           </div>
+          {headerLines.inchargeLine && (
+            <div className="mt-1 text-center text-xs font-bold text-foreground break-words">{headerLines.inchargeLine}</div>
+          )}
         </div>
 
         {/* ── Mobile View Controls (phones & small screens) ── */}
@@ -837,19 +856,20 @@ export function InstitutionalTimetableTable({
         {allocationList.length > 0 && (
           <div className="border-t px-4 py-3 bg-card overflow-x-auto">
             <table className="w-full table-fixed text-xs">
-              <colgroup><col style={{ width: "9%" }} /><col style={{ width: "44%" }} /><col style={{ width: "15%" }} /><col style={{ width: "32%" }} /></colgroup>
+              <colgroup><col style={{ width: "8%" }} /><col style={{ width: "36%" }} /><col style={{ width: "12%" }} /><col style={{ width: "14%" }} /><col style={{ width: "30%" }} /></colgroup>
               <thead>
                 <tr className="text-left font-bold text-foreground">
                   <th className="px-1 py-1 text-center">S.No</th>
                   <th className="px-1 py-1">Subject Name</th>
                   <th className="px-1 py-1">Sub Acr</th>
+                  <th className="px-1 py-1">Subject Code</th>
                   <th className="px-1 py-1">Faculty</th>
                 </tr>
               </thead>
               <tbody>
                 {groupAllocationByType(allocationList).map((g) => (
                   <Fragment key={g.label}>
-                    <tr><td colSpan={4} className="px-1 pt-2 pb-0.5 font-bold text-foreground">{g.label}</td></tr>
+                    <tr><td colSpan={5} className="px-1 pt-2 pb-0.5 font-bold text-foreground">{g.label}</td></tr>
                     {g.entries.map((item, i) => (
                       <tr key={`${g.label}-${i}`} className="text-foreground">
                         <td className="px-1 py-0.5 text-center">{i + 1}</td>
@@ -858,6 +878,7 @@ export function InstitutionalTimetableTable({
                           {item.labBatches.length > 0 && <span> ({item.labBatches.join(", ")})</span>}
                         </td>
                         <td className="px-1 py-0.5 break-words">{item.shortCode}</td>
+                        <td className="px-1 py-0.5 break-words">{item.code}</td>
                         <td className="px-1 py-0.5 break-words">{item.faculty}</td>
                       </tr>
                     ))}

@@ -5,9 +5,10 @@ import { usePathname } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
 import { useWorkContextStore } from "@/store/workContextStore";
 import {
-  getNavItemsForContext, getWorkContexts, resolveWorkContext,
+  getCollegeAdminNavItems, getNavItemsForContext, getWorkContexts, resolveWorkContext,
   type NavItem, type WorkContext, type WorkContextKey,
 } from "@/components/layout/navConfig";
+import { isCollegeAdminRole } from "@/lib/auth/collegeAdminPaths";
 import { ACTIVE_HOD_DEPT_COOKIE, departmentOfContext, encodeActiveHodDepartment } from "@/lib/roles/activeHodDepartment";
 
 // Tells the server which department a multi-department HOD is working in (see
@@ -30,13 +31,18 @@ export function useWorkContext(): { items: NavItem[]; contexts: WorkContext[]; a
   const uid = user?.uid;
   const roles = user?.roles ?? user?.seatRoles ?? [];
   const hodDepartments = user?.departments ?? (user?.department ? [user.department] : []);
-  const active = user ? resolveWorkContext(user.role, roles, chosen, pathname, hodDepartments) : null;
+  // A College Admin is one role-login with one dashboard: no "My Work", no seat dropdown (no contexts at
+  // all, so the switcher is not drawn). The menu is always the admin's own (no HOD department, no seat
+  // context), so every page it manages is in that one place.
+  const collegeAdmin = isCollegeAdminRole(user?.realRole);
+  const active = user ? (collegeAdmin ? "ME" as WorkContextKey : resolveWorkContext(user.role, roles, chosen, pathname, hodDepartments)) : null;
 
   useEffect(() => {
     if (uid) syncActiveHodCookie(uid, active);
   }, [uid, active]);
 
   if (!user) return { items: [], contexts: [], active: null };
+  if (collegeAdmin) return { items: getCollegeAdminNavItems(), contexts: [], active };
   return {
     items: getNavItemsForContext(user.role, roles, active ?? "ME"),
     contexts: getWorkContexts(user.role, roles, hodDepartments),

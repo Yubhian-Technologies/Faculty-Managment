@@ -1,5 +1,6 @@
 "use client";
 
+import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -51,6 +52,8 @@ const INSTITUTIONAL_STAFF_TAB = { key: "institutional" as const, label: "Institu
 // role default) by the time it's fetched - there is no "not set up" state,
 // only ever an existing, editable profile.
 export function LeaveProfilesRoster({ editHrefBase }: LeaveProfilesRosterProps) {
+  // Settings > Website Display Name > "Attendance and leave": names shown (and exported) as Display Names - display only.
+  const { nameFor } = useFacultyDisplayNames();
   const [roster, setRoster] = useState<RosterEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [staffType, setStaffType] = useState<StaffType>("faculty");
@@ -153,7 +156,7 @@ export function LeaveProfilesRoster({ editHrefBase }: LeaveProfilesRosterProps) 
                   <Card key={f.uid}>
                     <CardContent className="p-4 flex items-center justify-between gap-3 flex-wrap">
                       <div>
-                        <p className="font-medium">{f.name}</p>
+                        <p className="font-medium">{nameFor("attendanceLeave", { uid: f.uid }, f.name)}</p>
                         <p className="text-sm text-muted-foreground">
                           {f.designation}
                           {/* Redundant once a department header is already shown above the group */}

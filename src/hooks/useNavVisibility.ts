@@ -5,6 +5,7 @@ import { useMyAssignments } from "@/hooks/useMyAssignments";
 import { useOfficeAllowedHrefs } from "@/hooks/useOfficeAllowedHrefs";
 import { officeHiddenHrefs } from "@/lib/departments/officeAccess";
 import { getNavItemsForRole, groupNavItemsByModule } from "@/components/layout/navConfig";
+import { isCollegeAdminRole } from "@/lib/auth/collegeAdminPaths";
 import type { UserRole } from "@/types";
 
 type PerRole = Partial<Record<UserRole, string[]>>;
@@ -13,7 +14,7 @@ type PerRole = Partial<Record<UserRole, string[]>>;
 // everyone else, regardless of the Super Admin's own settings. Which duties a
 // login holds comes from useMyAssignments (one request, cached).
 const TIMETABLE_INCHARGE_HREFS = [
-  "/panel/timetable-incharge", "/panel/assignment-requests",
+  "/panel/timetable-incharge", "/panel/assignment-requests", "/panel/faculty-timetable",
   "/college-staff/timetable-incharge", "/college-staff/assignment-requests", "/college-staff/faculty-timetable",
 ];
 const SECTION_INCHARGE_HREFS = ["/panel/students", "/panel/students/batches", "/panel/section", "/panel/students/class-representatives"];
@@ -31,6 +32,9 @@ export function useNavVisibility() {
 
   const primary = user?.role;
   const seatRoles = user?.roles ?? user?.seatRoles;
+  // A College Admin has its OWN hidden modules / items (saved under "College Admin" in Nav Visibility) and
+  // nothing else applies: not the College Office's or the Principal's, which it only borrows pages from.
+  const collegeAdmin = isCollegeAdminRole(user?.realRole);
   const canBeIncharge = !!primary && !!user?.collegeId &&
     [primary, ...(seatRoles ?? [])].some((r) => DUTY_ROLES.includes(r));
   // null = not yet known; the nav stays in its loading state until it is.
@@ -76,7 +80,7 @@ export function useNavVisibility() {
     // primary one, and expand each role's hidden modules into that role's own
     // item hrefs (module names like "Personal" repeat across roles, so they
     // can't be matched by name once roles are combined).
-    const held = Array.from(new Set<UserRole>([primary, ...(seatRoles ?? [])]));
+    const held = collegeAdmin ? (["COLLEGE_ADMIN"] as UserRole[]) : Array.from(new Set<UserRole>([primary, ...(seatRoles ?? [])]));
     const hrefs = new Set<string>();
     for (const role of held) {
       raw.hiddenItems[role]?.forEach((h) => hrefs.add(h));
@@ -98,17 +102,17 @@ export function useNavVisibility() {
       if (assignments.internalExam === false) INTERNAL_EXAM_HREFS.forEach((h) => hrefs.add(h));
     }
     return Array.from(hrefs);
-  }, [raw, primary, seatRoles, assignments, officeAllowed.hrefs, wantsTimetable, hasTimetable, hasDuties]);
+  }, [raw, primary, seatRoles, collegeAdmin, assignments, officeAllowed.hrefs, wantsTimetable, hasTimetable, hasDuties]);
 
   const hiddenModules = useMemo(() => {
     if (!primary) return [];
-    const held = Array.from(new Set<UserRole>([primary, ...(seatRoles ?? [])]));
+    const held = collegeAdmin ? (["COLLEGE_ADMIN"] as UserRole[]) : Array.from(new Set<UserRole>([primary, ...(seatRoles ?? [])]));
     const mods = new Set<string>();
     for (const role of held) {
       raw.hiddenModules[role]?.forEach((m) => mods.add(m));
     }
     return Array.from(mods);
-  }, [raw, primary, seatRoles]);
+  }, [raw, primary, seatRoles, collegeAdmin]);
 
   return { hiddenModules, hiddenItems, loading: loading || (canBeIncharge && assignments === null) || officeAllowed.loading };
 }

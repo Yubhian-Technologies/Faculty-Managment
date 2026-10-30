@@ -126,6 +126,8 @@ interface FacultyProfileFieldsLike {
 }
 
 export interface ResumeData {
+  /** The faculty Display Name to print in the heading instead of the Full Name (Settings > Website Display Name). */
+  displayNameOverride?: string;
   /** Which sections to render. Absent = all of them, so any caller that
    *  doesn't offer the choice keeps producing the full resume. See
    *  lib/pdf/resumeSections.ts. */
@@ -633,9 +635,9 @@ export function getResumeHTML(rawData: ResumeData): string {
     <div class="header-left">
       ${data.profilePhotoUrl
         ? `<img class="avatar" src="${esc(data.profilePhotoUrl)}" alt="">`
-        : `<div class="avatar-fallback">${esc(initials(facultyDisplayName(data)))}</div>`}
+        : `<div class="avatar-fallback">${esc(initials(data.displayNameOverride || facultyDisplayName(data)))}</div>`}
       <div>
-        <div class="name">${esc(facultyDisplayName(data))}</div>
+        <div class="name">${esc(data.displayNameOverride || facultyDisplayName(data))}</div>
         ${subtitle ? `<div class="subtitle">${esc(subtitle)}</div>` : ""}
       </div>
     </div>

@@ -475,8 +475,7 @@ export interface FMSUser {
   emergencyContactName?: string;
   emergencyContactRelation?: string; // relation of the emergency contact to this person
   emergencyContactMobileNo?: string;
-  ratificationStatus?: "Ratified" | "Not Ratified" | "Attended" | "Not Yet Attended"; // see lib/faculty/ratificationHistory.ts
-  ratificationAttended?: boolean; // true = a "Not Ratified" the person confirmed as Attended + Not Ratified; absent on older records
+  ratificationStatus?: "Ratified" | "Not Ratified";
   ratificationProceedingsNumber?: string;
   ratificationDate?: Timestamp; // Ratification Proceedings Date
   maritalStatus?: "Single" | "Married";
@@ -693,47 +692,6 @@ export interface Department {
   // an inactive one - those are structural invariants, not inferences, so
   // ticking this box can never make one of them a freshman department.
   isFreshman?: boolean;
-  // Advisory-only classification into the Principal-facing vocabulary PARENT
-  // (owns students/sections/subjects, may have children) / CHILD (owns its
-  // own students/sections, sits under a parent) / GHOST (hasSubDepartments
-  // with parentRunsOwnSections===false and no feeder-shaped child - owns
-  // nothing itself, full control flows to its children already via
-  // childDepartmentNames in scope.ts) / NEIGHBOUR / NEIGHBOUR_SUB (owns no
-  // students of its own; uses managedDepartments/secondaryDepartments to
-  // teach another department's assigned years). This is a NAME for what
-  // the fields above already mean - never a new source of truth. Every
-  // real authorization/visibility decision keeps reading
-  // hasSubDepartments/parentRunsOwnSections/managedDepartments/
-  // secondaryDepartments/parentDepartmentId directly via scope.ts,
-  // academicStructure.ts, managedBranches.ts and taughtYears.ts, exactly as
-  // before this field existed - nothing branches on departmentRole.
-  // Computed by deriveDepartmentRole() (src/lib/departments/departmentRole.ts);
-  // UI badges call that function LIVE rather than trust this stored copy, so
-  // a stale value here can never display something no longer true. Stored
-  // only for the one-shot backfill audit trail and a future Principal
-  // override, same unset-means-derive convention as isFreshman above.
-  departmentRole?: "PARENT" | "CHILD" | "GHOST" | "NEIGHBOUR" | "NEIGHBOUR_SUB";
-  departmentRoleSource?: "DERIVED" | "PRINCIPAL_SET";
-  // Explicit, stored mirror of "which neighbour teaches this department's fed
-  // years" - a denormalized REVERSE of managedDepartments (set on the
-  // neighbour, not here), so a parent/child department's own record can show
-  // "Taught by: X" directly instead of reverse-scanning every other
-  // department for a name match. Computed by resolveNeighbourLinks()
-  // (src/lib/departments/neighbourLinks.ts), which wraps the SAME
-  // findBranchManager() scope.ts's canHodEditDepartmentYear uses for real
-  // teaching-assignment authority - so this can never show a neighbour that
-  // doesn't actually have it, or miss one that does. Display/navigation ONLY:
-  // no authorization path reads this field; a missed write-path sync at worst
-  // shows a stale neighbour in a UI panel, never changes who can do what.
-  // Typed as an array for forward compatibility, but the enforced
-  // one-owner-per-branch rule (findBranchClaimConflicts) means this holds 0
-  // or 1 entries today - never multiple neighbours feeding the same
-  // department at once.
-  neighbourLinks?: Array<{
-    neighbourDepartmentId: string;
-    neighbourDepartmentName: string;
-    years: number[];
-  }>;
   createdAt: Timestamp;
   updatedAt?: Timestamp;
 }
@@ -1224,6 +1182,8 @@ export interface PreviousTeachingAssignment {
 
 export interface FacultyMember {
   id: string;
+  displaySurname?: string; // "Display Name" tab: surname short form, max 2 capitals
+  displayName?: string; // "Display Name" tab: name as displayed, capitals
   collegeId: string;
   department: string;
   employeeId: string;
@@ -1305,8 +1265,7 @@ export interface FacultyMember {
   emergencyContactRelation?: string; // relation of the emergency contact to this person
   emergencyContactMobileNo?: string;
   collegeEmail: string; // required — this is the faculty member's login username
-  ratificationStatus?: "Ratified" | "Not Ratified" | "Attended" | "Not Yet Attended"; // see lib/faculty/ratificationHistory.ts
-  ratificationAttended?: boolean; // true = a "Not Ratified" the person confirmed as Attended + Not Ratified; absent on older records
+  ratificationStatus?: "Ratified" | "Not Ratified";
   // Historical ratification record(s) - see RatificationRecord's own doc-comment
   // below. A doc saved before this existed may still only carry the legacy flat
   // fields right below with no `ratifications` array; ratificationRecordsFromDoc()
@@ -1528,8 +1487,6 @@ export interface PromotionRecord {
 // not a Firestore Timestamp, so array entries need no per-element Timestamp
 // conversion on read - see lib/faculty/ratificationHistory.ts.
 export interface RatificationRecord {
-  // The "Ratified Designation" - stored as the full name (Professor, Assistant
-  // Professor, Associate Professor, Principal); older records may hold a legacy code.
   designation: string;
   proceedingsNumber?: string;
   date?: string; // "YYYY-MM-DD"
@@ -2866,6 +2823,8 @@ export interface Section {
   batch: string; // admission batch e.g. "2023-2027"
   facultyInchargeUid?: string;
   facultyInchargeName?: string;
+  classRepresentativeCount?: number;
+  classRepresentatives?: { studentId: string; name: string; rollNumber?: string }[];
   // The lab batches the faculty incharge has set up for this section ("Batch 1",
   // "Batch 2", ...), saved BEFORE any student is moved into them - a batch with no
   // students would otherwise not exist anywhere (StudentRecord.labBatch only
@@ -2874,11 +2833,6 @@ export interface Section {
   labBatches?: string[];
   classLeaderUid?: string;
   classLeaderName?: string;
-  // Class Representatives (CR-1 / CR-2) - a record on the section, apart from the Class Leader login above.
-  // The HOD sets how many the section has (0-2; absent = 2); the faculty incharge (or HOD) then picks
-  // that many students from the section's roster. Name / roll are copied so the header needs no lookup.
-  classRepresentativeCount?: number;
-  classRepresentatives?: { studentId: string; name: string; rollNumber?: string }[];
   studentCount: number;
   // Secondary — the branch this section feeds, e.g. a shared first-year Basic
   // Science section whose cohort promotes into CSE. Chosen per section from the
@@ -3388,6 +3342,7 @@ export type AuditAction =
   | "FACULTY_UPDATED"
   | "FACULTY_COLLEGE_EMAIL_CHANGED"
   | "COLLEGE_CATEGORY_CHANGED"
+  | "FACULTY_ORDER_CHANGED"
   | "FACULTY_COLLEGE_EMAIL_BULK_IMPORT"
   | "FACULTY_STATUS_CHANGED"
   | "FACULTY_DELETED"

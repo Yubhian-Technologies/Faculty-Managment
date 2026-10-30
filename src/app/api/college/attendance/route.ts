@@ -119,7 +119,7 @@ export async function GET(request: Request) {
     await closeMissedCheckouts(db, records);
 
     const registeredAt = await resolveFaceRegisteredAt(db, session.collegeId, facultyId, facultyRole);
-    // Working Day overrides (see college-office/holidays/page.tsx) naming
+    // Working Day overrides (see academics/holidays/page.tsx) naming
     // this person's own role - a Sunday they were required to work on
     // synthesizes as Absent (not an excused Holiday) if they never checked
     // in, same per-role override live check-in already enforces.

@@ -1,5 +1,6 @@
 "use client";
 
+import { useOwnerRoleLabel } from "@/hooks/useOwnerRoleLabel";
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -20,6 +21,7 @@ import { LeaveVacationStaffCard } from "@/components/leave/LeaveVacationStaffCar
 import { LeaveTypeRulesCard } from "@/components/leave/LeaveTypeRulesCard";
 import { AttendanceNotPostedSettingsCard } from "@/components/attendance/AttendanceNotPostedSettingsCard";
 import { TimetableSignatureSettingsCard } from "@/components/timetable/TimetableSignatureSettingsCard";
+import { DisplayNameSettingsCard } from "@/components/faculty/DisplayNameSettingsCard";
 import { CollegeLogoSettingsCard } from "@/components/college/CollegeLogoSettingsCard";
 import type { FacultyNorms } from "@/types/core";
 import { subjectBlockKey } from "@/lib/timetable/subjectBlockSize";
@@ -32,6 +34,7 @@ interface CollegeInfo {
 }
 
 export default function PrincipalSettingsPage() {
+  const who = useOwnerRoleLabel();
   const [collegeInfo, setCollegeInfo] = useState<CollegeInfo | null>(null);
   const [settings, setSettings] = useState<FacultyNorms | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -190,7 +193,7 @@ export default function PrincipalSettingsPage() {
       {settings?.updatedAt && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-lg border bg-muted/40 px-3 py-2">
           <Info className="h-3.5 w-3.5 shrink-0" />
-          Last updated {formatDate(settings.updatedAt)} by {settings.updatedByName ?? "Principal"}
+          Last updated {formatDate(settings.updatedAt)} by {settings.updatedByName ?? who}
         </div>
       )}
 
@@ -465,6 +468,7 @@ export default function PrincipalSettingsPage() {
       <DesignationCatalogCard category="TECHNICAL" />
       <DesignationCatalogCard category="NON_TECHNICAL" />
       <HonorificsCatalogCard />
+      <DisplayNameSettingsCard />
 
       <div className="flex justify-end pt-4 border-t">
         <Button size="lg" onClick={handleSave} loading={isSaving}>

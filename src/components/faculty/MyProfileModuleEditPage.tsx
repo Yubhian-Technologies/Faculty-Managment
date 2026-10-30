@@ -12,6 +12,7 @@ import { useAuthStore } from "@/store/authStore";
 import { getUserById } from "@/lib/firestore/users";
 import { FacultyProfileModuleEditor, type FacultyEditRecord } from "@/components/faculty/FacultyProfileModuleEditor";
 import { getMissingRequiredPersonalFields, STAFF_REQUIRED_PERSONAL_FIELDS, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
+import { resolveDisplayName } from "@/lib/faculty/displayName";
 import { PROFILE_MODULES, SELF_EDIT_DISABLED_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileModules";
 import { readPreviousTeachingAssignments } from "@/lib/faculty/previousTeaching";
 import { savePreviousTeachingAssignments, samePreviousTeaching } from "@/lib/faculty/savePreviousTeaching";
@@ -64,6 +65,8 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint, sectionScoped
   const params = useParams<{ module: string }>();
   const moduleKey = params.module as ProfileModuleKey;
   const moduleDef = PROFILE_MODULES[moduleKey];
+  // Display Name has no separate view page: its tile opens the fields directly, and Back/Cancel/Save return to My Profile.
+  const backHref = moduleKey === "display-name" ? basePath : `${basePath}/${moduleKey}`;
   const { user } = useAuth();
   const setUser = useAuthStore((s) => s.setUser);
   const { collegeType } = useCollegeType();
@@ -110,7 +113,12 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint, sectionScoped
         setRecordId(typeof d.faculty.id === "string" ? d.faculty.id : "");
         setOriginalAcademicProfile(academicProfile);
         // A real facultyMembers record carries the multi-entry Ratification history, like the Panel page.
-        setRecord({ ...personalRecordFromDoc(m, { ratificationHistory: ratificationHistory || viaFaculty }), academicProfile });
+        setRecord({
+          ...personalRecordFromDoc(m, { ratificationHistory: ratificationHistory || viaFaculty }),
+          academicProfile,
+          displaySurname: typeof m.displaySurname === "string" ? m.displaySurname : "",
+          displayName: typeof m.displayName === "string" ? m.displayName : "",
+        });
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load profile" }))
       .finally(() => setLoading(false));
@@ -124,7 +132,7 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint, sectionScoped
     if (moduleKey === "teaching-load") {
       if (samePreviousTeaching(previousRecords, originalPrevious)) {
         toast({ variant: "success", title: "No changes to save" });
-        router.push(`${basePath}/${moduleKey}`);
+        router.push(backHref);
         return;
       }
       setSaving(true);
@@ -135,7 +143,33 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint, sectionScoped
         return;
       }
       toast({ variant: "success", title: "Saved" });
-      router.push(`${basePath}/${moduleKey}`);
+      router.push(backHref);
+      return;
+    }
+    if (moduleKey === "display-name") {
+      const resolved = resolveDisplayName(record);
+      if (!resolved.ok) {
+        toast({ variant: "destructive", title: "Some required fields are missing", description: resolved.error });
+        return;
+      }
+      setSaving(true);
+      try {
+        const res = await fetch("/api/college/faculty/me", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ displaySurname: resolved.displaySurname, displayName: resolved.displayName }),
+        });
+        if (!res.ok) {
+          const err = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new Error(err.error);
+        }
+        toast({ variant: "success", title: "Saved" });
+        router.push(backHref);
+      } catch (err) {
+        toast({ variant: "destructive", title: err instanceof Error && err.message ? err.message : "Failed to save" });
+      } finally {
+        setSaving(false);
+      }
       return;
     }
     if (moduleKey === "personal") {
@@ -161,7 +195,7 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint, sectionScoped
         const academicProfileChanges = diffAcademicProfile(originalAcademicProfile, record.academicProfile);
         if (isEmptyChanges(academicProfileChanges)) {
           toast({ variant: "success", title: "No changes to save" });
-          router.push(`${basePath}/${moduleKey}`);
+          router.push(backHref);
           return;
         }
         body = { academicProfileChanges };
@@ -189,7 +223,7 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint, sectionScoped
           // non-fatal - profile was saved; TopBar catches up on next load
         }
       }
-      router.push(`${basePath}/${moduleKey}`);
+      router.push(backHref);
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error && err.message ? err.message : "Failed to save" });
     } finally {
@@ -209,7 +243,7 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint, sectionScoped
           note={moduleDef.description}
           actions={
             <Button variant="outline" asChild>
-              <Link href={`${basePath}/${moduleKey}`}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
+              <Link href={backHref}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
             </Button>
           }
         />
@@ -225,7 +259,7 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint, sectionScoped
         note={moduleDef.description}
         actions={
           <Button variant="outline" asChild>
-            <Link href={`${basePath}/${moduleKey}`}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
+            <Link href={backHref}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
           </Button>
         }
       />
@@ -251,7 +285,7 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint, sectionScoped
               ratificationHistory={ratificationHistory || viaFacultyRecord}
             />
             <div className="flex justify-end gap-3 pt-4 border-t">
-              <Button variant="outline" onClick={() => router.push(`${basePath}/${moduleKey}`)}>Cancel</Button>
+              <Button variant="outline" onClick={() => router.push(backHref)}>Cancel</Button>
               <Button onClick={handleSave} loading={saving}>Save Changes</Button>
             </div>
           </CardContent>

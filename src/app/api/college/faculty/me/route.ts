@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { resolveDisplayName } from "@/lib/faculty/displayName";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -20,8 +21,7 @@ import { mobileNoFromBody } from "@/lib/faculty/mobileNo";
 import { FieldValue } from "firebase-admin/firestore";
 import { normalizeHighestQualification } from "@/lib/faculty/highestQualification";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
-import { resolveHonorific, fetchActiveHonorificNames } from "@/lib/honorifics/validate";
-import { honorificForPhd } from "@/lib/faculty/phdHonorific";
+import { resolveHonorific } from "@/lib/honorifics/validate";
 import { isSingleSourceCollege } from "@/lib/faculty/singleSource";
 import { resolvePreviousTeachingUpdate } from "@/lib/faculty/previousTeaching";
 import type { TrainingEntry } from "@/types";
@@ -145,6 +145,9 @@ export async function PATCH(request: Request) {
       previousTeachingAssignments: unknown;
       previousTeachingAssignmentsLoadedIds: unknown;
       profilePhotoUrl: string;
+      // "Display Name" tab: surname short form (max 2, capitals) + name (capitals), both required together.
+      displaySurname: unknown;
+      displayName: unknown;
     }> & PersonalDetailsInput;
 
     if (
@@ -192,17 +195,14 @@ export async function PATCH(request: Request) {
         facultyUpdates.honorific = honorificResult.name;
       }
     }
+    if (body.displaySurname !== undefined || body.displayName !== undefined) {
+      const resolved = resolveDisplayName(body);
+      if (!resolved.ok) return NextResponse.json({ error: resolved.error }, { status: 400 });
+      facultyUpdates.displaySurname = resolved.displaySurname;
+      facultyUpdates.displayName = resolved.displayName;
+    }
     if (body.aicteFacultyId !== undefined) facultyUpdates.aicteFacultyId = body.aicteFacultyId.trim();
     if (body.highestQualification?.trim()) facultyUpdates.highestQualification = normalizeHighestQualification(body.highestQualification);
-    // Ph.D -> "Dr." (lib/faculty/phdHonorific.ts): only when this save sets the Highest Qualification, sends no honorific of its
-    // own, and none is stored yet. The display-name cascade below then carries it like any honorific.
-    if (body.honorific === undefined && typeof facultyUpdates.highestQualification === "string") {
-      const dr = honorificForPhd(
-        { isPhd: facultyUpdates.highestQualification === "Ph.D", honorific: (facultyDoc.data() as { honorific?: string }).honorific },
-        await fetchActiveHonorificNames(db, session.collegeId),
-      );
-      if (dr) facultyUpdates.honorific = dr;
-    }
     if (body.specialization !== undefined) facultyUpdates.specialization = body.specialization;
     if (body.additionalPhoneNumbers !== undefined) {
       facultyUpdates.additionalPhoneNumbers = body.additionalPhoneNumbers.filter((p) => p.number?.trim());

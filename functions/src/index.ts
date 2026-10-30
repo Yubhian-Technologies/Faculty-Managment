@@ -82,3 +82,22 @@ export const odProofReminderSweep = onSchedule(
     }
   }
 );
+
+// Student permissions: a request nobody answered within the hours set for its level moves up to the next level.
+// Same thin-pinger design - the logic lives in the app (src/lib/studentPermissions/escalation.ts), and the sweep is
+// idempotent, so a retried run is safe. Every 15 minutes is plenty for hour-sized limits and costs next to nothing
+// (two single-field queries per college, no reads when nothing is overdue).
+export const permissionEscalationSweep = onSchedule(
+  { schedule: "every 15 minutes", timeZone: "Asia/Kolkata", secrets: [cronSecret], retryCount: 2 },
+  async () => {
+    const url = appUrl.value();
+    if (!url) throw new Error("APP_URL is not configured");
+    const res = await fetch(`${url}/api/cron/permission-escalation`, { method: "POST", headers: { Authorization: `Bearer ${cronSecret.value()}` } });
+    const body = await res.text();
+    if (!res.ok) {
+      logger.error(`permission-escalation sweep failed: ${res.status} ${body}`);
+      throw new Error(`permission-escalation sweep failed: ${res.status}`);
+    }
+    logger.info("permission-escalation sweep ok", { body });
+  }
+);
