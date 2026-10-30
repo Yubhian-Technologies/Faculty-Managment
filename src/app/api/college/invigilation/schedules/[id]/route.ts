@@ -8,6 +8,7 @@ import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { midSources } from "@/lib/exams/seatingPairedServer";
 import { cleanRules } from "@/lib/invigilation/rules";
+import { notifyDuty, sessionEnded } from "@/lib/invigilation/assign";
 import { sessionOrder } from "@/lib/invigilation/slots";
 import { actorName, dutiesCol, facultyPool, INVIGILATION_READ_ROLES, invigilationError, loadSchedule, locksCol, scheduleLocks, scheduleSlots, schedulesCol } from "@/lib/invigilation/server";
 import { ACTIVE_DUTY_STATUSES, type InvigilationDuty, type InvigilationSchedule } from "@/types/invigilation";
@@ -15,7 +16,8 @@ import { ACTIVE_DUTY_STATUSES, type InvigilationDuty, type InvigilationSchedule 
 // One invigilation schedule: GET = the overview every Exam Cell page works
 // from (slots with how many are filled, every duty, the faculty pool with
 // their duty refs); PATCH = name / Mid timetables / rules / status; DELETE =
-// only while nothing was published.
+// the schedule and every duty - once anything was published only with
+// ?force=1 (holders of upcoming published duties are told they're withdrawn).
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -94,23 +96,36 @@ export async function PATCH(request: Request, { params }: Ctx) {
   }
 }
 
-export async function DELETE(_request: Request, { params }: Ctx) {
+export async function DELETE(request: Request, { params }: Ctx) {
   try {
     const session = await requireCollegeMember("EXAM_CELL");
     const { id } = await params;
+    const force = new URL(request.url).searchParams.get("force") === "1";
     const db = getAdminDb();
+    const schedule = await loadSchedule(db, session.collegeId, id);
+    if (!schedule) return NextResponse.json({ error: "Schedule not found" }, { status: 404 });
     const [duties, locks, slotLocks] = await Promise.all([
       dutiesCol(db, session.collegeId).where("scheduleId", "==", id).get(),
       locksCol(db, session.collegeId).where("scheduleId", "==", id).get(),
       db.collection("colleges").doc(session.collegeId).collection("invigilationSlotLocks").where("scheduleId", "==", id).get(),
     ]);
-    if (duties.docs.some((d) => (d.data() as InvigilationDuty).status !== "DRAFT" && (d.data() as InvigilationDuty).status !== "CANCELLED")) {
-      return NextResponse.json({ error: "Duties of this schedule were published - close it instead of deleting" }, { status: 409 });
+    const all = duties.docs.map((d) => ({ ...(d.data() as InvigilationDuty), id: d.id }));
+    const published = all.filter((d) => d.publishedAt);
+    if (published.length && !force) {
+      return NextResponse.json({ error: "Duties of this schedule were published - confirm to delete them too, or close the schedule instead", published: published.length }, { status: 409 });
     }
     const w = new ChunkedBatch(db);
     for (const d of [...duties.docs, ...locks.docs, ...slotLocks.docs]) w.delete(d.ref);
     await w.commit();
     await schedulesCol(db, session.collegeId).doc(id).delete();
+    // People still expecting a duty are told it's gone.
+    for (const d of published.filter((x) => (x.status === "PUBLISHED" || x.status === "ACKNOWLEDGED") && !sessionEnded(x))) {
+      await notifyDuty(db, session.collegeId, d, "Exam duty withdrawn");
+    }
+    await writeAuditLogSafe(db, session.collegeId, {
+      action: "INVIGILATION_SCHEDULE_DELETED", performedBy: session.uid, performedByName: await actorName(db, session.collegeId, session.uid, session.email || "Exam Cell"),
+      targetId: id, details: { schedule: schedule.name, duties: all.length, published: published.length },
+    });
     return NextResponse.json({ ok: true });
   } catch (err) {
     return invigilationError(err, "[invigilation/schedules/[id] DELETE]");

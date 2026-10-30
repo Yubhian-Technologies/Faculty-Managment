@@ -55,9 +55,10 @@ export default function InvigilationSchedulePage() {
 
   const departments = useMemo(() => [...new Set((overview?.faculty ?? []).map((f) => f.department).filter(Boolean))].sort(), [overview]);
   const openSlot = (k: string) => { setSlotKey(k); setTab("assign"); };
+  const publishedCount = (overview?.duties ?? []).filter((d) => d.publishedAt).length;
 
   async function remove() {
-    const res = await fetch(`/api/college/invigilation/schedules/${id}`, { method: "DELETE" });
+    const res = await fetch(`/api/college/invigilation/schedules/${id}${publishedCount ? "?force=1" : ""}`, { method: "DELETE" });
     const data = (await res.json()) as { error?: string };
     setDeleting(false);
     if (!res.ok) return toast({ variant: "destructive", title: data.error ?? "Could not delete" });
@@ -100,8 +101,10 @@ export default function InvigilationSchedulePage() {
         open={deleting}
         onOpenChange={setDeleting}
         title="Delete this schedule?"
-        description="Removes the schedule and its draft duties. Refused once any duty was published - close it instead (Configuration > Status)."
-        confirmLabel="Delete"
+        description={publishedCount
+          ? `${publishedCount} duties of this schedule were published. Deleting removes them and their record (reports, history); faculty with an upcoming duty are told it is withdrawn. To keep the record, close the schedule instead (Configuration > Status).`
+          : "Removes the schedule and its draft duties. Nobody was told of them yet."}
+        confirmLabel={publishedCount ? "Delete with its duties" : "Delete"}
         variant="destructive"
         onConfirm={() => void remove()}
       />

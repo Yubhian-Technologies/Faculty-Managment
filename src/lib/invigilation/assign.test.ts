@@ -118,6 +118,17 @@ describe("reassigning and cancelling", () => {
     await expect(changeDutyStatus(db as never, "C", d.id, "complete", actor)).rejects.toThrow(/can't be completed/);
   });
 
+  it("done only once the exam has ended (IST)", async () => {
+    const { sessionEnded } = await import("./assign");
+    const at = (iso: string) => new Date(iso);
+    expect(sessionEnded({ date: "2026-10-31", to: "11:30" }, at("2026-10-30T03:16:00Z"))).toBe(false); // 30 Oct 8:46 IST
+    expect(sessionEnded({ date: "2026-10-31", to: "11:30" }, at("2026-10-31T05:59:00Z"))).toBe(false); // 11:29 IST
+    expect(sessionEnded({ date: "2026-10-31", to: "11:30" }, at("2026-10-31T06:00:00Z"))).toBe(true); // 11:30 IST
+    const s = { ...schedule(), publishedSessions: [slot("201").session] };
+    const d = await assignDuty(db as never, "C", { schedule: s, slot: slot("201"), faculty: fac("f1"), facts: facts("f1"), sessions: [], actor });
+    await expect(changeDutyStatus(db as never, "C", d.id, "complete", actor)).rejects.toThrow(/mark it done after that/);
+  });
+
   it("acknowledge only a published duty", async () => {
     const d = await go(slot("201"), "f1");
     await expect(changeDutyStatus(db as never, "C", d.id, "acknowledge", actor)).rejects.toThrow(/can't be acknowledged/);

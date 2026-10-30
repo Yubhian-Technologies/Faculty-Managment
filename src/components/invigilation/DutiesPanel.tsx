@@ -16,6 +16,15 @@ import { STATUS_TONE, type Overview } from "./model";
 // Each duty's history (who did what) is one click away.
 
 const selectClass = "h-9 rounded-md border border-input bg-background px-2 text-sm";
+/** The session has ended (IST) - duties can be marked done. */
+const ended = (s: string) => {
+  const [d, t] = s.split("|");
+  const to = (t ?? "").split("-")[1] ?? "";
+  const now = new Date();
+  const today = now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const hhmm = now.toLocaleTimeString("en-GB", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: false });
+  return d < today || (d === today && hhmm >= to);
+};
 const sessionLabel = (s: string) => { const [d, t] = s.split("|"); const [f, to] = (t ?? "").split("-"); return `${dayLabel(d)} · ${timeLabel(f)} - ${timeLabel(to)}`; };
 
 export function DutiesPanel({ overview, onChanged, onOpenSlot }: { overview: Overview; onChanged: () => void; onOpenSlot: (slotKey: string) => void }) {
@@ -92,8 +101,8 @@ export function DutiesPanel({ overview, onChanged, onOpenSlot }: { overview: Ove
                 </div>
                 {schedule.status === "ACTIVE" && (
                   <div className="flex gap-2">
-                    <Button size="sm" variant={published ? "outline" : "default"} disabled={!drafts} onClick={() => setConfirm({ action: "publish", session: s })}><Send className="mr-1 h-4 w-4" />{published ? `Publish ${drafts} new` : "Publish this exam"}</Button>
-                    {published && <Button size="sm" variant="outline" onClick={() => setConfirm({ action: "complete", session: s })}><CheckCheck className="mr-1 h-4 w-4" />Mark done</Button>}
+                    {(!published || drafts > 0) && <Button size="sm" variant={published ? "outline" : "default"} disabled={!drafts} onClick={() => setConfirm({ action: "publish", session: s })}><Send className="mr-1 h-4 w-4" />{published ? `Publish ${drafts} new` : "Publish this exam"}</Button>}
+                    {published && <Button size="sm" variant="outline" disabled={!ended(s) || !list.some((d) => d.status === "PUBLISHED" || d.status === "ACKNOWLEDGED")} title={ended(s) ? undefined : "After the exam ends"} onClick={() => setConfirm({ action: "complete", session: s })}><CheckCheck className="mr-1 h-4 w-4" />Mark done</Button>}
                   </div>
                 )}
               </div>

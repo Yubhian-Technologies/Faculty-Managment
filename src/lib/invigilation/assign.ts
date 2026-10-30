@@ -6,6 +6,7 @@ import { evaluate, type CandidateFacts, type Issue } from "./eligibility";
 import { dutiesCol, lockId, locksCol, refOf } from "./server";
 import type { PoolFaculty } from "./server";
 import { dayLabel, timeLabel } from "@/lib/midTimetable/rules";
+import { istDateKey, istTimeHHMM } from "@/lib/attendance/istTime";
 
 // Writing duties - every change in a transaction on the holder's lock doc
 // (invigilationFacultyLocks/{schedule}__{faculty}: every duty they hold in the
@@ -23,6 +24,12 @@ export interface Actor { uid: string; name: string }
 const slotLockId = (scheduleId: string, slotKey: string) => `${scheduleId}__${slotKey.replace(/\//g, "_")}`;
 const slotLocks = (db: Firestore, c: string) => db.collection("colleges").doc(c).collection("invigilationSlotLocks");
 const nowIso = () => new Date().toISOString();
+
+/** A duty is done only once its exam session has ended (IST). */
+export function sessionEnded(d: Pick<InvigilationDuty, "date" | "to">, now: Date = new Date()): boolean {
+  const today = istDateKey(now);
+  return d.date < today || (d.date === today && istTimeHHMM(now) >= d.to);
+}
 
 /** Which warning issues the caller may override (named approvers only, with a reason). */
 function settle(issues: Issue[], rules: InvigilationRules, actor: Actor, reason: string | undefined): DutyOverride[] {
@@ -142,6 +149,7 @@ export async function changeDutyStatus(db: Firestore, c: string, dutyId: string,
       acknowledge: ["PUBLISHED"],
     };
     if (!allowed[action].includes(d.status)) throw new DutyRefused([], `A ${d.status.toLowerCase()} duty can't be ${action === "acknowledge" ? "acknowledged" : action === "cancel" ? "cancelled" : "completed"}`);
+    if (action === "complete" && !sessionEnded(d)) throw new DutyRefused([], `This exam ends ${dayLabel(d.date)} ${timeLabel(d.to)} - mark it done after that`);
     const status: DutyStatus = action === "cancel" ? "CANCELLED" : action === "complete" ? "COMPLETED" : "ACKNOWLEDGED";
     const lockRef = locksCol(db, c).doc(lockId(d.scheduleId, d.facultyId));
     const slotRef = slotLocks(db, c).doc(slotLockId(d.scheduleId, d.slotKey));

@@ -5,7 +5,7 @@ import { readJsonBody } from "@/lib/http/readJsonBody";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
-import { changeDutyStatus, DutyRefused, notifyDuty } from "@/lib/invigilation/assign";
+import { changeDutyStatus, DutyRefused, notifyDuty, sessionEnded } from "@/lib/invigilation/assign";
 import { actorName, dutiesCol, invigilationError, loadSchedule, schedulesCol } from "@/lib/invigilation/server";
 import type { InvigilationDuty } from "@/types/invigilation";
 
@@ -30,6 +30,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const duties = snap.docs.map((d) => ({ ...(d.data() as InvigilationDuty), id: d.id })).filter((d) => sessions.includes(d.session));
 
     if (body.action === "complete") {
+      if (duties.length && !duties.some((d) => sessionEnded(d))) return NextResponse.json({ error: "This exam hasn't ended yet - mark it done after it ends" }, { status: 409 });
       let done = 0;
       for (const d of duties.filter((x) => x.status === "PUBLISHED" || x.status === "ACKNOWLEDGED")) {
         try { await changeDutyStatus(db, session.collegeId, d.id, "complete", actor); done++; } catch (e) { if (!(e instanceof DutyRefused)) throw e; }
