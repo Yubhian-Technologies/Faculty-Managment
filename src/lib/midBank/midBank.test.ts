@@ -218,7 +218,12 @@ describe("deadline", () => {
 
 describe("sections of a bank", () => {
   it("only theory subjects get a mid question bank", () => {
-    expect(["THEORY", undefined, "PRACTICAL", "TUTORIAL", "PROJECT", "NON_TEACHING"].map(isMidBankSubject)).toEqual([true, true, false, false, false, false]);
+    expect(["THEORY", undefined, "PRACTICAL", "TUTORIAL", "PROJECT", "NON_TEACHING"].map((type) => isMidBankSubject({ type }))).toEqual([true, true, false, false, false, false]);
+  });
+  it("co-curricular subjects saved as Theory but ticked 'not in teaching load' are not Mid subjects", () => {
+    expect(isMidBankSubject({ type: "THEORY", isNonTeachingLoad: true })).toBe(false); // Counselling, Library, Sports ...
+    expect(isMidBankSubject({ type: "THEORY", isNonTeachingLoad: false })).toBe(true);
+    expect(isMidBankSubject(undefined)).toBe(false);
   });
   const row = (sectionId: string, facultyId: string, branch = "Information Technology", subjectId = "dm"): TeachingRow =>
     ({ subjectId, subjectName: "Discrete Maths", subjectCode: "DM101", branch, sectionId, sectionName: sectionId.toUpperCase(), facultyId, facultyName: `Dr ${facultyId}` });

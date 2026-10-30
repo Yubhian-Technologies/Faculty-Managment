@@ -327,6 +327,24 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
         }
       />
 
+      {/* Saved subjects that are no longer Mid exam subjects (e.g. Counselling / Library ticked
+          "Don't include in teaching load", or a type changed) - left out on the next save. */}
+      {(() => {
+        const gone = data.branches.flatMap((b) => {
+          const keep = new Set(b.subjects.map((x) => x.subjectId));
+          const names = [...new Set((b.timetable?.slots ?? []).filter((x) => !keep.has(x.subjectId)).map((x) => x.subjectName))];
+          return names.length ? [{ branch: b.branch, names, published: b.timetable?.status === "PUBLISHED" }] : [];
+        });
+        if (!gone.length) return null;
+        return (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100" role="status">
+            <p className="font-medium">Not Mid exam subjects any more - they are left out when you save{gone.some((g) => g.published) ? " (publish again so students and faculty see the change)" : ""}:</p>
+            <ul className="mt-1 list-disc pl-5">{gone.map((g) => <li key={g.branch}><b>{g.branch}</b>: {g.names.join(", ")}</li>)}</ul>
+            <p className="mt-1 text-xs">Only theory subjects that are part of the teaching load are written in the Mid (co-curricular subjects such as Counselling or Library are not).</p>
+          </div>
+        );
+      })()}
+
       {/* Step 1: days + time */}
       <Card className="rounded-2xl">
         <CardContent className="space-y-4 p-5">

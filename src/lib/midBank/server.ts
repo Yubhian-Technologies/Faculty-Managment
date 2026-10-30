@@ -67,10 +67,10 @@ export async function teachingFor(db: Db, collegeId: string, d: Pick<MidBankDead
     const a = i.data() as SubjectSemesterAssignment;
     if (a.semester === d.semester && a.subjectId) subjects.set(a.subjectId, { name: a.subjectName, code: a.subjectCode });
   }
-  // Theory subjects only (the master subject's type; the semester copy's snapshot may be stale).
+  // Mid exam subjects only (the master subject's type and teaching-load tick; the semester copy's snapshot may be stale).
   if (subjects.size > 0) {
     const masters = await db.getAll(...[...subjects.keys()].map((id) => refs.college.collection("subjects").doc(id)));
-    for (const m of masters) if (!m.exists || !isMidBankSubject((m.data() as Subject).type)) subjects.delete(m.id);
+    for (const m of masters) if (!m.exists || !isMidBankSubject(m.data() as Subject)) subjects.delete(m.id);
   }
   if (sections.size === 0 || subjects.size === 0) return [];
   const teachDocs = await inChunks([...sections.keys()], async (ids) => (await refs.college.collection("teachingAssignments").where("sectionId", "in", ids).get()).docs);
