@@ -15,9 +15,16 @@ export interface TeachingRow {
   facultyName: string;
 }
 
-/** Mid question banks are for theory subjects only - not practicals, tutorials, projects or non-teaching
- * slots. The master subject's own type decides; a legacy subject with no type counts as theory. */
-export const isMidBankSubject = (type: string | undefined | null) => !type || type === "THEORY";
+/**
+ * A Mid exam subject (question bank, Mid timetable, paper, seating, invigilation): a theory subject
+ * that is part of the teaching load. Practicals, tutorials, projects and Non-Teaching / Attendance
+ * Only subjects are left out - and so is a subject ticked "Don't include in teaching load"
+ * (Counselling, Library, Sports, Placement Training ... saved as Theory with that tick), the same
+ * flag the teaching load and Free Faculty already use. The master subject decides; a legacy subject
+ * with no type counts as theory.
+ */
+export const isMidBankSubject = (s: { type?: string | null; isNonTeachingLoad?: boolean | null } | undefined | null) =>
+  Boolean(s) && (!s!.type || s!.type === "THEORY") && s!.isNonTeachingLoad !== true;
 
 export const branchKey = (branch: string) => branch.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "branch";
 export const outcomesIdFor = (subjectId: string, branch: string) => `${subjectId}__${branchKey(branch)}`;
