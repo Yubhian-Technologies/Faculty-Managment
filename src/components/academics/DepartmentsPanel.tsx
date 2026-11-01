@@ -261,7 +261,9 @@ function MigrationReviewPage({ subDepartment, branchIds, allBranches, collegeSec
   //     this second source, those students would look like they have no
   //     section at all, when they actually do - it just isn't filed under
   //     this department any more.
-  const currentSections = useMemo(() => {
+  // Plain computation, not useMemo: allMovingSections is a new array every render, so a memo here
+  // never held (and the React Compiler refuses to compile a memo it can't preserve).
+  const currentSections = (() => {
     const fromCollege = collegeSections.filter((s) => s.department === subDepartment.name);
     const seenIds = new Set(fromCollege.map((s) => s.id));
     const strayMap = new Map<string, { id: string; name: string; year: number; studentCount: number }>();
@@ -270,7 +272,7 @@ function MigrationReviewPage({ subDepartment, branchIds, allBranches, collegeSec
       strayMap.set(s.sectionId, { id: s.sectionId, name: s.sectionName, year: s.year, studentCount: s.studentCount });
     }
     return [...fromCollege, ...strayMap.values()].sort((a, b) => (a.year - b.year) || a.name.localeCompare(b.name));
-  }, [collegeSections, subDepartment.name, allMovingSections]);
+  })();
   const currentSubjects = okPreviews[0]?.currentSubjects ?? [];
   const currentSectionsPageRows = currentSections.slice(currentSectionsPage * REVIEW_PAGE_SIZE, (currentSectionsPage + 1) * REVIEW_PAGE_SIZE);
   const currentSubjectsPageRows = currentSubjects.slice(currentSubjectsPage * REVIEW_PAGE_SIZE, (currentSubjectsPage + 1) * REVIEW_PAGE_SIZE);

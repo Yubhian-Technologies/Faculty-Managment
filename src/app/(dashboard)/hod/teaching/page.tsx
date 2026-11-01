@@ -122,12 +122,12 @@ export default function HODTeachingPage() {
 
   const nonTeachingAssignmentIds = new Set(
     assignments
-      .filter((a) => a.isNonTeachingLoad || a.excludeFromResume || (a as any).subjectType === "NON_TEACHING")
+      .filter((a) => a.isNonTeachingLoad || a.excludeFromResume || (a as { subjectType?: string }).subjectType === "NON_TEACHING")
       .map((a) => a.id)
   );
   const assignmentById = new Map(assignments.map((a) => [a.id, a]));
   const filteredSlots = timetableSlots.filter(
-    (s) => !nonTeachingAssignmentIds.has(s.assignmentId) && s.subjectType !== "NON_TEACHING" && !(s as any).isNonTeachingLoad
+    (s) => !nonTeachingAssignmentIds.has(s.assignmentId) && s.subjectType !== "NON_TEACHING" && !(s as { isNonTeachingLoad?: boolean }).isNonTeachingLoad
   );
   // Every period of the college day, not just the ones with a class in them: the longest day among the
   // loaded course-year timings, or a placed slot beyond it.
@@ -209,7 +209,7 @@ export default function HODTeachingPage() {
     try {
       const semesterSlots = timetableSlots
         .filter((s) => !s.id.startsWith("substitute_"))
-        .filter((s) => !nonTeachingAssignmentIds.has(s.assignmentId) && s.subjectType !== "NON_TEACHING" && !(s as any).isNonTeachingLoad)
+        .filter((s) => !nonTeachingAssignmentIds.has(s.assignmentId) && s.subjectType !== "NON_TEACHING" && !(s as { isNonTeachingLoad?: boolean }).isNonTeachingLoad)
         .filter((s) => typeFilter === "ALL" || s.subjectType === typeFilter);
       const courseCodeById = new Map(courses.map((c) => [c.id, c.code || c.name]));
       await downloadFacultyTimetableXlsx(
