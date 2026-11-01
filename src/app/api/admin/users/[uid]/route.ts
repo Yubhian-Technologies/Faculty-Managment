@@ -101,6 +101,7 @@ export async function PATCH(
       phone?: string;
       academicProfile?: Record<string, unknown>;
       newPassword?: string;
+      locationId?: string;
     } & PersonalDetailsInput;
 
     const { role, isActive, department, name, email, collegeEmail, employeeId, phone, academicProfile, newPassword } = body;
@@ -110,6 +111,25 @@ export async function PATCH(
     }
 
     const db = getAdminDb();
+
+    // A password-only reset works for EVERY login Super Admin manages - college,
+    // location (Administration, HR ...) and system-wide - so it doesn't need the
+    // collegeId the profile edits below do. Firebase Auth holds the password.
+    const passwordOnly = newPassword !== undefined && Object.keys(body).every((k) => ["newPassword", "collegeId", "locationId"].includes(k));
+    if (passwordOnly) {
+      const { getAdminAuth } = await import("@/lib/firebase/admin");
+      const auth = await getAdminAuth();
+      await auth.updateUser(uid, { password: newPassword });
+      let auditCollege = body.collegeId ?? "";
+      if (!auditCollege) auditCollege = ((await db.collection("systemUsers").doc(uid).get()).data() as { collegeId?: string } | undefined)?.collegeId ?? "";
+      if (auditCollege) {
+        await writeAuditLogSafe(db, auditCollege, { action: "USER_PASSWORD_RESET", performedBy: "SUPER_ADMIN", performedByName: "Super Admin", targetId: uid, details: {} });
+      } else {
+        // Location / system-wide logins have no college audit log.
+        await db.collection("systemAuditLogs").add({ action: "USER_PASSWORD_RESET", performedBy: "SUPER_ADMIN", performedByName: "Super Admin", targetId: uid, details: { locationId: body.locationId ?? null }, timestamp: new Date() }).catch(() => undefined);
+      }
+      return NextResponse.json({ ok: true });
+    }
 
     // Same systemUsers fallback as GET - module edit pages don't carry collegeId
     // through every link, only the initial list view does.

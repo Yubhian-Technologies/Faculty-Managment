@@ -253,14 +253,18 @@ export default function UsersPage() {
       const res = await fetch(`/api/admin/users/${resetUser.uid}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ collegeId: resetUser.collegeId, newPassword }),
+        body: JSON.stringify({
+          newPassword,
+          ...(resetUser.collegeId ? { collegeId: resetUser.collegeId } : {}),
+          ...(resetUser.locationId ? { locationId: resetUser.locationId } : {}),
+        }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? "Failed to reset password");
       toast({ variant: "success", title: "Password reset successfully" });
       setResetUser(null);
       setNewPassword("");
-    } catch {
-      toast({ variant: "destructive", title: "Failed to reset password" });
+    } catch (e) {
+      toast({ variant: "destructive", title: e instanceof Error && e.message ? e.message : "Failed to reset password" });
     } finally {
       setResetSaving(false);
     }
@@ -360,7 +364,7 @@ export default function UsersPage() {
         header: "",
         render: (row) => {
           // Edit (including the photo) is available for the 6 roles Super Admin
-          // administers. Reset/Activate/Deactivate only exist for college-scoped
+          // administers. Reset password works for every scope; Activate/Deactivate only exist for college-scoped
           // users today. Delete works for all three scopes: college + global via
           // /api/admin/users/[uid], location via /api/location/users/[uid]
           // (see handleDelete for how the two are routed).
@@ -405,12 +409,13 @@ export default function UsersPage() {
                 <FileDown className="h-3.5 w-3.5" />
                 <span className="ml-1 hidden lg:inline">Download</span>
               </Button>
+              {/* Password reset works for every scope (college, location, system-wide). */}
+              <Button variant="ghost" size="sm" title="Reset password" onClick={(e) => { e.stopPropagation(); setResetUser(row); setNewPassword(""); }}>
+                <KeyRound className="h-3.5 w-3.5" />
+                <span className="ml-1 hidden lg:inline">Reset password</span>
+              </Button>
               {isCollegeScoped && (
                 <>
-                  <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setResetUser(row); setNewPassword(""); }}>
-                    <KeyRound className="h-3.5 w-3.5" />
-                    <span className="ml-1 hidden lg:inline">Reset</span>
-                  </Button>
                   {(row.isActive as boolean) ? (
                     <Button
                       variant="ghost"
