@@ -27,7 +27,7 @@ describe("resolveRecipientUids", () => {
     vi.mocked(getHodDepartmentScope).mockImplementation(async (_db, _collegeId, uid) =>
       (uid === "seatHod1" ? { ownDepartmentNames: ["CSE"] } : { ownDepartmentNames: ["ECE"] }) as never
     );
-    vi.mocked(canHodEditDepartment).mockImplementation((scope: any, dept: string) =>
+    vi.mocked(canHodEditDepartment).mockImplementation((scope: unknown, dept: string) =>
       (scope as { ownDepartmentNames: string[] }).ownDepartmentNames.includes(dept)
     );
 
