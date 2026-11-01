@@ -1,6 +1,7 @@
 "use client";
 
-import { use, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -10,8 +11,17 @@ import type { MidBankPrepare } from "@/lib/midBank/clientTypes";
 
 // Faculty: set up (or change the sections of) a question bank for one deadline +
 // subject + branch. ?deadlineId=&subjectId=&branch=
-export default function PrepareMidBankPage({ searchParams }: { searchParams: Promise<{ deadlineId?: string; subjectId?: string; branch?: string; step?: string }> }) {
-  const q = use(searchParams);
+//
+// The query is read with useSearchParams (the real URL in the browser), not the page's
+// `searchParams` prop: this route has no dynamic segment, so the production build prerenders it
+// as static and the prop arrived empty there - every load asked the API for an empty bank (500).
+export default function PrepareMidBankPage() {
+  return <Suspense fallback={<div className="h-96 max-w-6xl animate-pulse rounded-lg bg-muted" />}><PrepareMidBank /></Suspense>;
+}
+
+function PrepareMidBank() {
+  const sp = useSearchParams();
+  const q = { deadlineId: sp.get("deadlineId") ?? undefined, subjectId: sp.get("subjectId") ?? undefined, branch: sp.get("branch") ?? undefined, step: sp.get("step") ?? undefined };
   // Kept here, not in the wizard: the wizard is rebuilt from fresh data after each save.
   const [step, setStep] = useState<PrepareStep>(() => (q.step === "2" ? 2 : q.step === "3" ? 3 : 1));
   const [data, setData] = useState<MidBankPrepare | null>(null);
