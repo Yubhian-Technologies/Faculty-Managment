@@ -23,7 +23,6 @@ vi.mock("@/lib/api/collegeFetch", () => ({
 
 import { subscribeToNotifications } from "./liveFeed";
 
-const snap = (...ids: string[]) => ({ docs: ids.map((id) => ({ id, data: () => ({ toUid: "u1", read: false }) })) });
 
 beforeEach(() => {
   h.listeners.length = 0;
@@ -32,36 +31,26 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-describe("subscribeToNotifications", () => {
-  it("pushes new notifications to subscribers as the listener delivers them", () => {
+// Notifications are PAUSED for cost (liveFeed.ts, commit 11e373e0): no Firestore listener and no polling -
+// subscribers get an empty list once. The listener / shared-subscription / polling-fallback tests that went
+// with the live feed are in commit b8796199 - bring them back with it when notifications are switched on.
+describe("subscribeToNotifications (paused)", () => {
+  it("gives the subscriber an empty list at once and starts nothing - no listener, no polling", async () => {
     const seen: string[][] = [];
     const off = subscribeToNotifications("c1", "u1", (items) => seen.push(items.map((n) => n.id)));
-    h.listeners[0].next(snap("a"));
-    h.listeners[0].next(snap("b", "a"));
-    expect(seen).toEqual([["a"], ["b", "a"]]);
-    off();
+    expect(seen).toEqual([[]]);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(h.listeners).toHaveLength(0);
+    expect(h.fetchCalls).toBe(0);
+    expect(() => { off(); off(); }).not.toThrow();
   });
 
-  it("shares one listener between components and stops it when the last one leaves", () => {
+  it("every subscriber is answered on its own", () => {
     const a = vi.fn(), b = vi.fn();
-    const offA = subscribeToNotifications("c1", "u1", a);
-    h.listeners[0].next(snap("x"));
-    const offB = subscribeToNotifications("c1", "u1", b);
-    expect(h.listeners).toHaveLength(1);
-    expect(b).toHaveBeenCalledTimes(1); // late subscriber gets the latest list at once
-    offA();
-    expect(h.listeners[0].unsub).not.toHaveBeenCalled();
-    offB();
-    expect(h.listeners[0].unsub).toHaveBeenCalledTimes(1);
-  });
-
-  it("falls back to polling the API when the listener errors", async () => {
-    const seen: string[][] = [];
-    const off = subscribeToNotifications("c2", "u1", (items) => seen.push(items.map((n) => n.id)));
-    h.listeners[0].error(new Error("permission-denied"));
-    await vi.waitFor(() => expect(seen).toEqual([["polled"]]));
-    expect(h.fetchCalls).toBe(1);
-    expect(h.listeners[0].unsub).toHaveBeenCalled();
-    off();
+    subscribeToNotifications("c1", "u1", a)();
+    subscribeToNotifications("c2", "u2", b)();
+    expect(a).toHaveBeenCalledWith([]);
+    expect(b).toHaveBeenCalledWith([]);
+    expect(h.listeners).toHaveLength(0);
   });
 });

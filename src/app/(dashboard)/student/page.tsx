@@ -114,7 +114,7 @@ export default function StudentDashboardPage() {
                   <CalendarDays className="h-5 w-5" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs text-muted-foreground truncate">Today's Classes</p>
+                  <p className="text-xs text-muted-foreground truncate">Today&apos;s Classes</p>
                   <p className="text-base sm:text-lg font-bold text-foreground">{periods.length} {periods.length === 1 ? "Period" : "Periods"}</p>
                 </div>
               </CardContent>
@@ -215,7 +215,7 @@ export default function StudentDashboardPage() {
           <Card className="border shadow-xs">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
               <div>
-                <CardTitle className="text-base font-semibold">Today's Schedule</CardTitle>
+                <CardTitle className="text-base font-semibold">Today&apos;s Schedule</CardTitle>
                 {data?.date && <p className="text-xs text-muted-foreground mt-0.5">{longDate(data.date)}</p>}
               </div>
               <Badge variant="outline" className="text-xs font-normal rounded-md">

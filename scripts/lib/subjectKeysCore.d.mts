@@ -5,8 +5,8 @@ export const nameKeyId: (scope: string, regulation: string, name: string) => str
 export interface PlanMember { id: string; scope: string; regulation: string; code: string; rawCode?: string; name: string; nameKey: string; courseId: string; used: number; isActive: boolean }
 export interface PlanClash { scope: string; regulation: string; field: "code" | "name"; value: string; members: PlanMember[] }
 export function planSubjectKeys(
-  subjects: { id: string; data: Record<string, any> }[],
-  courses: { id: string; data: Record<string, any> }[],
+  subjects: { id: string; data: Record<string, unknown> }[],
+  courses: { id: string; data: Record<string, unknown> }[],
   usage?: Map<string, number>,
 ): {
   legacy: string[];

@@ -112,7 +112,7 @@ export function StudentLifecycleActions({
           {student.status === "DETAINED" ? (
             <p className="text-sm text-muted-foreground">
               Detained - will repeat Year {student.year}. Still in {student.section ? `Section ${student.section}` : "no section"} until you place them
-              in a section of the junior batch (do this once the cohort is promoted or the junior batch's sections exist).
+              in a section of the junior batch (do this once the cohort is promoted or the junior batch&apos;s sections exist).
               {student.detainedReason ? ` Reason: ${student.detainedReason}` : ""}
             </p>
           ) : student.detainedPlacedAt ? (

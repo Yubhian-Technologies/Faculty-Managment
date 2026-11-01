@@ -48,7 +48,12 @@ export async function createLeaveRequestOnce(
   const requestRef = requests.doc();
 
   await db.runTransaction(async (tx) => {
-    const [, existing] = await Promise.all([tx.get(guardRef), tx.get(requests.where("uid", "==", uid))]);
+    // The guard FIRST, then the query - never both at once. A submission that commits after this
+    // transaction read the guard rewrites it, so this one retries and then sees that request; read
+    // together, the query could be from before that commit and the guard from after it, and both
+    // submissions would be saved.
+    await tx.get(guardRef);
+    const existing = await tx.get(requests.where("uid", "==", uid));
     if (existing.docs.some((d) => isPendingStatus((d.data() as { status?: string }).status))) {
       throw new DuplicateLeaveSubmissionError();
     }
