@@ -137,7 +137,7 @@ export async function proxy(request: NextRequest) {
 
   if (!sessionCookie) {
     const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("redirect", pathname);
+    loginUrl.searchParams.set("redirect", pathname + request.nextUrl.search);
     return NextResponse.redirect(loginUrl);
   }
 
@@ -147,7 +147,7 @@ export async function proxy(request: NextRequest) {
 
     if (payload.exp && Date.now() / 1000 > payload.exp) {
       const loginUrl = new URL("/login", request.url);
-      loginUrl.searchParams.set("redirect", pathname);
+      loginUrl.searchParams.set("redirect", pathname + request.nextUrl.search);
       const response = NextResponse.redirect(loginUrl);
       response.cookies.delete({ name: "fms-session", path: "/" });
       return response;

@@ -17,7 +17,10 @@ export default function PrepareMidBankPage({ searchParams }: { searchParams: Pro
   const [data, setData] = useState<MidBankPrepare | null>(null);
   const [error, setError] = useState("");
 
+  const complete = !!(q.deadlineId && q.subjectId && q.branch);
+
   const load = useCallback(() => {
+    if (!q.deadlineId || !q.subjectId || !q.branch) return;
     const params = new URLSearchParams({ deadlineId: q.deadlineId ?? "", subjectId: q.subjectId ?? "", branch: q.branch ?? "" });
     fetch(`/api/college/mid-question-banks/prepare?${params}`)
       .then(async (r) => {
@@ -36,7 +39,11 @@ export default function PrepareMidBankPage({ searchParams }: { searchParams: Pro
         description={data ? `${data.subject.code} · ${data.branch} · four steps: sections, course outcomes, CO-PO mapping, then the questions.` : undefined}
         actions={<Button asChild variant="ghost" size="sm"><Link href="/panel/mid-bank"><ArrowLeft className="mr-1.5 h-4 w-4" />Question Bank</Link></Button>}
       />
-      {error ? <p className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive" role="alert">{error}</p>
+      {!complete ? (
+        <p className="rounded-lg border bg-muted/30 p-4 text-sm" role="status">
+          This link doesn&rsquo;t say which question bank to open. <Link href="/panel/mid-bank" className="font-medium text-primary underline">Go to Question Bank</Link> and pick the subject there.
+        </p>
+      ) : error ? <p className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive" role="alert">{error}</p>
         : !data ? <div className="h-96 animate-pulse rounded-lg bg-muted" />
         : <PrepareBank key={`${data.outcomes?.version ?? 0}-${data.myBankId ?? ""}`} data={data} step={step} onStep={setStep} onChanged={load} />}
     </div>
