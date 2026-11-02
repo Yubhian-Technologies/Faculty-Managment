@@ -37,7 +37,7 @@ export async function GET(request: Request) {
         mentor: student.mentorUid ? { name: student.mentorName ?? "Your mentor", assignedAt: at?.toMillis?.() ?? null } : null,
       });
     }
-    const answer = await readOnlyRecordPart(db, session.collegeId, student, part, searchParams);
+    const answer = await readOnlyRecordPart(db, session.collegeId, student, part, searchParams, { self: true });
     return answer ?? NextResponse.json({ error: "part must be mentor, record, semesters, sheet or entries" }, { status: 400 });
   } catch (err) {
     return mentoringErrorResponse(err, "[student/me/mentoring GET]");

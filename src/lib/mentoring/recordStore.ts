@@ -21,7 +21,7 @@ const iso = (t: Stamp) => t?.toDate?.().toISOString() ?? null;
 export function toEntry(doc: DocumentSnapshot): MentoringEntry {
   const d = (doc.data() ?? {}) as {
     section?: string; semester?: number | null; values?: Record<string, string | boolean | string[]>;
-    createdByName?: string; createdAt?: Stamp; updatedAt?: Stamp;
+    createdByName?: string; createdAt?: Stamp; updatedAt?: Stamp; addedByStudent?: boolean;
   };
   return {
     id: doc.id,
@@ -29,6 +29,7 @@ export function toEntry(doc: DocumentSnapshot): MentoringEntry {
     semester: typeof d.semester === "number" ? d.semester : null,
     values: d.values ?? {},
     createdByName: d.createdByName ?? "",
+    ...(d.addedByStudent ? { addedByStudent: true } : {}),
     createdAt: iso(d.createdAt),
     updatedAt: iso(d.updatedAt),
   };

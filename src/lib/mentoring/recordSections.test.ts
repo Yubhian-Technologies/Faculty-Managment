@@ -58,3 +58,28 @@ describe("formatting", () => {
     expect(formatEntryMonth("March")).toBe("March");
   });
 });
+
+describe("what a student may add to their own record", () => {
+  it("their achievements - never meetings, discipline, follow-ups or referrals", async () => {
+    const { STUDENT_ENTRY_SECTIONS } = await import("./recordSections");
+    expect([...STUDENT_ENTRY_SECTIONS].sort()).toEqual(["achievements", "competitiveExams", "higherStudies", "internships", "placements", "scholarships"]);
+    for (const k of ["meetings", "disciplinary", "followUps", "referrals"]) expect(STUDENT_ENTRY_SECTIONS.has(k)).toBe(false);
+  });
+  it("a student's form never carries the mentor's 'document received' tick", async () => {
+    const { entrySection, studentSectionView } = await import("./recordSections");
+    const s = entrySection("previousAwards")!;
+    expect(s.columns.some((c) => c.key === "docReceived")).toBe(true);
+    expect(studentSectionView(s).columns.some((c) => c.key === "docReceived")).toBe(false);
+  });
+});
+
+describe("supporting document on a row", () => {
+  it("is optional, and only a file uploaded through the app is accepted", async () => {
+    const { cleanEntryValues, entrySection } = await import("./recordSections");
+    const s = entrySection("scholarships")!;
+    expect(cleanEntryValues(s, { name: "Merit" })).toMatchObject({ ok: true });
+    const url = `https://firebasestorage.googleapis.com/v0/b/x.appspot.com/o/${encodeURIComponent("mentoring-docs/c1/u1/a.pdf")}?alt=media&token=5f1e2d3c-1111-2222-3333-444455556666`;
+    expect(cleanEntryValues(s, { name: "Merit", document: url })).toMatchObject({ ok: true, values: { document: url } });
+    expect(cleanEntryValues(s, { name: "Merit", document: "https://evil.example/x.pdf" })).toMatchObject({ ok: false });
+  });
+});
