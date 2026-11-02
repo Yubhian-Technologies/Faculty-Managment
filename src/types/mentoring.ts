@@ -101,6 +101,8 @@ export interface MentoringEntry {
   semester: number | null;
   values: Record<string, string | boolean | string[]>;
   createdByName: string;
+  /** Added by the student themselves (they may edit / remove only these). */
+  addedByStudent?: boolean;
   createdAt: string | null;
   updatedAt: string | null;
 }

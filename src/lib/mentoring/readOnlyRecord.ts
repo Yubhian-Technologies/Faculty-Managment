@@ -16,7 +16,9 @@ export async function readOnlyRecordPart(
   collegeId: string,
   student: StudentRecord & { id: string },
   part: string,
-  searchParams: URLSearchParams
+  searchParams: URLSearchParams,
+  /** `self`: the student's own view (hides what the student alone must not see, e.g. disciplinary issues). */
+  opts: { self?: boolean } = {}
 ): Promise<NextResponse | null> {
   switch (part) {
     case "record": {
@@ -34,7 +36,7 @@ export async function readOnlyRecordPart(
     }
     case "entries": {
       const snap = await entriesCol(db, collegeId, student.id).limit(1000).get();
-      return NextResponse.json({ entries: visibleToStudent(snap.docs.map(toEntry)) });
+      return NextResponse.json({ entries: visibleToStudent(snap.docs.map(toEntry), { self: opts.self }) });
     }
     default:
       return null;

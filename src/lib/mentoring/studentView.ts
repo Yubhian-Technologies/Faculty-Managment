@@ -5,6 +5,9 @@
 
 export const STUDENT_HIDDEN_ENTRY_SECTIONS: ReadonlySet<string> = new Set(["escalations", "healthRecord"]);
 
-export function visibleToStudent<T extends { section: string }>(entries: T[]): T[] {
-  return entries.filter((e) => !STUDENT_HIDDEN_ENTRY_SECTIONS.has(e.section));
+/** Hidden from the STUDENT only - the Principal / Vice Principal's read-only view still shows them. */
+export const SELF_HIDDEN_ENTRY_SECTIONS: ReadonlySet<string> = new Set(["disciplinary"]);
+
+export function visibleToStudent<T extends { section: string }>(entries: T[], opts: { self?: boolean } = {}): T[] {
+  return entries.filter((e) => !STUDENT_HIDDEN_ENTRY_SECTIONS.has(e.section) && !(opts.self && SELF_HIDDEN_ENTRY_SECTIONS.has(e.section)));
 }

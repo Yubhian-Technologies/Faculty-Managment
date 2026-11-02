@@ -10,7 +10,7 @@ import { getActiveSubstitutionsForDates } from "@/lib/leave/periodCoverage";
 import { matchesCurrentSemester } from "@/lib/college/semester";
 import { activeSlotsOn } from "@/lib/timetable/slotScope";
 import { istDateKey, istDayOfWeek } from "@/lib/attendance/istTime";
-import { formatAcademicShortNotation } from "@/lib/academic/format";
+import { formatStudentClass } from "@/lib/academic/format";
 import { buildTimetableColumns } from "@/lib/timetable/gridModel";
 import type { DayOfWeek, TimetableSlot } from "@/types";
 
@@ -125,10 +125,12 @@ export async function GET() {
     return NextResponse.json({
       ...base,
       hasTiming: true,
-      className: formatAcademicShortNotation({
+      // "III B.Tech. I-Sem, CSE-A" (the semester running now; left out when none is).
+      className: formatStudentClass({
         year: section.year,
         courseName: course?.name,
         courseCode: course?.code,
+        semester: ctx.currentSemester,
         sectionName: section.name,
       }),
       periods,

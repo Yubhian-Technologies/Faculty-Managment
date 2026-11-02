@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { BookOpen, Briefcase, Check, FileCheck2, HeartHandshake, Home, Pencil, Plus, Target, Trash2, Users, X, type LucideIcon } from "lucide-react";
+import { BookOpen, Briefcase, Check, FileCheck2, FileText, HeartHandshake, Home, Loader2, Paperclip, Pencil, Plus, Target, Trash2, Users, X, type LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/useToast";
-import { formatEntryDate, formatEntryMonth, type EntryColumn, type EntrySection as Section } from "@/lib/mentoring/recordSections";
+import { formatEntryDate, formatEntryMonth, type EntryColumn, type EntrySection as Section, STUDENT_ENTRY_SECTIONS, studentSectionView } from "@/lib/mentoring/recordSections";
 import type { MentoringEntry } from "@/types/mentoring";
 import { sendJson } from "./recordApi";
 
@@ -52,9 +52,48 @@ function cellText(col: EntryColumn, v: Value | undefined): string {
   return v;
 }
 
+/** Optional supporting document: upload (PDF / PNG / JPEG, up to 4 MB) through api/upload/mentoring-doc; the row keeps the link. */
+function FileInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  async function upload(file: File | undefined) {
+    if (!file) return;
+    setBusy(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/upload/mentoring-doc", { method: "POST", body: form });
+      const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
+      if (!res.ok || !data.url) throw new Error(data.error || "Upload failed");
+      onChange(data.url);
+    } catch (e) {
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Upload failed" });
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-sm">
+      {value && (
+        <a href={value} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline">
+          <FileText className="h-4 w-4" /> View document
+        </a>
+      )}
+      <label className={`inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-md border bg-background px-3 hover:bg-muted ${busy ? "pointer-events-none opacity-60" : ""}`}>
+        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
+        {value ? "Replace" : "Upload file"}
+        <input type="file" accept="application/pdf,image/png,image/jpeg" className="sr-only" onChange={(e) => { void upload(e.target.files?.[0]); e.target.value = ""; }} />
+      </label>
+      {value && <Button type="button" size="sm" variant="ghost" onClick={() => onChange("")}>Remove</Button>}
+      <span className="text-xs text-muted-foreground">PDF, PNG or JPEG, up to 4 MB</span>
+    </div>
+  );
+}
+
 function ColumnInput({ col, value, onChange, autoFocus }: { col: EntryColumn; value: Value | undefined; onChange: (v: Value) => void; autoFocus?: boolean }) {
   const text = typeof value === "string" ? value : "";
   switch (col.kind) {
+    case "file":
+      return <FileInput value={text} onChange={onChange} />;
     case "textarea":
       return <Textarea value={text} rows={3} autoFocus={autoFocus} placeholder={col.placeholder} maxLength={col.max ?? 1000} onChange={(e) => onChange(e.target.value)} />;
     case "date":
@@ -131,7 +170,7 @@ function EntryForm({
           )}
           <div className="grid gap-3 sm:grid-cols-2">
             {group.columns.map((c) => (
-              <div key={c.key} className={c.kind === "textarea" || c.kind === "multiselect" ? "sm:col-span-2" : ""}>
+              <div key={c.key} className={c.kind === "textarea" || c.kind === "multiselect" || c.kind === "file" ? "sm:col-span-2" : ""}>
                 {c.kind !== "multiselect" && <label className="text-xs text-muted-foreground mb-1 block">{c.label}{c.required ? " *" : ""}</label>}
                 <ColumnInput col={c} value={values[c.key]} autoFocus={c === section.columns[0]} onChange={(v) => setValues((prev) => ({ ...prev, [c.key]: v }))} />
               </div>
@@ -148,10 +187,13 @@ function EntryForm({
 }
 
 export function EntrySectionView({
-  section, entries, api, editor, semester, heading = "h3", hideTitle, readOnly, newestFirst,
+  section, entries, api, editor, semester, heading = "h3", hideTitle, readOnly, newestFirst, studentSelf,
 }: {
   /** The student's own view: rows are shown, never added, edited or removed. */
   readOnly?: boolean;
+  /** The student's own record: in the sections students fill (STUDENT_ENTRY_SECTIONS) they may add rows and edit /
+   *  remove the ones they added, even though the page is otherwise read-only. */
+  studentSelf?: boolean;
   section: Section;
   entries: MentoringEntry[];
   /** /api/college/mentoring/students/{id} */
@@ -206,7 +248,11 @@ export function EntrySectionView({
     }
   }
 
-  const rowActions = (id: string) => readOnly ? null : (
+  // In the student's own record: add in their sections, and edit / remove only their own rows (the server checks too).
+  const studentAdds = !!readOnly && !!studentSelf && STUDENT_ENTRY_SECTIONS.has(section.key);
+  const canAdd = !readOnly || studentAdds;
+  const canChange = (id: string) => !readOnly || (studentAdds && !!entries.find((e) => e.id === id)?.addedByStudent);
+  const rowActions = (id: string) => !canChange(id) ? null : (
     <div className="flex gap-1 justify-end print:hidden">
       <button type="button" className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground" aria-label="Edit" onClick={() => setEditing(id)}><Pencil className="h-3.5 w-3.5" /></button>
       <button type="button" className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-red-600" aria-label="Remove" onClick={() => remove(id)}><Trash2 className="h-3.5 w-3.5" /></button>
@@ -216,7 +262,7 @@ export function EntrySectionView({
   const formFor = (id: string | "new") => (
     <EntryForm
       key={id}
-      section={section}
+      section={studentAdds ? studentSectionView(section) : section}
       initial={id === "new" ? {} : (entries.find((e) => e.id === id)?.values ?? {})}
       saving={saving}
       onSave={save}
@@ -234,7 +280,7 @@ export function EntrySectionView({
               {section.hint && <p className="text-xs text-muted-foreground mt-0.5">{section.hint}</p>}
             </div>
           )}
-          {!readOnly && editing !== "new" && (
+          {canAdd && editing !== "new" && (
             <Button size="sm" variant="outline" className="print:hidden ml-auto" disabled={full} onClick={() => setEditing("new")} title={full ? "This table is full" : undefined}>
               <Plus className="h-4 w-4 mr-1" /> {section.addLabel}
             </Button>
@@ -281,7 +327,11 @@ export function EntrySectionView({
                     <td className="py-2 pr-3 text-muted-foreground tabular-nums">{i + 1}</td>
                     {section.columns.map((c) => (
                       <td key={c.key} className="py-2 pr-3 whitespace-pre-wrap break-words">
-                        {c.kind === "check"
+                        {c.kind === "file"
+                          ? (typeof r.values[c.key] === "string" && r.values[c.key]
+                            ? <a href={r.values[c.key] as string} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline"><FileText className="h-4 w-4" /> View</a>
+                            : <span className="text-muted-foreground">—</span>)
+                          : c.kind === "check"
                           ? (r.values[c.key] === true ? <Check className="h-4 w-4 text-emerald-600" aria-label="Yes" /> : <span className="text-muted-foreground">—</span>)
                           : c.kind === "multiselect" && Array.isArray(r.values[c.key])
                           ? <div className="flex flex-wrap gap-1">{(r.values[c.key] as string[]).map((x) => <Badge key={x} variant="secondary" className="font-normal">{cellText(c, [x])}</Badge>)}</div>

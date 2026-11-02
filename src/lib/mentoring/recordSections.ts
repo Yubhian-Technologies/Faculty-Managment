@@ -5,7 +5,7 @@
 // Every one of them is stored the same way: one document per row at
 // students/{id}/mentoringEntries/{entryId} = { section, semester?, values }.
 
-export type EntryColumnKind = "text" | "textarea" | "date" | "month" | "select" | "check" | "multiselect";
+export type EntryColumnKind = "text" | "textarea" | "date" | "month" | "select" | "check" | "multiselect" | "file";
 
 /** What a stored cell holds: text, a ticked box, or (multiselect) the chosen option values. */
 export type EntryValue = string | boolean | string[];
@@ -61,6 +61,9 @@ export const ESCALATION_STATUS_OPTIONS = ["Open", "Under review", "Resolved"] as
 
 const DOCS_NOTE = "Copies of supporting documents are submitted to the mentor";
 const docsCol: EntryColumn = { key: "docReceived", label: "Supporting document received", kind: "check" };
+// An uploaded copy (certificate, offer letter, scorecard ...) - optional; the student or the mentor attaches it
+// through api/upload/mentoring-doc. Stored as the file's link.
+const docFileCol: EntryColumn = { key: "document", label: "Supporting document (optional)", kind: "file", max: 1000 };
 
 // 7.2 - 7.5 and 8 of the booklet are free text; rows let the mentor add one item at a time, dated if known.
 const freeText = (key: string, title: string, hint: string, withDocs: boolean): EntrySection => ({
@@ -145,6 +148,7 @@ export const ENTRY_SECTIONS: EntrySection[] = [
       { key: "name", label: "Name of the scholarship", kind: "text", required: true },
       { key: "monthYear", label: "Month / year", kind: "month" },
       { key: "grant", label: "Grant", kind: "text", placeholder: "₹ 35,000" },
+      docFileCol,
     ],
     maxEntries: 30,
     addLabel: "Add scholarship",
@@ -159,6 +163,7 @@ export const ENTRY_SECTIONS: EntrySection[] = [
       { key: "organization", label: "Organization / company", kind: "text", required: true },
       { key: "fromDate", label: "From", kind: "date" },
       { key: "toDate", label: "To", kind: "date" },
+      docFileCol,
     ],
     maxEntries: 30,
     addLabel: "Add internship",
@@ -173,6 +178,7 @@ export const ENTRY_SECTIONS: EntrySection[] = [
       { key: "organization", label: "Organization", kind: "text", required: true },
       { key: "location", label: "Location", kind: "text" },
       { key: "package", label: "Package per annum", kind: "text", placeholder: "6.5 LPA" },
+      docFileCol,
     ],
     maxEntries: 10,
     addLabel: "Add placement",
@@ -186,6 +192,7 @@ export const ENTRY_SECTIONS: EntrySection[] = [
     columns: [
       { key: "exam", label: "Details of the examination", kind: "text", required: true },
       { key: "result", label: "Result obtained", kind: "text" },
+      docFileCol,
     ],
     maxEntries: 20,
     addLabel: "Add examination",
@@ -199,6 +206,7 @@ export const ENTRY_SECTIONS: EntrySection[] = [
     columns: [
       { key: "university", label: "Name of the university", kind: "text", required: true },
       { key: "location", label: "Location", kind: "text" },
+      docFileCol,
     ],
     maxEntries: 10,
     addLabel: "Add university",
@@ -215,6 +223,7 @@ export const ENTRY_SECTIONS: EntrySection[] = [
       { key: "category", label: "Type", kind: "select", options: ["Co-curricular", "Extra-curricular"], required: true },
       { key: "responsibility", label: "Type of responsibility / achievement", kind: "textarea", required: true },
       { key: "date", label: "Date", kind: "date" },
+      docFileCol,
     ],
     maxEntries: 80,
     addLabel: "Add achievement",
@@ -304,6 +313,20 @@ export const ENTRY_SECTIONS: EntrySection[] = [
 const BY_KEY = new Map(ENTRY_SECTIONS.map((s) => [s.key, s]));
 export const entrySection = (key: string): EntrySection | undefined => BY_KEY.get(key);
 
+/**
+ * Sections a student may add to their OWN record (their mentor may too): what they achieved. Everything else -
+ * meetings, discipline, follow-ups, referrals - stays the mentor's / HOD's. A student edits and removes only the rows
+ * they added; the mentor can correct any row.
+ */
+export const STUDENT_ENTRY_SECTIONS: ReadonlySet<string> = new Set(["scholarships", "internships", "placements", "competitiveExams", "higherStudies", "achievements"]);
+
+/** Columns only the mentor sets ("Supporting document received" is the mentor confirming they got the copy). */
+export const MENTOR_ONLY_COLUMNS: ReadonlySet<string> = new Set(["docReceived"]);
+
+/** A section as the student fills it in: without the mentor-only columns. */
+export const studentSectionView = (section: EntrySection): EntrySection =>
+  ({ ...section, columns: section.columns.filter((c) => !MENTOR_ONLY_COLUMNS.has(c.key)) });
+
 /** How a student reached the degree: Intermediate (then EAPCET) or Diploma (then ECET). */
 export const QUALIFICATION_OPTIONS = ["Intermediate (Class XII)", "Diploma (Polytechnic)"] as const;
 
@@ -315,6 +338,11 @@ export const SEMESTER_REMARKS_MAX_LENGTH = 2000;
 
 /** Meetings per semester the booklet expects. */
 export const MEETINGS_TARGET = { min: 6, max: 8 } as const;
+
+/** A link to a file uploaded through api/upload/mentoring-doc (Firebase Storage, mentoring-docs/...). */
+export function isMentoringDocUrl(v: string): boolean {
+  return /^https:\/\/firebasestorage\.googleapis\.com\/v0\/b\/[^/]+\/o\/mentoring-docs%2F[^?]+\?alt=media&token=[\w-]+$/.test(v);
+}
 
 function isRealDate(v: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
@@ -368,6 +396,8 @@ export function cleanEntryValues(section: EntrySection, input: unknown): CleanEn
     if (s.length > max) return { ok: false, error: `${col.label} is too long (max ${max} characters)` };
     if (col.kind === "date" && !isRealDate(s)) return { ok: false, error: `${col.label} must be a valid date` };
     if (col.kind === "month" && !/^\d{4}-(0[1-9]|1[0-2])$/.test(s)) return { ok: false, error: `${col.label} must be a valid month` };
+    // Only a file this app uploaded (api/upload/mentoring-doc) - never an arbitrary link.
+    if (col.kind === "file" && !isMentoringDocUrl(s)) return { ok: false, error: `${col.label}: upload the file again` };
     if (col.kind === "select" && !(col.options ?? []).includes(s)) return { ok: false, error: `${col.label} must be one of: ${(col.options ?? []).join(", ")}` };
     if (section.key === "guardians" && col.key === "mobile") {
       const digits = s.replace(/[\s-]/g, "").replace(/^(\+91|91|0)(?=\d{10}$)/, "");

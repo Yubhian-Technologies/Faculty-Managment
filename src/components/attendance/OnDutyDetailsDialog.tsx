@@ -27,11 +27,11 @@ export function OnDutyTag({ studentId, studentName, date, periodNumber }: { stud
 
   return (
     <>
-      <button type="button" className={tag} title="Approved permission - locked. Click for details" onClick={() => setOpen(true)}>On Duty</button>
+      <button type="button" className={tag} title="Approved permission - locked. Click for details" onClick={() => setOpen(true)}>Permission</button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>On Duty - {studentName}</DialogTitle>
+            <DialogTitle>Permission - {studentName}</DialogTitle>
             <DialogDescription>This mark comes from an approved permission and can&apos;t be changed here.</DialogDescription>
           </DialogHeader>
           {error && <p className="text-sm text-destructive">Couldn&apos;t load the permission details. Try again.</p>}

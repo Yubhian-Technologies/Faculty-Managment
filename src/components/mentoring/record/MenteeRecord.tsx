@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Briefcase, GraduationCap, Printer, Users, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { entrySection } from "@/lib/mentoring/recordSections";
-import { STUDENT_HIDDEN_ENTRY_SECTIONS } from "@/lib/mentoring/studentView";
+import { SELF_HIDDEN_ENTRY_SECTIONS, STUDENT_HIDDEN_ENTRY_SECTIONS } from "@/lib/mentoring/studentView";
 import type { MentoringEntry, MentoringSemesterOption } from "@/types/mentoring";
 import { EntrySectionView, type EntryEditor } from "./EntrySection";
 import { MeetingsPage } from "./MeetingsPage";
@@ -39,7 +39,7 @@ function PartHeading({ children }: { children: React.ReactNode }) {
 }
 
 export function MenteeRecord({
-  studentId, studentName, rollNumber, readOnly, apiBase,
+  studentId, studentName, rollNumber, readOnly, apiBase, studentSelf,
 }: {
   studentId?: string;
   studentName: string;
@@ -48,6 +48,9 @@ export function MenteeRecord({
   readOnly?: boolean;
   /** Overrides the mentor-side endpoint (the student's page passes /api/college/student/me/mentoring). */
   apiBase?: string;
+  /** The student's OWN record: on top of read-only, they may add scholarships, internships, placements, exams,
+   *  higher studies and achievements, and edit / remove the rows they added. */
+  studentSelf?: boolean;
 }) {
   const api = apiBase ?? `/api/college/mentoring/students/${studentId}`;
   const [view, setView] = useState<View>("profile");
@@ -83,8 +86,8 @@ export function MenteeRecord({
     <div className="space-y-4">
       {keys.map((k) => {
         const s = entrySection(k);
-        if (!s || (readOnly && STUDENT_HIDDEN_ENTRY_SECTIONS.has(k))) return null;
-        return <EntrySectionView key={k} section={numbered ? { ...s, title: `${numbered[k]}. ${s.title}` } : s} entries={list} api={api} editor={editor} readOnly={readOnly} />;
+        if (!s || (readOnly && STUDENT_HIDDEN_ENTRY_SECTIONS.has(k)) || (studentSelf && SELF_HIDDEN_ENTRY_SECTIONS.has(k))) return null;
+        return <EntrySectionView key={k} section={numbered ? { ...s, title: `${numbered[k]}. ${s.title}` } : s} entries={list} api={api} editor={editor} readOnly={readOnly} studentSelf={studentSelf} />;
       })}
     </div>
   );
@@ -162,7 +165,7 @@ export function MenteeRecord({
           <>
             <PartHeading>Progress & placements</PartHeading>
             {renderSections(PROGRESS)}
-            <PartHeading>Activities & discipline</PartHeading>
+            <PartHeading>{studentSelf ? "Activities" : "Activities & discipline"}</PartHeading>
             {renderSections(ACTIVITIES)}
           </>
         )}

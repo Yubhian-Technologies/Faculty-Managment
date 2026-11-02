@@ -263,8 +263,8 @@ export function RequestForm({
             : "Request Permission for Students"}
         </CardTitle>
         <CardDescription>
-          Once approved, covered students are marked On Duty for selected dates
-          and periods.
+          Once approved, the selected periods show as Permission in the students’ attendance
+          (they are left out of the attendance percentage).
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 p-4 pt-2 sm:space-y-5 sm:p-6 sm:pt-3">
@@ -273,19 +273,25 @@ export function RequestForm({
             <span className="font-semibold text-foreground">
               Applying for Section:{" "}
             </span>
-            <span className="font-medium text-foreground">
-              {options.studentInfo.department}
-            </span>
-            <span className="mx-1 text-muted-foreground" aria-hidden>
-              •
-            </span>
-            <span>Year {options.studentInfo.year}</span>
-            <span className="mx-1 text-muted-foreground" aria-hidden>
-              •
-            </span>
-            <span className="font-medium">
-              Section {options.studentInfo.section}
-            </span>
+            {options.studentInfo.classLabel ? (
+              <span className="font-medium text-foreground">{options.studentInfo.classLabel}</span>
+            ) : (
+              <>
+                <span className="font-medium text-foreground">
+                  {options.studentInfo.department}
+                </span>
+                <span className="mx-1 text-muted-foreground" aria-hidden>
+                  •
+                </span>
+                <span>Year {options.studentInfo.year}</span>
+                <span className="mx-1 text-muted-foreground" aria-hidden>
+                  •
+                </span>
+                <span className="font-medium">
+                  Section {options.studentInfo.section}
+                </span>
+              </>
+            )}
             <span className="ml-2 text-muted-foreground">
               ({options.studentInfo.name} - {options.studentInfo.rollNumber})
             </span>
@@ -431,10 +437,11 @@ export function RequestForm({
             )}
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="pm-venue">Venue (optional)</Label>
+            <Label htmlFor="pm-venue">Place (optional)</Label>
             <Input
               id="pm-venue"
               value={venue}
+              placeholder="e.g. XYZ College, Hyderabad"
               maxLength={200}
               onChange={(e) => setVenue(e.target.value)}
             />

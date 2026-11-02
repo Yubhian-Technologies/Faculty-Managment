@@ -1,7 +1,7 @@
 // The header block and cell text shared by the section timetable's PDF / print
 // and Excel downloads, laid out like the college's printed timetable:
 //
-//   YEAR-SEM-SECTION : II B.Tech-I Sem-CE-A        W.E.F : 20 July 2026
+//   YEAR-SEM-SECTION : II B.Tech. I-Sem, CE-A       W.E.F : 20 July 2026
 //   BRANCH : Civil Engineering                     ROOM NO : B-304
 //   Class I/C: Dr. N A G K Manikanta Kopuri
 //
@@ -55,7 +55,7 @@ export interface TimetableHeaderParts {
 }
 
 export interface TimetableHeaderLines {
-  /** "YEAR-SEM-SECTION : II B.Tech-I Sem-CSE-A" */
+  /** "YEAR-SEM-SECTION : II B.Tech. I-Sem, CSE-A" */
   yearLine: string;
   /** "BRANCH : Civil Engineering" */
   branchLine: string;
@@ -78,11 +78,16 @@ export function formatWefDate(effectiveDate?: string): string {
 }
 
 export function buildTimetableHeaderLines(parts: TimetableHeaderParts): TimetableHeaderLines {
+  // The class as the college writes it: "II B.Tech. I-Sem, CSE-A". The semester is the one within the
+  // year - the last number of the label, odd = I, even = II - whether the label says "Sem 2-1", "Sem 1"
+  // or a semester number running across the course ("5").
   const semNumber = parts.semesterLabel?.match(/\d+/g)?.pop();
-  const semester = semNumber ? `${toRoman(Number(semNumber))} Sem` : (parts.semesterLabel ?? "");
+  const semester = semNumber ? `${Number(semNumber) % 2 === 1 ? "I" : "II"}-Sem` : (parts.semesterLabel ?? "");
   const course = parts.courseName ? shortCourse(parts.courseName) : "";
-  const yearCourse = parts.year != null ? `${toRoman(parts.year)} ${course}`.trim() : course;
-  const yearText = [yearCourse, semester, sectionCode(parts.sectionName, parts.departmentName)].filter(Boolean).join("-");
+  let yearCourse = parts.year != null ? `${toRoman(parts.year)} ${course}`.trim() : course;
+  if (yearCourse && !yearCourse.endsWith(".")) yearCourse += ".";
+  const head = [yearCourse, semester].filter(Boolean).join(" ");
+  const yearText = [head, sectionCode(parts.sectionName, parts.departmentName)].filter(Boolean).join(", ");
 
   const room = parts.classroom?.trim().replace(/^room\s*(no)?\s*:?\s*/i, "").trim();
   const wef = formatWefDate(parts.effectiveDate);

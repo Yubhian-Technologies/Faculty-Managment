@@ -10,7 +10,7 @@ describe("timetable header", () => {
         classInchargeName: "Dr. N A G K Manikanta Kopuri", effectiveDate: "2026-07-20",
       })
     ).toEqual({
-      yearLine: "YEAR-SEM-SECTION : I B.Tech-I Sem-CSE-A",
+      yearLine: "YEAR-SEM-SECTION : I B.Tech. I-Sem, CSE-A",
       branchLine: "BRANCH : Computer Science",
       inchargeLine: "Class I/C: Dr. N A G K Manikanta Kopuri",
       wefLine: "W.E.F : 20 July 2026",
@@ -21,14 +21,19 @@ describe("timetable header", () => {
   it("works the section out from how it is stored", () => {
     const line = (sectionName: string) =>
       buildTimetableHeaderLines({ courseName: "B.Tech", year: 2, semesterLabel: "Sem 2-1", sectionName, departmentName: "Civil Engineering" }).yearLine;
-    expect(line("CSE-C")).toBe("YEAR-SEM-SECTION : II B.Tech-I Sem-CSE-C");
-    expect(line("BSC-CSE-C")).toBe("YEAR-SEM-SECTION : II B.Tech-I Sem-CSE-C");
-    expect(line("A")).toBe("YEAR-SEM-SECTION : II B.Tech-I Sem-CE-A");
-    expect(line("Section B")).toBe("YEAR-SEM-SECTION : II B.Tech-I Sem-CE-B");
+    expect(line("CSE-C")).toBe("YEAR-SEM-SECTION : II B.Tech. I-Sem, CSE-C");
+    expect(line("BSC-CSE-C")).toBe("YEAR-SEM-SECTION : II B.Tech. I-Sem, CSE-C");
+    expect(line("A")).toBe("YEAR-SEM-SECTION : II B.Tech. I-Sem, CE-A");
+    expect(line("Section B")).toBe("YEAR-SEM-SECTION : II B.Tech. I-Sem, CE-B");
   });
 
   it("leaves off whatever is not known", () => {
     expect(buildTimetableHeaderLines({})).toEqual({ yearLine: "", branchLine: "", inchargeLine: "", wefLine: "", roomLine: "" });
+    // The semester within the year, however the label gives it (in-year "Sem 1", "Sem 2-2", or a number running across the course).
+    const sem = (semesterLabel: string) => buildTimetableHeaderLines({ courseName: "B.Tech", year: 3, semesterLabel, sectionName: "CSE-A" }).yearLine;
+    expect(sem("Sem 1")).toBe("YEAR-SEM-SECTION : III B.Tech. I-Sem, CSE-A");
+    expect(sem("5")).toBe("YEAR-SEM-SECTION : III B.Tech. I-Sem, CSE-A");
+    expect(sem("Sem 3-2")).toBe("YEAR-SEM-SECTION : III B.Tech. II-Sem, CSE-A");
     expect(formatWefDate("")).toBe("");
   });
 

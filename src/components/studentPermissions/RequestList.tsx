@@ -221,7 +221,7 @@ function RequestCard({
           )}
           {p.venue && (
             <div className="flex min-w-0 gap-1.5">
-              <dt className="shrink-0 text-muted-foreground">Venue</dt>
+              <dt className="shrink-0 text-muted-foreground">Place</dt>
               <dd className="min-w-0 break-words">{p.venue}</dd>
             </div>
           )}
@@ -288,7 +288,7 @@ function RequestCard({
           >
             <span className="flex-1">
               Approved, but the attendance update did not complete. Covered
-              periods remain marked On Duty.
+              periods still show as Permission.
             </span>
             {view !== "mine" && (
               <Button

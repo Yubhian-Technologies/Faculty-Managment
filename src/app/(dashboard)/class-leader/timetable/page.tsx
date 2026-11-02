@@ -11,9 +11,9 @@ import { currentWeekDates } from "@/lib/utils";
 import { isoDateKey } from "@/lib/leave/dayCounter";
 import { InstitutionalTimetableTable } from "@/components/timetable/InstitutionalTimetableTable";
 import { ordinalYear } from "@/lib/timetable/gridModel";
-import { toRoman, formatAcademicShortNotation } from "@/lib/academic/format";
+import { formatAcademicShortNotation } from "@/lib/academic/format";
 import type { Course, Department, Section, CourseYearTiming, TimetableSlot, SubjectType, Subject, TeachingAssignment, DayOfWeek } from "@/types";
-import { yearSemesterLabelIn, semesterInYearLabel } from "@/lib/academic/format";
+import { semesterInYearLabel } from "@/lib/academic/format";
 
 type TimetableSlotRow = TimetableSlot & { id: string; subjectType?: SubjectType };
 
@@ -257,7 +257,7 @@ export default function ClassLeaderTimetablePage() {
               courseName={course?.name}
               departmentName={departmentName}
               academicYear={slots[0]?.academicYear}
-              semesterLabel={selectedSemester ? `${toRoman(selectedSemester)} Sem Time Table` : undefined}
+              semesterLabel={selectedSemester ? semesterInYearLabel(availableSemesters.map((x) => x.semester), selectedSemester, { format: "short" }) : undefined}
               workingDays={workingDays}
               weekStart={weekStart}
               onWeekChange={changeWeek}

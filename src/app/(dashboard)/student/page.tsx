@@ -56,7 +56,7 @@ function longDate(iso: string): string {
 const ACADEMIC_MODULES = [
   { label: "My Timetable", description: "Weekly period schedule", href: "/student/timetable", icon: CalendarDays, color: "bg-blue-50 text-blue-600" },
   { label: "My Attendance", description: "Attendance records & percentage", href: "/student/attendance", icon: TrendingUp, color: "bg-emerald-50 text-emerald-600" },
-  { label: "Permissions", description: "On-Duty & permission requests", href: "/student/permissions", icon: ShieldCheck, color: "bg-amber-50 text-amber-600" },
+  { label: "Permissions", description: "Your permission requests", href: "/student/permissions", icon: ShieldCheck, color: "bg-amber-50 text-amber-600" },
 ];
 
 const RESOURCE_MODULES = [
@@ -107,7 +107,7 @@ export default function StudentDashboardPage() {
       ) : (
         <>
           {/* Quick Overview Stats Bar */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Card className="border shadow-xs">
               <CardContent className="p-3 sm:p-4 flex items-center gap-3">
                 <div className="h-10 w-10 rounded-lg flex items-center justify-center shrink-0 bg-blue-50 text-blue-600">
@@ -116,18 +116,6 @@ export default function StudentDashboardPage() {
                 <div className="min-w-0">
                   <p className="text-xs text-muted-foreground truncate">Today&apos;s Classes</p>
                   <p className="text-base sm:text-lg font-bold text-foreground">{periods.length} {periods.length === 1 ? "Period" : "Periods"}</p>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border shadow-xs">
-              <CardContent className="p-3 sm:p-4 flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg flex items-center justify-center shrink-0 bg-amber-50 text-amber-600">
-                  <ShieldCheck className="h-5 w-5" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs text-muted-foreground truncate">Permissions</p>
-                  <p className="text-base sm:text-lg font-bold text-foreground">On Duty</p>
                 </div>
               </CardContent>
             </Card>

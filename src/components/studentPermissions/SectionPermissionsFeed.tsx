@@ -51,7 +51,7 @@ export function SectionPermissionsFeed() {
       </div>
 
       {requests.length === 0 ? (
-        <EmptyState icon={FileCheck} headline="No approved permissions for this section yet." hint="Approved On-Duty permissions automatically display here." />
+        <EmptyState icon={FileCheck} headline="No approved permissions for this section yet." hint="Approved permissions show here automatically." />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {requests.map((req) => (

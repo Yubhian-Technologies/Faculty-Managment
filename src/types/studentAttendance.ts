@@ -22,7 +22,8 @@ export type StudentAttendanceMark = "PRESENT" | "ABSENT" | "ON_DUTY";
 export const STUDENT_ATTENDANCE_MARK_LABELS: Record<StudentAttendanceMark, string> = {
   PRESENT: "Present",
   ABSENT: "Absent",
-  ON_DUTY: "On Duty",
+  // Stored as ON_DUTY; for a student it is an approved permission, so that is what is shown.
+  ON_DUTY: "Permission",
 };
 
 export type StudentAttendanceSessionStatus = "DRAFT" | "SUBMITTED";

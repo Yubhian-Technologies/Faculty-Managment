@@ -222,13 +222,13 @@ export function OfficeAttendanceEditor({ facultyId, date, subjectName, sectionLa
                         {periods.length > 1 && (
                           <td className="px-3 py-2.5 text-center border-l whitespace-nowrap">
                             {open.length === 0 ? (
-                              <span className="text-xs text-muted-foreground">On Duty</span>
+                              <span className="text-xs text-muted-foreground">Permission</span>
                             ) : (
                               <Switch
                                 checked={open.every((n) => draft[s.studentId]?.[n] === meaning)}
                                 disabled={!mode || isSaving}
                                 onCheckedChange={(c) => setRow(s.studentId, c ? meaning : opposite)}
-                                title={`Applies to Periods ${open.join(", ")}. On Duty periods are kept.`}
+                                title={`Applies to Periods ${open.join(", ")}. Permission periods are kept.`}
                                 aria-label={`Mark ${s.name} ${meaning === "PRESENT" ? "present" : "absent"} for all periods`}
                               />
                             )}

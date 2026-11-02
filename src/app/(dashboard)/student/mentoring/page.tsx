@@ -8,7 +8,8 @@ import { MenteeRecord } from "@/components/mentoring/record/MenteeRecord";
 import { getJson } from "@/components/mentoring/record/recordApi";
 
 // The student's own Mentoring Record: who their mentor is and the record the mentor keeps
-// (details, semester sheets, progress, meetings), read-only. Served by student/me/mentoring.
+// (details, semester sheets, progress, meetings), read-only - except Progress & activities, where the student adds
+// their own rows (student/me/mentoring/record/entries). Served by student/me/mentoring.
 
 const API = "/api/college/student/me/mentoring";
 
@@ -31,7 +32,7 @@ export default function StudentMentoringPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Mentoring" description="Your mentor and your Student Mentoring Record. The record is kept by your mentor; you can read it here." />
+      <PageHeader title="Mentoring" description="Your mentor and your Student Mentoring Record. Your mentor keeps the record; you can add your scholarships, internships, placements, competitive exams, higher studies and achievements under Progress & activities." />
 
       {error && <p className="text-sm text-muted-foreground py-6">{error}</p>}
       {!error && !data && <p className="text-sm text-muted-foreground py-6">Loading…</p>}
@@ -51,7 +52,7 @@ export default function StudentMentoringPage() {
             </CardContent>
           </Card>
 
-          <MenteeRecord apiBase={API} readOnly studentName={data.student.name} rollNumber={data.student.rollNumber} />
+          <MenteeRecord apiBase={API} readOnly studentSelf studentName={data.student.name} rollNumber={data.student.rollNumber} />
         </>
       )}
     </div>
