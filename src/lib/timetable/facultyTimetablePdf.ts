@@ -194,7 +194,7 @@ export function buildFacultyTimetablePdfHtml(opts: FacultyTimetablePdfOptions): 
     .map(
       (row) => `
   <div class="signature-row" style="margin-top:44px;margin-bottom:6px;padding-top:0;display:flex;justify-content:space-between;align-items:flex-end;width:100%;page-break-inside:avoid;">
-    ${row.map((label) => `<div class="signature-block" style="flex:1;text-align:center;font-weight:700;font-size:9.5pt;">${escapeHtml(label)}</div>`).join("\n    ")}
+    ${row.map((label, i) => `<div class="signature-block" style="flex:1;text-align:${i === 0 ? "left" : i === row.length - 1 ? "right" : "center"};font-weight:700;font-size:9.5pt;">${escapeHtml(label)}</div>`).join("\n    ")}
   </div>`
     )
     .join("");
