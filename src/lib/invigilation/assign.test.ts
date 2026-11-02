@@ -124,8 +124,10 @@ describe("reassigning and cancelling", () => {
     expect(sessionEnded({ date: "2026-10-31", to: "11:30" }, at("2026-10-30T03:16:00Z"))).toBe(false); // 30 Oct 8:46 IST
     expect(sessionEnded({ date: "2026-10-31", to: "11:30" }, at("2026-10-31T05:59:00Z"))).toBe(false); // 11:29 IST
     expect(sessionEnded({ date: "2026-10-31", to: "11:30" }, at("2026-10-31T06:00:00Z"))).toBe(true); // 11:30 IST
-    const s = { ...schedule(), publishedSessions: [slot("201").session] };
-    const d = await assignDuty(db as never, "C", { schedule: s, slot: slot("201"), faculty: fac("f1"), facts: facts("f1"), sessions: [], actor });
+    // An exam that is still in the future whenever this runs (a fixed date would turn "ended" once it passes).
+    const future = { ...slot("201"), date: "2099-11-02", session: "2099-11-02|10:00-11:30", key: "2099-11-02|10:00-11:30|201" };
+    const s = { ...schedule(), publishedSessions: [future.session] };
+    const d = await assignDuty(db as never, "C", { schedule: s, slot: future, faculty: fac("f1"), facts: facts("f1"), sessions: [], actor });
     await expect(changeDutyStatus(db as never, "C", d.id, "complete", actor)).rejects.toThrow(/mark it done after that/);
   });
 
