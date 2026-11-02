@@ -13,6 +13,7 @@ import { CATEGORY_OPTIONS, QUALIFICATION_OPTIONS, entrySection } from "@/lib/men
 import type { MentoringEntry, MentoringRecordProfile, RecordFieldView } from "@/types/mentoring";
 import { EntrySectionView, type EntryEditor } from "./EntrySection";
 import { sendJson, useLoaded } from "./recordApi";
+import { ParentDetailsEditor } from "./ParentDetailsEditor";
 
 // Page 1 and 7.1 of the Student Mentoring Record. Everything the student's own record holds is
 // shown as it is (and can only be changed there); a detail that is missing can be filled in here,
@@ -164,7 +165,9 @@ function lockProfile(p: MentoringRecordProfile): MentoringRecordProfile {
 }
 
 export function StudentInfoPage({ api, entries, editor, readOnly }: { api: string; entries: MentoringEntry[]; editor: EntryEditor; readOnly?: boolean }) {
-  const { data: loaded, error, loading, setData } = useLoaded<MentoringRecordProfile>(`${api}?part=record`);
+  const { data: loaded, error, loading, setData, reload } = useLoaded<MentoringRecordProfile>(`${api}?part=record`);
+  // Both record APIs end in the student's id (mentoring/students/<id>, mentoring/college-students/<id>).
+  const studentId = api.split("/").pop() ?? "";
   const data = useMemo(() => (loaded && readOnly ? lockProfile(loaded) : loaded), [loaded, readOnly]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -223,6 +226,9 @@ export function StudentInfoPage({ api, entries, editor, readOnly }: { api: strin
 
   return (
     <div className="space-y-4">
+      <div className="flex justify-end">
+        <ParentDetailsEditor studentId={studentId} onSaved={reload} />
+      </div>
       {data.missingCount > 0 ? (
         <div className="flex items-start gap-2 rounded-lg border border-amber-300/60 bg-amber-50 dark:bg-amber-950/20 px-3 py-2 text-sm print:hidden">
           <Info className="h-4 w-4 mt-0.5 shrink-0 text-amber-600" />

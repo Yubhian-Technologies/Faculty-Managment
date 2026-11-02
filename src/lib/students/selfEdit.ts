@@ -1,13 +1,14 @@
 import { normalizeRosterDetails, ROSTER_DETAIL_GROUPS } from "@/lib/students/rosterFields";
 import { normalizeStudentMobile, studentMobileProblem, STUDENT_MOBILE_CLEAR_MESSAGE } from "@/lib/students/studentMobile";
 import { EMAIL_REGEX, PHONE_REGEX } from "@/lib/validations";
+import { PARENT_DETAIL_KEYS } from "@/lib/students/parentDetails";
 import type { StudentRecord } from "@/types";
 
 // What a student may change about THEIR OWN record (PATCH /api/college/student/me/profile), and the rules for it.
 //
 // The College Office (and, for placement, the department) owns identity and academic data - Regd. No, name, course /
 // department / year / section, admission and entrance details, caste / religion, Aadhar, remarks. A student owns their
-// own contact, family, address and bank details. Anything not listed here is refused (403), never silently dropped, so
+// own contact, address and bank details (parent / guardian details are corrected by their mentor / HOD / Office). Anything not listed here is refused (403), never silently dropped, so
 // a bad client cannot appear to save something it did not.
 
 /** Fields a student may edit. Everything else on the record is office-managed. */
@@ -17,8 +18,8 @@ export const STUDENT_SELF_EDITABLE_KEYS: readonly string[] = [
   // Contact & address
   "mobileNo", "landLineNo", "email", "distanceFromResidenceKm", "temporaryAddress", "permanentAddressSameAsTemporary",
   "permanentAddress", "state", "district",
-  // Family & guardian
-  "fatherName", "fatherContactNo", "motherName", "motherContactNo", "guardianName", "guardianContact",
+  // Family & guardian details are NOT here: corrected by the mentor, HOD, Principal / Vice Principal (mentoring
+  // record) or the College Office - see lib/students/parentDetails.ts.
   // Bank
   "bankAccountNo", "bankName", "ifscCode",
   // Additional
@@ -64,6 +65,9 @@ export function buildStudentSelfUpdate(student: Partial<StudentRecord>, details:
   if (keys.length === 0) return { ok: false, status: 400, error: "No fields provided" };
 
   const locked = keys.filter((k) => !EDITABLE.has(k));
+  if (locked.some((k) => (PARENT_DETAIL_KEYS as readonly string[]).includes(k))) {
+    return { ok: false, status: 403, code: "FIELD_NOT_EDITABLE", error: "Parent and guardian details are corrected by your mentor, HOD or the College Office - ask them to update these" };
+  }
   if (locked.length > 0) {
     return { ok: false, status: 403, code: "FIELD_NOT_EDITABLE", error: `These details are managed by the College Office and can't be changed here: ${locked.join(", ")}` };
   }

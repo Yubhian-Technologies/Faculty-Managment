@@ -5,6 +5,7 @@ import {
 } from "./bulkUpdate";
 import { parseBulkUpdateRequest } from "./bulkUpdateRows";
 import { buildStudentSelfUpdate } from "./selfEdit";
+import { PARENT_DETAIL_KEYS, buildParentDetailsUpdate } from "./parentDetails";
 
 const stu = (id: string, data: Record<string, unknown>): BulkStudent => ({ id, data: { name: id.toUpperCase(), rollNumber: "", ...data } });
 const row = (rowNumber: number, mobile: string, values: Record<string, string>): BulkUpdateRow => ({ rowNumber, mobile, values });
@@ -205,6 +206,15 @@ describe("parity with the student self-edit rules (so the two cannot drift)", ()
   ];
   for (const [key, value] of cases) {
     it(`${key} = ${JSON.stringify(value)}`, () => {
+      // Parent / guardian details are not the student's to change any more: compare with the rule that does
+      // change them (mentor / HOD / Principal - lib/students/parentDetails.ts).
+      if ((PARENT_DETAIL_KEYS as readonly string[]).includes(key)) {
+        const parent = buildParentDetailsUpdate({}, { [key]: value });
+        const mine = normalizeBulkCell(key, value);
+        expect(mine.ok, "same accept/reject decision").toBe(parent.ok);
+        if (parent.ok && mine.ok) expect(parent.updates[key as keyof typeof parent.updates]).toEqual(mine.value);
+        return;
+      }
       const self = buildStudentSelfUpdate({ mobileNo: "9876543210", rollNumber: "R1" }, { [key]: value });
       const mine = normalizeBulkCell(key, value);
       expect(mine.ok, "same accept/reject decision").toBe(self.ok);
