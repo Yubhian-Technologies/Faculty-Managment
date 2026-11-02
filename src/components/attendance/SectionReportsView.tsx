@@ -236,7 +236,7 @@ export function SectionReportsView({ sectionId, title }: { sectionId?: string; t
                 <td className="px-3 py-2 font-medium">{s.name}</td>
                 {subs.map((sub) => (
                   <td key={sub.subjectId} className="border-l px-3 py-2 text-center">
-                    {s.statusBySubject[sub.subjectId] === "PRESENT" ? "P" : s.statusBySubject[sub.subjectId] === "ABSENT" ? "A" : s.statusBySubject[sub.subjectId] === "ON_DUTY" ? "OD" : "—"}
+                    {s.statusBySubject[sub.subjectId] === "PRESENT" ? "P" : s.statusBySubject[sub.subjectId] === "ABSENT" ? "A" : s.statusBySubject[sub.subjectId] === "ON_DUTY" ? "Perm" : "—"}
                   </td>
                 ))}
                 <td className="border-l px-3 py-2 text-center font-semibold">{formatPercent(s.overall.percentage)}</td>
