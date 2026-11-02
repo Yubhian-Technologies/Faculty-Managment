@@ -534,11 +534,11 @@ export function LeaveApprovalQueue() {
                     {(r.placeOfVisit || r.pointOfContact) && (
                       <div className="grid gap-3 sm:grid-cols-2">
                         <div className="space-y-1">
-                          <label className="text-xs text-muted-foreground">Place{r.leaveTypeCode === "OD" ? " of Visit" : ""}</label>
+                          <label className="text-xs text-muted-foreground">{r.leaveTypeCode === "OD" ? "Place of Visit" : "Leave Address"}</label>
                           <p className="text-sm">{r.placeOfVisit || "—"}</p>
                         </div>
                         <div className="space-y-1">
-                          <label className="text-xs text-muted-foreground">Point of Contact</label>
+                          <label className="text-xs text-muted-foreground">Contact Person</label>
                           <p className="text-sm">{r.pointOfContact || "—"}</p>
                         </div>
                       </div>

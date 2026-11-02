@@ -23,6 +23,7 @@ import { HANDOVER_ENABLED } from "@/lib/leave/featureFlags";
 import { LEAVE_TYPE_LABELS } from "@/types/leave";
 import type { LeaveRequest, LeaveTypeCode } from "@/types/leave";
 import type { Holiday, SummerHoliday, WorkingDayOverride } from "@/types";
+import { ROLE_LABELS, type UserRole } from "@/types/core";
 
 interface BalanceEntry {
   code: LeaveTypeCode;
@@ -80,12 +81,10 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
   // the free-text box below it. Irrelevant (and never shown) for a type with
   // no reasonOptions, which just gets the plain Textarea it always had.
   const [customReasonMode, setCustomReasonMode] = useState(false);
-  // Available on every leave type (was OD-only) - an optional "where are you
-  // and how do we reach you" pair, see types/leave.ts's
-  // placeOfVisit/pointOfContact. Still required for OD specifically (see the
-  // validation below and applications/route.ts).
+  // Leave Address on every leave type (required for OD as its place of visit - see the
+  // validation below and applications/route.ts). The contact person is no longer asked for;
+  // one saved on an older request stays on it (the form never sends the field).
   const [placeOfVisit, setPlaceOfVisit] = useState("");
-  const [pointOfContact, setPointOfContact] = useState("");
   // SCL's mandatory apply-time evidence (see applications/route.ts POST) -
   // uploaded via /api/upload/leave-apply-proof, a separate uid-keyed route
   // since no LeaveRequest document exists yet to upload against.
@@ -283,7 +282,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
     if (!types.find((t) => t.code === value)?.halfDayAllowed) setIsHalfDay(false);
     setReason("");
     setCustomReasonMode(false);
-    if (value !== "OD") { setPlaceOfVisit(""); setPointOfContact(""); }
+    if (value !== "OD") setPlaceOfVisit("");
     if (value !== "SCL" && value !== "SL") setProofUrl("");
     // Summer Vacation defaults From/To to the College Office's full declared
     // range (see the effect below) - inherently a span, so the single-day
@@ -444,7 +443,6 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
         if (r.halfDaySession) setHalfDaySession(r.halfDaySession);
         setReason(r.reason ?? "");
         setPlaceOfVisit(r.placeOfVisit ?? "");
-        setPointOfContact(r.pointOfContact ?? "");
       })
       .catch(() => toast({ variant: "destructive", title: "Couldn't load this leave request" }));
   }, [editId]);
@@ -508,8 +506,8 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
       toast({ variant: "destructive", title: "Select a substitute for every affected period before submitting" });
       return;
     }
-    if (leaveTypeCode === "OD" && (!placeOfVisit.trim() || !pointOfContact.trim())) {
-      toast({ variant: "destructive", title: "Place of visit and point of contact are required for On Duty" });
+    if (leaveTypeCode === "OD" && !placeOfVisit.trim()) {
+      toast({ variant: "destructive", title: "Place of visit is required for On Duty" });
       return;
     }
     if (leaveTypeCode === "SCL" && !proofUrl) {
@@ -537,7 +535,6 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
               halfDaySession: isHalfDay ? effectiveHalfDaySession : undefined,
               reason: reason.trim(),
               placeOfVisit: placeOfVisit.trim() || undefined,
-              pointOfContact: pointOfContact.trim() || undefined,
               periodSubstitutions,
             }),
           })
@@ -557,7 +554,6 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
               roleHandoverToUid: roleToUid || undefined,
               roleHandoverDepartment: roleToUid ? roleDept : undefined,
               placeOfVisit: placeOfVisit.trim() || undefined,
-              pointOfContact: pointOfContact.trim() || undefined,
               proofUrl: (leaveTypeCode === "SCL" || leaveTypeCode === "SL") && proofUrl ? proofUrl : undefined,
               periodSubstitutions,
             }),
@@ -601,7 +597,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
       <Card>
         <CardContent className="p-4 space-y-4">
           <div className="space-y-2">
-            <Label>Leave Type</Label>
+            <Label>Leave Category</Label>
             <Select value={leaveTypeCode} onValueChange={handleLeaveTypeChange} disabled={isLoadingTypes || !!extendId || !!editId}>
               <SelectTrigger>
                 <SelectValue placeholder="Select leave type" />
@@ -636,6 +632,35 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                 Earned Leave becomes available once your Casual Leave balance is fully used.
               </p>
             )}
+            {/* Right after the leave type: the reasons offered depend on it (and are cleared when it changes),
+                so it only appears once a type is picked. */}
+            {leaveTypeCode && (
+              <div className="space-y-2 pt-2">
+                <Label>Reason for Leave</Label>
+                {selectedType?.reasonOptions?.length ? (
+                  <>
+                    <Select
+                      value={customReasonMode ? "OTHER" : reason}
+                      onValueChange={(v) => {
+                        if (v === "OTHER") { setCustomReasonMode(true); setReason(""); }
+                        else { setCustomReasonMode(false); setReason(v); }
+                      }}
+                    >
+                      <SelectTrigger><SelectValue placeholder="Select a reason" /></SelectTrigger>
+                      <SelectContent>
+                        {selectedType.reasonOptions.map((r) => <SelectItem key={r.label} value={r.label}>{r.label}</SelectItem>)}
+                        {selectedType.allowCustomReason && <SelectItem value="OTHER">Other</SelectItem>}
+                      </SelectContent>
+                    </Select>
+                    {customReasonMode && (
+                      <Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} placeholder="Describe your reason" />
+                    )}
+                  </>
+                ) : (
+                  <Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={4} placeholder="Reason for leave" />
+                )}
+              </div>
+            )}
             {/* Set the expectation before they apply, not after they're
                 already overdue. Shared by all 17 apply routes for free. */}
             {leaveTypeCode === "OD" && (
@@ -661,26 +686,15 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                 />
               </div>
             )}
-            {/* Available on every leave type - required only for OD (see the
-                submit validation and applications/route.ts), optional
-                elsewhere as a general "how do we reach you" pair. */}
-            <div className="grid gap-3 sm:grid-cols-2 pt-1">
+            {/* Leave Address on every leave type (OD: Place of Visit, required). */}
+            <div className="grid gap-3 pt-1">
               <div className="space-y-1.5">
-                <Label htmlFor="place-of-visit" className="text-xs">Place{leaveTypeCode === "OD" ? " of Visit" : ""}</Label>
+                <Label htmlFor="place-of-visit" className="text-xs">{leaveTypeCode === "OD" ? "Place of Visit" : "Leave Address"}</Label>
                 <Input
                   id="place-of-visit"
                   value={placeOfVisit}
                   onChange={(e) => setPlaceOfVisit(e.target.value)}
                   placeholder="e.g. XYZ College, Hyderabad"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="point-of-contact" className="text-xs">Point of Contact{leaveTypeCode !== "OD" ? " (optional)" : ""}</Label>
-                <Input
-                  id="point-of-contact"
-                  value={pointOfContact}
-                  onChange={(e) => setPointOfContact(e.target.value)}
-                  placeholder="Name and phone number"
                 />
               </div>
             </div>
@@ -696,7 +710,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
           </div>
 
           <div className="space-y-2">
-            <Label>Duration</Label>
+            <Label>Leave Duration</Label>
             <div className="flex items-center gap-2">
               <SegmentedTabs
                 value={isHalfDay ? "HALF" : "FULL"}
@@ -720,8 +734,8 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                 value={fullDayMode}
                 onChange={(v) => handleFullDayModeChange(v as "ONE" | "RANGE")}
                 options={[
-                  { key: "ONE", label: "One day" },
-                  { key: "RANGE", label: "More than one day" },
+                  { key: "ONE", label: "Single Day" },
+                  { key: "RANGE", label: "Multiple Days" },
                 ]}
               />
             )}
@@ -729,7 +743,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
 
           <div className={isHalfDay || fullDayMode === "ONE" ? "grid grid-cols-1 gap-3" : "grid grid-cols-2 gap-3"}>
             <div className="space-y-2">
-              <Label>{isHalfDay || fullDayMode === "ONE" ? "Date" : "From"}</Label>
+              <Label>{isHalfDay || fullDayMode === "ONE" ? "Leave Date" : "From"}</Label>
               <Input
                 type="date"
                 value={fromDate}
@@ -790,10 +804,10 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
             <div className="space-y-2">
               <div className="flex items-center gap-1.5">
                 <Users className="h-4 w-4 text-muted-foreground" />
-                <Label>Who&rsquo;s covering your classes?</Label>
+                <Label>Work Adjustment</Label>
               </div>
               <p className="text-xs text-muted-foreground">
-                Pick a substitute for each period you&rsquo;d otherwise teach on this leave. Anyone free that period is listed, across departments - your own department comes first.
+                Choose a faculty member to take each of your classes during this leave. Only faculty who are free at that time are shown, and faculty from your department are listed first.
               </p>
               {substituteDepartments.length > 1 && (
                 <div className="flex items-center gap-2">
@@ -885,23 +899,23 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
 
           {handoverRoles.length > 0 && handoverDepts.length > 0 && (
             <div className="space-y-2">
-              <Label>Hand over my role during this leave (optional)</Label>
+              <Label>Role Adjustment (Optional)</Label>
               <p className="text-xs text-muted-foreground">
-                Choose a department, then the person who will act as {handoverRoles.join(" / ").replaceAll("_", " ")} while
-                you&rsquo;re away. They get those modules only on your approved leave dates; you keep yours.
+                Choose a department and a person to do your {handoverRoles.map((r) => ROLE_LABELS[r as UserRole] ?? r.replaceAll("_", " ")).join(" / ")} work
+                while you are on leave. They get access only on your approved leave dates, and you keep your access too.
               </p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <Select value={roleDept || "NONE"} onValueChange={(v) => setRoleDept(v === "NONE" ? "" : v)}>
                   <SelectTrigger><SelectValue placeholder="Department" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="NONE">No handover</SelectItem>
+                    <SelectItem value="NONE">No Role Adjustment Required</SelectItem>
                     {handoverDepts.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 <Select value={roleToUid || "NONE"} onValueChange={(v) => setRoleToUid(v === "NONE" ? "" : v)} disabled={!roleDept}>
                   <SelectTrigger><SelectValue placeholder="Person" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="NONE">Select person</SelectItem>
+                    <SelectItem value="NONE">Select Faculty / Staff Member</SelectItem>
                     {rolePeople.map((p) => <SelectItem key={p.uid} value={p.uid}>{p.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
@@ -918,32 +932,6 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
               </span>
             </div>
           )}
-
-          <div className="space-y-2">
-            <Label>Reason</Label>
-            {selectedType?.reasonOptions?.length ? (
-              <>
-                <Select
-                  value={customReasonMode ? "OTHER" : reason}
-                  onValueChange={(v) => {
-                    if (v === "OTHER") { setCustomReasonMode(true); setReason(""); }
-                    else { setCustomReasonMode(false); setReason(v); }
-                  }}
-                >
-                  <SelectTrigger><SelectValue placeholder="Select a reason" /></SelectTrigger>
-                  <SelectContent>
-                    {selectedType.reasonOptions.map((r) => <SelectItem key={r.label} value={r.label}>{r.label}</SelectItem>)}
-                    {selectedType.allowCustomReason && <SelectItem value="OTHER">Other</SelectItem>}
-                  </SelectContent>
-                </Select>
-                {customReasonMode && (
-                  <Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} placeholder="Describe your reason" />
-                )}
-              </>
-            ) : (
-              <Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={4} placeholder="Reason for leave" />
-            )}
-          </div>
 
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => router.push(backHref)}>

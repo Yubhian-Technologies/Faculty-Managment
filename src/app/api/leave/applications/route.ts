@@ -308,8 +308,9 @@ export async function POST(request: Request) {
     if (!body.leaveTypeCode && !body.isOtherRequest) {
       return NextResponse.json({ error: "leaveTypeCode or isOtherRequest is required" }, { status: 400 });
     }
-    if (body.leaveTypeCode === "OD" && (!body.placeOfVisit?.trim() || !body.pointOfContact?.trim())) {
-      return NextResponse.json({ error: "Place of visit and point of contact are required for On Duty" }, { status: 400 });
+    // On Duty needs the place of visit. The contact person is no longer asked for (a value still sent is kept).
+    if (body.leaveTypeCode === "OD" && !body.placeOfVisit?.trim()) {
+      return NextResponse.json({ error: "Place of visit is required for On Duty" }, { status: 400 });
     }
 
     const db = getAdminDb();
