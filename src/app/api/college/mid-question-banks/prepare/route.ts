@@ -20,6 +20,8 @@ export async function GET(request: Request) {
     const session = await requireCollegeMember(...MID_BANK_WRITE_ROLES);
     const q = new URL(request.url).searchParams;
     const deadlineId = q.get("deadlineId") ?? "", subjectId = q.get("subjectId") ?? "", branch = q.get("branch") ?? "";
+    // A bare /panel/mid-bank/prepare (e.g. a bookmark, or a link that lost its query) - say so, don't crash on doc("").
+    if (!deadlineId || !subjectId || !branch) return NextResponse.json({ error: "Open the question bank from the Question Bank list" }, { status: 400 });
     const db = getAdminDb();
     const [d, subject, me] = await Promise.all([
       loadDeadline(db, session.collegeId, deadlineId),

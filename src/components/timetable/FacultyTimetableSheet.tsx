@@ -102,10 +102,11 @@ export function FacultyTimetableFooter({
           </table>
         </div>
       )}
+      {/* Signature line: the first label at the left (a lone HOD signs bottom-left), the last at the right, any between centred. */}
       {signatures.map((row, i) => (
-        <div key={i} className="flex justify-between gap-2 pt-6 text-center text-xs font-bold text-foreground">
+        <div key={i} className="flex justify-between gap-2 pt-6 text-xs font-bold text-foreground">
           {row.map((label, j) => (
-            <div key={`${label}-${j}`} className="flex-1 min-w-0 break-words">{label}</div>
+            <div key={`${label}-${j}`} className={`flex-1 min-w-0 break-words ${j === 0 ? "text-left" : j === row.length - 1 ? "text-right" : "text-center"}`}>{label}</div>
           ))}
         </div>
       ))}

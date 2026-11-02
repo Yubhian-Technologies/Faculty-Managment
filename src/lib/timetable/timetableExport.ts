@@ -84,7 +84,7 @@ function styleRange(
   row: number,
   fromCol: number,
   toCol: number,
-  opts: { bold?: boolean; align?: "left" | "center"; size?: number } = {}
+  opts: { bold?: boolean; align?: "left" | "center" | "right"; size?: number } = {}
 ) {
   for (let c = fromCol; c <= toCol; c++) {
     const cell = sheet.getCell(row, c);
@@ -643,6 +643,7 @@ export async function downloadFacultyTimetableXlsx(opts: FacultyTimetableXlsxOpt
   }
 
   // Signature blocks, one row per group the college chose (default: In-Charge / HOD / Principal).
+  // First label at the left (a lone HOD signs bottom-left), last at the right, any between centred.
   r += 2;
   for (const row of resolveSignatureRows(c.teachingLoadSignatureRows, deptName)) {
     const sigGroups = splitColumns(lastCol, row.map(() => 1));
@@ -650,7 +651,7 @@ export async function downloadFacultyTimetableXlsx(opts: FacultyTimetableXlsxOpt
       const [from, to] = sigGroups[i];
       sheet.getCell(r, from).value = label;
       if (to > from) sheet.mergeCells(r, from, r, to);
-      styleRange(sheet, r, from, to, { bold: true, align: "center" });
+      styleRange(sheet, r, from, to, { bold: true, align: i === 0 ? "left" : i === row.length - 1 ? "right" : "center" });
       for (let col = from; col <= to; col++) sheet.getCell(r, col).border = {};
     });
     sheet.getRow(r).height = 24;

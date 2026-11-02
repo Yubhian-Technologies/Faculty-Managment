@@ -86,7 +86,8 @@ export async function POST(request: Request) {
     const late = isLateCheckIn(checkIn, permittedCheckInTime);
     const lateReason = body.lateReason?.trim();
     if (late && !lateReason) {
-      return NextResponse.json({ error: "A reason is required when checking in late" }, { status: 400 });
+      // `code` lets the check-in screen ask for the reason with the face scan it already has.
+      return NextResponse.json({ error: "A reason is required when checking in late", code: "LATE_REASON_REQUIRED" }, { status: 400 });
     }
 
     // Transactional check-then-set so a double-tapped/retried request cannot

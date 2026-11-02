@@ -512,8 +512,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         if (result.resolved.length > 0) periodSubstitutions = result.resolved;
       }
 
-      if (req.leaveTypeCode === "OD" && (!body.placeOfVisit?.trim() || !body.pointOfContact?.trim())) {
-        return NextResponse.json({ error: "Place of visit and point of contact are required for On Duty" }, { status: 400 });
+      // On Duty needs the place of visit; the contact person is no longer asked for.
+      if (req.leaveTypeCode === "OD" && !body.placeOfVisit?.trim()) {
+        return NextResponse.json({ error: "Place of visit is required for On Duty" }, { status: 400 });
       }
 
       // Re-resolved against the (possibly edited) reason text - see

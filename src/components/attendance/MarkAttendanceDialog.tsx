@@ -31,7 +31,10 @@ const LIVENESS_STEPS = ["Blink your eyes", "Tilt your head to the left", "Look s
 const STEP_MIN_DISPLAY_MS = 1500;
 const STEP_CONFIRM_HOLD_MS = 1300;
 
-type Stage = "init" | "camera-ready" | "guided-liveness" | "capturing" | "verifying" | "late-reason" | "submitting" | "success" | "error";
+// "reason-first": late when Check In was tapped - the reason is asked BEFORE the camera opens, and a
+// successful scan then checks in at once. "late-reason": became late during the scan (or the server's
+// clock says so) - the reason is asked AFTER, reusing the scan already made.
+type Stage = "init" | "reason-first" | "camera-ready" | "guided-liveness" | "capturing" | "verifying" | "late-reason" | "submitting" | "success" | "error";
 
 interface MarkAttendanceDialogProps {
   // "register" runs the one-time enrollment flow (capture → extract → store
@@ -147,6 +150,12 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
     void (async () => {
       if (open) {
         cancelledRef.current = false;
+        // Late already: ask why first, then open the camera (Continue to Face Scan).
+        if (mode === "check-in" && isLateCheckIn(nowInIndia().timeHHMM)) {
+          setIsLate(true);
+          setStage("reason-first");
+          return;
+        }
         await startCamera();
       } else {
         cancelledRef.current = true;
@@ -326,12 +335,20 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
       // people justify a check-in that might still have failed on face match or
       // location, and it sat in front of the camera for everyone whose clock
       // read late here but not on the server.
-      if (mode === "check-in" && isLate) {
+      // Lateness is judged NOW (after the scan), not when the dialog opened - someone
+      // who crossed 09:05 during the scan is asked here instead of being refused by the
+      // server and sent back to scan again.
+      const lateNow = mode === "check-in" && isLateCheckIn(nowInIndia().timeHHMM);
+      const hasReason = mode === "check-in" && !!lateReason.trim();
+      // Reason given up front: check in straight away with it. Became late during the
+      // scan with no reason yet: ask now, with this scan.
+      if (lateNow && !hasReason) {
+        setIsLate(true);
         setStage("late-reason");
         return;
       }
 
-      await submitAttendance();
+      await submitAttendance(lateNow || hasReason);
     } catch (err) {
       console.error("[MarkAttendanceDialog] capture failed", err);
       fail("Something went wrong verifying your face. Please try again.");
@@ -340,7 +357,7 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
 
   // The write itself - reached straight from handleCapture when nothing is
   // owed, or from the late-reason screen once the reason is filled in.
-  async function submitAttendance() {
+  async function submitAttendance(late: boolean) {
     if (!coordsRef.current) {
       fail("Still waiting on your location — check location permissions and try again.");
       return;
@@ -364,10 +381,17 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
           faceDescriptor: proof.descriptor,
           capturedAt: proof.capturedAt,
           accuracy: coordsRef.current.accuracy,
-          ...(mode === "check-in" && isLate ? { lateReason: lateReason.trim() } : {}),
+          ...(mode === "check-in" && late ? { lateReason: lateReason.trim() } : {}),
         }),
       });
-      const json = await res.json() as { error?: string; checkIn?: string; checkOut?: string };
+      const json = await res.json() as { error?: string; code?: string; checkIn?: string; checkOut?: string };
+      // The server's clock says late (this device's didn't): ask for the reason with the
+      // scan already made (valid for 10 minutes) - never send them back to scan again.
+      if (!res.ok && mode === "check-in" && json.code === "LATE_REASON_REQUIRED") {
+        setIsLate(true);
+        setStage("late-reason");
+        return;
+      }
       if (!res.ok) {
         fail(json.error ?? "Failed to mark attendance");
         return;
@@ -406,7 +430,7 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
           );
         })()}
 
-        {mode === "check-in" && isLate && stage === "late-reason" && (
+        {mode === "check-in" && isLate && (stage === "late-reason" || stage === "reason-first") && (
           <div className="space-y-1.5">
             <Label htmlFor="late-reason" className="text-sm font-medium text-amber-700">
               You&rsquo;re checking in late — why?
@@ -429,6 +453,12 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
               <p className="font-medium">
                 {isRegister ? "Face registered successfully" : `${label} recorded at ${resultTime}`}
               </p>
+            </div>
+          ) : stage === "reason-first" ? (
+            <div className="flex flex-col items-center gap-2 py-6 text-center">
+              <ScanFace className="h-10 w-10 text-muted-foreground" />
+              <p className="text-sm font-medium">Add your reason, then scan your face</p>
+              <p className="text-xs text-muted-foreground">Your check-in is recorded as soon as your face is verified.</p>
             </div>
           ) : stage === "late-reason" ? (
             <div className="flex flex-col items-center gap-2 py-6 text-center">
@@ -488,17 +518,24 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
               {isRegister ? "Start Registration" : `Start & ${label}`}
             </Button>
           )}
+          {stage === "reason-first" && (
+            <Button onClick={() => void startCamera()} disabled={!lateReason.trim()}>
+              <Camera className="h-4 w-4 mr-1.5" />
+              Continue to Face Scan
+            </Button>
+          )}
           {stage === "late-reason" && (
             <Button
               onClick={() => {
                 // Only reachable after a capture; submitAttendance refuses to go on
-                // without one, so nothing unverified can be recorded.
-                void submitAttendance();
+                // without one, so nothing unverified can be recorded. No new scan:
+                // this sends the verified one with the reason.
+                void submitAttendance(true);
               }}
               disabled={!lateReason.trim()}
             >
-              <Camera className="h-4 w-4 mr-1.5" />
-              {label}
+              <CheckCircle2 className="h-4 w-4 mr-1.5" />
+              Submit & Check In
             </Button>
           )}
           {stage === "success" && (
