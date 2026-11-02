@@ -14,9 +14,9 @@ import { isoDateKey } from "@/lib/leave/dayCounter";
 import { InstitutionalTimetableTable } from "@/components/timetable/InstitutionalTimetableTable";
 import { StudentDayTimetable } from "@/components/timetable/StudentDayTimetable";
 import { ALL_DAYS, ordinalYear } from "@/lib/timetable/gridModel";
-import { toRoman, formatAcademicShortNotation } from "@/lib/academic/format";
+import { formatStudentClass } from "@/lib/academic/format";
 import type { Course, Department, Section, CourseYearTiming, TimetableSlot, SubjectType, Subject, TeachingAssignment, DayOfWeek } from "@/types";
-import { yearSemesterLabelIn, semesterInYearLabel } from "@/lib/academic/format";
+import { semesterInYearLabel } from "@/lib/academic/format";
 
 type TimetableSlotRow = TimetableSlot & { id: string; subjectType?: SubjectType };
 
@@ -151,13 +151,13 @@ export default function StudentTimetablePage() {
       <PageHeader
         title={
           section
-            ? `${formatAcademicShortNotation({
+            ? formatStudentClass({
                 year: section.year,
                 courseName: course?.name,
                 courseCode: course?.code,
                 semester: selectedSemester,
                 sectionName: section.name,
-              })}`
+              })
             : "My Timetable"
         }
         description={section && course ? `${departmentName} · Timetable` : "Your weekly class schedule"}
@@ -275,7 +275,7 @@ export default function StudentTimetablePage() {
               courseName={course?.name}
               departmentName={departmentName}
               academicYear={slots[0]?.academicYear}
-              semesterLabel={selectedSemester ? `${toRoman(selectedSemester)} Sem Time Table` : undefined}
+              semesterLabel={selectedSemester ? semesterInYearLabel(availableSemesters.map((x) => x.semester), selectedSemester, { format: "short" }) : undefined}
               workingDays={workingDays}
               weekStart={weekStart}
               onWeekChange={changeWeek}

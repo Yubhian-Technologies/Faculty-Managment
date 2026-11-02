@@ -82,6 +82,35 @@ export function formatAcademicShortNotation({
 }
 
 /**
+ * A student's class the way the college writes it: "III B.Tech. I-Sem, CSE-A" - year in roman
+ * numerals, the short course name, the semester within the year (odd = I, even = II; the stored
+ * number may run across the course, 5 = III year I-Sem) and the section. Parts that are unknown
+ * are left out ("III B.Tech., CSE-A" when no semester is running).
+ */
+export function formatStudentClass({
+  year,
+  courseName,
+  courseCode,
+  semester,
+  sectionName,
+}: {
+  year?: number | null;
+  courseName?: string | null;
+  courseCode?: string | null;
+  semester?: number | null;
+  sectionName?: string | null;
+}): string {
+  const romanYear = year ? toRoman(year) : "";
+  const course = formatShortCourseName(courseName, courseCode);
+  let head = [romanYear, course].filter(Boolean).join(" ") || (romanYear ? `${romanYear} Year` : "");
+  if (head && !head.endsWith(".")) head += ".";
+  const sem = semester && semester > 0 ? `${semester % 2 === 1 ? "I" : "II"}-Sem` : "";
+  const first = [head, sem].filter(Boolean).join(" ");
+  const section = sectionName?.trim() ?? "";
+  return [first, section].filter(Boolean).join(", ");
+}
+
+/**
  * A semester number written the way the college actually says it: "2-1" for
  * the first semester of second year, rather than the flat "Semester 3" the
  * number itself is stored as.

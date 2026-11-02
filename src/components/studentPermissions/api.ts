@@ -33,7 +33,7 @@ export interface FormOptions {
   department: string;
   /** Students only: is this student a Class Representative of their section (the Section Feed is theirs alone). */
   isClassRepresentative?: boolean;
-  studentInfo?: { name: string; rollNumber: string; department: string; year: number; section: string };
+  studentInfo?: { name: string; rollNumber: string; department: string; year: number; section: string; classLabel?: string };
   groups: { id: string; label: string; items: { id: string; label: string; enabled: boolean }[] }[];
   limits: PermissionLimits;
   /** Students only: the periods of the student's own class with their times (absent = unknown, the form offers 1-8). */

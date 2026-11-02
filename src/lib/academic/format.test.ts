@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toRoman, yearSemesterLabel, yearSemesterLabelIn, semesterInYearLabel } from "./format";
+import { toRoman, yearSemesterLabel, yearSemesterLabelIn, semesterInYearLabel, formatStudentClass } from "./format";
 
 describe("yearSemesterLabel", () => {
   // The whole point: semesters are STORED running across the course, but
@@ -105,5 +105,18 @@ describe("semesterInYearLabel", () => {
     expect(semesterInYearLabel([5, 6], 6, { format: "full" })).toBe("Semester 2");
     expect(semesterInYearLabel([1, 2], 1, { format: "number" })).toBe("1");
     expect(semesterInYearLabel([1, 2], 2, { format: "number" })).toBe("2");
+  });
+});
+
+describe("formatStudentClass", () => {
+  it("writes the class the college way: III B.Tech. I-Sem, CSE-A", () => {
+    expect(formatStudentClass({ year: 3, courseCode: "BTECH", semester: 5, sectionName: "CSE-A" })).toBe("III B.Tech. I-Sem, CSE-A");
+    expect(formatStudentClass({ year: 3, courseCode: "BTECH", semester: 6, sectionName: "CSE-A" })).toBe("III B.Tech. II-Sem, CSE-A");
+    expect(formatStudentClass({ year: 1, courseCode: "BTECH", semester: 1, sectionName: "IT-B" })).toBe("I B.Tech. I-Sem, IT-B");
+  });
+  it("leaves out what isn't known", () => {
+    expect(formatStudentClass({ year: 3, courseCode: "BTECH", semester: null, sectionName: "CSE-A" })).toBe("III B.Tech., CSE-A");
+    expect(formatStudentClass({ year: 3, courseCode: "BTECH", semester: -1, sectionName: "CSE-A" })).toBe("III B.Tech., CSE-A");
+    expect(formatStudentClass({ year: 2, courseCode: "PHARM.D", semester: 3 })).toBe("II Pharm.D. I-Sem");
   });
 });

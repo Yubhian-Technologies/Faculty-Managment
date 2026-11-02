@@ -13,6 +13,8 @@ import { DEFAULT_LIMITS } from "@/lib/studentPermissions/types";
 import { getSectionTimetableData } from "@/lib/students/sectionTimetableData";
 import { buildTimetableColumns } from "@/lib/timetable/gridModel";
 import type { Section } from "@/types";
+import { resolveCurrentSemester } from "@/lib/college/semester";
+import { formatStudentClass } from "@/lib/academic/format";
 
 // What the request form should offer: the permission types enabled for the
 // requester's department and the limits that apply there. For faculty (who pick
@@ -29,7 +31,7 @@ export async function GET(request: Request) {
     let department = new URL(request.url).searchParams.get("department") ?? "";
     let isClassRepresentative = false;
     let periods: { number: number; start?: string; end?: string }[] | undefined;
-    let studentInfo: { name: string; rollNumber: string; department: string; year: number; section: string } | undefined;
+    let studentInfo: { name: string; rollNumber: string; department: string; year: number; section: string; classLabel?: string } | undefined;
     if (session.role === "STUDENT") {
       const student = await loadStudentByUid(db, session.collegeId, user.uid);
       if (student) {
@@ -37,9 +39,11 @@ export async function GET(request: Request) {
         department = (sec?.data() as { department?: string } | undefined)?.department || student.department;
         // The periods the student's class really has (and their times), so the form offers exactly those. Reuses the
         // section timetable's 60-second shared cache, so this is usually no extra read; if it can't be had the form falls back to 1-8.
+        let currentSemester: number | null = null;
         if (sec) {
           try {
             const { timing } = await getSectionTimetableData(db, session.collegeId, { id: sec.id, ...sec.data() } as Section & { id: string });
+            currentSemester = resolveCurrentSemester(timing);
             if (timing) periods = buildTimetableColumns(timing).flatMap((c) => (c.kind === "period" ? [{ number: c.periodNumber, start: c.startTime, end: c.endTime }] : []));
           } catch { /* optional detail */ }
         }
@@ -50,6 +54,13 @@ export async function GET(request: Request) {
           department,
           year: student.year,
           section: student.section,
+          // "III B.Tech. I-Sem, CSE-A" - the same class label as the student's dashboard.
+          classLabel: formatStudentClass({
+            year: (sec?.data() as { year?: number } | undefined)?.year ?? student.year,
+            courseName: (sec?.data() as { courseName?: string } | undefined)?.courseName ?? student.course,
+            semester: currentSemester,
+            sectionName: (sec?.data() as { name?: string } | undefined)?.name ?? student.section,
+          }),
         };
       }
     }
