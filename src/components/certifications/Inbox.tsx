@@ -13,6 +13,8 @@ import type { CertificateRequest } from "@/types";
 import { decideRequest, listRequests } from "./api";
 import { StatusBadge } from "./StatusBadge";
 import { StudentProfileDialog } from "./StudentProfileDialog";
+import { returnRequest } from "./configApi";
+import { RequestAnswers, StepTimeline } from "./StepTimeline";
 
 const when = (ts: unknown) => {
   const d = toDate(ts as never);
@@ -25,15 +27,19 @@ function InboxCard({ request, onDecided }: { request: CertificateRequest; onDeci
   const step = request.flow[request.currentStepIndex];
   const stepState = request.steps[request.currentStepIndex];
 
-  async function act(action: "APPROVE" | "REJECT", branchKey?: string) {
-    if (action === "REJECT" && !remarks.trim()) {
-      toast({ variant: "destructive", title: "Please add a reason for rejecting" });
+  // Configured certificates can also go back to the student to correct (a wrong detail, a missing document).
+  const canReturn = Boolean(request.certificateTypeId);
+
+  async function act(action: "APPROVE" | "REJECT" | "RETURN", branchKey?: string) {
+    if (action !== "APPROVE" && !remarks.trim()) {
+      toast({ variant: "destructive", title: action === "RETURN" ? "Say what the student must correct" : "Please add a reason for rejecting" });
       return;
     }
     setBusy(true);
     try {
-      await decideRequest(request.id, action, remarks.trim() || undefined, branchKey);
-      toast({ variant: "success", title: action === "APPROVE" ? "Decision recorded" : "Rejected" });
+      if (action === "RETURN") await returnRequest(request.id, remarks.trim(), branchKey);
+      else await decideRequest(request.id, action, remarks.trim() || undefined, branchKey);
+      toast({ variant: "success", title: action === "APPROVE" ? "Decision recorded" : action === "RETURN" ? "Sent back to the student" : "Rejected" });
       onDecided();
     } catch (e) {
       toast({ variant: "destructive", title: e instanceof Error ? e.message : "That didn't work" });
@@ -57,14 +63,23 @@ function InboxCard({ request, onDecided }: { request: CertificateRequest; onDeci
 
         <StudentProfileDialog requestId={request.id} studentName={request.studentName} />
 
+        {canReturn && <RequestAnswers request={request} />}
+        {canReturn && (
+          <details className="rounded-md border p-2 text-sm">
+            <summary className="cursor-pointer text-muted-foreground">All approvals of this request</summary>
+            <div className="mt-2"><StepTimeline request={request} /></div>
+          </details>
+        )}
+
         <div className="space-y-1.5">
-          <Label htmlFor={`remarks-${request.id}`}>Remarks (required to reject)</Label>
+          <Label htmlFor={`remarks-${request.id}`}>{canReturn ? "Remarks (required to reject or send back)" : "Remarks (required to reject)"}</Label>
           <Textarea id={`remarks-${request.id}`} value={remarks} onChange={(e) => setRemarks(e.target.value)} />
         </div>
 
         {step.type === "SEQUENTIAL" && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button onClick={() => act("APPROVE")} disabled={busy}>Approve</Button>
+            {canReturn && <Button variant="outline" onClick={() => act("RETURN")} disabled={busy}>Send back for correction</Button>}
             <Button variant="outline" onClick={() => act("REJECT")} disabled={busy}>Reject</Button>
           </div>
         )}
@@ -78,7 +93,8 @@ function InboxCard({ request, onDecided }: { request: CertificateRequest; onDeci
                 <div key={branch.key} className="flex items-center justify-between gap-2 rounded-md border p-2">
                   <span className="text-sm font-medium">{branch.label}</span>
                   <div className="flex gap-2">
-                    <Button size="sm" onClick={() => act("APPROVE", branch.key)} disabled={busy}>Clear</Button>
+                    <Button size="sm" onClick={() => act("APPROVE", branch.key)} disabled={busy}>{canReturn ? "Approve" : "Clear"}</Button>
+                    {canReturn && <Button size="sm" variant="outline" onClick={() => act("RETURN", branch.key)} disabled={busy}>Send back</Button>}
                     <Button size="sm" variant="outline" onClick={() => act("REJECT", branch.key)} disabled={busy}>Reject</Button>
                   </div>
                 </div>

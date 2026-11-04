@@ -3320,6 +3320,8 @@ export type NotificationType =
   | "CERTIFICATE_ISSUED"
   | "CERTIFICATE_REJECTED"
   | "CERTIFICATE_EXAM_CELL_ISSUED"
+  | "CERTIFICATE_RETURNED"
+  | "CERTIFICATE_REVOKED"
   | "GENERAL";
 
 export interface AppNotification {
@@ -3532,6 +3534,10 @@ export type AuditAction =
   | "CERTIFICATE_ISSUED"
   | "CERTIFICATE_REJECTED_AT_ISSUANCE"
   | "CERTIFICATE_CANCELLED"
+  | "CERTIFICATE_RETURNED"
+  | "CERTIFICATE_RESUBMITTED"
+  | "CERTIFICATE_REVOKED"
+  | "CERTIFICATE_CONFIG_CHANGED"
   | "CERTIFICATE_EXAM_CELL_ISSUED"
   // Academics > Curriculum: master subjects (per catalog course + regulation) and their assignment by code.
   | "SUBJECTS_IMPORTED"

@@ -2,9 +2,14 @@ import type { Firestore } from "firebase-admin/firestore";
 import type { RecipientResolver } from "@/types";
 import { findUsersByRoles } from "@/lib/roles/findUsersByRoles";
 import { canHodEditDepartment, getHodDepartmentScope } from "@/lib/departments/scope";
+import { findCurrentSectionDoc } from "@/lib/students/findCurrentSectionDoc";
+import { resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
+import type { StudentRecord } from "@/types";
 
 export interface RecipientContext {
   studentDepartment: string;
+  /** Needed by the mentor / class in-charge resolvers. */
+  studentId?: string;
 }
 
 // The one function every step/branch/issuer "who can act" question goes
@@ -20,6 +25,22 @@ export async function resolveRecipientUids(
   if (resolver.kind === "ROLE") {
     const docs = await findUsersByRoles(db, collegeId, [resolver.role]);
     return docs.map((d) => d.id);
+  }
+  if (resolver.kind === "USER") {
+    // A named person - only while their login is still active.
+    const u = await db.collection("colleges").doc(collegeId).collection("users").doc(resolver.uid).get();
+    return u.exists && u.data()?.isActive !== false ? [resolver.uid] : [];
+  }
+  if (resolver.kind === "STUDENT_MENTOR" || resolver.kind === "CLASS_INCHARGE") {
+    if (!context.studentId) return [];
+    const snap = await db.collection("colleges").doc(collegeId).collection("students").doc(context.studentId).get();
+    const student = snap.data() as StudentRecord | undefined;
+    if (!student) return [];
+    if (resolver.kind === "STUDENT_MENTOR") return student.mentorUid ? [student.mentorUid] : [];
+    const section = await findCurrentSectionDoc(db, collegeId, student);
+    const incharge = (section?.data() as { facultyInchargeUid?: string } | undefined)?.facultyInchargeUid;
+    // Stored as the login uid, or (older data) the faculty record id - resolve either to the login.
+    return incharge ? [await resolveLoginUidForFacultyMember(db, collegeId, incharge)] : [];
   }
   // STUDENT_DEPARTMENT_HOD: the HOD of THIS request's own student department -
   // never every HOD in the college. Resolved via the same department-scoping

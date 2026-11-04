@@ -16,6 +16,7 @@ import type { CertificateRequest } from "@/types";
 import { issueCertificate, listRequests, rejectAtIssuance, uploadCertificatePdf } from "./api";
 import { StatusBadge } from "./StatusBadge";
 import { StudentProfileDialog } from "./StudentProfileDialog";
+import { IssueCard } from "./IssueCard";
 
 const when = (ts: unknown) => {
   const d = toDate(ts as never);
@@ -158,7 +159,10 @@ export function IssuanceQueue() {
 
   return (
     <div className="space-y-3">
-      {requests.map((r) => <CertificateCard key={r.id} request={r} collegeName={collegeName} onDone={load} />)}
+      {/* Configured certificates are built by the server from their template; the original No Due keeps its generator. */}
+      {requests.map((r) => r.certificateTypeId
+        ? <IssueCard key={r.id} request={r} onDone={load} />
+        : <CertificateCard key={r.id} request={r} collegeName={collegeName} onDone={load} />)}
     </div>
   );
 }

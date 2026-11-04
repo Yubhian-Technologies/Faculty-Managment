@@ -44,4 +44,6 @@ export const ANY_CERTIFICATE_ACTOR_ROLE = [
   "STUDENT", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE", "COLLEGE_STAFF",
   "ACADEMICS", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "LIBRARY", "HOSTEL", "PD", "EXAM_CELL",
   "WEBMASTER", "PLACEMENT_DEPT", "PURCHASE_DEPT",
+  // A configured step can be the student's mentor / class in-charge (faculty logins) or College Accounts.
+  "PANEL_MEMBER", "COLLEGE_ACCOUNTS",
 ] as const;

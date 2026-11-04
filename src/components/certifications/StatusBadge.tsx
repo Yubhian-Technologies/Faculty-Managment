@@ -1,4 +1,4 @@
-import { CheckCircle2, CircleDashed, Clock, XCircle } from "lucide-react";
+import { CheckCircle2, CircleDashed, Clock, Undo2, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CertificateRequestStatus } from "@/types";
 
@@ -13,6 +13,7 @@ const LABEL: Record<CertificateRequestStatus, string> = {
   ISSUED: "Issued",
   REJECTED: "Rejected",
   CANCELLED: "Cancelled",
+  RETURNED: "Returned for correction",
 };
 
 const ICON: Record<CertificateRequestStatus, typeof Clock> = {
@@ -21,6 +22,7 @@ const ICON: Record<CertificateRequestStatus, typeof Clock> = {
   ISSUED: CheckCircle2,
   REJECTED: XCircle,
   CANCELLED: CircleDashed,
+  RETURNED: Undo2,
 };
 
 const CLASS: Record<CertificateRequestStatus, string> = {
@@ -29,6 +31,7 @@ const CLASS: Record<CertificateRequestStatus, string> = {
   ISSUED: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900",
   REJECTED: "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-900",
   CANCELLED: "bg-muted text-muted-foreground border-border",
+  RETURNED: "bg-orange-50 text-orange-800 border-orange-200 dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-900",
 };
 
 export function StatusBadge({ status }: { status: CertificateRequestStatus }) {

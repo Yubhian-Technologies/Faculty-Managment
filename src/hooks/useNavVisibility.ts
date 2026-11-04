@@ -26,6 +26,9 @@ const MID_TIMETABLE_ROLES: UserRole[] = ["STUDENT", "PANEL_MEMBER"];
 const DUTY_ROLES: UserRole[] = ["PANEL_MEMBER", "COLLEGE_STAFF"];
 // Invigilation Duties shows once the Exam Cell has published a duty for them.
 const INVIGILATION_HREFS = ["/panel/invigilation"];
+// The faculty's own Certificates entry shows only for an approver / issuer: named as a person in an active
+// certificate's approvals or as its issuer, or with a request waiting on them now (as mentor / class in-charge). A seat's own Certificates entry (HOD, Principal, Exam Cell ...) is a different page.
+const PANEL_CERTIFICATES_HREF = "/panel/certificates";
 
 export function useNavVisibility() {
   const user = useAuthStore((s) => s.user);
@@ -72,6 +75,14 @@ export function useNavVisibility() {
     staleTime: 5 * 60_000,
   });
 
+  const wantsCertificates = !!primary && !!user?.collegeId && [primary, ...(seatRoles ?? [])].includes("PANEL_MEMBER");
+  const { data: hasCertificates } = useQuery({
+    queryKey: ["certificates-waiting", user?.collegeId, user?.uid],
+    queryFn: () => fetch("/api/college/certificate-requests?view=exists").then((r) => (r.ok ? r.json() : { exists: false })).then((d: { exists?: boolean }) => Boolean(d.exists)),
+    enabled: wantsCertificates,
+    staleTime: 2 * 60_000,
+  });
+
   const hiddenItems = useMemo(() => {
     if (!primary) return [];
     // The Super Admin configures rules per role, but a login can act as several
@@ -95,6 +106,7 @@ export function useNavVisibility() {
     // Hidden until known to exist (no flash of a menu item that leads nowhere).
     if (wantsTimetable && hasTimetable !== true) MID_TIMETABLE_HREFS.forEach((h) => hrefs.add(h));
     if (hasDuties !== true) INVIGILATION_HREFS.forEach((h) => hrefs.add(h));
+    if (hasCertificates !== true) hrefs.add(PANEL_CERTIFICATES_HREF);
     if (assignments) {
       if (!assignments.timetableIncharge) TIMETABLE_INCHARGE_HREFS.forEach((h) => hrefs.add(h));
       if (!assignments.sectionIncharge) SECTION_INCHARGE_HREFS.forEach((h) => hrefs.add(h));
@@ -102,7 +114,7 @@ export function useNavVisibility() {
       if (assignments.internalExam === false) INTERNAL_EXAM_HREFS.forEach((h) => hrefs.add(h));
     }
     return Array.from(hrefs);
-  }, [raw, primary, seatRoles, collegeAdmin, assignments, officeAllowed.hrefs, wantsTimetable, hasTimetable, hasDuties]);
+  }, [raw, primary, seatRoles, collegeAdmin, assignments, officeAllowed.hrefs, wantsTimetable, hasTimetable, hasDuties, hasCertificates]);
 
   const hiddenModules = useMemo(() => {
     if (!primary) return [];
