@@ -45,7 +45,7 @@ describe("readOnlyNavItems (the whole menu of a read-only person)", () => {
   it("is exactly My Profile, Leave, My Attendance - in that order - and nothing that changes anything", () => {
     const items = readOnlyNavItems();
     expect(items.map((i) => i.href)).toEqual(["/panel/profile", "/panel/leave", "/panel/attendance"]);
-    expect(items.map((i) => i.label)).toEqual(["My Profile", "Leave", "My Attendance"]);
+    expect(items.map((i) => i.label)).toEqual(["My Profile", "My Leave", "My Attendance"]);
     expect(items[0].section).toBe("My records");
     expect(items.slice(1).every((i) => i.section === undefined)).toBe(true);
   });

@@ -283,7 +283,7 @@ export default function PrincipalTimetablePage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Timetable View" description="Published section timetables across the college" />
+      <PageHeader title="Timetables" description="Published section timetables across the college" />
 
       {canSeeLeisure && (
         <div className="flex flex-wrap gap-2" role="tablist">

@@ -643,7 +643,7 @@ export default function MarkAttendancePage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Attendance"
+        title="Mark Attendance"
         description="All classes assigned to you today from the published timetable. Continuous lab periods are grouped into single slots with per-period attendance."
       />
 

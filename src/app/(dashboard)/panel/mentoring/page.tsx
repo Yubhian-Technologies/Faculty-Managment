@@ -22,7 +22,7 @@ export default function PanelMentoringPage() {
   return (
     <div>
       <PageHeader
-        title="My Mentees"
+        title="Mentoring"
         description="Students your HOD has assigned to you. Open one to follow their attendance, results and internal marks."
       />
       {error && <p className="text-sm text-red-600">{error}</p>}

@@ -115,7 +115,7 @@ export default function LeaveAdjustmentsPage() {
   return (
     <div className="max-w-2xl space-y-6">
       <PageHeader
-        title="Adjustment Requests"
+        title="Work Adjustments"
         description="Requests from colleagues asking you to cover a class or be their point of contact while they're on leave."
       />
       {isLoading ? (

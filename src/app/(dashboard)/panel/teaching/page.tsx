@@ -258,7 +258,7 @@ export default function TeachingLoadPage() {
     return (
       <div className="space-y-6">
         <PageHeader
-          title="My Time Table"
+          title="My Timetable"
           description="Assigned courses, weekly teaching hours, and period-wise timetable"
         />
         <div className="h-96 rounded-lg border bg-muted/30 animate-pulse" />
@@ -269,7 +269,7 @@ export default function TeachingLoadPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="My Time Table"
+        title="My Timetable"
         description="Assigned courses, weekly teaching hours, and period-wise timetable"
       />
 

@@ -63,7 +63,7 @@ export default function PrincipalIndentsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Budget History"
+        title="Indents"
         description="Past indent requests raised by departments"
         actions={
           <Button variant="outline" size="sm" onClick={load} loading={isLoading}>

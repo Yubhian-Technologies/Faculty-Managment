@@ -441,7 +441,7 @@ export default function AcademicsHolidaysPage() {
     <div className="space-y-6">
       {inPrincipal && <PrincipalHolidaysTabs active="holidays" />}
       <PageHeader
-        title="Holidays"
+        title={inPrincipal ? "Academic Calendar" : "Holidays"}
         description="Holidays counted in the Leave History Report"
         actions={
           <div className="flex items-center gap-2">

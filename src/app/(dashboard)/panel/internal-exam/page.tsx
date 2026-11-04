@@ -208,7 +208,7 @@ export default function InternalExamPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Internal Exam"
+        title="Internal Marks"
         description="Select the details and assign marks to students. Once submitted, marks cannot be edited."
       />
 

@@ -12,6 +12,7 @@ import { AssignmentRequestsPanel } from "@/components/timetable/AssignmentReques
 export default function AssignmentRequestsPage() {
   return (
     <AssignmentRequestsPanel
+      title="Subject Allocation Requests"
       timetableHrefFor={(r) =>
         `/panel/timetable-incharge/${r.courseId}/${r.year}/${r.sectionId}?courseName=${encodeURIComponent(r.courseName)}&sectionName=${encodeURIComponent(r.sectionName)}&requestId=${r.id}&assignmentId=${r.teachingAssignmentId ?? ""}`
       }

@@ -33,6 +33,8 @@ interface RosterEntry {
 
 interface LeaveProfilesRosterProps {
   editHrefBase: string; // e.g. "/hod/leave/profiles" -> links to "{base}/{uid}/edit"
+  /** Page title (the HOD's menu calls it "Leave Balances"). */
+  title?: string;
 }
 
 const BASE_STAFF_TYPE_TABS: { key: StaffType; label: string }[] = [
@@ -51,7 +53,7 @@ const INSTITUTIONAL_STAFF_TAB = { key: "institutional" as const, label: "Institu
 // Every entry here is auto-set-up already (from FacultyMember/SupportingStaff/
 // role default) by the time it's fetched - there is no "not set up" state,
 // only ever an existing, editable profile.
-export function LeaveProfilesRoster({ editHrefBase }: LeaveProfilesRosterProps) {
+export function LeaveProfilesRoster({ editHrefBase, title = "Leave Profiles" }: LeaveProfilesRosterProps) {
   // Settings > Website Display Name > "Attendance and leave": names shown (and exported) as Display Names - display only.
   const { nameFor } = useFacultyDisplayNames();
   const [roster, setRoster] = useState<RosterEntry[]>([]);
@@ -107,7 +109,7 @@ export function LeaveProfilesRoster({ editHrefBase }: LeaveProfilesRosterProps) 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Leave Profiles"
+        title={title}
         description="Auto-set up from each person's staff details - edit only to correct a category"
       />
 

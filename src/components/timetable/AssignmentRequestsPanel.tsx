@@ -32,6 +32,8 @@ function statusBadge(status: FacultyAssignmentRequest["status"]) {
 }
 
 interface AssignmentRequestsPanelProps {
+  /** Page title (the faculty menu calls it "Subject Allocation Requests"). */
+  title?: string;
   // Where "Place on timetable" (on an ALLOCATED incoming request) sends this
   // viewer - the HOD's own grid at /hod/timetable/... or a Timetable
   // Incharge's own equivalent under /panel or /college-staff (see
@@ -47,7 +49,7 @@ interface AssignmentRequestsPanelProps {
 // same way. The API (faculty-assignment-requests/route.ts GET,
 // [id]/route.ts PATCH) already scopes what each caller can see/act on -
 // this component has no role-specific logic of its own.
-export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequestsPanelProps) {
+export function AssignmentRequestsPanel({ timetableHrefFor, title = "Assignment Requests" }: AssignmentRequestsPanelProps) {
   const { user } = useAuth();
   const { active: activeContext } = useWorkContext();
   const [requests, setRequests] = useState<FacultyAssignmentRequest[]>([]);
@@ -336,7 +338,7 @@ export function AssignmentRequestsPanel({ timetableHrefFor }: AssignmentRequests
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Assignment Requests"
+        title={title}
         description="Ask another department to lend a faculty member for a subject you can't staff yourself, or fulfil requests sent to your department"
       />
 

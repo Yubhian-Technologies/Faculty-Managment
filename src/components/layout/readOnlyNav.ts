@@ -27,7 +27,9 @@ export function readOnlyNavItems(): NavItem[] {
     if (!item) continue;
     const { section: _drop, ...rest } = item;
     void _drop;
-    out.push(out.length === 0 ? { ...rest, section: "My records" } : rest);
+    // A read-only person can't apply for leave - the faculty menu's "Apply Leave" reads "My Leave" here.
+    const shown = href === "/panel/leave" ? { ...rest, label: "My Leave" } : rest;
+    out.push(out.length === 0 ? { ...shown, section: "My records" } : shown);
   }
   return out;
 }

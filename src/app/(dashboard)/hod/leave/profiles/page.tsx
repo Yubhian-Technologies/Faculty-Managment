@@ -3,5 +3,5 @@
 import { LeaveProfilesRoster } from "@/components/leave/LeaveProfilesRoster";
 
 export default function HodLeaveProfilesPage() {
-  return <LeaveProfilesRoster editHrefBase="/hod/leave/profiles" />;
+  return <LeaveProfilesRoster editHrefBase="/hod/leave/profiles" title="Leave Balances" />;
 }
