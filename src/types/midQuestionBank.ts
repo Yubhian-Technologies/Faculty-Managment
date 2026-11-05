@@ -184,8 +184,15 @@ export interface MidQuestionBank {
   marks: number;
   unitStatus: Record<string, MidUnitStatus>;
   status: MidQuestionBankStatus;
+  /** The college's academic tags when the bank started (absent = all on): COs, CO-PO mapping, Bloom's levels. */
+  outcomes?: import("./examMidSchedule").MidOutcomeSwitches;
   completeCount: number;
   totalCount: number;
+  /** "PAPERS": ready question papers (sets) to the Exam Cell's pattern instead of a bank (absent = a bank). */
+  kind?: "BANK" | "PAPERS";
+  /** PAPERS: the pattern as it was when started, and each set's progress. */
+  pattern?: import("./midPaperSet").MidPaperPattern;
+  setProgress?: import("./midPaperSet").PaperSetProgress;
   approval?: MidBankApproval;
   approvalHistory?: MidBankApprovalEntry[];
   createdAt: Timestamp;

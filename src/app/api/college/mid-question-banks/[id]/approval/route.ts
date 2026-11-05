@@ -55,17 +55,18 @@ export async function POST(request: Request, { params }: Params) {
 
     const bank = (result.body as { bank: MidQuestionBank }).bank;
     const what = `${bank.subjectName} (${bank.subjectCode}) · ${bank.branch} · Mid ${bank.midNumber}`;
+    const label = bank.kind === "PAPERS" ? "Question papers" : "Question bank";
     if (action === "submit") {
       for (const uid of await getDepartmentHeadUids(db, session.collegeId, bank.branch)) {
-        await notify(db, session.collegeId, uid, "MID_BANK_SUBMITTED", "Question bank submitted for approval", `${bank.ownerName}: ${what}`, `/hod/question-banks/${encodeURIComponent(bank.deadlineId)}/${encodeURIComponent(id)}`);
+        await notify(db, session.collegeId, uid, "MID_BANK_SUBMITTED", `${label} submitted for approval`, `${bank.ownerName}: ${what}`, `/hod/question-banks/${encodeURIComponent(bank.deadlineId)}/${encodeURIComponent(id)}`);
       }
     } else if (action === "approve" || action === "return") {
       if (bank.ownerUid) {
         await notify(db, session.collegeId, bank.ownerUid, "MID_BANK_REVIEWED",
-          action === "approve" ? "Question bank approved by the HOD" : "Question bank returned by the HOD",
+          action === "approve" ? `${label} approved by the HOD` : `${label} returned by the HOD`,
           action === "approve" ? what : `${what} - ${remarks}`, `/panel/mid-bank/${encodeURIComponent(id)}/review`);
       }
-      if (action === "approve") await notifyRole(db, session.collegeId, "EXAM_CELL", "MID_BANK_APPROVED", "Question bank approved", `${what} - ${bank.ownerName}`, `/exam-cell/question-banks/${encodeURIComponent(bank.deadlineId)}/${encodeURIComponent(id)}`);
+      if (action === "approve") await notifyRole(db, session.collegeId, "EXAM_CELL", "MID_BANK_APPROVED", `${label} approved`, `${what} - ${bank.ownerName}`, `/exam-cell/question-banks/${encodeURIComponent(bank.deadlineId)}/${encodeURIComponent(id)}`);
     }
     await writeAuditLogSafe(db, session.collegeId, {
       action: `MID_BANK_${action.toUpperCase()}`, performedBy: session.uid, performedByName: name, targetId: id,

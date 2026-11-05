@@ -207,6 +207,7 @@ export async function POST(request: Request) {
       ...(c.description?.trim() ? { description: c.description.trim() } : {}),
       order: c.order ?? i,
       isActive: c.isActive !== false,
+      ...(Number.isInteger(c.midNumber) && c.midNumber! >= 1 && c.midNumber! <= 10 ? { midNumber: c.midNumber } : {}),
     }));
 
     // Written via .set() with a plain object (not typed against ExamConfiguration)
@@ -241,6 +242,48 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     console.error("[college/exam-configurations POST]", err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
+}
+
+/**
+ * { id, componentId, midNumber | null } - a saved configuration's component takes its marks from Mid N's question
+ * paper (question by question) or goes back to one typed number. Nothing else of a saved configuration changes,
+ * and marks already entered stay as they are.
+ */
+export async function PATCH(request: Request) {
+  try {
+    const session = await requireCollegeMember("EXAM_CELL", "SUPER_ADMIN");
+    const body = (await readJsonBody(request)) as { id?: string; componentId?: string; midNumber?: number | null };
+    const mid = body.midNumber == null ? null : Number(body.midNumber);
+    if (mid !== null && !(Number.isInteger(mid) && mid >= 1 && mid <= 10)) return NextResponse.json({ error: "Pick a Mid" }, { status: 400 });
+    const db = getAdminDb();
+    const ref = db.collection("colleges").doc(session.collegeId).collection("examConfigurations").doc(String(body.id ?? ""));
+    const done = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) return "NOT_FOUND";
+      const comps = (snap.get("components") as ExamConfigComponent[] | undefined) ?? [];
+      if (!comps.some((c) => c.id === body.componentId)) return "NO_COMPONENT";
+      tx.update(ref, {
+        components: comps.map((c) => {
+          if (c.id !== body.componentId) return c;
+          const { midNumber: _old, ...rest } = c; void _old;
+          return mid ? { ...rest, midNumber: mid } : rest;
+        }),
+        updatedAt: new Date(),
+      });
+      return "OK";
+    });
+    if (done === "NOT_FOUND") return NextResponse.json({ error: "Configuration not found" }, { status: 404 });
+    if (done === "NO_COMPONENT") return NextResponse.json({ error: "Component not found" }, { status: 404 });
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    const badBody = badBodyResponse(err);
+    if (badBody) return badBody;
+    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    console.error("[college/exam-configurations PATCH]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }

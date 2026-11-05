@@ -23,6 +23,12 @@ const prepareHref = (i: MidBankListItem) =>
   `/panel/mid-bank/prepare?${new URLSearchParams({ deadlineId: i.deadline.id, subjectId: i.subject.id, branch: i.branch })}`;
 
 export default function FacultyQuestionBankPage() {
+  // How this college prepares Mids (question bank or question papers) - only the wording differs here.
+  const [papers, setPapers] = useState(false);
+  useEffect(() => {
+    fetch("/api/college/exam-mid-settings").then((r) => (r.ok ? r.json() : null))
+      .then((d: { settings?: { midPreparation?: string } } | null) => setPapers(d?.settings?.midPreparation === "PAPERS")).catch(() => undefined);
+  }, []);
   const [items, setItems] = useState<MidBankListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -34,7 +40,7 @@ export default function FacultyQuestionBankPage() {
         if (!res.ok) throw new Error(data.error ?? "Failed to load");
         setItems(data.items ?? []);
       } catch (e) {
-        toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to load your question banks" });
+        toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to load" });
       } finally {
         setIsLoading(false);
       }
@@ -51,8 +57,10 @@ export default function FacultyQuestionBankPage() {
   return (
     <div className="max-w-5xl space-y-8">
       <PageHeader
-        title="Mid Question Bank"
-        description="Prepare the Mid question banks for the subjects you teach, before the Exam Cell's deadline. Each unit needs 10 questions with Bloom's levels L2, L3 and L4 at least 3 times each."
+        title={papers ? "Mid Question Papers" : "Mid Question Bank"}
+        description={papers
+          ? "Write the Mid question papers for the subjects you teach, before the Exam Cell's deadline, to the paper pattern the Exam Cell set. Your HOD approves them and the Exam Cell picks the one used."
+          : "Prepare the Mid question banks for the subjects you teach, before the Exam Cell's deadline. Each unit needs 10 questions with Bloom's levels L2, L3 and L4 at least 3 times each."}
       />
 
       {isLoading ? (
@@ -61,8 +69,8 @@ export default function FacultyQuestionBankPage() {
         <Card>
           <CardContent className="py-12 text-center">
             <BookOpen className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
-            <p className="font-medium">No question banks open</p>
-            <p className="mt-1 text-sm text-muted-foreground">When the Exam Cell sets a Mid&rsquo;s question bank deadline, your subjects for that semester appear here.</p>
+            <p className="font-medium">{papers ? "No question papers open" : "No question banks open"}</p>
+            <p className="mt-1 text-sm text-muted-foreground">When the Exam Cell sets a Mid&rsquo;s {papers ? "question paper" : "question bank"} deadline, your subjects for that semester appear here.</p>
           </CardContent>
         </Card>
       ) : (
@@ -93,7 +101,7 @@ export default function FacultyQuestionBankPage() {
                           {i.sections.map((s) => (
                             <Badge key={s.sectionId} variant="outline" className={s.mine ? "border-primary/50" : ""} title={s.facultyNames.join(", ")}>
                               {s.sectionName}{s.mine ? " (you)" : ` · ${s.facultyNames[0] ?? ""}`}
-                              {s.heldBy && <span className="ml-1 text-muted-foreground">- in {s.mine && i.myBank?.sections.includes(s.sectionName) ? "your" : `${s.heldBy}'s`} bank</span>}
+                              {s.heldBy && <span className="ml-1 text-muted-foreground">- in {s.mine && i.myBank?.sections.includes(s.sectionName) ? "your" : `${s.heldBy}'s`} {papers ? "papers" : "bank"}</span>}
                             </Badge>
                           ))}
                         </div>
@@ -101,7 +109,7 @@ export default function FacultyQuestionBankPage() {
                         {i.myBank && (
                           <div>
                             <div className="mb-1 flex justify-between text-xs">
-                              <span>Your bank (sections {i.myBank.sections.join(", ")}): {i.myBank.completeCount} of {i.myBank.totalCount} questions</span>
+                              <span>{papers ? "Your question papers" : "Your bank"} (sections {i.myBank.sections.join(", ")}): {i.myBank.completeCount} of {i.myBank.totalCount} questions</span>
                               <span className="font-medium">{pct}%</span>
                             </div>
                             <div className="h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`${i.subject.name} progress`}>
@@ -128,7 +136,7 @@ export default function FacultyQuestionBankPage() {
                           ) : i.uncovered.length > 0 ? (
                             d.locked
                               ? <span className="text-xs text-muted-foreground">Not prepared - the deadline has passed</span>
-                              : <Button asChild size="sm"><Link href={prepareHref(i)}>Prepare bank</Link></Button>
+                              : <Button asChild size="sm"><Link href={prepareHref(i)}>{papers ? "Prepare question papers" : "Prepare bank"}</Link></Button>
                           ) : null}
                         </div>
                       </CardContent>

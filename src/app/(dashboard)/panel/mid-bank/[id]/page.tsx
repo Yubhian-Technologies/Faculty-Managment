@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, BookOpen, CalendarClock, FileText, GraduationCap, Layers, Settings2, Users, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BankWorkspace } from "@/components/midBank/BankWorkspace";
+import { PaperSetWorkspace } from "@/components/midPapers/PaperSetWorkspace";
 import { daysLeft, deadlineLabel } from "@/lib/midBank/deadline";
 import { bankFormatText, bankFormats } from "@/lib/midBank/validateQuestion";
 import type { MidBankDetail } from "@/lib/midBank/clientTypes";
@@ -25,10 +26,10 @@ export default function MidBankPage({ params, searchParams }: { params: Promise<
     fetch(`/api/college/mid-question-banks/${encodeURIComponent(id)}`)
       .then(async (r) => {
         const d = (await r.json()) as MidBankDetail & { error?: string };
-        if (!r.ok) throw new Error(d.error ?? "Failed to load the question bank");
+        if (!r.ok) throw new Error(d.error ?? "Failed to load");
         setDetail(d);
       })
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load the question bank"));
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load"));
   }, [id]);
   useEffect(() => { load(); }, [load]);
 
@@ -36,9 +37,11 @@ export default function MidBankPage({ params, searchParams }: { params: Promise<
     if (detail && !detail.access.canWrite) router.replace(`/panel/mid-bank/${encodeURIComponent(id)}/review`);
   }, [detail, id, router]);
 
-  const back = <Button asChild variant="ghost" size="sm"><Link href="/panel/mid-bank"><ArrowLeft className="mr-1.5 h-4 w-4" />Question Bank</Link></Button>;
+  const back = <Button asChild variant="ghost" size="sm"><Link href="/panel/mid-bank"><ArrowLeft className="mr-1.5 h-4 w-4" />All subjects</Link></Button>;
   if (error) return <div className="space-y-4">{back}<p className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive" role="alert">{error}</p></div>;
-  if (!detail || !detail.access.canWrite || !detail.outcomes) {
+  // Question papers don't need the Course Outcomes setup when the college doesn't use COs.
+  const papers = detail?.bank.kind === "PAPERS";
+  if (!detail || !detail.access.canWrite || (!papers && !detail.outcomes)) {
     return <div className="space-y-4"><div className="h-10 w-64 animate-pulse rounded bg-muted" /><div className="h-96 animate-pulse rounded-lg bg-muted" /></div>;
   }
 
@@ -48,8 +51,9 @@ export default function MidBankPage({ params, searchParams }: { params: Promise<
   const facts: [LucideIcon, string][] = [
     [GraduationCap, bank.branch],
     [Users, `Section${bank.sections.length === 1 ? "" : "s"} ${bank.sections.map((s) => s.sectionName).join(", ")}`],
-    [Layers, `Units ${bank.units.join(", ")}`],
-    [FileText, bankFormatText(bankFormats(bank, detail.rules), bank.marks)],
+    ...(papers && bank.pattern
+      ? [[FileText, `${bank.pattern.setsPerFaculty} question paper${bank.pattern.setsPerFaculty === 1 ? "" : "s"} · ${bank.pattern.parts.map((p) => `${p.label} ${p.questions} x ${p.marksEach}`).join(" · ")}`] as [LucideIcon, string]]
+      : [[Layers, `Units ${bank.units.join(", ")}`] as [LucideIcon, string], [FileText, bankFormatText(bankFormats(bank, detail.rules), bank.marks)] as [LucideIcon, string]]),
   ];
   return (
     <div className="space-y-5">
@@ -79,7 +83,7 @@ export default function MidBankPage({ params, searchParams }: { params: Promise<
           )}
         </div>
       </header>
-      <BankWorkspace detail={detail} initialQ={q} />
+      {papers ? <PaperSetWorkspace detail={detail} /> : <BankWorkspace detail={detail} initialQ={q} />}
     </div>
   );
 }

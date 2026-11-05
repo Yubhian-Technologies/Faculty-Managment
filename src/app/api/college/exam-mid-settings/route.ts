@@ -4,7 +4,10 @@ import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import type { ExamMidSettings } from "@/types";
+import type { ExamMidSettings, MidOutcomeSwitches } from "@/types";
+import { loadMidSettings, midSettingsRef, readMidSettings } from "@/lib/exams/midSettings";
+import { outcomeSwitches } from "@/lib/midBank/outcomeSwitches";
+import { isDeadlineLocked } from "@/lib/midBank/deadline";
 
 // colleges/{collegeId}/examSettings/mid - single college-wide doc.
 // HOD / timetable incharges read the mid count for the flexible-cell dialog (read-only; saving stays with the Exam Cell).
@@ -18,7 +21,9 @@ export async function GET() {
       .collection("colleges").doc(session.collegeId).collection("examSettings").doc("mid")
       .get();
     const settings: ExamMidSettings = snap.exists ? (snap.data() as ExamMidSettings) : { midCount: 0 };
-    return NextResponse.json({ settings });
+    // midPreparation / outcomes as every Mid route reads them (missing = question bank, all tags on).
+    const resolved = readMidSettings(settings);
+    return NextResponse.json({ settings: { ...settings, midPreparation: resolved.midPreparation, outcomes: resolved.outcomes } });
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
@@ -33,25 +38,41 @@ export async function GET() {
 export async function PUT(request: Request) {
   try {
     const session = await requireCollegeMember("EXAM_CELL", "SUPER_ADMIN");
-    const body = (await readJsonBody(request)) as { midCount?: number };
-    const midCount = Number(body.midCount);
-
+    const body = (await readJsonBody(request)) as { midCount?: number; midPreparation?: unknown; outcomes?: unknown };
+    const db = getAdminDb();
+    const current = await loadMidSettings(db, session.collegeId);
+    // Any field left out keeps its saved value (the Mid count card and the preparation card save separately).
+    const midCount = body.midCount === undefined ? current.midCount : Number(body.midCount);
     if (!Number.isInteger(midCount) || midCount < 1 || midCount > 10) {
       return NextResponse.json({ error: "Mid count must be an integer between 1 and 10" }, { status: 400 });
     }
+    const midPreparation = body.midPreparation === undefined ? current.midPreparation : body.midPreparation === "PAPERS" ? "PAPERS" : "BANK";
+    const outcomes = body.outcomes === undefined ? current.outcomes : outcomeSwitches(body.outcomes as Partial<MidOutcomeSwitches>);
 
-    const db = getAdminDb();
+    // Switching bank <-> papers while faculty are preparing under an open deadline would strand their work.
+    if (midPreparation !== current.midPreparation) {
+      const college = db.collection("colleges").doc(session.collegeId);
+      const open = (await college.collection("midBankDeadlines").get()).docs.filter((d) => !isDeadlineLocked(d.get("deadline") as string)).map((d) => d.id);
+      for (const id of open) {
+        const [banks, sets] = await Promise.all([
+          college.collection("midQuestionBanks").where("deadlineId", "==", id).limit(1).get(),
+          college.collection("midPaperSets").where("deadlineId", "==", id).limit(1).get(),
+        ]);
+        if (!banks.empty || !sets.empty) {
+          return NextResponse.json({ error: "Faculty are already preparing for an open deadline - switch after it ends (or move the deadline)" }, { status: 409 });
+        }
+      }
+    }
+
     const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
     const actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Exam Cell";
 
     const settings: ExamMidSettings = {
-      midCount,
+      midCount, midPreparation, outcomes,
       updatedAt: new Date() as unknown as ExamMidSettings["updatedAt"],
       updatedByName: actorName,
     };
-    await db
-      .collection("colleges").doc(session.collegeId).collection("examSettings").doc("mid")
-      .set(settings, { merge: true });
+    await midSettingsRef(db, session.collegeId).set(settings, { merge: true });
 
     return NextResponse.json({ settings });
   } catch (err) {

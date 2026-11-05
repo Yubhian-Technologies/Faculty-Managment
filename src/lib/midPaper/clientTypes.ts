@@ -28,6 +28,8 @@ export interface GeneratedPaper {
   unitTitles: Record<string, string>;
   cos: { id: string; statement: string }[];
   mapping: Record<string, string[]>;
+  /** The bank's academic tags (absent = all on): the paper leaves out CO / BL / PO columns that are off. */
+  outcomes?: import("@/types").MidOutcomeSwitches;
   marks: number;
   maxMarks: number;
   instruction: string;

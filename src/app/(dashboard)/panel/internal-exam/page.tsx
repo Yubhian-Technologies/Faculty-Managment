@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import type { ExamConfiguration, InternalExamMarksBatch, TeachingAssignment } from "@/types";
+import { paperTotal, scaleToComponent, type QuestionSheet } from "@/lib/exams/questionMarks";
 
 interface Option {
   value: string;
@@ -44,6 +45,10 @@ export default function InternalExamPage() {
   const [isLoadingStudents, setIsLoadingStudents] = useState(false);
   // studentId -> componentId -> entered value (string, for controlled inputs)
   const [marksDraft, setMarksDraft] = useState<Record<string, Record<string, string>>>({});
+  // Components taken from a Mid question paper: their question columns, and studentId -> componentId -> key -> value.
+  const [sheets, setSheets] = useState<Record<string, QuestionSheet>>({});
+  const [questionDraft, setQuestionDraft] = useState<Record<string, Record<string, Record<string, string>>>>({});
+  const [isSaving, setIsSaving] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -105,6 +110,8 @@ export default function InternalExamPage() {
     setConfiguration(null);
     setLoadError(null);
     setMarksDraft({});
+    setSheets({});
+    setQuestionDraft({});
   }
 
   function handleBranchChange(v: string) {
@@ -135,13 +142,17 @@ export default function InternalExamPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ assignmentId: selectedAssignment.id }),
       });
-      const json = (await res.json()) as { batch?: InternalExamMarksBatch; configuration?: ExamConfiguration; error?: string };
+      const json = (await res.json()) as { batch?: InternalExamMarksBatch; configuration?: ExamConfiguration; sheets?: Record<string, QuestionSheet>; error?: string };
       if (!res.ok || !json.batch || !json.configuration) {
         setLoadError(json.error ?? "Failed to load students");
         return;
       }
       setBatch(json.batch);
       setConfiguration(json.configuration);
+      const sh = json.sheets ?? {};
+      setSheets(sh);
+      setQuestionDraft(Object.fromEntries(json.batch.entries.map((e) => [e.studentId, Object.fromEntries(Object.keys(sh).map((cid) => [cid,
+        Object.fromEntries(sh[cid].columns.map((c) => { const v = e.questionMarks?.[cid]?.[c.key]; return [c.key, v == null ? "" : String(v)]; }))]))])));
       const activeIds = json.configuration.components.filter((c) => c.isActive).map((c) => c.id);
       setMarksDraft(
         Object.fromEntries(
@@ -162,33 +173,67 @@ export default function InternalExamPage() {
     setMarksDraft((prev) => ({ ...prev, [studentId]: { ...prev[studentId], [componentId]: value } }));
   }
 
+  function handleQuestionChange(studentId: string, componentId: string, key: string, value: string) {
+    setQuestionDraft((prev) => ({ ...prev, [studentId]: { ...prev[studentId], [componentId]: { ...prev[studentId]?.[componentId], [key]: value } } }));
+  }
+  const numbers = (row: Record<string, string> | undefined) =>
+    Object.fromEntries(Object.entries(row ?? {}).map(([k, v]) => [k, v.trim() === "" ? null : Number(v)]));
+
+  /** A component's marks for a student: typed, or worked out from the paper's questions (scaled to its max). */
+  function componentValue(studentId: string, componentId: string, max: number): number | null {
+    const sheet = sheets[componentId];
+    if (!sheet) { const raw = marksDraft[studentId]?.[componentId]; return raw?.trim() ? Number(raw) : null; }
+    const total = paperTotal(sheet, numbers(questionDraft[studentId]?.[componentId]));
+    return total == null ? null : scaleToComponent(total, sheet.paperMax, max);
+  }
+
   function studentTotal(studentId: string): number {
-    const row = marksDraft[studentId] ?? {};
-    return activeComponents.reduce((sum, c) => sum + (Number(row[c.id]) || 0), 0);
+    return activeComponents.reduce((sum, c) => sum + (componentValue(studentId, c.id, c.maxMarks) ?? 0), 0);
   }
 
   function isRowComplete(studentId: string): boolean {
-    const row = marksDraft[studentId] ?? {};
-    return activeComponents.length > 0 && activeComponents.every((c) => row[c.id]?.trim());
+    return activeComponents.length > 0 && activeComponents.every((c) => componentValue(studentId, c.id, c.maxMarks) != null);
   }
 
   const enteredCount = batch ? batch.entries.filter((e) => isRowComplete(e.studentId)).length : 0;
   const allEntered = !!batch && batch.totalStudents > 0 && enteredCount === batch.totalStudents;
   const isReadOnly = batch?.status === "SUBMITTED";
 
+  const entriesToSend = () => (batch?.entries ?? []).map((e) => ({
+    studentId: e.studentId,
+    componentMarks: Object.fromEntries(
+      activeComponents.filter((c) => !sheets[c.id]).map((c) => {
+        const raw = marksDraft[e.studentId]?.[c.id];
+        return [c.id, raw?.trim() ? Number(raw) : null];
+      })
+    ),
+    ...(Object.keys(sheets).length ? { questionMarks: Object.fromEntries(Object.keys(sheets).map((cid) => [cid, numbers(questionDraft[e.studentId]?.[cid])])) } : {}),
+  }));
+
+  /** Keep what is entered so far (nothing is submitted). */
+  async function handleSaveDraft() {
+    if (!batch) return;
+    setIsSaving(true);
+    try {
+      const res = await fetch(`/api/college/internal-exam-marks/${batch.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entries: entriesToSend() }),
+      });
+      const json = (await res.json()) as { batch?: InternalExamMarksBatch; error?: string };
+      if (!res.ok || !json.batch) throw new Error(json.error ?? "Failed to save");
+      setBatch(json.batch);
+      toast({ variant: "success", title: "Marks saved as a draft" });
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save" });
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   async function handleSubmit() {
     if (!batch || !allEntered) return;
     setIsSubmitting(true);
     try {
-      const entries = batch.entries.map((e) => ({
-        studentId: e.studentId,
-        componentMarks: Object.fromEntries(
-          activeComponents.map((c) => {
-            const raw = marksDraft[e.studentId]?.[c.id];
-            return [c.id, raw?.trim() ? Number(raw) : null];
-          })
-        ),
-      }));
+      const entries = entriesToSend();
       const res = await fetch(`/api/college/internal-exam-marks/${batch.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -328,7 +373,15 @@ export default function InternalExamPage() {
                           <th className="px-4 py-3">S.No</th>
                           <th className="px-4 py-3">Regd. No.</th>
                           <th className="px-4 py-3">Student Name</th>
-                          {activeComponents.map((c) => (
+                          {activeComponents.map((c) => sheets[c.id] ? (
+                            <th key={c.id} className="px-2 py-3" colSpan={sheets[c.id].columns.length + 1}>
+                              {c.name} (Max {c.maxMarks}) - from the question paper (out of {sheets[c.id].paperMax})
+                              <div className="mt-1 flex gap-1 normal-case">
+                                {sheets[c.id].columns.map((col) => <span key={col.key} className="w-14 text-center" title={`Max ${col.max}`}>{col.label}<br /><span className="font-normal">/{col.max}</span></span>)}
+                                <span className="w-14 text-center">= /{c.maxMarks}</span>
+                              </div>
+                            </th>
+                          ) : (
                             <th key={c.id} className="px-4 py-3">{c.name} (Max {c.maxMarks})</th>
                           ))}
                           <th className="px-4 py-3">Total (Out of {configuration.internalMaxMarks})</th>
@@ -340,7 +393,19 @@ export default function InternalExamPage() {
                             <td className="px-4 py-2.5 text-muted-foreground">{i + 1}</td>
                             <td className="px-4 py-2.5">{entry.rollNumber}</td>
                             <td className="px-4 py-2.5 font-medium text-foreground">{entry.name}</td>
-                            {activeComponents.map((c) => (
+                            {activeComponents.map((c) => sheets[c.id] ? (
+                              <td key={c.id} className="px-2 py-2.5" colSpan={sheets[c.id].columns.length + 1}>
+                                <div className="flex items-center gap-1">
+                                  {sheets[c.id].columns.map((col) => (
+                                    <Input key={col.key} type="number" min={0} max={col.max} step={0.5} className="h-8 w-14 px-1.5 text-center" disabled={isReadOnly}
+                                      aria-label={`${col.label} marks for ${entry.name}`}
+                                      value={questionDraft[entry.studentId]?.[c.id]?.[col.key] ?? ""}
+                                      onChange={(e) => handleQuestionChange(entry.studentId, c.id, col.key, e.target.value)} />
+                                  ))}
+                                  <span className="w-14 text-center font-semibold">{componentValue(entry.studentId, c.id, c.maxMarks) ?? "-"}</span>
+                                </div>
+                              </td>
+                            ) : (
                               <td key={c.id} className="px-4 py-2.5">
                                 <Input
                                   type="number"
@@ -377,6 +442,9 @@ export default function InternalExamPage() {
                     <p className="text-sm font-medium shrink-0">
                       You have entered marks for {enteredCount} out of {batch.totalStudents} students
                     </p>
+                    {!isReadOnly && (
+                      <Button variant="outline" onClick={() => void handleSaveDraft()} loading={isSaving} disabled={isSubmitting} className="shrink-0">Save draft</Button>
+                    )}
                     {!isReadOnly && (
                       <Button
                         onClick={() => void handleSubmit()}

@@ -191,8 +191,11 @@ export async function usedOutcomeRefs(db: Db, collegeId: string, outcomesId: str
   for (const b of banks.docs) {
     owners.add(String(b.get("ownerFacultyId")));
     for (const q of await loadQuestions(db, collegeId, b.id)) {
-      units.add(q.unit);
-      for (const p of q.parts) for (const c of p.cos) cos.add(c);
+      // A question paper's question carries its COs (and maybe a unit) itself, not in parts.
+      const paper = q as unknown as { unit?: number; cos?: string[] };
+      if (typeof q.unit === "number") units.add(q.unit);
+      for (const p of q.parts ?? []) for (const c of p.cos) cos.add(c);
+      for (const c of paper.cos ?? []) cos.add(c);
     }
   }
   return { units, cos, owners };

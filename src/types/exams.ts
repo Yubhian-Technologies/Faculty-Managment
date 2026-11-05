@@ -16,6 +16,12 @@ export interface InternalExamMarkEntry {
   name: string;
   // Keyed by ExamConfiguration component id — absent/undefined until entered.
   componentMarks: Record<string, number | null>;
+  /**
+   * Components taken from a Mid paper (ExamConfigComponent.midNumber): the marks per question (descriptive) / per
+   * part (objective), keyed by component id then question key ("A" = objective part A, "B3" = Part B question 3).
+   * The component's own total in `componentMarks` is worked out from these by the server.
+   */
+  questionMarks?: Record<string, Record<string, number | null>>;
 }
 
 export interface InternalExamMarksBatch {

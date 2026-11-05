@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavLabels } from "@/hooks/useNavLabels";
 import { CollegeLogo } from "@/components/shared/CollegeLogo";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -54,6 +55,7 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
   const { nameFor } = useFacultyDisplayNames();
   const { logout } = useAuth();
   const pathname = usePathname();
+  const navLabel = useNavLabels();
   const { hasInterviews } = useAssignedInterviews();
   const { coordinatorBatchId } = useAssignedCoordinator();
   const { hideSubDepartmentsLink } = useIsSubDepartmentHod();
@@ -191,8 +193,8 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
                         <Link
                           key={item.href}
                           href={item.href}
-                          title={collapsed ? item.label : undefined}
-                          aria-label={collapsed ? item.label : undefined}
+                          title={collapsed ? navLabel(item.href, item.label) : undefined}
+                          aria-label={collapsed ? navLabel(item.href, item.label) : undefined}
                           className={cn(
                             "relative flex items-center rounded-lg text-sm font-medium transition-all duration-200",
                             collapsed ? "justify-center h-10 w-full" : "gap-3 px-3 py-2.5",
@@ -202,7 +204,7 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
                           )}
                         >
                           <NavIcon name={item.iconName} className="h-4 w-4 shrink-0" />
-                          {!collapsed && <span className="truncate">{item.label}</span>}
+                          {!collapsed && <span className="truncate">{navLabel(item.href, item.label)}</span>}
                           {showBadge && (collapsed ? (
                             <span className="absolute top-1 right-1 h-2.5 w-2.5 rounded-full bg-red-500" />
                           ) : (

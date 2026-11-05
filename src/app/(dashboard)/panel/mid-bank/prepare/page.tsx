@@ -45,13 +45,13 @@ function PrepareMidBank() {
   return (
     <div className="max-w-6xl space-y-6">
       <PageHeader
-        title={data ? `${data.subject.name} - Mid ${data.deadline.midNumber}` : "Prepare question bank"}
-        description={data ? `${data.subject.code} · ${data.branch} · four steps: sections, course outcomes, CO-PO mapping, then the questions.` : undefined}
-        actions={<Button asChild variant="ghost" size="sm"><Link href="/panel/mid-bank"><ArrowLeft className="mr-1.5 h-4 w-4" />Question Bank</Link></Button>}
+        title={data ? `${data.subject.name} - Mid ${data.deadline.midNumber}` : "Prepare for the Mid"}
+        description={data ? `${data.subject.code} · ${data.branch} · ${data.midPreparation === "PAPERS" ? "pick the sections, then write the question papers" : "sections, then the setup, then the questions"}.` : undefined}
+        actions={<Button asChild variant="ghost" size="sm"><Link href="/panel/mid-bank"><ArrowLeft className="mr-1.5 h-4 w-4" />All subjects</Link></Button>}
       />
       {!complete ? (
         <p className="rounded-lg border bg-muted/30 p-4 text-sm" role="status">
-          This link doesn&rsquo;t say which question bank to open. <Link href="/panel/mid-bank" className="font-medium text-primary underline">Go to Question Bank</Link> and pick the subject there.
+          This link doesn&rsquo;t say which subject to open. <Link href="/panel/mid-bank" className="font-medium text-primary underline">Go to the subjects</Link> and pick the subject there.
         </p>
       ) : error ? <p className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive" role="alert">{error}</p>
         : !data ? <div className="h-96 animate-pulse rounded-lg bg-muted" />

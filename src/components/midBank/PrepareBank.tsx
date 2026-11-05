@@ -14,8 +14,10 @@ import { cn } from "@/lib/utils";
 import { LIMITS, MAPPING_TARGETS, PROGRAM_OUTCOMES } from "@/lib/midBank/constants";
 import { daysLeft, deadlineLabel } from "@/lib/midBank/deadline";
 import { allowedFormats, bankFormatText } from "@/lib/midBank/validateQuestion";
+import { patternMax } from "@/lib/midPapers/pattern";
 import type { MidBankPrepare } from "@/lib/midBank/clientTypes";
 import type { OutcomeMapping } from "@/types";
+import { outcomeSwitches } from "@/lib/midBank/outcomeSwitches";
 
 // The question bank setup as a 4-step wizard, the subject card and the steps on
 // the left: 1. Sections (own, and optionally colleagues' sections of the subject
@@ -103,6 +105,13 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
 }) {
   const router = useRouter();
   const { subject, outcomes, rules, setup, deadline, sections, branch, myBankId, canEditOutcomes } = data;
+  // The college's academic tags: no COs = the setup is the units only; no mapping = no CO-PO step.
+  const sw = outcomeSwitches(data.outcomeSwitches);
+  const lastStep: PrepareStep = sw.poMapping ? 3 : 2;
+  // A college that prepares question papers: the same setup, then the papers instead of a bank.
+  const papers = data.midPreparation === "PAPERS";
+  const what = papers ? "question papers" : "question bank";
+  const pattern = data.pattern ?? null;
   const [draft, setDraft] = useState<Draft>(() => fromData(data));
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
@@ -120,7 +129,7 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
       method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         deadlineId: deadline.id, subjectId: subject.id, branch, baseVersion: outcomes?.version ?? 0,
-        units: draft.units.map((title, i) => ({ title, syllabus: draft.syllabi[i] ?? "" })), cos: draft.cos.map((statement) => ({ statement })), mapping: draft.mapping,
+        units: draft.units.map((title, i) => ({ title, syllabus: draft.syllabi[i] ?? "" })), cos: sw.cos ? draft.cos.map((statement) => ({ statement })) : [], mapping: sw.poMapping ? draft.mapping : {},
       }),
     });
     const json = (await res.json()) as { error?: string; errors?: string[] };
@@ -143,12 +152,12 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
           toast({ variant: "success", title: "Sections saved" });
         }
         onStep(2);
-      } else if (step === 2) {
+      } else if (step === 2 && lastStep === 3) {
         if (!readOnly && !(await putOutcomes())) return;
         if (!readOnly) { toast({ variant: "success", title: "Course Outcomes saved" }); onChanged(); }
         onStep(3);
       } else {
-        const unmapped = draft.cos.map((_, i) => `CO${i + 1}`).filter((co) => (draft.mapping[co] ?? []).length === 0);
+        const unmapped = sw.poMapping ? draft.cos.map((_, i) => `CO${i + 1}`).filter((co) => (draft.mapping[co] ?? []).length === 0) : [];
         if (unmapped.length) { setErrors(unmapped.map((co) => `${co} needs at least one PO or PSO`)); return; }
         if (!readOnly && !(await putOutcomes())) return;
         if (myBankId) { router.push(bankHref!); return; }
@@ -158,8 +167,8 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
           body: JSON.stringify({ deadlineId: deadline.id, subjectId: subject.id, branch, sectionIds: [...picked] }),
         });
         const json = (await res.json()) as { error?: string; bank?: { id: string } };
-        if (!res.ok || !json.bank) { setErrors([json.error ?? "Could not start the question bank"]); onChanged(); return; }
-        toast({ variant: "success", title: "Question bank started" });
+        if (!res.ok || !json.bank) { setErrors([json.error ?? `Could not start the ${what}`]); onChanged(); return; }
+        toast({ variant: "success", title: papers ? "Question papers started" : "Question bank started" });
         router.push(`/panel/mid-bank/${encodeURIComponent(json.bank.id)}`);
       }
     } catch {
@@ -171,9 +180,9 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
 
   const steps: { n: 1 | 2 | 3 | 4; label: string; hint: string; done: boolean }[] = [
     { n: 1, label: "Sections", hint: "Who this bank is for", done: pickedMine },
-    { n: 2, label: "Course Outcomes", hint: "Units and COs", done: Boolean(outcomes) },
-    { n: 3, label: "CO-PO Mapping", hint: "POs / PSOs per CO", done: Boolean(outcomes) && !setup.issues.some((i) => i.code === "MAPPING_MISSING" || i.code === "NO_OUTCOMES") },
-    { n: 4, label: "Question Bank", hint: "Write the questions", done: Boolean(myBankId) },
+    { n: 2, label: sw.cos ? "Course Outcomes" : "Units", hint: sw.cos ? "Units and COs" : "The subject's units", done: Boolean(outcomes) },
+    ...(sw.poMapping ? [{ n: 3 as const, label: "CO-PO Mapping", hint: "POs / PSOs per CO", done: Boolean(outcomes) && !setup.issues.some((i) => i.code === "MAPPING_MISSING" || i.code === "NO_OUTCOMES") }] : []),
+    { n: 4, label: papers ? "Question Papers" : "Question Bank", hint: papers ? `Write ${pattern?.setsPerFaculty ?? ""} question paper${pattern?.setsPerFaculty === 1 ? "" : "s"}` : "Write the questions", done: Boolean(myBankId) },
   ];
   const left = daysLeft(deadline.deadline);
   const pickedCount = sections.filter((s) => picked.has(s.sectionId)).length;
@@ -246,13 +255,17 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
         {examCellIssues.length > 0 && (
           <p className="flex gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />{examCellIssues[0].message}</p>
         )}
-        {rules && examCellIssues.length === 0 && (
+        {(papers ? pattern : rules) && examCellIssues.length === 0 && (
           <div className="grid gap-2 sm:grid-cols-3">
-            {[
+            {(papers && pattern ? [
+              { icon: Layers, label: "Question papers", value: `${pattern.setsPerFaculty} to write` },
+              { icon: FileText, label: "Each paper", value: `${patternMax(pattern)} marks · ${pattern.durationMinutes} min` },
+              { icon: ListChecks, label: "Parts", value: pattern.parts.map((p) => `${p.label}: ${p.questions} x ${p.marksEach}`).join(" · ") },
+            ] : rules ? [
               { icon: Layers, label: `Mid ${deadline.midNumber} covers`, value: `Units ${setup.units.join(", ")}` },
               { icon: FileText, label: "Question format", value: bankFormatText(allowedFormats(rules), rules.marks) },
-              { icon: ListChecks, label: "Each unit", value: "10 questions · L2, L3, L4 at least 3 each" },
-            ].map(({ icon: Icon, label, value }) => (
+              { icon: ListChecks, label: "Each unit", value: sw.bloom ? "10 questions · L2, L3, L4 at least 3 each" : "10 questions" },
+            ] : []).map(({ icon: Icon, label, value }) => (
               <div key={label} className="flex items-start gap-2.5 rounded-xl border bg-card p-3">
                 <Icon className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                 <div className="min-w-0"><p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p><p className="text-sm font-medium">{value}</p></div>
@@ -265,7 +278,7 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
           <Card className="rounded-2xl">
             <CardContent className="space-y-5 p-6">
               <StepHeading icon={Users} title="Sections">
-                Tick the sections this question bank is for: yours, and if you prepare it for them too, colleagues&rsquo; sections of {subject.name} in {branch}. They are told, and can only view it.
+                Tick the sections {papers ? "these question papers are" : "this question bank is"} for: yours, and if you prepare it for them too, colleagues&rsquo; sections of {subject.name} in {branch}. They are told, and can only view it.
               </StepHeading>
               <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <span>{sections.length} section{sections.length === 1 ? "" : "s"} teach this subject in {branch}</span>
@@ -376,8 +389,8 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
                 </ol>
               </section>
 
-              {/* COs */}
-              <section aria-labelledby="cos-h" className="space-y-3">
+              {/* COs (a college without Course Outcomes sets up units only) */}
+              {sw.cos && <section aria-labelledby="cos-h" className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3">
                   <div>
                     <h3 id="cos-h" className="text-base font-semibold">Course outcomes (COs)</h3>
@@ -407,7 +420,7 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
                     );
                   })}
                 </ol>
-              </section>
+              </section>}
             </CardContent>
           </Card>
         )}
@@ -453,10 +466,10 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
 
         <div className="flex items-center justify-between gap-2 rounded-2xl border bg-card p-3 shadow-sm">
           <Button variant="ghost" disabled={step === 1 || busy} onClick={() => onStep((step - 1) as PrepareStep)}>Back</Button>
-          <span className="hidden text-xs text-muted-foreground sm:block">Step {step} of 4</span>
-          {!(locked && step === 3) && (
+          <span className="hidden text-xs text-muted-foreground sm:block">Step {steps.findIndex((x) => x.n === step) + 1} of {steps.length}</span>
+          {!(locked && step === lastStep) && (
             <Button size="lg" onClick={() => void next()} loading={busy} disabled={step === 1 && !pickedMine}>
-              {step === 3 ? (myBankId ? "Save & open the question bank" : "Save & start the question bank") : "Save & Next"}
+              {step === lastStep ? (myBankId ? `Save & open the ${what}` : `Save & start the ${what}`) : "Save & Next"}
             </Button>
           )}
         </div>

@@ -21,6 +21,12 @@ import type { MidBankDeadline } from "@/types";
 type Row = MidBankDeadline & { locked: boolean };
 
 export function QuestionBankOverview({ base, examCell }: { base: string; examCell: boolean }) {
+  // How the college prepares Mids - only the wording differs.
+  const [papers, setPapers] = useState(false);
+  useEffect(() => {
+    fetch("/api/college/exam-mid-settings").then((r) => (r.ok ? r.json() : null))
+      .then((d: { settings?: { midPreparation?: string } } | null) => setPapers(d?.settings?.midPreparation === "PAPERS")).catch(() => undefined);
+  }, []);
   const [rows, setRows] = useState<Row[] | null>(null);
   const [summaries, setSummaries] = useState<Record<string, DeadlineProgress | "error">>({});
   const [error, setError] = useState("");
@@ -50,8 +56,10 @@ export function QuestionBankOverview({ base, examCell }: { base: string; examCel
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Mid Question Bank"
-        description={examCell ? "Question bank deadlines and how far the faculty have got - open one to see every branch, subject and section." : "Your branches' question banks - progress, who is preparing each, and the banks waiting for your approval."}
+        title={papers ? "Mid Question Papers" : "Mid Question Bank"}
+        description={examCell
+          ? `${papers ? "Question paper" : "Question bank"} deadlines and how far the faculty have got - open one to see every branch, subject and section.`
+          : papers ? "Your branches' question papers - progress, who is preparing each, and the papers waiting for your approval." : "Your branches' question banks - progress, who is preparing each, and the banks waiting for your approval."}
         actions={!examCell ? undefined :
           <div className="flex flex-wrap gap-2">
             <Button asChild variant="outline" size="sm"><Link href="/exam-cell/mid-configuration"><Settings2 className="mr-1.5 h-4 w-4" />Question rules</Link></Button>
@@ -68,8 +76,8 @@ export function QuestionBankOverview({ base, examCell }: { base: string; examCel
         <Card className="rounded-2xl">
           <CardContent className="flex flex-col items-center gap-3 p-10 text-center">
             <span className="grid h-12 w-12 place-items-center rounded-full bg-primary/10 text-primary"><BookOpenCheck className="h-6 w-6" /></span>
-            <p className="font-semibold">No question bank deadlines yet</p>
-            <p className="max-w-md text-sm text-muted-foreground">{examCell ? <>Set the question rules for each course in Mid Configuration, then publish a deadline on Mid Timings &amp; Dates - the faculty teaching that semester are notified.</> : "The Exam Cell hasn't published a question bank deadline yet."}</p>
+            <p className="font-semibold">No {papers ? "question paper" : "question bank"} deadlines yet</p>
+            <p className="max-w-md text-sm text-muted-foreground">{examCell ? <>Set the question rules for each course in Mid Configuration, then publish a deadline on Mid Timings &amp; Dates - the faculty teaching that semester are notified.</> : `The Exam Cell hasn't published a ${papers ? "question paper" : "question bank"} deadline yet.`}</p>
             {examCell && <Button asChild size="sm"><Link href="/exam-cell/mid-timings">Publish a deadline</Link></Button>}
           </CardContent>
         </Card>
@@ -113,13 +121,13 @@ export function QuestionBankOverview({ base, examCell }: { base: string; examCel
                         ))}
                       </div>
                       <div className="mt-4">
-                        <div className="mb-1 flex justify-between text-xs"><span className="text-muted-foreground">Overall - {s.ready} of {s.sections} sections have a complete bank</span><span className="font-semibold">{pct}%</span></div>
+                        <div className="mb-1 flex justify-between text-xs"><span className="text-muted-foreground">Overall - {s.ready} of {s.sections} sections have {papers ? "complete question papers" : "a complete bank"}</span><span className="font-semibold">{pct}%</span></div>
                         <div className="h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Overall progress">
                           <div className={cn("h-full rounded-full", pct === 100 ? "bg-emerald-500" : "bg-primary")} style={{ width: `${pct}%` }} />
                         </div>
                       </div>
                       {s.sections > s.covered && <p className="mt-3 text-xs text-amber-700">{s.sections - s.covered} section{s.sections - s.covered === 1 ? "" : "s"} not in any bank yet</p>}
-                      {s.banksSubmitted > 0 && <p className="mt-1 text-xs font-medium text-amber-800">{s.banksSubmitted} bank{s.banksSubmitted === 1 ? "" : "s"} waiting for {examCell ? "the HOD's" : "your"} approval</p>}
+                      {s.banksSubmitted > 0 && <p className="mt-1 text-xs font-medium text-amber-800">{s.banksSubmitted} {papers ? "set" : "bank"}{s.banksSubmitted === 1 ? "" : "s"} waiting for {examCell ? "the HOD's" : "your"} approval</p>}
                     </>
                   )}
                   <p className="mt-4 flex items-center gap-1 text-sm font-medium text-primary">View progress<ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" /></p>

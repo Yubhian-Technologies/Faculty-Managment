@@ -1,6 +1,7 @@
 import { EXAM_HEADER_STYLE, examHeaderHTML } from "@/lib/pdf/examHeader";
 import { renderMathHtml } from "@/lib/midBank/renderMath";
 import { derivePoPso } from "@/lib/midBank/outcomes";
+import { outcomeSwitches } from "@/lib/midBank/outcomeSwitches";
 import { QUESTIONS_PER_UNIT } from "@/lib/midBank/constants";
 import { allowedFormats, formatOf, partLetter, partMarks } from "@/lib/midBank/validateQuestion";
 import type { MidQuestion, MidQuestionBank, SubjectOutcomes } from "@/types";
@@ -45,7 +46,7 @@ export interface MidBankPdfData {
   college: { name: string; affiliation?: string; address?: string; logoUrl?: string; academicYear?: string };
   subject: { name: string; code: string; courseName: string; regulation: string; year: number; semester: number | null; department: string };
   facultyName: string;
-  bank: Pick<MidQuestionBank, "midNumber" | "units" | "format" | "marks">;
+  bank: Pick<MidQuestionBank, "midNumber" | "units" | "format" | "marks" | "outcomes">;
   outcomes: Pick<SubjectOutcomes, "units" | "cos" | "mapping">;
   questions: MidQuestion[];
   katexCss: string;
@@ -55,6 +56,7 @@ export interface MidBankPdfData {
 
 export function getMidQuestionBankHTML(d: MidBankPdfData): string {
   const byId = new Map(d.questions.map((q) => [q.id, q]));
+  const sw = outcomeSwitches(d.bank.outcomes);
   const unitTitle = (u: number) => d.outcomes.units.find((x) => x.no === u)?.title ?? "";
 
   const unitTables = d.bank.units.map((u) => {
@@ -67,16 +69,16 @@ export function getMidQuestionBankHTML(d: MidBankPdfData): string {
         <td class="num">${slot}</td>
         <td>${cell((p, i) => `${f !== "SINGLE" ? `<b>(${partLetter(i)})</b> ` : ""}${renderMathHtml(p.text, d.formula)}${p.imageUrl ? `<img class="img" src="${esc(p.imageUrl)}" alt="" />${p.imageCaption ? `<div class="cap">${esc(p.imageCaption)}</div>` : ""}` : ""}`)}</td>
         <td class="narrow">${cell((p, i) => String(partMarks(p, i, f, d.bank.marks)))}</td>
-        <td class="narrow">${cell((p) => esc(p.cos.join(", ")))}</td>
-        <td class="po">${cell((p) => esc(derivePoPso(p.cos, d.outcomes.mapping).join(", ")))}</td>
-        <td class="narrow">${cell((p) => esc(p.bloom))}</td>
+        ${sw.cos ? `<td class="narrow">${cell((p) => esc(p.cos.join(", ")))}</td>` : ""}
+        ${sw.poMapping ? `<td class="po">${cell((p) => esc(derivePoPso(p.cos, d.outcomes.mapping).join(", ")))}</td>` : ""}
+        ${sw.bloom ? `<td class="narrow">${cell((p) => esc(p.bloom))}</td>` : ""}
       </tr>`;
     }).join("");
     return `<div class="section-title">Unit ${u}${unitTitle(u) ? ` - ${esc(unitTitle(u))}` : ""}</div>
-      <table><thead><tr><th class="num">Q</th><th>Question</th><th class="narrow">Marks</th><th class="narrow">CO</th><th class="po">PO / PSO</th><th class="narrow">Bloom</th></tr></thead><tbody>${rows}</tbody></table>`;
+      <table><thead><tr><th class="num">Q</th><th>Question</th><th class="narrow">Marks</th>${sw.cos ? `<th class="narrow">CO</th>` : ""}${sw.poMapping ? `<th class="po">PO / PSO</th>` : ""}${sw.bloom ? `<th class="narrow">Bloom</th>` : ""}</tr></thead><tbody>${rows}</tbody></table>`;
   }).join("");
 
-  const coTable = `<div class="section-title">Course Outcomes</div>
+  const coTable = !sw.cos ? "" : `<div class="section-title">Course Outcomes</div>
     <table class="cos"><tbody>${d.outcomes.cos.map((c) => `<tr><td class="narrow"><b>${esc(c.id)}</b></td><td>${esc(c.statement)}</td></tr>`).join("")}</tbody></table>`;
 
   const s = d.subject;

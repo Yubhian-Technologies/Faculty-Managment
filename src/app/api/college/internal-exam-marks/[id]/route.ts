@@ -2,6 +2,8 @@ export const dynamic = "force-dynamic";
 
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
+import { questionSheetsFor } from "@/lib/exams/questionMarksServer";
+import { cleanQuestionValues, paperTotal, questionMarksError, scaleToComponent } from "@/lib/exams/questionMarks";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { countEntered, resolveExamConfigForBatch } from "@/lib/exams/internalExamMarks";
@@ -52,7 +54,7 @@ export async function PATCH(
     const session = await requireCollegeMember("PANEL_MEMBER", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
     const isPrincipalTier = PRINCIPAL_TIER_ROLES.includes(session.role);
     const body = (await readJsonBody(request)) as {
-      entries?: { studentId: string; componentMarks: Record<string, number | null> }[];
+      entries?: { studentId: string; componentMarks: Record<string, number | null>; questionMarks?: Record<string, unknown> }[];
       submit?: boolean;
     };
 
@@ -106,6 +108,24 @@ export async function PATCH(
     // marks; a faculty member filling in their own draft has no prior value
     // worth auditing.
     const changes: { studentId: string; studentName: string; componentId: string; componentName: string; from: number | null; to: number | null }[] = [];
+    // A component taken from a Mid question paper: the marks per question are checked against the paper and the
+    // component's total is worked out here (never trusted from the client).
+    const sheets = body.entries?.some((e) => e.questionMarks) ? await questionSheetsFor(db, session.collegeId, existing, config) : {};
+    const questionUpdates = new Map<string, Record<string, Record<string, number | null>>>();
+    for (const e of body.entries ?? []) {
+      if (!e.questionMarks) continue;
+      for (const [cid, raw] of Object.entries(e.questionMarks)) {
+        const sheet = sheets[cid];
+        const comp = componentsById.get(cid);
+        if (!sheet || !comp) continue;
+        const values = cleanQuestionValues(sheet, raw);
+        const bad = questionMarksError(sheet, values);
+        if (bad) return NextResponse.json({ error: `${comp.name}: ${bad}` }, { status: 400 });
+        const total = paperTotal(sheet, values);
+        e.componentMarks = { ...(e.componentMarks ?? {}), [cid]: total == null ? null : scaleToComponent(total, sheet.paperMax, comp.maxMarks) };
+        questionUpdates.set(e.studentId, { ...(questionUpdates.get(e.studentId) ?? {}), [cid]: values });
+      }
+    }
     if (body.entries) {
       const updates = new Map(body.entries.map((e) => [e.studentId, e.componentMarks]));
       for (const componentMarks of updates.values()) {
@@ -142,7 +162,8 @@ export async function PATCH(
           }
           merged[componentId] = marks;
         }
-        return { ...e, componentMarks: merged };
+        const q = questionUpdates.get(e.studentId);
+        return { ...e, componentMarks: merged, ...(q ? { questionMarks: { ...(e.questionMarks ?? {}), ...q } } : {}) };
       });
     }
     const enteredCount = countEntered(entries, config);

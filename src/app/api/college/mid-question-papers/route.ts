@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { outcomeSwitches } from "@/lib/midBank/outcomeSwitches";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -59,7 +60,8 @@ export async function POST(request: Request) {
     const timetables = tts.docs.map((d) => d.data() as MidTimetable);
     const onDay = timetables.flatMap((t) => t.slots.filter((s) => s.date === date).map((s) => ({ ...s, branch: t.branch, sessions: t.sessions })));
     if (onDay.length === 0) return NextResponse.json({ error: "No exam is on that date in this Mid timetable" }, { status: 400 });
-    const banks = banksSnap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<MidQuestionBank, "id">) }));
+    // Question banks only - a college's question paper sets are chosen, not picked from (mid-paper-choices).
+    const banks = banksSnap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<MidQuestionBank, "id">) })).filter((b) => b.kind !== "PAPERS");
     const codeOf = new Map(depts.docs.map((d) => [(d.data() as Department).name, (d.data() as Department).code]));
     const session1 = plan.sessions.find((s) => s.id === onDay[0].sessionId) ?? plan.sessions[0];
     const semsOfYear = [...new Set((timing?.semesters ?? []).map((s) => s.semester))].sort((a, b) => a - b);
@@ -97,7 +99,9 @@ export async function POST(request: Request) {
         if (error) { papers.push({ ...b, key, regulation: subject?.regulation ?? "", error }); continue; }
         const allowed = allowedFormats(bank);
         const lite = (q: (typeof questions)[number]): PaperQuestion => ({ id: q.id, unit: q.unit, slot: q.slot, format: formatOf(q, allowed), parts: q.parts });
-        const r = pickPaper(questions, slots);
+        // A bank of a college without Bloom's levels is picked by unit only.
+        const sw = outcomeSwitches(bank.outcomes);
+        const r = pickPaper(questions, slots, Math.random, sw.bloom);
         const ids = new Set(Object.values(r.candidates).flat().map((q) => q.id));
         papers.push({
           ...b, key, regulation: subject?.regulation ?? "", slots,
@@ -105,9 +109,9 @@ export async function POST(request: Request) {
           candidates: Object.fromEntries(Object.entries(r.candidates).map(([no, list]) => [no, list.map((q) => q.id)])),
           questions: Object.fromEntries(questions.filter((q) => ids.has(q.id)).map((q) => [q.id, lite(q)])),
           unitTitles: Object.fromEntries((outcomes?.units ?? []).map((u) => [String(u.no), u.title])),
-          cos: outcomes?.cos ?? [], mapping: outcomes?.mapping ?? {},
+          cos: sw.cos ? outcomes?.cos ?? [] : [], mapping: sw.poMapping ? outcomes?.mapping ?? {} : {}, outcomes: sw,
           maxMarks: template.maxMarks ?? bank.marks * 3, instruction: template.instruction || DEFAULT_INSTRUCTION, regdBoxes: template.regdBoxes ?? DEFAULT_REGD_BOXES,
-          ...(r.shortages.length ? { error: "Not enough questions of the right unit and level", shortages: r.shortages } : {}),
+          ...(r.shortages.length ? { error: sw.bloom ? "Not enough questions of the right unit and level" : "Not enough questions of the right unit", shortages: r.shortages } : {}),
         });
       }
     }

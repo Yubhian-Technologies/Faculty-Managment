@@ -79,17 +79,25 @@ export function paperSlots(midUnits: number[], template: { sequences: Record<str
  * level, at random. `candidates[no]` lists every question that could fill the
  * slot (for Swap). `shortages` says what a bank lacks (nothing picked then).
  */
-export function pickPaper<Q extends Pick<MidQuestion, "id" | "unit" | "state" | "parts">>(questions: Q[], slots: PaperSlot[], random: () => number = Math.random): { picked: Q[]; candidates: Record<number, Q[]>; shortages: string[] } {
+export function pickPaper<Q extends Pick<MidQuestion, "id" | "unit" | "state" | "parts">>(
+  questions: Q[], slots: PaperSlot[], random: () => number = Math.random,
+  /** false = the college doesn't use Bloom's levels: any complete question of the slot's unit fits. */
+  byLevel = true,
+): { picked: Q[]; candidates: Record<number, Q[]>; shortages: string[] } {
   const usable = questions.filter((q) => q.state === "COMPLETE");
+  const fits = (q: Q, unit: number, level: string) => q.unit === unit && (!byLevel || questionLevel(q) === level);
   const candidates: Record<number, Q[]> = {};
-  for (const s of slots) candidates[s.no] = usable.filter((q) => q.unit === s.unit && questionLevel(q) === s.level);
+  for (const s of slots) candidates[s.no] = usable.filter((q) => fits(q, s.unit, s.level));
   const shortages: string[] = [];
   const need = new Map<string, number>();
-  for (const s of slots) need.set(`${s.unit}|${s.level}`, (need.get(`${s.unit}|${s.level}`) ?? 0) + 1);
+  const keyOf = (s: PaperSlot) => (byLevel ? `${s.unit}|${s.level}` : `${s.unit}|`);
+  for (const s of slots) need.set(keyOf(s), (need.get(keyOf(s)) ?? 0) + 1);
   for (const [k, n] of need) {
     const [unit, level] = k.split("|");
-    const have = usable.filter((q) => q.unit === Number(unit) && questionLevel(q) === level).length;
-    if (have < n) shortages.push(`Unit ${unit} has ${have} complete ${level} question${have === 1 ? "" : "s"} with every part at ${level}; the paper needs ${n}`);
+    const have = usable.filter((q) => fits(q, Number(unit), level)).length;
+    if (have < n) shortages.push(byLevel
+      ? `Unit ${unit} has ${have} complete ${level} question${have === 1 ? "" : "s"} with every part at ${level}; the paper needs ${n}`
+      : `Unit ${unit} has ${have} complete question${have === 1 ? "" : "s"}; the paper needs ${n}`);
   }
   if (shortages.length) return { picked: [], candidates, shortages };
   const used = new Set<string>();

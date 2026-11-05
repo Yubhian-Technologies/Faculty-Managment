@@ -1,14 +1,16 @@
 import type { BloomLevel, MidQuestion, MidUnitStatus } from "@/types/midQuestionBank";
+import type { MidOutcomeSwitches } from "@/types/examMidSchedule";
 import { BLOOM_LEVELS, BLOOM_MIN_PER_UNIT, QUESTIONS_PER_UNIT } from "./constants";
+import { ALL_OUTCOMES_ON } from "./outcomeSwitches";
 
 // Unit progress of a bank. A unit is COMPLETE when all QUESTIONS_PER_UNIT
 // slots hold a complete question AND every Bloom level L2/L3/L4 is used at
-// least BLOOM_MIN_PER_UNIT times among those questions' parts. Units open in
+// least BLOOM_MIN_PER_UNIT times among those questions' parts (only for a college that uses Bloom's levels). Units open in
 // the Mid's order: a unit is writable once every unit before it is complete.
 
 type Q = Pick<MidQuestion, "unit" | "state" | "parts">;
 
-export function unitStatus(questions: Q[], unit: number): MidUnitStatus {
+export function unitStatus(questions: Q[], unit: number, sw: MidOutcomeSwitches = ALL_OUTCOMES_ON): MidUnitStatus {
   const bloom: Record<BloomLevel, number> = { L2: 0, L3: 0, L4: 0 };
   let completeCount = 0, draftCount = 0;
   for (const q of questions) {
@@ -18,12 +20,12 @@ export function unitStatus(questions: Q[], unit: number): MidUnitStatus {
       for (const p of q.parts) if (p.bloom) bloom[p.bloom]++;
     } else draftCount++;
   }
-  const complete = completeCount >= QUESTIONS_PER_UNIT && BLOOM_LEVELS.every((l) => bloom[l] >= BLOOM_MIN_PER_UNIT);
+  const complete = completeCount >= QUESTIONS_PER_UNIT && (!sw.bloom || BLOOM_LEVELS.every((l) => bloom[l] >= BLOOM_MIN_PER_UNIT));
   return { complete, completeCount, draftCount, bloom };
 }
 
-export function unitStatuses(units: number[], questions: Q[]): Record<string, MidUnitStatus> {
-  return Object.fromEntries(units.map((u) => [String(u), unitStatus(questions, u)]));
+export function unitStatuses(units: number[], questions: Q[], sw: MidOutcomeSwitches = ALL_OUTCOMES_ON): Record<string, MidUnitStatus> {
+  return Object.fromEntries(units.map((u) => [String(u), unitStatus(questions, u, sw)]));
 }
 
 /** The units a faculty member may write in now: the first, and each one whose predecessors are all complete. */

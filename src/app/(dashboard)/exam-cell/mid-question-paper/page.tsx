@@ -19,6 +19,7 @@ import { getMidQuestionPaperHTML, paperFileName, ROMAN } from "@/lib/pdf/midQues
 import { pdfFormulaRenderer } from "@/lib/midBank/mathSvg";
 import type { GeneratedPaper, GeneratedPapers, PaperQuestion } from "@/lib/midPaper/clientTypes";
 import type { BloomLevel, MidExamPlan, MidTimetable } from "@/types";
+import { PaperChoices } from "@/components/midPapers/PaperChoices";
 
 // Exam Cell > Mid Exams > Mid Question Paper: pick a Mid timetable and an exam
 // date, the level of Question 1, and generate a paper for every subject written
@@ -43,7 +44,18 @@ function repick(p: GeneratedPaper): string[] {
   });
 }
 
+/** Question bank colleges generate papers from banks; question paper colleges choose one of the faculty's papers. */
 export default function MidQuestionPaperPage() {
+  const [mode, setMode] = useState<"BANK" | "PAPERS" | null>(null);
+  useEffect(() => {
+    fetch("/api/college/exam-mid-settings").then((r) => (r.ok ? r.json() : null))
+      .then((d: { settings?: { midPreparation?: string } } | null) => setMode(d?.settings?.midPreparation === "PAPERS" ? "PAPERS" : "BANK")).catch(() => setMode("BANK"));
+  }, []);
+  if (!mode) return <div className="h-64 animate-pulse rounded-lg bg-muted" />;
+  return mode === "PAPERS" ? <PaperChoices /> : <BankPaperGenerator />;
+}
+
+function BankPaperGenerator() {
   const [plans, setPlans] = useState<Plan[] | null>(null);
   const [planId, setPlanId] = useState("");
   const [detail, setDetail] = useState<PlanDetail | null>(null);

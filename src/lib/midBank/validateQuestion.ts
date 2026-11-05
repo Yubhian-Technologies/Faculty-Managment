@@ -1,5 +1,7 @@
 import type { BloomLevel, MidBankFormat, MidQuestion, MidQuestionFormat, MidQuestionPart } from "@/types/midQuestionBank";
+import type { MidOutcomeSwitches } from "@/types/examMidSchedule";
 import { BLOOM_LEVELS, LIMITS, MID_IMAGE_URL_PREFIX } from "./constants";
+import { ALL_OUTCOMES_ON } from "./outcomeSwitches";
 
 // One question's parts: shaping whatever the editor sent (drafts keep anything
 // the right shape) and the academic checks a COMPLETE question must pass.
@@ -111,16 +113,16 @@ export function cleanParts(raw: unknown, format: MidQuestionFormat, coIds: Set<s
   });
 }
 
-/** Checks a COMPLETE question must pass. Empty object = valid. */
-export function questionErrors(parts: MidQuestionPart[], format: MidQuestionFormat, total: number): Record<string, string> {
+/** Checks a COMPLETE question must pass. Empty object = valid. COs / Bloom only when the college uses them. */
+export function questionErrors(parts: MidQuestionPart[], format: MidQuestionFormat, total: number, sw: MidOutcomeSwitches = ALL_OUTCOMES_ON): Record<string, string> {
   const errors: Record<string, string> = {};
   if (parts.length !== partsFor(format)) errors.parts = `This question has ${partsFor(format)} part(s)`;
   parts.forEach((p, i) => {
     const label = partLabel(format, i);
     if (!p.text.trim() || /^\$+\s*\$+$/.test(p.text.trim())) errors[`parts.${i}.text`] = `${label}: write the question (text or a formula)`;
     else if (/\\placeholder\b/.test(p.text)) errors[`parts.${i}.text`] = `${label}: a formula still has empty boxes - click it in the preview and fill or delete them`;
-    if (p.cos.length === 0) errors[`parts.${i}.cos`] = `${label}: pick at least one Course Outcome`;
-    if (!p.bloom) errors[`parts.${i}.bloom`] = `${label}: pick one Bloom's level (L2, L3 or L4)`;
+    if (sw.cos && p.cos.length === 0) errors[`parts.${i}.cos`] = `${label}: pick at least one Course Outcome`;
+    if (sw.bloom && !p.bloom) errors[`parts.${i}.bloom`] = `${label}: pick one Bloom's level (L2, L3 or L4)`;
     if (p.imageCaption && !p.imageUrl) errors[`parts.${i}.imageCaption`] = `${label}: a caption needs an image`;
     if (format !== "SINGLE" && !(Number(p.marks) >= 1)) errors[`parts.${i}.marks`] = `${label}: give it at least 1 mark`;
   });
