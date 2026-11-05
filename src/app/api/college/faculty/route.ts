@@ -379,7 +379,7 @@ export async function POST(request: Request) {
     // Previous Teaching Assignments (free text) - validated before anything is created, so a bad row cannot leave a half-made login.
     const previousTeachingResult = body.previousTeachingAssignments === undefined
       ? { ok: true as const, value: [] }
-      : normalizePreviousTeachingAssignments(body.previousTeachingAssignments, () => crypto.randomUUID());
+      : normalizePreviousTeachingAssignments(body.previousTeachingAssignments, () => crypto.randomUUID(), new Set());
     if (!previousTeachingResult.ok) return NextResponse.json({ error: previousTeachingResult.error }, { status: 400 });
     const previousTeaching = previousTeachingResult.value;
 

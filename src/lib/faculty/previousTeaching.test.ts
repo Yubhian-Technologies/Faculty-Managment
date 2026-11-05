@@ -91,7 +91,7 @@ describe("resolvePreviousTeachingUpdate", () => {
   it("returns an error for a bad list and the merged list otherwise", () => {
     expect(resolvePreviousTeachingUpdate({ previousTeachingAssignments: [{ source: "EXTERNAL", subject: "x" }] }, undefined, makeId).kind).toBe("error");
     const ok = resolvePreviousTeachingUpdate(
-      { previousTeachingAssignments: [{ id: "n", subject: "New" }], previousTeachingAssignmentsLoadedIds: ["1"] },
+      { previousTeachingAssignments: [{ id: "n", subject: "New", subjectType: "THEORY" }], previousTeachingAssignmentsLoadedIds: ["1"] },
       { previousTeachingAssignments: [row({ id: "1" }), row({ id: "2" })] }, makeId,
     );
     expect(ok.kind === "set" && ok.value.map((r) => r.id)).toEqual(["n", "2"]);
@@ -121,5 +121,26 @@ describe("helpers", () => {
     expect(previousTeachingProblem([row({ source: "EXTERNAL", collegeName: " " })])).toMatch(/College Name/);
     expect(previousTeachingProblem([row({ source: "EXTERNAL", collegeName: "X" }), row()])).toBeNull();
     expect(previousTeachingProblem([row({ source: "EXTERNAL", collegeName: "", subject: "", academicYear: "", course: "", year: "", semester: "", passPercentage: "" })])).toBeNull();
+  });
+});
+
+describe("Subject Type", () => {
+  it("is kept when it is one of the Curriculum's types, dropped otherwise", () => {
+    const r = normalizePreviousTeachingAssignments([{ id: "a", source: "INTERNAL", subject: "DBMS Lab", subjectType: "PRACTICAL" }, { id: "b", source: "INTERNAL", subject: "X", subjectType: "LAB" }], makeId);
+    expect(r.ok && r.value.map((x) => x.subjectType)).toEqual(["PRACTICAL", undefined]);
+  });
+
+  it("a new row must have one; a row already stored without one may stay so", () => {
+    const stored = { previousTeachingAssignments: [{ id: "old", source: "INTERNAL", subject: "Maths" }] };
+    expect(resolvePreviousTeachingUpdate({ previousTeachingAssignments: [{ id: "old", source: "INTERNAL", subject: "Maths" }] }, stored, makeId).kind).toBe("set");
+    const fresh = resolvePreviousTeachingUpdate({ previousTeachingAssignments: [{ id: "new", source: "INTERNAL", subject: "OS" }] }, stored, makeId);
+    expect(fresh).toMatchObject({ kind: "error", error: expect.stringMatching(/Subject Type/) });
+    expect(resolvePreviousTeachingUpdate({ previousTeachingAssignments: [{ id: "new", source: "INTERNAL", subject: "OS", subjectType: "THEORY" }] }, stored, makeId).kind).toBe("set");
+  });
+
+  it("the edit page asks for it on new rows only", () => {
+    expect(previousTeachingProblem([row({ id: "old" })], ["old"])).toBeNull();
+    expect(previousTeachingProblem([row({ id: "new" })], ["old"])).toMatch(/Subject Type/);
+    expect(previousTeachingProblem([row({ id: "new", subjectType: "THEORY" })], [])).toBeNull();
   });
 });

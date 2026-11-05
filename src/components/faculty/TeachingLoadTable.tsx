@@ -7,7 +7,7 @@ import { toast } from "@/hooks/useToast";
 import { useCollegeInfo } from "@/hooks/useCollegeInfo";
 import { downloadTeachingLoadPdf, downloadTeachingLoadXlsx } from "@/lib/teaching/teachingLoadExport";
 import { formatClassColumn, type TeachingLoadRow, type TeachingLoadGroups } from "@/lib/teaching/buildTeachingLoadRows";
-import { formatPassPercentage, PREVIOUS_TEACHING_SOURCE_LABELS } from "@/lib/faculty/previousTeaching";
+import { formatPassPercentage, subjectTypeText, PREVIOUS_TEACHING_SOURCE_LABELS } from "@/lib/faculty/previousTeaching";
 import type { PreviousTeachingAssignment } from "@/types";
 
 interface Props {
@@ -25,7 +25,7 @@ function PreviousTable({ rows }: { rows: PreviousTeachingAssignment[] }) {
       <table className="w-full text-xs">
         <thead>
           <tr className="border-b bg-muted/40">
-            {["Internal / External", "Academic Year", "Course", "Year", "Semester", "Subject", "Passing %"].map((h) => (
+            {["Internal / External", "Academic Year", "Course", "Year", "Semester", "Subject", "Type", "Passing %"].map((h) => (
               <th key={h} className="p-2 text-left font-medium text-muted-foreground whitespace-nowrap">{h}</th>
             ))}
           </tr>
@@ -39,6 +39,7 @@ function PreviousTable({ rows }: { rows: PreviousTeachingAssignment[] }) {
               <td className="p-2 whitespace-nowrap">{r.year || "-"}</td>
               <td className="p-2 whitespace-nowrap">{r.semester || "-"}</td>
               <td className="p-2">{r.subject || "-"}</td>
+              <td className="p-2 whitespace-nowrap">{subjectTypeText(r.subjectType) || "-"}</td>
               <td className="p-2 whitespace-nowrap">{formatPassPercentage(r.passPercentage) || "-"}</td>
             </tr>
           ))}

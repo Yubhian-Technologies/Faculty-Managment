@@ -466,7 +466,8 @@ export default function NewFacultyPage() {
       return;
     }
 
-    const previousProblem = previousTeachingProblem(previousTeaching);
+    // Every row of a new faculty member is new: each needs its Subject Type.
+    const previousProblem = previousTeachingProblem(previousTeaching, []);
     if (previousProblem) {
       setErroredSteps(new Set<WizardStepKey>(["teaching-load"]));
       setStepIndex(steps.findIndex((s) => s.key === "teaching-load"));

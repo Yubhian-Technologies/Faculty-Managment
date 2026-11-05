@@ -72,7 +72,7 @@ export async function POST(request: Request) {
     // Previous Teaching Assignments (free text) - see POST /api/college/faculty.
     const previousTeachingResult = body.previousTeachingAssignments === undefined
       ? { ok: true as const, value: [] }
-      : normalizePreviousTeachingAssignments(body.previousTeachingAssignments, () => crypto.randomUUID());
+      : normalizePreviousTeachingAssignments(body.previousTeachingAssignments, () => crypto.randomUUID(), new Set());
     if (!previousTeachingResult.ok) return NextResponse.json({ error: previousTeachingResult.error }, { status: 400 });
     const previousTeaching = previousTeachingResult.value;
     const statusDateField = FACULTY_STATUS_DATE_FIELD[status];

@@ -5,7 +5,7 @@ import { renderHtmlToPdf } from "@/lib/pdf/htmlToPdf";
 import { formatClassColumn, type TeachingLoadGroups, type TeachingLoadRow } from "@/lib/teaching/buildTeachingLoadRows";
 import { resolveSignatureRows } from "@/lib/timetable/signatureAuthority";
 import { collegeHeading, departmentHeading } from "@/lib/timetable/timetableHeader";
-import { formatPassPercentage, PREVIOUS_TEACHING_SOURCE_LABELS } from "@/lib/faculty/previousTeaching";
+import { formatPassPercentage, PREVIOUS_TEACHING_SOURCE_LABELS, subjectTypeText } from "@/lib/faculty/previousTeaching";
 import type { PreviousTeachingAssignment } from "@/types";
 
 // Downloads of the Teaching Load tables shown on the faculty profile. They are
@@ -52,11 +52,11 @@ function buildTables({ groups, previous = [] }: TeachingLoadExportInput): Table[
   if (previous.length > 0) {
     tables.push({
       heading: "Previous Teaching Assignments",
-      headers: ["S.No", "Internal / External", "Academic Year", "Course", "Year", "Semester", "Subject", "Passing %"],
+      headers: ["S.No", "Internal / External", "Academic Year", "Course", "Year", "Semester", "Subject", "Type", "Passing %"],
       rows: previous.map((r, i) => [
         i + 1,
         `${PREVIOUS_TEACHING_SOURCE_LABELS[r.source]}${r.source === "EXTERNAL" && r.collegeName ? ` - ${r.collegeName}` : ""}`,
-        r.academicYear || "-", r.course || "-", r.year || "-", r.semester || "-", r.subject || "-", formatPassPercentage(r.passPercentage) || "-",
+        r.academicYear || "-", r.course || "-", r.year || "-", r.semester || "-", r.subject || "-", subjectTypeText(r.subjectType) || "-", formatPassPercentage(r.passPercentage) || "-",
       ]),
       left: [1, 6],
     });
