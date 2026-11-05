@@ -14,19 +14,43 @@ export interface SetupIssue { code: "NO_RULES" | "NO_MID_IN_RULES" | "NO_OUTCOME
  */
 export function paperSetupIssues(
   subject: Pick<Subject, "courseName" | "regulation">,
-  pattern: { parts: unknown[] } | null,
-  outcomes: Partial<Pick<SubjectOutcomes, "cos" | "mapping">> | null,
+  pattern: { parts: { flexible?: boolean; perUnit?: number }[] } | null,
+  outcomes: Pick<SubjectOutcomes, "units"> & Partial<Pick<SubjectOutcomes, "cos" | "mapping">> | null,
   sw: MidOutcomeSwitches = ALL_OUTCOMES_ON,
-): { issues: SetupIssue[]; units: number[] } {
+  /** For a pattern with per-unit parts: which units the Mid covers (the same Mid units setup as the bank). */
+  mid?: { midNumber: number; rules: MidBankRules | null; exception?: Record<string, number[]> | null; midCount?: number },
+): { issues: SetupIssue[]; units: number[]; shared: number[] } {
   const issues: SetupIssue[] = [];
   const course = `${subject.courseName ?? "this course"}${subject.regulation ? ` (${subject.regulation})` : ""}`;
   if (!pattern) issues.push({ code: "NO_PATTERN", who: "EXAM_CELL", message: `The Exam Cell hasn't set the question paper pattern for ${course} yet (Mid Configuration > Question paper pattern).` });
+  let units: number[] = [];
+  let shared: number[] = [];
+  const perUnit = !!pattern?.parts.some((p) => !p.flexible && p.perUnit);
+  if (perUnit && mid) {
+    // Questions per unit: the subject's units (its setup) and the Mid's units (Mid Configuration > units per Mid).
+    if (!outcomes?.units.length) issues.push({ code: "NO_OUTCOMES", who: "FACULTY", message: "Enter the subject's units - the paper has a question for each unit of the Mid." });
+    else {
+      const r = midUnitsFor(mid.rules, mid.midNumber, outcomes.units.length, mid.exception);
+      units = r.units;
+      if (!mid.rules && r.source !== "SUBJECT") issues.push({ code: "NO_RULES", who: "EXAM_CELL", message: `The Exam Cell hasn't set which units each Mid covers for ${course} (Mid Configuration > units per Mid).` });
+      else if (units.length === 0) issues.push({ code: "NO_MID_IN_RULES", who: "EXAM_CELL", message: `The Exam Cell's Mid setup for ${course} doesn't say which units Mid ${mid.midNumber} covers for a subject of ${outcomes.units.length} units.` });
+      else {
+        const have = new Set(outcomes.units.map((u) => u.no));
+        const missing = units.filter((u) => !have.has(u));
+        if (missing.length) issues.push({ code: "UNITS_MISSING", who: "FACULTY", message: `Mid ${mid.midNumber} covers Unit ${missing.join(", ")}, which the setup doesn't have yet - add the unit(s).` });
+        // A unit another Mid also covers ("2½ units per Mid") gets half its questions in each.
+        const others = new Set<number>();
+        for (let m = 1; m <= Math.max(mid.midCount ?? 2, mid.midNumber); m++) if (m !== mid.midNumber) for (const u of midUnitsFor(mid.rules, m, outcomes.units.length, mid.exception).units) others.add(u);
+        shared = units.filter((u) => others.has(u));
+      }
+    }
+  }
   if (sw.cos && !(outcomes?.cos ?? []).length) issues.push({ code: "NO_OUTCOMES", who: "FACULTY", message: sw.poMapping ? "Enter the units and Course Outcomes, then the CO-PO/PSO mapping." : "Enter the units and Course Outcomes." });
   else if (sw.poMapping) {
     const unmapped = (outcomes?.cos ?? []).filter((c) => (outcomes?.mapping?.[c.id] ?? []).length === 0).map((c) => c.id);
     if (unmapped.length > 0) issues.push({ code: "MAPPING_MISSING", who: "FACULTY", message: `Map ${unmapped.join(", ")} to at least one PO or PSO (CO-PO Mapping).` });
   }
-  return { issues, units: [] };
+  return { issues, units, shared };
 }
 
 export function setupIssues(

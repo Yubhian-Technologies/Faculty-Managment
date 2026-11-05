@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { buildCourseGroups } from "@/lib/departments/hodScope";
-import { choiceText, kindLabel, marksPerQuestion, PART_KINDS, partMax, patternMax } from "@/lib/midPapers/pattern";
+import { choiceText, countedMax, kindLabel, marksPerQuestion, PART_KINDS, partMax } from "@/lib/midPapers/pattern";
 import type { Course, MidPaperPattern, PaperPartDef, PaperPartKind } from "@/types";
 
 // Exam Cell > Mid Configuration > Question paper pattern (a college that prepares question papers): per course
@@ -95,7 +95,8 @@ export function MidPaperPatternCard() {
     load();
   }
 
-  const total = patternMax({ parts: parts as PaperPartDef[] });
+  // Max marks as marks entry counts them (a per-unit part counts for its own max).
+  const total = (parts as PaperPartDef[]).reduce((n, x) => n + countedMax(x), 0);
 
   return (
     <Card>
@@ -117,8 +118,8 @@ export function MidPaperPatternCard() {
                   <tr key={p.id} className="border-t">
                     <td className="p-2 font-medium">{p.courseName}</td>
                     <td className="p-2">{p.regulation === "ALL" ? <span className="text-muted-foreground">All</span> : p.regulation}</td>
-                    <td className="p-2 text-xs">{p.parts.map((x) => `${x.label}: ${x.questions} x ${x.marksEach}`).join(" · ")}</td>
-                    <td className="p-2">{patternMax(p)}</td>
+                    <td className="p-2 text-xs">{p.parts.map((x) => (x.flexible ? `${x.label}: ${x.maxMarks} marks (faculty decide)` : x.perUnit ? `${x.label}: ${x.perUnit} per unit x ${x.marksEach} -> ${x.maxMarks}` : `${x.label}: ${x.questions} x ${x.marksEach}`)).join(" · ")}</td>
+                    <td className="p-2">{p.parts.reduce((n, x) => n + countedMax(x), 0)}</td>
                     <td className="p-2">{p.setsPerFaculty}</td>
                     <td className="whitespace-nowrap p-2 text-right">
                       <Button size="icon" variant="ghost" aria-label={`Edit the pattern for ${p.courseName}`} onClick={() => edit(p)}><Pencil className="h-4 w-4" /></Button>
@@ -161,9 +162,37 @@ export function MidPaperPatternCard() {
           {parts.map((p, i) => (
             <div key={i} className="rounded-md border p-3 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm font-semibold">{p.label || `Part ${String.fromCharCode(65 + i)}`} <span className="font-normal text-muted-foreground">· {partMax({ ...p })} marks · {choiceText(p)} · marks entered {marksPerQuestion(p.kind) ? "per question" : "as one total"}</span></p>
+                <p className="text-sm font-semibold">{p.label || `Part ${String.fromCharCode(65 + i)}`} <span className="font-normal text-muted-foreground">· {p.perUnit && !p.flexible ? `${p.perUnit} per unit x ${p.marksEach}, counts for ${p.maxMarks ?? 0}` : `${partMax({ ...p })} marks`} · {choiceText(p)}{p.flexible ? " · faculty build the questions" : ` · marks entered ${marksPerQuestion(p.kind) ? "per question" : "as one total"}`}</span></p>
                 <Button size="icon" variant="ghost" disabled={parts.length === 1} aria-label="Remove part" onClick={() => setParts((ps) => ps.filter((_, j) => j !== i))}><Trash2 className="h-4 w-4" /></Button>
               </div>
+              <div className="flex flex-wrap gap-2">
+                {([[false, "Fixed by the Exam Cell", "Kind, number of questions and marks set here"], [true, "Faculty decide", "Only the max marks set here - each faculty builds the part (any mix of question kinds)"]] as const).map(([flex, label, hint]) => (
+                  <label key={String(flex)} className={`flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 text-sm ${!!p.flexible === flex ? "border-primary bg-primary/5" : ""}`}>
+                    <input type="radio" className="mt-1" checked={!!p.flexible === flex} onChange={() => setPart(i, flex
+                      ? { flexible: true, maxMarks: p.maxMarks ?? (partMax({ ...p, flexible: false }) || 10), choice: p.choice.kind === "ANY" ? p.choice : p.choice }
+                      : { flexible: false, questions: p.questions || 5, marksEach: p.marksEach || 2 })} />
+                    <span><span className="block font-medium">{label}</span><span className="block text-xs text-muted-foreground">{hint}</span></span>
+                  </label>
+                ))}
+              </div>
+              {p.flexible ? (
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="space-y-1"><Label className="text-xs">Name</Label><Input value={p.label} placeholder={`Part ${String.fromCharCode(65 + i)}`} onChange={(e) => setPart(i, { label: e.target.value })} /></div>
+                <div className="space-y-1"><Label className="text-xs">Heading on the paper</Label><Input value={p.title} onChange={(e) => setPart(i, { title: e.target.value })} /></div>
+                <div className="space-y-1"><Label className="text-xs">Max marks</Label><Input type="number" min={1} max={200} step={1} value={p.maxMarks ?? ""} onChange={(e) => setPart(i, { maxMarks: Number(e.target.value) })} /></div>
+                <div className="space-y-1 sm:col-span-2"><Label className="text-xs">Student answers</Label>
+                  <div className="flex gap-2">
+                    <select className={selectClass} value={p.choice.kind} onChange={(e) => setPart(i, { choice: e.target.value === "ANY" ? { kind: "ANY", answer: 2 } : { kind: e.target.value as "ALL" | "OR_PAIRS" } })}>
+                      <option value="ALL">All questions (they add up to the max)</option>
+                      <option value="ANY">Any of them (every question the same marks)</option>
+                      <option value="OR_PAIRS">One of each pair (OR) - pairs of equal marks</option>
+                    </select>
+                    {p.choice.kind === "ANY" && <Input className="w-20" type="number" min={1} aria-label="How many to answer" value={p.choice.answer} onChange={(e) => setPart(i, { choice: { kind: "ANY", answer: Number(e.target.value) } })} />}
+                  </div>
+                  {p.choice.kind === "ANY" && (p.maxMarks ?? 0) % (p.choice.answer || 1) === 0 && <p className="text-xs text-muted-foreground">Each question carries {(p.maxMarks ?? 0) / (p.choice.answer || 1)} marks.</p>}
+                </div>
+              </div>
+              ) : (
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="space-y-1"><Label className="text-xs">Name</Label><Input value={p.label} placeholder={`Part ${String.fromCharCode(65 + i)}`} onChange={(e) => setPart(i, { label: e.target.value })} /></div>
                 <div className="space-y-1"><Label className="text-xs">Kind</Label>
@@ -172,7 +201,25 @@ export function MidPaperPatternCard() {
                   </select>
                 </div>
                 <div className="space-y-1"><Label className="text-xs">Heading on the paper</Label><Input value={p.title} onChange={(e) => setPart(i, { title: e.target.value })} /></div>
-                <div className="space-y-1"><Label className="text-xs">Questions</Label><Input type="number" min={1} max={40} value={p.questions} onChange={(e) => setPart(i, { questions: Number(e.target.value) })} /></div>
+                <div className="space-y-1"><Label className="text-xs">Questions</Label>
+                  <div className="flex gap-2">
+                    <select className={selectClass} aria-label="How many questions" value={p.perUnit ? "UNIT" : "FIXED"}
+                      onChange={(e) => setPart(i, e.target.value === "UNIT" ? { perUnit: 1, questions: 0, maxMarks: p.maxMarks ?? (p.questions * p.marksEach || 25) } : { perUnit: undefined, maxMarks: undefined, questions: p.questions || 5 })}>
+                      <option value="FIXED">A set number</option>
+                      <option value="UNIT">Per unit of the Mid</option>
+                    </select>
+                    {p.perUnit
+                      ? <Input className="w-20" type="number" min={1} max={4} aria-label="Questions per unit" value={p.perUnit} onChange={(e) => setPart(i, { perUnit: Number(e.target.value) })} />
+                      : <Input className="w-20" type="number" min={1} max={40} aria-label="Number of questions" value={p.questions} onChange={(e) => setPart(i, { questions: Number(e.target.value) })} />}
+                  </div>
+                  {p.perUnit ? <p className="text-[11px] text-muted-foreground">{p.perUnit} question{p.perUnit === 1 ? "" : "s"} for each unit the subject&apos;s Mid covers (units per Mid). A unit two Mids share (2&frac12; units each) gets half{p.choice.kind === "OR_PAIRS" ? " - except with OR pairs, which keep a full pair" : ""}: e.g. 5 units, 2 per unit, Mid 1 = 1, 1, 2, 2, 3 and Mid 2 = 3, 4, 4, 5, 5.</p> : null}
+                </div>
+                {p.perUnit ? (
+                  <div className="space-y-1"><Label className="text-xs">Counts for (marks)</Label>
+                    <Input type="number" min={1} max={200} step={1} value={p.maxMarks ?? ""} onChange={(e) => setPart(i, { maxMarks: Number(e.target.value) })} />
+                    <p className="text-[11px] text-muted-foreground">The paper prints the real total (e.g. 6 units x {p.marksEach} = {6 * (p.perUnit ?? 1) * p.marksEach}); marks entry scales it to {p.maxMarks ?? "-"}.</p>
+                  </div>
+                ) : null}
                 <div className="space-y-1"><Label className="text-xs">Marks each</Label><Input type="number" min={0.5} step={0.5} max={100} value={p.marksEach} onChange={(e) => setPart(i, { marksEach: Number(e.target.value) })} /></div>
                 <div className="space-y-1"><Label className="text-xs">Student answers</Label>
                   <div className="flex gap-2">
@@ -187,6 +234,7 @@ export function MidPaperPatternCard() {
                 {p.kind === "MCQ" && <div className="space-y-1"><Label className="text-xs">Options per question</Label><Input type="number" min={2} max={6} value={p.options ?? 4} onChange={(e) => setPart(i, { options: Number(e.target.value) })} /></div>}
                 {p.kind === "DESCRIPTIVE" && <div className="space-y-1"><Label className="text-xs">Up to parts (a), (b) ...</Label><Input type="number" min={1} max={5} value={p.maxSubParts ?? 1} onChange={(e) => setPart(i, { maxSubParts: Number(e.target.value) })} /></div>}
               </div>
+              )}
             </div>
           ))}
           <div className="flex flex-wrap items-center justify-between gap-2">

@@ -52,7 +52,7 @@ export default function MidBankPage({ params, searchParams }: { params: Promise<
     [GraduationCap, bank.branch],
     [Users, `Section${bank.sections.length === 1 ? "" : "s"} ${bank.sections.map((s) => s.sectionName).join(", ")}`],
     ...(papers && bank.pattern
-      ? [[FileText, `${bank.pattern.setsPerFaculty} question paper${bank.pattern.setsPerFaculty === 1 ? "" : "s"} · ${bank.pattern.parts.map((p) => `${p.label} ${p.questions} x ${p.marksEach}`).join(" · ")}`] as [LucideIcon, string]]
+      ? [[FileText, `${bank.pattern.setsPerFaculty} question paper${bank.pattern.setsPerFaculty === 1 ? "" : "s"} · ${bank.pattern.parts.map((p) => (p.flexible ? `${p.label} ${p.maxMarks} marks (yours)` : `${p.label} ${p.questions} x ${p.marksEach}`)).join(" · ")}`] as [LucideIcon, string]]
       : [[Layers, `Units ${bank.units.join(", ")}`] as [LucideIcon, string], [FileText, bankFormatText(bankFormats(bank, detail.rules), bank.marks)] as [LucideIcon, string]]),
   ];
   return (

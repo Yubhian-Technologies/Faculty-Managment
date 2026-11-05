@@ -2,7 +2,7 @@ import { logoSrc } from "@/lib/pdf/logo";
 import { renderMathHtml } from "@/lib/midBank/renderMath";
 import { derivePoPso } from "@/lib/midBank/outcomes";
 import { outcomeSwitches } from "@/lib/midBank/outcomeSwitches";
-import { choiceText, partMax, patternMax } from "@/lib/midPapers/pattern";
+import { choiceText, partMax, patternMax, unitOfQuestion } from "@/lib/midPapers/pattern";
 import { PAPER_STYLE, ROMAN } from "@/lib/pdf/midQuestionPaperTemplate";
 import type { MidOutcomeSwitches, MidPaperPattern, MidPaperQuestion } from "@/types";
 
@@ -25,6 +25,8 @@ export interface PaperSetPdfData {
   pattern: Pick<MidPaperPattern, "parts" | "durationMinutes" | "instruction" | "regdBoxes">;
   set: number;
   questions: MidPaperQuestion[];
+  /** The units the paper covers (per-unit parts print a UNIT row before each unit's questions). */
+  units?: number[];
   outcomes?: Partial<MidOutcomeSwitches>;
   cos?: { id: string; statement: string }[];
   mapping?: Record<string, string[]>;
@@ -50,14 +52,21 @@ export function getMidPaperSetHTML(d: PaperSetPdfData): string {
 
   let no = 0;
   const parts = d.pattern.parts.map((part) => {
-    let rows = `<tr class="unit"><td colspan="2">${esc(part.label.toUpperCase())} - ${esc(part.title)}<br /><span style="font-weight:normal">${esc(choiceText(part))}</span></td><td class="num colhead">${partMax(part)} M</td>${extra.map((x) => `<td class="${x === "PO" ? "po" : "num"} colhead">${x}</td>`).join("")}</tr>`;
-    for (let i = 1; i <= part.questions; i++) {
+    const count = part.flexible ? d.questions.filter((q) => q.set === d.set && q.partId === part.id).length : part.questions;
+    let rows = `<tr class="unit"><td colspan="2">${esc(part.label.toUpperCase())} - ${esc(part.title)}<br /><span style="font-weight:normal">${esc(choiceText(part, part.flexible ? count : undefined))}</span></td><td class="num colhead">${partMax(part)} M</td>${extra.map((x) => `<td class="${x === "PO" ? "po" : "num"} colhead">${x}</td>`).join("")}</tr>`;
+    for (let i = 1; i <= count; i++) {
       no++;
       const q = byId.get(`${d.set}_${part.id}_${i}`);
+      // A faculty-decides part: each question's own kind and marks.
+      const kind = q?.kind ?? part.kind;
+      const marks = part.flexible ? q?.marks ?? "" : part.marksEach;
       let block = part.choice.kind === "OR_PAIRS" && i % 2 === 0 ? `<tr class="or"><td colspan="${cols}">OR</td></tr>` : "";
+      // A per-unit part: a UNIT row before each unit's questions.
+      const u = part.perUnit ? unitOfQuestion(part, d.units ?? [], i) : undefined;
+      if (u && u !== (i > 1 ? unitOfQuestion(part, d.units ?? [], i - 1) : undefined)) block = `<tr class="unit"><td colspan="${cols}">UNIT-${ROMAN[u] ?? u}</td></tr>` + block;
       if (d.answerKey) {
-        const ans = !q ? "" : part.kind === "MCQ" ? `(${LETTERS[Number(q.answer)] ?? "?"}) ${esc(q.options?.[Number(q.answer)] ?? "")}` : part.kind === "FILL_BLANK" ? esc(q.answer ?? "") : "<i>Descriptive</i>";
-        rows += `<tr><td class="no">${no}</td><td class="q">${ans}</td><td class="num">${part.marksEach}</td>${tags(q)}</tr>`;
+        const ans = !q ? "" : kind === "MCQ" ? `(${LETTERS[Number(q.answer)] ?? "?"}) ${esc(q.options?.[Number(q.answer)] ?? "")}` : kind === "FILL_BLANK" ? esc(q.answer ?? "") : "<i>Descriptive</i>";
+        rows += `<tr><td class="no">${no}</td><td class="q">${ans}</td><td class="num">${marks}</td>${tags(q)}</tr>`;
         continue;
       }
       if (q?.subParts?.length) {
@@ -66,9 +75,9 @@ export function getMidPaperSetHTML(d: PaperSetPdfData): string {
           block += `<tr><td class="no">${!q.text.trim() && j === 0 ? `${no}.` : ""}(${LETTERS[j]})</td><td class="q">${text(sp.text, sp.imageUrl, sp.imageCaption)}</td><td class="num">${sp.marks}</td>${j === 0 && !q.text.trim() ? tags(q) : extra.map(() => `<td class="num"></td>`).join("")}</tr>`;
         });
       } else {
-        const opts = part.kind === "MCQ" && q?.options
+        const opts = kind === "MCQ" && q?.options
           ? `<div class="opts">${q.options.map((o, j) => `<span>(${LETTERS[j]}) ${renderMathHtml(o, d.formula)}</span>`).join("")}</div>` : "";
-        block += `<tr><td class="no">${no}</td><td class="q">${q ? text(q.text, q.imageUrl, q.imageCaption) : "<i>(not written)</i>"}${opts}</td><td class="num">${part.marksEach}</td>${tags(q)}</tr>`;
+        block += `<tr><td class="no">${no}</td><td class="q">${q ? text(q.text, q.imageUrl, q.imageCaption) : "<i>(not written)</i>"}${opts}</td><td class="num">${marks}</td>${tags(q)}</tr>`;
       }
       rows += `<tbody class="section">${block}</tbody>`;
     }
