@@ -55,8 +55,11 @@ export function MidTimetableSheet({ rows, days, sessions, onCell, cellTitle }: {
   rows: SheetRow[];
   days: string[];
   sessions: MidExamSession[];
-  /** Makes cells clickable (the Exam Cell builder) - the session is picked in the cell. */
-  onCell?: (rowKey: string, date: string) => void;
+  /**
+   * Makes cells clickable (the Exam Cell builder). With more than one session a day, each day cell shows one slot
+   * per session (Morning, Afternoon ...) so a branch's second exam that day goes straight into its own session.
+   */
+  onCell?: (rowKey: string, date: string, sessionId?: string) => void;
   cellTitle?: string;
 }) {
   if (days.length === 0) return <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">No exam days.</p>;
@@ -89,7 +92,23 @@ export function MidTimetableSheet({ rows, days, sessions, onCell, cellTitle }: {
                   const label = `${r.branch}, ${dayLabel(date)}`;
                   return (
                     <td key={date} className="border-b border-r p-1.5 last:border-r-0">
-                      {onCell ? (
+                      {onCell && sessions.length > 1 ? (
+                        <div className="space-y-1">
+                          {[...sessions].sort((a, b) => a.from.localeCompare(b.from)).map((ses) => {
+                            const inSes = here.filter((x) => x.sessionId === ses.id);
+                            const usualOne = ses.id === r.usualSessionId;
+                            return (
+                              <button key={ses.id} type="button" onClick={() => onCell(r.key, date, ses.id)} title={cellTitle}
+                                aria-label={inSes.length ? `${label}, ${ses.label}: ${inSes.map((x) => x.subjectName).join(" / ")} - change` : `${label}, ${ses.label}: add a subject`}
+                                className={cn("flex w-full flex-col items-center justify-center rounded-lg px-2 py-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                  inSes.length ? "min-h-14 bg-primary/5 ring-1 ring-primary/15 hover:bg-primary/10" : cn("border border-dashed text-muted-foreground hover:border-primary/50 hover:text-primary", usualOne ? "min-h-12" : "min-h-8 opacity-70"))}>
+                                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{ses.label} · {timeLabel(ses.from)}</span>
+                                {inSes.length ? <SheetCell slots={inSes} /> : <Plus className="h-3.5 w-3.5" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : onCell ? (
                         <button type="button" onClick={() => onCell(r.key, date)} title={cellTitle} aria-label={here.length ? `${label}: ${here.map((s) => s.subjectName).join(" / ")} - change` : `${label}: add a subject`}
                           className={cn("flex min-h-16 w-full items-center justify-center rounded-lg p-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                             here.length ? "bg-primary/5 ring-1 ring-primary/15 hover:bg-primary/10" : "border border-dashed text-muted-foreground hover:border-primary/50 hover:text-primary")}>
