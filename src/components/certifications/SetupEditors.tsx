@@ -78,19 +78,27 @@ export function FlowEditor({ flow, onChange, staff }: { flow: FlowStepDef[]; onC
             <RecipientPicker idPrefix={step.id} value={step.recipient} staff={staff} onChange={(r) => set(i, { ...step, recipient: r })} />
           ) : (
             <div className="space-y-2 pl-4 border-l-2">
-              <p className="text-xs text-muted-foreground">Each approves on their own; the request moves on once all have approved.</p>
+              <p className="text-xs text-muted-foreground">Each works on their own; the request moves on once all are cleared. A dues check marks No dues, Dues pending (the student pays first) or Not applicable; an exam result shows Pass / Fail from published results, then approve or reject.</p>
               {step.branches.map((b, j) => (
                 <div key={b.key} className="flex flex-wrap items-center gap-2">
                   <Input className="w-48" value={b.label} placeholder={recipientLabel(b.recipient)}
                     onChange={(e) => set(i, { ...step, branches: step.branches.map((x, k) => (k === j ? { ...x, label: e.target.value } : x)) })} />
                   <RecipientPicker idPrefix={`${step.id}-${b.key}`} value={b.recipient} staff={staff}
                     onChange={(r) => set(i, { ...step, branches: step.branches.map((x, k) => (k === j ? { ...x, recipient: r } : x)) })} />
+                  <Select value={b.check ?? "APPROVAL"} onValueChange={(c) => set(i, { ...step, branches: step.branches.map((x, k) => (k === j ? { ...x, check: c === "APPROVAL" ? undefined : (c as "DUES" | "RESULT") } : x)) })}>
+                    <SelectTrigger className="w-48" aria-label="What they check"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="APPROVAL">Approval</SelectItem>
+                      <SelectItem value="DUES">Dues check</SelectItem>
+                      <SelectItem value="RESULT">Exam result (Pass / Fail)</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <Button size="icon" variant="ghost" disabled={step.branches.length <= 2} aria-label="Remove approver"
                     onClick={() => set(i, { ...step, branches: step.branches.filter((_, k) => k !== j) })}><Trash2 className="h-4 w-4" /></Button>
                 </div>
               ))}
-              <Button size="sm" variant="outline" onClick={() => set(i, { ...step, branches: [...step.branches, { key: newId(), label: "", recipient: { kind: "ROLE", role: "PD" } }] })}>
-                <Plus className="h-4 w-4 mr-1" /> Add approver
+              <Button size="sm" variant="outline" disabled={step.branches.length >= 25} onClick={() => set(i, { ...step, branches: [...step.branches, { key: newId(), label: "", recipient: { kind: "ROLE", role: "PD" } }] })}>
+                <Plus className="h-4 w-4 mr-1" /> Add department
               </Button>
             </div>
           )}

@@ -14,7 +14,7 @@ vi.mock("@/lib/college/collegeAcademicYear", () => ({ resolveCollegeAcademicYear
 vi.mock("@/lib/examResults/store", () => ({ loadResultRules: async () => ({ rules: { showSgpa: "ALWAYS", showCgpa: "ALWAYS", decimals: 2 } }) }));
 vi.mock("@/lib/examResults/studentSittings", () => ({ loadPublishedSittings: async () => [] }));
 // Who holds each role (the real lookup reads users + seats).
-const ROLE_HOLDERS: Record<string, string[]> = { HOD: ["u-hod"], PRINCIPAL: ["u-prin"], COLLEGE_OFFICE: ["u-office"], LIBRARY: ["u-lib"], HOSTEL: ["u-hostel"], PLACEMENT_DEPT: ["u-place"], PD: ["u-pd"], EXAM_CELL: ["u-exam"] };
+const ROLE_HOLDERS: Record<string, string[]> = { HOD: ["u-hod"], PRINCIPAL: ["u-prin"], COLLEGE_OFFICE: ["u-office"], LIBRARY: ["u-lib"], HOSTEL: ["u-hostel"], PLACEMENT_DEPT: ["u-place"], PD: ["u-pd"], EXAM_CELL: ["u-exam"], COLLEGE_ACCOUNTS: ["u-accounts"] };
 vi.mock("@/lib/roles/findUsersByRoles", () => ({ findUsersByRoles: async (_db: unknown, _c: string, roles: string[]) => roles.flatMap((r) => (ROLE_HOLDERS[r] ?? []).map((id) => ({ id }))) }));
 vi.mock("@/lib/departments/scope", () => ({
   getHodDepartmentScope: async () => ({ departments: ["CSE"] }),
@@ -95,7 +95,7 @@ beforeEach(async () => {
     uid: "u-stu", name: "Ravi Kumar", rollNumber: "22A31A0501", department: "CSE", year: 3, section: "A", status: "REGULAR",
     gender: "Male", fatherName: "Suresh", course: "B.Tech", mentorUid: "u-mentor",
   });
-  for (const u of ["u-hod", "u-prin", "u-office", "u-lib", "u-hostel", "u-place", "u-pd", "u-exam", "u-mentor"]) store.set(`colleges/${C}/users/${u}`, { name: u, isActive: true });
+  for (const u of ["u-hod", "u-prin", "u-office", "u-lib", "u-hostel", "u-place", "u-pd", "u-exam", "u-mentor", "u-accounts"]) store.set(`colleges/${C}/users/${u}`, { name: u, isActive: true });
   await installStarterCatalog(D, C, "Principal");
 });
 
@@ -169,21 +169,54 @@ describe("apply -> approve -> return -> correct -> issue -> verify -> revoke", (
     expect((await getRequest(D, STUDENT, request.id)).history.at(-1)?.action).toBe("REVOKED");
   });
 
-  it("No Dues: every department of the parallel step must approve, any can send it back", async () => {
-    const { request } = await submitConfigured(D, STUDENT, { typeId: "no_dues" });
-    let r = await decide(D, actor("u-hod", "HOD"), request.id, "APPROVE");
-    expect(new Set(r.pendingRecipientUids)).toEqual(new Set(["u-lib", "u-hostel", "u-place", "u-pd"]));
-    r = await decide(D, actor("u-lib", "LIBRARY"), request.id, "APPROVE", undefined, "LIBRARY");
-    expect(r.pendingRecipientUids).not.toContain("u-lib");
-    r = await returnRequest(D, actor("u-hostel", "HOSTEL"), request.id, "Hostel fee receipt missing", "HOSTEL");
-    expect(r.status).toBe("RETURNED");
-    r = await resubmit(D, STUDENT, request.id, {});
-    // Back to the approvals still open - the Library's stays approved.
-    expect(new Set(r.pendingRecipientUids)).toEqual(new Set(["u-hostel", "u-place", "u-pd"]));
-    for (const [uid, key] of [["u-hostel", "HOSTEL"], ["u-place", "PLACEMENT_DEPT"], ["u-pd", "PD"]]) r = await decide(D, actor(uid, key), request.id, "APPROVE", undefined, key);
-    expect(r.pendingRecipientUids).toEqual(["u-office"]);
-    r = await decide(D, actor("u-office", "COLLEGE_OFFICE"), request.id, "APPROVE");
+  it("No Dues: started by the office for a class; dues pending keeps it open; result line; then the Principal", async () => {
+    const { startBatch } = await import("./configured");
+    const office = actor("u-office", "COLLEGE_OFFICE");
+    // Students can't apply for it.
+    await expect(submitConfigured(D, STUDENT, { typeId: "no_dues" })).rejects.toThrow(/College Office starts/);
+    const key = "CSE|3|A|REGULAR";
+    expect(await startBatch(D, office, "no_dues", [key], true)).toMatchObject({ started: 1, total: 1 });
+    expect((await startBatch(D, office, "no_dues", [key], false)).started).toBe(1);
+    // Starting again skips the student who already has one open.
+    expect((await startBatch(D, office, "no_dues", [key], true)).skipped).toEqual([{ student: "Ravi Kumar (22A31A0501)", reason: "Already in progress" }]);
+
+    const [id] = [...store.keys()].filter((k) => k.startsWith(`colleges/${C}/certificateRequests/`)).map((k) => k.split("/").pop()!);
+    let r = await getRequest(D, STUDENT, id);
+    expect(r.startedByUid).toBe("u-office");
+    expect(new Set(r.pendingRecipientUids)).toEqual(new Set(["u-office", "u-hod", "u-lib", "u-hostel", "u-accounts", "u-exam", "u-pd"]));
+    // The student can't cancel an office-started request.
+    const { cancel } = await import("./service");
+    await expect(cancel(D, STUDENT, id)).rejects.toThrow(/College Office started/);
+
+    // A dues line can't be "rejected" or approved without saying how; it records dues pending instead.
+    await expect(decide(D, actor("u-lib", "LIBRARY"), id, "REJECT", "x", "LIBRARY")).rejects.toThrow(/pending/);
+    await expect(decide(D, actor("u-lib", "LIBRARY"), id, "APPROVE", undefined, "LIBRARY")).rejects.toThrow(/No dues or Not applicable/);
+    const { duesPending } = await import("./service");
+    r = await duesPending(D, actor("u-lib", "LIBRARY"), id, "LIBRARY", 450, "Lost book");
+    expect(r.status).toBe("IN_PROGRESS");
+    const lib = () => (r.steps[0] as { branches: { branchKey: string; status: string; duesPending?: unknown; outcome?: string; result?: unknown }[] }).branches.find((b) => b.branchKey === "LIBRARY")!;
+    expect(lib()).toMatchObject({ status: "PENDING", duesPending: { amount: 450, reason: "Lost book" } });
+    r = await decide(D, actor("u-lib", "LIBRARY"), id, "APPROVE", undefined, "LIBRARY", "NO_DUES");
+    expect(lib()).toMatchObject({ status: "ACCEPTED", outcome: "NO_DUES", duesPending: null });
+
+    // Clear every other line: dues ones (some Not applicable), approvals, and the Exam Cell's result.
+    const lines: [string, string, "NO_DUES" | "NOT_APPLICABLE" | undefined][] = [
+      ["u-office", "COLLEGE", "NO_DUES"], ["u-hod", "DEPARTMENT", undefined], ["u-hostel", "HOSTEL_ACCOUNTS", "NOT_APPLICABLE"],
+      ["u-office", "ADMINISTRATION", "NO_DUES"], ["u-office", "CANTEEN", "NO_DUES"], ["u-office", "BANK_LOAN", "NOT_APPLICABLE"],
+      ["u-accounts", "COLLEGE_ACCOUNTS", "NO_DUES"], ["u-office", "SCHOLARSHIPS", "NOT_APPLICABLE"], ["u-exam", "EXAM_CELL", undefined],
+      ["u-pd", "PHYSICAL_EDUCATION", "NO_DUES"], ["u-hostel", "WARDEN", undefined],
+    ];
+    for (const [uid, key2, outcome] of lines) r = await decide(D, actor(uid, "X"), id, "APPROVE", undefined, key2, outcome);
+    const exam = (r.steps[0] as { branches: { branchKey: string; result?: unknown }[] }).branches.find((b) => b.branchKey === "EXAM_CELL")!;
+    expect(exam.result).toEqual({ outcome: "NO_RESULTS", backlogs: [] });
+    expect(r.pendingRecipientUids).toEqual(["u-prin"]);
+    r = await decide(D, actor("u-prin", "PRINCIPAL"), id, "APPROVE");
     expect(r.status).toBe("PENDING_ISSUANCE");
+
+    const issued = await issueConfigured(D, office, id, {}, "https://app.test");
+    const html = (await readIssuedDocument(D, office, id)).html!;
+    expect(issued.certificateNumber).toMatch(/^ND\//);
+    for (const t of ["NO DUES CERTIFICATE", "Library", "No dues", "Not applicable", "Hostel Accounts", "Exam Cell", "No results"]) expect(html).toContain(t);
   });
 
   it("a fee must have its receipt, an issuer field is required, and a once-only type can't be applied for again", async () => {

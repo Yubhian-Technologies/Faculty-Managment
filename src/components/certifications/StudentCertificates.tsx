@@ -18,14 +18,12 @@ import type { CertificateRequest } from "@/types";
 import { cancelRequest } from "./api";
 import { applyFor, downloadIssued, loadCatalog, resubmitRequest, uploadAttachment, type CatalogEntry } from "./configApi";
 import { FieldInput } from "./IssueCard";
-import { RequestForm } from "./RequestForm";
 import { StatusBadge } from "./StatusBadge";
 import { RequestAnswers, StepTimeline } from "./StepTimeline";
 
 // The student's Certificates page: every certificate the college offers (grouped, with the approvals each needs
-// and its fee), the form to apply, and their own requests with every approval, corrections asked for, and the
-// issued certificate to download. A college that has not set up any certificate types yet keeps the original
-// No Due form.
+// and its fee), the form to apply, and their own requests with every approval, corrections asked for, dues to pay,
+// and the issued certificate to download. Certificates the College Office starts (No Dues) appear in My requests.
 
 const when = (ts: unknown) => {
   const d = toDate(ts as never);
@@ -158,7 +156,7 @@ function MyRequest({ request, entry, onChanged, onCorrect }: { request: Certific
         <div className="flex items-start justify-between gap-2 flex-wrap">
           <div>
             <p className="font-semibold">{request.certificateTypeLabel}</p>
-            <p className="text-xs text-muted-foreground">Applied {when(request.createdAt)}{request.certificateNumber ? ` · ${request.certificateNumber}` : ""}</p>
+            <p className="text-xs text-muted-foreground">{request.startedByUid ? "Started by the College Office" : "Applied"} {when(request.createdAt)}{request.certificateNumber ? ` · ${request.certificateNumber}` : ""}</p>
           </div>
           <StatusBadge status={request.status} />
         </div>
@@ -172,7 +170,7 @@ function MyRequest({ request, entry, onChanged, onCorrect }: { request: Certific
             <Button size="sm" onClick={download} loading={busy}><Download className="h-4 w-4 mr-1" /> Download</Button>
           )}
           {request.status === "RETURNED" && entry && <Button size="sm" onClick={onCorrect} disabled={busy}>Correct and send again</Button>}
-          {(request.status === "IN_PROGRESS" || request.status === "RETURNED") && <Button size="sm" variant="outline" onClick={cancel} disabled={busy}>Cancel request</Button>}
+          {(request.status === "IN_PROGRESS" || request.status === "RETURNED") && !request.startedByUid && <Button size="sm" variant="outline" onClick={cancel} disabled={busy}>Cancel request</Button>}
         </div>
       </CardContent>
     </Card>
@@ -199,8 +197,9 @@ export function StudentCertificates() {
 
   if (!data) return <p className="text-sm text-muted-foreground">Loading…</p>;
   if (!data.linked) return <Card><EmptyState icon={<FileText className="h-6 w-6" />} title="Your login isn't linked to a student record yet" description="Please contact your College Office." /></Card>;
-  // Nothing configured yet: the original No Due request form.
-  if (data.entries.length === 0 && !data.requests.some((r) => r.certificateTypeId)) return <RequestForm />;
+  if (data.entries.length === 0 && data.requests.length === 0) {
+    return <Card><EmptyState icon={<FileText className="h-6 w-6" />} title="No certificates available yet" description="Your college hasn't set up any certificates yet." /></Card>;
+  }
 
   const open = data.requests.filter((r) => ["IN_PROGRESS", "PENDING_ISSUANCE", "RETURNED"].includes(r.status));
   const byId = new Map(data.entries.map((e) => [e.type.id, e]));

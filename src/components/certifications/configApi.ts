@@ -69,7 +69,29 @@ export const saveTemplate = async (t: Partial<CertificateTemplate>, id?: string)
   (await call<{ template: CertificateTemplate }>(id ? `${CFG}/templates/${id}` : `${CFG}/templates`, json(id ? "PATCH" : "POST", t))).template;
 export const deleteTemplate = (id: string) => call<{ ok: true }>(`${CFG}/templates/${id}`, json("DELETE"));
 export const saveSignatures = (signatures: CertificateSettings["signatures"]) => call<{ settings: CertificateSettings }>(`${CFG}/settings`, json("PUT", { signatures }));
+export const resetType = (typeId: string) => call<{ ok: true }>(`${CFG}/install`, json("POST", { reset: typeId }));
 export const installCatalog = () => call<{ added: { types: number; templates: number } }>(`${CFG}/install`, json("POST"));
 
 export interface StaffOption { uid: string; name: string; role: string }
 export const loadStaff = async () => (await call<{ users: StaffOption[] }>("/api/college/users?allDepts=true")).users;
+
+/** A department line's decision on a configured request. */
+export const decideLine = async (id: string, body: { action: "APPROVE" | "REJECT" | "RETURN" | "DUES_PENDING"; branchKey?: string; remarks?: string; outcome?: "NO_DUES" | "NOT_APPLICABLE"; amount?: number }) =>
+  (await call<{ request: CertificateRequest }>(`${REQ}/${id}`, json("PATCH", body))).request;
+
+export const loadResultCheck = async (id: string) =>
+  (await call<{ result: { outcome: "PASS" | "FAIL" | "NO_RESULTS"; backlogs: string[] } }>(`${REQ}/${id}/result`)).result;
+
+export const bulkClear = (items: { id: string; branchKey?: string }[], outcome?: "NO_DUES" | "NOT_APPLICABLE") =>
+  call<{ done: string[]; failed: { id: string; error: string }[] }>(`${REQ}/bulk-clear`, json("POST", { items, outcome }));
+
+export interface BatchGroupRow { key: string; department: string; year: number; section: string; status: string; count: number }
+export interface BatchOptions {
+  groups: BatchGroupRow[];
+  types: { id: string; name: string; isActive: boolean }[];
+  /** A No Dues installed before it was started by the office - can be switched to the new form. */
+  oldNoDues?: { id: string; name: string; inUse: boolean };
+}
+export const loadBatchOptions = () => call<BatchOptions>(`${REQ}/batch`);
+export const startBatch = (typeId: string, groups: string[], dryRun: boolean) =>
+  call<{ started: number; skipped: { student: string; reason: string }[]; total: number }>(`${REQ}/batch`, json("POST", { typeId, groups, dryRun }));

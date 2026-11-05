@@ -1,5 +1,6 @@
 import type { Timestamp } from "firebase/firestore";
 import type { LeaveTypeCode, LeaveTypeRuleOverride, LeaveBlackoutWindow } from "./leave";
+import type { SubjectType } from "./teaching";
 
 // ─── Roles ────────────────────────────────────────────────────────────────────
 
@@ -1219,6 +1220,8 @@ export interface PreviousTeachingAssignment {
   year: string;         // e.g. "1st", "2nd"
   semester: string;     // e.g. "I", "II"
   subject: string;
+  /** Theory / Practical / Tutorial / Project / Non-Teaching - the same list as the Curriculum's subjects. Absent on older rows. */
+  subjectType?: SubjectType;
   passPercentage: string; // free text, e.g. "85" or "85%"
 }
 
@@ -3322,6 +3325,8 @@ export type NotificationType =
   | "CERTIFICATE_EXAM_CELL_ISSUED"
   | "CERTIFICATE_RETURNED"
   | "CERTIFICATE_REVOKED"
+  | "CERTIFICATE_DUES_PENDING"
+  | "CERTIFICATE_STARTED"
   | "GENERAL";
 
 export interface AppNotification {
@@ -3538,6 +3543,8 @@ export type AuditAction =
   | "CERTIFICATE_RESUBMITTED"
   | "CERTIFICATE_REVOKED"
   | "CERTIFICATE_CONFIG_CHANGED"
+  | "CERTIFICATE_DUES_PENDING"
+  | "CERTIFICATE_BATCH_STARTED"
   | "CERTIFICATE_EXAM_CELL_ISSUED"
   // Academics > Curriculum: master subjects (per catalog course + regulation) and their assignment by code.
   | "SUBJECTS_IMPORTED"

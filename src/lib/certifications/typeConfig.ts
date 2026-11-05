@@ -1,5 +1,5 @@
 import type {
-  CertificateAttachmentDef, CertificateCategory, CertificateFieldDef, CertificateTemplate, CertificateTypeConfig, FlowStepDef, RecipientResolver, UserRole,
+  BranchCheck, CertificateAttachmentDef, CertificateCategory, CertificateFieldDef, CertificateTemplate, CertificateTypeConfig, FlowStepDef, RecipientResolver, UserRole,
 } from "@/types";
 
 // Validation of a certificate type as the Principal / College Admin saves it (pure - the routes and the editor's live
@@ -107,11 +107,13 @@ export function cleanFlow(raw: unknown): Result<FlowStepDef[]> {
     if (s?.type === "PARALLEL") {
       const branches = Array.isArray(s.branches) ? s.branches : [];
       if (branches.length < 2) return fail(`"${label}": approvals at the same time need at least two approvers`);
+      if (branches.length > 25) return fail(`"${label}": at most 25 departments`);
       const cleanBranches = [];
-      for (const [j, b] of (branches as { key?: string; label?: string; recipient?: unknown }[]).entries()) {
+      for (const [j, b] of (branches as { key?: string; label?: string; recipient?: unknown; check?: string }[]).entries()) {
         const rec = cleanRecipient(b?.recipient);
         if (!rec.ok) return fail(`"${label}": ${rec.error}`);
-        cleanBranches.push({ key: str(b?.key, 40) || `b${j + 1}`, label: str(b?.label, 80) || recipientLabel(rec.value), recipient: rec.value });
+        const check: BranchCheck | undefined = b?.check === "DUES" || b?.check === "RESULT" ? b.check : undefined;
+        cleanBranches.push({ key: str(b?.key, 40) || `b${j + 1}`, label: str(b?.label, 80) || recipientLabel(rec.value), recipient: rec.value, ...(check ? { check } : {}) });
       }
       if (new Set(cleanBranches.map((b) => b.key)).size !== cleanBranches.length) return fail(`"${label}": each approver must be listed once`);
       out.push({ id, type: "PARALLEL", label, branches: cleanBranches });
@@ -172,6 +174,7 @@ export function cleanTypeConfig(raw: unknown, templateIds: Set<string>): Result<
       flow: flow.value, issuer: issuer.value, templateId, issuerFields: issuerFields.value, numberFormat,
       signatureId: str(t.signatureId, 60) || undefined,
       delivery: (["DIGITAL", "PHYSICAL", "BOTH"] as const).includes(t.delivery as never) ? t.delivery! : "BOTH",
+      startedBy: t.startedBy === "OFFICE" ? "OFFICE" : "STUDENT",
       ...(t.catalogKey ? { catalogKey: str(t.catalogKey, 40) } : {}),
     },
   };
@@ -237,7 +240,7 @@ export function cleanTemplate(raw: unknown): Result<Omit<CertificateTemplate, "i
   if (!title) return fail("Give the heading printed on the certificate");
   const body = str(t.body, 6000);
   const footer = str(t.footer, 1500);
-  if (kind === "LETTER" && !body) return fail("Write the certificate text");
+  if (kind === "LETTER" && !body && t.showClearances !== true) return fail("Write the certificate text");
   let rows: { label: string; value: string }[] | undefined;
   if (kind === "FORM") {
     rows = (Array.isArray(t.rows) ? t.rows : []).map((r) => ({ label: str(r?.label, 120), value: str(r?.value, 400) })).filter((r) => r.label);
@@ -249,7 +252,7 @@ export function cleanTemplate(raw: unknown): Result<Omit<CertificateTemplate, "i
   return {
     ok: true,
     value: {
-      name, kind, title, showQr: t.showQr !== false,
+      name, kind, title, showQr: t.showQr !== false, ...(t.showClearances === true && kind !== "UPLOAD" ? { showClearances: true } : {}),
       ...(body && kind !== "UPLOAD" && kind !== "FORM" ? { body } : {}),
       ...(rows ? { rows } : {}), ...(marksKind ? { marksKind } : {}), ...(footer && kind !== "UPLOAD" ? { footer } : {}),
       ...(t.catalogKey ? { catalogKey: str(t.catalogKey, 40) } : {}),

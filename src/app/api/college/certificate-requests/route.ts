@@ -3,7 +3,8 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { actingUser, authenticate, failure, readJson, ANY_CERTIFICATE_ACTOR_ROLE } from "@/lib/certifications/http";
-import { listExamCellQueue, listInbox, listIssuanceQueue, listMine, submitRequest } from "@/lib/certifications/service";
+import { listExamCellQueue, listInbox, listIssuanceQueue, listMine } from "@/lib/certifications/service";
+import { CertificationError } from "@/lib/certifications/types";
 import { studentCatalog, submitConfigured } from "@/lib/certifications/configured";
 import { CERTIFICATE_REQUESTS_COL } from "@/lib/certifications/transitions";
 import { loadTypes } from "@/lib/certifications/store";
@@ -48,9 +49,11 @@ export async function POST(request: Request) {
     const db = getAdminDb();
     const user = await actingUser(db, session);
     const body = await readJson(request);
-    // A configured certificate names its type; the original No Due form sends none.
+    // Every request names its configured type; the original No Due prototype (no type) is replaced by the
+    // configured No Dues, which the College Office starts for a batch.
     const typeId = (body as { typeId?: unknown } | null)?.typeId;
-    const { alreadyExists, request: req } = typeId ? await submitConfigured(db, user, body) : await submitRequest(db, user, body);
+    if (!typeId) throw new CertificationError("INVALID", "Pick a certificate", 400);
+    const { alreadyExists, request: req } = await submitConfigured(db, user, body);
     return NextResponse.json({ alreadyExists, request: req }, { status: alreadyExists ? 200 : 201 });
   } catch (err) {
     return failure(err, "certificate-requests POST");

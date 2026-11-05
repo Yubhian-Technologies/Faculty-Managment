@@ -45,7 +45,7 @@ function Row({ state, label, sub }: { state: State; label: string; sub?: string 
 
 export function StepTimeline({ request }: { request: CertificateRequest }) {
   const rows: { key: string; state: State; label: string; sub?: string }[] = [
-    { key: "submitted", state: "done", label: "Applied", sub: when(request.createdAt) },
+    { key: "submitted", state: "done", label: request.startedByUid ? "Started by the College Office" : "Applied", sub: when(request.createdAt) },
   ];
   request.flow.forEach((step, i) => {
     const s = request.steps[i];
@@ -62,11 +62,17 @@ export function StepTimeline({ request }: { request: CertificateRequest }) {
       const st = s?.type === "PARALLEL" ? s : undefined;
       for (const b of step.branches) {
         const bs = st?.branches.find((x) => x.branchKey === b.key);
+        const dues = bs?.status === "PENDING" ? bs.duesPending : null;
         const state: State = bs?.status === "ACCEPTED" ? "done" : bs?.status === "REJECTED" ? "rejected"
-          : isCurrent ? (request.status === "RETURNED" ? "returned" : "current") : "upcoming";
-        const sub = bs?.decidedByName
-          ? `${bs.status === "ACCEPTED" ? "Approved" : "Rejected"} by ${bs.decidedByName} · ${when(bs.decidedAt)}${bs.remarks ? ` - ${bs.remarks}` : ""}`
-          : state === "current" ? "Waiting" : undefined;
+          : dues ? "returned" : isCurrent ? (request.status === "RETURNED" ? "returned" : "current") : "upcoming";
+        const how = bs?.status !== "ACCEPTED" ? "Rejected"
+          : b.check === "RESULT" ? `${bs.result?.outcome === "PASS" ? "Pass" : bs.result?.outcome === "FAIL" ? `Fail (${bs.result.backlogs.length} backlog${bs.result.backlogs.length === 1 ? "" : "s"})` : "No results"} - approved`
+          : bs.outcome === "NO_DUES" ? "No dues" : bs.outcome === "NOT_APPLICABLE" ? "Not applicable" : "Approved";
+        const sub = dues
+          ? `Dues pending: Rs. ${dues.amount} - ${dues.reason}. Pay it and ${b.label} will clear you.`
+          : bs?.decidedByName
+            ? `${how} · ${bs.decidedByName} · ${when(bs.decidedAt)}${bs.remarks ? ` - ${bs.remarks}` : ""}`
+            : state === "current" ? "Waiting" : undefined;
         rows.push({ key: `${step.id}:${b.key}`, state, label: b.label, sub });
       }
     }

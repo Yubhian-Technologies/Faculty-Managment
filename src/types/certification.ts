@@ -22,10 +22,15 @@ export type RecipientResolver =
   /** The faculty in-charge of the student's section. */
   | { kind: "CLASS_INCHARGE" };
 
+/** What a department of a parallel step checks: an approval, the student's dues, or their exam result. */
+export type BranchCheck = "APPROVAL" | "DUES" | "RESULT";
+
 export interface ParallelBranchDef {
   key: string;
   label: string;
   recipient: RecipientResolver;
+  /** Absent = APPROVAL. DUES: No dues / Dues pending / Not applicable. RESULT: Pass / Fail from published results, then approve. */
+  check?: BranchCheck;
 }
 
 export type FlowStepDef =
@@ -89,6 +94,8 @@ export interface CertificateTypeConfig {
   numberFormat: string;
   signatureId?: string;
   delivery: "DIGITAL" | "PHYSICAL" | "BOTH";
+  /** Who starts a request: the student applies (default), or the College Office starts it for a whole batch. */
+  startedBy?: "STUDENT" | "OFFICE";
   /** Seeded from the starter catalogue (which entry). */
   catalogKey?: string;
   updatedAt?: string;
@@ -107,6 +114,8 @@ export interface CertificateTemplate {
   body?: string;
   /** FORM: numbered rows "label -> value" (the value may hold {{placeholders}}). */
   rows?: { label: string; value: string }[];
+  /** Print every department's clearance (status, by, date) as a table - the No Dues layout. */
+  showClearances?: boolean;
   /** MARKS: which statement. */
   marksKind?: "SEMESTER" | "CONSOLIDATED" | "TRANSCRIPT";
   /** Shown below the body (a note, "This certificate is issued on request ..."). */
@@ -165,6 +174,12 @@ export interface CertificateClearance {
   // transaction writes it (same convention as the rest of this type).
   decidedAt?: Timestamp | Date;
   remarks?: string;
+  /** How it was cleared: NO_DUES / NOT_APPLICABLE (dues check), APPROVED (approval or result). */
+  outcome?: "NO_DUES" | "NOT_APPLICABLE" | "APPROVED";
+  /** Dues check: money still owed - the request stays open until the department clears it. */
+  duesPending?: { amount: number; reason: string; byName: string; at: Timestamp | Date } | null;
+  /** Result check: worked out from the published results when the Exam Cell decided. */
+  result?: { outcome: "PASS" | "FAIL" | "NO_RESULTS"; backlogs: string[] };
 }
 
 export type StepRuntimeState =
@@ -232,6 +247,9 @@ export interface CertificateRequest {
 
   requesterUid: string;
   requesterName: string;
+  /** Started by the College Office for a batch (the student did not apply; they can't cancel it). */
+  startedByUid?: string;
+  startedByName?: string;
   // Why the student needs this certificate - a controlled list (see
   // lib/certifications/purposes.ts); "purpose" is the resolved label, or
   // the student's own text when purposeCode is "OTHER". Optional on the

@@ -10,7 +10,10 @@ import { loadPublishedSittings } from "@/lib/examResults/studentSittings";
 import { buildInitialStep, CERTIFICATE_REQUESTS_COL, CertificateStateConflictError, recipientContext } from "./transitions";
 import { resolveRecipientUids } from "./configStore";
 import { canDecide } from "./decisionRules";
-import { buildCertificateValues } from "./documentValues";
+import { buildCertificateValues, displayDate } from "./documentValues";
+import { findCurrentSectionDoc } from "@/lib/students/findCurrentSectionDoc";
+import { resolveSectionCurrentSemester } from "@/lib/college/semester";
+import { toRoman } from "@/lib/academic/format";
 import { missingPlaceholders, renderCertificateHtml } from "./render";
 import { issuedCol, issuedDocumentDoc, loadIssued, loadSettings, loadTemplate, loadType, loadTypes, countersCol, verificationsCol } from "./store";
 import { cleanPurpose, cleanValues, eligibilityProblem, formatCertificateNumber } from "./typeConfig";
@@ -47,7 +50,8 @@ export async function studentCatalog(db: Firestore, user: ActingUser): Promise<{
     const ofType = requests.filter((r) => r.certificateTypeId === t.id);
     const open = ofType.find((r) => OPEN.includes(r.status));
     const issued = ofType.some((r) => r.status === "ISSUED");
-    const blocked = eligibilityProblem(t, student) ?? (t.onceOnly && issued ? "Already issued to you - it is issued only once" : null);
+    const blocked = t.startedBy === "OFFICE" ? "Started by the College Office for your class - it appears in My requests"
+      : eligibilityProblem(t, student) ?? (t.onceOnly && issued ? "Already issued to you - it is issued only once" : null);
     return {
       type: {
         id: t.id, name: t.name, code: t.code, category: t.category, description: t.description, purposes: t.purposes, allowOtherPurpose: t.allowOtherPurpose,
@@ -84,6 +88,7 @@ export async function submitConfigured(db: Firestore, user: ActingUser, raw: unk
   const typeId = typeof body.typeId === "string" ? body.typeId : "";
   const type = typeId ? await loadType(db, user.collegeId, typeId) : null;
   if (!type || !type.isActive) throw new CertificationError("NOT_FOUND", "This certificate isn't available", 404);
+  if (type.startedBy === "OFFICE") throw new CertificationError("INVALID", "The College Office starts this certificate for your class", 400);
 
   const student = await loadStudentByUid(db, user.collegeId, user.uid);
   if (!student) throw new CertificationError("INVALID", "Your login isn't linked to a student record yet. Please contact your College Office.", 400);
@@ -188,8 +193,16 @@ async function buildDocument(
   const values = buildCertificateValues({
     student, request: req, issuerValues: opts.issuerValues, academicYear, cgpa, certificateNumber: opts.certificateNumber, issueDate: opts.issueDate,
   });
+  // The form's Semester: the student's current semester (from their section's course-year timings), when asked for.
+  if (!values.semester && texts.some((t) => t.includes("{{semester"))) {
+    const section = await findCurrentSectionDoc(db, collegeId, student as StudentRecord).catch(() => null);
+    const courseId = (section?.data() as { courseId?: string } | undefined)?.courseId;
+    const sem = courseId && student.year ? await resolveSectionCurrentSemester(db, collegeId, courseId, student.year).catch(() => null) : null;
+    if (sem) values.semester = toRoman(sem);
+  }
   const signature = settings.signatures.find((s) => s.id === type?.signatureId) ?? settings.signatures[0] ?? null;
   const html = renderCertificateHtml(template, {
+    clearances: clearanceRows(req),
     college: { name: college.name ?? "", address: college.address, logoUrl: college.logoUrl },
     values, marks, signature, certificateNumber: opts.certificateNumber, preview: opts.preview,
     verifyUrl: opts.verificationCode ? `${opts.baseUrl}/verify-certificate/${opts.verificationCode}` : opts.preview ? `${opts.baseUrl}/verify-certificate/PREVIEW` : undefined,
@@ -197,6 +210,25 @@ async function buildDocument(
   const missing = missingPlaceholders(texts, { ...values, collegeName: college.name ?? "", certificateNumber: "x" });
   if (template.kind === "MARKS" && (!marks || marks.semesters.length === 0)) missing.push("published results");
   return { html, missing, uploadOnly: template.kind === "UPLOAD" };
+}
+
+/** One line per department of the request's parallel steps, as the certificate prints it. */
+export function clearanceRows(req: Pick<CertificateRequest, "flow" | "steps">): { label: string; status: string; by: string; date: string }[] {
+  const rows: { label: string; status: string; by: string; date: string }[] = [];
+  req.flow.forEach((step, i) => {
+    const st = req.steps[i];
+    if (step.type !== "PARALLEL" || st?.type !== "PARALLEL") return;
+    for (const b of step.branches) {
+      const c = st.branches.find((x) => x.branchKey === b.key);
+      const at = c?.decidedAt as unknown as { toDate?: () => Date } | Date | undefined;
+      const date = at instanceof Date ? at : at?.toDate?.();
+      const status = c?.status !== "ACCEPTED" ? (c?.status === "REJECTED" ? "Rejected" : "Pending")
+        : b.check === "RESULT" ? (c.result?.outcome === "PASS" ? "Pass" : c.result?.outcome === "FAIL" ? "Fail" : "No results")
+        : c.outcome === "NOT_APPLICABLE" ? "Not applicable" : c.outcome === "NO_DUES" ? "No dues" : "Approved";
+      rows.push({ label: b.label, status, by: c?.decidedByName ?? "", date: date ? displayDate(date) : "" });
+    }
+  });
+  return rows;
 }
 
 async function loadIssuable(db: Firestore, user: ActingUser, id: string): Promise<CertificateRequest> {
@@ -387,3 +419,105 @@ export async function typeInUse(db: Firestore, collegeId: string, typeId: string
   return !snap.empty;
 }
 
+
+// ─── Exam result check (Pass / Fail) ───────────────────────────────────────────────
+
+/** PASS when the student's published results have no backlog, FAIL with the backlog codes, NO_RESULTS when none. */
+export async function resultCheck(db: Firestore, collegeId: string, studentId: string): Promise<{ outcome: "PASS" | "FAIL" | "NO_RESULTS"; backlogs: string[] }> {
+  const [{ rules }, sittings] = await Promise.all([loadResultRules(db, collegeId), loadPublishedSittings(db, collegeId, studentId)]);
+  const view = buildStudentResults(sittings, rules);
+  if (view.semesters.length === 0) return { outcome: "NO_RESULTS", backlogs: [] };
+  const backlogs = view.backlogs.map((b) => b.subjectCode);
+  return { outcome: backlogs.length ? "FAIL" : "PASS", backlogs };
+}
+
+// ─── Started by the College Office for a batch ────────────────────────────────────
+
+export interface BatchGroup { key: string; department: string; year: number; section: string; status: string; count: number }
+const groupKey = (s: { department?: string; year?: number; section?: string; status?: string }) =>
+  `${s.department ?? ""}|${s.year ?? 0}|${s.section ?? ""}|${s.status || "REGULAR"}`;
+
+/** The students to choose from, grouped by branch, year, section and status (studying / passed out ...). */
+export async function batchGroups(db: Firestore, collegeId: string): Promise<BatchGroup[]> {
+  const snap = await db.collection("colleges").doc(collegeId).collection("students").select("department", "year", "section", "status").get();
+  const groups = new Map<string, BatchGroup>();
+  for (const d of snap.docs) {
+    const s = d.data() as Partial<StudentRecord>;
+    const key = groupKey(s);
+    const g = groups.get(key) ?? { key, department: s.department ?? "", year: s.year ?? 0, section: s.section ?? "", status: s.status || "REGULAR", count: 0 };
+    g.count += 1;
+    groups.set(key, g);
+  }
+  return [...groups.values()].sort((a, b) => a.department.localeCompare(b.department) || a.year - b.year || a.section.localeCompare(b.section) || a.status.localeCompare(b.status));
+}
+
+/**
+ * Starts one request per student of the chosen groups. A student who already has an open request of the type (or
+ * holds an issued once-only one) is skipped and counted. dryRun counts without writing. Each approver gets one
+ * summary notification, not one per student.
+ */
+export async function startBatch(
+  db: Firestore, user: ActingUser, typeId: string, keys: string[], dryRun: boolean,
+): Promise<{ started: number; skipped: { student: string; reason: string }[]; total: number }> {
+  const type = await loadType(db, user.collegeId, typeId);
+  if (!type) throw new CertificationError("NOT_FOUND", "Certificate type not found", 404);
+  if (!type.isActive) throw new CertificationError("INVALID", "Switch this certificate on in Setup first", 400);
+  if (type.startedBy !== "OFFICE") throw new CertificationError("INVALID", "Students apply for this certificate themselves", 400);
+  const wanted = new Set(keys);
+  if (wanted.size === 0) throw new CertificationError("INVALID", "Pick at least one class", 400);
+
+  const col = db.collection("colleges").doc(user.collegeId).collection("students");
+  const students = (await col.get()).docs.map((d) => ({ ...(d.data() as StudentRecord), id: d.id })).filter((s) => wanted.has(groupKey(s)));
+  if (students.length > 2000) throw new CertificationError("INVALID", "At most 2000 students at a time - pick fewer classes", 400);
+  const existing = (await CERTIFICATE_REQUESTS_COL(db, user.collegeId).where("certificateTypeId", "==", type.id).get()).docs.map(rowOf);
+  const open = new Set(existing.filter((r) => OPEN.includes(r.status)).map((r) => r.studentId));
+  const issued = new Set(existing.filter((r) => r.status === "ISSUED").map((r) => r.studentId));
+
+  const skipped: { student: string; reason: string }[] = [];
+  const todo = students.filter((s) => {
+    const who = `${s.name} (${s.rollNumber || "no Regd. No"})`;
+    if (open.has(s.id)) { skipped.push({ student: who, reason: "Already in progress" }); return false; }
+    if (type.onceOnly && issued.has(s.id)) { skipped.push({ student: who, reason: "Already issued" }); return false; }
+    return true;
+  });
+  if (dryRun) return { started: todo.length, skipped, total: students.length };
+
+  const now = new Date();
+  const notifyCount = new Map<string, number>();
+  let batch = db.batch();
+  let inBatch = 0;
+  let started = 0;
+  for (const s of todo) {
+    const { steps, pendingRecipientUids } = await buildInitialStep(db, user.collegeId, type.flow, s.department, s.id);
+    if (pendingRecipientUids.length === 0) { skipped.push({ student: `${s.name} (${s.rollNumber})`, reason: `No one is set to approve "${type.flow[0].label}"` }); continue; }
+    const data = {
+      collegeId: user.collegeId, certificateTypeKey: type.code, certificateTypeLabel: type.name,
+      certificateTypeId: type.id, certificateTypeCode: type.code, issuer: type.issuer, templateId: type.templateId,
+      issuerFields: type.issuerFields, feeAmount: type.feeAmount, fields: type.fields, values: {}, attachments: [],
+      requesterUid: s.uid ?? "", requesterName: s.name, startedByUid: user.uid, startedByName: user.name,
+      studentId: s.id, studentRollNumber: s.rollNumber, studentName: s.name,
+      studentDepartment: s.department, studentYear: s.year, studentSection: s.section,
+      status: "IN_PROGRESS", flow: type.flow, currentStepIndex: 0, steps, pendingRecipientUids,
+      history: [{ action: "STARTED", byUid: user.uid, byName: user.name, byRole: user.role, at: now, detail: "Started by the College Office" }],
+      createdAt: now, updatedAt: now,
+    };
+    batch.set(CERTIFICATE_REQUESTS_COL(db, user.collegeId).doc(), data);
+    for (const uid of pendingRecipientUids) notifyCount.set(uid, (notifyCount.get(uid) ?? 0) + 1);
+    started += 1;
+    if (++inBatch >= 400) { await batch.commit(); batch = db.batch(); inBatch = 0; }
+  }
+  if (inBatch > 0) await batch.commit();
+
+  await writeAuditLogSafe(db, user.collegeId, {
+    action: "CERTIFICATE_BATCH_STARTED", performedBy: user.uid, performedByName: user.name, targetId: type.id,
+    details: { certificate: type.name, started, skipped: skipped.length },
+  });
+  const sends: (() => Promise<unknown>)[] = [
+    ...[...notifyCount].map(([uid, n]) => () => notifications.notifyStudent(db, user.collegeId, uid, "CERTIFICATE_STARTED", `${type.name} - ${n} waiting for you`,
+      `The College Office started ${type.name} for ${n} student${n === 1 ? "" : "s"}. Clear them in Certificates.`, "/certificates")),
+    ...todo.filter((s) => s.uid).map((s) => () => notifications.notifyStudent(db, user.collegeId, s.uid!, "CERTIFICATE_STARTED", `${type.name} started`,
+      `The College Office started your ${type.name}. Follow each department's clearance in Certificates.`)),
+  ];
+  for (let i = 0; i < sends.length; i += 25) await Promise.all(sends.slice(i, i + 25).map((f) => f().catch(() => undefined)));
+  return { started, skipped, total: students.length };
+}

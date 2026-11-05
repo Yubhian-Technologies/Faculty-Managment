@@ -66,3 +66,17 @@ export async function installStarterCatalog(db: Firestore, c: string, byName: st
   if (types + templates > 0) await batch.commit();
   return { types, templates };
 }
+
+/** Puts one installed starter type (and its template) back to the starter version - only while nobody has used it. */
+export async function resetToStarter(db: Firestore, c: string, typeId: string, byName: string): Promise<void> {
+  const current = await loadType(db, c, typeId);
+  const item = current?.catalogKey ? starterCatalog().find((i) => i.type.catalogKey === current.catalogKey) : undefined;
+  if (!current || !item) throw new Error("NOT_STARTER");
+  const used = await db.collection("colleges").doc(c).collection("certificateRequests").where("certificateTypeId", "==", typeId).limit(1).get();
+  if (!used.empty) throw new Error("IN_USE");
+  const now = new Date().toISOString();
+  const batch = db.batch();
+  batch.set(templatesCol(db, c).doc(item.templateId), { ...item.template, updatedAt: now });
+  batch.set(typesCol(db, c).doc(typeId), { ...item.type, templateId: item.templateId, isActive: current.isActive, updatedAt: now, updatedByName: byName });
+  await batch.commit();
+}

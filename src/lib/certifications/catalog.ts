@@ -4,7 +4,8 @@ import type {
 
 // The starter catalogue: the 28 certificates colleges commonly issue, each with its own template. Installed on request
 // by the Principal / College Admin (never automatically), only for entries the college doesn't have yet - an installed
-// type or template is never overwritten. Everything arrives switched OFF except No Dues (the flow students already use),
+// type or template is never overwritten (Setup offers "Reset to starter" for one not yet used). Everything arrives
+// switched OFF except No Dues (it replaces the original No Due flow),
 // so a college reviews each one - approvers, fee, wording - before students see it.
 
 type Flow = FlowStepDef[];
@@ -57,7 +58,8 @@ interface Entry {
   issuer?: RecipientResolver;
   issuerFields?: CertificateFieldDef[];
   delivery?: CertificateTypeConfig["delivery"];
-  template: { kind: CertificateTemplateKind; title: string; body?: string; rows?: { label: string; value: string }[]; marksKind?: CertificateTemplate["marksKind"]; footer?: string; showQr?: boolean };
+  startedBy?: CertificateTypeConfig["startedBy"];
+  template: { kind: CertificateTemplateKind; title: string; body?: string; rows?: { label: string; value: string }[]; marksKind?: CertificateTemplate["marksKind"]; footer?: string; showQr?: boolean; showClearances?: boolean };
 }
 
 const GENERAL_PURPOSES = ["Higher studies", "Employment", "Passport", "Bank account", "Scholarship", "Government scheme"];
@@ -192,10 +194,39 @@ const ENTRIES: Entry[] = [
     template: { kind: "LETTER", title: "MEDIUM OF INSTRUCTION CERTIFICATE", body: `${STUDENT_LINE} {{studentStatus}} {{course}} ({{branch}}) in this college. The medium of instruction and examination for the entire course is ENGLISH.\n\n${REQUEST_LINE}` },
   },
   {
+    // The college's own No Dues form: every department at once (dues / approval / result), then the Principal.
+    // Started by the College Office for a whole batch; a department that doesn't apply marks Not applicable.
     key: "NO_DUES", code: "ND", name: "No Dues Certificate", category: "CLEARANCE",
-    description: "Every department confirms you have nothing pending.",
-    flow: [HOD_STEP, DUES_STEP, seq("officeFeeCheck", "College Office - fee verification", role("COLLEGE_OFFICE"))],
-    template: { kind: "LETTER", title: "NO DUES CERTIFICATE", body: `${STUDENT_LINE} studying {{course}} ({{branch}}), has no dues pending with the Library, Hostel, Placement Cell, Physical Education department or the College Office as on the date of this certificate.` },
+    description: "Every department confirms the student has nothing pending.", startedBy: "OFFICE",
+    flow: [
+      {
+        id: "clearances", type: "PARALLEL", label: "Department clearances",
+        branches: [
+          { key: "COLLEGE", label: "College", recipient: role("COLLEGE_OFFICE"), check: "DUES" },
+          { key: "DEPARTMENT", label: "Department", recipient: HOD, check: "APPROVAL" },
+          { key: "LIBRARY", label: "Library", recipient: role("LIBRARY"), check: "DUES" },
+          { key: "HOSTEL_ACCOUNTS", label: "Hostel Accounts", recipient: role("HOSTEL"), check: "DUES" },
+          { key: "ADMINISTRATION", label: "Administration", recipient: role("COLLEGE_OFFICE"), check: "DUES" },
+          { key: "CANTEEN", label: "Canteen", recipient: role("COLLEGE_OFFICE"), check: "DUES" },
+          { key: "BANK_LOAN", label: "Bank Loan", recipient: role("COLLEGE_OFFICE"), check: "DUES" },
+          { key: "COLLEGE_ACCOUNTS", label: "College Accounts", recipient: role("COLLEGE_ACCOUNTS"), check: "DUES" },
+          { key: "SCHOLARSHIPS", label: "Scholarships", recipient: role("COLLEGE_OFFICE"), check: "DUES" },
+          { key: "EXAM_CELL", label: "Exam Cell", recipient: role("EXAM_CELL"), check: "RESULT" },
+          { key: "PHYSICAL_EDUCATION", label: "Physical Education", recipient: role("PD"), check: "DUES" },
+          { key: "WARDEN", label: "Warden", recipient: role("HOSTEL"), check: "APPROVAL" },
+        ],
+      },
+      PRINCIPAL_STEP,
+    ],
+    template: {
+      kind: "FORM", title: "NO DUES CERTIFICATE", showClearances: true,
+      rows: [
+        { label: "Name", value: "{{studentName}}" }, { label: "Father's Name", value: "{{fatherName}}" },
+        { label: "Regd. No", value: "{{rollNumber}}" }, { label: "College", value: "{{collegeName}}" },
+        { label: "Year / Semester", value: "{{year}} / {{semester}}" }, { label: "Branch", value: "{{branch}}" },
+      ],
+      footer: "The above student has \"NO DUES\" with the departments listed.",
+    },
   },
   {
     key: "ATTENDANCE", code: "ATT", name: "Attendance Certificate", category: "ACADEMIC_RECORDS",
@@ -310,6 +341,7 @@ export function starterCatalog(): CatalogItem[] {
         name: e.name, kind: e.template.kind, title: e.template.title, showQr: e.template.showQr ?? true, catalogKey: e.key,
         ...(e.template.body ? { body: e.template.body } : {}), ...(e.template.rows ? { rows: e.template.rows } : {}),
         ...(e.template.marksKind ? { marksKind: e.template.marksKind } : {}), ...(e.template.footer ? { footer: e.template.footer } : {}),
+        ...(e.template.showClearances ? { showClearances: true } : {}),
       },
       type: {
         code: e.code, name: e.name, category: e.category, description: e.description,
@@ -318,7 +350,7 @@ export function starterCatalog(): CatalogItem[] {
         purposes: e.purposes ?? [], allowOtherPurpose: e.allowOtherPurpose ?? false,
         fields: e.fields ?? [], attachments: e.attachments ?? [], onceOnly: e.onceOnly ?? false, feeAmount: e.feeAmount ?? 0,
         flow: e.flow, issuer: e.issuer ?? role("COLLEGE_OFFICE"), templateId, issuerFields: e.issuerFields ?? [],
-        numberFormat: "{CODE}/{YYYY}/{SEQ}", delivery: e.delivery ?? "BOTH", catalogKey: e.key,
+        numberFormat: "{CODE}/{YYYY}/{SEQ}", delivery: e.delivery ?? "BOTH", catalogKey: e.key, startedBy: e.startedBy ?? "STUDENT",
       },
     };
   });

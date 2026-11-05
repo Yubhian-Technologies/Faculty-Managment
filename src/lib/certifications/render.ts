@@ -18,6 +18,8 @@ export interface CertificateData {
   verifyUrl?: string;
   /** Preview: missing values are highlighted and a PREVIEW mark is shown. */
   preview?: boolean;
+  /** Each department's clearance, for a template with showClearances (the No Dues table). */
+  clearances?: { label: string; status: string; by: string; date: string }[];
 }
 
 /** Every placeholder the editor offers, grouped - type-specific form / issuer fields are added by key. */
@@ -35,7 +37,7 @@ export const PLACEHOLDER_GROUPS: { title: string; items: { key: string; label: s
   {
     title: "Course",
     items: [
-      { key: "course", label: "Course" }, { key: "branch", label: "Branch" }, { key: "year", label: "Year (III)" }, { key: "section", label: "Section" },
+      { key: "course", label: "Course" }, { key: "branch", label: "Branch" }, { key: "year", label: "Year (III)" }, { key: "semester", label: "Semester (I / II)" }, { key: "section", label: "Section" },
       { key: "academicYear", label: "Academic year" }, { key: "batch", label: "Batch" }, { key: "regulation", label: "Regulation" }, { key: "studentStatus", label: "Status (studying / completed)" },
       { key: "cgpa", label: "CGPA" },
     ],
@@ -119,6 +121,14 @@ export function renderCertificateHtml(template: CertificateTemplate, data: Certi
     body = `${template.body ? paragraphs(fill(template.body)) : ""}${marksHtml(template.marksKind, data.marks, Number(v.semester) || null)}`;
   }
   if (template.kind === "UPLOAD") body = `<p class="note">This certificate is issued as an uploaded document.</p>`;
+  if (template.showClearances && template.kind !== "UPLOAD") {
+    const rows = data.clearances ?? [];
+    body += rows.length
+      ? `<table class="grid clear"><thead><tr><th>#</th><th>Department</th><th>Status</th><th>Cleared by</th><th>Date</th></tr></thead><tbody>
+        ${rows.map((r, i) => `<tr><td>${i + 1}</td><td class="l">${escapeHtml(r.label)}</td><td class="${/Fail|Pending|Rejected/.test(r.status) ? "bad" : "ok"}">${escapeHtml(r.status)}</td><td class="l">${escapeHtml(r.by)}</td><td>${escapeHtml(r.date)}</td></tr>`).join("")}
+        </tbody></table>`
+      : `<p class="note">The departments' clearances are listed here when it is issued.</p>`;
+  }
 
   const sig = data.signature;
   const qr = template.showQr && data.verifyUrl ? `<div class="qr">${qrSvg(data.verifyUrl)}<div>Scan to verify<br/>${escapeHtml(data.verifyUrl.replace(/^https?:\/\//, ""))}</div></div>` : `<div></div>`;
@@ -133,17 +143,18 @@ export function renderCertificateHtml(template: CertificateTemplate, data: Certi
     .head > div { min-width: 0; }
     .head .addr { font-size: 11.5pt; line-height: 1.35; color: #333; }
     .meta { display: flex; justify-content: space-between; font-size: 13pt; margin: 14px 0 6px; }
-    h1 { text-align: center; font-size: 19pt; letter-spacing: 1.5px; text-decoration: underline; margin: 18px 0 16px; }
+    h1 { text-align: center; font-size: 19pt; letter-spacing: 1.5px; text-decoration: underline; margin: 14px 0 12px; }
     h3 { font-size: 13.5pt; margin: 14px 0 4px; }
     p { text-align: justify; margin: 0 0 12px; }
     .note { color: #555; font-style: italic; }
-    table.form { width: 100%; border-collapse: collapse; } table.form td { padding: 5px 4px; vertical-align: top; }
+    table.form { width: 100%; border-collapse: collapse; } table.form td { padding: 3px 4px; vertical-align: top; line-height: 1.45; }
     table.form td.n { width: 28px; } table.form td.k { width: 44%; } table.form td.c { width: 12px; }
     table.grid { width: 100%; border-collapse: collapse; font-size: 11.5pt; margin-top: 6px; }
     table.grid th, table.grid td { border: 1px solid #555; padding: 3px 5px; text-align: center; } table.grid td.l { text-align: left; }
     .sgpa { margin-top: 6px; text-align: right; }
+    table.clear { margin-top: 10px; font-size: 11pt; } table.clear th, table.clear td { padding: 2px 6px; } table.clear td.ok { font-weight: 700; } table.clear td.bad { font-weight: 700; color: #b91c1c; }
     .foot { margin-top: 14px; font-size: 13pt; }
-    .bottom { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 40px; break-inside: avoid-page; }
+    .bottom { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 28px; break-inside: avoid-page; }
     .qr { display: flex; align-items: flex-end; gap: 8px; font-size: 10pt; color: #444; }
     .sign { text-align: center; min-width: 200px; } .sign img { height: 52px; display: block; margin: 0 auto 2px; }
     .sign .d { font-weight: 700; font-size: 15pt; }

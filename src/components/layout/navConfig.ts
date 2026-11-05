@@ -173,8 +173,8 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Semester Results", href: "/exam-cell/semester-results", iconName: "GraduationCap", roles: ["EXAM_CELL"], section: "Results", legacyModule: "General" },
   { label: "Result Rules", href: "/exam-cell/result-rules", iconName: "Settings2", roles: ["EXAM_CELL"], legacyModule: "General" },
   { label: "Results Analysis", href: "/exam-cell/results-analysis", iconName: "BarChart3", roles: ["EXAM_CELL"], legacyModule: "General" },
-  { label: "PC & CMM Requests", href: "/exam-cell/certificate-requests", iconName: "FileCheck", roles: ["EXAM_CELL"], section: "Student Services", legacyModule: "General" },
-  { label: "Certificates", href: "/certificates", iconName: "FileCheck", roles: ["EXAM_CELL"], legacyModule: "General" },
+  // Replaces the No Due prototype's "PC & CMM Requests" (that page still opens for its old records).
+  { label: "Certificates", href: "/certificates", iconName: "FileCheck", roles: ["EXAM_CELL"], section: "Student Services", legacyModule: "General" },
   { label: "Attendance Reports", href: "/exam-cell/attendance-report", iconName: "BarChart3", roles: ["EXAM_CELL"], section: "Attendance", legacyModule: "General" },
   { label: "Import Attendance", href: "/exam-cell/attendance-import", iconName: "Upload", roles: ["EXAM_CELL"], legacyModule: "General" },
   { label: "Staff Attendance", href: "/exam-cell/staff-attendance", iconName: "ClipboardCheck", roles: ["EXAM_CELL"], legacyModule: "General" },

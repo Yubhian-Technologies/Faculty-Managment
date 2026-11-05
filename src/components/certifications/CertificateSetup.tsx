@@ -21,7 +21,7 @@ import { PLACEHOLDER_GROUPS, renderCertificateHtml } from "@/lib/certifications/
 import type { CertificateSettings, CertificateSignature, CertificateTemplate, CertificateTypeConfig } from "@/types";
 import type { StudentResultsView } from "@/lib/examResults/studentResults";
 import {
-  deleteTemplate, deleteType, installCatalog, loadSetup, loadStaff, saveSignatures, saveTemplate, saveType, uploadSignature,
+  deleteTemplate, deleteType, installCatalog, resetType, loadSetup, loadStaff, saveSignatures, saveTemplate, saveType, uploadSignature,
   type SetupType, type StaffOption,
 } from "./configApi";
 import { A4Preview } from "./A4Preview";
@@ -57,13 +57,20 @@ const SAMPLE_MARKS: StudentResultsView = {
   cgpa: 8.42, cgpaWithheld: false, creditsEarned: 40, backlogs: [], decimals: 2,
 };
 
+const SAMPLE_CLEARANCES = [
+  { label: "Library", status: "No dues", by: "Librarian", date: "01-11-2026" },
+  { label: "Hostel Accounts", status: "Not applicable", by: "Hostel Office", date: "01-11-2026" },
+  { label: "Exam Cell", status: "Pass", by: "Exam Cell", date: "02-11-2026" },
+  { label: "Physical Education", status: "No dues", by: "Physical Director", date: "02-11-2026" },
+];
+
 /** The certificate a template produces, for a sample student (the type's own fields shown by their label). */
 type PreviewCollege = { name: string; address?: string; logoUrl?: string };
 function sampleHtml(template: CertificateTemplate, opts: { college: PreviewCollege; signature: CertificateSignature | null; certificateNumber: string; fields?: { key: string; label: string; defaultValue?: string; kind?: string }[] }) {
   const own = Object.fromEntries((opts.fields ?? []).filter((f) => f.key).map((f) => [f.key, f.defaultValue || (f.key === "semester" ? "2" : `[${f.label}]`)]));
   return renderCertificateHtml(template, {
     college: opts.college, values: { ...SAMPLE, ...own, certificateNumber: opts.certificateNumber }, certificateNumber: opts.certificateNumber,
-    marks: SAMPLE_MARKS, verifyUrl: "https://example.org/verify-certificate/SAMPLE", preview: true, signature: opts.signature,
+    marks: SAMPLE_MARKS, clearances: SAMPLE_CLEARANCES, verifyUrl: "https://example.org/verify-certificate/SAMPLE", preview: true, signature: opts.signature,
   });
 }
 
@@ -116,7 +123,16 @@ function TypeEditor({ initial, id, templates, signatures, staff, college, onClos
               </div>
             </div>
             <div className="space-y-1.5"><Label htmlFor="ct-desc">Description shown to students</Label><Input id="ct-desc" value={t.description ?? ""} onChange={(e) => set("description", e.target.value)} /></div>
-            <label className="flex items-center gap-2 text-sm"><Switch checked={t.isActive === true} onCheckedChange={(c) => set("isActive", c)} /> Students can apply for it</label>
+            <label className="flex items-center gap-2 text-sm"><Switch checked={t.isActive === true} onCheckedChange={(c) => set("isActive", c)} /> Switched on</label>
+            <div className="space-y-1.5 max-w-md"><Label>Who starts it</Label>
+              <Select value={t.startedBy ?? "STUDENT"} onValueChange={(v) => set("startedBy", v as CertificateTypeConfig["startedBy"])}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="STUDENT">The student applies</SelectItem>
+                  <SelectItem value="OFFICE">The College Office starts it for classes (e.g. No Dues)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </Section>
 
           <Section title="Who can apply" hint="Leave all unticked for every student.">
@@ -292,6 +308,9 @@ function TemplateEditor({ initial, id, signature, college, onClose, onSaved }: {
             {kind !== "UPLOAD" && (
               <div className="space-y-1.5"><Label htmlFor="tp-footer">Note below (optional)</Label><Textarea id="tp-footer" rows={2} value={t.footer ?? ""} onChange={(e) => set("footer", e.target.value)} /></div>
             )}
+            {kind !== "UPLOAD" && (
+              <label className="flex items-center gap-2 text-sm"><Checkbox checked={t.showClearances === true} onCheckedChange={(c) => set("showClearances", c === true)} /> Print every department&apos;s clearance as a table (No Dues)</label>
+            )}
             <label className="flex items-center gap-2 text-sm"><Checkbox checked={t.showQr !== false} onCheckedChange={(c) => set("showQr", c === true)} /> Print the QR verification code</label>
           </div>
           <div className="space-y-1.5">
@@ -387,6 +406,14 @@ export function CertificateSetup({ canEdit }: { canEdit: boolean }) {
     finally { setBusy(""); }
   }
 
+  async function reset(t: SetupType) {
+    if (!window.confirm(`Put "${t.name}" and its template back to the starter version? Your edits to them are replaced.`)) return;
+    setBusy(`reset:${t.id}`);
+    try { await resetType(t.id); toast({ variant: "success", title: "Reset to the starter version" }); load(); }
+    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't reset" }); }
+    finally { setBusy(""); }
+  }
+
   async function toggle(t: SetupType, on: boolean) {
     setBusy(t.id);
     try { await saveType({ ...t, isActive: on }, t.id); load(); }
@@ -440,7 +467,7 @@ export function CertificateSetup({ canEdit }: { canEdit: boolean }) {
                       <p className="font-medium">{t.name} <span className="text-xs font-mono text-muted-foreground">{t.code}</span></p>
                       <p className="text-xs text-muted-foreground">
                         {t.flow.map((s) => (s.type === "PARALLEL" ? s.branches.map((b) => b.label || recipientLabel(b.recipient)).join(" + ") : s.label || recipientLabel(s.recipient))).join(" → ")}
-                        {" → issued by "}{recipientLabel(t.issuer)} · {templateName.get(t.templateId) ?? "no template"}
+                        {" → issued by "}{recipientLabel(t.issuer)} · {templateName.get(t.templateId) ?? "no template"}{t.startedBy === "OFFICE" ? " · started by the College Office" : ""}
                       </p>
                     </div>
                     {t.feeAmount > 0 && <Badge variant="secondary">Rs. {t.feeAmount}</Badge>}
@@ -448,6 +475,7 @@ export function CertificateSetup({ canEdit }: { canEdit: boolean }) {
                     {canEdit && (
                       <div className="flex gap-1">
                         <Button size="sm" variant="ghost" onClick={() => setEditingType({ initial: t, id: t.id })}><Pencil className="h-4 w-4 mr-1" /> Edit</Button>
+                        {!t.inUse && t.catalogKey && <Button size="sm" variant="ghost" loading={busy === `reset:${t.id}`} onClick={() => reset(t)} title="Put this certificate and its template back to the starter version">Reset</Button>}
                         {!t.inUse && <Button size="icon" variant="ghost" onClick={() => setDeleting({ kind: "type", id: t.id, name: t.name })} aria-label="Delete"><Trash2 className="h-4 w-4" /></Button>}
                       </div>
                     )}

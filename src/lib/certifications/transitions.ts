@@ -134,8 +134,14 @@ export async function decideSequentialStep(
   return result;
 }
 
+export interface BranchOutcome {
+  outcome?: "NO_DUES" | "NOT_APPLICABLE" | "APPROVED";
+  result?: CertificateClearance["result"];
+}
+
 export async function decideParallelBranch(
-  db: Firestore, collegeId: string, id: string, branchKey: string, action: "ACCEPT" | "REJECT", actor: ActingUser, remarks?: string
+  db: Firestore, collegeId: string, id: string, branchKey: string, action: "ACCEPT" | "REJECT", actor: ActingUser, remarks?: string,
+  extra: BranchOutcome = {}
 ): Promise<CertificateRequest> {
   const ref = CERTIFICATE_REQUESTS_COL(db, collegeId).doc(id);
   const now = new Date();
@@ -158,10 +164,20 @@ export async function decideParallelBranch(
     const resolvedUids = await resolveRecipientUids(db, collegeId, branchDef.recipient, recipientContext(req));
     if (!canDecide(actor.uid, req.requesterUid, resolvedUids)) throw new CertificationError("FORBIDDEN", "You can't decide this clearance", 403);
     if (action === "REJECT" && !remarks) throw new CertificationError("REMARKS_REQUIRED", "Remarks are required to reject", 400);
+    // A dues check is cleared (No dues / Not applicable) or marked Dues pending - never rejected.
+    const check = branchDef.check ?? "APPROVAL";
+    if (check === "DUES" && action === "REJECT") throw new CertificationError("INVALID", "Mark the dues as pending instead - the student can then pay and be cleared", 400);
+    if (check === "DUES" && action === "ACCEPT" && extra.outcome !== "NO_DUES" && extra.outcome !== "NOT_APPLICABLE") {
+      throw new CertificationError("INVALID", "Mark No dues or Not applicable", 400);
+    }
+    const outcome = action === "ACCEPT" ? (check === "DUES" ? extra.outcome : "APPROVED") : undefined;
 
     const updatedBranches: CertificateClearance[] = current.branches.map((b) =>
       b.branchKey === branchKey
-        ? { ...b, status: action === "ACCEPT" ? "ACCEPTED" : "REJECTED", decidedByUid: actor.uid, decidedByName: actor.name, decidedAt: now, ...(remarks ? { remarks } : {}) }
+        ? {
+            ...b, status: action === "ACCEPT" ? "ACCEPTED" : "REJECTED", decidedByUid: actor.uid, decidedByName: actor.name, decidedAt: now,
+            ...(remarks ? { remarks } : {}), ...(outcome ? { outcome } : {}), ...(extra.result ? { result: extra.result } : {}), duesPending: null,
+          }
         : b
     );
     const updatedStepState: StepRuntimeState = { type: "PARALLEL", branches: updatedBranches };
@@ -307,6 +323,7 @@ export async function cancelRequest(db: Firestore, collegeId: string, id: string
     if (!snap.exists) throw new CertificationError("NOT_FOUND", "Request not found", 404);
     const req = { id: snap.id, ...snap.data() } as CertificateRequest;
     if (req.requesterUid !== actor.uid) throw new CertificationError("FORBIDDEN", "You can only cancel your own request", 403);
+    if (req.startedByUid) throw new CertificationError("FORBIDDEN", "The College Office started this request - it can't be cancelled here", 403);
     if (req.status !== "IN_PROGRESS" && req.status !== "RETURNED") throw new CertificateStateConflictError("This request can no longer be cancelled.");
 
     const historyEntry: CertificateHistoryEntry = { action: "CANCELLED", byUid: actor.uid, byName: actor.name, byRole: actor.role, at: now };
@@ -410,6 +427,48 @@ export async function resubmitRequest(
       collegeId, action: "CERTIFICATE_RESUBMITTED", performedBy: actor.uid, performedByName: actor.name, targetId: id, details: {}, timestamp: now,
     });
     result = { ...req, ...(update as Partial<CertificateRequest>) };
+  });
+  return result;
+}
+
+/**
+ * A department records money the student still owes (amount + reason). Not a rejection: the line stays open, the
+ * student sees what to pay, and the department clears it (No dues) once paid. Recording it again replaces it.
+ */
+export async function markDuesPending(
+  db: Firestore, collegeId: string, id: string, branchKey: string, actor: ActingUser, amount: number, reason: string
+): Promise<CertificateRequest> {
+  const ref = CERTIFICATE_REQUESTS_COL(db, collegeId).doc(id);
+  const now = new Date();
+  let result!: CertificateRequest;
+  if (!Number.isFinite(amount) || amount < 0 || amount > 10_000_000) throw new CertificationError("INVALID", "Enter the amount due", 400);
+  if (!reason.trim()) throw new CertificationError("REMARKS_REQUIRED", "Say what the dues are for", 400);
+
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new CertificationError("NOT_FOUND", "Request not found", 404);
+    const req = { id: snap.id, ...snap.data() } as CertificateRequest;
+    const step = req.flow[req.currentStepIndex];
+    const current = req.steps[req.currentStepIndex];
+    if (req.status !== "IN_PROGRESS" || step?.type !== "PARALLEL" || current?.type !== "PARALLEL") throw new CertificateStateConflictError();
+    const branchDef = step.branches.find((b) => b.key === branchKey);
+    const state = current.branches.find((b) => b.branchKey === branchKey);
+    if (!branchDef || !state) throw new CertificationError("NOT_FOUND", "No such clearance on this request", 404);
+    if ((branchDef.check ?? "APPROVAL") !== "DUES") throw new CertificationError("INVALID", "This line is not a dues check", 400);
+    if (state.status !== "PENDING") throw new CertificateStateConflictError("This clearance was already decided.");
+    const uids = await resolveRecipientUids(db, collegeId, branchDef.recipient, recipientContext(req));
+    if (!canDecide(actor.uid, req.requesterUid, uids)) throw new CertificationError("FORBIDDEN", "You can't decide this clearance", 403);
+
+    const duesPending = { amount: Math.round(amount * 100) / 100, reason: reason.trim().slice(0, 200), byName: actor.name, at: now };
+    const branches = current.branches.map((b) => (b.branchKey === branchKey ? { ...b, duesPending } : b));
+    const steps = [...req.steps.slice(0, req.currentStepIndex), { type: "PARALLEL" as const, branches }];
+    const history = [...req.history, { action: "DUES_PENDING", byUid: actor.uid, byName: actor.name, byRole: actor.role, at: now, detail: branchDef.label, remarks: `Rs. ${duesPending.amount} - ${duesPending.reason}` }];
+    tx.update(ref, { steps, history, updatedAt: now });
+    tx.set(auditRef(db, collegeId), {
+      collegeId, action: "CERTIFICATE_DUES_PENDING", performedBy: actor.uid, performedByName: actor.name, targetId: id,
+      details: { branch: branchDef.label, amount: duesPending.amount }, timestamp: now,
+    });
+    result = { ...req, steps, history, updatedAt: now };
   });
   return result;
 }
