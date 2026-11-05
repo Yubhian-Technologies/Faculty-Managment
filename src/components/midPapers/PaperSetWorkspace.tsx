@@ -9,11 +9,11 @@ import { toast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
 import { BLOOM_LEVELS } from "@/lib/midBank/constants";
 import { outcomeSwitches } from "@/lib/midBank/outcomeSwitches";
-import { choiceText, paperQuestionErrors, partMax, patternMax, questionId } from "@/lib/midPapers/pattern";
+import { choiceText, unitOfQuestion, FLEXIBLE_MAX_QUESTIONS, flexibleProblem, flexibleQuestions, PART_KINDS, paperQuestionErrors, partFor, partMax, patternMax, questionId } from "@/lib/midPapers/pattern";
 import { MathText, QuestionTextField } from "@/components/midBank/MathText";
 import { ApprovalPanel } from "@/components/midBank/ApprovalPanel";
 import type { MidBankDetail } from "@/lib/midBank/clientTypes";
-import type { BloomLevel, MidPaperQuestion, MidQuestionBank, PaperPartDef, PaperSubPart } from "@/types";
+import type { BloomLevel, MidPaperQuestion, MidQuestionBank, PaperPartDef, PaperPartKind, PaperSubPart } from "@/types";
 
 // A faculty member's question papers: one tab per set, the questions of each part down the left, the editor for
 // the selected question in the middle (its kind decides the fields - options for "choose the correct answer", the
@@ -21,11 +21,18 @@ import type { BloomLevel, MidPaperQuestion, MidQuestionBank, PaperPartDef, Paper
 // autosave (one request at a time, never overwriting a newer copy - 409); "Save question" runs the checks.
 
 const AUTOSAVE_MS = 1500;
-type Editable = Pick<MidPaperQuestion, "text" | "imageUrl" | "imageCaption" | "options" | "answer" | "subParts" | "cos" | "bloom" | "unit">;
-const blank = (part: PaperPartDef): Editable => ({
-  text: "", cos: [], bloom: "", ...(part.kind === "MCQ" ? { options: Array.from({ length: part.options ?? 4 }, () => ""), answer: "" } : {}),
-  ...(part.kind === "FILL_BLANK" ? { answer: "" } : {}),
-});
+type Editable = Pick<MidPaperQuestion, "text" | "imageUrl" | "imageCaption" | "options" | "answer" | "subParts" | "cos" | "bloom" | "unit" | "kind" | "marks">;
+/** A new question's fields for its kind (a faculty-decides part starts it as a short answer; any-k: the fixed marks). */
+const blank = (setPart: PaperPartDef): Editable => {
+  const kind = setPart.flexible ? "SHORT" : setPart.kind;
+  const options = setPart.flexible ? 4 : setPart.options ?? 4;
+  return {
+    text: "", cos: [], bloom: "",
+    ...(setPart.flexible ? { kind, marks: setPart.choice.kind === "ANY" ? Math.max(1, Math.floor((setPart.maxMarks ?? 1) / setPart.choice.answer)) : 2 } : {}),
+    ...(kind === "MCQ" ? { options: Array.from({ length: options }, () => ""), answer: "" } : {}),
+    ...(kind === "FILL_BLANK" ? { answer: "" } : {}),
+  };
+};
 
 export function PaperSetWorkspace({ detail }: { detail: MidBankDetail }) {
   const [bank, setBank] = useState<MidQuestionBank>(detail.bank);
@@ -37,9 +44,12 @@ export function PaperSetWorkspace({ detail }: { detail: MidBankDetail }) {
     Object.fromEntries((detail.questions as unknown as MidPaperQuestion[]).map((q) => [q.id, q])));
   const [set, setSet] = useState(1);
   const [cur, setCur] = useState<{ partId: string; no: number }>({ partId: pattern.parts[0].id, no: 1 });
-  const part = pattern.parts.find((p) => p.id === cur.partId)!;
+  const setPart = pattern.parts.find((p) => p.id === cur.partId)!;
   const qid = questionId(set, cur.partId, cur.no);
-  const [q, setQ] = useState<Editable>(() => questions[qid] ?? blank(part));
+  const [q, setQ] = useState<Editable>(() => questions[qid] ?? blank(setPart));
+  // The part as this question sees it (a faculty-decides part: the question's own kind and marks).
+  const part = partFor(setPart, q);
+  const flexList = (pid: string) => flexibleQuestions(Object.values(questions), set, pid);
   const [rev, setRev] = useState(questions[qid]?.rev ?? 0);
   const [dirty, setDirty] = useState(false);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "failed" | "conflict">("idle");
@@ -51,7 +61,7 @@ export function PaperSetWorkspace({ detail }: { detail: MidBankDetail }) {
   // What a save sends: always the current question (kept after each render).
   useEffect(() => { latest.current = { qid, q, rev, dirty }; });
 
-  const live = useMemo(() => paperQuestionErrors(q, part, sw), [q, part, sw]);
+  const live = useMemo(() => paperQuestionErrors(q, setPart, sw), [q, setPart, sw]);
 
   const edit = (patch: Partial<Editable>) => { setQ((x) => ({ ...x, ...patch })); setDirty(true); setSaveState((s) => (s === "saved" ? "idle" : s)); };
 
@@ -104,14 +114,46 @@ export function PaperSetWorkspace({ detail }: { detail: MidBankDetail }) {
     open(nextSet, partId, no);
   }
   function nextSlot(): [number, string, number] | null {
-    if (cur.no < part.questions) return [set, cur.partId, cur.no + 1];
+    if (setPart.flexible) {
+      const n = flexList(cur.partId).length;
+      if (cur.no < n) return [set, cur.partId, cur.no + 1];
+      // A new question until the part fits its marks, then the next part.
+      if (flexibleProblem(setPart, flexList(cur.partId))) return [set, cur.partId, n + 1];
+    } else if (cur.no < setPart.questions) return [set, cur.partId, cur.no + 1];
     const i = pattern.parts.findIndex((p) => p.id === cur.partId);
     return pattern.parts[i + 1] ? [set, pattern.parts[i + 1].id, 1] : null;
   }
   async function saveQuestion(andNext: boolean) {
     if (!(await save("complete"))) return;
-    toast({ variant: "success", title: `Set ${set} · ${part.label} Q${cur.no} saved` });
+    toast({ variant: "success", title: `Set ${set} · ${setPart.label} Q${cur.no} saved` });
     if (andNext) { const n = nextSlot(); if (n) open(...n); }
+  }
+
+  /** A faculty-decides part: delete this question; the ones after it move up. */
+  async function removeQuestion() {
+    if (!questions[qid]) { const n = flexList(cur.partId).length; open(set, cur.partId, Math.max(1, Math.min(cur.no, n))); return; }
+    if (!window.confirm(`Remove question ${cur.no} of ${setPart.label}? The questions after it move up.`)) return;
+    try {
+      const res = await fetch(`/api/college/mid-question-banks/${encodeURIComponent(bank.id)}/paper-questions/${qid}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "remove" }),
+      });
+      const data = (await res.json()) as { error?: string; progress?: { setProgress: MidQuestionBank["setProgress"]; completeCount: number; totalCount: number; allComplete: boolean } };
+      if (!res.ok) throw new Error(data.error ?? "Could not remove it");
+      setQuestions((qs) => {
+        const next: Record<string, MidPaperQuestion> = {};
+        for (const x of Object.values(qs)) {
+          if (x.id === qid) continue;
+          if (x.set === set && x.partId === cur.partId && x.no > cur.no) { const id = questionId(set, cur.partId, x.no - 1); next[id] = { ...x, id, no: x.no - 1 }; }
+          else next[x.id] = x;
+        }
+        return next;
+      });
+      if (data.progress) setBank((b) => ({ ...b, setProgress: data.progress!.setProgress, completeCount: data.progress!.completeCount, totalCount: data.progress!.totalCount, status: data.progress!.allComplete ? "COMPLETE" : "IN_PROGRESS" }));
+      toast({ variant: "success", title: "Question removed" });
+      setCur({ partId: cur.partId, no: Math.max(1, cur.no - 1) });
+      setDirty(false);
+      setTimeout(() => window.location.reload(), 300);
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not remove it" }); }
   }
 
   async function upload(file: File, sub?: number) {
@@ -158,19 +200,26 @@ export function PaperSetWorkspace({ detail }: { detail: MidBankDetail }) {
           {pattern.parts.map((p) => (
             <div key={p.id}>
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{p.label} · {p.title}</p>
-              <p className="mb-1.5 text-[11px] text-muted-foreground">{p.questions} x {p.marksEach} = {partMax(p)} marks · {choiceText(p)}</p>
+              <p className="mb-1.5 text-[11px] text-muted-foreground">{p.flexible
+                ? `${flexList(p.id).filter((_, i) => p.choice.kind !== "OR_PAIRS" || i % 2 === 0).reduce((n, x) => n + (x.marks ?? 0), 0)} of ${partMax(p)} marks · ${choiceText(p, flexList(p.id).length)}`
+                : `${p.questions} x ${p.marksEach} = ${partMax(p)} marks${p.perUnit ? ` (counts for ${p.maxMarks})` : ""} · ${choiceText(p)}`}</p>
+              {p.flexible && (() => { const prob = flexibleProblem(p, flexList(p.id)); return prob ? <p className="mb-1.5 text-[11px] text-amber-700">{prob.replace(`${p.label}: `, "")}</p> : <p className="mb-1.5 text-[11px] text-emerald-700">Marks add up</p>; })()}
               <div className="grid grid-cols-5 gap-1.5">
-                {Array.from({ length: p.questions }, (_, i) => i + 1).map((no) => {
+                {Array.from({ length: p.flexible ? Math.max(flexList(p.id).length, p.id === cur.partId ? cur.no : 0) : p.questions }, (_, i) => i + 1).map((no) => {
                   const id = questionId(set, p.id, no);
                   const st = stateOf(id);
                   const on = p.id === cur.partId && no === cur.no;
                   return (
-                    <button key={no} type="button" onClick={() => void go(set, p.id, no)} aria-current={on ? "true" : undefined}
+                    <button key={no} type="button" onClick={() => void go(set, p.id, no)} aria-current={on ? "true" : undefined} title={unitOfQuestion(p, bank.units ?? [], no) ? `Unit ${unitOfQuestion(p, bank.units ?? [], no)}` : undefined}
                       className={cn("h-9 rounded-lg border text-sm font-semibold", on && "ring-2 ring-primary", st === "COMPLETE" ? "border-emerald-500 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200" : st === "DRAFT" ? "border-amber-400 bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200" : "bg-background")}>
                       {no}
                     </button>
                   );
                 })}
+                {p.flexible && flexList(p.id).length < FLEXIBLE_MAX_QUESTIONS && (
+                  <button type="button" title="Add a question" aria-label={`Add a question to ${p.label}`} onClick={() => void go(set, p.id, flexList(p.id).length + 1)}
+                    className="flex h-9 items-center justify-center rounded-lg border border-dashed text-muted-foreground hover:border-primary/50 hover:text-primary"><Plus className="h-4 w-4" /></button>
+                )}
               </div>
             </div>
           ))}
@@ -180,7 +229,7 @@ export function PaperSetWorkspace({ detail }: { detail: MidBankDetail }) {
         {/* Editor */}
         <section className="space-y-4 rounded-2xl border bg-card p-4 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-base font-semibold">Paper {set} · {part.label} · Question {cur.no} <span className="text-sm font-normal text-muted-foreground">({part.marksEach} marks)</span></h2>
+            <h2 className="text-base font-semibold">Paper {set} · {setPart.label} · Question {cur.no}{unitOfQuestion(setPart, bank.units ?? [], cur.no) ? ` · Unit ${unitOfQuestion(setPart, bank.units ?? [], cur.no)}` : ""} <span className="text-sm font-normal text-muted-foreground">({part.marksEach} marks)</span></h2>
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
               {saveState === "saving" && <><Loader2 className="h-3.5 w-3.5 animate-spin" />Saving</>}
               {saveState === "saved" && <><Check className="h-3.5 w-3.5 text-emerald-600" />Saved</>}
@@ -189,6 +238,24 @@ export function PaperSetWorkspace({ detail }: { detail: MidBankDetail }) {
               {isComplete ? <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800">Complete</span> : questions[qid] ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-900">Draft</span> : <span className="rounded-full bg-muted px-2 py-0.5"><CircleDashed className="inline h-3 w-3" /> Empty</span>}
             </span>
           </div>
+
+          {setPart.flexible && (
+            <div className="flex flex-wrap items-end gap-3 rounded-lg bg-muted/40 p-3">
+              <div className="space-y-1"><Label htmlFor="pq-kind" className="text-xs">Kind of question</Label>
+                <select id="pq-kind" className="h-9 rounded-md border border-input bg-background px-2 text-sm" value={part.kind}
+                  onChange={(e) => { const k = e.target.value as PaperPartKind; edit({ kind: k, subParts: undefined, ...(k === "MCQ" ? { options: q.options?.length ? q.options : ["", "", "", ""], answer: "" } : { options: undefined, answer: k === "FILL_BLANK" ? "" : undefined }) }); }}>
+                  {PART_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
+                </select>
+              </div>
+              <div className="space-y-1"><Label htmlFor="pq-marks" className="text-xs">Marks</Label>
+                <Input id="pq-marks" type="number" min={1} max={100} step={1} className="h-9 w-24" value={q.marks ?? ""} disabled={setPart.choice.kind === "ANY"}
+                  onChange={(e) => edit({ marks: Math.max(1, Math.round(Number(e.target.value)) || 1) })} />
+              </div>
+              {setPart.choice.kind === "ANY" && <p className="text-xs text-muted-foreground">Students answer any {setPart.choice.answer} - every question carries {part.marksEach} marks.</p>}
+              {setPart.choice.kind === "OR_PAIRS" && <p className="text-xs text-muted-foreground">Questions {cur.no % 2 === 1 ? `${cur.no} and ${cur.no + 1}` : `${cur.no - 1} and ${cur.no}`} are an OR pair - give them the same marks.</p>}
+              <Button size="sm" variant="ghost" className="ml-auto text-destructive" onClick={() => void removeQuestion()}><Trash2 className="mr-1 h-4 w-4" />Remove question</Button>
+            </div>
+          )}
 
           {!split && (
             <div className="space-y-1.5">
@@ -212,8 +279,12 @@ export function PaperSetWorkspace({ detail }: { detail: MidBankDetail }) {
                   <input type="radio" name="pq-answer" aria-label={`Option (${"abcdef"[i]}) is correct`} checked={q.answer === String(i)} onChange={() => edit({ answer: String(i) })} />
                   <span className="w-6 text-sm font-semibold">({"abcdef"[i]})</span>
                   <Input value={o} onChange={(e) => edit({ options: (q.options ?? []).map((x, j) => (j === i ? e.target.value : x)) })} />
+                  {setPart.flexible && (q.options ?? []).length > 2 && (
+                    <Button size="icon" variant="ghost" aria-label={`Remove option (${"abcdef"[i]})`} onClick={() => edit({ options: (q.options ?? []).filter((_, j) => j !== i), answer: q.answer === String(i) ? "" : q.answer && Number(q.answer) > i ? String(Number(q.answer) - 1) : q.answer })}><X className="h-4 w-4" /></Button>
+                  )}
                 </div>
               ))}
+              {setPart.flexible && (q.options ?? []).length < 6 && <Button size="sm" variant="outline" onClick={() => edit({ options: [...(q.options ?? []), ""] })}><Plus className="mr-1 h-4 w-4" />Add option</Button>}
             </fieldset>
           )}
           {part.kind === "FILL_BLANK" && (
@@ -244,9 +315,9 @@ export function PaperSetWorkspace({ detail }: { detail: MidBankDetail }) {
             </div>
           )}
 
-          {(units.length > 0 || sw.cos || sw.bloom) && (
+          {((units.length > 0 && !setPart.perUnit) || sw.cos || sw.bloom) && (
             <div className="grid gap-4 md:grid-cols-3">
-              {units.length > 0 && (
+              {units.length > 0 && !setPart.perUnit && (
                 <div className="space-y-1.5"><Label htmlFor="pq-unit">Unit (optional)</Label>
                   <select id="pq-unit" className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm" value={q.unit ?? ""} onChange={(e) => edit({ unit: e.target.value ? Number(e.target.value) : undefined })}>
                     <option value="">-</option>

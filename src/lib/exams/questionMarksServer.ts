@@ -2,7 +2,7 @@ import type { ExamConfiguration, InternalExamMarksBatch, MidQuestionBank } from 
 import { loadMidSettings } from "@/lib/exams/midSettings";
 import { loadSubject, midBankRefs } from "@/lib/midBank/server";
 import { loadPlan } from "@/lib/midTimetable/server";
-import { patternForSubject } from "@/lib/midPapers/server";
+import { loadPaperQuestions, patternForSubject } from "@/lib/midPapers/server";
 import { sheetFromPattern, type QuestionSheet } from "@/lib/exams/questionMarks";
 
 type Db = FirebaseFirestore.Firestore;
@@ -29,13 +29,17 @@ export async function questionSheetsFor(db: Db, collegeId: string, batch: Pick<I
   const out: Record<string, QuestionSheet> = {};
   for (const comp of linked) {
     const choice = choices.find((c) => { const p = plans.get(c.planId); return p && p.midNumber === comp.midNumber && (!batch.year || p.year === batch.year); });
-    let pattern = null;
+    let sheet = null;
     if (choice) {
       const bank = await midBankRefs(db, collegeId).banks.doc(choice.bankId).get();
-      pattern = (bank.data() as MidQuestionBank | undefined)?.pattern ?? null;
+      const pattern = (bank.data() as MidQuestionBank | undefined)?.pattern ?? null;
+      // A part the faculty built is laid out from the chosen paper's own questions.
+      const questions = pattern?.parts.some((p) => p.flexible) ? await loadPaperQuestions(db, collegeId, choice.bankId) : [];
+      if (pattern) sheet = sheetFromPattern(pattern, "CHOSEN", { set: choice.setNo, questions });
     }
-    if (pattern) out[comp.id] = sheetFromPattern(pattern, "CHOSEN");
-    else if (fallback) out[comp.id] = sheetFromPattern(fallback, "PATTERN");
+    // No paper chosen yet: the course pattern, when it has no faculty-decides part (else typed as one number).
+    if (!sheet && fallback) sheet = sheetFromPattern(fallback, "PATTERN");
+    if (sheet) out[comp.id] = sheet;
   }
   return out;
 }

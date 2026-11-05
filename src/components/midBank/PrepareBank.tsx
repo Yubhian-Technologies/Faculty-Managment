@@ -260,7 +260,7 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
             {(papers && pattern ? [
               { icon: Layers, label: "Question papers", value: `${pattern.setsPerFaculty} to write` },
               { icon: FileText, label: "Each paper", value: `${patternMax(pattern)} marks · ${pattern.durationMinutes} min` },
-              { icon: ListChecks, label: "Parts", value: pattern.parts.map((p) => `${p.label}: ${p.questions} x ${p.marksEach}`).join(" · ") },
+              { icon: ListChecks, label: "Parts", value: pattern.parts.map((p) => (p.flexible ? `${p.label}: ${p.maxMarks} marks, your own questions` : `${p.label}: ${p.questions} x ${p.marksEach}`)).join(" · ") },
             ] : rules ? [
               { icon: Layers, label: `Mid ${deadline.midNumber} covers`, value: `Units ${setup.units.join(", ")}` },
               { icon: FileText, label: "Question format", value: bankFormatText(allowedFormats(rules), rules.marks) },

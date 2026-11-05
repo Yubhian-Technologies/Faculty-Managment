@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { answeredCount, choiceText, cleanPaperQuestion, cleanPattern, paperProgress, paperQuestionErrors, partMax, patternMax, questionSlots } from "./pattern";
+import { answeredCount, choiceText, cleanPaperQuestion, cleanPattern, flexibleProblem, paperProgress, paperQuestionErrors, partMax, patternMax, questionSlots } from "./pattern";
 import type { PaperPartDef } from "@/types";
 
 const partA: PaperPartDef = { id: "A", label: "Part A", title: "Choose the correct answer", kind: "MCQ", questions: 10, marksEach: 1, choice: { kind: "ALL" }, options: 4 };
@@ -60,9 +60,82 @@ describe("paper questions", () => {
 
   it("progress per set", () => {
     const pat = { parts: [partA, partB], setsPerFaculty: 2 };
-    const done = Array.from({ length: 16 }, () => ({ set: 1, state: "COMPLETE" as const }));
-    const p = paperProgress(pat, [...done, { set: 2, state: "DRAFT" }]);
+    const done = Array.from({ length: 16 }, (_, i) => ({ set: 1, partId: i < 10 ? "A" : "B", no: i < 10 ? i + 1 : i - 9, state: "COMPLETE" as const }));
+    const p = paperProgress(pat, [...done, { set: 2, partId: "A", no: 1, state: "DRAFT" }]);
     expect(p.setProgress).toEqual({ "1": { complete: 16, total: 16 }, "2": { complete: 0, total: 16 } });
     expect(p).toMatchObject({ completeCount: 16, totalCount: 32, allComplete: false });
+  });
+});
+
+describe("faculty-decides parts", () => {
+  const all: PaperPartDef = { id: "B", label: "Part B", title: "", flexible: true, maxMarks: 20, kind: "DESCRIPTIVE", questions: 0, marksEach: 0, choice: { kind: "ALL" } };
+  it("the Exam Cell fixes the max marks and the choice", () => {
+    expect(partMax(all)).toBe(20);
+    expect(cleanPattern({ setsPerFaculty: 1, durationMinutes: 90, parts: [{ ...all, choice: { kind: "ANY", answer: 3 } }] }).errors).toEqual([expect.stringMatching(/divide by 3/)]);
+    expect(cleanPattern({ setsPerFaculty: 1, durationMinutes: 90, parts: [all] }).value.parts[0]).toMatchObject({ flexible: true, maxMarks: 20 });
+  });
+  it("answer all: the questions add up to the max", () => {
+    expect(flexibleProblem(all, [])).toMatch(/add questions/);
+    expect(flexibleProblem(all, [{ marks: 5 }, { marks: 10 }])).toMatch(/15 of 20/);
+    expect(flexibleProblem(all, [{ marks: 2 }, { marks: 8 }, { marks: 10 }])).toBe("");
+  });
+  it("OR pairs: equal marks per pair, one of each pair adds up to the max", () => {
+    const or = { ...all, choice: { kind: "OR_PAIRS" as const } };
+    expect(flexibleProblem(or, [{ marks: 10 }, { marks: 10 }, { marks: 10 }])).toMatch(/one more/);
+    expect(flexibleProblem(or, [{ marks: 10 }, { marks: 8 }])).toMatch(/same marks/);
+    expect(flexibleProblem(or, [{ marks: 10 }, { marks: 10 }, { marks: 10 }, { marks: 10 }])).toBe("");
+  });
+  it("any k: more than k questions, each max / k", () => {
+    const any = { ...all, choice: { kind: "ANY" as const, answer: 2 } };
+    expect(flexibleProblem(any, [{ marks: 10 }, { marks: 10 }])).toMatch(/more than 2/);
+    expect(flexibleProblem(any, [{ marks: 10 }, { marks: 10 }, { marks: 5 }])).toMatch(/carries 10 marks/);
+    expect(flexibleProblem(any, [{ marks: 10 }, { marks: 10 }, { marks: 10 }])).toBe("");
+  });
+  it("each question keeps its own kind and whole marks; a paper is complete only when the part fits", () => {
+    const q = cleanPaperQuestion({ kind: "MCQ", marks: 2.6, text: "2+2?", options: ["3", "4", "5"], answer: 1 }, all, new Set());
+    expect(q).toMatchObject({ kind: "MCQ", marks: 3, options: ["3", "4", "5"] });
+    expect(paperQuestionErrors(q, all, { cos: false, poMapping: false, bloom: false })).toEqual([]);
+    const pat = { parts: [all], setsPerFaculty: 1 };
+    const qs = [{ set: 1, partId: "B", no: 1, marks: 10, state: "COMPLETE" as const }, { set: 1, partId: "B", no: 2, marks: 5, state: "COMPLETE" as const }];
+    expect(paperProgress(pat, qs)).toMatchObject({ allComplete: false, completeCount: 2, totalCount: 2 });
+    expect(paperProgress(pat, [...qs, { set: 1, partId: "B", no: 3, marks: 5, state: "COMPLETE" as const }]).allComplete).toBe(true);
+  });
+});
+
+describe("per-unit parts", () => {
+  const U = { id: "A", label: "Part A", title: "", kind: "SHORT" as const, questions: 0, marksEach: 5, choice: { kind: "ALL" as const }, perUnit: 1, maxMarks: 25 };
+  it("the number of questions follows the Mid's units; the paper prints the real total", async () => {
+    const { cleanPattern: clean, expandPattern, unitOfQuestion, countedMax, needsUnits, partMax: pm } = await import("./pattern");
+    const c = clean({ setsPerFaculty: 1, durationMinutes: 90, parts: [U] });
+    expect(c.errors).toEqual([]);
+    expect(c.value.parts[0]).toMatchObject({ perUnit: 1, maxMarks: 25, questions: 0 });
+    expect(needsUnits(c.value)).toBe(true);
+    const six = expandPattern(c.value, [1, 2, 3, 4, 5, 6]);
+    expect(six.parts[0].questions).toBe(6);
+    expect(pm(six.parts[0])).toBe(30);
+    expect(countedMax(six.parts[0])).toBe(25);
+    const pairs = expandPattern({ parts: [{ ...U, perUnit: 2, choice: { kind: "OR_PAIRS" as const } }] }, [3, 4, 5]);
+    expect(pairs.parts[0].questions).toBe(6);
+    expect([1, 2, 3, 4, 5, 6].map((n) => unitOfQuestion(pairs.parts[0], [3, 4, 5], n))).toEqual([3, 3, 4, 4, 5, 5]);
+    expect(clean({ setsPerFaculty: 1, durationMinutes: 90, parts: [{ ...U, choice: { kind: "OR_PAIRS" } }] }).errors).toEqual([expect.stringMatching(/even number of questions per unit/)]);
+  });
+});
+
+describe("half units shared by two Mids", () => {
+  it("a shared unit gets half its questions in each Mid", async () => {
+    const { unitLayout, expandPattern, unitOfQuestion } = await import("./pattern");
+    const p = { perUnit: 2, choice: { kind: "ALL" as const } };
+    // 5-unit subject, 2½ units per Mid: Mid 1 = 1, 2, 3 and Mid 2 = 3, 4, 5 (unit 3 shared).
+    expect(unitLayout(p, [1, 2, 3], [3])).toEqual([1, 1, 2, 2, 3]);
+    expect(unitLayout(p, [3, 4, 5], [3])).toEqual([3, 4, 4, 5, 5]);
+    // 6-unit subject, 3 per Mid: nothing shared.
+    expect(unitLayout(p, [1, 2, 3])).toEqual([1, 1, 2, 2, 3, 3]);
+    expect(unitLayout(p, [4, 5, 6])).toEqual([4, 4, 5, 5, 6, 6]);
+    // One per unit: a shared unit still gets its question; OR pairs keep the pair.
+    expect(unitLayout({ perUnit: 1, choice: { kind: "ALL" as const } }, [1, 2, 3], [3])).toEqual([1, 2, 3]);
+    expect(unitLayout({ perUnit: 2, choice: { kind: "OR_PAIRS" as const } }, [1, 2, 3], [3])).toEqual([1, 1, 2, 2, 3, 3]);
+    const pat = expandPattern({ parts: [{ id: "A", label: "Part A", title: "", kind: "SHORT" as const, questions: 0, marksEach: 5, choice: { kind: "ALL" as const }, perUnit: 2, maxMarks: 25 }] }, [3, 4, 5], [3]);
+    expect(pat.parts[0].questions).toBe(5);
+    expect([1, 2, 3, 4, 5].map((n) => unitOfQuestion(pat.parts[0], [3, 4, 5], n))).toEqual([3, 4, 4, 5, 5]);
   });
 });

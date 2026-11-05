@@ -199,11 +199,9 @@ function MidSettings() {
         </Button>
       </div>
 
-      {/* The question bank rules apply to a college that prepares banks. */}
-      {(settings?.midPreparation ?? "BANK") === "BANK" && <>
-        <MidBankRulesCard midCount={settings?.midCount ?? Number(midCount)} />
-        <MidSubjectSplitsCard midCount={settings?.midCount ?? Number(midCount)} />
-      </>}
+      {/* Which units each Mid covers: the bank rules, or (question papers) only the units - for per-unit paper parts. */}
+      <MidBankRulesCard midCount={settings?.midCount ?? Number(midCount)} papers={settings?.midPreparation === "PAPERS"} />
+      <MidSubjectSplitsCard midCount={settings?.midCount ?? Number(midCount)} />
     </div>
   );
 }

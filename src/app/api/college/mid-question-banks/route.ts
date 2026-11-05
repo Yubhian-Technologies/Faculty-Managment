@@ -4,7 +4,7 @@ import { allowedFormats } from "@/lib/midBank/validateQuestion";
 import { NextResponse } from "next/server";
 import { loadMidSettings } from "@/lib/exams/midSettings";
 import { patternForSubject } from "@/lib/midPapers/server";
-import { paperProgress } from "@/lib/midPapers/pattern";
+import { expandPattern, paperProgress } from "@/lib/midPapers/pattern";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -112,7 +112,9 @@ export async function POST(request: Request) {
     // A college that prepares question papers starts a paper set (same doc, kind PAPERS) to its paper pattern.
     const papers = settings.midPreparation === "PAPERS";
     const pattern = papers ? await patternForSubject(db, session.collegeId, subject) : null;
-    const { issues, units } = papers ? paperSetupIssues(subject, pattern, outcomes, sw) : setupIssues(subject, d.midNumber, rules, outcomes, exception, sw);
+    const paperSetup = papers ? paperSetupIssues(subject, pattern, outcomes, sw, { midNumber: d.midNumber, rules, exception, midCount: settings.midCount }) : null;
+    const { issues, units } = paperSetup ?? setupIssues(subject, d.midNumber, rules, outcomes, exception, sw);
+    const shared = paperSetup?.shared ?? [];
     if (issues.length > 0 || (papers ? !pattern : !rules)) return NextResponse.json({ error: issues[0]?.message ?? "Setup is incomplete", issues }, { status: 400 });
 
     const bankId = bankIdFor(d.id, subjectId, branch, me);
@@ -129,14 +131,15 @@ export async function POST(request: Request) {
 
       const now = new Date();
       const unitStatus = unitStatuses(units, [], sw);
-      const totals = papers ? paperProgress(pattern!, []) : bankTotals(units, unitStatus);
+      const totals = papers ? paperProgress(expandPattern(pattern!, units, shared), []) : bankTotals(units, unitStatus);
       const data: Omit<MidQuestionBank, "id"> = {
         deadlineId: d.id, courseName: d.courseName, year: d.year, semester: d.semester, midNumber: d.midNumber,
         subjectId, subjectName: subject.name, subjectCode: subject.code, branch, outcomesId,
         sections: pick.sections, ownerFacultyId: me, ownerName, ownerUid: session.uid,
         viewerFacultyIds: [...new Set(pick.sections.flatMap((s) => s.facultyIds))],
         units, formats: papers ? [] : allowedFormats(rules!), marks: papers ? 0 : rules!.marks, unitStatus, status: "IN_PROGRESS", outcomes: sw,
-        ...(papers ? { kind: "PAPERS" as const, pattern: pattern!, setProgress: paperProgress(pattern!, []).setProgress } : {}),
+        // A per-unit part gets a question for each of the Mid's units (fixed in this paper's copy of the pattern).
+        ...(papers ? { kind: "PAPERS" as const, pattern: expandPattern(pattern!, units, shared), setProgress: paperProgress(expandPattern(pattern!, units, shared), []).setProgress } : {}),
         completeCount: totals.completeCount, totalCount: totals.totalCount,
         createdAt: now as unknown as MidQuestionBank["createdAt"], updatedAt: now as unknown as MidQuestionBank["updatedAt"],
       };

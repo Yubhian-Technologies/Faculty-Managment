@@ -24,7 +24,8 @@ const selectClass = "h-9 w-full rounded-md border border-input bg-background px-
 
 const parseUnits = (s: string) => [...new Set(s.split(/[\s,]+/).map(Number).filter((n) => Number.isInteger(n) && n > 0))];
 
-export function MidBankRulesCard({ midCount }: { midCount: number }) {
+/** `papers`: a college that prepares question papers uses only the units per Mid (for per-unit paper parts). */
+export function MidBankRulesCard({ midCount, papers = false }: { midCount: number; papers?: boolean }) {
   const [rules, setRules] = useState<MidBankRules[]>([]);
   const [regulationsByCourse, setRegulationsByCourse] = useState<Record<string, string[]>>({});
   const [courses, setCourses] = useState<Course[]>([]);
@@ -117,10 +118,12 @@ export function MidBankRulesCard({ midCount }: { midCount: number }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Mid Question Bank rules</CardTitle>
+        <CardTitle className="text-base">{papers ? "Units per Mid" : "Mid Question Bank rules"}</CardTitle>
         <CardDescription>
-          For each course, which units each Mid covers and how questions are set. Faculty write 10 questions per unit,
-          with Bloom&rsquo;s levels L2, L3 and L4 each used at least 3 times. A bank keeps the rules it started with.
+          {papers
+            ? <>For each course, which units each Mid covers - a question paper part set &ldquo;per unit&rdquo; gets its questions for these units. A paper keeps the units it started with.</>
+            : <>For each course, which units each Mid covers and how questions are set. Faculty write 10 questions per unit,
+              with Bloom&rsquo;s levels L2, L3 and L4 each used at least 3 times. A bank keeps the rules it started with.</>}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -219,7 +222,7 @@ export function MidBankRulesCard({ midCount }: { midCount: number }) {
               </table>
             </div>
           </fieldset>
-          <div className="space-y-1.5">
+          {!papers && <><div className="space-y-1.5">
             <Label htmlFor="mbr-marks">Marks per question</Label>
             <Input id="mbr-marks" type="number" min={1} max={100} value={marks} onChange={(e) => setMarks(e.target.value)} />
             {formats.some((f) => f !== "SINGLE") && Number(marks) > 0 && <p className="text-xs text-muted-foreground">With parts, the faculty splits the {Number(marks)} marks between the parts.</p>}
@@ -241,7 +244,7 @@ export function MidBankRulesCard({ midCount }: { midCount: number }) {
               })}
             </div>
             {formats.length === 0 && <p className="text-xs text-destructive">Tick at least one question type.</p>}
-          </fieldset>
+          </fieldset></>}
         </div>
         <div className="flex justify-end">
           <Button onClick={() => void save()} loading={saving} disabled={!courseKey || formats.length === 0}>{editingId ? "Save changes" : "Save rules"}</Button>

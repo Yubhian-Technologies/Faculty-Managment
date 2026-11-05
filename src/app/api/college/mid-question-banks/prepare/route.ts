@@ -64,7 +64,7 @@ export async function GET(request: Request) {
       subject: { id: subject.id, name: subject.name, code: subject.code, courseName: subject.courseName ?? d.courseName, regulation: subject.regulation ?? "", year: d.year, semester: d.semester },
       branch, outcomesId, outcomes, rules, sections,
       setup: settings.midPreparation === "PAPERS"
-        ? paperSetupIssues(subject, pattern, outcomes, settings.outcomes)
+        ? paperSetupIssues(subject, pattern, outcomes, settings.outcomes, { midNumber: d.midNumber, rules, exception, midCount: settings.midCount })
         : setupIssues(subject, d.midNumber, rules, outcomes, exception, settings.outcomes),
       outcomeSwitches: settings.outcomes, midPreparation: settings.midPreparation, pattern,
       myBankId: myBank.exists ? myBankId : null,

@@ -84,7 +84,7 @@ export function PaperChoices() {
       await downloadMidPaperSetPdf({
         exam: { courseName: day.header.courseCode, year: b.year, semester: b.semester, semesterInYear: day.header.semesterInYear, midNumber: b.midNumber, academicYear: day.header.academicYear, date: day.header.date },
         subject: { name: b.subjectName, code: b.subjectCode, regulation: d.subject.regulation },
-        branch: row.branchCode, sections: b.sections.map((s) => s.sectionName), pattern: b.pattern!, set: row.choice.setNo,
+        branch: row.branchCode, sections: b.sections.map((s) => s.sectionName), pattern: b.pattern!, set: row.choice.setNo, units: b.units,
         questions: d.questions as unknown as MidPaperQuestion[], outcomes: b.outcomes, cos: d.outcomes?.cos ?? [], mapping: d.outcomes?.mapping ?? {}, answerKey,
       }, `MID${b.midNumber}_${day.header.date}_${row.branchCode}_${b.subjectCode}${answerKey ? "_answer-key" : ""}`);
     } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not make the PDF" }); }
