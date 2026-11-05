@@ -23,6 +23,7 @@ import { useNavVisibility } from "@/hooks/useNavVisibility";
 import { isPathHidden } from "@/components/layout/navConfig";
 import { toast } from "@/hooks/useToast";
 import { formatTime12h } from "@/lib/timetable/facultyTimetablePdf";
+import { useTodayHoliday } from "@/components/timetable/TodayHolidayBanner";
 
 interface TodayPeriod {
   id: string;
@@ -71,6 +72,8 @@ export default function StudentDashboardPage() {
   const { hiddenModules, hiddenItems } = useNavVisibility();
   const [data, setData] = useState<TodayResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  // On a holiday the notice above says so; today's classes aren't shown.
+  const holiday = useTodayHoliday()?.holiday === true;
 
   const isHidden = (href: string) => !!user?.role && isPathHidden(href, user.role, hiddenModules, hiddenItems);
 
@@ -115,7 +118,7 @@ export default function StudentDashboardPage() {
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs text-muted-foreground truncate">Today&apos;s Classes</p>
-                  <p className="text-base sm:text-lg font-bold text-foreground">{periods.length} {periods.length === 1 ? "Period" : "Periods"}</p>
+                  <p className="text-base sm:text-lg font-bold text-foreground">{holiday ? "Holiday" : `${periods.length} ${periods.length === 1 ? "Period" : "Periods"}`}</p>
                 </div>
               </CardContent>
             </Card>
@@ -199,8 +202,8 @@ export default function StudentDashboardPage() {
             </div>
           )}
 
-          {/* Today's Schedule Card */}
-          <Card className="border shadow-xs">
+          {/* Today's Schedule Card - not on a holiday */}
+          {!holiday && <Card className="border shadow-xs">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
               <div>
                 <CardTitle className="text-base font-semibold">Today&apos;s Schedule</CardTitle>
@@ -257,7 +260,7 @@ export default function StudentDashboardPage() {
                 </ul>
               )}
             </CardContent>
-          </Card>
+          </Card>}
         </>
       )}
     </div>

@@ -51,7 +51,7 @@ export default function FacultyQuestionBankPage() {
   return (
     <div className="max-w-5xl space-y-8">
       <PageHeader
-        title="Question Bank"
+        title="Mid Question Bank"
         description="Prepare the Mid question banks for the subjects you teach, before the Exam Cell's deadline. Each unit needs 10 questions with Bloom's levels L2, L3 and L4 at least 3 times each."
       />
 

@@ -12,7 +12,7 @@ import { getHolidayNameForDate } from "@/lib/leave/holidaysCount";
 // Students (and class leaders) get the class calendar's answer - holiday,
 // suspension, sem break, summer break, Sunday; staff only a holiday that
 // applies to faculty, since a students-only holiday or sem break leaves
-// faculty working.
+// faculty working - though staff are told that no classes run then (`classesOff`).
 export async function GET() {
   try {
     const session = await requireCollegeMember(
@@ -26,6 +26,14 @@ export async function GET() {
     const db = getAdminDb();
     const today = istDateKey();
 
+    // Today's declared holidays (any audience) - the hostellers' outing flag, and for staff a students-only one.
+    const [y, m, d] = today.split("-").map(Number);
+    const start = istDateFromParts(y, m, d);
+    const snap = await db.collection("colleges").doc(session.collegeId).collection("holidays")
+      .where("date", ">=", start).where("date", "<", new Date(start.getTime() + 24 * 60 * 60 * 1000)).get();
+    const declared = snap.docs.map((doc) => doc.data() as { name?: string; appliesTo?: string; category?: string; hostelersOutingAllowed?: boolean });
+    const outing = declared.map((h) => h.hostelersOutingAllowed).find((v) => v != null);
+
     let reason: string | null;
     if (isStudent) {
       reason = await getNoClassReason(db, session.collegeId, today);
@@ -33,16 +41,17 @@ export async function GET() {
       const name = await getHolidayNameForDate(db, session.collegeId, new Date());
       reason = name === null ? null : name ? `Holiday: ${name}` : "Holiday";
     }
-    if (!reason) return NextResponse.json({ date: today, holiday: false });
-
-    // Hostellers' outing flag, when a declared holiday today states one.
-    const [y, m, d] = today.split("-").map(Number);
-    const start = istDateFromParts(y, m, d);
-    const snap = await db.collection("colleges").doc(session.collegeId).collection("holidays")
-      .where("date", ">=", start).where("date", "<", new Date(start.getTime() + 24 * 60 * 60 * 1000)).get();
-    const outing = snap.docs
-      .map((doc) => (doc.data() as { hostelersOutingAllowed?: boolean }).hostelersOutingAllowed)
-      .find((v) => v != null);
+    if (!reason) {
+      // Staff: a students-only holiday / class suspension is a working day, but no classes run.
+      const studentsOnly = !isStudent ? declared.find((h) => h.appliesTo === "STUDENTS") : undefined;
+      if (studentsOnly) {
+        return NextResponse.json({
+          date: today, holiday: false, classesOff: true,
+          reason: `${studentsOnly.category === "CLASS_SUSPENDED" ? "Classes suspended" : "Holiday for students"}${studentsOnly.name ? `: ${studentsOnly.name}` : ""}`,
+        });
+      }
+      return NextResponse.json({ date: today, holiday: false });
+    }
 
     return NextResponse.json({ date: today, holiday: true, reason, ...(outing != null ? { hostelersOutingAllowed: outing } : {}) });
   } catch (err) {

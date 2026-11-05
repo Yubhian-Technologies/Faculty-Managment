@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { emptyPreviousTeaching, PREVIOUS_TEACHING_SOURCE_LABELS } from "@/lib/faculty/previousTeaching";
-import type { PreviousTeachingAssignment, PreviousTeachingSource } from "@/types";
+import { emptyPreviousTeaching, PREVIOUS_TEACHING_SOURCE_LABELS, PREVIOUS_TEACHING_SUBJECT_TYPES } from "@/lib/faculty/previousTeaching";
+import type { PreviousTeachingAssignment, PreviousTeachingSource, SubjectType } from "@/types";
 
 function newId() {
   return typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `prev_${Date.now()}_${Math.random()}`;
@@ -23,7 +23,8 @@ interface ListProps {
 }
 
 // The rows only - no heading or Add button - so TeachingAssignmentsEditor can show them under its own "Previous"
-// heading. Every field is free text; College Name appears only when the row is External.
+// heading. Every field is free text except Subject Type (the Curriculum's list); College Name appears only when the
+// row is External.
 export function PreviousTeachingRecordList({ value, onChange }: ListProps) {
   function update(id: string, patch: Partial<PreviousTeachingAssignment>) {
     onChange(value.map((r) => (r.id === id ? { ...r, ...patch } : r)));
@@ -85,6 +86,15 @@ export function PreviousTeachingRecordList({ value, onChange }: ListProps) {
             <div className="space-y-1">
               <Label className="text-xs">Subject</Label>
               <Input value={row.subject} onChange={(e) => update(row.id, { subject: e.target.value })} placeholder="Subject taught" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Subject Type *</Label>
+              <Select value={row.subjectType || undefined} onValueChange={(v) => update(row.id, { subjectType: v as SubjectType })}>
+                <SelectTrigger aria-label="Subject Type"><SelectValue placeholder="Theory, Practical ..." /></SelectTrigger>
+                <SelectContent>
+                  {PREVIOUS_TEACHING_SUBJECT_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Passing Percentage %</Label>

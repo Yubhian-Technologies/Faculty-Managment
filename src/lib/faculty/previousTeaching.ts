@@ -1,4 +1,5 @@
 import type { PreviousTeachingAssignment, PreviousTeachingSource } from "@/types/core";
+import { SUBJECT_TYPE_LABELS, subjectTypeDisplayLabel, type SubjectType } from "@/types/teaching";
 
 // Previous Teaching Assignments - the free-text record of teaching done earlier, at this college (Internal) or
 // another one (External). Stored as `previousTeachingAssignments` on the facultyMembers doc. Everything here is
@@ -11,6 +12,14 @@ export const PREVIOUS_TEACHING_SOURCE_LABELS: Record<PreviousTeachingSource, str
   INTERNAL: "Internal",
   EXTERNAL: "External",
 };
+
+/** The Subject Type choices (the Curriculum's list), with the reader-facing label ("Co-Curricular"). */
+export const PREVIOUS_TEACHING_SUBJECT_TYPES: { value: SubjectType; label: string }[] =
+  (Object.keys(SUBJECT_TYPE_LABELS) as SubjectType[]).map((value) => ({ value, label: subjectTypeDisplayLabel(value) }));
+const isSubjectType = (v: unknown): v is SubjectType => typeof v === "string" && v in SUBJECT_TYPE_LABELS;
+/** "Theory", "Practical" ... or "" for an older row with none. */
+export const subjectTypeText = (t: SubjectType | undefined) => (t ? subjectTypeDisplayLabel(t) : "");
+const SUBJECT_TYPE_REQUIRED = "Pick the Subject Type (Theory, Practical ...) for every new previous teaching assignment";
 
 export function emptyPreviousTeaching(id: string): PreviousTeachingAssignment {
   return { id, source: "INTERNAL", collegeName: "", academicYear: "", course: "", year: "", semester: "", subject: "", passPercentage: "" };
@@ -31,7 +40,11 @@ export type NormalizeResult =
  * Cleans a client-sent list: trims every field, keeps them free text, drops blank rows, requires a College Name on an
  * External row, caps lengths/rows and gives every row an id (`makeId` supplies one for a row that arrived without).
  */
-export function normalizePreviousTeachingAssignments(input: unknown, makeId: () => string): NormalizeResult {
+export function normalizePreviousTeachingAssignments(
+  input: unknown, makeId: () => string,
+  /** When given, every row whose id isn't in it (a new row) must carry a Subject Type; older rows never have to. */
+  requireSubjectTypeExcept?: Set<string>,
+): NormalizeResult {
   if (!Array.isArray(input)) return { ok: false, error: "previousTeachingAssignments must be a list" };
   if (input.length > MAX_PREVIOUS_TEACHING_ROWS) return { ok: false, error: `At most ${MAX_PREVIOUS_TEACHING_ROWS} previous teaching assignments can be saved` };
 
@@ -47,6 +60,7 @@ export function normalizePreviousTeachingAssignments(input: unknown, makeId: () 
       collegeName: source === "EXTERNAL" ? text(r.collegeName) : "",
       academicYear: text(r.academicYear), course: text(r.course), year: text(r.year), semester: text(r.semester),
       subject: text(r.subject), passPercentage: text(r.passPercentage),
+      ...(isSubjectType(r.subjectType) ? { subjectType: r.subjectType } : {}),
     };
     if (isBlankRow(row)) continue;
     for (const [k, v] of Object.entries(row)) {
@@ -55,6 +69,7 @@ export function normalizePreviousTeachingAssignments(input: unknown, makeId: () 
     if (source === "EXTERNAL" && !row.collegeName) return { ok: false, error: "College Name is required for an External previous teaching assignment" };
     let id = typeof r.id === "string" && r.id.trim() ? r.id.trim().slice(0, 80) : "";
     if (!id || seen.has(id)) id = makeId();
+    if (requireSubjectTypeExcept && !row.subjectType && !requireSubjectTypeExcept.has(id)) return { ok: false, error: SUBJECT_TYPE_REQUIRED };
     seen.add(id);
     out.push({ id, ...row });
   }
@@ -103,6 +118,7 @@ export function readPreviousTeachingAssignments(doc: { previousTeachingAssignmen
       source: r.source === "EXTERNAL" ? ("EXTERNAL" as const) : ("INTERNAL" as const),
       collegeName: text(r.collegeName), academicYear: text(r.academicYear), course: text(r.course), year: text(r.year),
       semester: text(r.semester), subject: text(r.subject), passPercentage: text(r.passPercentage),
+      ...(isSubjectType(r.subjectType) ? { subjectType: r.subjectType } : {}),
     }];
   });
 }
@@ -122,16 +138,21 @@ export function resolvePreviousTeachingUpdate(
   makeId: () => string,
 ): PreviousTeachingUpdate {
   if (body.previousTeachingAssignments === undefined) return { kind: "none" };
-  const cleaned = normalizePreviousTeachingAssignments(body.previousTeachingAssignments, makeId);
+  const stored = readPreviousTeachingAssignments(storedDoc);
+  // Rows already stored may have no Subject Type (saved before it existed); a new row must have one.
+  const cleaned = normalizePreviousTeachingAssignments(body.previousTeachingAssignments, makeId, new Set(stored.map((r) => r.id)));
   if (!cleaned.ok) return { kind: "error", error: cleaned.error };
-  const merged = mergePreviousTeachingAssignments(
-    readPreviousTeachingAssignments(storedDoc), cleaned.value, parseLoadedIds(body.previousTeachingAssignmentsLoadedIds),
-  );
+  const merged = mergePreviousTeachingAssignments(stored, cleaned.value, parseLoadedIds(body.previousTeachingAssignmentsLoadedIds));
   return { kind: "set", value: merged };
 }
 
 /** The first thing wrong with a list the user is about to save (before any request is made), or null. */
-export function previousTeachingProblem(rows: PreviousTeachingAssignment[]): string | null {
+export function previousTeachingProblem(rows: PreviousTeachingAssignment[], existingIds?: string[]): string | null {
   const missingCollege = rows.some((r) => r.source === "EXTERNAL" && !(r.collegeName ?? "").trim() && !isBlankRow({ ...r }));
-  return missingCollege ? "College Name is required for every External previous teaching assignment" : null;
+  if (missingCollege) return "College Name is required for every External previous teaching assignment";
+  if (existingIds) {
+    const old = new Set(existingIds);
+    if (rows.some((r) => !r.subjectType && !old.has(r.id) && !isBlankRow({ ...r }))) return SUBJECT_TYPE_REQUIRED;
+  }
+  return null;
 }

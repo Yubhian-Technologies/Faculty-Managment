@@ -9,7 +9,7 @@ import { DESIGNATION_LABELS, FACULTY_STATUS_LABELS, ROLE_LABELS, RELIGION_LABELS
 import type { Religion, Caste } from "@/types";
 import { currentTimetableAcademicYear } from "@/lib/college/academicSession";
 import { buildTeachingLoadRows, formatClassColumn, type TeachingLoadRow } from "@/lib/teaching/buildTeachingLoadRows";
-import { readPreviousTeachingAssignments, formatPassPercentage } from "@/lib/faculty/previousTeaching";
+import { readPreviousTeachingAssignments, formatPassPercentage, subjectTypeText } from "@/lib/faculty/previousTeaching";
 import type { PreviousTeachingAssignment } from "@/types";
 import { allPreviousExperienceEntries, sortExperienceLatestFirst, totalYearsOfExperience, experienceBreakdown, formatDuration, durationBetween } from "@/lib/faculty/experienceCalc";
 
@@ -284,6 +284,8 @@ export function docLinkRow(label: string, url?: string): string {
 function renderTeachingLoadGroups(groups: { current: TeachingLoadRow[]; past: TeachingLoadRow[] }, previous: PreviousTeachingAssignment[] = []): string {
   const showFeedback = groups.past.some((r) => r.studentFeedback != null);
   const pct = (v: unknown) => (v != null && v !== "" ? `${esc(v)}%` : "");
+  // "Data Structures (Theory)" - the Subject Type, when the row has one.
+  const subjectWithType = (r: PreviousTeachingAssignment) => (r.subjectType ? `${r.subject} (${subjectTypeText(r.subjectType)})` : r.subject);
   const classOf = (r: PreviousTeachingAssignment) =>
     [r.course, r.year, r.semester].map((v) => String(v ?? "").trim()).filter(Boolean).join(" / ");
   const table = (headers: string[], rows: string[]) =>
@@ -298,12 +300,12 @@ function renderTeachingLoadGroups(groups: { current: TeachingLoadRow[]; past: Te
     ...groups.past.filter((r) => !isLab(r.subject)).map(
       (r) => `<tr><td>${esc(r.academicYear)}</td><td>${esc(formatClassColumn(r))}</td><td>${esc(r.subject)}</td><td>${pct(r.passPercentage)}</td>${showFeedback ? `<td>${pct(r.studentFeedback)}</td>` : ""}</tr>`
     ),
-    ...previous.filter((r) => r.source !== "EXTERNAL" && !isLab(r.subject)).map(
-      (r) => `<tr><td>${esc(r.academicYear)}</td><td>${esc(classOf(r))}</td><td>${esc(r.subject)}</td><td>${esc(formatPassPercentage(r.passPercentage))}</td>${showFeedback ? "<td></td>" : ""}</tr>`
+    ...previous.filter((r) => r.source !== "EXTERNAL" && !isLab(r.subject) && r.subjectType !== "PRACTICAL").map(
+      (r) => `<tr><td>${esc(r.academicYear)}</td><td>${esc(classOf(r))}</td><td>${esc(subjectWithType(r))}</td><td>${esc(formatPassPercentage(r.passPercentage))}</td>${showFeedback ? "<td></td>" : ""}</tr>`
     ),
   ];
   const pastExternalRows = previous.filter((r) => r.source === "EXTERNAL").map(
-    (r) => `<tr><td>${esc(r.collegeName)}</td><td>${esc(r.academicYear)}</td><td>${esc(classOf(r))}</td><td>${esc(r.subject)}</td><td>${esc(formatPassPercentage(r.passPercentage))}</td></tr>`
+    (r) => `<tr><td>${esc(r.collegeName)}</td><td>${esc(r.academicYear)}</td><td>${esc(classOf(r))}</td><td>${esc(subjectWithType(r))}</td><td>${esc(formatPassPercentage(r.passPercentage))}</td></tr>`
   );
 
   const block = (title: string, headers: string[], rows: string[]) =>

@@ -3,7 +3,7 @@ import type {
   CertificateClearance, CertificateHistoryEntry, CertificateRequest, CertificateRequestStatus, ExamCellTask, FlowStepDef, StepRuntimeState,
 } from "@/types";
 import { getCertificateTypeDef } from "./certificateTypes";
-import { resolveRecipientUids } from "./configStore";
+import { resolveRecipientUids, type RecipientContext } from "./configStore";
 import { allBranchesAccepted, canDecide } from "./decisionRules";
 import { CertificationError } from "./types";
 import type { ActingUser } from "./types";
@@ -23,13 +23,17 @@ export class CertificateStateConflictError extends Error {
   }
 }
 
-async function resolveStepPendingUids(
-  db: Firestore, collegeId: string, step: FlowStepDef, studentDepartment: string
+/** Who the student behind a request is - every resolver gets the same context. */
+export const recipientContext = (req: { studentDepartment: string; studentId?: string }): RecipientContext =>
+  ({ studentDepartment: req.studentDepartment, studentId: req.studentId });
+
+export async function resolveStepPendingUids(
+  db: Firestore, collegeId: string, step: FlowStepDef, ctx: RecipientContext
 ): Promise<string[]> {
   if (step.type === "SEQUENTIAL") {
-    return resolveRecipientUids(db, collegeId, step.recipient, { studentDepartment });
+    return resolveRecipientUids(db, collegeId, step.recipient, ctx);
   }
-  const perBranch = await Promise.all(step.branches.map((b) => resolveRecipientUids(db, collegeId, b.recipient, { studentDepartment })));
+  const perBranch = await Promise.all(step.branches.map((b) => resolveRecipientUids(db, collegeId, b.recipient, ctx)));
   return Array.from(new Set(perBranch.flat()));
 }
 
@@ -40,10 +44,10 @@ function initStepState(step: FlowStepDef): StepRuntimeState {
 
 /** The first step's runtime state + who can act on it, for a brand-new request. */
 export async function buildInitialStep(
-  db: Firestore, collegeId: string, flow: FlowStepDef[], studentDepartment: string
+  db: Firestore, collegeId: string, flow: FlowStepDef[], studentDepartment: string, studentId?: string
 ): Promise<{ steps: StepRuntimeState[]; pendingRecipientUids: string[] }> {
   const step = flow[0];
-  const pendingRecipientUids = await resolveStepPendingUids(db, collegeId, step, studentDepartment);
+  const pendingRecipientUids = await resolveStepPendingUids(db, collegeId, step, { studentDepartment, studentId });
   return { steps: [initStepState(step)], pendingRecipientUids };
 }
 
@@ -55,19 +59,21 @@ export async function buildInitialStep(
  * another flow step, so neither one blocks the other.
  */
 async function advance(
-  db: Firestore, collegeId: string, req: Pick<CertificateRequest, "flow" | "currentStepIndex" | "studentDepartment" | "certificateTypeKey">, steps: StepRuntimeState[]
+  db: Firestore, collegeId: string, req: Pick<CertificateRequest, "flow" | "currentStepIndex" | "studentDepartment" | "certificateTypeKey" | "issuer" | "certificateTypeId" | "studentId">, steps: StepRuntimeState[]
 ): Promise<{ status: CertificateRequestStatus; currentStepIndex: number; steps: StepRuntimeState[]; pendingRecipientUids: string[]; examCellTask?: ExamCellTask }> {
   const nextIndex = req.currentStepIndex + 1;
   if (nextIndex >= req.flow.length) {
-    const typeDef = getCertificateTypeDef(req.certificateTypeKey);
-    const issuerUids = await resolveRecipientUids(db, collegeId, typeDef.issuer, { studentDepartment: req.studentDepartment });
+    // Configured types carry their issuer on the request (snapshot at submission); the prototype No Due uses its constant.
+    const issuer = req.issuer ?? getCertificateTypeDef("NO_DUE").issuer;
+    const issuerUids = await resolveRecipientUids(db, collegeId, issuer, recipientContext(req));
     return {
       status: "PENDING_ISSUANCE", currentStepIndex: req.currentStepIndex, steps, pendingRecipientUids: issuerUids,
-      examCellTask: { status: "PENDING" },
+      // The Exam Cell PC / CMM side task belongs to the prototype No Due flow only.
+      ...(req.certificateTypeId ? {} : { examCellTask: { status: "PENDING" as const } }),
     };
   }
   const nextStep = req.flow[nextIndex];
-  const pendingRecipientUids = await resolveStepPendingUids(db, collegeId, nextStep, req.studentDepartment);
+  const pendingRecipientUids = await resolveStepPendingUids(db, collegeId, nextStep, recipientContext(req));
   return { status: "IN_PROGRESS", currentStepIndex: nextIndex, steps: [...steps, initStepState(nextStep)], pendingRecipientUids };
 }
 
@@ -92,7 +98,7 @@ export async function decideSequentialStep(
       throw new CertificateStateConflictError();
     }
 
-    const resolvedUids = await resolveStepPendingUids(db, collegeId, step, req.studentDepartment);
+    const resolvedUids = await resolveStepPendingUids(db, collegeId, step, recipientContext(req));
     if (!canDecide(actor.uid, req.requesterUid, resolvedUids)) throw new CertificationError("FORBIDDEN", "You can't decide this step", 403);
     if (action === "REJECT" && !remarks) throw new CertificationError("REMARKS_REQUIRED", "Remarks are required to reject", 400);
 
@@ -128,8 +134,14 @@ export async function decideSequentialStep(
   return result;
 }
 
+export interface BranchOutcome {
+  outcome?: "NO_DUES" | "NOT_APPLICABLE" | "APPROVED";
+  result?: CertificateClearance["result"];
+}
+
 export async function decideParallelBranch(
-  db: Firestore, collegeId: string, id: string, branchKey: string, action: "ACCEPT" | "REJECT", actor: ActingUser, remarks?: string
+  db: Firestore, collegeId: string, id: string, branchKey: string, action: "ACCEPT" | "REJECT", actor: ActingUser, remarks?: string,
+  extra: BranchOutcome = {}
 ): Promise<CertificateRequest> {
   const ref = CERTIFICATE_REQUESTS_COL(db, collegeId).doc(id);
   const now = new Date();
@@ -149,13 +161,23 @@ export async function decideParallelBranch(
     if (!branchDef || !branchState) throw new CertificationError("NOT_FOUND", "No such clearance branch on this request", 404);
     if (branchState.status !== "PENDING") throw new CertificateStateConflictError("This clearance was already decided.");
 
-    const resolvedUids = await resolveRecipientUids(db, collegeId, branchDef.recipient, { studentDepartment: req.studentDepartment });
+    const resolvedUids = await resolveRecipientUids(db, collegeId, branchDef.recipient, recipientContext(req));
     if (!canDecide(actor.uid, req.requesterUid, resolvedUids)) throw new CertificationError("FORBIDDEN", "You can't decide this clearance", 403);
     if (action === "REJECT" && !remarks) throw new CertificationError("REMARKS_REQUIRED", "Remarks are required to reject", 400);
+    // A dues check is cleared (No dues / Not applicable) or marked Dues pending - never rejected.
+    const check = branchDef.check ?? "APPROVAL";
+    if (check === "DUES" && action === "REJECT") throw new CertificationError("INVALID", "Mark the dues as pending instead - the student can then pay and be cleared", 400);
+    if (check === "DUES" && action === "ACCEPT" && extra.outcome !== "NO_DUES" && extra.outcome !== "NOT_APPLICABLE") {
+      throw new CertificationError("INVALID", "Mark No dues or Not applicable", 400);
+    }
+    const outcome = action === "ACCEPT" ? (check === "DUES" ? extra.outcome : "APPROVED") : undefined;
 
     const updatedBranches: CertificateClearance[] = current.branches.map((b) =>
       b.branchKey === branchKey
-        ? { ...b, status: action === "ACCEPT" ? "ACCEPTED" : "REJECTED", decidedByUid: actor.uid, decidedByName: actor.name, decidedAt: now, ...(remarks ? { remarks } : {}) }
+        ? {
+            ...b, status: action === "ACCEPT" ? "ACCEPTED" : "REJECTED", decidedByUid: actor.uid, decidedByName: actor.name, decidedAt: now,
+            ...(remarks ? { remarks } : {}), ...(outcome ? { outcome } : {}), ...(extra.result ? { result: extra.result } : {}), duesPending: null,
+          }
         : b
     );
     const updatedStepState: StepRuntimeState = { type: "PARALLEL", branches: updatedBranches };
@@ -169,7 +191,7 @@ export async function decideParallelBranch(
     } else {
       const stillPending = updatedBranches.filter((b) => b.status === "PENDING");
       const perBranch = await Promise.all(
-        stillPending.map((b) => resolveRecipientUids(db, collegeId, step.branches.find((d) => d.key === b.branchKey)!.recipient, { studentDepartment: req.studentDepartment }))
+        stillPending.map((b) => resolveRecipientUids(db, collegeId, step.branches.find((d) => d.key === b.branchKey)!.recipient, recipientContext(req)))
       );
       next = { status: "IN_PROGRESS", currentStepIndex: req.currentStepIndex, steps, pendingRecipientUids: Array.from(new Set(perBranch.flat())) };
     }
@@ -301,7 +323,8 @@ export async function cancelRequest(db: Firestore, collegeId: string, id: string
     if (!snap.exists) throw new CertificationError("NOT_FOUND", "Request not found", 404);
     const req = { id: snap.id, ...snap.data() } as CertificateRequest;
     if (req.requesterUid !== actor.uid) throw new CertificationError("FORBIDDEN", "You can only cancel your own request", 403);
-    if (req.status !== "IN_PROGRESS") throw new CertificateStateConflictError("This request can no longer be cancelled.");
+    if (req.startedByUid) throw new CertificationError("FORBIDDEN", "The College Office started this request - it can't be cancelled here", 403);
+    if (req.status !== "IN_PROGRESS" && req.status !== "RETURNED") throw new CertificateStateConflictError("This request can no longer be cancelled.");
 
     const historyEntry: CertificateHistoryEntry = { action: "CANCELLED", byUid: actor.uid, byName: actor.name, byRole: actor.role, at: now };
     const history = [...req.history, historyEntry];
@@ -314,5 +337,138 @@ export async function cancelRequest(db: Firestore, collegeId: string, id: string
     result = { ...req, status: "CANCELLED", pendingRecipientUids: [], history, updatedAt: now, decidedAt: now };
   });
 
+  return result;
+}
+
+/**
+ * The current approver sends the request back to the student to correct (a wrong detail, a missing document) -
+ * not a rejection: the step stays undecided, and once the student resubmits it comes back to the same step.
+ * Parallel steps: one branch returns it; branches already accepted stay accepted.
+ */
+export async function returnToStudent(
+  db: Firestore, collegeId: string, id: string, actor: ActingUser, remarks: string, branchKey?: string
+): Promise<CertificateRequest> {
+  const ref = CERTIFICATE_REQUESTS_COL(db, collegeId).doc(id);
+  const now = new Date();
+  let result!: CertificateRequest;
+  if (!remarks) throw new CertificationError("REMARKS_REQUIRED", "Say what the student must correct", 400);
+
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new CertificationError("NOT_FOUND", "Request not found", 404);
+    const req = { id: snap.id, ...snap.data() } as CertificateRequest;
+    const step = req.flow[req.currentStepIndex];
+    const current = req.steps[req.currentStepIndex];
+    if (req.status !== "IN_PROGRESS" || !step || !current) throw new CertificateStateConflictError();
+
+    let label = step.label;
+    if (step.type === "SEQUENTIAL") {
+      if (current.type !== "SEQUENTIAL" || current.status !== "PENDING") throw new CertificateStateConflictError();
+      const uids = await resolveStepPendingUids(db, collegeId, step, recipientContext(req));
+      if (!canDecide(actor.uid, req.requesterUid, uids)) throw new CertificationError("FORBIDDEN", "You can't decide this step", 403);
+    } else {
+      const branch = step.branches.find((b) => b.key === branchKey);
+      const state = current.type === "PARALLEL" ? current.branches.find((b) => b.branchKey === branchKey) : undefined;
+      if (!branch || !state) throw new CertificationError("NOT_FOUND", "No such approval on this request", 404);
+      if (state.status !== "PENDING") throw new CertificateStateConflictError("This approval was already decided.");
+      const uids = await resolveRecipientUids(db, collegeId, branch.recipient, recipientContext(req));
+      if (!canDecide(actor.uid, req.requesterUid, uids)) throw new CertificationError("FORBIDDEN", "You can't decide this approval", 403);
+      label = branch.label;
+    }
+
+    const history = [...req.history, { action: "RETURNED", byUid: actor.uid, byName: actor.name, byRole: actor.role, at: now, detail: label, remarks } as CertificateHistoryEntry];
+    const update = { status: "RETURNED" as const, returnedAtStep: req.currentStepIndex, returnRemarks: remarks, pendingRecipientUids: [] as string[], history, updatedAt: now };
+    tx.update(ref, update);
+    tx.set(auditRef(db, collegeId), {
+      collegeId, action: "CERTIFICATE_RETURNED", performedBy: actor.uid, performedByName: actor.name, targetId: id, details: { step: label }, timestamp: now,
+    });
+    result = { ...req, ...update };
+  });
+  return result;
+}
+
+/** The student corrects a returned request; it goes back to the step (or the approvals still pending) that returned it. */
+export async function resubmitRequest(
+  db: Firestore, collegeId: string, id: string, actor: ActingUser,
+  changes: { values?: Record<string, string>; attachments?: CertificateRequest["attachments"]; purpose?: string | null }
+): Promise<CertificateRequest> {
+  const ref = CERTIFICATE_REQUESTS_COL(db, collegeId).doc(id);
+  const now = new Date();
+  let result!: CertificateRequest;
+
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new CertificationError("NOT_FOUND", "Request not found", 404);
+    const req = { id: snap.id, ...snap.data() } as CertificateRequest;
+    if (req.requesterUid !== actor.uid) throw new CertificationError("FORBIDDEN", "You can only correct your own request", 403);
+    if (req.status !== "RETURNED") throw new CertificateStateConflictError("This request isn't waiting for your correction.");
+
+    const step = req.flow[req.currentStepIndex];
+    const current = req.steps[req.currentStepIndex];
+    let pendingRecipientUids: string[];
+    if (step.type === "PARALLEL" && current?.type === "PARALLEL") {
+      const pending = current.branches.filter((b) => b.status === "PENDING");
+      const per = await Promise.all(pending.map((b) => resolveRecipientUids(db, collegeId, step.branches.find((d) => d.key === b.branchKey)!.recipient, recipientContext(req))));
+      pendingRecipientUids = Array.from(new Set(per.flat()));
+    } else {
+      pendingRecipientUids = await resolveStepPendingUids(db, collegeId, step, recipientContext(req));
+    }
+    if (pendingRecipientUids.length === 0) throw new CertificationError("NO_APPROVER", `No one is set to approve "${step.label}" right now - please contact the College Office.`, 409);
+
+    const history = [...req.history, { action: "RESUBMITTED", byUid: actor.uid, byName: actor.name, byRole: actor.role, at: now } as CertificateHistoryEntry];
+    const update: Record<string, unknown> = {
+      status: "IN_PROGRESS", pendingRecipientUids, history, updatedAt: now,
+      ...(changes.values ? { values: changes.values } : {}),
+      ...(changes.attachments ? { attachments: changes.attachments } : {}),
+      ...(changes.purpose !== undefined && changes.purpose !== null ? { purpose: changes.purpose } : {}),
+    };
+    tx.update(ref, update);
+    tx.set(auditRef(db, collegeId), {
+      collegeId, action: "CERTIFICATE_RESUBMITTED", performedBy: actor.uid, performedByName: actor.name, targetId: id, details: {}, timestamp: now,
+    });
+    result = { ...req, ...(update as Partial<CertificateRequest>) };
+  });
+  return result;
+}
+
+/**
+ * A department records money the student still owes (amount + reason). Not a rejection: the line stays open, the
+ * student sees what to pay, and the department clears it (No dues) once paid. Recording it again replaces it.
+ */
+export async function markDuesPending(
+  db: Firestore, collegeId: string, id: string, branchKey: string, actor: ActingUser, amount: number, reason: string
+): Promise<CertificateRequest> {
+  const ref = CERTIFICATE_REQUESTS_COL(db, collegeId).doc(id);
+  const now = new Date();
+  let result!: CertificateRequest;
+  if (!Number.isFinite(amount) || amount < 0 || amount > 10_000_000) throw new CertificationError("INVALID", "Enter the amount due", 400);
+  if (!reason.trim()) throw new CertificationError("REMARKS_REQUIRED", "Say what the dues are for", 400);
+
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new CertificationError("NOT_FOUND", "Request not found", 404);
+    const req = { id: snap.id, ...snap.data() } as CertificateRequest;
+    const step = req.flow[req.currentStepIndex];
+    const current = req.steps[req.currentStepIndex];
+    if (req.status !== "IN_PROGRESS" || step?.type !== "PARALLEL" || current?.type !== "PARALLEL") throw new CertificateStateConflictError();
+    const branchDef = step.branches.find((b) => b.key === branchKey);
+    const state = current.branches.find((b) => b.branchKey === branchKey);
+    if (!branchDef || !state) throw new CertificationError("NOT_FOUND", "No such clearance on this request", 404);
+    if ((branchDef.check ?? "APPROVAL") !== "DUES") throw new CertificationError("INVALID", "This line is not a dues check", 400);
+    if (state.status !== "PENDING") throw new CertificateStateConflictError("This clearance was already decided.");
+    const uids = await resolveRecipientUids(db, collegeId, branchDef.recipient, recipientContext(req));
+    if (!canDecide(actor.uid, req.requesterUid, uids)) throw new CertificationError("FORBIDDEN", "You can't decide this clearance", 403);
+
+    const duesPending = { amount: Math.round(amount * 100) / 100, reason: reason.trim().slice(0, 200), byName: actor.name, at: now };
+    const branches = current.branches.map((b) => (b.branchKey === branchKey ? { ...b, duesPending } : b));
+    const steps = [...req.steps.slice(0, req.currentStepIndex), { type: "PARALLEL" as const, branches }];
+    const history = [...req.history, { action: "DUES_PENDING", byUid: actor.uid, byName: actor.name, byRole: actor.role, at: now, detail: branchDef.label, remarks: `Rs. ${duesPending.amount} - ${duesPending.reason}` }];
+    tx.update(ref, { steps, history, updatedAt: now });
+    tx.set(auditRef(db, collegeId), {
+      collegeId, action: "CERTIFICATE_DUES_PENDING", performedBy: actor.uid, performedByName: actor.name, targetId: id,
+      details: { branch: branchDef.label, amount: duesPending.amount }, timestamp: now,
+    });
+    result = { ...req, steps, history, updatedAt: now };
+  });
   return result;
 }

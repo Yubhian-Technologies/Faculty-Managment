@@ -10,12 +10,14 @@ describe("College Admin menu", () => {
 
   it("starts at /college-admin and holds only the admin's own pages and the College Office's", () => {
     expect(hrefs[0]).toBe("/college-admin");
-    expect(hrefs.every((h) => h.startsWith("/college-admin") || h.startsWith("/college-office"))).toBe(true);
+    // ...plus the shared certificate workspace, which has one URL for every role.
+    expect(hrefs.every((h) => h.startsWith("/college-admin") || h.startsWith("/college-office") || h === "/certificates")).toBe(true);
+    expect(hrefs.filter((h) => h === "/certificates")).toHaveLength(1);
     expect(hrefs.some((h) => h.startsWith("/principal"))).toBe(false);
   });
 
   it("includes the College Office modules the admin also runs, once each", () => {
-    for (const kept of ["/college-office/timings", "/college-office/non-technical-staff", "/college-office/staff", "/college-office/certificates", "/college-office/student-attendance-import"]) {
+    for (const kept of ["/college-office/timings", "/college-office/non-technical-staff", "/college-office/staff", "/college-office/student-attendance-import"]) {
       expect(hrefs).toContain(kept);
     }
     expect(new Set(items.map((i) => i.label)).size).toBe(items.length);

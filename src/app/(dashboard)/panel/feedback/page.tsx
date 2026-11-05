@@ -74,7 +74,7 @@ export default function PanelFeedbackPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="My Feedback"
+        title="Feedback"
         description="Interview feedback you have submitted"
       />
 

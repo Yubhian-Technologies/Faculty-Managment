@@ -1175,7 +1175,7 @@ const effectiveSemester = semesterOptions.length === 0
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Teaching Assignments"
+        title="Subject Allocation"
         description="Find staffing gaps and assign faculty to subjects, course &amp; year wise"
         actions={
           <div className="flex flex-wrap items-center gap-2">

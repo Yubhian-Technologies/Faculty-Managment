@@ -52,7 +52,7 @@ export default function PrincipalLeaveHistoryDepartmentsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Leave History" description="Pick a department or a college-wide role to view its leave register" />
+      <PageHeader title="Leave Register" description="Pick a department or a college-wide role to view its leave register" />
 
       <ActiveLeaveNowCard />
 

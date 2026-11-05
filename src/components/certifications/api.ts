@@ -23,7 +23,7 @@ export const getRequestStudent = async (id: string) =>
   (await call<{ student: StudentRecord }>(`${BASE}/${id}/student`)).student;
 
 export const getDepartmentOverview = async () =>
-  (await call<{ rows: CertificateSectionOverviewRow[] }>(`${BASE}/overview`)).rows;
+  call<{ rows: CertificateSectionOverviewRow[]; requests: CertificateRequest[] }>(`${BASE}/overview`);
 
 export const submitRequest = async (purposeCode: string, purposeOther?: string, reason?: string) =>
   call<{ alreadyExists: boolean; request: CertificateRequest }>(BASE, { method: "POST", body: JSON.stringify({ purposeCode, purposeOther, reason }) });

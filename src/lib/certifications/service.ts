@@ -9,7 +9,11 @@ import { resolvePurpose } from "./purposes";
 import {
   buildInitialStep, cancelRequest as txCancel, CERTIFICATE_REQUESTS_COL, decideParallelBranch, decideSequentialStep,
   issueCertificate as txIssue, markExamCellIssued as txMarkExamCellIssued, rejectAtIssuance as txReject,
+  markDuesPending as txDuesPending, resubmitRequest as txResubmit, returnToStudent as txReturn, recipientContext,
 } from "./transitions";
+import { cleanAttachments, notifyStepRecipients, resultCheck } from "./configured";
+import { loadType } from "./store";
+import { cleanPurpose, cleanValues } from "./typeConfig";
 import { CertificationError } from "./types";
 import type { ActingUser } from "./types";
 import * as notifications from "./notifications";
@@ -88,10 +92,12 @@ async function notifyExamCellIfSeeded(db: Firestore, collegeId: string, updated:
 }
 
 export async function decide(
-  db: Firestore, user: ActingUser, id: string, action: "APPROVE" | "REJECT", remarks?: string, branchKey?: string
+  db: Firestore, user: ActingUser, id: string, action: "APPROVE" | "REJECT", remarks?: string, branchKey?: string,
+  outcome?: "NO_DUES" | "NOT_APPLICABLE"
 ): Promise<CertificateRequest> {
   const current = await getRequest(db, user, id);
   const step = current.flow[current.currentStepIndex];
+  if (current.certificateTypeId) return decideConfigured(db, user, current, action, remarks, branchKey, outcome);
 
   if (step.type === "SEQUENTIAL") {
     const updated = await decideSequentialStep(db, user.collegeId, id, action, actorOf(user), remarks);
@@ -154,6 +160,89 @@ export async function decide(
   return updated;
 }
 
+/** Configured types: the same transitions, with each type's own name in every message and /certificates as the link. */
+async function decideConfigured(
+  db: Firestore, user: ActingUser, current: CertificateRequest, action: "APPROVE" | "REJECT", remarks?: string, branchKey?: string,
+  outcome?: "NO_DUES" | "NOT_APPLICABLE"
+): Promise<CertificateRequest> {
+  const step = current.flow[current.currentStepIndex];
+  let updated: CertificateRequest;
+  if (step.type === "SEQUENTIAL") {
+    updated = await decideSequentialStep(db, user.collegeId, current.id, action, actorOf(user), remarks);
+    await notifications.resolveHodNotifications(db, user.collegeId, current.id);
+  } else {
+    if (!branchKey) throw new CertificationError("INVALID", "branchKey is required for this decision", 400);
+    const branch = step.branches.find((b) => b.key === branchKey);
+    // A result check records the Pass / Fail worked out now from the published results.
+    const result = branch?.check === "RESULT" ? await resultCheck(db, user.collegeId, current.studentId) : undefined;
+    updated = await decideParallelBranch(db, user.collegeId, current.id, branchKey, action === "APPROVE" ? "ACCEPT" : "REJECT", actorOf(user), remarks, {
+      ...(outcome ? { outcome } : {}), ...(result ? { result } : {}),
+    });
+    await notifications.resolveBranchNotifications(db, user.collegeId, current.id, branchKey);
+  }
+  const label = updated.certificateTypeLabel;
+  if (updated.status === "REJECTED") {
+    // Every other branch of a parallel step still has its popup - clear them too.
+    if (step.type === "PARALLEL") for (const b of step.branches) await notifications.resolveBranchNotifications(db, user.collegeId, current.id, b.key);
+    await notifications.notifyStudent(
+      db, user.collegeId, updated.requesterUid, "CERTIFICATE_REJECTED", `${label} rejected`,
+      `Your ${label} request was rejected at "${step.type === "PARALLEL" ? step.branches.find((b) => b.key === branchKey)?.label ?? step.label : step.label}".${remarks ? " Remarks: " + remarks : ""}`,
+    );
+  } else if (updated.status === "PENDING_ISSUANCE" || updated.currentStepIndex > current.currentStepIndex) {
+    await notifyStepRecipients(db, user.collegeId, updated);
+  }
+  return updated;
+}
+
+/** A department records dues the student still owes; the student is told what to pay. */
+export async function duesPending(db: Firestore, user: ActingUser, id: string, branchKey: string, amount: number, reason: string): Promise<CertificateRequest> {
+  await getRequest(db, user, id);
+  const updated = await txDuesPending(db, user.collegeId, id, branchKey, actorOf(user), amount, reason);
+  const step = updated.flow[updated.currentStepIndex];
+  const label = step?.type === "PARALLEL" ? step.branches.find((b) => b.key === branchKey)?.label ?? "" : "";
+  await notifications.notifyStudent(
+    db, user.collegeId, updated.requesterUid, "CERTIFICATE_DUES_PENDING", `${updated.certificateTypeLabel} - dues pending`,
+    `${label}: Rs. ${amount} pending (${reason}). Pay it and the department will clear you.`,
+  );
+  return updated;
+}
+
+/** An approver sends the request back to the student to correct. */
+export async function returnRequest(db: Firestore, user: ActingUser, id: string, remarks: string, branchKey?: string): Promise<CertificateRequest> {
+  const current = await getRequest(db, user, id);
+  if (!current.certificateTypeId) throw new CertificationError("INVALID", "A No Due request can be approved or rejected only", 400);
+  const updated = await txReturn(db, user.collegeId, id, actorOf(user), remarks, branchKey);
+  const step = current.flow[current.currentStepIndex];
+  if (step.type === "PARALLEL") for (const b of step.branches) await notifications.resolveBranchNotifications(db, user.collegeId, id, b.key);
+  else await notifications.resolveHodNotifications(db, user.collegeId, id);
+  await notifications.notifyStudent(
+    db, user.collegeId, updated.requesterUid, "CERTIFICATE_RETURNED", `${updated.certificateTypeLabel} - correction needed`,
+    `Your ${updated.certificateTypeLabel} request was sent back for a correction: ${remarks}`,
+  );
+  return updated;
+}
+
+/** The student corrects a returned request (their answers / documents) and sends it on. */
+export async function resubmit(db: Firestore, user: ActingUser, id: string, raw: unknown): Promise<CertificateRequest> {
+  const current = await getRequest(db, user, id);
+  if (!current.certificateTypeId) throw new CertificationError("INVALID", "This request can't be corrected", 400);
+  const type = await loadType(db, user.collegeId, current.certificateTypeId);
+  const body = (raw ?? {}) as { values?: unknown; attachments?: unknown; purpose?: unknown; purposeOther?: unknown };
+  // Checked against the form the student applied with (a later edit of the type never re-asks).
+  const values = cleanValues(current.fields ?? type?.fields ?? [], body.values);
+  if (!values.ok) throw new CertificationError("INVALID", values.error, 400);
+  const attachments = type ? cleanAttachments(type, body.attachments, user.collegeId, user.uid) : current.attachments;
+  let purpose: string | null = null;
+  if (type && (body.purpose !== undefined || body.purposeOther !== undefined)) {
+    const p = cleanPurpose(type, body.purpose, body.purposeOther);
+    if (!p.ok) throw new CertificationError("INVALID", p.error, 400);
+    purpose = p.value;
+  }
+  const updated = await txResubmit(db, user.collegeId, id, actorOf(user), { values: values.value, attachments, purpose });
+  await notifyStepRecipients(db, user.collegeId, updated);
+  return updated;
+}
+
 export async function issue(db: Firestore, user: ActingUser, id: string, certificateUrl: string, certificateNumber: string): Promise<CertificateRequest> {
   const updated = await txIssue(db, user.collegeId, id, actorOf(user), certificateUrl, certificateNumber);
   await notifications.resolveIssuanceNotifications(db, user.collegeId, id);
@@ -168,8 +257,8 @@ export async function rejectAtIssuance(db: Firestore, user: ActingUser, id: stri
   const updated = await txReject(db, user.collegeId, id, actorOf(user), remarks);
   await notifications.resolveIssuanceNotifications(db, user.collegeId, id);
   await notifications.notifyStudent(
-    db, user.collegeId, updated.requesterUid, "CERTIFICATE_REJECTED", "No Due Certificate rejected",
-    `College Office rejected your No Due Certificate request. Remarks: ${remarks}`
+    db, user.collegeId, updated.requesterUid, "CERTIFICATE_REJECTED", `${updated.certificateTypeLabel} rejected`,
+    `${updated.issuedByName ?? user.name} rejected your ${updated.certificateTypeLabel} request at issue. Remarks: ${remarks}`
   );
   return updated;
 }
@@ -207,25 +296,53 @@ export async function listMine(db: Firestore, user: ActingUser): Promise<Certifi
  * sees exactly the sections they actually head, same as everywhere else.
  */
 export async function listDepartmentOverview(db: Firestore, user: ActingUser): Promise<CertificateSectionOverviewRow[]> {
+  return (await listDepartmentRequests(db, user)).rows;
+}
+
+/** The same department-wide set, with the requests themselves - so the HOD sees where each one stands. */
+export async function listDepartmentRequests(db: Firestore, user: ActingUser): Promise<{ rows: CertificateSectionOverviewRow[]; requests: CertificateRequest[] }> {
   const scope = await getHodDepartmentScope(db, user.collegeId, user.uid, { activeOnly: false });
   const snap = await CERTIFICATE_REQUESTS_COL(db, user.collegeId).get();
   const mine = snap.docs.map(row).filter((r) => canHodEditDepartment(scope, r.studentDepartment));
 
   const bySection = new Map<string, CertificateSectionOverviewRow>();
   for (const r of mine) {
-    const key = `${r.studentDepartment} ${r.studentYear} ${r.studentSection}`;
+    const key = `${r.studentDepartment}\u0000${r.studentYear}\u0000${r.studentSection}`;
     const entry = bySection.get(key) ?? { department: r.studentDepartment, year: r.studentYear, section: r.studentSection, inProgress: 0, completed: 0 };
     if (r.status === "ISSUED") entry.completed += 1;
-    else if (ACTIVE_STATUSES.includes(r.status)) entry.inProgress += 1;
+    // A request sent back to the student is still in progress.
+    else if (ACTIVE_STATUSES.includes(r.status) || r.status === "RETURNED") entry.inProgress += 1;
     bySection.set(key, entry);
   }
-  return Array.from(bySection.values()).sort((a, b) => a.year - b.year || a.department.localeCompare(b.department) || a.section.localeCompare(b.section));
+  const rows = Array.from(bySection.values()).sort((a, b) => a.year - b.year || a.department.localeCompare(b.department) || a.section.localeCompare(b.section));
+  const requests = mine.filter((r) => r.status !== "CANCELLED").sort(byCreatedDesc);
+  return { rows, requests };
 }
 
-export async function listInbox(db: Firestore, user: ActingUser): Promise<CertificateRequest[]> {
+export async function listInbox(db: Firestore, user: ActingUser): Promise<(CertificateRequest & { myBranchKeys?: string[] })[]> {
   const snap = await CERTIFICATE_REQUESTS_COL(db, user.collegeId)
     .where("pendingRecipientUids", "array-contains", user.uid).where("status", "==", "IN_PROGRESS").get();
-  return snap.docs.map(row).sort(byCreatedDesc);
+  const requests = snap.docs.map(row).sort(byCreatedDesc);
+  // A parallel step: which of its departments are THIS person's to clear (a role's answer is the same for every
+  // request, so it is worked out once; HOD / mentor / class in-charge depend on the student).
+  const memo = new Map<string, Promise<string[]>>();
+  const resolve = (r: CertificateRequest, b: { recipient: import("@/types").RecipientResolver }) => {
+    const k = b.recipient.kind === "ROLE" ? `ROLE:${b.recipient.role}` : b.recipient.kind === "USER" ? `USER:${b.recipient.uid}`
+      : b.recipient.kind === "STUDENT_DEPARTMENT_HOD" ? `HOD:${r.studentDepartment}` : `${b.recipient.kind}:${r.studentId}`;
+    if (!memo.has(k)) memo.set(k, resolveRecipientUids(db, user.collegeId, b.recipient, recipientContext(r)));
+    return memo.get(k)!;
+  };
+  return Promise.all(requests.map(async (r) => {
+    const step = r.flow[r.currentStepIndex];
+    const state = r.steps[r.currentStepIndex];
+    if (step?.type !== "PARALLEL" || state?.type !== "PARALLEL") return r;
+    const mine: string[] = [];
+    for (const b of step.branches) {
+      if (state.branches.find((x) => x.branchKey === b.key)?.status !== "PENDING") continue;
+      if ((await resolve(r, b)).includes(user.uid)) mine.push(b.key);
+    }
+    return { ...r, myBranchKeys: mine };
+  }));
 }
 
 export async function listIssuanceQueue(db: Firestore, user: ActingUser): Promise<CertificateRequest[]> {

@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { actingUser, authenticate, failure } from "@/lib/certifications/http";
-import { listDepartmentOverview } from "@/lib/certifications/service";
+import { listDepartmentRequests } from "@/lib/certifications/service";
 
 // HOD-only: every certificate request filed by a student in their own
 // department(s), bucketed per section into in-progress vs completed - not
@@ -14,8 +14,8 @@ export async function GET() {
     const session = await authenticate("HOD");
     const db = getAdminDb();
     const user = await actingUser(db, session);
-    const rows = await listDepartmentOverview(db, user);
-    return NextResponse.json({ rows });
+    const { rows, requests } = await listDepartmentRequests(db, user);
+    return NextResponse.json({ rows, requests });
   } catch (err) {
     return failure(err, "certificate-requests/overview GET");
   }

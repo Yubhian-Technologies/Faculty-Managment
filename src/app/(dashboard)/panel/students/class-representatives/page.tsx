@@ -53,7 +53,7 @@ export default function ClassRepresentativesPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Section Settings" description="Pick your section's Class Representatives from its students" />
+      <PageHeader title="Class Representatives" description="Pick your section's Class Representatives from its students" />
       {!isLoading && sections.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-sm text-muted-foreground">

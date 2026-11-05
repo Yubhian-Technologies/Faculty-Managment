@@ -12,7 +12,7 @@ export async function savePreviousTeachingAssignments(
   rows: PreviousTeachingAssignment[],
   loadedIds: string[],
 ): Promise<string | null> {
-  const problem = previousTeachingProblem(rows);
+  const problem = previousTeachingProblem(rows, loadedIds);
   if (problem) return problem;
   try {
     const res = await fetch(endpoint, {

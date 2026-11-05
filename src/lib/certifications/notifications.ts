@@ -50,6 +50,14 @@ export async function notifyIssuer(db: Firestore, collegeId: string, req: Certif
   });
 }
 
+/** A configured certificate is ready for its issuer (same entity as the No Due issuance popup, so issuing clears it). */
+export async function notifyIssuerOf(db: Firestore, collegeId: string, req: CertificateRequest, uid: string, title: string, message: string): Promise<void> {
+  await emitWorkflowNotification({
+    db, collegeId, toUid: uid, type: "CERTIFICATE_READY_FOR_ISSUANCE", title, message,
+    link: "/certificates", entityType: "certificateIssuance", entityId: req.id, dedupeKey: `certificate:${req.id}:issuance:${uid}`,
+  });
+}
+
 export const resolveHodNotifications = (db: Firestore, collegeId: string, requestId: string) =>
   resolveWorkflowNotifications({ db, collegeId, entityType: "certificateRequest", entityId: requestId });
 

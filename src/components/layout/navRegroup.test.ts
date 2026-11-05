@@ -17,6 +17,7 @@ const EXPECTED: Record<string, string[]> = {
     "/principal/internal-marks",
     "/principal/results-analysis",
     "/principal/mentoring",
+    "/certificates",
     "/principal/faculty/profile-completion",
     "/principal/faculty",
     "/principal/leave-approvals",
@@ -50,6 +51,7 @@ const EXPECTED: Record<string, string[]> = {
     "/principal/internal-marks",
     "/principal/results-analysis",
     "/principal/mentoring",
+    "/certificates",
     "/principal/faculty/profile-completion",
     "/principal/faculty",
     "/principal/leave-approvals",
@@ -128,6 +130,7 @@ const EXPECTED: Record<string, string[]> = {
     "/panel/students/batches",
     "/panel/students/class-representatives",
     "/panel/feedback",
+    "/panel/certificates",
     "/panel/leave",
     "/leave/adjustments",
     "/panel/attendance",
@@ -176,7 +179,14 @@ describe("sidebar regrouping", () => {
     expect(migrateHiddenModules("PRINCIPAL", ["Staff & HR Management"])).not.toContain("Administration");
     expect(migrateHiddenModules("PRINCIPAL", ["Payroll & Budget"])).toContain("Budget & Purchase");
     expect(migrateHiddenModules("PRINCIPAL", ["Academic Management"])).toContain("Academics");
-    expect(migrateHiddenModules("PANEL_MEMBER", ["My Work"]).sort()).toEqual(["Incharge Duties", "My Work", "Students & Attendance"]);
+    expect(migrateHiddenModules("PANEL_MEMBER", ["My Work"]).sort()).toEqual(["Academics", "Additional Duties", "My Work", "Students"]);
+    // Renamed sections (Nov 2026): a college that hid the old name keeps it hidden under the new one.
+    expect(migrateHiddenModules("PANEL_MEMBER", ["Students & Attendance"])).toContain("Students");
+    expect(migrateHiddenModules("PANEL_MEMBER", ["Incharge Duties"])).toContain("Additional Duties");
+    expect(migrateHiddenModules("PANEL_MEMBER", ["Leave & Attendance"])).toContain("My Leave & Attendance");
+    expect(migrateHiddenModules("HOD", ["Hiring"])).toContain("Recruitment");
+    expect(migrateHiddenModules("HOD", ["Budget & Purchase"])).toContain("Budget & Purchases");
+    expect(migrateHiddenModules("PRINCIPAL", ["Hiring Pipeline"])).toContain("Recruitment");
     expect(migrateHiddenModules("HOD", [])).toEqual([]);
   });
 });

@@ -8,6 +8,7 @@ import { MobileDrawer } from "@/components/layout/MobileDrawer";
 import { TopBar } from "@/components/layout/TopBar";
 import { SummerHolidayBanner } from "@/components/layout/SummerHolidayBanner";
 import { TodayHolidayBanner } from "@/components/timetable/TodayHolidayBanner";
+import { ROLE_DASHBOARD_PATHS } from "@/types";
 import { HolidayReminder } from "@/components/layout/HolidayReminder";
 import { ReadOnlyAccessGate } from "@/components/layout/ReadOnlyAccessGate";
 import { readOnlyHiddenHrefs } from "@/components/layout/readOnlyNav";
@@ -26,6 +27,10 @@ import { DashboardSkeleton } from "@/components/shared/SkeletonLoader";
 const SUB_PAGE_VISIBILITY_PARENT: Record<string, string> = {
   "/hod/assignment-requests": "/hod/teaching-assignments",
 };
+
+// Every login's dashboard home, and the faculty / HOD "My Timetable" (/panel/teaching, /hod/teaching), also get the
+// "Today is a holiday" notice.
+const DASHBOARD_HOMES = new Set<string>([...Object.values(ROLE_DASHBOARD_PATHS), "/college-admin"]);
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuthStore();
@@ -83,7 +88,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <SummerHolidayBanner />
         <HolidayReminder />
         <main className={`flex-1 p-4 md:p-6 md:pb-6 max-w-7xl mx-auto w-full ${hasBottomNav(user.role, pathname) ? "pb-24" : "pb-6"}`}>
-          {/timetable/i.test(pathname) && <TodayHolidayBanner />}
+          {(/timetable/i.test(pathname) || /\/teaching$/.test(pathname) || DASHBOARD_HOMES.has(pathname)) && <TodayHolidayBanner />}
           <ReadOnlyAccessGate>{children}</ReadOnlyAccessGate>
         </main>
         <footer className="hidden md:flex items-center justify-between px-6 py-3 border-t bg-background text-xs text-muted-foreground">
