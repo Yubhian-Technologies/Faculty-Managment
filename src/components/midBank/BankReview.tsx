@@ -1,5 +1,6 @@
 "use client";
 
+import { outcomeSwitches } from "@/lib/midBank/outcomeSwitches";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, CheckCircle2, FileDown, Info, Lock } from "lucide-react";
@@ -17,6 +18,7 @@ import { downloadMidQuestionBankPdf } from "@/lib/pdf/downloadMidQuestionBank";
 import type { MidBankDetail } from "@/lib/midBank/clientTypes";
 import { MathText } from "./MathText";
 import { ApprovalPanel } from "./ApprovalPanel";
+import { PaperSetReview } from "@/components/midPapers/PaperSetReview";
 
 // Stage 5: the whole bank at a glance - what is done, what is still missing
 // (each issue links to its question), a full preview, and the PDF once every
@@ -43,9 +45,11 @@ export function BankReview({ id, editHref, writeHref, autoDownload }: { id: stri
 
   const bank = detail?.bank ?? null;
   const ready = bank?.status === "COMPLETE";
+  // The academic tags this bank started with (older banks: all on).
+  const sw = outcomeSwitches(bank?.outcomes);
 
   const issues = useMemo<Issue[]>(() => {
-    if (!detail?.bank) return [];
+    if (!detail?.bank || detail.bank.kind === "PAPERS") return [];
     const b = detail.bank;
     const out: Issue[] = [];
     const qs = detail.questions;
@@ -53,11 +57,11 @@ export function BankReview({ id, editHref, writeHref, autoDownload }: { id: stri
       const st = b.unitStatus[String(u)];
       const empty = QUESTIONS_PER_UNIT - qs.filter((q) => q.unit === u).length;
       if (empty > 0) out.push({ level: "error", text: `Unit ${u}: ${empty} question slot${empty > 1 ? "s" : ""} still empty` });
-      for (const n of bloomNeeds(st?.bloom ?? { L2: 0, L3: 0, L4: 0 })) if (n.need) out.push({ level: "error", text: `Unit ${u}: ${n.level} used ${n.count} time${n.count === 1 ? "" : "s"} - needs ${n.need} more` });
+      if (sw.bloom) for (const n of bloomNeeds(st?.bloom ?? { L2: 0, L3: 0, L4: 0 })) if (n.need) out.push({ level: "error", text: `Unit ${u}: ${n.level} used ${n.count} time${n.count === 1 ? "" : "s"} - needs ${n.need} more` });
     }
     for (const q of [...qs].sort((a, b2) => a.unit - b2.unit || a.slot - b2.slot)) {
       if (q.state === "DRAFT") {
-        const errs = Object.values(questionErrors(q.parts, formatOf(q, allowedFormats(b)), b.marks));
+        const errs = Object.values(questionErrors(q.parts, formatOf(q, allowedFormats(b)), b.marks, outcomeSwitches(b.outcomes)));
         out.push({ level: "error", qid: q.id, text: `Unit ${q.unit} Q${q.slot} is a draft${errs.length ? ` - ${errs[0]}` : ""}` });
       }
       const others = qs.filter((o) => o.id > q.id);
@@ -85,11 +89,13 @@ export function BankReview({ id, editHref, writeHref, autoDownload }: { id: stri
   }, [detail]);
 
   useEffect(() => {
-    if (autoDownload && ready && !autoDone.current) { autoDone.current = true; void download(); }
-  }, [autoDownload, ready, download]);
+    if (autoDownload && ready && detail?.bank.kind !== "PAPERS" && !autoDone.current) { autoDone.current = true; void download(); }
+  }, [autoDownload, ready, download, detail]);
 
   if (error) return <p className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive" role="alert">{error}</p>;
   if (!detail) return <div className="h-96 animate-pulse rounded-lg bg-muted" />;
+  // A college that prepares question papers: the papers' own review.
+  if (detail.bank.kind === "PAPERS") return <PaperSetReview detail={detail} writeHref={writeHref} onChanged={() => setReloadKey((k) => k + 1)} />;
   if (!bank || !detail.outcomes) {
     return <p className="rounded-lg border p-6 text-center text-sm text-muted-foreground">This question bank hasn&rsquo;t been started yet.</p>;
   }
@@ -139,7 +145,7 @@ export function BankReview({ id, editHref, writeHref, autoDownload }: { id: stri
               <div key={u} className="flex flex-wrap items-center gap-2">
                 <span className="w-16 font-medium">Unit {u}</span>
                 <Badge variant={st?.complete ? "default" : "outline"}>{st?.complete ? "Complete" : `${st?.completeCount ?? 0}/${QUESTIONS_PER_UNIT}`}</Badge>
-                {bloomNeeds(st?.bloom ?? { L2: 0, L3: 0, L4: 0 }).map((b) => (
+                {sw.bloom && bloomNeeds(st?.bloom ?? { L2: 0, L3: 0, L4: 0 }).map((b) => (
                   <Badge key={b.level} variant="outline" className={b.need ? "border-amber-500/60 text-amber-800" : "border-green-600/50 text-green-800"}>{b.level}: {b.count}</Badge>
                 ))}
               </div>
@@ -179,7 +185,7 @@ export function BankReview({ id, editHref, writeHref, autoDownload }: { id: stri
                             {/* eslint-disable-next-line @next/next/no-img-element -- Storage URL with a token */}
                             {p.imageUrl && <figure className="mt-2"><img src={p.imageUrl} alt={p.imageCaption || ""} className="max-h-40 rounded border" />{p.imageCaption && <figcaption className="text-xs text-muted-foreground">{p.imageCaption}</figcaption>}</figure>}
                             <p className="mt-1 text-xs text-muted-foreground">
-                              [{partMarks(p, i, formatOf(q, allowedFormats(bank)), bank.marks)} M] · {p.cos.join(", ") || "No CO"} · {derivePoPso(p.cos, detail.outcomes!.mapping).join(", ") || "-"} · {p.bloom || "No level"}
+                              {[`[${partMarks(p, i, formatOf(q, allowedFormats(bank)), bank.marks)} M]`, sw.cos && (p.cos.join(", ") || "No CO"), sw.poMapping && (derivePoPso(p.cos, detail.outcomes!.mapping).join(", ") || "-"), sw.bloom && (p.bloom || "No level")].filter(Boolean).join(" · ")}
                             </p>
                           </div>
                         ))}

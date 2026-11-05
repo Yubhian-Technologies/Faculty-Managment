@@ -2,6 +2,9 @@ export const dynamic = "force-dynamic";
 
 import { allowedFormats } from "@/lib/midBank/validateQuestion";
 import { NextResponse } from "next/server";
+import { loadMidSettings } from "@/lib/exams/midSettings";
+import { patternForSubject } from "@/lib/midPapers/server";
+import { paperProgress } from "@/lib/midPapers/pattern";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -9,7 +12,7 @@ import { notify } from "@/lib/notify";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { isDeadlineLocked } from "@/lib/midBank/deadline";
 import { bankTotals, unitStatuses } from "@/lib/midBank/rules";
-import { setupIssues } from "@/lib/midBank/setup";
+import { paperSetupIssues, setupIssues } from "@/lib/midBank/setup";
 import { bankIdFor, checkSectionPick, claimIdFor, outcomesIdFor, sectionsOf, type TeachingRow } from "@/lib/midBank/sections";
 import {
   actorName, guardError, loadOutcomes, loadSubject, loginUidsOf, MID_BANK_WRITE_ROLES, midBankRefs, rulesForSubject, teachingFor, subjectSplitFor } from "@/lib/midBank/server";
@@ -104,9 +107,13 @@ export async function POST(request: Request) {
     if (!available.some((s) => s.facultyIds.includes(me))) return NextResponse.json({ error: "You don't teach this subject in this branch" }, { status: 403 });
 
     const outcomesId = outcomesIdFor(subjectId, branch);
-    const [rules, outcomes, exception] = await Promise.all([rulesForSubject(db, session.collegeId, subject), loadOutcomes(db, session.collegeId, outcomesId), subjectSplitFor(db, session.collegeId, subjectId)]);
-    const { issues, units } = setupIssues(subject, d.midNumber, rules, outcomes, exception);
-    if (issues.length > 0 || !rules) return NextResponse.json({ error: issues[0]?.message ?? "Setup is incomplete", issues }, { status: 400 });
+    const [rules, outcomes, exception, settings] = await Promise.all([rulesForSubject(db, session.collegeId, subject), loadOutcomes(db, session.collegeId, outcomesId), subjectSplitFor(db, session.collegeId, subjectId), loadMidSettings(db, session.collegeId)]);
+    const sw = settings.outcomes;
+    // A college that prepares question papers starts a paper set (same doc, kind PAPERS) to its paper pattern.
+    const papers = settings.midPreparation === "PAPERS";
+    const pattern = papers ? await patternForSubject(db, session.collegeId, subject) : null;
+    const { issues, units } = papers ? paperSetupIssues(subject, pattern, outcomes, sw) : setupIssues(subject, d.midNumber, rules, outcomes, exception, sw);
+    if (issues.length > 0 || (papers ? !pattern : !rules)) return NextResponse.json({ error: issues[0]?.message ?? "Setup is incomplete", issues }, { status: 400 });
 
     const bankId = bankIdFor(d.id, subjectId, branch, me);
     const ownerName = await actorName(db, session.collegeId, session.uid);
@@ -121,14 +128,15 @@ export async function POST(request: Request) {
       if (pick.error) return { status: 409, body: { error: pick.error } };
 
       const now = new Date();
-      const unitStatus = unitStatuses(units, []);
-      const totals = bankTotals(units, unitStatus);
+      const unitStatus = unitStatuses(units, [], sw);
+      const totals = papers ? paperProgress(pattern!, []) : bankTotals(units, unitStatus);
       const data: Omit<MidQuestionBank, "id"> = {
         deadlineId: d.id, courseName: d.courseName, year: d.year, semester: d.semester, midNumber: d.midNumber,
         subjectId, subjectName: subject.name, subjectCode: subject.code, branch, outcomesId,
         sections: pick.sections, ownerFacultyId: me, ownerName, ownerUid: session.uid,
         viewerFacultyIds: [...new Set(pick.sections.flatMap((s) => s.facultyIds))],
-        units, formats: allowedFormats(rules), marks: rules.marks, unitStatus, status: "IN_PROGRESS",
+        units, formats: papers ? [] : allowedFormats(rules!), marks: papers ? 0 : rules!.marks, unitStatus, status: "IN_PROGRESS", outcomes: sw,
+        ...(papers ? { kind: "PAPERS" as const, pattern: pattern!, setProgress: paperProgress(pattern!, []).setProgress } : {}),
         completeCount: totals.completeCount, totalCount: totals.totalCount,
         createdAt: now as unknown as MidQuestionBank["createdAt"], updatedAt: now as unknown as MidQuestionBank["updatedAt"],
       };
@@ -145,8 +153,9 @@ export async function POST(request: Request) {
       for (const f of others) {
         const uid = uids.get(f);
         const secs = bank.sections.filter((s) => s.facultyIds.includes(f)).map((s) => s.sectionName).join(", ");
-        if (uid) await notify(db, session.collegeId, uid, "MID_BANK_SHARED", `${ownerName} is preparing your Mid ${d.midNumber} question bank`,
-          `${subject.name} (${branch}, section ${secs}) is covered by ${ownerName}'s question bank. You can view it under Question Bank.`, "/panel/mid-bank");
+        const what = papers ? "question papers" : "question bank";
+        if (uid) await notify(db, session.collegeId, uid, "MID_BANK_SHARED", `${ownerName} is preparing your Mid ${d.midNumber} ${what}`,
+          `${subject.name} (${branch}, section ${secs}) is covered by ${ownerName}'s ${what}. You can view it under Mid Question Bank.`, "/panel/mid-bank");
       }
     }
     return NextResponse.json(result.body, { status: result.status });

@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { loadMidSettings } from "@/lib/exams/midSettings";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -49,7 +50,7 @@ export async function PUT(request: Request, { params }: Params) {
     const teaches = sectionsOf(await teachingFor(db, session.collegeId, d), subjectId, branch).some((s) => s.facultyIds.includes(me));
     if (!teaches) return NextResponse.json({ error: "Only faculty teaching this subject in this branch can set it up" }, { status: 403 });
 
-    const { value, errors } = cleanOutcomes(body);
+    const { value, errors } = cleanOutcomes(body, (await loadMidSettings(db, session.collegeId)).outcomes);
     if (errors.length > 0) return NextResponse.json({ error: errors[0], errors }, { status: 400 });
 
     const current = await loadOutcomes(db, session.collegeId, id);

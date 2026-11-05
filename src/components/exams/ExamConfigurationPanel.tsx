@@ -28,6 +28,8 @@ interface ComponentForm {
   maxMarks: string;
   description: string;
   isActive: boolean;
+  /** Marks from Mid N's question paper (question by question), or none = typed as one number. */
+  midNumber?: number;
 }
 
 function emptyComponent(): ComponentForm {
@@ -200,7 +202,7 @@ function ExamCellConfigureForm({ embedded }: { embedded: boolean }) {
           setComponents(
             [...cfg.components]
               .sort((a, b) => a.order - b.order)
-              .map((c) => ({ id: c.id, name: c.name, maxMarks: String(c.maxMarks), description: c.description ?? "", isActive: c.isActive }))
+              .map((c) => ({ id: c.id, name: c.name, maxMarks: String(c.maxMarks), description: c.description ?? "", isActive: c.isActive, ...(c.midNumber ? { midNumber: c.midNumber } : {}) }))
           );
         } else {
           setExistingConfig(null);
@@ -221,6 +223,25 @@ function ExamCellConfigureForm({ embedded }: { embedded: boolean }) {
   // it (see the POST route's matching 409 guard), so re-saving the same
   // identity can never silently overwrite what's there.
   const isViewOnly = existingConfig !== null;
+
+  // A college that prepares question papers: a component may take its marks from a Mid's paper.
+  const [paperMids, setPaperMids] = useState(0);
+  useEffect(() => {
+    fetch("/api/college/exam-mid-settings").then((r) => (r.ok ? r.json() : null))
+      .then((d: { settings?: { midPreparation?: string; midCount?: number } } | null) => setPaperMids(d?.settings?.midPreparation === "PAPERS" ? d.settings.midCount || 2 : 0)).catch(() => undefined);
+  }, []);
+
+  /** Saved configurations can still change where a component's marks come from (nothing else). */
+  async function linkMid(componentId: string, midNumber: number | null) {
+    updateComponent(componentId, { midNumber: midNumber ?? undefined });
+    if (!existingConfig) return;
+    const res = await fetch("/api/college/exam-configurations", {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: existingConfig.id, componentId, midNumber }),
+    });
+    const json = (await res.json().catch(() => ({}))) as { error?: string };
+    if (!res.ok) toast({ variant: "destructive", title: json.error ?? "Couldn't save" });
+    else toast({ variant: "success", title: midNumber ? `Marks now come from the Mid ${midNumber} question paper` : "Marks are typed as one number" });
+  }
 
   function updateComponent(id: string, patch: Partial<ComponentForm>) {
     setComponents((list) => list.map((c) => (c.id === id ? { ...c, ...patch } : c)));
@@ -273,6 +294,7 @@ function ExamCellConfigureForm({ embedded }: { embedded: boolean }) {
             description: c.description.trim() || undefined,
             order: i,
             isActive: c.isActive,
+            ...(c.midNumber ? { midNumber: c.midNumber } : {}),
           })),
         }),
       });
@@ -430,6 +452,13 @@ function ExamCellConfigureForm({ embedded }: { embedded: boolean }) {
                         />
                       </div>
                       <div className="flex items-center gap-3">
+                        {paperMids > 0 && (
+                          <select aria-label={`Where ${c.name || "this component"}'s marks come from`} className="h-9 rounded-md border border-input bg-background px-2 text-xs"
+                            value={c.midNumber ?? ""} onChange={(e) => void linkMid(c.id, e.target.value ? Number(e.target.value) : null)}>
+                            <option value="">Typed as one number</option>
+                            {Array.from({ length: paperMids }, (_, i) => i + 1).map((n) => <option key={n} value={n}>From Mid {n} paper (per question)</option>)}
+                          </select>
+                        )}
                         <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
                           <Checkbox checked={c.isActive} onCheckedChange={(v) => updateComponent(c.id, { isActive: v === true })} disabled={isViewOnly} />
                           Active

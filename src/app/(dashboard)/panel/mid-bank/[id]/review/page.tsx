@@ -15,10 +15,10 @@ export default function MidBankReviewPage({ params, searchParams }: { params: Pr
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Review question bank"
-        description="Everything still missing, a full preview, and the PDF once every unit is complete."
+        title="Review"
+        description="Everything still missing, a full preview, and the PDF once it is complete."
         actions={
-          <Button asChild variant="ghost" size="sm"><Link href="/panel/mid-bank"><ArrowLeft className="mr-1.5 h-4 w-4" />Question Bank</Link></Button>
+          <Button asChild variant="ghost" size="sm"><Link href="/panel/mid-bank"><ArrowLeft className="mr-1.5 h-4 w-4" />All subjects</Link></Button>
         }
       />
       <BankReview id={id} editHref={(qid) => `${base}?q=${qid}`} writeHref={base} autoDownload={download === "1"} />

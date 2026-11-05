@@ -7,7 +7,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { notify } from "@/lib/notify";
 import { checkSectionPick, claimIdFor, sectionsOf } from "@/lib/midBank/sections";
 import {
-  bankAccess, guardError, writeRefusal, loadOutcomes, loadQuestions, loadSubject, loginUidsOf, MID_BANK_READ_ROLES, MID_BANK_WRITE_ROLES, midBankRefs, rulesForSubject, teachingFor,
+  bankAccess, guardError, writeRefusal, MID_BANK_OVERSEERS, loadOutcomes, loadQuestions, loadSubject, loginUidsOf, MID_BANK_READ_ROLES, MID_BANK_WRITE_ROLES, midBankRefs, rulesForSubject, teachingFor,
 } from "@/lib/midBank/server";
 
 // One question bank.
@@ -34,8 +34,14 @@ export async function GET(_request: Request, { params }: Params) {
       subject ? rulesForSubject(db, session.collegeId, subject) : null,
       loadQuestions(db, session.collegeId, id),
     ]);
+    // Question papers: the answers (MCQ key, blanks) are for the owner, the HOD reviewing and the Exam Cell -
+    // not for colleagues who only read the papers.
+    const seesAnswers = access.isOwner || access.isHod || MID_BANK_OVERSEERS.includes(session.role);
+    const shown = bank.kind === "PAPERS" && !seesAnswers
+      ? questions.map((q) => { const { answer: _answer, ...rest } = q as typeof q & { answer?: string }; void _answer; return rest; })
+      : questions;
     return NextResponse.json({
-      bank, deadline, outcomes, rules, questions,
+      bank, deadline, outcomes, rules, questions: shown,
       subject: {
         id: bank.subjectId, name: bank.subjectName, code: bank.subjectCode, courseName: bank.courseName,
         regulation: subject?.regulation ?? "", year: bank.year, semester: bank.semester, branch: bank.branch,

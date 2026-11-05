@@ -1,5 +1,7 @@
 import type { CourseOutcome, OutcomeMapping, SyllabusUnit } from "@/types/midQuestionBank";
+import type { MidOutcomeSwitches } from "@/types/examMidSchedule";
 import { LIMITS, MAPPING_TARGETS } from "./constants";
+import { ALL_OUTCOMES_ON } from "./outcomeSwitches";
 
 // Units, Course Outcomes and the CO -> PO/PSO mapping of one subject in one
 // branch: checking what a faculty member entered, and working out which POs /
@@ -21,7 +23,7 @@ const order = (ids: Iterable<string>) => [...new Set(ids)].filter((t) => MAPPING
  * are never gaps; a CO's mapping keeps only known POs / PSOs. Older saves stored
  * `{ PO1: 3, ... }` per CO - those read as the POs they named.
  */
-export function cleanOutcomes(raw: unknown): { value: OutcomesInput; errors: string[] } {
+export function cleanOutcomes(raw: unknown, sw: MidOutcomeSwitches = ALL_OUTCOMES_ON): { value: OutcomesInput; errors: string[] } {
   const r = (raw ?? {}) as Partial<Record<keyof OutcomesInput, unknown>>;
   const errors: string[] = [];
   const list = (v: unknown) => (Array.isArray(v) ? v : []);
@@ -36,7 +38,8 @@ export function cleanOutcomes(raw: unknown): { value: OutcomesInput; errors: str
   if (units.length === 0) errors.push("Add at least one unit");
   if (units.length > LIMITS.units) errors.push(`At most ${LIMITS.units} units`);
   units.forEach((u) => { if (!u.title) errors.push(`Unit ${u.no} needs a title`); });
-  if (cos.length === 0) errors.push("Add at least one Course Outcome");
+  // A college without Course Outcomes sets up units only.
+  if (sw.cos && cos.length === 0) errors.push("Add at least one Course Outcome");
   if (cos.length > LIMITS.cos) errors.push(`At most ${LIMITS.cos} Course Outcomes`);
   cos.forEach((c) => { if (!c.statement) errors.push(`${c.id} needs its statement`); });
 

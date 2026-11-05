@@ -5,8 +5,22 @@ import type { Timestamp } from "firebase/firestore";
 // ExamMidSchedule publishing (1..midCount) — set once by Exam Cell in Settings.
 export interface ExamMidSettings {
   midCount: number;
+  /** How faculty prepare a Mid: a question bank (default) or ready question papers (sets). */
+  midPreparation?: MidPreparation;
+  /** Which academic tags this college uses on questions (missing = all on). */
+  outcomes?: Partial<MidOutcomeSwitches>;
   updatedAt?: Timestamp;
   updatedByName?: string;
+}
+
+export type MidPreparation = "BANK" | "PAPERS";
+
+/** Course Outcomes, CO-PO/PSO mapping and Bloom's levels - each can be switched off for a college. */
+export interface MidOutcomeSwitches {
+  cos: boolean;
+  /** Needs `cos`. */
+  poMapping: boolean;
+  bloom: boolean;
 }
 
 // colleges/{collegeId}/examMidSchedules/{id} — one doc per published

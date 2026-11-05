@@ -1,6 +1,7 @@
 import { logoSrc } from "@/lib/pdf/logo";
 import { renderMathHtml } from "@/lib/midBank/renderMath";
 import { derivePoPso } from "@/lib/midBank/outcomes";
+import { outcomeSwitches } from "@/lib/midBank/outcomeSwitches";
 import { partMarks } from "@/lib/midBank/validateQuestion";
 import { DEFAULT_REGD_BOXES } from "@/lib/midPaper/rules";
 import type { GeneratedPaper, GeneratedPapers } from "@/lib/midPaper/clientTypes";
@@ -15,7 +16,7 @@ const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&
 export const ROMAN = ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
 const dmy = (d: string) => `${d.slice(8, 10)}-${d.slice(5, 7)}-${d.slice(0, 4)}`;
 
-const STYLE = `
+export const PAPER_STYLE = `
   body { font-family: "Times New Roman", Times, serif; margin: 0; color: #000; font-size: 14px; }
   /* No bottom padding: anything after the last line would start an empty page. */
   .page { width: 210mm; padding: 0 12mm; box-sizing: border-box; }
@@ -79,6 +80,9 @@ export function getMidQuestionPaperHTML(d: {
   formula?: (latex: string, display: boolean) => string;
 }): string {
   const { header: h, paper: p } = d;
+  // Columns the college uses: Marks always; CO, BL, PO only when on.
+  const sw = outcomeSwitches(p.outcomes);
+  const extra = [sw.cos && "CO", sw.bloom && "BL", sw.poMapping && "PO"].filter(Boolean) as string[];
   const qs = p.picked.map((id) => p.questions[id]);
   const regCode = p.regulation.match(/\d+/)?.[0] ?? p.regulation;
   const coText = (cos: string[]) => esc(cos.map((c) => c.replace(/^CO/, "")).join(", "));
@@ -94,26 +98,26 @@ export function getMidQuestionPaperHTML(d: {
     const no = i + 1;
     const firstOfPair = i % 2 === 0;
     // "OR" travels with the question after it - never left alone at the foot of a page.
-    let block = firstOfPair ? "" : `<tr class="or"><td colspan="6">OR</td></tr>`;
+    let block = firstOfPair ? "" : `<tr class="or"><td colspan="${3 + extra.length}">OR</td></tr>`;
     if (firstOfPair || q.unit !== qs[i - 1].unit) {
-      block += `<tr class="unit"><td colspan="2">UNIT-${ROMAN[q.unit] ?? q.unit}</td>${i === 0 ? `<td class="num colhead">Marks</td><td class="num colhead">CO</td><td class="num colhead">BL</td><td class="po colhead">PO</td>` : `<td colspan="4"></td>`}</tr>`;
+      block += `<tr class="unit"><td colspan="2">UNIT-${ROMAN[q.unit] ?? q.unit}</td>${i === 0 ? `<td class="num colhead">Marks</td>${extra.map((x) => `<td class="${x === "PO" ? "po" : "num"} colhead">${x}</td>`).join("")}` : `<td colspan="${1 + extra.length}"></td>`}</tr>`;
     }
     const single = q.parts.length === 1;
     q.parts.forEach((part, j) => {
       const label = single ? `${no}` : `${no}.${"abcde"[j]}`;
-      block += `<tr><td class="no">${label}</td><td class="q">${body(part.text, part.imageUrl, part.imageCaption)}</td><td class="num">${partMarks(part, j, q.format ?? (single ? "SINGLE" : "PARTS_AB"), p.marks)}</td><td class="num">${coText(part.cos)}</td><td class="num">${esc(part.bloom.replace(/^L/, ""))}</td><td class="po">${poText(part.cos)}</td></tr>`;
+      block += `<tr><td class="no">${label}</td><td class="q">${body(part.text, part.imageUrl, part.imageCaption)}</td><td class="num">${partMarks(part, j, q.format ?? (single ? "SINGLE" : "PARTS_AB"), p.marks)}</td>${sw.cos ? `<td class="num">${coText(part.cos)}</td>` : ""}${sw.bloom ? `<td class="num">${esc(part.bloom.replace(/^L/, ""))}</td>` : ""}${sw.poMapping ? `<td class="po">${poText(part.cos)}</td>` : ""}</tr>`;
     });
     rows += `<tbody class="section">${block}</tbody>`;
   });
 
   const used = [...new Set(qs.flatMap((q) => q.parts.flatMap((x) => x.cos)))].sort((a, b) => Number(a.slice(2)) - Number(b.slice(2)));
-  const coList = p.cos.filter((c) => used.includes(c.id)).map((c) => `<p><b>${esc(c.id.replace(/^CO/, ""))}.</b> ${esc(c.statement)}</p>`).join("");
+  const coList = !sw.cos ? "" : p.cos.filter((c) => used.includes(c.id)).map((c) => `<p><b>${esc(c.id.replace(/^CO/, ""))}.</b> ${esc(c.statement)}</p>`).join("");
   const sem = h.semesterInYear ? `${ROMAN[h.semesterInYear]} SEMESTER` : `SEMESTER ${h.semester}`;
   // "B.Tech" -> "B.TECH." ("I B.TECH. I SEMESTER MID-1 EXAMINATION").
   const courseLabel = `${h.courseCode.toUpperCase().replace(/\.$/, "")}.`;
   const sections = shortSections(p);
 
-  return `<!DOCTYPE html><html><head><meta charset="utf-8" /><style>${STYLE}</style></head><body><div class="page">
+  return `<!DOCTYPE html><html><head><meta charset="utf-8" /><style>${PAPER_STYLE}</style></head><body><div class="page">
     <div class="pdf-page-header"></div>
     <div class="top"><span class="code">${esc(p.subjectCode)}</span><span>${regCode ? `<span class="code">${esc(regCode)}</span>` : ""}</span><span class="regd"><span>Regd. No:</span>${"<i></i>".repeat(p.regdBoxes || DEFAULT_REGD_BOXES)}</span></div>
     <div class="head">
@@ -130,7 +134,7 @@ export function getMidQuestionPaperHTML(d: {
     <hr />
     <p class="instr">${esc(p.instruction)}</p>
     ${coList ? `<p class="cos-title">Course Outcomes:</p><div class="cos"><p>Upon the completion of the course, the student will be able to:</p>${coList}</div>` : ""}
-    <table><colgroup><col style="width:7%" /><col style="width:71%" /><col style="width:7%" /><col style="width:5%" /><col style="width:5%" /><col style="width:5%" /></colgroup>${rows}</table>
+    <table><colgroup><col style="width:7%" /><col style="width:${86 - extra.length * 5}%" /><col style="width:7%" />${extra.map(() => `<col style="width:5%" />`).join("")}</colgroup>${rows}</table>
     <p class="end">*****</p>
   </div></body></html>`;
 }

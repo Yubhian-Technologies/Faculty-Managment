@@ -7,7 +7,7 @@ import type { MidBankApproval, MidQuestionBank } from "@/types";
 
 export type BankStage = "IN_PROGRESS" | "READY" | "SUBMITTED" | "RETURNED" | "APPROVED";
 
-type B = Pick<MidQuestionBank, "status" | "approval">;
+type B = Pick<MidQuestionBank, "status" | "approval"> & Partial<Pick<MidQuestionBank, "kind">>;
 
 export function bankStage(b: B): BankStage {
   if (b.approval === "APPROVED") return "APPROVED";
@@ -42,7 +42,7 @@ export function nextApproval(b: B, action: ApprovalAction, who: { isOwner: boole
       if (!who.isOwner) return { error: "Only the faculty preparing this bank can submit it" };
       if (stage === "SUBMITTED") return { error: "Already submitted - waiting for the HOD" };
       if (stage === "APPROVED") return { error: "Already approved by the HOD" };
-      if (b.status !== "COMPLETE") return { error: "Complete every unit before submitting" };
+      if (b.status !== "COMPLETE") return { error: b.kind === "PAPERS" ? "Complete every question of every question paper before submitting" : "Complete every unit before submitting" };
       return { approval: "SUBMITTED" };
     case "withdraw":
       if (!who.isOwner) return { error: "Only the faculty preparing this bank can withdraw it" };

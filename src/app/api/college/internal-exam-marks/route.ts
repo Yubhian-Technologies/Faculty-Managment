@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
+import { questionSheetsFor } from "@/lib/exams/questionMarksServer";
 import { AggregateField } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -218,6 +219,8 @@ export async function POST(request: Request) {
     const id = assignmentId;
     const ref = collegeRef.collection("internalExamMarks").doc(id);
     const now = new Date();
+    // Components taken from a Mid question paper: the question columns the faculty fill in (empty for other colleges).
+    const sheets = await questionSheetsFor(db, session.collegeId, { subjectId: assignment.subjectId, department: assignment.department, year: year ?? undefined }, config);
 
     const existingSnap = await ref.get();
 
@@ -289,7 +292,7 @@ export async function POST(request: Request) {
         updatedAt: now,
       };
       await ref.set(batch);
-      return NextResponse.json({ batch: { id, ...batch }, configuration: config }, { status: 201 });
+      return NextResponse.json({ batch: { id, ...batch }, configuration: config, sheets }, { status: 201 });
     }
 
     const existing = existingSnap.data() as InternalExamMarksBatch;
@@ -305,6 +308,7 @@ export async function POST(request: Request) {
         rollNumber: s.rollNumber,
         name: s.name,
         componentMarks: existingByStudent.get(s.id)?.componentMarks ?? {},
+        ...(existingByStudent.get(s.id)?.questionMarks ? { questionMarks: existingByStudent.get(s.id)!.questionMarks } : {}),
       }));
       const enteredCount = countEntered(entries, config);
 
@@ -317,11 +321,11 @@ export async function POST(request: Request) {
 
       return NextResponse.json({
         batch: { ...existing, id, entries, totalStudents: entries.length, enteredCount },
-        configuration: config,
+        configuration: config, sheets,
       });
     }
 
-    return NextResponse.json({ batch: { ...existing, id }, configuration: config });
+    return NextResponse.json({ batch: { ...existing, id }, configuration: config, sheets });
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;

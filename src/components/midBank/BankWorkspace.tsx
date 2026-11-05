@@ -12,6 +12,7 @@ import { toast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
 import { BLOOM_LABELS, BLOOM_LEVELS, BLOOM_MIN_PER_UNIT, PROGRAM_OUTCOMES, QUESTIONS_PER_UNIT } from "@/lib/midBank/constants";
 import { derivePoPso } from "@/lib/midBank/outcomes";
+import { outcomeSwitches } from "@/lib/midBank/outcomeSwitches";
 import { bloomNeeds, lockReason } from "@/lib/midBank/rules";
 import { allowedFormats, bankFormats, defaultSplit, formatsFor, formatName, formatOf, isBlankPart, partLabel, partLetter, partMarks, partsFor, questionErrors, questionFormat, splitAfterEdit } from "@/lib/midBank/validateQuestion";
 import type { MidBankDetail } from "@/lib/midBank/clientTypes";
@@ -83,6 +84,8 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
   const current = questions[qid];
   const allowed = formatsFor(bankAllowed, current ? fmtOf(current) : null);
   const isComplete = current?.state === "COMPLETE";
+  // The academic tags this bank started with (older banks: all on).
+  const sw = outcomeSwitches(bank.outcomes);
   const unitStatus: MidUnitStatus = bank.unitStatus[String(cur.unit)] ?? { complete: false, completeCount: 0, draftCount: 0, bloom: { L2: 0, L3: 0, L4: 0 } };
   const unitTitle = (u: number) => outcomes.units.find((x) => x.no === u)?.title ?? "";
 
@@ -248,7 +251,7 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
   }
 
   const liveErrors = useMemo(() => {
-    const errs = questionErrors(parts, qFormat, bank.marks);
+    const errs = questionErrors(parts, qFormat, bank.marks, sw);
     // A formula the printer can't read (written before the pop-up checked them) - shown, not saved over.
     parts.forEach((p, i) => {
       const bad = splitMath(p.text).find((m) => m.kind === "math" && formulaProblem(m.latex));
@@ -457,7 +460,7 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
                               <span className={cn("mt-0.5 shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-bold", q.state === "COMPLETE" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900")}>U{q.unit} · Q{q.slot}</span>
                               <span className="min-w-0 flex-1">
                                 <span className="line-clamp-2 text-sm">{plainText(q.parts[0]?.text ?? "") || <span className="italic text-muted-foreground">Formula / image only</span>}</span>
-                                <span className="text-[11px] text-muted-foreground">{formatName(fmtOf(q))} · {q.parts.flatMap((p) => p.cos).filter((c, i, a) => a.indexOf(c) === i).join(", ") || "No CO"}</span>
+                                <span className="text-[11px] text-muted-foreground">{formatName(fmtOf(q))}{sw.cos ? ` · ${q.parts.flatMap((p) => p.cos).filter((c, i, a) => a.indexOf(c) === i).join(", ") || "No CO"}` : ""}</span>
                               </span>
                             </button>
                           </li>
@@ -522,8 +525,8 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
                     {err("imageCaption") && <p className="text-xs text-destructive">{err("imageCaption")}</p>}
                   </div>
 
-                  <div className="grid gap-5 md:grid-cols-2">
-                    <div className="space-y-2">
+                  {(sw.cos || sw.bloom) && <div className="grid gap-5 md:grid-cols-2">
+                    {sw.cos && <div className="space-y-2">
                       <span className="text-sm font-medium" id={`${pre}-co-label`}>Course Outcome(s)</span>
                       <div className="flex flex-wrap gap-1.5" role="group" aria-labelledby={`${pre}-co-label`}>
                         {outcomes.cos.map((c) => {
@@ -539,9 +542,9 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
                         })}
                       </div>
                       {err("cos") && <p className="text-xs text-destructive">{err("cos")}</p>}
-                    </div>
+                    </div>}
 
-                    <fieldset className="space-y-2">
+                    {sw.bloom && <fieldset className="space-y-2">
                       <legend className="text-sm font-medium">Bloom&rsquo;s level</legend>
                       <div className="grid grid-cols-3 gap-1.5">
                         {BLOOM_LEVELS.map((l) => {
@@ -557,8 +560,8 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
                         })}
                       </div>
                       {err("bloom") && <p className="text-xs text-destructive">{err("bloom")}</p>}
-                    </fieldset>
-                  </div>
+                    </fieldset>}
+                  </div>}
                 </fieldset>
               );
             })}
@@ -591,8 +594,8 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
             </div>
           )}
           <div className="rounded-2xl border bg-card p-4 shadow-sm">
-            <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><BarChart3 className="h-3.5 w-3.5" />Unit {cur.unit} Bloom&rsquo;s levels</p>
-            <ul className="space-y-3">
+            <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><BarChart3 className="h-3.5 w-3.5" />Unit {cur.unit} {sw.bloom ? <>Bloom&rsquo;s levels</> : "progress"}</p>
+            {sw.bloom && <ul className="space-y-3">
               {bloomNeeds(unitStatus.bloom).map((b) => (
                 <li key={b.level}>
                   <div className="mb-1 flex justify-between text-xs">
@@ -604,21 +607,21 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
                   </div>
                 </li>
               ))}
-            </ul>
-            <p className="mt-3 flex justify-between border-t pt-3 text-xs"><span className="text-muted-foreground">Questions</span><span className="font-semibold">{unitStatus.completeCount}/{QUESTIONS_PER_UNIT} complete{unitStatus.draftCount ? `, ${unitStatus.draftCount} draft` : ""}</span></p>
+            </ul>}
+            <p className={cn("flex justify-between text-xs", sw.bloom && "mt-3 border-t pt-3")}><span className="text-muted-foreground">Questions</span><span className="font-semibold">{unitStatus.completeCount}/{QUESTIONS_PER_UNIT} complete{unitStatus.draftCount ? `, ${unitStatus.draftCount} draft` : ""}</span></p>
           </div>
 
-          <div className="rounded-2xl border bg-card p-4 shadow-sm">
+          {sw.cos && <div className="rounded-2xl border bg-card p-4 shadow-sm">
             <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><Target className="h-3.5 w-3.5" />Outcomes</p>
             {allCos.length === 0 ? <p className="text-xs text-muted-foreground">Pick a Course Outcome to see its POs and PSOs.</p> : (
               <>
                 <ul className="mb-3 space-y-2">{allCos.map((c) => <li key={c} className="flex gap-2 text-xs"><span className="h-fit shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 font-bold text-primary">{c}</span><span>{outcomes.cos.find((x) => x.id === c)?.statement}</span></li>)}</ul>
-                <div className="flex flex-wrap gap-1">
+                {sw.poMapping && <div className="flex flex-wrap gap-1">
                   {poPso.map((x) => <Badge key={x} variant="secondary" className="rounded-full" title={PROGRAM_OUTCOMES.find((p) => p.id === x)?.title ?? "Programme-specific outcome"}>{x}</Badge>)}
-                </div>
+                </div>}
               </>
             )}
-          </div>
+          </div>}
 
           <div className="rounded-2xl border bg-card p-4 shadow-sm">
             <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><Eye className="h-3.5 w-3.5" />Preview</p>
@@ -633,7 +636,7 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
                   </div>
                   {/* eslint-disable-next-line @next/next/no-img-element -- Storage URL with a token */}
                   {p.imageUrl && <figure className="mt-2"><img src={p.imageUrl} alt={p.imageCaption || ""} className="max-h-32 rounded border" />{p.imageCaption && <figcaption className="font-sans text-xs text-neutral-500">{p.imageCaption}</figcaption>}</figure>}
-                  <p className="mt-1.5 font-sans text-[11px] text-neutral-500">[{partMarks(p, i, qFormat, bank.marks)} M] {p.cos.join(", ") || "No CO"} · {p.bloom || "No level"}</p>
+                  <p className="mt-1.5 font-sans text-[11px] text-neutral-500">[{partMarks(p, i, qFormat, bank.marks)} M] {[sw.cos && (p.cos.join(", ") || "No CO"), sw.bloom && (p.bloom || "No level")].filter(Boolean).join(" · ")}</p>
                 </div>
               ))}
             </div>

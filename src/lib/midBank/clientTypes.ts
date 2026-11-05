@@ -36,6 +36,11 @@ export interface MidBankPrepare {
   setup: { issues: SetupIssue[]; units: number[] };
   myBankId: string | null;
   canEditOutcomes: boolean;
+  /** The college's academic tags and how it prepares Mids. */
+  outcomeSwitches?: import("@/types").MidOutcomeSwitches;
+  midPreparation?: import("@/types").MidPreparation;
+  /** A college that prepares question papers: the Exam Cell's pattern for this subject. */
+  pattern?: import("@/types").MidPaperPattern | null;
 }
 
 /** GET mid-question-banks/[id]. */

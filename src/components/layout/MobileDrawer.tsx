@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavLabels } from "@/hooks/useNavLabels";
 import { groupNavItems } from "./navGroups";
 import { CollegeLogo } from "@/components/shared/CollegeLogo";
 import { useEffect, useState } from "react";
@@ -47,6 +48,7 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
   const { sidebarOpen, setSidebarOpen } = useUIStore();
   const { logout } = useAuth();
   const pathname = usePathname();
+  const navLabel = useNavLabels();
   const { hasInterviews } = useAssignedInterviews();
   const { coordinatorBatchId } = useAssignedCoordinator();
   const { hideSubDepartmentsLink } = useIsSubDepartmentHod();
@@ -203,7 +205,7 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
                             )}
                           >
                             <NavIcon name={item.iconName} className="h-5 w-5 shrink-0" />
-                            <span className="truncate">{item.label}</span>
+                            <span className="truncate">{navLabel(item.href, item.label)}</span>
                             {item.href === PENDING_HIRING_HREF && pendingHiringCount > 0 && (
                               <span className="ml-auto bg-red-500 text-white text-xs rounded-full h-5 min-w-5 px-1 flex items-center justify-center font-semibold">
                                 {pendingHiringCount > 99 ? "99+" : pendingHiringCount}

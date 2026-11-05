@@ -15,9 +15,12 @@ import { MidBankRulesCard } from "@/components/exams/MidBankRulesCard";
 import { ExamConfigurationPanel } from "@/components/exams/ExamConfigurationPanel";
 import { ExamMarksCategoriesCard } from "@/components/exams/ExamMarksCategoriesCard";
 import { MidPaperTemplateCard } from "@/components/exams/MidPaperTemplateCard";
+import { MidPaperPatternCard } from "@/components/exams/MidPaperPatternCard";
 import { MidSubjectSplitsCard } from "@/components/exams/MidSubjectSplitsCard";
 import { cn } from "@/lib/utils";
-import type { ExamMidSettings } from "@/types";
+import type { ExamMidSettings, MidOutcomeSwitches, MidPreparation } from "@/types";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ALL_OUTCOMES_ON, outcomeSwitches } from "@/lib/midBank/outcomeSwitches";
 
 // Exam Cell > Mid Exams > Mid Configuration, two tabs: "Mid exams & question
 // bank" (how many Mids the college runs, the question bank rules per course) and
@@ -43,14 +46,27 @@ function MidConfigurationTabs() {
             className={cn("rounded-lg px-3.5 py-1.5 font-medium", tab === k ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}>{label}</Link>
         ))}
       </nav>
-      {tab === "marks" ? <div className="space-y-6"><ExamConfigurationPanel embedded /><ExamMarksCategoriesCard /></div> : tab === "paper" ? <MidPaperTemplateCard /> : <MidSettings />}
+      {tab === "marks" ? <div className="space-y-6"><ExamConfigurationPanel embedded /><ExamMarksCategoriesCard /></div> : tab === "paper" ? <PaperTab /> : <MidSettings />}
     </div>
   );
+}
+
+/** Question paper tab: the paper pattern when the college prepares question papers, else the bank paper template. */
+function PaperTab() {
+  const [mode, setMode] = useState<MidPreparation | null>(null);
+  useEffect(() => {
+    fetch("/api/college/exam-mid-settings").then((r) => r.json() as Promise<{ settings?: ExamMidSettings }>)
+      .then((d) => setMode(d.settings?.midPreparation === "PAPERS" ? "PAPERS" : "BANK")).catch(() => setMode("BANK"));
+  }, []);
+  if (!mode) return <div className="h-32 bg-muted animate-pulse rounded-lg" />;
+  return mode === "PAPERS" ? <MidPaperPatternCard /> : <MidPaperTemplateCard />;
 }
 
 function MidSettings() {
   const [settings, setSettings] = useState<ExamMidSettings | null>(null);
   const [midCount, setMidCount] = useState("2");
+  const [preparation, setPreparation] = useState<MidPreparation>("BANK");
+  const [outcomes, setOutcomes] = useState<MidOutcomeSwitches>(ALL_OUTCOMES_ON);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -62,6 +78,8 @@ function MidSettings() {
         if (data.settings) {
           setSettings(data.settings);
           if (data.settings.midCount > 0) setMidCount(String(data.settings.midCount));
+          setPreparation(data.settings.midPreparation === "PAPERS" ? "PAPERS" : "BANK");
+          setOutcomes(outcomeSwitches(data.settings.outcomes));
         }
       } catch {
         toast({ variant: "destructive", title: "Failed to load settings" });
@@ -82,7 +100,7 @@ function MidSettings() {
       const res = await fetch("/api/college/exam-mid-settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ midCount: count }),
+        body: JSON.stringify({ midCount: count, midPreparation: preparation, outcomes }),
       });
       const data = (await res.json()) as { settings?: ExamMidSettings; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed to save");
@@ -140,14 +158,52 @@ function MidSettings() {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">How faculty prepare a Mid</CardTitle>
+          <CardDescription>For the whole college. It can&apos;t change while faculty are preparing for an open deadline.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            {([
+              ["BANK", "Question bank", "Faculty build a bank (10 questions per unit); the question paper is picked from the approved bank."],
+              ["PAPERS", "Question papers", "Faculty write the number of question papers set in the paper pattern; the Exam Cell picks the one used."],
+            ] as const).map(([v, label, hint]) => (
+              <label key={v} className={cn("flex cursor-pointer items-start gap-3 rounded-lg border p-3", preparation === v && "border-primary bg-primary/5")}>
+                <input type="radio" name="midPreparation" className="mt-1" checked={preparation === v} onChange={() => setPreparation(v)} />
+                <span><span className="block text-sm font-medium">{label}</span><span className="block text-xs text-muted-foreground">{hint}</span></span>
+              </label>
+            ))}
+          </div>
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Questions carry</p>
+            {([
+              ["cos", "Course Outcomes (CO)", "Units and COs are set up per subject; each question names its COs."],
+              ["poMapping", "CO-PO / PSO mapping", "Each CO is mapped to POs / PSOs (needs Course Outcomes)."],
+              ["bloom", "Bloom's levels (L2 / L3 / L4)", "Each question names its level; a bank unit needs 3 of each."],
+            ] as const).map(([k, label, hint]) => (
+              <label key={k} className="flex items-start gap-3 text-sm">
+                <Checkbox className="mt-0.5" checked={outcomes[k]} disabled={k === "poMapping" && !outcomes.cos}
+                  onCheckedChange={(c) => setOutcomes((o) => outcomeSwitches({ ...o, [k]: c === true, ...(k === "cos" && c !== true ? { poMapping: false } : {}) }))} />
+                <span><span className="block font-medium">{label}</span><span className="block text-xs text-muted-foreground">{hint}</span></span>
+              </label>
+            ))}
+            <p className="text-xs text-muted-foreground">A bank or paper already started keeps what it started with.</p>
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="flex justify-end">
         <Button size="lg" onClick={() => void handleSave()} loading={isSaving}>
           Save Settings
         </Button>
       </div>
 
-      <MidBankRulesCard midCount={settings?.midCount ?? Number(midCount)} />
-      <MidSubjectSplitsCard midCount={settings?.midCount ?? Number(midCount)} />
+      {/* The question bank rules apply to a college that prepares banks. */}
+      {(settings?.midPreparation ?? "BANK") === "BANK" && <>
+        <MidBankRulesCard midCount={settings?.midCount ?? Number(midCount)} />
+        <MidSubjectSplitsCard midCount={settings?.midCount ?? Number(midCount)} />
+      </>}
     </div>
   );
 }

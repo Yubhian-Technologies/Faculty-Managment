@@ -21,20 +21,26 @@ import type { Course, ExamMarksCategory, Subject } from "@/types";
 // A subject in a category uses its breakdown in every branch; the rest keep
 // their branch's configuration. Nothing changes for a subject with marks entered.
 
-interface Row { id?: string; name: string; maxMarks: string }
+interface Row { id?: string; name: string; maxMarks: string; midNumber?: number }
 const selectClass = "h-9 w-full rounded-md border border-input bg-background px-3 text-sm";
 const blankRows = (): Row[] => [{ name: "Mid", maxMarks: "" }, { name: "Quiz", maxMarks: "" }, { name: "Assignment", maxMarks: "" }];
 
 /** The breakdown form (name, type, internal / external max, components) - for a new category or editing one. */
 function BreakdownForm({ initial, onSave, onCancel, saving, isNew }: {
   initial?: ExamMarksCategory; isNew: boolean; saving: boolean; onCancel: () => void;
-  onSave: (v: { name: string; examType: string; internalMaxMarks: number; externalMaxMarks: number; components: { id?: string; name: string; maxMarks: number; order: number; isActive: boolean }[] }) => void;
+  onSave: (v: { name: string; examType: string; internalMaxMarks: number; externalMaxMarks: number; components: { id?: string; name: string; maxMarks: number; order: number; isActive: boolean; midNumber?: number }[] }) => void;
 }) {
+  // A college that prepares question papers: a component may take its marks from a Mid's paper (per question).
+  const [paperMids, setPaperMids] = useState(0);
+  useEffect(() => {
+    fetch("/api/college/exam-mid-settings").then((r) => (r.ok ? r.json() : null))
+      .then((d: { settings?: { midPreparation?: string; midCount?: number } } | null) => setPaperMids(d?.settings?.midPreparation === "PAPERS" ? d.settings.midCount || 2 : 0)).catch(() => undefined);
+  }, []);
   const [name, setName] = useState(initial?.name ?? "");
   const [examType, setExamType] = useState(initial?.examType ?? "THEORY");
   const [internal, setInternal] = useState(String(initial?.internalMaxMarks ?? 30));
   const [external, setExternal] = useState(String(initial?.externalMaxMarks ?? 70));
-  const [rows, setRows] = useState<Row[]>(initial ? [...initial.components].filter((c) => c.isActive).sort((a, b) => a.order - b.order).map((c) => ({ id: c.id, name: c.name, maxMarks: String(c.maxMarks) })) : blankRows());
+  const [rows, setRows] = useState<Row[]>(initial ? [...initial.components].filter((c) => c.isActive).sort((a, b) => a.order - b.order).map((c) => ({ id: c.id, name: c.name, maxMarks: String(c.maxMarks), ...(c.midNumber ? { midNumber: c.midNumber } : {}) })) : blankRows());
   const total = rows.reduce((n, r) => n + (Number(r.maxMarks) || 0), 0);
   return (
     <div className="space-y-4 rounded-xl border bg-muted/20 p-4">
@@ -57,6 +63,13 @@ function BreakdownForm({ initial, onSave, onCancel, saving, isNew }: {
           <div key={i} className="flex items-center gap-2">
             <Input aria-label={`Component ${i + 1} name`} value={r.name} placeholder="e.g. Mid" className="flex-1 bg-background" onChange={(e) => setRows((x) => x.map((y, j) => (j === i ? { ...y, name: e.target.value } : y)))} />
             <Input aria-label={`Component ${i + 1} marks`} type="number" min={1} value={r.maxMarks} placeholder="Marks" className="w-28 bg-background" onChange={(e) => setRows((x) => x.map((y, j) => (j === i ? { ...y, maxMarks: e.target.value } : y)))} />
+            {paperMids > 0 && (
+              <select aria-label={`Where component ${i + 1}'s marks come from`} className="h-9 rounded-md border border-input bg-background px-2 text-xs" value={r.midNumber ?? ""}
+                onChange={(e) => setRows((x) => x.map((y, j) => (j === i ? { ...y, midNumber: e.target.value ? Number(e.target.value) : undefined } : y)))}>
+                <option value="">Typed</option>
+                {Array.from({ length: paperMids }, (_, k) => k + 1).map((n) => <option key={n} value={n}>Mid {n} paper</option>)}
+              </select>
+            )}
             <Button size="icon" variant="ghost" aria-label={`Remove component ${i + 1}`} disabled={rows.length === 1} onClick={() => setRows((x) => x.filter((_, j) => j !== i))}><X className="h-4 w-4" /></Button>
           </div>
         ))}
@@ -68,7 +81,7 @@ function BreakdownForm({ initial, onSave, onCancel, saving, isNew }: {
       <div className="flex justify-end gap-2">
         <Button variant="ghost" onClick={onCancel}>Cancel</Button>
         <Button loading={saving} disabled={!name.trim() || total !== Number(internal) || rows.some((r) => !r.name.trim() || !(Number(r.maxMarks) > 0))}
-          onClick={() => onSave({ name, examType, internalMaxMarks: Number(internal), externalMaxMarks: Number(external), components: rows.map((r, i) => ({ id: r.id, name: r.name, maxMarks: Number(r.maxMarks), order: i, isActive: true })) })}>
+          onClick={() => onSave({ name, examType, internalMaxMarks: Number(internal), externalMaxMarks: Number(external), components: rows.map((r, i) => ({ id: r.id, name: r.name, maxMarks: Number(r.maxMarks), order: i, isActive: true, ...(r.midNumber ? { midNumber: r.midNumber } : {}) })) })}>
           {isNew ? "Create category" : "Save breakdown"}
         </Button>
       </div>

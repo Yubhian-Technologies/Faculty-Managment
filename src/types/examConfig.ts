@@ -24,6 +24,11 @@ export interface ExamConfigComponent {
   description?: string;
   order: number;
   isActive: boolean;
+  /**
+   * A college that prepares question papers: this component's marks come from Mid N's paper - entered question by
+   * question for descriptive parts (one total per objective part), then scaled to `maxMarks`. Absent = typed as one number.
+   */
+  midNumber?: number;
 }
 
 export type ExamConfigurationStatus = "ACTIVE" | "INACTIVE";

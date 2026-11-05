@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { outcomeSwitches } from "@/lib/midBank/outcomeSwitches";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -40,6 +41,7 @@ export async function PATCH(request: Request, { params }: Params) {
     if (!access) return NextResponse.json({ error: "Question bank not found" }, { status: 404 });
     if (!access.isOwner) return NextResponse.json({ error: "Only the faculty preparing this question bank can edit it" }, { status: 403 });
     if (!access.canWrite) return NextResponse.json({ error: writeRefusal(access) }, { status: 403 });
+    if (access.bank.kind === "PAPERS") return NextResponse.json({ error: "This is a question paper set - save its questions as papers" }, { status: 400 });
     const [outcomes, subject] = await Promise.all([
       loadOutcomes(db, session.collegeId, access.bank.outcomesId),
       loadSubject(db, session.collegeId, access.bank.subjectId),
@@ -60,6 +62,8 @@ export async function PATCH(request: Request, { params }: Params) {
       const bankSnap = await tx.get(bankRef);
       if (!bankSnap.exists) return { status: 400, body: { error: "Start the question bank first" } };
       const bank = bankSnap.data() as MidQuestionBank;
+      // The academic tags this bank started with (older banks: all on).
+      const sw = outcomeSwitches(bank.outcomes);
       // Submitted / approved meanwhile (another tab) - read-only until returned.
       if (bank.approval === "SUBMITTED" || bank.approval === "APPROVED") return { status: 409, body: { error: writeRefusal({ frozen: true, bank }) } };
       if (!bank.units.includes(unit)) return { status: 400, body: { error: `Mid ${bank.midNumber} doesn't cover Unit ${unit}` } };
@@ -83,7 +87,7 @@ export async function PATCH(request: Request, { params }: Params) {
 
       let state: MidQuestion["state"];
       if (action === "complete") {
-        const errors = questionErrors(parts, format, bank.marks);
+        const errors = questionErrors(parts, format, bank.marks, sw);
         for (const h of dup.exact) {
           errors[`parts.${h.part}.text`] = h.id
             ? `${partLabel(format, h.part)} is the same as Unit ${h.unit} Q${h.slot}`
@@ -96,12 +100,12 @@ export async function PATCH(request: Request, { params }: Params) {
           // Clearing an empty slot.
           if (!current) return { status: 200, body: { question: null, unitStatus: bank.unitStatus[String(unit)], warnings: [] } };
           if (current.state === "COMPLETE") {
-            const after = unitStatus(others, unit);
+            const after = unitStatus(others, unit, sw);
             const broken = breaksCompletedUnit(bank.unitStatus[String(unit)], after);
             if (broken) return { status: 409, body: { error: broken } };
           }
           tx.delete(qRef);
-          const statuses = { ...bank.unitStatus, [String(unit)]: unitStatus(others, unit) };
+          const statuses = { ...bank.unitStatus, [String(unit)]: unitStatus(others, unit, sw) };
           const totals = bankTotals(bank.units, statuses);
           tx.update(bankRef, { unitStatus: statuses, completeCount: totals.completeCount, totalCount: totals.totalCount, status: totals.allComplete ? "COMPLETE" : "IN_PROGRESS", updatedAt: new Date() });
           return { status: 200, body: { question: null, unitStatus: statuses[String(unit)], bank: { ...totals, status: totals.allComplete ? "COMPLETE" : "IN_PROGRESS" }, warnings: [] } };
@@ -113,7 +117,7 @@ export async function PATCH(request: Request, { params }: Params) {
         unit, slot, format, parts, state, rev: rev + 1, textKeys: keys,
         updatedBy: session.uid, updatedByName: name, updatedAt: new Date() as unknown as MidQuestion["updatedAt"],
       };
-      const after = unitStatus([...others, { ...next, id: qid }], unit);
+      const after = unitStatus([...others, { ...next, id: qid }], unit, sw);
       const broken = breaksCompletedUnit(bank.unitStatus[String(unit)], after);
       if (broken) return { status: 409, body: { error: broken } };
 

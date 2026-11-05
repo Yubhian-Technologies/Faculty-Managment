@@ -1,11 +1,13 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { loadMidSettings } from "@/lib/exams/midSettings";
+import { patternForSubject } from "@/lib/midPapers/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { isDeadlineLocked } from "@/lib/midBank/deadline";
-import { setupIssues } from "@/lib/midBank/setup";
+import { paperSetupIssues, setupIssues } from "@/lib/midBank/setup";
 import { bankIdFor, claimIdFor, outcomesIdFor, sectionsOf } from "@/lib/midBank/sections";
 import { guardError, subjectSplitFor, loadDeadline, loadOutcomes, loadSubject, MID_BANK_WRITE_ROLES, midBankRefs, rulesForSubject, teachingFor, usedOutcomeRefs } from "@/lib/midBank/server";
 
@@ -44,6 +46,9 @@ export async function GET(request: Request) {
       usedOutcomeRefs(db, session.collegeId, outcomesId),
       subjectSplitFor(db, session.collegeId, subjectId),
     ]);
+    const settings = await loadMidSettings(db, session.collegeId);
+    // A college that prepares question papers works to the Exam Cell's paper pattern instead of the bank rules.
+    const pattern = settings.midPreparation === "PAPERS" ? await patternForSubject(db, session.collegeId, subject) : null;
     const sections = available.map((s, i) => ({
       ...s, mine: s.facultyIds.includes(me),
       heldBy: claimSnaps[i]?.exists ? String(claimSnaps[i].get("ownerName") ?? "") : null,
@@ -58,7 +63,10 @@ export async function GET(request: Request) {
       deadline: { ...d, locked: isDeadlineLocked(d.deadline) },
       subject: { id: subject.id, name: subject.name, code: subject.code, courseName: subject.courseName ?? d.courseName, regulation: subject.regulation ?? "", year: d.year, semester: d.semester },
       branch, outcomesId, outcomes, rules, sections,
-      setup: setupIssues(subject, d.midNumber, rules, outcomes, exception),
+      setup: settings.midPreparation === "PAPERS"
+        ? paperSetupIssues(subject, pattern, outcomes, settings.outcomes)
+        : setupIssues(subject, d.midNumber, rules, outcomes, exception, settings.outcomes),
+      outcomeSwitches: settings.outcomes, midPreparation: settings.midPreparation, pattern,
       myBankId: myBank.exists ? myBankId : null,
       canEditOutcomes,
     });
