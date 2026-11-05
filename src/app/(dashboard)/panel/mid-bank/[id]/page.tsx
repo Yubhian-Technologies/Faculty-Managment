@@ -3,7 +3,7 @@
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, BookOpen, CalendarClock, FileText, GraduationCap, Layers, Settings2, Users, type LucideIcon } from "lucide-react";
+import { ArrowLeft, BookOpen, CalendarClock, FileText, GraduationCap, Layers, Pencil, Settings2, Users, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BankWorkspace } from "@/components/midBank/BankWorkspace";
 import { PaperSetWorkspace } from "@/components/midPapers/PaperSetWorkspace";
@@ -59,7 +59,11 @@ export default function MidBankPage({ params, searchParams }: { params: Promise<
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         {back}
-        <Button asChild variant="outline" size="sm"><Link href={changeSections}><Settings2 className="mr-1.5 h-4 w-4" />Sections &amp; setup</Link></Button>
+        <div className="flex flex-wrap gap-2">
+          {/* The subject's units / COs stay editable after starting (never removing one a question uses). */}
+          <Button asChild variant="outline" size="sm"><Link href={`${changeSections}&step=2`}><Pencil className="mr-1.5 h-4 w-4" />Edit units &amp; COs</Link></Button>
+          <Button asChild variant="outline" size="sm"><Link href={changeSections}><Settings2 className="mr-1.5 h-4 w-4" />Sections &amp; setup</Link></Button>
+        </div>
       </div>
       <header className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary to-primary/80 p-5 text-primary-foreground shadow-md sm:p-6">
         <div aria-hidden className="pointer-events-none absolute -right-10 -top-16 h-48 w-48 rounded-full bg-white/10" />

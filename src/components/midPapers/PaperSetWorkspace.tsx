@@ -63,6 +63,27 @@ export function PaperSetWorkspace({ detail }: { detail: MidBankDetail }) {
 
   const live = useMemo(() => paperQuestionErrors(q, setPart, sw), [q, setPart, sw]);
 
+  // The Exam Cell changed the pattern / units per Mid after this paper started: offer to move onto the current one.
+  const [newer, setNewer] = useState<{ dropped: string[]; parts: { label: string; questions: number; unitLayout: number[] | null }[] } | null>(null);
+  const [updating, setUpdating] = useState(false);
+  useEffect(() => {
+    fetch(`/api/college/mid-question-banks/${encodeURIComponent(bank.id)}/update-pattern`).then((r) => (r.ok ? r.json() : null))
+      .then((d: { changed?: boolean; dropped?: string[]; parts?: { label: string; questions: number; unitLayout: number[] | null }[] } | null) => { if (d?.changed) setNewer({ dropped: d.dropped ?? [], parts: d.parts ?? [] }); })
+      .catch(() => undefined);
+  }, [bank.id]);
+  async function updatePattern() {
+    if (dirty && !(await save(isComplete ? "complete" : "draft"))) return;
+    setUpdating(true);
+    try {
+      const res = await fetch(`/api/college/mid-question-banks/${encodeURIComponent(bank.id)}/update-pattern`, { method: "POST" });
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Couldn't update");
+      toast({ variant: "success", title: "Your question papers now follow the current pattern" });
+      window.location.reload();
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't update" }); }
+    finally { setUpdating(false); }
+  }
+
   const edit = (patch: Partial<Editable>) => { setQ((x) => ({ ...x, ...patch })); setDirty(true); setSaveState((s) => (s === "saved" ? "idle" : s)); };
 
   const save = useCallback(async (action: "draft" | "complete"): Promise<boolean> => {
@@ -179,6 +200,16 @@ export function PaperSetWorkspace({ detail }: { detail: MidBankDetail }) {
   return (
     <div className="space-y-4">
       <ApprovalPanel bank={bank} isOwner isHod={false} onChanged={() => window.location.reload()} />
+      {newer && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+          <div className="min-w-0 flex-1">
+            <p className="font-medium">The Exam Cell changed the question paper pattern after you started.</p>
+            <p className="text-xs">Now: {newer.parts.map((x) => `${x.label} - ${x.unitLayout ? `${x.questions} questions (units ${x.unitLayout.join(", ")})` : x.questions ? `${x.questions} questions` : "your own questions"}`).join(" · ")}.
+              {newer.dropped.length ? ` ${newer.dropped.length} written question(s) would have no place - clear them first.` : " Your written questions keep their units."}</p>
+          </div>
+          <Button size="sm" onClick={() => void updatePattern()} loading={updating} disabled={newer.dropped.length > 0}>Update my papers</Button>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         {Array.from({ length: pattern.setsPerFaculty }, (_, i) => i + 1).map((n) => {
