@@ -115,12 +115,14 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
   const [draft, setDraft] = useState<Draft>(() => fromData(data));
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
+  // Assigned by the HOD: the paper is for every section of the scope - nothing to pick.
+  const assigned = data.assignment ?? null;
   const [picked, setPicked] = useState<Set<string>>(() => new Set(sections
-    .filter((s) => (myBankId ? s.heldByMe : s.mine && !s.heldBy))
+    .filter((s) => (assigned ? true : myBankId ? s.heldByMe : s.mine && !s.heldBy))
     .map((s) => s.sectionId)));
   const locked = deadline.locked;
   const readOnly = locked || !canEditOutcomes;
-  const pickedMine = sections.some((s) => s.mine && picked.has(s.sectionId));
+  const pickedMine = assigned ? true : sections.some((s) => s.mine && picked.has(s.sectionId));
   const examCellIssues = setup.issues.filter((i) => i.who === "EXAM_CELL");
   const bankHref = myBankId ? `/panel/mid-bank/${encodeURIComponent(myBankId)}` : null;
 
@@ -143,7 +145,7 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
     try {
       if (step === 1) {
         if (!pickedMine) { setErrors(["Include at least one section you teach"]); return; }
-        if (myBankId) {
+        if (myBankId && !assigned) {
           const res = await fetch(`/api/college/mid-question-banks/${encodeURIComponent(myBankId)}`, {
             method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sectionIds: [...picked] }),
           });
@@ -279,7 +281,29 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
           </div>
         )}
 
-        {step === 1 && (
+        {step === 1 && assigned && (
+          <Card className="rounded-2xl">
+            <CardContent className="space-y-4 p-6">
+              <StepHeading icon={Users} title="Sections">
+                {assigned.assignedByName || "Your HOD"} assigned you to prepare {subject.name} {assigned.scope === "SUBJECT" ? `for all branches (${assigned.branches.join(", ")})` : `for ${branch}`}
+                {assigned.facultyNames.length > 1 ? `, together with ${assigned.facultyNames.filter((n) => n).length - 1} other setter(s) - each prepares their own` : ""}. It covers every section below; those teaching them can view it and give suggestions.
+              </StepHeading>
+              <ul className="grid gap-2 sm:grid-cols-2">
+                {sections.map((s) => (
+                  <li key={s.sectionId} className="flex items-center gap-3 rounded-xl border p-3">
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-semibold">{s.branch && assigned.scope === "SUBJECT" ? `${s.branch} · ` : ""}Section {s.sectionName}</span>
+                      <span className="block truncate text-xs text-muted-foreground">{s.mine ? "You teach it" : s.facultyNames.join(", ") || "No teacher yet"}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {sections.length === 0 && <p className="text-sm text-muted-foreground">No sections have this subject yet.</p>}
+            </CardContent>
+          </Card>
+        )}
+
+        {step === 1 && !assigned && (
           <Card className="rounded-2xl">
             <CardContent className="space-y-5 p-6">
               <StepHeading icon={Users} title="Sections">

@@ -23,7 +23,7 @@ export async function GET() {
     const settings: ExamMidSettings = snap.exists ? (snap.data() as ExamMidSettings) : { midCount: 0 };
     // midPreparation / outcomes as every Mid route reads them (missing = question bank, all tags on).
     const resolved = readMidSettings(settings);
-    return NextResponse.json({ settings: { ...settings, midPreparation: resolved.midPreparation, outcomes: resolved.outcomes } });
+    return NextResponse.json({ settings: { ...settings, midPreparation: resolved.midPreparation, midAssignment: resolved.midAssignment, outcomes: resolved.outcomes } });
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
@@ -38,7 +38,7 @@ export async function GET() {
 export async function PUT(request: Request) {
   try {
     const session = await requireCollegeMember("EXAM_CELL", "SUPER_ADMIN");
-    const body = (await readJsonBody(request)) as { midCount?: number; midPreparation?: unknown; outcomes?: unknown };
+    const body = (await readJsonBody(request)) as { midCount?: number; midPreparation?: unknown; midAssignment?: unknown; outcomes?: unknown };
     const db = getAdminDb();
     const current = await loadMidSettings(db, session.collegeId);
     // Any field left out keeps its saved value (the Mid count card and the preparation card save separately).
@@ -47,10 +47,11 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: "Mid count must be an integer between 1 and 10" }, { status: 400 });
     }
     const midPreparation = body.midPreparation === undefined ? current.midPreparation : body.midPreparation === "PAPERS" ? "PAPERS" : "BANK";
+    const midAssignment = body.midAssignment === undefined ? current.midAssignment : body.midAssignment === "HOD" ? "HOD" : "SELF";
     const outcomes = body.outcomes === undefined ? current.outcomes : outcomeSwitches(body.outcomes as Partial<MidOutcomeSwitches>);
 
     // Switching bank <-> papers while faculty are preparing under an open deadline would strand their work.
-    if (midPreparation !== current.midPreparation) {
+    if (midPreparation !== current.midPreparation || midAssignment !== current.midAssignment) {
       const college = db.collection("colleges").doc(session.collegeId);
       const open = (await college.collection("midBankDeadlines").get()).docs.filter((d) => !isDeadlineLocked(d.get("deadline") as string)).map((d) => d.id);
       for (const id of open) {
@@ -68,7 +69,7 @@ export async function PUT(request: Request) {
     const actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Exam Cell";
 
     const settings: ExamMidSettings = {
-      midCount, midPreparation, outcomes,
+      midCount, midPreparation, midAssignment, outcomes,
       updatedAt: new Date() as unknown as ExamMidSettings["updatedAt"],
       updatedByName: actorName,
     };

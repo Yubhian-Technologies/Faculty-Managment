@@ -7,6 +7,8 @@ export interface ExamMidSettings {
   midCount: number;
   /** How faculty prepare a Mid: a question bank (default) or ready question papers (sets). */
   midPreparation?: MidPreparation;
+  /** Who prepares: everyone teaching the subject starts their own (SELF, default), or the subject's HOD assigns the setters (HOD). */
+  midAssignment?: MidAssignment;
   /** Which academic tags this college uses on questions (missing = all on). */
   outcomes?: Partial<MidOutcomeSwitches>;
   updatedAt?: Timestamp;
@@ -14,6 +16,7 @@ export interface ExamMidSettings {
 }
 
 export type MidPreparation = "BANK" | "PAPERS";
+export type MidAssignment = "SELF" | "HOD";
 
 /** Course Outcomes, CO-PO/PSO mapping and Bloom's levels - each can be switched off for a college. */
 export interface MidOutcomeSwitches {

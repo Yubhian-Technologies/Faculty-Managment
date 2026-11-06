@@ -1,5 +1,6 @@
 "use client";
 
+import { SuggestionsPanel } from "@/components/midBank/SuggestionsPanel";
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -88,6 +89,8 @@ export default function MidBankPage({ params, searchParams }: { params: Promise<
           )}
         </div>
       </header>
+      {/* Colleagues viewing it may leave suggestions - shown here while writing. */}
+      <SuggestionsPanel bankId={bank.id} />
       {papers ? <PaperSetWorkspace detail={detail} /> : <BankWorkspace detail={detail} initialQ={q} />}
     </div>
   );

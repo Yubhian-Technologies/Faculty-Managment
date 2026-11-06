@@ -11,6 +11,7 @@ import { choiceText, flexibleQuestions, partFor, partMax, patternMax } from "@/l
 import { downloadMidPaperSetPdf } from "@/lib/pdf/downloadMidPaperSet";
 import { MathText } from "@/components/midBank/MathText";
 import { ApprovalPanel } from "@/components/midBank/ApprovalPanel";
+import { SuggestionsPanel } from "@/components/midBank/SuggestionsPanel";
 import type { MidBankDetail } from "@/lib/midBank/clientTypes";
 import type { MidPaperQuestion } from "@/types";
 
@@ -47,6 +48,7 @@ export function PaperSetReview({ detail, writeHref, onChanged }: { detail: MidBa
   return (
     <div className="space-y-4">
       <ApprovalPanel bank={bank} isOwner={detail.access.isOwner} isHod={!!detail.access.isHod} onChanged={onChanged} />
+      <SuggestionsPanel bankId={bank.id} questions={questions.map((q) => ({ id: q.id, label: `Paper ${q.set} · ${pattern.parts.find((p) => p.id === q.partId)?.label ?? q.partId} Q${q.no}` }))} />
       <Card><CardContent className="flex flex-wrap items-center gap-2 p-4">
         <div className="min-w-0 flex-1">
           <p className="font-semibold">{bank.subjectName} ({bank.subjectCode}) · {bank.branch} · Mid {bank.midNumber}</p>

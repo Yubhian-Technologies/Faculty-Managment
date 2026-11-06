@@ -29,6 +29,8 @@ interface Progress {
     reviewDepartments?: string[];
     /** This viewer may open the banks (false: the branch HOD of a subject another department looks after). */
     canOpen?: boolean;
+    /** "The HOD assigns": who prepares it; null = not assigned yet; absent = the faculty start their own. */
+    assigned?: { facultyNames: string[]; allBranches: boolean; byName: string } | null;
     sections: { sectionId: string; sectionName: string; facultyNames: string[]; bankId: string | null; ownerName: string | null }[];
     banks: { id: string; ownerName: string; sections: string[]; status: MidQuestionBank["status"]; approval: MidQuestionBank["approval"] | null; lastApproval: MidBankApprovalEntry | null; completeCount: number; totalCount: number; updatedAt: string | null }[];
   }[];
@@ -120,6 +122,8 @@ export function QuestionBankProgress({ deadlineId, base, examCell }: { deadlineI
                           <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_CLASS[groupStatus(g)]}`}>{STATUS_LABEL[groupStatus(g)]}</span>
                         </p>
                         {g.reviewDepartments && (g.reviewDepartments.length > 1 || g.reviewDepartments[0] !== g.branch) && <p className="text-[11px] text-muted-foreground">Reviewed by the {g.reviewDepartments.join(" or ")} HOD</p>}
+                        {g.assigned === null && <p className="text-[11px] font-medium text-amber-700">Setter not assigned yet (HOD)</p>}
+                        {g.assigned && <p className="text-[11px] text-muted-foreground">Setter{g.assigned.facultyNames.length === 1 ? "" : "s"}: {g.assigned.facultyNames.join(", ")}{g.assigned.allBranches ? " · one paper for all branches" : ""}</p>}
                       </td>
                       <td className="p-3">
                         <div className="flex flex-wrap gap-1">

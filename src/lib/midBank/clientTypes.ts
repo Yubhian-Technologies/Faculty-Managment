@@ -17,11 +17,15 @@ export interface MidBankListItem {
   myBank: { id: string; status: MidQuestionBank["status"]; approval?: MidQuestionBank["approval"] | null; completeCount: number; totalCount: number; sections: string[]; updatedAt: string | null } | null;
   sharedBanks: { id: string; ownerName: string; sections: string[]; completeCount: number; totalCount: number }[];
   uncovered: string[];
+  /** "The HOD assigns": who assigned it / who prepares it. */
+  note?: string;
 }
 
 export interface PrepareSection {
   sectionId: string; sectionName: string; facultyIds: string[]; facultyNames: string[];
   mine: boolean; heldBy: string | null; heldByMe: boolean;
+  /** A whole-subject paper: the section's branch. */
+  branch?: string;
 }
 
 /** GET mid-question-banks/prepare. */
@@ -36,6 +40,8 @@ export interface MidBankPrepare {
   setup: { issues: SetupIssue[]; units: number[] };
   myBankId: string | null;
   canEditOutcomes: boolean;
+  /** "The HOD assigns": the assignment this caller prepares under (its sections are fixed - all of the scope). */
+  assignment?: { scope: "BRANCH" | "SUBJECT"; assignedByName: string; facultyNames: string[]; branches: string[] } | null;
   /** The college's academic tags and how it prepares Mids. */
   outcomeSwitches?: import("@/types").MidOutcomeSwitches;
   midPreparation?: import("@/types").MidPreparation;
