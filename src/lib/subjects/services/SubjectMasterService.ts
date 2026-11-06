@@ -10,6 +10,7 @@ import { claimSubjectKeys, keyDocId, type SubjectKeyClaim, type SubjectKeyConfli
 import { normalizeSubjectCode, normalizeSubjectName } from "../subjectIdentity";
 import { planTeachingHoursSync, type HoursTarget } from "../hoursCascade";
 import { MASTER_IMPORT_MAX_ROWS } from "../limits";
+import { OWNER_DEPARTMENTS_MAX, ownerDepartmentRefs } from "../ownerDepartment";
 import type { Subject, SubjectSemesterAssignment } from "@/types";
 
 // The one place a master subject is created, edited or removed. A master
@@ -68,6 +69,8 @@ export interface CourseScope {
 type SubjectDoc = Subject & { id: string };
 
 const COLLEGE = "colleges";
+/** Subjects given a Subject Department in one request (one write batch). */
+export const OWNER_DEPARTMENT_MAX = 400;
 
 export class SubjectMasterService {
   constructor(private db: Firestore = getAdminDb()) {}
@@ -455,6 +458,103 @@ export class SubjectMasterService {
 
   private async loadScopeForExisting(collegeId: string, s: SubjectDoc): Promise<CourseScope> {
     return this.loadScope(collegeId, s.courseId!, s.regulation ?? "");
+  }
+
+  // ── subject department ──────────────────────────────────────────────────
+  /**
+   * Changes the Subject Departments of master subjects - the department(s) that look after them
+   * (syllabus, question bank / paper approval; with two, either HOD decides):
+   *   SET     replace with `departmentIds` (0 = none: each branch looks after it again)
+   *   ADD     add `departmentIds` to what each subject has
+   *   REMOVE  take `departmentIds` off each subject
+   * A subject may have at most OWNER_DEPARTMENTS_MAX; one that would go over refuses the whole
+   * request (nothing written). Only these fields are written; semester copies, teaching
+   * assignments and the timetable are untouched.
+   */
+  async setOwnerDepartments(p: { collegeId: string; subjectIds: string[]; mode: "SET" | "ADD" | "REMOVE"; departmentIds: string[]; actor?: SubjectActor }): Promise<{ updated: number }> {
+    const ids = [...new Set(p.subjectIds.map((x) => String(x ?? "").trim()).filter(Boolean))];
+    if (ids.length === 0) throw new SubjectRequestError("Pick at least one subject.");
+    if (ids.length > OWNER_DEPARTMENT_MAX) throw new SubjectRequestError(`At most ${OWNER_DEPARTMENT_MAX} subjects at a time.`);
+    if (!["SET", "ADD", "REMOVE"].includes(p.mode)) throw new SubjectRequestError("Unknown change.");
+    const deptIds = [...new Set(p.departmentIds.map((x) => String(x ?? "").trim()).filter(Boolean))];
+    if (p.mode !== "SET" && deptIds.length === 0) throw new SubjectRequestError("Pick a department.");
+    if (deptIds.length > OWNER_DEPARTMENTS_MAX) throw new SubjectRequestError(`A subject can have at most ${OWNER_DEPARTMENTS_MAX} Subject Departments.`);
+    const college = this.college(p.collegeId);
+
+    const deptSnaps = deptIds.length ? await this.db.getAll(...deptIds.map((id) => college.collection("departments").doc(id))) : [];
+    const depts = new Map<string, string>();
+    for (const d of deptSnaps) {
+      // A department being removed may already be gone - that is fine.
+      if (!d.exists) { if (p.mode === "REMOVE") continue; throw new SubjectRequestError("Department not found.", 404); }
+      const name = String((d.data() as { name?: string }).name ?? "").trim();
+      if (!name && p.mode !== "REMOVE") throw new SubjectRequestError("That department has no name.");
+      depts.set(d.id, name);
+    }
+
+    const snaps = await this.db.getAll(...ids.map((id) => college.collection("subjects").doc(id)));
+    const missing = snaps.filter((s) => !s.exists).length;
+    if (missing) throw new SubjectRequestError(`${missing} of the subjects weren't found - reload and try again.`, 404);
+    if (snaps.some((s) => !(s.data() as Subject).courseId)) throw new SubjectRequestError("Only Curriculum subjects (a course + regulation) can be given a Subject Department.");
+
+    const plans = snaps.map((s) => {
+      const cur = s.data() as Subject;
+      const before = ownerDepartmentRefs(cur);
+      let next: { id: string; name: string }[];
+      if (p.mode === "SET") next = deptIds.map((id) => ({ id, name: depts.get(id)! }));
+      else if (p.mode === "ADD") next = [...before, ...deptIds.filter((id) => !before.some((b) => b.id === id)).map((id) => ({ id, name: depts.get(id)! }))];
+      else next = before.filter((b) => !deptIds.includes(b.id));
+      // Refresh the saved names of the departments kept.
+      next = next.map((d) => ({ id: d.id, name: depts.get(d.id) || d.name }));
+      return { snap: s, cur, before, next };
+    });
+    const over = plans.find((x) => x.next.length > OWNER_DEPARTMENTS_MAX);
+    if (over) throw new SubjectRequestError(`${over.cur.code} would have more than ${OWNER_DEPARTMENTS_MAX} Subject Departments - remove one first.`);
+
+    const same = (a: { id: string; name: string }[], b: { id: string; name: string }[]) => a.length === b.length && a.every((x, i) => x.id === b[i].id && x.name === b[i].name);
+    const changed = plans.filter((x) => !same(x.before, x.next) || !!x.cur.ownerDepartmentId);
+    const now = new Date();
+    const batch = this.db.batch();
+    for (const x of changed) {
+      batch.update(x.snap.ref, {
+        ...(x.next.length
+          ? { ownerDepartments: x.next, ownerDepartmentIds: x.next.map((d) => d.id) }
+          : { ownerDepartments: FieldValue.delete(), ownerDepartmentIds: FieldValue.delete() }),
+        // The single field from before lists existed is folded into the list.
+        ownerDepartmentId: FieldValue.delete(), ownerDepartmentName: FieldValue.delete(),
+        updatedAt: now,
+      });
+    }
+    if (changed.length) await batch.commit();
+    for (const x of changed) {
+      if (same(x.before, x.next)) continue;
+      await writeAuditLogSafe(this.db, p.collegeId, {
+        action: "SUBJECT_DEPARTMENT_CHANGED",
+        performedBy: p.actor?.uid ?? "unknown",
+        performedByName: p.actor?.name,
+        targetId: x.snap.id,
+        details: { code: x.cur.code, name: x.cur.name, regulation: x.cur.regulation, from: x.before.map((d) => d.name), to: x.next.map((d) => d.name) },
+      });
+    }
+    return { updated: changed.filter((x) => !same(x.before, x.next)).length };
+  }
+
+  /** Saves (or removes, `file: null`) a subject's syllabus document. Nothing else on the subject changes. */
+  async setSyllabus(p: { collegeId: string; id: string; file: { url: string; fileName: string } | null; actor?: SubjectActor }): Promise<void> {
+    const ref = this.college(p.collegeId).collection("subjects").doc(p.id);
+    const snap = await ref.get();
+    if (!snap.exists) throw new SubjectRequestError("Subject not found.", 404);
+    const cur = snap.data() as Subject;
+    const now = new Date();
+    await ref.update(p.file
+      ? { syllabusUrl: p.file.url, syllabusFileName: p.file.fileName, syllabusUpdatedAt: now, syllabusUpdatedByName: p.actor?.name ?? "", updatedAt: now }
+      : { syllabusUrl: FieldValue.delete(), syllabusFileName: FieldValue.delete(), syllabusUpdatedAt: FieldValue.delete(), syllabusUpdatedByName: FieldValue.delete(), updatedAt: now });
+    await writeAuditLogSafe(this.db, p.collegeId, {
+      action: "SUBJECT_SYLLABUS_CHANGED",
+      performedBy: p.actor?.uid ?? "unknown",
+      performedByName: p.actor?.name,
+      targetId: p.id,
+      details: { code: cur.code, name: cur.name, regulation: cur.regulation, file: p.file?.fileName ?? null },
+    });
   }
 
   // ── delete ──────────────────────────────────────────────────────────────

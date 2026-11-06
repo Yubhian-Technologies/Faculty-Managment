@@ -61,7 +61,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       deadline: { ...d, locked: isDeadlineLocked(d.deadline) },
-      subject: { id: subject.id, name: subject.name, code: subject.code, courseName: subject.courseName ?? d.courseName, regulation: subject.regulation ?? "", year: d.year, semester: d.semester },
+      subject: { id: subject.id, name: subject.name, code: subject.code, courseName: subject.courseName ?? d.courseName, regulation: subject.regulation ?? "", year: d.year, semester: d.semester, syllabusUrl: subject.syllabusUrl ?? null, syllabusFileName: subject.syllabusFileName ?? null },
       branch, outcomesId, outcomes, rules, sections,
       setup: settings.midPreparation === "PAPERS"
         ? paperSetupIssues(subject, pattern, outcomes, settings.outcomes, { midNumber: d.midNumber, rules, exception, midCount: settings.midCount })

@@ -60,6 +60,7 @@ export default function MidBankPage({ params, searchParams }: { params: Promise<
       <div className="flex flex-wrap items-center justify-between gap-2">
         {back}
         <div className="flex flex-wrap gap-2">
+          {detail.subject.syllabusUrl && <Button asChild variant="outline" size="sm"><a href={detail.subject.syllabusUrl} target="_blank" rel="noreferrer"><BookOpen className="mr-1.5 h-4 w-4" />Syllabus</a></Button>}
           {/* The subject's units / COs stay editable after starting (never removing one a question uses). */}
           <Button asChild variant="outline" size="sm"><Link href={`${changeSections}&step=2`}><Pencil className="mr-1.5 h-4 w-4" />Edit units &amp; COs</Link></Button>
           <Button asChild variant="outline" size="sm"><Link href={changeSections}><Settings2 className="mr-1.5 h-4 w-4" />Sections &amp; setup</Link></Button>

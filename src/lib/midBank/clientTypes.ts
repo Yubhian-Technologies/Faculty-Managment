@@ -27,7 +27,7 @@ export interface PrepareSection {
 /** GET mid-question-banks/prepare. */
 export interface MidBankPrepare {
   deadline: MidBankDeadline & { locked: boolean };
-  subject: { id: string; name: string; code: string; courseName: string; regulation: string; year: number; semester: number };
+  subject: { id: string; name: string; code: string; courseName: string; regulation: string; year: number; semester: number; syllabusUrl?: string | null; syllabusFileName?: string | null };
   branch: string;
   outcomesId: string;
   outcomes: SubjectOutcomes | null;
@@ -47,9 +47,9 @@ export interface MidBankPrepare {
 export interface MidBankDetail {
   bank: MidQuestionBank;
   deadline: MidBankDeadline | null;
-  subject: { id: string; name: string; code: string; courseName: string; regulation: string; year: number; semester: number; branch: string };
+  subject: { id: string; name: string; code: string; courseName: string; regulation: string; year: number; semester: number; branch: string; syllabusUrl?: string | null; syllabusFileName?: string | null };
   outcomes: SubjectOutcomes | null;
   rules: MidBankRules | null;
   questions: MidQuestion[];
-  access: { isOwner: boolean; isIncluded: boolean; canWrite: boolean; locked: boolean; isHod?: boolean; frozen?: boolean };
+  access: { isOwner: boolean; isIncluded: boolean; canWrite: boolean; locked: boolean; isHod?: boolean; frozen?: boolean; reviewDepartments?: string[] };
 }

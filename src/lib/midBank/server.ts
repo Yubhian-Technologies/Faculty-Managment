@@ -1,4 +1,5 @@
 import { canHodEditDepartment, getHodDepartmentScope } from "@/lib/departments/scope";
+import { ownerDepartmentNamesLive } from "@/lib/subjects/ownerDepartment";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import type { Course, MidBankDeadline, MidBankRules, MidQuestion, MidQuestionBank, Section, Subject, SubjectOutcomes, SubjectSemesterAssignment, TeachingAssignment } from "@/types";
 import { isDeadlineLocked } from "./deadline";
@@ -101,8 +102,12 @@ export interface BankAccess {
   /** Teaches a section the bank covers (read-only unless also the owner). */
   isIncluded: boolean;
   canRead: boolean;
-  /** The branch's HOD (approves / returns it). */
+  /** An HOD who reviews it (approves / returns): a subject department's (either, when two), else the branch's. */
   isHod: boolean;
+  /** The departments whose HODs review it (`reviewDepartmentsOf`); any one of them decides. */
+  reviewDepartments: string[];
+  /** Of those, the one this HOD reviews it as ("" when not a reviewer). */
+  hodDepartment: string;
   /** Submitted to / approved by the HOD - nobody edits it until it is returned. */
   frozen: boolean;
   /** Owner, the deadline not passed, and not submitted / approved. */
@@ -121,18 +126,27 @@ export async function bankAccess(db: Db, session: Session, bankId: string): Prom
   const snap = await midBankRefs(db, session.collegeId).banks.doc(bankId).get();
   if (!snap.exists) return null;
   const bank = { id: snap.id, ...(snap.data() as Omit<MidQuestionBank, "id">) };
-  const [facultyId, deadline] = await Promise.all([
+  const [facultyId, deadline, subject] = await Promise.all([
     resolveFacultyMemberId(db, session.collegeId, session.uid),
     loadDeadline(db, session.collegeId, bank.deadlineId),
+    loadSubject(db, session.collegeId, bank.subjectId),
   ]);
   const isOwner = facultyId === bank.ownerFacultyId;
   const isIncluded = (bank.viewerFacultyIds ?? []).includes(facultyId);
-  let isHod = false;
-  if (session.role === "HOD") isHod = canHodEditDepartment(await getHodDepartmentScope(db, session.collegeId, session.uid), bank.branch);
+  // The subject's department reviews it (a Maths bank for CSE goes to the Maths HOD); a subject with
+  // none set keeps going to the branch's HOD. Only that HOD reads / decides it.
+  const owners = await ownerDepartmentNamesLive(db, session.collegeId, subject);
+  const reviewDepartments = owners.length ? owners : [bank.branch];
+  let hodDepartment = "";
+  if (session.role === "HOD") {
+    const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+    hodDepartment = reviewDepartments.find((d) => canHodEditDepartment(scope, d)) ?? "";
+  }
+  const isHod = !!hodDepartment;
   const locked = !deadline || isDeadlineLocked(deadline.deadline);
   const frozen = bank.approval === "SUBMITTED" || bank.approval === "APPROVED";
   return {
-    bank, deadline, locked, isOwner, isIncluded, isHod, frozen,
+    bank, deadline, locked, isOwner, isIncluded, isHod, reviewDepartments, hodDepartment, frozen,
     canRead: isOwner || isIncluded || isHod || MID_BANK_OVERSEERS.includes(session.role),
     canWrite: isOwner && !locked && !frozen,
   };

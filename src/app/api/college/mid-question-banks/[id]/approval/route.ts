@@ -14,8 +14,10 @@ import type { MidBankApprovalEntry, MidQuestionBank } from "@/types";
 // HOD approval of one question bank.
 //   { action: "submit" }              the owner, once every unit is complete
 //   { action: "withdraw" }            the owner, while the HOD hasn't decided
-//   { action: "approve" }             the branch's HOD - the Exam Cell can now use it
-//   { action: "return", remarks }     the branch's HOD - back to the owner to change
+//   { action: "approve" }             the reviewing HOD - the Exam Cell can now use it
+//   { action: "return", remarks }     the reviewing HOD - back to the owner to change
+// The reviewing HOD is a subject department's (set by Academics; with two, both are told and either
+// one decides), else the branch's. The history records who decided, as which department.
 // A submitted / approved bank is read-only (bankAccess.frozen). Every step is
 // kept on the bank (approvalHistory) and in the audit log.
 
@@ -43,7 +45,7 @@ export async function POST(request: Request, { params }: Params) {
       const bank = { ...(snap.data() as MidQuestionBank), id };
       const next = nextApproval(bank, action, { isOwner: access.isOwner, isHod: access.isHod }, remarks);
       if ("error" in next) return { status: 409, body: { error: next.error } };
-      const entry: MidBankApprovalEntry = { at: new Date().toISOString(), byUid: session.uid, byName: name, action: action === "withdraw" ? "WITHDRAWN" : next.approval!, ...(remarks ? { remarks } : {}) };
+      const entry: MidBankApprovalEntry = { at: new Date().toISOString(), byUid: session.uid, byName: name, action: action === "withdraw" ? "WITHDRAWN" : next.approval!, ...(remarks ? { remarks } : {}), department: action === "approve" || action === "return" ? access.hodDepartment : access.reviewDepartments.join(", ") };
       tx.update(ref, {
         approval: next.approval ?? FieldValue.delete(),
         approvalHistory: [...(bank.approvalHistory ?? []), entry],
@@ -57,7 +59,8 @@ export async function POST(request: Request, { params }: Params) {
     const what = `${bank.subjectName} (${bank.subjectCode}) · ${bank.branch} · Mid ${bank.midNumber}`;
     const label = bank.kind === "PAPERS" ? "Question papers" : "Question bank";
     if (action === "submit") {
-      for (const uid of await getDepartmentHeadUids(db, session.collegeId, bank.branch)) {
+      const heads = new Set((await Promise.all(access.reviewDepartments.map((dep) => getDepartmentHeadUids(db, session.collegeId, dep)))).flat());
+      for (const uid of heads) {
         await notify(db, session.collegeId, uid, "MID_BANK_SUBMITTED", `${label} submitted for approval`, `${bank.ownerName}: ${what}`, `/hod/question-banks/${encodeURIComponent(bank.deadlineId)}/${encodeURIComponent(id)}`);
       }
     } else if (action === "approve" || action === "return") {
@@ -70,7 +73,7 @@ export async function POST(request: Request, { params }: Params) {
     }
     await writeAuditLogSafe(db, session.collegeId, {
       action: `MID_BANK_${action.toUpperCase()}`, performedBy: session.uid, performedByName: name, targetId: id,
-      details: { bank: what, owner: bank.ownerName, ...(remarks ? { remarks } : {}) },
+      details: { bank: what, owner: bank.ownerName, reviewDepartments: access.reviewDepartments, ...(access.hodDepartment ? { decidedAs: access.hodDepartment } : {}), ...(remarks ? { remarks } : {}) },
     });
     return NextResponse.json({ approval: (result.body as { approval: string | null }).approval });
   } catch (err) {
