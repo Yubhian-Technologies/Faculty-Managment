@@ -65,6 +65,7 @@ export async function PATCH(request: Request, { params }: Params) {
     if (!access.isOwner) return NextResponse.json({ error: "Only the faculty preparing this bank can change its sections" }, { status: 403 });
     if (!access.canWrite || !access.deadline) return NextResponse.json({ error: writeRefusal(access) }, { status: 403 });
     const { bank, deadline } = access;
+    if (bank.assignmentId) return NextResponse.json({ error: "Your HOD assigned this one - it covers every section of the assignment" }, { status: 409 });
     const refs = midBankRefs(db, session.collegeId);
     const available = sectionsOf(await teachingFor(db, session.collegeId, deadline), bank.subjectId, bank.branch);
     const before = new Set(bank.viewerFacultyIds);

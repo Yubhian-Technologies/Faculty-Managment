@@ -8,6 +8,9 @@ import { isDeadlineLocked } from "@/lib/midBank/deadline";
 import { sectionsOf } from "@/lib/midBank/sections";
 import { guardError, loadDeadline, MID_BANK_OVERSEERS, midBankRefs, teachingFor } from "@/lib/midBank/server";
 import { departmentNamesById, reviewDepartmentsOf } from "@/lib/subjects/ownerDepartment";
+import { loadMidSettings } from "@/lib/exams/midSettings";
+import { isAllBranches, servesBranch } from "@/lib/midBank/assignments";
+import { loadAssignments } from "@/lib/midBank/assignmentsServer";
 import type { MidQuestionBank, Subject } from "@/types";
 
 // Progress of one deadline, for the Exam Cell (and leadership; an HOD sees only
@@ -42,19 +45,29 @@ export async function GET(_request: Request, { params }: Params) {
     const reviewOf = (branch: string, subjectId: string) => reviewDepartmentsOf(branch, subjects.get(subjectId), deptNames);
     const reviews = (branch: string, subjectId: string) => !scope || reviewOf(branch, subjectId).some((dep) => canHodEditDepartment(scope, dep));
     const visible = (branch: string, subjectId: string) => !scope || canHodEditDepartment(scope, branch) || reviews(branch, subjectId);
-    const banks = allBanks.filter((b) => visible(b.branch, b.subjectId));
+    // A whole-subject paper (HOD-assigned) belongs to every branch it serves.
+    const banks = allBanks.filter((b) => visible(b.branch, b.subjectId) || (b.branches ?? []).some((br) => visible(br, b.subjectId)));
+    const [settings, assignments] = await Promise.all([loadMidSettings(db, session.collegeId), loadAssignments(db, session.collegeId, id)]);
+    const hodMode = settings.midAssignment === "HOD";
 
     const keys = new Map<string, { branch: string; subjectId: string; subjectName: string; subjectCode: string }>();
     for (const r of rows) if (visible(r.branch, r.subjectId)) keys.set(`${r.branch}|${r.subjectId}`, { branch: r.branch, subjectId: r.subjectId, subjectName: r.subjectName, subjectCode: r.subjectCode });
-    for (const b of banks) keys.set(`${b.branch}|${b.subjectId}`, { branch: b.branch, subjectId: b.subjectId, subjectName: b.subjectName, subjectCode: b.subjectCode });
+    for (const b of banks) {
+      for (const br of isAllBranches(b.branch) ? (b.branches ?? []) : [b.branch]) {
+        if (!keys.has(`${br}|${b.subjectId}`) && visible(br, b.subjectId)) keys.set(`${br}|${b.subjectId}`, { branch: br, subjectId: b.subjectId, subjectName: b.subjectName, subjectCode: b.subjectCode });
+      }
+    }
 
     const groups = [...keys.values()].map((k) => {
-      const mine = banks.filter((b) => b.branch === k.branch && b.subjectId === k.subjectId);
+      const mine = banks.filter((b) => b.subjectId === k.subjectId && servesBranch(b, k.branch));
+      const covering = assignments.filter((a) => a.subjectId === k.subjectId && (a.branch === k.branch || (isAllBranches(a.branch) && a.branches.includes(k.branch))));
       const heldBy = new Map<string, (typeof mine)[number]>();
       for (const b of mine) for (const s of b.sections) heldBy.set(s.sectionId, b);
       return {
         ...k,
         reviewDepartments: reviewOf(k.branch, k.subjectId),
+        // "The HOD assigns": who prepares it (null = the HOD hasn't assigned yet); absent in the other flow.
+        ...(hodMode ? { assigned: covering.length ? { facultyNames: [...new Set(covering.flatMap((a) => a.facultyNames))].filter(Boolean), allBranches: covering.some((a) => isAllBranches(a.branch)), byName: covering[0].assignedByName } : null } : {}),
         canOpen: reviews(k.branch, k.subjectId),
         sections: sectionsOf(rows, k.subjectId, k.branch).map((s) => ({ ...s, bankId: heldBy.get(s.sectionId)?.id ?? null, ownerName: heldBy.get(s.sectionId)?.ownerName ?? null })),
         banks: mine.map((b) => ({
@@ -66,7 +79,7 @@ export async function GET(_request: Request, { params }: Params) {
       };
     }).sort((a, b) => a.branch.localeCompare(b.branch) || a.subjectName.localeCompare(b.subjectName));
 
-    return NextResponse.json({ deadline: { ...d, locked: isDeadlineLocked(d.deadline) }, groups });
+    return NextResponse.json({ deadline: { ...d, locked: isDeadlineLocked(d.deadline) }, groups, mode: settings.midAssignment });
   } catch (err) {
     return guardError(err, "[college/mid-bank-deadlines/[id]/progress GET]");
   }

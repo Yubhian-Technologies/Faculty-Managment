@@ -153,6 +153,45 @@ export interface MidBankSection {
   /** Who teaches the subject in this section (FacultyMember ids / names; usually one). */
   facultyIds: string[];
   facultyNames: string[];
+  /** The section's branch - set on a paper prepared for every branch of the subject (`branches`). */
+  branch?: string;
+}
+
+/**
+ * "The HOD assigns" colleges (ExamMidSettings.midAssignment = HOD): who prepares a subject's bank / papers for one
+ * deadline. colleges/{c}/midBankAssignments/{deadlineId}__{subjectId}__{branchKey | all-branches}.
+ * BRANCH = for one branch (each branch its own paper); SUBJECT = one paper used by every branch (`branches`).
+ * Several setters may be assigned; each prepares their own.
+ */
+export interface MidBankAssignment {
+  id: string;
+  deadlineId: string;
+  subjectId: string;
+  subjectName: string;
+  subjectCode: string;
+  scope: "BRANCH" | "SUBJECT";
+  /** The branch, or ALL_BRANCHES for a SUBJECT assignment. */
+  branch: string;
+  branches: string[];
+  facultyIds: string[];
+  facultyNames: string[];
+  assignedByUid: string;
+  assignedByName: string;
+  at: string;
+  history?: { at: string; byName: string; facultyNames: string[] }[];
+}
+
+/** A suggestion a colleague (read-only viewer) leaves on a bank / paper set: .../midQuestionBanks/{id}/suggestions/{id}. */
+export interface MidBankSuggestion {
+  id: string;
+  /** The question it is about (question doc id), or absent = the whole bank / paper. */
+  questionId?: string;
+  questionLabel?: string;
+  text: string;
+  byUid: string;
+  byName: string;
+  at: string;
+  resolved?: { at: string; byName: string } | null;
 }
 
 export interface MidQuestionBank {
@@ -165,8 +204,12 @@ export interface MidQuestionBank {
   subjectId: string;
   subjectName: string;
   subjectCode: string;
-  /** The branch (the sections' department) - banks are per branch + subject + Mid. */
+  /** The branch (the sections' department) - banks are per branch + subject + Mid. ALL_BRANCHES = one paper for every branch in `branches`. */
   branch: string;
+  /** A paper prepared for the whole subject ("The HOD assigns", SUBJECT scope): every branch it is used by. */
+  branches?: string[];
+  /** Started under an HOD assignment (sections are the scope's, not picked; no section claims). */
+  assignmentId?: string;
   /** subjectOutcomes doc id (subject + branch). */
   outcomesId: string;
   /** Sections this bank covers - its own and possibly colleagues'; each is claimed by one bank only. */

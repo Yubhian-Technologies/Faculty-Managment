@@ -106,6 +106,8 @@ export default function FacultyQuestionBankPage() {
                           ))}
                         </div>
 
+                        {i.note && <p className="rounded-md bg-muted/60 px-2.5 py-1.5 text-xs text-muted-foreground">{i.note}</p>}
+
                         {i.myBank && (
                           <div>
                             <div className="mb-1 flex justify-between text-xs">

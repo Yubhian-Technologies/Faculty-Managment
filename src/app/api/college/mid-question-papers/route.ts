@@ -12,6 +12,7 @@ import { allowedFormats, formatOf } from "@/lib/midBank/validateQuestion";
 import { BLOOM_LEVELS } from "@/lib/midBank/constants";
 import { DEFAULT_INSTRUCTION, DEFAULT_REGD_BOXES, paperSlots, pickPaper } from "@/lib/midPaper/rules";
 import { loadPlan, midTimetableRefs } from "@/lib/midTimetable/server";
+import { servesBranch } from "@/lib/midBank/assignments";
 import type { GeneratedPaper, GeneratedPapers, PaperQuestion } from "@/lib/midPaper/clientTypes";
 import type { BloomLevel, Course, Department, MidPaperTemplate, MidQuestionBank, MidTimetable, Subject } from "@/types";
 
@@ -81,11 +82,11 @@ export async function POST(request: Request) {
         regulation: "", sections: [] as string[], ownerName: "", slots: [], picked: [], candidates: {}, questions: {}, unitTitles: {}, cos: [], mapping: {},
         marks: 0, maxMarks: 0, instruction: DEFAULT_INSTRUCTION, regdBoxes: DEFAULT_REGD_BOXES, startLevel: start,
       };
-      const mine = banks.filter((b) => b.subjectId === slot.subjectId && b.branch === slot.branch);
+      const mine = banks.filter((b) => b.subjectId === slot.subjectId && servesBranch(b, slot.branch));
       if (mine.length === 0) { papers.push({ ...base, key: `${slot.branch}|${slot.subjectId}`, error: "No question bank has been prepared for this subject in this branch" }); continue; }
       for (const bank of mine) {
         const key = bank.id;
-        const b = { ...base, sections: bank.sections.map((s) => s.sectionName), ownerName: bank.ownerName, marks: bank.marks };
+        const b = { ...base, sections: bank.sections.filter((s) => !s.branch || s.branch === slot.branch).map((s) => s.sectionName), ownerName: bank.ownerName, marks: bank.marks };
         if (bank.status !== "COMPLETE") { papers.push({ ...b, key, error: `The question bank isn't complete yet (${bank.completeCount} of ${bank.totalCount} questions)` }); continue; }
         // Only a bank the branch's HOD approved goes into a paper.
         if (bank.approval !== "APPROVED") {

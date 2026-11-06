@@ -17,6 +17,7 @@ import { allowedFormats, formatOf, partLetter, partMarks, questionErrors } from 
 import { downloadMidQuestionBankPdf } from "@/lib/pdf/downloadMidQuestionBank";
 import type { MidBankDetail } from "@/lib/midBank/clientTypes";
 import { MathText } from "./MathText";
+import { SuggestionsPanel } from "@/components/midBank/SuggestionsPanel";
 import { ApprovalPanel } from "./ApprovalPanel";
 import { PaperSetReview } from "@/components/midPapers/PaperSetReview";
 
@@ -119,6 +120,7 @@ export function BankReview({ id, editHref, writeHref, autoDownload }: { id: stri
       </p>
 
       <ApprovalPanel bank={bank} isOwner={detail.access.isOwner} isHod={Boolean(detail.access.isHod)} onChanged={() => setReloadKey((k) => k + 1)} />
+      <SuggestionsPanel bankId={bank.id} questions={detail.questions.map((q) => ({ id: q.id, label: `Unit ${q.id.split("_")[0]} · Q${q.id.split("_")[1] ?? ""}` }))} />
 
       <div className="grid gap-3 sm:grid-cols-4">
         {[

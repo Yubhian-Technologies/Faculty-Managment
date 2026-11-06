@@ -12,6 +12,7 @@ import { actorName, guardError, loadOutcomes, loadSubject, midBankRefs } from "@
 import { loadPaperQuestions } from "@/lib/midPapers/server";
 import { cleanPrintLayout } from "@/lib/midPapers/printLayout";
 import { partMax } from "@/lib/midPapers/pattern";
+import { servesBranch } from "@/lib/midBank/assignments";
 import type { Course, Department, MidPaperFinal, MidQuestionBank, MidTimetable } from "@/types";
 import type { PaperChoiceRow } from "@/lib/midPapers/clientTypes";
 
@@ -54,7 +55,8 @@ async function day(db: FirebaseFirestore.Firestore, collegeId: string, planId: s
     semesterInYear: semsOfYear.includes(plan.semester) ? semsOfYear.indexOf(plan.semester) + 1 : null, midNumber: plan.midNumber, academicYear, date,
   };
   const rows: PaperChoiceRow[] = onDay.sort((a, b) => a.branch.localeCompare(b.branch) || a.subjectName.localeCompare(b.subjectName)).map((slot) => {
-    const mine = sets.filter((b) => b.subjectId === slot.subjectId && b.branch === slot.branch);
+    // A paper prepared for the whole subject serves every branch it lists.
+    const mine = sets.filter((b) => b.subjectId === slot.subjectId && servesBranch(b, slot.branch));
     const approved = mine.filter((b) => b.approval === "APPROVED" && b.status === "COMPLETE");
     const c = chosen.get(`${slot.subjectId}|${slot.branch}`) as (Record<string, unknown> & { final?: MidPaperFinal }) | undefined;
     return {
@@ -152,7 +154,7 @@ async function finalize(db: FirebaseFirestore.Firestore, session: { uid: string;
       ...(bank.outcomes ? { outcomes: bank.outcomes } : {}),
       cos: (outcomes?.cos ?? []).map((c) => ({ id: c.id, statement: c.statement })), mapping: outcomes?.mapping ?? {},
       subject: { name: bank.subjectName, code: bank.subjectCode, regulation: subject?.regulation ?? "" },
-      branchCode: row.branchCode, sections: bank.sections.map((s) => s.sectionName),
+      branchCode: row.branchCode, sections: bank.sections.filter((s) => !s.branch || s.branch === row.branch).map((s) => s.sectionName),
       exam: { courseName: r.header.courseCode, year: r.header.year, semester: r.header.semester, semesterInYear: r.header.semesterInYear, midNumber: r.header.midNumber, academicYear: r.header.academicYear, date: r.header.date },
       layout: value,
     };

@@ -18,7 +18,7 @@ import { MidPaperTemplateCard } from "@/components/exams/MidPaperTemplateCard";
 import { MidPaperPatternCard } from "@/components/exams/MidPaperPatternCard";
 import { MidSubjectSplitsCard } from "@/components/exams/MidSubjectSplitsCard";
 import { cn } from "@/lib/utils";
-import type { ExamMidSettings, MidOutcomeSwitches, MidPreparation } from "@/types";
+import type { ExamMidSettings, MidAssignment, MidOutcomeSwitches, MidPreparation } from "@/types";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ALL_OUTCOMES_ON, outcomeSwitches } from "@/lib/midBank/outcomeSwitches";
 
@@ -66,6 +66,7 @@ function MidSettings() {
   const [settings, setSettings] = useState<ExamMidSettings | null>(null);
   const [midCount, setMidCount] = useState("2");
   const [preparation, setPreparation] = useState<MidPreparation>("BANK");
+  const [assignment, setAssignment] = useState<MidAssignment>("SELF");
   const [outcomes, setOutcomes] = useState<MidOutcomeSwitches>(ALL_OUTCOMES_ON);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -79,6 +80,7 @@ function MidSettings() {
           setSettings(data.settings);
           if (data.settings.midCount > 0) setMidCount(String(data.settings.midCount));
           setPreparation(data.settings.midPreparation === "PAPERS" ? "PAPERS" : "BANK");
+          setAssignment(data.settings.midAssignment === "HOD" ? "HOD" : "SELF");
           setOutcomes(outcomeSwitches(data.settings.outcomes));
         }
       } catch {
@@ -100,7 +102,7 @@ function MidSettings() {
       const res = await fetch("/api/college/exam-mid-settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ midCount: count, midPreparation: preparation, outcomes }),
+        body: JSON.stringify({ midCount: count, midPreparation: preparation, midAssignment: assignment, outcomes }),
       });
       const data = (await res.json()) as { settings?: ExamMidSettings; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed to save");
@@ -171,6 +173,18 @@ function MidSettings() {
             ] as const).map(([v, label, hint]) => (
               <label key={v} className={cn("flex cursor-pointer items-start gap-3 rounded-lg border p-3", preparation === v && "border-primary bg-primary/5")}>
                 <input type="radio" name="midPreparation" className="mt-1" checked={preparation === v} onChange={() => setPreparation(v)} />
+                <span><span className="block text-sm font-medium">{label}</span><span className="block text-xs text-muted-foreground">{hint}</span></span>
+              </label>
+            ))}
+          </div>
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Who prepares</p>
+            {([
+              ["SELF", "Every faculty member teaching the subject", "When the Exam Cell sets the deadline, everyone teaching a subject is told and starts their own, for the sections they pick."],
+              ["HOD", "The subject's HOD assigns the setters", "The deadline goes to each subject's HOD (its Subject Department, else the branch HOD), who assigns one or more faculty - per branch, or one paper for all branches. Only they prepare it; others teaching it can view it and give suggestions."],
+            ] as const).map(([v, label, hint]) => (
+              <label key={v} className={cn("flex cursor-pointer items-start gap-3 rounded-lg border p-3", assignment === v && "border-primary bg-primary/5")}>
+                <input type="radio" name="midAssignment" className="mt-1" checked={assignment === v} onChange={() => setAssignment(v)} />
                 <span><span className="block text-sm font-medium">{label}</span><span className="block text-xs text-muted-foreground">{hint}</span></span>
               </label>
             ))}
