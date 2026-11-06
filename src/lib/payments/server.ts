@@ -43,14 +43,18 @@ export function settingsView(s: CcavenueSettings | null): CcavenueSettingsView {
   return {
     enabled: !!s?.enabled, env: s?.env ?? "TEST", merchantId: s?.merchantId ?? "", accessCode: s?.accessCode ?? "",
     hasWorkingKey: !!s?.workingKeyEnc, updatedAt: s?.updatedAt, updatedByName: s?.updatedByName,
+    apiKeys: (s?.apiKeys ?? []).map((k) => ({ label: k.label, accessCode: k.accessCode, hasWorkingKey: !!k.workingKeyEnc })),
   };
 }
 
 /** The college's account ready to use (with its Working Key), or null when online payment is off / incomplete. */
-export async function activeCcavenue(db: Firestore, collegeId: string): Promise<(CcavenueSettings & { workingKey: string }) | null> {
+export async function activeCcavenue(db: Firestore, collegeId: string): Promise<(CcavenueSettings & { workingKey: string; fallbacks: { accessCode: string; workingKey: string }[] }) | null> {
   const s = await loadCcavenue(db, collegeId);
   if (!s?.enabled || !s.merchantId || !s.accessCode || !s.workingKeyEnc) return null;
-  try { return { ...s, workingKey: openSecret(s.workingKeyEnc) }; } catch { return null; }
+  try {
+    const fallbacks = (s.apiKeys ?? []).flatMap((k) => { try { return [{ accessCode: k.accessCode, workingKey: openSecret(k.workingKeyEnc) }]; } catch { return []; } });
+    return { ...s, workingKey: openSecret(s.workingKeyEnc), fallbacks };
+  } catch { return null; }
 }
 
 /** The public base URL CCAvenue sends the student back to (APP_URL, else the request's own origin). */

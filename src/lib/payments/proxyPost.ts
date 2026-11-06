@@ -7,10 +7,21 @@ import tls from "tls";
 // the proxy's fixed IP, which CCAvenue has whitelisted. ONLY the CCAvenue API calls use this; the rest of
 // the app goes out as usual. Without the variable it refuses (CCAvenue would reject a direct call).
 
-export const paymentProxyConfigured = () => !!process.env.PAYMENT_PROXY_URL;
+// PAYMENT_STATIC_EGRESS=vercel instead: the project has Vercel Static IPs on, so EVERY outgoing call already leaves
+// from the whitelisted IPs - the call is made directly (no proxy).
+const vercelStaticIps = () => (process.env.PAYMENT_STATIC_EGRESS ?? "").trim().toLowerCase() === "vercel";
+export const paymentProxyConfigured = () => !!process.env.PAYMENT_PROXY_URL || vercelStaticIps();
 
 export async function proxyPostForm(url: string, form: Record<string, string>, timeoutMs = 20_000): Promise<{ status: number; body: string }> {
   const proxyRaw = process.env.PAYMENT_PROXY_URL;
+  if (!proxyRaw && vercelStaticIps()) {
+    if (new URL(url).protocol !== "https:") throw new Error("HTTPS_ONLY");
+    const res = await fetch(url, {
+      method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams(form).toString(), signal: AbortSignal.timeout(timeoutMs), cache: "no-store",
+    });
+    return { status: res.status, body: await res.text() };
+  }
   if (!proxyRaw) throw new Error("PAYMENT_PROXY_NOT_CONFIGURED");
   const proxy = new URL(proxyRaw);
   const target = new URL(url);

@@ -41,6 +41,14 @@ export interface CcavOrder {
   merchantParam2?: string;
 }
 
+/** A name as CCAvenue accepts it: letters and single spaces, at most 60. */
+export const ccavName = (n?: string) => (n ?? "").normalize("NFKD").replace(/[^A-Za-z ]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
+
+/** redirect_url / cancel_url may only hold letters, numbers, / _ ? (and the scheme / host): no hyphens in the path. */
+export const ccavUrlOk = (u: string) => {
+  try { const x = new URL(u); return /^[A-Za-z0-9/_?=&]*$/.test(x.pathname + x.search) && u.length <= 100; } catch { return false; }
+};
+
 /** The plain request string (encrypt it with `ccavEncrypt`). */
 export function ccavRequestString(o: CcavOrder): string {
   const p = new URLSearchParams({
@@ -52,8 +60,12 @@ export function ccavRequestString(o: CcavOrder): string {
     cancel_url: o.cancelUrl,
     language: "EN",
   });
-  if (o.billingName) p.set("billing_name", o.billingName.slice(0, 60));
-  if (o.billingEmail) p.set("billing_email", o.billingEmail.slice(0, 70));
+  // CCAvenue's field rules (Integration Document 4.8): a name is letters + spaces only; an email only letters,
+  // numbers, @ . _ (one with other characters is left out rather than refused); a phone digits only.
+  const name = ccavName(o.billingName);
+  if (name) p.set("billing_name", name);
+  const email = (o.billingEmail ?? "").trim();
+  if (email && email.length <= 70 && /^[A-Za-z0-9._]+@[A-Za-z0-9._]+$/.test(email)) p.set("billing_email", email);
   if (o.billingTel) p.set("billing_tel", o.billingTel.replace(/\D/g, "").slice(-10));
   if (o.merchantParam1) p.set("merchant_param1", o.merchantParam1);
   if (o.merchantParam2) p.set("merchant_param2", o.merchantParam2);

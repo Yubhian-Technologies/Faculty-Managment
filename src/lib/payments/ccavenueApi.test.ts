@@ -2,7 +2,7 @@ import http from "http";
 import type { AddressInfo } from "net";
 import { afterEach, describe, expect, it } from "vitest";
 import { ccavEncrypt } from "./ccavenue";
-import { readApiAnswer, statusAsResponse, statusOutcome } from "./ccavenueApi";
+import { CcavApiRefused, callApi, readApiAnswer, statusAsResponse, statusOutcome } from "./ccavenueApi";
 import { proxyPostForm } from "./proxyPost";
 
 const KEY = "ABCDEF0123456789ABCDEF0123456789";
@@ -29,6 +29,28 @@ describe("CCAvenue API answers", () => {
     expect(r).toMatchObject({ orderId: "FMS1", outcome: "SUCCESS", amount: 150, trackingId: "3100", bankRefNo: "BR", currency: "INR" });
     expect(statusAsResponse("FMS1", { order_status: "Awaited" })).toBeNull();
     expect(() => statusAsResponse("FMS1", { status: 1, error_desc: "No records found" })).toThrow(/No records/);
+  });
+});
+
+describe("one key per proxy IP: callApi tries the keys in turn", () => {
+  const K2 = "BBBBBB0123456789ABCDEF0123456789";
+  const acc = { env: "TEST" as const, accessCode: "WEBSITE", workingKey: KEY, fallbacks: [{ accessCode: "IP2", workingKey: K2 }] };
+  it("the website key is refused from this IP -> the IP's key is used", async () => {
+    const tried: string[] = [];
+    const post = async (_u: string, f: Record<string, string>) => {
+      tried.push(f.access_code);
+      return f.access_code === "IP2"
+        ? { status: 200, body: `status=0&enc_response=${ccavEncrypt(JSON.stringify({ order_status: "Successful" }), K2)}` }
+        : { status: 200, body: "status=1&enc_response=Access_code: Invalid Parameter" };
+    };
+    expect(await callApi(acc, "orderStatusTracker", { order_no: "FMS1" }, post)).toEqual({ order_status: "Successful" });
+    expect(tried).toEqual(["WEBSITE", "IP2"]);
+  });
+  it("every key refused -> a clear refusal; a network error stops at once", async () => {
+    await expect(callApi(acc, "x", {}, async () => ({ status: 200, body: "status=1&enc_response=IP not whitelisted" }))).rejects.toBeInstanceOf(CcavApiRefused);
+    let n = 0;
+    await expect(callApi(acc, "x", {}, async () => { n++; throw new Error("ECONNRESET"); })).rejects.toThrow("ECONNRESET");
+    expect(n).toBe(1);
   });
 });
 
@@ -59,6 +81,18 @@ describe("proxyPostForm (static-IP proxy only for payment calls)", () => {
     expect(seen.method).toBe("CONNECT");
     expect(seen.url).toBe("api.ccavenue.com:443");
     expect(seen.auth).toBe(`Basic ${Buffer.from("user:p@ss").toString("base64")}`);
+  });
+
+  it("Vercel Static IPs: called directly, no proxy needed", async () => {
+    delete process.env.PAYMENT_PROXY_URL;
+    process.env.PAYMENT_STATIC_EGRESS = "vercel";
+    const real = globalThis.fetch;
+    let seen = "";
+    globalThis.fetch = (async (u: string, init?: RequestInit) => { seen = `${u}|${String(init?.body)}`; return new Response("status=0&enc_response=x", { status: 200 }); }) as typeof fetch;
+    try {
+      expect(await proxyPostForm("https://apitest.ccavenue.com/apis/servlet/DoWebTrans", { a: "1" })).toEqual({ status: 200, body: "status=0&enc_response=x" });
+      expect(seen).toBe("https://apitest.ccavenue.com/apis/servlet/DoWebTrans|a=1");
+    } finally { globalThis.fetch = real; delete process.env.PAYMENT_STATIC_EGRESS; }
   });
 
   it("only HTTPS targets", async () => {

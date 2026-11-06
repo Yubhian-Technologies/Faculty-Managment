@@ -3,7 +3,7 @@ import { FakeFirestore, asFirestore } from "@/test-support/fakeFirestore";
 
 vi.mock("@/lib/firebase/admin", () => ({ getAdminDb: () => ({}) }));
 
-import { ccavDecrypt, ccavEncrypt, ccavParseResponse, ccavRequestString, ccavAmount, sameAmount } from "./ccavenue";
+import { ccavDecrypt, ccavEncrypt, ccavName, ccavParseResponse, ccavRequestString, ccavAmount, ccavUrlOk, sameAmount } from "./ccavenue";
 import { decideSettlement, settlePayment } from "./settle";
 import { openSecret, sealSecret } from "./secretBox";
 
@@ -38,6 +38,17 @@ describe("CCAvenue request / response format", () => {
     expect(s.get("billing_tel")).toBe("9876543210");
     expect(s.get("merchant_param1")).toBe("c1");
     expect(ccavAmount(99.999)).toBe("100.00");
+  });
+
+  it("follows CCAvenue's field rules (Integration Document 4.8)", () => {
+    expect(ccavName("K. Venkata Rao")).toBe("K Venkata Rao");
+    expect(ccavName("  Sri-Lakshmi  O'Neil ")).toBe("Sri Lakshmi O Neil");
+    const ok = new URLSearchParams(ccavRequestString({ merchantId: "1", orderId: "FMS1", amount: 1, redirectUrl: "https://x/a", cancelUrl: "https://x/a", billingEmail: "a.b_c@vit.edu.in" }));
+    expect(ok.get("billing_email")).toBe("a.b_c@vit.edu.in");
+    const bad = new URLSearchParams(ccavRequestString({ merchantId: "1", orderId: "FMS1", amount: 1, redirectUrl: "https://x/a", cancelUrl: "https://x/a", billingEmail: "a-b+c@vit.edu.in" }));
+    expect(bad.has("billing_email")).toBe(false);
+    expect(ccavUrlOk("https://www.vishnupeople.in/api/public/ccavenue_response/fffeab8b168a4b449dea")).toBe(true);
+    expect(ccavUrlOk("https://www.vishnupeople.in/api/public/ccavenue-response/x")).toBe(false);
   });
 
   it("reads the result: only Success is paid, Aborted is cancelled", () => {

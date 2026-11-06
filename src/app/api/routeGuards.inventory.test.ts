@@ -56,7 +56,7 @@ const EXEMPT = new Set([
   "PATCH public/candidate-form/[collegeId]/[candidateId]", "POST public/careers/[collegeId]",
   "POST public/offer-acceptance/[collegeId]/[offerId]", "POST public/student-feedback",
   // CCAvenue's browser post of a payment result - trusted only by decrypting with the college's Working Key.
-  "POST public/ccavenue-response/[collegeId]",
+  "POST public/ccavenue_response/[collegeId]",
 ]);
 
 // Calls that ARE a role guard (the require* family, plus the wrappers that call it).

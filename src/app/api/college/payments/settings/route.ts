@@ -27,7 +27,7 @@ export async function PUT(request: Request) {
   try {
     const db = getAdminDb();
     const session = await requirePaymentsManager(db, request);
-    const body = (await readJsonBody(request)) as { enabled?: unknown; env?: unknown; merchantId?: unknown; accessCode?: unknown; workingKey?: unknown };
+    const body = (await readJsonBody(request)) as { enabled?: unknown; env?: unknown; merchantId?: unknown; accessCode?: unknown; workingKey?: unknown; apiKeys?: unknown };
     const merchantId = String(body.merchantId ?? "").trim();
     const accessCode = String(body.accessCode ?? "").trim();
     const workingKey = String(body.workingKey ?? "").trim();
@@ -40,16 +40,33 @@ export async function PUT(request: Request) {
 
     const cur = await loadCcavenue(db, session.collegeId);
     const workingKeyEnc = workingKey ? sealSecret(workingKey) : cur?.workingKeyEnc;
+    // Extra API keys per whitelisted proxy IP: { label, accessCode, workingKey? } - a blank key keeps the saved one
+    // of the same access code. Left out = keep them as they are.
+    let apiKeys = cur?.apiKeys ?? [];
+    if (Array.isArray(body.apiKeys)) {
+      if (body.apiKeys.length > 5) throw new PaymentError("At most 5 extra API keys");
+      apiKeys = (body.apiKeys as { label?: unknown; accessCode?: unknown; workingKey?: unknown }[]).map((k, i) => {
+        const label = String(k?.label ?? "").trim().slice(0, 60) || `Key ${i + 1}`;
+        const code = String(k?.accessCode ?? "").trim();
+        const key = String(k?.workingKey ?? "").trim();
+        if (!/^[A-Za-z0-9]{6,40}$/.test(code)) throw new PaymentError(`${label}: the Access Code looks wrong`);
+        if (key && !/^[A-Za-z0-9]{16,64}$/.test(key)) throw new PaymentError(`${label}: the Working Key looks wrong`);
+        if (key && !paymentSecretConfigured()) throw new PaymentError("Online payment isn't set up on the server yet (PAYMENT_CONFIG_SECRET) - ask the administrator", 503);
+        const enc = key ? sealSecret(key) : cur?.apiKeys?.find((x) => x.accessCode === code)?.workingKeyEnc;
+        if (!enc) throw new PaymentError(`${label}: enter its Working Key`);
+        return { label, accessCode: code, workingKeyEnc: enc };
+      });
+    }
     if (enabled && (!merchantId || !accessCode || !workingKeyEnc)) throw new PaymentError("Enter the Merchant ID, Access Code and Working Key before turning online payment on");
     const actor = session.email;
     const next: CcavenueSettings = {
-      enabled, env, merchantId, accessCode, ...(workingKeyEnc ? { workingKeyEnc } : {}),
+      enabled, env, merchantId, accessCode, ...(workingKeyEnc ? { workingKeyEnc } : {}), apiKeys,
       updatedAt: new Date().toISOString(), updatedByName: actor,
     };
     await paymentRefs(db, session.collegeId).settings.set(next);
     await writeAuditLogSafe(db, session.collegeId, {
       action: "PAYMENT_SETTINGS_UPDATED", performedBy: session.uid, performedByName: actor, targetId: "ccavenue",
-      details: { enabled, env, merchantId, workingKeyChanged: !!workingKey },
+      details: { enabled, env, merchantId, workingKeyChanged: !!workingKey, apiKeys: apiKeys.map((k) => k.label) },
     });
     return NextResponse.json({ settings: settingsView(next), secretConfigured: paymentSecretConfigured(), proxyConfigured: paymentProxyConfigured() });
   } catch (err) {

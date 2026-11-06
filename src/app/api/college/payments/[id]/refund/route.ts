@@ -7,7 +7,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { notify } from "@/lib/notify";
 import { CERTIFICATE_REQUESTS_COL } from "@/lib/certifications/transitions";
-import { refundOrder } from "@/lib/payments/ccavenueApi";
+import { CcavApiRefused, refundOrder } from "@/lib/payments/ccavenueApi";
 import { paymentProxyConfigured } from "@/lib/payments/proxyPost";
 import { activeCcavenue, PaymentError, paymentErrorResponse, paymentOf, paymentRefs, paymentView, requirePaymentsManager } from "@/lib/payments/server";
 import type { CertificateRequest, Payment, PaymentRefund } from "@/types";
@@ -88,6 +88,11 @@ export async function POST(request: Request, { params }: Params) {
       let answer: { ok: boolean; reason: string };
       try { answer = await refundOrder(account, claimed.trackingId, amount, claimed.refundRef); }
       catch (e) {
+        // Refused by CCAvenue (every key): nothing was refunded - release the claim and say why.
+        if (e instanceof CcavApiRefused) {
+          await ref.update({ refundPending: null });
+          throw new PaymentError(e.message, 409);
+        }
         // Unknown whether CCAvenue did it: keep the claim (5 minutes) and say so - check their dashboard first.
         console.error("[college/payments/[id]/refund CCAvenue]", e);
         throw new PaymentError("CCAvenue didn't answer - check the order in their dashboard before trying again", 503);
