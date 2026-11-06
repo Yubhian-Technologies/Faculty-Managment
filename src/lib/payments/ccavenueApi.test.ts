@@ -83,6 +83,18 @@ describe("proxyPostForm (static-IP proxy only for payment calls)", () => {
     expect(seen.auth).toBe(`Basic ${Buffer.from("user:p@ss").toString("base64")}`);
   });
 
+  it("Vercel Static IPs: called directly, no proxy needed", async () => {
+    delete process.env.PAYMENT_PROXY_URL;
+    process.env.PAYMENT_STATIC_EGRESS = "vercel";
+    const real = globalThis.fetch;
+    let seen = "";
+    globalThis.fetch = (async (u: string, init?: RequestInit) => { seen = `${u}|${String(init?.body)}`; return new Response("status=0&enc_response=x", { status: 200 }); }) as typeof fetch;
+    try {
+      expect(await proxyPostForm("https://apitest.ccavenue.com/apis/servlet/DoWebTrans", { a: "1" })).toEqual({ status: 200, body: "status=0&enc_response=x" });
+      expect(seen).toBe("https://apitest.ccavenue.com/apis/servlet/DoWebTrans|a=1");
+    } finally { globalThis.fetch = real; delete process.env.PAYMENT_STATIC_EGRESS; }
+  });
+
   it("only HTTPS targets", async () => {
     process.env.PAYMENT_PROXY_URL = "http://127.0.0.1:1";
     await expect(proxyPostForm("http://api.ccavenue.com/x", {})).rejects.toThrow("HTTPS_ONLY");

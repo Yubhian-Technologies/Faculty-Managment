@@ -118,8 +118,8 @@ function CcavenueCard({ collegeId, onProxy }: { collegeId: string; onProxy: (on:
       </div>
       <p className="text-xs text-muted-foreground">
         {proxy
-          ? "Static IP proxy: on - status checks and refunds go to CCAvenue's API through it (only these calls; the rest of FMS is unchanged). Unfinished payments are also checked every 15 minutes."
-          : "Static IP proxy: not set up - check unfinished payments and make refunds in the CCAvenue dashboard, then record refunds here."}
+          ? "Static IP: on - status checks and refunds go to CCAvenue's API from the whitelisted static IPs. Unfinished payments are also checked every 15 minutes."
+          : "Static IP: not set up - check unfinished payments and make refunds in the CCAvenue dashboard, then record refunds here."}
       </p>
       <div className="flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-2 text-sm"><Checkbox checked={form.enabled} onCheckedChange={(v) => setForm({ ...form, enabled: v === true })} />Students can pay online</label>
