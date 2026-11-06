@@ -18,12 +18,17 @@ import type { MidBankApprovalEntry, MidBankDeadline, MidQuestionBank } from "@/t
 // every section, which bank covers it, each bank's progress and HOD approval,
 // and the sections nobody has started yet. The Exam Cell sees every branch
 // (banks before approval too, with their status); an HOD their own branches,
-// opening a bank to approve or return it.
+// opening a bank to approve or return it. A subject looked after by another department
+// (Subject Department) is reviewed by that department's HOD; the branch HOD sees its progress only.
 
 interface Progress {
   deadline: MidBankDeadline & { locked: boolean };
   groups: {
     branch: string; subjectId: string; subjectName: string; subjectCode: string;
+    /** The departments whose HODs review this subject's banks (the Subject Departments, else the branch); either decides. */
+    reviewDepartments?: string[];
+    /** This viewer may open the banks (false: the branch HOD of a subject another department looks after). */
+    canOpen?: boolean;
     sections: { sectionId: string; sectionName: string; facultyNames: string[]; bankId: string | null; ownerName: string | null }[];
     banks: { id: string; ownerName: string; sections: string[]; status: MidQuestionBank["status"]; approval: MidQuestionBank["approval"] | null; lastApproval: MidBankApprovalEntry | null; completeCount: number; totalCount: number; updatedAt: string | null }[];
   }[];
@@ -114,6 +119,7 @@ export function QuestionBankProgress({ deadlineId, base, examCell }: { deadlineI
                         <p className="flex items-center gap-2 text-xs text-muted-foreground">{g.subjectCode}
                           <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_CLASS[groupStatus(g)]}`}>{STATUS_LABEL[groupStatus(g)]}</span>
                         </p>
+                        {g.reviewDepartments && (g.reviewDepartments.length > 1 || g.reviewDepartments[0] !== g.branch) && <p className="text-[11px] text-muted-foreground">Reviewed by the {g.reviewDepartments.join(" or ")} HOD</p>}
                       </td>
                       <td className="p-3">
                         <div className="flex flex-wrap gap-1">
@@ -131,13 +137,15 @@ export function QuestionBankProgress({ deadlineId, base, examCell }: { deadlineI
                               const pct = b.totalCount ? Math.round((b.completeCount / b.totalCount) * 100) : 0;
                               return (
                                 <li key={b.id} className="flex items-center gap-2">
-                                  <Link className="text-primary underline" href={`${base}/${encodeURIComponent(deadlineId)}/${encodeURIComponent(b.id)}`}>{b.ownerName}</Link>
+                                  {g.canOpen === false
+                                    ? <span>{b.ownerName}</span>
+                                    : <Link className="text-primary underline" href={`${base}/${encodeURIComponent(deadlineId)}/${encodeURIComponent(b.id)}`}>{b.ownerName}</Link>}
                                   <span className="text-xs text-muted-foreground">sec {b.sections.join(", ")}</span>
                                   {(() => { const st = bankStage({ status: b.status, approval: b.approval ?? undefined }); return (
                                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${STAGE_CLASS[st]}`} title={b.lastApproval ? `${b.lastApproval.byName}${b.lastApproval.remarks ? ` - ${b.lastApproval.remarks}` : ""}` : undefined}>
                                       {st === "IN_PROGRESS" ? `${pct}%` : STAGE_LABEL[st]}
                                     </span>); })()}
-                                  {!examCell && b.approval === "SUBMITTED" && <Button asChild size="sm" variant="outline" className="h-7"><Link href={`${base}/${encodeURIComponent(deadlineId)}/${encodeURIComponent(b.id)}`}>Review</Link></Button>}
+                                  {!examCell && g.canOpen !== false && b.approval === "SUBMITTED" && <Button asChild size="sm" variant="outline" className="h-7"><Link href={`${base}/${encodeURIComponent(deadlineId)}/${encodeURIComponent(b.id)}`}>Review</Link></Button>}
                                 </li>
                               );
                             })}

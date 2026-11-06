@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Info, Lock, Pencil, RefreshCw } from "lucide-react";
+import { FileText, Info, Lock, Pencil, RefreshCw } from "lucide-react";
+import { istDateKey } from "@/lib/attendance/istTime";
+import { downloadMidPaperFinalPdf } from "@/lib/pdf/downloadMidPaperSet";
+import type { MidPaperFinal } from "@/types";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -47,6 +50,19 @@ export default function InternalExamPage() {
   const [marksDraft, setMarksDraft] = useState<Record<string, Record<string, string>>>({});
   // Components taken from a Mid question paper: their question columns, and studentId -> componentId -> key -> value.
   const [sheets, setSheets] = useState<Record<string, QuestionSheet>>({});
+  const [viewing, setViewing] = useState("");
+  /** The finalized paper (as printed by the Exam Cell, no answer key) - from the exam date on. */
+  async function viewPaper(choiceId: string) {
+    setViewing(choiceId);
+    try {
+      const res = await fetch(`/api/college/mid-paper-choices/final?choiceId=${encodeURIComponent(choiceId)}`);
+      const json = (await res.json()) as { final?: MidPaperFinal; error?: string };
+      if (!res.ok || !json.final) throw new Error(json.error ?? "Could not load the question paper");
+      const f = json.final;
+      await downloadMidPaperFinalPdf(f, { fileName: `MID${f.exam.midNumber}_${f.exam.date}_${f.branchCode}_${f.subject.code}` });
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not load the question paper" }); }
+    finally { setViewing(""); }
+  }
   const [questionDraft, setQuestionDraft] = useState<Record<string, Record<string, Record<string, string>>>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -365,6 +381,22 @@ export default function InternalExamPage() {
                   </CardContent>
                 </Card>
               ) : (
+                <>
+                {activeComponents.some((c) => sheets[c.id]?.paper) && (
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    {activeComponents.filter((c) => sheets[c.id]?.paper).map((c) => {
+                      const ref = sheets[c.id].paper!;
+                      const open = ref.date <= istDateKey();
+                      return (
+                        <Button key={c.id} size="sm" variant="outline" disabled={!open || viewing === ref.choiceId} loading={viewing === ref.choiceId}
+                          title={open ? "The paper as the Exam Cell printed it - marks are entered against it" : `Available from the exam date (${ref.date})`}
+                          onClick={() => void viewPaper(ref.choiceId)}>
+                          <FileText className="mr-1.5 h-4 w-4" />{c.name}: question paper{open ? "" : ` (from ${ref.date})`}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                )}
                 <Card className="overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
@@ -426,6 +458,7 @@ export default function InternalExamPage() {
                     </table>
                   </div>
                 </Card>
+                </>
               )}
 
               {batch.totalStudents > 0 && (

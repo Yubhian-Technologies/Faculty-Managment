@@ -45,8 +45,9 @@ export async function GET(_request: Request, { params }: Params) {
       subject: {
         id: bank.subjectId, name: bank.subjectName, code: bank.subjectCode, courseName: bank.courseName,
         regulation: subject?.regulation ?? "", year: bank.year, semester: bank.semester, branch: bank.branch,
+        syllabusUrl: subject?.syllabusUrl ?? null, syllabusFileName: subject?.syllabusFileName ?? null,
       },
-      access: { isOwner: access.isOwner, isIncluded: access.isIncluded, canWrite: access.canWrite, locked: access.locked, isHod: access.isHod, frozen: access.frozen },
+      access: { isOwner: access.isOwner, isIncluded: access.isIncluded, canWrite: access.canWrite, locked: access.locked, isHod: access.isHod, frozen: access.frozen, reviewDepartments: access.reviewDepartments },
     });
   } catch (err) {
     return guardError(err, "[college/mid-question-banks/[id] GET]");

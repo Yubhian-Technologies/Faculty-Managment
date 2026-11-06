@@ -230,3 +230,72 @@ describe("SubjectMasterService.remove", () => {
     expect(subjects()).toHaveLength(1);
   });
 });
+
+describe("SubjectMasterService.setOwnerDepartments / setSyllabus", () => {
+  async function twoSubjects() {
+    await svc.importMany({ collegeId: "c1", courseId: "c-cse", regulation: "R20", records: [row(), row({ name: "Maths I", code: "MA101" })] });
+    fake.seed(`${C}/departments/bsm`, { name: "Basic Science - Maths" });
+    fake.seed(`${C}/departments/bsp`, { name: "Basic Science - Physics" });
+    fake.seed(`${C}/departments/bsc`, { name: "Basic Science - Chemistry" });
+    return subjects().map((k) => k.split("/").pop()!);
+  }
+  const owners = (id: string) => (fake.read(`${C}/subjects/${id}`)!.ownerDepartments as { id: string }[] | undefined)?.map((d) => d.id) ?? [];
+
+  it("sets one or two, adds, removes and clears - only these fields", async () => {
+    const ids = await twoSubjects();
+    const before = fake.read(`${C}/subjects/${ids[0]}`)!;
+    expect(await svc.setOwnerDepartments({ collegeId: "c1", subjectIds: ids, mode: "SET", departmentIds: ["bsm"] })).toEqual({ updated: 2 });
+    const after = fake.read(`${C}/subjects/${ids[0]}`)!;
+    expect(after.ownerDepartments).toEqual([{ id: "bsm", name: "Basic Science - Maths" }]);
+    expect(after.ownerDepartmentIds).toEqual(["bsm"]);
+    expect(after.code).toBe(before.code);
+    expect(after.credits).toBe(before.credits);
+    // Same again: nothing changes.
+    expect(await svc.setOwnerDepartments({ collegeId: "c1", subjectIds: ids, mode: "SET", departmentIds: ["bsm"] })).toEqual({ updated: 0 });
+
+    await svc.setOwnerDepartments({ collegeId: "c1", subjectIds: [ids[0]], mode: "ADD", departmentIds: ["bsp"] });
+    expect(owners(ids[0])).toEqual(["bsm", "bsp"]);
+    await svc.setOwnerDepartments({ collegeId: "c1", subjectIds: [ids[0]], mode: "REMOVE", departmentIds: ["bsm"] });
+    expect(owners(ids[0])).toEqual(["bsp"]);
+    await svc.setOwnerDepartments({ collegeId: "c1", subjectIds: [ids[1]], mode: "SET", departmentIds: ["bsp", "bsc"] });
+    expect(owners(ids[1])).toEqual(["bsp", "bsc"]);
+    await svc.setOwnerDepartments({ collegeId: "c1", subjectIds: [ids[1]], mode: "SET", departmentIds: [] });
+    expect(fake.read(`${C}/subjects/${ids[1]}`)!.ownerDepartments).toBeUndefined();
+    expect(fake.read(`${C}/subjects/${ids[1]}`)!.ownerDepartmentIds).toBeUndefined();
+  });
+
+  it("at most two: a third is refused for the whole request", async () => {
+    const ids = await twoSubjects();
+    await svc.setOwnerDepartments({ collegeId: "c1", subjectIds: [ids[0]], mode: "SET", departmentIds: ["bsm", "bsp"] });
+    await expect(svc.setOwnerDepartments({ collegeId: "c1", subjectIds: ids, mode: "ADD", departmentIds: ["bsc"] })).rejects.toBeInstanceOf(SubjectRequestError);
+    expect(owners(ids[0])).toEqual(["bsm", "bsp"]);
+    expect(owners(ids[1])).toEqual([]); // the other subject wasn't touched either
+    await expect(svc.setOwnerDepartments({ collegeId: "c1", subjectIds: ids, mode: "SET", departmentIds: ["bsm", "bsp", "bsc"] })).rejects.toBeInstanceOf(SubjectRequestError);
+  });
+
+  it("folds a single department saved before lists into the list", async () => {
+    const [id] = await twoSubjects();
+    fake.seed(`${C}/subjects/${id}`, { ...fake.read(`${C}/subjects/${id}`)!, ownerDepartmentId: "bsm", ownerDepartmentName: "Basic Science - Maths" });
+    await svc.setOwnerDepartments({ collegeId: "c1", subjectIds: [id], mode: "ADD", departmentIds: ["bsc"] });
+    const doc = fake.read(`${C}/subjects/${id}`)!;
+    expect(owners(id)).toEqual(["bsm", "bsc"]);
+    expect(doc.ownerDepartmentId).toBeUndefined();
+  });
+
+  it("refuses an unknown department or subject, and writes nothing", async () => {
+    const ids = await twoSubjects();
+    await expect(svc.setOwnerDepartments({ collegeId: "c1", subjectIds: ids, mode: "SET", departmentIds: ["nope"] })).rejects.toBeInstanceOf(SubjectRequestError);
+    await expect(svc.setOwnerDepartments({ collegeId: "c1", subjectIds: [...ids, "missing"], mode: "SET", departmentIds: ["bsm"] })).rejects.toBeInstanceOf(SubjectRequestError);
+    await expect(svc.setOwnerDepartments({ collegeId: "c1", subjectIds: [], mode: "SET", departmentIds: ["bsm"] })).rejects.toBeInstanceOf(SubjectRequestError);
+    await expect(svc.setOwnerDepartments({ collegeId: "c1", subjectIds: ids, mode: "ADD", departmentIds: [] })).rejects.toBeInstanceOf(SubjectRequestError);
+    expect(ids.every((id) => owners(id).length === 0)).toBe(true);
+  });
+
+  it("saves and removes a syllabus", async () => {
+    const [id] = await twoSubjects();
+    await svc.setSyllabus({ collegeId: "c1", id, file: { url: "https://x/s.pdf", fileName: "s.pdf" }, actor: { uid: "u", name: "Dean" } });
+    expect(fake.read(`${C}/subjects/${id}`)!).toMatchObject({ syllabusUrl: "https://x/s.pdf", syllabusFileName: "s.pdf", syllabusUpdatedByName: "Dean" });
+    await svc.setSyllabus({ collegeId: "c1", id, file: null });
+    expect(fake.read(`${C}/subjects/${id}`)!.syllabusUrl).toBeUndefined();
+  });
+});

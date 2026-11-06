@@ -130,6 +130,7 @@ export default function FacultyQuestionBankPage() {
                             <span className={`mr-auto flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${STAGE_CLASS[st]}`}>{st === "APPROVED" && <CheckCircle2 className="h-3.5 w-3.5" />}{st === "READY" ? "Complete - submit to HOD" : STAGE_LABEL[st]}</span>); })()}
                           {i.myBank ? (
                             <>
+                              {!d.locked && <Button asChild size="sm" variant="ghost"><Link href={`${prepareHref(i)}&step=2`}>Edit units &amp; COs</Link></Button>}
                               <Button asChild size="sm" variant="outline"><Link href={`/panel/mid-bank/${encodeURIComponent(i.myBank.id)}/review`}>Review</Link></Button>
                               {!d.locked && (i.myBank.status !== "COMPLETE" || i.myBank.approval === "RETURNED") && <Button asChild size="sm"><Link href={`/panel/mid-bank/${encodeURIComponent(i.myBank.id)}`}>Continue</Link></Button>}
                             </>

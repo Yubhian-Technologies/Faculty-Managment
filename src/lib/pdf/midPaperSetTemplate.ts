@@ -32,6 +32,9 @@ export interface PaperSetPdfData {
   mapping?: Record<string, string[]>;
   formula?: (latex: string, display: boolean) => string;
   answerKey?: boolean;
+  /** Print only this part, as its own sheet with its own header (time + max marks below). Numbers stay as in the full paper. */
+  onlyPartId?: string;
+  partHeader?: { durationMinutes: number; maxMarks: number };
 }
 
 export function getMidPaperSetHTML(d: PaperSetPdfData): string {
@@ -51,8 +54,11 @@ export function getMidPaperSetHTML(d: PaperSetPdfData): string {
   }).join("");
 
   let no = 0;
+  const only = d.onlyPartId ? d.pattern.parts.find((p) => p.id === d.onlyPartId) : undefined;
   const parts = d.pattern.parts.map((part) => {
     const count = part.flexible ? d.questions.filter((q) => q.set === d.set && q.partId === part.id).length : part.questions;
+    // Another part when printing one part alone: only its numbers are counted, so this part's numbers stay the same.
+    if (only && part.id !== only.id) { no += count; return ""; }
     let rows = `<tr class="unit"><td colspan="2">${esc(part.label.toUpperCase())} - ${esc(part.title)}<br /><span style="font-weight:normal">${esc(choiceText(part, part.flexible ? count : undefined))}</span></td><td class="num colhead">${partMax(part)} M</td>${extra.map((x) => `<td class="${x === "PO" ? "po" : "num"} colhead">${x}</td>`).join("")}</tr>`;
     for (let i = 1; i <= count; i++) {
       no++;
@@ -84,9 +90,10 @@ export function getMidPaperSetHTML(d: PaperSetPdfData): string {
     return rows;
   }).join("");
 
-  const used = [...new Set(d.questions.filter((q) => q.set === d.set).flatMap((q) => q.cos))].sort((a, b) => Number(a.slice(2)) - Number(b.slice(2)));
+  const used = [...new Set(d.questions.filter((q) => q.set === d.set && (!only || q.partId === only.id)).flatMap((q) => q.cos))].sort((a, b) => Number(a.slice(2)) - Number(b.slice(2)));
   const coList = sw.cos && !d.answerKey ? (d.cos ?? []).filter((c) => used.includes(c.id)).map((c) => `<p><b>${esc(c.id.replace(/^CO/, ""))}.</b> ${esc(c.statement)}</p>`).join("") : "";
-  const maxMarks = patternMax(d.pattern);
+  const maxMarks = only ? (d.partHeader?.maxMarks ?? partMax(only)) : patternMax(d.pattern);
+  const duration = only ? (d.partHeader?.durationMinutes ?? d.pattern.durationMinutes) : d.pattern.durationMinutes;
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8" /><style>${PAPER_STYLE}
     .opts { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 16px; margin-top: 4px; }
@@ -100,10 +107,11 @@ export function getMidPaperSetHTML(d: PaperSetPdfData): string {
         <p class="line">${ROMAN[d.exam.year] ?? d.exam.year} ${esc(course)} ${sem} MID-${d.exam.midNumber} EXAMINATION${d.answerKey ? " - ANSWER KEY" : ""}</p>
         ${d.exam.academicYear ? `<p class="line">Academic Year: ${esc(d.exam.academicYear)}</p>` : ""}
         <p class="subject">${esc(d.subject.name)}</p>
+        ${only ? `<p class="line"><b>${esc(only.label.toUpperCase())}</b></p>` : ""}
       </div><span></span>
     </div>
     <div class="meta"><span>Branch &amp; Sections: <b>${esc(d.branch)}${d.sections.length ? ` - ${esc(d.sections.join(", "))}` : ""}</b></span><span>${d.exam.date ? `Date: <b>${dmy(d.exam.date)}</b>` : `Question paper ${d.set}`}</span></div>
-    <div class="meta"><span>Time: <b>${d.pattern.durationMinutes} Mins.</b></span><span>Max. Marks: <b>${maxMarks}</b></span></div>
+    <div class="meta"><span>Time: <b>${duration} Mins.</b></span><span>Max. Marks: <b>${maxMarks}</b></span></div>
     <hr />
     ${d.pattern.instruction && !d.answerKey ? `<p class="instr">${esc(d.pattern.instruction)}</p>` : ""}
     ${coList ? `<p class="cos-title">Course Outcomes:</p><div class="cos"><p>Upon the completion of the course, the student will be able to:</p>${coList}</div>` : ""}

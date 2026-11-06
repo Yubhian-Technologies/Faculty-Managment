@@ -6,6 +6,8 @@
 export interface ProgressGroup {
   sections: { bankId: string | null }[];
   banks: { id: string; status: string; completeCount: number; totalCount: number; approval?: string | null }[];
+  /** false: listed for progress only - another department's HOD reviews it (not counted as waiting for this viewer). */
+  canOpen?: boolean;
 }
 
 export interface DeadlineProgress {
@@ -19,7 +21,7 @@ export interface DeadlineProgress {
   ready: number;
   banks: number;
   banksComplete: number;
-  /** Banks waiting for the HOD / approved by the HOD. */
+  /** Banks waiting for the HOD (the viewer's to review) / approved by the HOD. */
   banksSubmitted: number;
   banksApproved: number;
   /** Subjects whose every section is in an HOD-approved bank. */
@@ -49,7 +51,7 @@ export function deadlineProgress(groups: ProgressGroup[]): DeadlineProgress {
     ready,
     banks: banks.length,
     banksComplete: banks.filter((b) => b.status === "COMPLETE").length,
-    banksSubmitted: banks.filter((b) => b.approval === "SUBMITTED").length,
+    banksSubmitted: groups.filter((g) => g.canOpen !== false).flatMap((g) => g.banks).filter((b) => b.approval === "SUBMITTED").length,
     banksApproved: banks.filter((b) => b.approval === "APPROVED").length,
     subjectsApproved: groups.filter((g) => g.sections.length > 0 && g.sections.every((s) => s.bankId && byId.get(s.bankId)?.approval === "APPROVED")).length,
     pct: sections.length ? Math.floor((sum / sections.length) * 100) : 0,

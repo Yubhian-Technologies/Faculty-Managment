@@ -113,6 +113,21 @@ export interface Subject {
   isCustom?: boolean;
   isNonTeachingLoad?: boolean;
   excludeFromResume?: boolean;
+  // The department(s) that look after this subject (syllabus, question banks / papers and their HOD
+  // approval - either HOD decides), set by Academics / Principal / VP; at most two. Not set = the
+  // branch's own department, as before. Separate from the legacy `department` above and from the
+  // semester assignments (the timetable). Master subjects only. `ownerDepartmentIds` mirrors the
+  // ids (for array-contains queries).
+  ownerDepartments?: { id: string; name: string }[];
+  ownerDepartmentIds?: string[];
+  // A single Subject Department saved before the list existed (read as a list of one; cleared on the next save).
+  ownerDepartmentId?: string;
+  ownerDepartmentName?: string;
+  // The subject's syllabus document (Academics / Principal / VP or the subject department's HOD).
+  syllabusUrl?: string;
+  syllabusFileName?: string;
+  syllabusUpdatedAt?: Timestamp;
+  syllabusUpdatedByName?: string;
   isActive: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;

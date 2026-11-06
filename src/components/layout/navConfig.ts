@@ -507,6 +507,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Hiring — Offer Letters", href: "/accounts/hiring", iconName: "UserCheck", roles: ["ACCOUNTS"], section: "Hiring" },
   { label: "Hiring Pipeline", href: "/accounts/pipeline", iconName: "GitBranch", roles: ["ACCOUNTS"], section: "Hiring" },
   { label: "Salary Structures", href: "/accounts/salary-structures", iconName: "Landmark", roles: ["ACCOUNTS"], section: "Payroll" },
+  { label: "Payments", href: "/accounts/payments", iconName: "Wallet", roles: ["ACCOUNTS"], section: "Student Fees" },
   { label: "My Profile", href: "/accounts/profile", iconName: "UserCircle", roles: ["ACCOUNTS"], section: "Personal" },
   { label: "My Leave", href: "/accounts/leave", iconName: "CalendarClock", roles: ["ACCOUNTS"] },
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["ACCOUNTS"] },

@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment, getRelatedDepartmentNames } from "@/lib/departments/scope";
+import { ownerDepartmentNamesLive } from "@/lib/subjects/ownerDepartment";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import type { MidNumber, Subject, TeachingAssignment } from "@/types";
 
@@ -92,10 +93,15 @@ export async function POST(request: Request) {
     const subjectSnap = await collegeRef.collection("subjects").doc(subjectId).get();
     if (!subjectSnap.exists) return NextResponse.json({ error: "Subject not found" }, { status: 404 });
     const subject = subjectSnap.data() as Subject;
+    // The Subject Department(s) (set by Academics) look after the subject when set; else its own department.
+    const owners = await ownerDepartmentNamesLive(db, session.collegeId, subject);
+    let department = owners[0] || subject.department;
 
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (!canHodEditDepartment(scope, subject.department ?? "")) {
+      // Either Subject Department's HOD may assign it; it is filed under theirs.
+      department = (owners.length ? owners.find((d) => canHodEditDepartment(scope, d)) : department) ?? "";
+      if (!canHodEditDepartment(scope, department)) {
         return NextResponse.json({ error: "This subject isn't in your department" }, { status: 403 });
       }
     }
@@ -120,7 +126,7 @@ export async function POST(request: Request) {
     const id = `${subjectId}_mid${midNumber}`;
     const data = {
       collegeId: session.collegeId,
-      department: subject.department,
+      department,
       courseId: subject.courseId,
       courseName: subject.courseName,
       year: subject.year ?? 0,

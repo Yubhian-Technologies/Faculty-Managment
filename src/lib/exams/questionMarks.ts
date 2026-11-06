@@ -16,7 +16,11 @@ export interface SheetPart {
   /** A faculty-decides part answered in full: its objective questions entered as one total (column `${id}obj`). */
   objectiveTotal?: { max: number; nos: number[] };
 }
-export interface QuestionSheet { paperMax: number; parts: SheetPart[]; columns: SheetColumn[]; source: "CHOSEN" | "PATTERN" }
+export interface QuestionSheet {
+  paperMax: number; parts: SheetPart[]; columns: SheetColumn[]; source: "CHOSEN" | "PATTERN";
+  /** The finalized (printed) paper this sheet comes from - the faculty can view it once the exam date has come. */
+  paper?: { choiceId: string; date: string };
+}
 
 /**
  * The sheet for a paper. A faculty-decides part is laid out from that paper's own questions (`set` of `questions`):

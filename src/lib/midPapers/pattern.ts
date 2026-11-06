@@ -255,3 +255,43 @@ export function paperProgress(pat: Pick<MidPaperPattern, "parts" | "setsPerFacul
 /** A blank question's text keys, for the duplicate check across the faculty's sets. */
 export const questionTexts = (q: Pick<MidPaperQuestion, "text" | "subParts" | "options">) =>
   [q.text, ...(q.subParts ?? []).map((s) => s.text)].filter((t) => t.trim());
+
+/** The parts of a pattern as they shape a paper (what "the pattern changed" compares - not who saved it or when). */
+export const patternShape = (pat: Pick<MidPaperPattern, "parts" | "setsPerFaculty" | "durationMinutes">) => JSON.stringify({
+  sets: pat.setsPerFaculty, minutes: pat.durationMinutes,
+  parts: pat.parts.map((p) => ({ id: p.id, label: p.label, title: p.title, flexible: !!p.flexible, kind: p.kind, perUnit: p.perUnit ?? 0, maxMarks: p.maxMarks ?? 0,
+    marksEach: p.marksEach, choice: p.choice, options: p.options ?? 0, maxSubParts: p.maxSubParts ?? 0, questions: p.perUnit || p.flexible ? 0 : p.questions })),
+});
+
+/**
+ * Moving a paper's questions onto a newer pattern: a per-unit part's question goes to the same place among its
+ * unit's questions (Unit 2's first question stays Unit 2's first); a fixed part keeps question numbers; a
+ * faculty-decides part keeps all its questions. `dropped` = questions with no place in the new pattern (the move
+ * is refused then, so nothing written is ever lost).
+ */
+export function remapQuestions(
+  oldPat: Pick<MidPaperPattern, "parts" | "setsPerFaculty">, newPat: Pick<MidPaperPattern, "parts" | "setsPerFaculty">,
+  questions: Pick<MidPaperQuestion, "id" | "set" | "partId" | "no" | "unit">[], units: number[],
+): { moves: { from: string; to: string }[]; dropped: string[] } {
+  const moves: { from: string; to: string }[] = [];
+  const dropped: string[] = [];
+  for (const q of questions) {
+    const np = newPat.parts.find((p) => p.id === q.partId);
+    const op = oldPat.parts.find((p) => p.id === q.partId);
+    if (!np || q.set > newPat.setsPerFaculty || !!np.flexible !== !!op?.flexible) { dropped.push(q.id); continue; }
+    if (np.flexible) { moves.push({ from: q.id, to: q.id }); continue; }
+    if (np.perUnit) {
+      const unit = q.unit ?? (op ? unitOfQuestion(op, units, q.no) : undefined);
+      // Its place among the old part's questions of the same unit.
+      const oldNos = questions.filter((x) => x.set === q.set && x.partId === q.partId && (x.unit ?? (op ? unitOfQuestion(op, units, x.no) : undefined)) === unit).map((x) => x.no).sort((a, b) => a - b);
+      const k = oldNos.indexOf(q.no);
+      const slots = (np.unitLayout ?? []).map((u, i) => (u === unit ? i + 1 : 0)).filter(Boolean);
+      if (unit == null || k < 0 || k >= slots.length) { dropped.push(q.id); continue; }
+      moves.push({ from: q.id, to: questionId(q.set, q.partId, slots[k]) });
+      continue;
+    }
+    if (q.no > np.questions) { dropped.push(q.id); continue; }
+    moves.push({ from: q.id, to: q.id });
+  }
+  return { moves, dropped };
+}

@@ -9,11 +9,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
-import { Download, Pencil, Search, Trash2 } from "lucide-react";
+import { Download, FileText, Pencil, Search, Trash2, Upload, X } from "lucide-react";
 import { SUBJECT_TYPE_LABELS } from "@/types";
 import type { Subject, SubjectCategory, SubjectType } from "@/types";
 import { CategoryField } from "@/components/academics/CategoryField";
 import { downloadCSV, toCSV } from "@/lib/utils/csv";
+import { ownerDepartmentNames } from "@/lib/subjects/ownerDepartment";
 
 const PAGE_SIZE = 20;
 const SELECT_CLASS = "h-9 w-full rounded-md border bg-background px-2 text-sm";
@@ -57,6 +58,66 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
   const [isSaving, setIsSaving] = useState(false);
   const [editError, setEditError] = useState("");
   const [deleting, setDeleting] = useState<Subject | null>(null);
+  // Subject Department: tick subjects, pick a department, Set (Academics / Principal / VP).
+  const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkMode, setBulkMode] = useState<"SET" | "ADD" | "REMOVE">("SET");
+  const [bulkDept, setBulkDept] = useState("");
+  const [bulkDept2, setBulkDept2] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [syllabusBusy, setSyllabusBusy] = useState("");
+
+  useEffect(() => {
+    fetch("/api/college/departments")
+      .then((r) => r.json() as Promise<{ departments?: { id: string; name?: string }[] }>)
+      .then((d) => setDepartments((d.departments ?? []).filter((x) => x.name?.trim()).map((x) => ({ id: x.id, name: x.name!.trim() })).sort((a, b) => a.name.localeCompare(b.name))))
+      .catch(() => setDepartments([]));
+  }, []);
+  const deptName = (s: Subject) => ownerDepartmentNames(s, new Map(departments.map((d) => [d.id, d.name]))).join(", ");
+
+  async function setOwnerDepartment() {
+    if (selected.size === 0 || !bulkDept) return;
+    const none = bulkMode === "SET" && bulkDept === "NONE";
+    const departmentIds = none ? [] : [...new Set([bulkDept, ...(bulkMode === "SET" && bulkDept2 ? [bulkDept2] : [])])];
+    setBulkBusy(true);
+    try {
+      const res = await fetch("/api/college/subjects/owner-department", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subjectIds: [...selected], mode: bulkMode, departmentIds }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { error?: string; updated?: number };
+      if (!res.ok) { toast({ variant: "destructive", title: j.error ?? "Couldn't change the Subject Department" }); return; }
+      const did = none ? "cleared" : bulkMode === "ADD" ? "added" : bulkMode === "REMOVE" ? "removed" : "set";
+      toast({ variant: "success", title: `Subject Department ${did} for ${j.updated ?? 0} subject${j.updated === 1 ? "" : "s"}` });
+      setSelected(new Set());
+      setBulkDept("");
+      setBulkDept2("");
+      await load();
+    } finally { setBulkBusy(false); }
+  }
+
+  async function uploadSyllabus(s: Subject, file: File) {
+    setSyllabusBusy(s.id);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch(`/api/college/subjects/${s.id}/syllabus`, { method: "POST", body: form });
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) { toast({ variant: "destructive", title: j.error ?? "Upload failed" }); return; }
+      toast({ variant: "success", title: `Syllabus saved for ${s.code}` });
+      await load();
+    } finally { setSyllabusBusy(""); }
+  }
+
+  async function removeSyllabus(s: Subject) {
+    setSyllabusBusy(s.id);
+    try {
+      const res = await fetch(`/api/college/subjects/${s.id}/syllabus`, { method: "DELETE" });
+      if (!res.ok) { const j = (await res.json().catch(() => ({}))) as { error?: string }; toast({ variant: "destructive", title: j.error ?? "Couldn't remove it" }); return; }
+      toast({ variant: "success", title: `Syllabus removed from ${s.code}` });
+      await load();
+    } finally { setSyllabusBusy(""); }
+  }
 
   async function load() {
     setIsLoading(true);
@@ -117,14 +178,14 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
   function handleExport() {
     const header = [
       "Category", "Name", "Code", "Short Code", "Second Short Code", "Type",
-      "Lecture Hours", "Tutorial Hours", "Practical Hours", "Credits", "Total Hours per Semester", "Regulation",
+      "Lecture Hours", "Tutorial Hours", "Practical Hours", "Credits", "Total Hours per Semester", "Regulation", "Subject Department",
     ];
     const rows = subjects.map((s) => [
       s.category === "OTHER" ? (s.customCategory || "Other") : (s.category ?? ""),
       s.name ?? "", s.code ?? "", s.shortCode ?? "", s.altShortCode ?? "", s.type ?? "",
       String(s.lectureHours ?? 0), String(s.tutorialHours ?? 0), String(s.practicalHours ?? 0), String(s.credits ?? 0),
       s.totalHoursPerSemester != null ? String(s.totalHoursPerSemester) : "",
-      s.regulation ?? "",
+      s.regulation ?? "", deptName(s),
     ]);
     const safeName = [courseName, regulation].filter(Boolean).join("_").replace(/[^a-z0-9]+/gi, "_");
     downloadCSV(toCSV([header, ...rows]), `subjects_${safeName}.csv`);
@@ -163,6 +224,33 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
           />
         </div>
 
+        <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-sm">
+          <span className="font-medium">{selected.size ? `${selected.size} selected` : "Subject Department"}</span>
+          <span className="text-xs text-muted-foreground">{selected.size ? "" : "Tick subjects to set which department(s) look after them - up to two. Their HODs keep the syllabus and approve the question banks / papers (either one decides). Not set = each branch's own HOD."}</span>
+          {selected.size > 0 && (
+            <>
+              <select aria-label="Change" className="h-8 rounded-md border bg-background px-2 text-sm" value={bulkMode} onChange={(e) => { setBulkMode(e.target.value as "SET" | "ADD" | "REMOVE"); setBulkDept(""); setBulkDept2(""); }}>
+                <option value="SET">Set to</option>
+                <option value="ADD">Add</option>
+                <option value="REMOVE">Remove</option>
+              </select>
+              <select aria-label="Subject Department" className="h-8 min-w-48 rounded-md border bg-background px-2 text-sm" value={bulkDept} onChange={(e) => setBulkDept(e.target.value)}>
+                <option value="">Pick a department</option>
+                {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                {bulkMode === "SET" && <option value="NONE">None - each branch looks after it</option>}
+              </select>
+              {bulkMode === "SET" && bulkDept && bulkDept !== "NONE" && (
+                <select aria-label="Second Subject Department (optional)" className="h-8 min-w-48 rounded-md border bg-background px-2 text-sm" value={bulkDept2} onChange={(e) => setBulkDept2(e.target.value)}>
+                  <option value="">and no second department</option>
+                  {departments.filter((d) => d.id !== bulkDept).map((d) => <option key={d.id} value={d.id}>and {d.name}</option>)}
+                </select>
+              )}
+              <Button size="sm" onClick={() => void setOwnerDepartment()} loading={bulkBusy} disabled={!bulkDept}>{bulkMode === "SET" ? "Set" : bulkMode === "ADD" ? "Add" : "Remove"}</Button>
+              <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}><X className="mr-1 h-3.5 w-3.5" />Clear selection</Button>
+            </>
+          )}
+        </div>
+
         {isLoading ? (
           <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-10 rounded-md border bg-muted/30 animate-pulse" />)}</div>
         ) : subjects.length === 0 ? (
@@ -175,24 +263,47 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
               <table className="w-full text-sm">
                 <thead className="text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   <tr>
+                    <th className="py-1.5 pr-2">
+                      <Checkbox aria-label="Select every subject on this page" checked={pageRows.length > 0 && pageRows.every((s) => selected.has(s.id))}
+                        onCheckedChange={(v) => setSelected((cur) => { const next = new Set(cur); for (const s of pageRows) { if (v === true) next.add(s.id); else next.delete(s.id); } return next; })} />
+                    </th>
                     <th className="py-1.5 pr-3">Category</th>
                     <th className="py-1.5 pr-3">Name</th>
                     <th className="py-1.5 pr-3">Code</th>
                     <th className="py-1.5 pr-3">L-T-P</th>
                     <th className="py-1.5 pr-3">Credits</th>
                     <th className="py-1.5 pr-3">Regulation</th>
+                    <th className="py-1.5 pr-3">Subject Department</th>
+                    <th className="py-1.5 pr-3">Syllabus</th>
                     <th className="py-1.5" />
                   </tr>
                 </thead>
                 <tbody className="divide-y">
                   {pageRows.map((s) => (
                     <tr key={s.id}>
+                      <td className="py-1.5 pr-2">
+                        <Checkbox aria-label={`Select ${s.code}`} checked={selected.has(s.id)}
+                          onCheckedChange={(v) => setSelected((cur) => { const next = new Set(cur); if (v === true) next.add(s.id); else next.delete(s.id); return next; })} />
+                      </td>
                       <td className="py-1.5 pr-3">{s.category === "OTHER" ? (s.customCategory || "Other") : (s.category ?? "-")}</td>
                       <td className="py-1.5 pr-3 font-medium">{s.name}</td>
                       <td className="py-1.5 pr-3 font-mono">{s.code}</td>
                       <td className="py-1.5 pr-3 tabular-nums whitespace-nowrap">{s.lectureHours}-{s.tutorialHours}-{s.practicalHours}</td>
                       <td className="py-1.5 pr-3 tabular-nums">{s.credits}</td>
                       <td className="py-1.5 pr-3">{s.regulation ?? "-"}</td>
+                      <td className="py-1.5 pr-3">{deptName(s) || <span className="text-xs text-muted-foreground">Each branch</span>}</td>
+                      <td className="py-1.5 pr-3 whitespace-nowrap">
+                        {s.syllabusUrl && (
+                          <>
+                            <a href={s.syllabusUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary underline" title={s.syllabusFileName ?? undefined}><FileText className="h-3.5 w-3.5" />View</a>
+                            <Button variant="ghost" size="icon" className="ml-1 h-7 w-7 text-destructive" aria-label={`Remove the syllabus of ${s.code}`} disabled={syllabusBusy === s.id} onClick={() => void removeSyllabus(s)}><X className="h-3.5 w-3.5" /></Button>
+                          </>
+                        )}
+                        <label className={`inline-flex cursor-pointer items-center gap-1 text-xs text-muted-foreground hover:text-foreground ${syllabusBusy === s.id ? "pointer-events-none opacity-50" : ""}`}>
+                          <Upload className="h-3.5 w-3.5" />{syllabusBusy === s.id ? "Saving..." : s.syllabusUrl ? "Replace" : "Upload PDF"}
+                          <input type="file" accept="application/pdf,.pdf" className="sr-only" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void uploadSyllabus(s, f); }} />
+                        </label>
+                      </td>
                       <td className="py-1.5 whitespace-nowrap">
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditError(""); setEditForm(toEditForm(s)); }}><Pencil className="h-3.5 w-3.5" /></Button>
                         <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleting(s)}><Trash2 className="h-3.5 w-3.5" /></Button>

@@ -101,3 +101,35 @@ export const permissionEscalationSweep = onSchedule(
     logger.info("permission-escalation sweep ok", { body });
   }
 );
+
+// Online payments: payments a student started but never came back from (browser closed) are asked
+// about through CCAvenue's Order Status API - see src/app/api/cron/payment-status/route.ts. The app
+// does nothing until PAYMENT_PROXY_URL (the static-IP proxy) is set, so this is safe to deploy early.
+export const paymentStatusSweep = onSchedule(
+  {
+    schedule: "every 15 minutes",
+    timeZone: "Asia/Kolkata",
+    secrets: [cronSecret],
+  },
+  async () => {
+    const url = appUrl.value();
+    if (!url) {
+      logger.error("APP_URL is not configured - skipping sweep. See functions/README.md.");
+      return;
+    }
+    try {
+      const res = await fetch(`${url}/api/cron/payment-status`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${cronSecret.value()}` },
+      });
+      const body = await res.text();
+      if (!res.ok) {
+        logger.error(`payment-status sweep failed: ${res.status} ${body}`);
+        return;
+      }
+      logger.info("payment-status sweep ok", { body });
+    } catch (err) {
+      logger.error("payment-status sweep threw", err);
+    }
+  }
+);

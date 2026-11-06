@@ -214,6 +214,11 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
                 <div key={k} className="contents"><dt className="text-muted-foreground">{k}</dt><dd className="text-right font-medium">{v}</dd></div>
               ))}
             </dl>
+            {subject.syllabusUrl && (
+              <a href={subject.syllabusUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-primary underline" title={subject.syllabusFileName ?? undefined}>
+                <BookOpen className="h-3.5 w-3.5" />Syllabus (PDF)
+              </a>
+            )}
           </CardContent>
         </Card>
 
