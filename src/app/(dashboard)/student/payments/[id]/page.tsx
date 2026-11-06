@@ -36,7 +36,8 @@ export default function StudentPaymentPage({ params }: { params: Promise<{ id: s
   const ok = p.status === "SUCCESS" || p.status === "REFUNDED" || p.status === "PARTIALLY_REFUNDED";
   const Icon = ok ? CheckCircle2 : p.status === "INITIATED" ? Clock : XCircle;
   const rows: [string, string | undefined][] = [
-    ["For", p.purpose.label], ["Amount", `Rs. ${p.amount}`], ["Order no.", p.id], ["CCAvenue ref", p.trackingId], ["Bank ref", p.bankRefNo],
+    ["For", p.purpose.label], ["Amount", `Rs. ${p.amount}`],
+    ...(p.chargedAmount ? [["Charged", `Rs. ${p.chargedAmount.toFixed(2)} (incl. CCAvenue convenience fee + tax)`] as [string, string]] : []), ["Order no.", p.id], ["CCAvenue ref", p.trackingId], ["Bank ref", p.bankRefNo],
     ["Paid by", p.paymentMode], ["Date", new Date(p.settledAt ?? p.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })],
     ...(p.refundedAmount ? [["Refunded", `Rs. ${p.refundedAmount}`] as [string, string]] : []),
   ];

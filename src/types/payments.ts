@@ -27,6 +27,8 @@ export interface Payment {
   collegeId: string;
   purpose: PaymentPurpose;
   amount: number;
+  /** What the student was actually charged when CCAvenue added its convenience fee + tax (absent = amount). */
+  chargedAmount?: number;
   currency: "INR";
   status: PaymentStatus;
   studentId: string;

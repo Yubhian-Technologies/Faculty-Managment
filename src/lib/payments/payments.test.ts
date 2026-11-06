@@ -63,8 +63,14 @@ describe("CCAvenue request / response format", () => {
 
 describe("decideSettlement", () => {
   const p = { id: "FMS1", status: "INITIATED" as const, amount: 150, collegeId: "c1" };
+  const p1 = { ...p, amount: 1 };
   it("a matching Success settles it", () => expect(decideSettlement(p, resp())).toEqual({ kind: "SET", status: "SUCCESS" }));
   it("another order is ignored", () => expect(decideSettlement(p, resp({ order_id: "FMS2" })).kind).toBe("IGNORE"));
+  it("CCAvenue's convenience fee: amount 24.60, mer_amount 1.00 for a Rs. 1 order -> paid", () => {
+    expect(decideSettlement(p1, resp({ amount: "24.60", mer_amount: "1.00" }))).toEqual({ kind: "SET", status: "SUCCESS" });
+    expect(decideSettlement(p1, resp({ amount: "24.60", mer_amount: "5.00" })).kind).toBe("SET");
+    expect(decideSettlement(p1, resp({ amount: "24.60", mer_amount: "5.00" }))).toMatchObject({ status: "FAILED" });
+  });
   it("a wrong amount is recorded as failed, never paid", () => {
     expect(decideSettlement(p, resp({ amount: "1.00" }))).toMatchObject({ kind: "SET", status: "FAILED" });
   });

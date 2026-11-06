@@ -77,7 +77,7 @@ export function statusAsResponse(orderId: string, j: Record<string, unknown>): C
   const fields = Object.fromEntries(Object.entries(r).map(([k, v]) => [k, str(v)]));
   return {
     orderId: str(r.order_no) || orderId, trackingId: str(r.reference_no), bankRefNo: str(r.order_bank_ref_no), orderStatus, outcome,
-    amount: Number(r.order_amt ?? r.order_gross_amt ?? NaN), currency: str(r.order_currncy || r.order_currency), paymentMode: str(r.order_option_type),
+    amount: Number(r.order_gross_amt ?? r.order_amt ?? NaN), merAmount: Number(r.order_amt ?? NaN), currency: str(r.order_currncy || r.order_currency), paymentMode: str(r.order_option_type),
     cardName: str(r.order_card_name), statusMessage: str(r.order_status_date_time), failureMessage: str(r.order_bank_response),
     merchantParam1: "", fields,
   };
