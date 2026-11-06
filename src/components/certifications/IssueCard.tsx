@@ -63,7 +63,7 @@ export function IssueCard({ request, onDone }: { request: CertificateRequest; on
   async function issue() {
     setBusy(true);
     try {
-      const done = await issueConfigured(request.id, { issuerValues: values, ...(fee > 0 ? { feeReceiptNo: receipt.trim() } : {}), ...(uploadedUrl ? { uploadedUrl } : {}) });
+      const done = await issueConfigured(request.id, { issuerValues: values, ...(fee > 0 && !request.feePaid ? { feeReceiptNo: receipt.trim() } : {}), ...(uploadedUrl ? { uploadedUrl } : {}) });
       toast({ variant: "success", title: `Issued ${done.certificateNumber ?? ""}` });
       setPreview(null);
       if (done.issuedCertificateId) await downloadIssued(done.issuedCertificateId).catch(() => undefined);
@@ -109,7 +109,12 @@ export function IssueCard({ request, onDone }: { request: CertificateRequest; on
             ))}
           </div>
         )}
-        {fee > 0 && (
+        {fee > 0 && request.feePaid && (
+          <p className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
+            Fee Rs. {request.feePaid.amount} paid online · CCAvenue ref {request.feePaid.trackingId}{request.feePaid.bankRefNo ? ` · bank ref ${request.feePaid.bankRefNo}` : ""}
+          </p>
+        )}
+        {fee > 0 && !request.feePaid && (
           <div className="space-y-1.5 max-w-sm">
             <Label htmlFor={`${request.id}-receipt`}>Fee receipt number (Rs. {fee}) *</Label>
             <Input id={`${request.id}-receipt`} value={receipt} onChange={(e) => setReceipt(e.target.value)} placeholder="Receipt no. of the fee paid" />

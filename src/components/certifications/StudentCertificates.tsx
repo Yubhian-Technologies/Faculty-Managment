@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Download, FileText, Paperclip, Search } from "lucide-react";
+import { CreditCard, Download, FileText, Paperclip, Search } from "lucide-react";
+import Link from "next/link";
+import { payCertificateFeeOnline } from "@/components/payments/payOnline";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -32,7 +34,7 @@ const when = (ts: unknown) => {
 
 type FormState = { purpose: string; purposeOther: string; values: Record<string, string>; attachments: Record<string, string> };
 
-function ApplyDialog({ entry, request, onClose, onDone }: { entry: CatalogEntry; request?: CertificateRequest; onClose: () => void; onDone: () => void }) {
+function ApplyDialog({ entry, request, onClose, onDone, onlineEnabled }: { entry: CatalogEntry; request?: CertificateRequest; onClose: () => void; onDone: () => void; onlineEnabled?: boolean }) {
   const t = entry.type;
   const [form, setForm] = useState<FormState>(() => ({
     purpose: request?.purpose && t.purposes.includes(request.purpose) ? request.purpose : request?.purpose ? "Other" : "",
@@ -121,7 +123,7 @@ function ApplyDialog({ entry, request, onClose, onDone }: { entry: CatalogEntry;
           ))}
           <div className="rounded-md bg-muted/60 px-3 py-2 text-xs text-muted-foreground space-y-0.5">
             <p>Approvals: {entry.steps.join(" → ")}</p>
-            {t.feeAmount > 0 && <p>Fee: Rs. {t.feeAmount} - pay at the College Office; the receipt number is entered when it is issued.</p>}
+            {t.feeAmount > 0 && <p>Fee: Rs. {t.feeAmount} - {onlineEnabled ? "pay online from My requests after applying, or" : ""} pay at the College Office; the receipt number is entered when it is issued.</p>}
             <p>{t.delivery === "PHYSICAL" ? "Collect the signed copy from the College Office." : t.delivery === "DIGITAL" ? "Download it here once issued." : "Download it here once issued; a signed copy is available at the College Office."}</p>
           </div>
         </div>
@@ -134,8 +136,15 @@ function ApplyDialog({ entry, request, onClose, onDone }: { entry: CatalogEntry;
   );
 }
 
-function MyRequest({ request, entry, onChanged, onCorrect }: { request: CertificateRequest; entry?: CatalogEntry; onChanged: () => void; onCorrect: () => void }) {
+function MyRequest({ request, entry, onChanged, onCorrect, onlineEnabled }: { request: CertificateRequest; entry?: CatalogEntry; onChanged: () => void; onCorrect: () => void; onlineEnabled: boolean }) {
   const [busy, setBusy] = useState(false);
+  const fee = request.feeAmount ?? 0;
+  const canPay = onlineEnabled && fee > 0 && !request.feePaid && !request.feeReceiptNo && ["IN_PROGRESS", "PENDING_ISSUANCE", "RETURNED"].includes(request.status);
+  async function pay() {
+    setBusy(true);
+    try { await payCertificateFeeOnline(request.id); }
+    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't start the payment" }); setBusy(false); }
+  }
   async function cancel() {
     setBusy(true);
     try { await cancelRequest(request.id); toast({ variant: "success", title: "Request cancelled" }); onChanged(); }
@@ -163,12 +172,15 @@ function MyRequest({ request, entry, onChanged, onCorrect }: { request: Certific
         {request.status === "RETURNED" && request.returnRemarks && (
           <p className="rounded-md bg-orange-50 px-3 py-2 text-sm text-orange-800 dark:bg-orange-950 dark:text-orange-200">Correction needed: {request.returnRemarks}</p>
         )}
+        {fee > 0 && request.feePaid && <p className="text-xs text-emerald-700 dark:text-emerald-300">Fee Rs. {request.feePaid.amount} paid online · ref {request.feePaid.trackingId}</p>}
+        {fee > 0 && !request.feePaid && request.feeReceiptNo && <p className="text-xs text-muted-foreground">Fee paid · receipt {request.feeReceiptNo}</p>}
         <RequestAnswers request={request} />
         <StepTimeline request={request} />
         <div className="flex flex-wrap gap-2">
           {request.status === "ISSUED" && (request.issuedCertificateId || request.certificateUrl) && (
             <Button size="sm" onClick={download} loading={busy}><Download className="h-4 w-4 mr-1" /> Download</Button>
           )}
+          {canPay && <Button size="sm" onClick={pay} loading={busy}><CreditCard className="h-4 w-4 mr-1" /> Pay Rs. {fee} online</Button>}
           {request.status === "RETURNED" && entry && <Button size="sm" onClick={onCorrect} disabled={busy}>Correct and send again</Button>}
           {(request.status === "IN_PROGRESS" || request.status === "RETURNED") && !request.startedByUid && <Button size="sm" variant="outline" onClick={cancel} disabled={busy}>Cancel request</Button>}
         </div>
@@ -182,6 +194,10 @@ export function StudentCertificates() {
   const [tab, setTab] = useState("apply");
   const [query, setQuery] = useState("");
   const [applying, setApplying] = useState<{ entry: CatalogEntry; request?: CertificateRequest } | null>(null);
+  const [onlineEnabled, setOnlineEnabled] = useState(false);
+  useEffect(() => {
+    fetch("/api/college/payments/my").then((r) => (r.ok ? r.json() : null)).then((d: { onlineEnabled?: boolean } | null) => setOnlineEnabled(!!d?.onlineEnabled)).catch(() => undefined);
+  }, []);
 
   const load = useCallback(async () => {
     try { setData(await loadCatalog()); }
@@ -249,18 +265,19 @@ export function StudentCertificates() {
         </div>
       )}
 
+      {tab === "mine" && onlineEnabled && <p className="text-xs text-muted-foreground">Online payments: <Link href="/student/payments" className="text-primary underline">My payments</Link></p>}
       {tab === "mine" && (
         data.requests.length === 0
           ? <Card><EmptyState icon={<FileText className="h-6 w-6" />} title="No requests yet" description="Apply for a certificate from the Apply tab." /></Card>
           : <div className="space-y-3">
               {data.requests.map((r) => (
-                <MyRequest key={r.id} request={r} entry={r.certificateTypeId ? byId.get(r.certificateTypeId) : undefined} onChanged={load}
+                <MyRequest key={r.id} request={r} entry={r.certificateTypeId ? byId.get(r.certificateTypeId) : undefined} onChanged={load} onlineEnabled={onlineEnabled}
                   onCorrect={() => { const e = r.certificateTypeId ? byId.get(r.certificateTypeId) : undefined; if (e) setApplying({ entry: e, request: r }); }} />
               ))}
             </div>
       )}
 
-      {applying && <ApplyDialog entry={applying.entry} request={applying.request} onClose={() => setApplying(null)} onDone={() => { setApplying(null); setTab("mine"); load(); }} />}
+      {applying && <ApplyDialog entry={applying.entry} request={applying.request} onClose={() => setApplying(null)} onDone={() => { setApplying(null); setTab("mine"); load(); }} onlineEnabled={onlineEnabled} />}
     </div>
   );
 }

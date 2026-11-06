@@ -238,6 +238,8 @@ export interface CertificateRequest {
   returnedAtStep?: number;
   returnRemarks?: string;
   feeReceiptNo?: string;
+  /** The fee paid online (CCAvenue) - stands in for a typed receipt number at issue. Removed when the payment is refunded. */
+  feePaid?: { paymentId: string; trackingId: string; bankRefNo: string; amount: number; at: string };
   /** The issuer's entries at issue time (date of leaving, conduct ...). */
   issuerValues?: Record<string, string>;
   /** Number + verification code reserved by the first issue attempt (a retry reuses them - no gaps). */

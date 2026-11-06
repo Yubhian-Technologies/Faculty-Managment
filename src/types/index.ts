@@ -34,3 +34,4 @@ export * from "./customNav";
 export * from "./certification";
 export * from "./incident";
 export * from "./invigilation";
+export * from "./payments";
