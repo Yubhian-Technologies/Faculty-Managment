@@ -66,9 +66,14 @@ export interface CcavenueSettings {
   accessCode: string;
   /** The Working Key, encrypted with PAYMENT_CONFIG_SECRET - never returned to any browser. */
   workingKeyEnc?: string;
+  /**
+   * Extra API keys CCAvenue issued per whitelisted static IP (one Access Code + Working Key per proxy IP). The
+   * Order Status / Refund APIs try the website pair first, then these, until CCAvenue accepts one.
+   */
+  apiKeys?: { label: string; accessCode: string; workingKeyEnc: string }[];
   updatedAt?: string;
   updatedByName?: string;
 }
 
 /** What the settings screen sees (no key). */
-export type CcavenueSettingsView = Omit<CcavenueSettings, "workingKeyEnc"> & { hasWorkingKey: boolean };
+export type CcavenueSettingsView = Omit<CcavenueSettings, "workingKeyEnc" | "apiKeys"> & { hasWorkingKey: boolean; apiKeys: { label: string; accessCode: string; hasWorkingKey: boolean }[] };

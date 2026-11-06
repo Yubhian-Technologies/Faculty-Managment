@@ -51,6 +51,7 @@ function CcavenueCard({ collegeId, onProxy }: { collegeId: string; onProxy: (on:
   const [secretConfigured, setSecretConfigured] = useState(true);
   const [proxy, setProxy] = useState(false);
   const [form, setForm] = useState({ enabled: false, env: "TEST" as "TEST" | "LIVE", merchantId: "", accessCode: "", workingKey: "" });
+  const [apiKeys, setApiKeys] = useState<{ label: string; accessCode: string; workingKey: string; hasWorkingKey: boolean }[]>([]);
   const [busy, setBusy] = useState(false);
   const qs = `?collegeId=${encodeURIComponent(collegeId)}`;
   useEffect(() => {
@@ -60,6 +61,7 @@ function CcavenueCard({ collegeId, onProxy }: { collegeId: string; onProxy: (on:
         if (off || !d.settings) return;
         setS(d.settings); setSecretConfigured(d.secretConfigured !== false); setProxy(!!d.proxyConfigured); onProxy(!!d.proxyConfigured);
         setForm({ enabled: d.settings.enabled, env: d.settings.env, merchantId: d.settings.merchantId, accessCode: d.settings.accessCode, workingKey: "" });
+        setApiKeys((d.settings.apiKeys ?? []).map((k) => ({ ...k, workingKey: "" })));
       }).catch(() => undefined);
     return () => { off = true; };
   }, [qs, onProxy]);
@@ -67,10 +69,11 @@ function CcavenueCard({ collegeId, onProxy }: { collegeId: string; onProxy: (on:
   async function save() {
     setBusy(true);
     try {
-      const res = await fetch(`/api/college/payments/settings${qs}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+      const res = await fetch(`/api/college/payments/settings${qs}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...form, apiKeys: apiKeys.map((k) => ({ label: k.label, accessCode: k.accessCode, workingKey: k.workingKey })) }) });
       const d = (await res.json()) as { settings?: CcavenueSettingsView; error?: string };
       if (!res.ok || !d.settings) throw new Error(d.error ?? "Couldn't save");
       setS(d.settings); setForm((f) => ({ ...f, workingKey: "" }));
+      setApiKeys((d.settings.apiKeys ?? []).map((k) => ({ ...k, workingKey: "" })));
       toast({ variant: "success", title: d.settings.enabled ? "Online payment is on" : "Saved - online payment is off" });
     } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't save" }); }
     finally { setBusy(false); }
@@ -95,6 +98,23 @@ function CcavenueCard({ collegeId, onProxy }: { collegeId: string; onProxy: (on:
             <option value="TEST">Test (test.ccavenue.com)</option><option value="LIVE">Live (real payments)</option>
           </select>
         </div>
+      </div>
+      <div className="space-y-2 rounded-md border p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-sm font-medium">API keys for the static IPs (optional)</p>
+            <p className="text-xs text-muted-foreground">When CCAvenue gives each whitelisted proxy IP its own Access Code and Working Key, enter them here. Status checks and refunds try the key above first, then these.</p>
+          </div>
+          {apiKeys.length < 5 && <Button size="sm" variant="outline" onClick={() => setApiKeys((k) => [...k, { label: "", accessCode: "", workingKey: "", hasWorkingKey: false }])}>Add key</Button>}
+        </div>
+        {apiKeys.map((k, i) => (
+          <div key={i} className="grid gap-2 sm:grid-cols-[10rem_minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
+            <div className="space-y-1"><Label htmlFor={`ak-l-${i}`} className="text-xs">IP / label</Label><Input id={`ak-l-${i}`} placeholder="155.121.231.0" value={k.label} onChange={(e) => setApiKeys((cur) => cur.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} /></div>
+            <div className="space-y-1"><Label htmlFor={`ak-c-${i}`} className="text-xs">Access Code</Label><Input id={`ak-c-${i}`} value={k.accessCode} onChange={(e) => setApiKeys((cur) => cur.map((x, j) => (j === i ? { ...x, accessCode: e.target.value } : x)))} /></div>
+            <div className="space-y-1"><Label htmlFor={`ak-k-${i}`} className="text-xs">Working Key</Label><Input id={`ak-k-${i}`} type="password" autoComplete="off" placeholder={k.hasWorkingKey ? "Saved - type to replace" : "Paste the Working Key"} value={k.workingKey} onChange={(e) => setApiKeys((cur) => cur.map((x, j) => (j === i ? { ...x, workingKey: e.target.value } : x)))} /></div>
+            <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setApiKeys((cur) => cur.filter((_, j) => j !== i))}>Remove</Button>
+          </div>
+        ))}
       </div>
       <p className="text-xs text-muted-foreground">
         {proxy

@@ -7,7 +7,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { CERTIFICATE_REQUESTS_COL } from "@/lib/certifications/transitions";
-import { CCAVENUE_CHECKOUT_URL, ccavEncrypt, ccavRequestString } from "@/lib/payments/ccavenue";
+import { CCAVENUE_CHECKOUT_URL, ccavEncrypt, ccavRequestString, ccavUrlOk } from "@/lib/payments/ccavenue";
 import { activeCcavenue, appBaseUrl, PaymentError, paymentErrorResponse, paymentRefs } from "@/lib/payments/server";
 import type { CertificateRequest, Payment } from "@/types";
 
@@ -37,6 +37,11 @@ export async function POST(request: Request) {
     if (req.feeReceiptNo) throw new PaymentError("The fee was already paid at the College Office", 409);
     if (!PAYABLE.includes(req.status)) throw new PaymentError("This request can't be paid for now", 409);
 
+    const back = `${appBaseUrl(request)}/api/public/ccavenue_response/${encodeURIComponent(session.collegeId)}`;
+    if (!ccavUrlOk(back)) {
+      console.error("[college/payments/ccavenue/start] return URL not accepted by CCAvenue:", back);
+      throw new PaymentError("Online payment isn't set up correctly (return address) - pay at the College Office and tell the Accounts office", 409);
+    }
     // Order id: short, unique, letters + digits only (CCAvenue allows up to 30).
     const orderId = `FMS${Date.now().toString(36).toUpperCase()}${randomBytes(3).toString("hex").toUpperCase()}`;
     const now = new Date().toISOString();
@@ -51,7 +56,6 @@ export async function POST(request: Request) {
     };
     await paymentRefs(db, session.collegeId).payments.doc(orderId).create(payment);
 
-    const back = `${appBaseUrl(request)}/api/public/ccavenue-response/${encodeURIComponent(session.collegeId)}`;
     const plain = ccavRequestString({
       merchantId: account.merchantId, orderId, amount, redirectUrl: back, cancelUrl: back,
       billingName: req.studentName, billingEmail: u.email ?? session.email, billingTel: u.mobileNo ?? u.phone,
