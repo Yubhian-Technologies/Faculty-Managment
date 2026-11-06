@@ -56,6 +56,7 @@ export async function POST(request: Request) {
     const body = (await readJsonBody(request)) as {
       name: string;
       mobile: string;
+      email?: string;
       password: string;
       role: UserRole;
       locationId: string;
@@ -74,9 +75,14 @@ export async function POST(request: Request) {
     if (!name || !mobile || !password || !role || !locationId) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
-    // Mobile is the login username (not email)
     if (!/^[6-9]\d{9}$/.test(mobile.trim())) {
       return NextResponse.json({ error: "Valid 10-digit mobile number required" }, { status: 400 });
+    }
+    // The login is the EMAIL (Firebase Auth needs one, and the sign-in page signs staff in by email); the mobile is
+    // contact detail. A request without an email (older form) is refused clearly instead of failing at Firebase.
+    const email = String(body.email ?? "").trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return NextResponse.json({ error: "Enter a valid email - it is the sign-in for this account" }, { status: 400 });
     }
     if (profilePhotoUrl !== undefined && !profilePhotoUrl.startsWith("https://firebasestorage.googleapis.com/")) {
       return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
@@ -124,8 +130,7 @@ export async function POST(request: Request) {
       resolvedDepartment = (deptSnap.data() as { name?: string } | undefined)?.name ?? "";
     }
 
-    // Create Firebase Auth user with mobile as username (email field = mobile)
-    const uid = await createFirebaseUser(mobile.trim(), password, name);
+    const uid = await createFirebaseUser(email, password, name);
     const now = new Date();
 
     await db
@@ -137,8 +142,8 @@ export async function POST(request: Request) {
         uid,
         locationId,
         name,
-        email: mobile.trim(),
-        mobile,
+        email,
+        mobile: mobile.trim(),
         role,
         department: resolvedDepartment,
         locationDeptId: locationDeptId ?? "",
@@ -152,7 +157,7 @@ export async function POST(request: Request) {
       });
 
     await db.collection("systemUsers").doc(uid).set({
-      uid, role, locationId, collegeId: "", email: mobile.trim(), name, mobile,
+      uid, role, locationId, collegeId: "", email, name, mobile: mobile.trim(),
       ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
     });
 
@@ -174,10 +179,15 @@ export async function POST(request: Request) {
       err && typeof err === "object" && "code" in err &&
       (err as { code: string }).code === "auth/email-already-exists"
     ) {
-      return NextResponse.json({ error: "An account with this mobile number already exists" }, { status: 409 });
+      return NextResponse.json({ error: "An account with this email already exists" }, { status: 409 });
     }
     const authErr = firebaseAuthErrorResponse(err);
     if (authErr) return authErr;
+    // Firebase refused to create the sign-in (e.g. INVALID_EMAIL, OPERATION_NOT_ALLOWED): say so instead of a bare 500.
+    if (err && typeof err === "object" && (err as { code?: string }).code === "auth/create-failed") {
+      console.error("[location/users POST] Firebase sign-up refused:", (err as Error).message);
+      return NextResponse.json({ error: `Couldn't create the sign-in (${(err as Error).message})` }, { status: 400 });
+    }
     console.error("[location/users POST]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }

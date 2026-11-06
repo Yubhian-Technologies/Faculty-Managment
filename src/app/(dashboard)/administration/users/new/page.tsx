@@ -34,6 +34,8 @@ export default function NewLocationUserPage() {
   const user = useAuthStore((s) => s.user);
   const [name, setName] = useState("");
   const [mobile, setMobile] = useState("");
+  // The login: staff sign in with their email (the sign-in page has no mobile-number login).
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("12345678");
   const [role, setRole] = useState("");
   const [locationDeptId, setLocationDeptId] = useState("");
@@ -78,7 +80,7 @@ export default function NewLocationUserPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name || !mobile || !role) return;
+    if (!name || !mobile || !role || !email.trim()) return;
     if (SINGLETON_ROLES.includes(role) && filledSingletons[role]) {
       toast({ variant: "destructive", title: "Role already assigned", description: `${filledSingletons[role]} already holds this role.` });
       return;
@@ -89,7 +91,7 @@ export default function NewLocationUserPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name, mobile, password, role,
+          name, mobile, email: email.trim().toLowerCase(), password, role,
           locationId: user?.locationId ?? "",
           locationDeptId: role === "LOCATION_DEPT_HEAD" ? locationDeptId : undefined,
           ...(MULTI_DEPT_ROLES.includes(role) ? { locationDeptIds, allLocationDepts } : {}),
@@ -101,7 +103,7 @@ export default function NewLocationUserPage() {
         toast({ variant: "destructive", title: "Failed", description: json.error });
         return;
       }
-      toast({ variant: "success", title: "Staff member created", description: `Default password: ${password}` });
+      toast({ variant: "success", title: "Staff member created", description: `Sign-in: ${email.trim().toLowerCase()} · default password: ${password}` });
       router.push("/administration/users");
     } catch {
       toast({ variant: "destructive", title: "Network error" });
@@ -125,6 +127,11 @@ export default function NewLocationUserPage() {
             <div className="space-y-2">
               <Label>Full Name <span className="text-destructive">*</span></Label>
               <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" />
+            </div>
+            <div className="space-y-2">
+              <Label>Email (sign-in) <span className="text-destructive">*</span></Label>
+              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@college.edu.in" autoComplete="off" />
+              <p className="text-xs text-muted-foreground">They sign in with this email and the password below.</p>
             </div>
             <div className="space-y-2">
               <Label>Mobile Number <span className="text-destructive">*</span></Label>
@@ -237,7 +244,7 @@ export default function NewLocationUserPage() {
             type="submit"
             loading={saving}
             disabled={
-              !name || !mobile || !role ||
+              !name || !mobile || !email.trim() || !role ||
               (SINGLETON_ROLES.includes(role) && !!filledSingletons[role]) ||
               (role === "LOCATION_DEPT_HEAD" && !locationDeptId)
             }
