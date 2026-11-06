@@ -1,4 +1,4 @@
-import type { ExamConfiguration, InternalExamMarksBatch, MidQuestionBank } from "@/types";
+import type { ExamConfiguration, InternalExamMarksBatch, MidPaperFinal, MidQuestionBank } from "@/types";
 import { loadMidSettings } from "@/lib/exams/midSettings";
 import { loadSubject, midBankRefs } from "@/lib/midBank/server";
 import { loadPlan } from "@/lib/midTimetable/server";
@@ -18,7 +18,7 @@ export async function questionSheetsFor(db: Db, collegeId: string, batch: Pick<I
   if ((await loadMidSettings(db, collegeId)).midPreparation !== "PAPERS") return {};
   const college = midBankRefs(db, collegeId).college;
   const choices = (await college.collection("midPaperChoices").where("subjectId", "==", batch.subjectId).get()).docs
-    .map((d) => d.data() as { planId: string; branch: string; bankId: string; setNo: number; at?: string })
+    .map((d) => ({ ...(d.data() as { planId: string; date: string; branch: string; bankId: string; setNo: number; at?: string; final?: MidPaperFinal }), id: d.id }))
     .filter((c) => c.branch === batch.department)
     .sort((a, b) => String(b.at ?? "").localeCompare(String(a.at ?? "")));
   const plans = new Map<string, { midNumber: number; year: number } | null>();
@@ -30,7 +30,11 @@ export async function questionSheetsFor(db: Db, collegeId: string, batch: Pick<I
   for (const comp of linked) {
     const choice = choices.find((c) => { const p = plans.get(c.planId); return p && p.midNumber === comp.midNumber && (!batch.year || p.year === batch.year); });
     let sheet = null;
-    if (choice) {
+    if (choice?.final) {
+      // Finalized (printed): exactly the paper the students wrote - the frozen copy, never the live paper.
+      sheet = sheetFromPattern(choice.final.pattern, "CHOSEN", { set: choice.final.setNo, questions: choice.final.questions });
+      if (sheet) sheet = { ...sheet, paper: { choiceId: choice.id, date: choice.date } };
+    } else if (choice) {
       const bank = await midBankRefs(db, collegeId).banks.doc(choice.bankId).get();
       const pattern = (bank.data() as MidQuestionBank | undefined)?.pattern ?? null;
       // A part the faculty built is laid out from the chosen paper's own questions.

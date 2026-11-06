@@ -6,7 +6,10 @@ export interface PaperChoiceRow {
   papers: { bankId: string; ownerName: string; sections: string[]; setNo: number }[];
   /** Paper sets of this subject + branch not approved yet (so the Exam Cell knows who to chase). */
   pending: { ownerName: string; stage: string }[];
-  choice: { bankId: string; setNo: number; chosenByName: string; at: string } | null;
+  choice: { bankId: string; setNo: number; chosenByName: string; at: string; final: { at: string; byName: string; layout: import("@/types").PaperPrintLayout } | null } | null;
+  /** The paper's parts (for the print layout) and its time. */
+  parts: { id: string; label: string; max: number }[];
+  durationMinutes: number;
 }
 
 export interface PaperChoiceDay {

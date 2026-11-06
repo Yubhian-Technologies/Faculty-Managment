@@ -103,3 +103,36 @@ export interface MidPaperQuestion {
 
 /** Per set: how many of its questions are complete. */
 export type PaperSetProgress = Record<string, { complete: number; total: number; problems?: string[] }>;
+
+/** How the Exam Cell printed a paper: all parts on one paper, or each part on its own page(s) with its own header. */
+export interface PaperPrintLayout {
+  separateParts: boolean;
+  /** Separate parts: each part's own header - time and max marks printed on that part's sheet. */
+  parts?: { partId: string; durationMinutes: number; maxMarks: number }[];
+}
+
+/**
+ * The paper the Exam Cell finalized for an exam (printed): a frozen copy kept on the choice
+ * (midPaperChoices/{id}.final), so marks entry and the faculty's view always use exactly what was printed,
+ * whatever happens to the faculty's paper later.
+ */
+export interface MidPaperFinal {
+  at: string;
+  byUid: string;
+  byName: string;
+  bankId: string;
+  setNo: number;
+  ownerName: string;
+  pattern: Pick<MidPaperPattern, "parts" | "durationMinutes" | "instruction" | "regdBoxes">;
+  units: number[];
+  /** That set's questions, as printed (answers included - only the Exam Cell gets them back). */
+  questions: Omit<MidPaperQuestion, "updatedAt" | "rev" | "textKeys" | "updatedBy" | "updatedByName">[];
+  outcomes?: { cos?: boolean; poMapping?: boolean; bloom?: boolean };
+  cos: { id: string; statement: string }[];
+  mapping: Record<string, string[]>;
+  subject: { name: string; code: string; regulation: string };
+  branchCode: string;
+  sections: string[];
+  exam: { courseName: string; year: number; semester: number; semesterInYear: number | null; midNumber: number; academicYear: string; date: string };
+  layout: PaperPrintLayout;
+}
