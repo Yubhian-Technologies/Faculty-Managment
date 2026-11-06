@@ -25,7 +25,10 @@ export function decideSettlement(p: Pick<Payment, "id" | "status" | "amount" | "
     return p.status === r.outcome ? { kind: "IGNORE", reason: "Already recorded" } : { kind: "SET", status: r.outcome };
   }
   if (r.merchantParam1 && r.merchantParam1 !== p.collegeId) return { kind: "SET", status: "FAILED", note: "The payment answer was for another college" };
-  if (!sameAmount(r.amount, p.amount)) return { kind: "SET", status: "FAILED", note: `Amount mismatch: asked Rs. ${p.amount}, CCAvenue reported Rs. ${r.fields.amount ?? "?"}` };
+  // The order amount is mer_amount (what the college receives); `amount` can add CCAvenue's convenience fee + tax
+  // paid by the student. Older answers without mer_amount are checked on `amount`.
+  const orderAmount = Number.isFinite(r.merAmount) ? r.merAmount : r.amount;
+  if (!sameAmount(orderAmount, p.amount)) return { kind: "SET", status: "FAILED", note: `Amount mismatch: asked Rs. ${p.amount}, CCAvenue reported Rs. ${Number.isFinite(r.merAmount) ? r.fields.mer_amount : r.fields.amount ?? "?"}` };
   if (r.currency && r.currency !== "INR") return { kind: "SET", status: "FAILED", note: `Currency mismatch: ${r.currency}` };
   return { kind: "SET", status: "SUCCESS" };
 }
@@ -51,6 +54,7 @@ export async function settlePayment(db: Firestore, collegeId: string, r: CcavRes
       status: decision.status,
       trackingId: r.trackingId || p.trackingId, bankRefNo: r.bankRefNo || p.bankRefNo,
       paymentMode: r.paymentMode || p.paymentMode, cardName: r.cardName || p.cardName,
+      ...(Number.isFinite(r.amount) && !sameAmount(r.amount, p.amount) ? { chargedAmount: r.amount } : {}),
       gatewayStatus: r.orderStatus, statusMessage: r.statusMessage, failureMessage: decision.note ?? r.failureMessage,
       gatewayResponse: r.fields, settledAt: now, updatedAt: now,
     };

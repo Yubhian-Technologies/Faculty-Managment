@@ -201,7 +201,7 @@ function PaymentsList({ collegeId, proxyConfigured }: { collegeId: string; proxy
                   <td className="py-1.5 pr-3 whitespace-nowrap text-xs">{new Date(p.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}<br /><span className="text-muted-foreground">{p.id}</span></td>
                   <td className="py-1.5 pr-3">{p.studentName}<br /><span className="text-xs text-muted-foreground">{p.studentRollNumber}</span></td>
                   <td className="py-1.5 pr-3">{p.purpose.label}</td>
-                  <td className="py-1.5 pr-3 text-right tabular-nums">{p.amount.toFixed(2)}{p.refundedAmount ? <><br /><span className="text-xs text-sky-700">-{p.refundedAmount.toFixed(2)}</span></> : null}</td>
+                  <td className="py-1.5 pr-3 text-right tabular-nums" title={p.chargedAmount ? `Student paid Rs. ${p.chargedAmount.toFixed(2)} incl. CCAvenue charges` : undefined}>{p.amount.toFixed(2)}{p.refundedAmount ? <><br /><span className="text-xs text-sky-700">-{p.refundedAmount.toFixed(2)}</span></> : null}</td>
                   <td className="py-1.5 pr-3">
                     <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${PAYMENT_STATUS_CLASS[p.status]}`}>{PAYMENT_STATUS_LABEL[p.status]}</span>
                     {p.needsRefund && <span className="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">Needs refund</span>}

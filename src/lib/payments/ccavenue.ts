@@ -80,7 +80,10 @@ export interface CcavResponse {
   bankRefNo: string;
   orderStatus: string;
   outcome: CcavOutcome;
+  /** What the customer was charged - can include CCAvenue's convenience fee + tax. */
   amount: number;
+  /** What the merchant receives (the order amount we asked for); NaN when CCAvenue didn't send it. */
+  merAmount: number;
   currency: string;
   paymentMode: string;
   cardName: string;
@@ -103,6 +106,7 @@ export function ccavParseResponse(plain: string): CcavResponse {
     orderStatus: status,
     outcome,
     amount: Number(fields.amount ?? NaN),
+    merAmount: Number(fields.mer_amount ?? NaN),
     currency: fields.currency ?? "",
     paymentMode: fields.payment_mode ?? "",
     cardName: fields.card_name ?? "",

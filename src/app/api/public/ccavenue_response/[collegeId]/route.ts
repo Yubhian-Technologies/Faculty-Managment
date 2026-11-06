@@ -17,7 +17,10 @@ type Params = { params: Promise<{ collegeId: string }> };
 
 export async function POST(request: Request, { params }: Params) {
   const base = appBaseUrl(request);
-  const go = (path: string) => NextResponse.redirect(`${base}${path}`, 303);
+  // Not a 303: the browser arrives here from CCAvenue's site, so a redirect straight to the page would go without
+  // the SameSite=strict sign-in cookie (the student looks logged out). A tiny page of ours sends the browser on
+  // instead - that navigation starts on our own site, so the cookie goes with it.
+  const go = (path: string) => bounce(`${base}${path}`);
   try {
     const { collegeId } = await params;
     const form = await request.formData();
@@ -51,4 +54,13 @@ export async function POST(request: Request, { params }: Params) {
     console.error("[public/ccavenue-response POST]", err);
     return go("/student/payments?result=unknown");
   }
+}
+
+function bounce(url: string): NextResponse {
+  const safe = url.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="refresh" content="0;url=${safe}"><title>Returning to FMS</title>
+<style>body{font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;margin:0;color:#334}</style></head>
+<body><p>Returning to FMS&hellip; <a href="${safe}">Continue</a></p><script>location.replace(${JSON.stringify(url)});</script></body></html>`;
+  return new NextResponse(html, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
 }
