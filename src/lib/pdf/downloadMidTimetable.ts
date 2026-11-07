@@ -72,7 +72,13 @@ export async function downloadMidTimetablePdf(sheet: MidTimetableSheetPrint, fil
     fetchCollegeLogoUrl(),
   ]);
   const college = { name: info.name || "College", affiliation: info.affiliation, address: info.address, logoUrl };
-  sheet = { ...sheet, academicYear: sheet.academicYear ?? info.academicYear };
+  // Branches print by their short code (CSE, ECE ...) so the sheet fits one page; a key under it names them.
+  const codes = new Map<string, string>();
+  try {
+    const res = await fetch("/api/college/departments");
+    if (res.ok) for (const d of ((await res.json()) as { departments?: { name?: string; code?: string }[] }).departments ?? []) if (d.name && d.code?.trim()) codes.set(d.name.trim(), d.code.trim());
+  } catch { /* names then */ }
+  sheet = { ...sheet, academicYear: sheet.academicYear ?? info.academicYear, rows: sheet.rows.map((r) => ({ ...r, branchCode: r.branchCode ?? codes.get(r.branch.trim()) })) };
   const htmls = mode === "branches"
     ? sheet.rows.filter((r) => r.slots.length).map((row) => getBranchTimetableHTML({ college, sheet, row }))
     : mode === "sessions" ? splitBySession(sheet).map((s) => getMidTimetableHTML({ college, sheet: s }))
