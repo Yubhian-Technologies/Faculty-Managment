@@ -35,6 +35,12 @@ export interface Payment {
   studentUid: string;
   studentName: string;
   studentRollNumber: string;
+  /** For the receipt: the student's year and department, and the academic year, when the payment started. */
+  studentYear?: number;
+  studentDepartment?: string;
+  academicYear?: string;
+  /** The fee receipt number, given when the payment succeeds (FR-<college code>/<yy>/<m>/<running no.>). */
+  receiptNo?: string;
   gateway: "CCAVENUE";
   /** CCAvenue's answer (when it came back). */
   trackingId?: string;

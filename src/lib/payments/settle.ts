@@ -33,6 +33,12 @@ export function decideSettlement(p: Pick<Payment, "id" | "status" | "amount" | "
   return { kind: "SET", status: "SUCCESS" };
 }
 
+/** FR-<college code>/<yy>/<month>/<running no.> - like the college's own fee receipts (IST date). */
+export function receiptNumber(code: string, at: Date, seq: number): string {
+  const ist = new Date(at.getTime() + 5.5 * 3600_000);
+  return `FR-${code}/${String(ist.getUTCFullYear()).slice(2)}/${ist.getUTCMonth() + 1}/${seq}`;
+}
+
 export interface SettleResult { payment: Payment; changed: boolean; newlyPaid: boolean; alreadyPaidByOther: boolean }
 
 export async function settlePayment(db: Firestore, collegeId: string, r: CcavResponse): Promise<SettleResult | null> {
@@ -47,6 +53,10 @@ export async function settlePayment(db: Firestore, collegeId: string, r: CcavRes
     // Reads first (Firestore transactions): what was paid for.
     const reqRef = p.purpose.kind === "CERTIFICATE" ? CERTIFICATE_REQUESTS_COL(db, collegeId).doc(p.purpose.requestId) : null;
     const reqSnap = reqRef && decision.status === "SUCCESS" ? await tx.get(reqRef) : null;
+    // A successful payment gets the college's next fee receipt number (one running number per college).
+    const counterRef = paymentRefs(db, collegeId).college.collection("paymentSettings").doc("receiptCounter");
+    const needsNo = decision.status === "SUCCESS" && !p.receiptNo;
+    const [counterSnap, collegeSnap] = needsNo ? await Promise.all([tx.get(counterRef), tx.get(paymentRefs(db, collegeId).college)]) : [null, null];
 
     const now = new Date().toISOString();
     const next: Payment = {
@@ -58,6 +68,12 @@ export async function settlePayment(db: Firestore, collegeId: string, r: CcavRes
       gatewayStatus: r.orderStatus, statusMessage: r.statusMessage, failureMessage: decision.note ?? r.failureMessage,
       gatewayResponse: r.fields, settledAt: now, updatedAt: now,
     };
+    if (needsNo) {
+      const seq = Number((counterSnap?.data() as { next?: number } | undefined)?.next ?? 1);
+      const code = String((collegeSnap?.data() as { code?: string } | undefined)?.code ?? "").trim().toUpperCase().replace(/[^A-Z0-9]+/g, "") || "FMS";
+      next.receiptNo = receiptNumber(code, new Date(), seq);
+      tx.set(counterRef, { next: seq + 1, updatedAt: now }, { merge: true });
+    }
     let alreadyPaidByOther = false;
     if (decision.status === "SUCCESS" && reqRef && reqSnap?.exists) {
       const req = reqSnap.data() as CertificateRequest;

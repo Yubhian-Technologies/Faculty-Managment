@@ -113,6 +113,12 @@ export interface Subject {
   isCustom?: boolean;
   isNonTeachingLoad?: boolean;
   excludeFromResume?: boolean;
+  // Renamed while in use (Academics > Curriculum): earlier codes / names. A results file that still uses an old
+  // code is matched to this subject.
+  previousCodes?: string[];
+  previousNames?: string[];
+  renamedAt?: string;
+  renamedByName?: string;
   // The department(s) that look after this subject (syllabus, question banks / papers and their HOD
   // approval - either HOD decides), set by Academics / Principal / VP; at most two. Not set = the
   // branch's own department, as before. Separate from the legacy `department` above and from the

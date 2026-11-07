@@ -99,7 +99,11 @@ export async function loadSubjectsByCode(db: Firestore, collegeId: string, codes
   }))];
   const col = college(db, collegeId).collection("subjects");
   const parts = chunks(variants, 30);
-  const snaps = await mapLimited(parts, 10, (p) => col.where("code", "in", p).get());
+  // A subject renamed while in use keeps its old codes (previousCodes): a file still using one is matched to it.
+  const snaps = [
+    ...(await mapLimited(parts, 10, (p) => col.where("code", "in", p).get())),
+    ...(await mapLimited(parts, 10, (p) => col.where("previousCodes", "array-contains-any", p).get())),
+  ];
   const out = new Map<string, ResultSubjectOption[]>();
   const seen = new Set<string>();
   for (const snap of snaps) for (const d of snap.docs) {
@@ -113,6 +117,10 @@ export async function loadSubjectsByCode(db: Firestore, collegeId: string, codes
     };
     const key = subjectKey(s.code);
     if (key) out.set(key, [...(out.get(key) ?? []), option]);
+    for (const old of (d.get("previousCodes") as string[] | undefined) ?? []) {
+      const k = subjectKey(old);
+      if (k && k !== key && !(out.get(k) ?? []).some((o) => o.id === d.id)) out.set(k, [...(out.get(k) ?? []), option]);
+    }
   }
   return out;
 }

@@ -11,6 +11,7 @@ import { normalizeSubjectCode, normalizeSubjectName } from "../subjectIdentity";
 import { planTeachingHoursSync, type HoursTarget } from "../hoursCascade";
 import { MASTER_IMPORT_MAX_ROWS } from "../limits";
 import { OWNER_DEPARTMENTS_MAX, ownerDepartmentRefs } from "../ownerDepartment";
+import { RENAME_STEPS, renameJobsCol, type RenameJob } from "../rename";
 import type { Subject, SubjectSemesterAssignment } from "@/types";
 
 // The one place a master subject is created, edited or removed. A master
@@ -458,6 +459,79 @@ export class SubjectMasterService {
 
   private async loadScopeForExisting(collegeId: string, s: SubjectDoc): Promise<CourseScope> {
     return this.loadScope(collegeId, s.courseId!, s.regulation ?? "");
+  }
+
+  // ── rename an assigned subject (new Code / Name everywhere) ───────────────
+  /**
+   * Renames a master subject that may already be in use: checks the new code is free in its course + regulation,
+   * renames it (claiming the new code's lock; the old code is kept in `previousCodes` so results files that still
+   * use it are matched), and starts a rename job that brings every copy of the name / code up to date
+   * (lib/subjects/rename.ts). `preview` only counts what would change.
+   */
+  async beginRename(p: { collegeId: string; id: string; name: string; code: string; preview?: boolean; actor: SubjectActor }): Promise<
+    { preview: true; counts: { key: string; label: string; count: number | null }[] } | { preview: false; jobId: string }
+  > {
+    const { collegeId, id } = p;
+    const college = this.college(collegeId);
+    const ref = college.collection("subjects").doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) throw new SubjectRequestError("Subject not found.", 404);
+    const cur = { ...(snap.data() as Subject), id };
+    if (!cur.courseId) throw new SubjectRequestError("Only Curriculum subjects (a course + regulation) can be renamed here.");
+    const name = String(p.name ?? "").replace(/\s+/g, " ").trim();
+    const code = String(p.code ?? "").trim().toUpperCase();
+    // Same rules as creating one (name / code shape), with the subject's other values.
+    const v = SubjectCatalogValidator.validateRow({
+      name, code, shortCode: cur.shortCode ?? "", category: cur.category ?? "", customCategory: cur.customCategory ?? "", type: cur.type,
+      lectureHours: cur.lectureHours ?? 0, tutorialHours: cur.tutorialHours ?? 0, practicalHours: cur.practicalHours ?? 0,
+      totalHoursPerSemester: cur.totalHoursPerSemester ?? ("" as unknown as number), credits: cur.credits,
+      internalMarks: cur.internalMarks ?? ("" as unknown as number), externalMarks: cur.externalMarks ?? ("" as unknown as number), totalMarks: cur.totalMarks ?? ("" as unknown as number),
+    });
+    const fieldErrors = (v.errors ?? []).filter((e) => /name|code/i.test(e));
+    if (fieldErrors.length) throw new SubjectRequestError(fieldErrors.join("; "));
+    const codeChanged = normalizeSubjectCode(code) !== normalizeSubjectCode(cur.code);
+    const nameChanged = normalizeSubjectName(name) !== normalizeSubjectName(cur.name) || name !== cur.name;
+    if (!codeChanged && !nameChanged) throw new SubjectRequestError("The name and code are the same as now.");
+
+    const scope = await this.loadScopeForExisting(collegeId, cur);
+    const regulation = (cur.regulation ?? "").trim();
+    if (codeChanged) {
+      const siblings = await getInChunks(scope.groupCourseIds, (chunk) => college.collection("subjects").where("courseId", "in", chunk));
+      const clash = siblings.find((d) => d.id !== id && normalizeSubjectCode(d.get("code")) === normalizeSubjectCode(code) && String(d.get("regulation") ?? "").trim() === regulation);
+      if (clash) throw new SubjectRequestError(`Code ${code} is already used by ${clash.get("name")} in this course and regulation.`, 409);
+    }
+    const ctx = { db: this.db, collegeId, subjectId: id, to: { name, code }, groupCourseIds: scope.groupCourseIds };
+    if (p.preview) {
+      const counts = await Promise.all(RENAME_STEPS.map(async (st) => ({ key: st.key, label: st.label, count: st.count ? await st.count(ctx) : null })));
+      return { preview: true, counts };
+    }
+
+    const jobRef = renameJobsCol(this.db, collegeId).doc();
+    const now = new Date();
+    const claims: SubjectKeyClaim[] = codeChanged ? [{ field: "code", scope: scope.scopeId, regulation, value: code, subjectId: id }] : [];
+    let conflicts: SubjectKeyConflict[] = [];
+    await this.db.runTransaction(async (tx) => {
+      conflicts = await claimSubjectKeys(tx, this.db, collegeId, claims);
+      if (conflicts.length > 0) return;
+      tx.update(ref, {
+        name, code, updatedAt: now,
+        ...(codeChanged ? { previousCodes: [...new Set([...(cur.previousCodes ?? []), cur.code])].filter((c) => normalizeSubjectCode(c) !== normalizeSubjectCode(code)) } : {}),
+        ...(nameChanged ? { previousNames: [...new Set([...(cur.previousNames ?? []), cur.name])].filter((n) => n !== name) } : {}),
+        renamedAt: now.toISOString(), renamedByName: p.actor.name ?? "",
+      });
+      if (codeChanged) tx.delete(college.collection("subjectKeys").doc(keyDocId({ field: "code", scope: scope.scopeId, regulation, value: cur.code })));
+      const job: Omit<RenameJob, "id"> = {
+        subjectId: id, from: { name: cur.name, code: cur.code }, to: { name, code }, groupCourseIds: scope.groupCourseIds,
+        status: "RUNNING", stepIndex: 0, cursor: null, updated: {}, startedByUid: p.actor.uid, startedByName: p.actor.name ?? "", startedAt: now.toISOString(),
+      };
+      tx.set(jobRef, job);
+    });
+    if (conflicts.length > 0) throw new SubjectRequestError(`That code was just taken by ${conflicts[0].ownerCode} (${conflicts[0].ownerName}).`, 409);
+    await writeAuditLogSafe(this.db, collegeId, {
+      action: "SUBJECT_RENAMED", performedBy: p.actor.uid, performedByName: p.actor.name, targetId: id,
+      details: { from: `${cur.code} ${cur.name}`, to: `${code} ${name}`, regulation, jobId: jobRef.id },
+    });
+    return { preview: false, jobId: jobRef.id };
   }
 
   // ── subject department ──────────────────────────────────────────────────

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { CheckCircle2, Clock, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { PAYMENT_STATUS_LABEL } from "@/components/payments/payOnline";
+import { PAYMENT_STATUS_LABEL, printFeeReceipt } from "@/components/payments/payOnline";
 import { toast } from "@/hooks/useToast";
 import type { Payment } from "@/types";
 
@@ -37,7 +37,7 @@ export default function StudentPaymentPage({ params }: { params: Promise<{ id: s
   const Icon = ok ? CheckCircle2 : p.status === "INITIATED" ? Clock : XCircle;
   const rows: [string, string | undefined][] = [
     ["For", p.purpose.label], ["Amount", `Rs. ${p.amount}`],
-    ...(p.chargedAmount ? [["Charged", `Rs. ${p.chargedAmount.toFixed(2)} (incl. CCAvenue convenience fee + tax)`] as [string, string]] : []), ["Order no.", p.id], ["CCAvenue ref", p.trackingId], ["Bank ref", p.bankRefNo],
+    ...(p.receiptNo ? [["Receipt no.", p.receiptNo] as [string, string]] : []), ["Order no.", p.id], ["CCAvenue ref", p.trackingId], ["Bank ref", p.bankRefNo],
     ["Paid by", p.paymentMode], ["Date", new Date(p.settledAt ?? p.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })],
     ...(p.refundedAmount ? [["Refunded", `Rs. ${p.refundedAmount}`] as [string, string]] : []),
   ];
@@ -59,7 +59,7 @@ export default function StudentPaymentPage({ params }: { params: Promise<{ id: s
       <div className="flex gap-2">
         <Button asChild><Link href="/student/certificates">Back to certificates</Link></Button>
         <Button asChild variant="outline"><Link href="/student/payments">My payments</Link></Button>
-        {ok && <Button variant="outline" onClick={() => window.print()}>Print receipt</Button>}
+        {ok && <Button variant="outline" onClick={() => void printFeeReceipt(`/api/college/payments/my/${encodeURIComponent(p.id)}/receipt`).catch((e: unknown) => toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't print" }))}>Print receipt</Button>}
         {!ok && canCheck && <Button variant="outline" onClick={() => void checkAgain()} loading={checking}>Check again</Button>}
       </div>
     </div>
