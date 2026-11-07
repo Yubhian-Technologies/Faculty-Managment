@@ -10,7 +10,7 @@ import { notify } from "@/lib/notify";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { isDeadlineLocked } from "@/lib/midBank/deadline";
 import { ALL_BRANCHES, assignmentIdFor, checkAssignment, isAllBranches, sectionsForScope } from "@/lib/midBank/assignments";
-import { assignmentsCol, branchesOf, candidatesFor, hodMayAssign, loadAssignments, reviewDepartmentsForScope, startedByAssignment } from "@/lib/midBank/assignmentsServer";
+import { assignmentsCol, branchesOf, candidatesFor, loadFacultyIndex, hodMayAssign, loadAssignments, reviewDepartmentsForScope, startedByAssignment } from "@/lib/midBank/assignmentsServer";
 import { actorName, guardError, loadDeadline, loginUidsOf, MID_BANK_OVERSEERS, midBankRefs, teachingFor } from "@/lib/midBank/server";
 import { departmentNamesById, ownerDepartmentNames } from "@/lib/subjects/ownerDepartment";
 import type { MidBankAssignment, MidBankDeadline, MidQuestionBank, Subject } from "@/types";
@@ -25,11 +25,12 @@ import type { MidBankAssignment, MidBankDeadline, MidQuestionBank, Subject } fro
 const VIEW_ROLES = ["HOD", ...MID_BANK_OVERSEERS];
 
 async function load(db: FirebaseFirestore.Firestore, collegeId: string, d: MidBankDeadline, scope: Awaited<ReturnType<typeof getHodDepartmentScope>> | null, onlySubject?: string) {
-  const [rows, assignments, bankSnap, names] = await Promise.all([
+  const [rows, assignments, bankSnap, names, faculty] = await Promise.all([
     teachingFor(db, collegeId, d),
     loadAssignments(db, collegeId, d.id),
     midBankRefs(db, collegeId).banks.where("deadlineId", "==", d.id).get(),
     departmentNamesById(db, collegeId),
+    loadFacultyIndex(db, collegeId),
   ]);
   const banks = bankSnap.docs.map((b) => b.data() as MidQuestionBank);
   const started = startedByAssignment(banks);
@@ -52,23 +53,23 @@ async function load(db: FirebaseFirestore.Firestore, collegeId: string, d: MidBa
     }
     // HOD: only subjects they review somewhere.
     if (scope && !items.some((i) => i?.canAssign)) continue;
-    const view = async (branch: string, depts: string[], canAssign: boolean) => {
+    const view = (branch: string, depts: string[], canAssign: boolean) => {
       const a = assignments.find((x) => x.subjectId === subjectId && x.branch === branch) ?? null;
       const secs = sectionsForScope(rows, subjectId, branch);
       return {
         branch, reviewDepartments: depts, canAssign,
         sections: secs.map((s) => ({ sectionName: s.sectionName, branch: s.branch, facultyNames: s.facultyNames })),
         assignment: a && { ...a, started: [...(started.get(a.id) ?? [])] },
-        candidates: canAssign ? await candidatesFor(db, collegeId, rows, subjectId, branch, depts) : [],
+        candidates: canAssign ? candidatesFor(faculty, rows, subjectId, branch, depts) : [],
       };
     };
     const perBranch = [];
-    for (let i = 0; i < branches.length; i++) { const it = items[i]!; perBranch.push(await view(it.branch, it.depts, it.canAssign)); }
+    for (let i = 0; i < branches.length; i++) { const it = items[i]!; perBranch.push(view(it.branch, it.depts, it.canAssign)); }
     const w = items[branches.length];
     out.push({
       subjectId, subjectName: subject.name, subjectCode: subject.code, ownerDepartments: ownerDepartmentNames(subject, names),
       branches: perBranch,
-      whole: w ? await view(ALL_BRANCHES, w.depts, w.canAssign) : null,
+      whole: w ? view(ALL_BRANCHES, w.depts, w.canAssign) : null,
     });
   }
   return { rows, assignments, banks, out: out.sort((a, b) => a.subjectName.localeCompare(b.subjectName)) };

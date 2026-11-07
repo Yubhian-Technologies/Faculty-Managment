@@ -1,5 +1,4 @@
 import { canHodEditDepartment, type HodDepartmentScope } from "@/lib/departments/scope";
-import { getInChunks } from "@/lib/firestore/inQuery";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { ownerDepartmentNames, reviewDepartmentsOf } from "@/lib/subjects/ownerDepartment";
 import { ALL_BRANCHES, branchesOf, isAllBranches, sectionsForScope } from "./assignments";
@@ -31,27 +30,38 @@ export const hodMayAssign = (scope: HodDepartmentScope | null, departments: stri
 
 export interface Candidate { facultyId: string; name: string; department: string; teaches: boolean }
 
+/** Every faculty member of the college, read ONCE per request (by id and by department) - the candidate lists are
+ *  built from it in memory, so a deadline with many subjects x branches is not two queries per pair. */
+export interface FacultyIndex { byId: Map<string, FacultyMember>; byDept: Map<string, { id: string; f: FacultyMember }[]> }
+
+export async function loadFacultyIndex(db: Db, collegeId: string): Promise<FacultyIndex> {
+  const snap = await midBankRefs(db, collegeId).college.collection("facultyMembers").get();
+  const byId = new Map<string, FacultyMember>();
+  const byDept = new Map<string, { id: string; f: FacultyMember }[]>();
+  for (const d of snap.docs) {
+    const f = d.data() as FacultyMember;
+    byId.set(d.id, f);
+    const k = f.department ?? "";
+    byDept.set(k, [...(byDept.get(k) ?? []), { id: d.id, f }]);
+  }
+  return { byId, byDept };
+}
+
 /** Faculty teaching the subject in the scope, then faculty of the reviewing departments (available ones only). */
-export async function candidatesFor(db: Db, collegeId: string, rows: TeachingRow[], subjectId: string, branch: string, departments: string[]): Promise<Candidate[]> {
+export function candidatesFor(index: FacultyIndex, rows: TeachingRow[], subjectId: string, branch: string, departments: string[]): Candidate[] {
   const teachers = new Map<string, Candidate>();
   for (const s of sectionsForScope(rows, subjectId, branch)) {
     s.facultyIds.forEach((id, i) => { if (!teachers.has(id)) teachers.set(id, { facultyId: id, name: s.facultyNames[i] ?? "", department: "", teaches: true }); });
   }
-  const col = midBankRefs(db, collegeId).college.collection("facultyMembers");
-  const deptDocs = departments.length ? await getInChunks(departments, (chunk) => col.where("department", "in", chunk)) : [];
-  const teacherDocs = teachers.size ? await db.getAll(...[...teachers.keys()].map((id) => col.doc(id))) : [];
-  for (const d of teacherDocs) {
-    const t = teachers.get(d.id);
-    if (!t) continue;
-    const f = d.data() as FacultyMember | undefined;
-    if (f && !isFacultyAvailable(f.status)) { teachers.delete(d.id); continue; }
+  for (const [id, t] of [...teachers]) {
+    const f = index.byId.get(id);
+    if (f && !isFacultyAvailable(f.status)) { teachers.delete(id); continue; }
     if (f) { t.name = facultyDisplayName(f) || t.name; t.department = f.department ?? ""; }
   }
   const out = [...teachers.values()];
-  for (const d of deptDocs) {
-    const f = d.data() as FacultyMember;
-    if (teachers.has(d.id) || !isFacultyAvailable(f.status)) continue;
-    out.push({ facultyId: d.id, name: facultyDisplayName(f), department: f.department ?? "", teaches: false });
+  for (const dept of new Set(departments)) for (const { id, f } of index.byDept.get(dept) ?? []) {
+    if (teachers.has(id) || !isFacultyAvailable(f.status)) continue;
+    out.push({ facultyId: id, name: facultyDisplayName(f), department: f.department ?? "", teaches: false });
   }
   return out.sort((a, b) => Number(b.teaches) - Number(a.teaches) || a.name.localeCompare(b.name));
 }
