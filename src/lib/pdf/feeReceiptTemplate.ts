@@ -5,6 +5,7 @@ import type { Payment } from "@/types";
 // logo top-left, college name + place centred, "<fee> Receipt", the copy label (STUDENT), No / Dated / Receipt
 // mode on the left and the transaction details on the right, the amount in words, who paid it (name, Regd. No,
 // year, branch), towards what, the breakdown and total, a narration, and "For <college> / Authorised Signatory".
+// Only the college's own fee is shown - never the gateway's convenience fee or tax.
 
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 const ROMAN = ["", "I", "II", "III", "IV", "V", "VI"];
@@ -37,7 +38,7 @@ const money = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 
 const dateText = (iso?: string) => (iso ? new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata" }) : "");
 
 export interface FeeReceiptData {
-  payment: Pick<Payment, "id" | "receiptNo" | "amount" | "chargedAmount" | "status" | "purpose" | "studentName" | "studentRollNumber" | "studentYear" | "studentDepartment" | "academicYear" | "trackingId" | "bankRefNo" | "paymentMode" | "cardName" | "settledAt" | "createdAt" | "refundedAmount">;
+  payment: Pick<Payment, "id" | "receiptNo" | "amount" | "status" | "purpose" | "studentName" | "studentRollNumber" | "studentYear" | "studentDepartment" | "academicYear" | "trackingId" | "bankRefNo" | "paymentMode" | "cardName" | "settledAt" | "createdAt" | "refundedAmount">;
   college: { name: string; place?: string; logoUrl?: string };
   copy?: string;
 }
@@ -46,7 +47,6 @@ export function getFeeReceiptHTML(d: FeeReceiptData): string {
   const p = d.payment;
   const paidOn = dateText(p.settledAt ?? p.createdAt);
   const mode = ["Online - CCAvenue", p.paymentMode, p.cardName].filter(Boolean).join(" / ");
-  const gateway = p.chargedAmount && p.chargedAmount > p.amount ? p.chargedAmount - p.amount : 0;
   const yearBranch = [p.studentYear ? ROMAN[p.studentYear] ?? String(p.studentYear) : "", p.studentDepartment ?? ""].filter(Boolean);
   return `<!doctype html><html><head><meta charset="utf-8"><title>Fee Receipt ${esc(p.receiptNo ?? p.id)}</title><style>
   @page { size: A4; margin: 12mm; }
@@ -73,7 +73,6 @@ export function getFeeReceiptHTML(d: FeeReceiptData): string {
   td { padding: 1.2mm 0; }
   td.amt { text-align: right; width: 32mm; }
   tr.total td { border-top: 1.5px solid #111; border-bottom: 1.5px solid #111; font-weight: bold; padding: 1.8mm 0; }
-  .note { font-size: 11px; color: #333; margin-top: 2mm; }
   .sign { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; text-align: center; min-height: 34mm; }
   .stamp { margin-top: 3mm; display: inline-block; border: 2px solid #b91c1c; color: #b91c1c; font-weight: bold; padding: 1mm 3mm; transform: rotate(-4deg); }
   .gen { font-size: 10.5px; color: #444; margin-top: 1.5mm; }
@@ -109,7 +108,6 @@ export function getFeeReceiptHTML(d: FeeReceiptData): string {
         <tr><td>${esc(p.purpose.label)} Fee</td><td class="amt">${money(p.amount)}</td></tr>
         <tr class="total"><td>Total</td><td class="amt">${money(p.amount)}</td></tr>
       </table>
-      ${gateway > 0 ? `<p class="note">Paid online Rs. ${money(p.chargedAmount!)}, including Rs. ${money(gateway)} CCAvenue convenience fee + tax (charged by the gateway).</p>` : ""}
       <p style="margin-top:4mm">Narration : ${esc([yearBranch.join(" "), p.academicYear, p.purpose.label].filter(Boolean).join(" · "))}</p>
       ${p.refundedAmount ? `<span class="stamp">REFUNDED Rs. ${money(p.refundedAmount)}</span>` : ""}
     </div>
