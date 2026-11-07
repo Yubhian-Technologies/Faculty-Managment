@@ -31,3 +31,26 @@ export const PAYMENT_STATUS_CLASS: Record<string, string> = {
   FAILED: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200", ABORTED: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200",
   REFUNDED: "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200", PARTIALLY_REFUNDED: "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200",
 };
+
+/** Opens the fee receipt (laid out like the college's printed receipts) in a print window. */
+export async function printFeeReceipt(url: string): Promise<void> {
+  const win = window.open("", "_blank");
+  if (!win) throw new Error("Allow pop-ups to print the receipt");
+  win.document.write("<p style=\"font-family:sans-serif;padding:24px\">Preparing the receipt...</p>");
+  try {
+    const res = await fetch(url);
+    const d = (await res.json()) as { payment?: import("@/types").Payment; college?: { name: string; place?: string; logoUrl?: string }; error?: string };
+    if (!res.ok || !d.payment || !d.college) throw new Error(d.error ?? "Couldn't load the receipt");
+    const { getFeeReceiptHTML } = await import("@/lib/pdf/feeReceiptTemplate");
+    win.document.open();
+    win.document.write(getFeeReceiptHTML({ payment: d.payment, college: d.college }));
+    win.document.close();
+    const img = win.document.querySelector("img");
+    if (img && !img.complete) await new Promise((r) => { img.onload = r; img.onerror = r; setTimeout(r, 3000); });
+    win.focus();
+    win.print();
+  } catch (e) {
+    win.close();
+    throw e;
+  }
+}

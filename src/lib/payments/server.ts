@@ -82,3 +82,18 @@ export function paymentErrorResponse(err: unknown, label: string): NextResponse 
   console.error(label, err);
   return NextResponse.json({ error: "Internal error" }, { status: 500 });
 }
+
+/** The college letterhead for a fee receipt: name, place (its city, else its address) and its own logo. */
+export async function receiptCollege(db: Firestore, collegeId: string): Promise<{ name: string; place?: string; logoUrl?: string }> {
+  const snap = await db.collection("colleges").doc(collegeId).get();
+  const c = (snap.data() ?? {}) as { name?: string; address?: string; logoUrl?: string; locationId?: string };
+  let city = "";
+  if (c.locationId) {
+    try { city = String(((await db.collection("locations").doc(c.locationId).get()).data() as { city?: string } | undefined)?.city ?? "").trim(); } catch { /* left out */ }
+  }
+  const logo = c.logoUrl?.trim();
+  return { name: c.name ?? "College", place: city || c.address?.trim() || undefined, logoUrl: logo && logo !== "/vishnulogo.png" ? logo : undefined };
+}
+
+/** A receipt exists only for money actually received (refunded ones keep theirs, stamped). */
+export const hasReceipt = (p: Pick<Payment, "status">) => p.status === "SUCCESS" || p.status === "REFUNDED" || p.status === "PARTIALLY_REFUNDED";

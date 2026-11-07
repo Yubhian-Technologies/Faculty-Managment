@@ -4,7 +4,8 @@ import { FakeFirestore, asFirestore } from "@/test-support/fakeFirestore";
 vi.mock("@/lib/firebase/admin", () => ({ getAdminDb: () => ({}) }));
 
 import { ccavDecrypt, ccavEncrypt, ccavName, ccavParseResponse, ccavRequestString, ccavAmount, ccavUrlOk, sameAmount } from "./ccavenue";
-import { decideSettlement, settlePayment } from "./settle";
+import { decideSettlement, receiptNumber, settlePayment } from "./settle";
+import { rupeesInWords } from "@/lib/pdf/feeReceiptTemplate";
 import { openSecret, sealSecret } from "./secretBox";
 
 const KEY = "ABCDEF0123456789ABCDEF0123456789";
@@ -106,6 +107,22 @@ describe("settlePayment", () => {
     expect(again).toMatchObject({ changed: false, newlyPaid: false });
   });
 
+  it("a successful payment gets the college's next receipt number", async () => {
+    fake.seed(`${C}`, { name: "VIT", code: "VIT" });
+    seedPayment("FMS1"); seedPayment("FMS2", "r2");
+    fake.seed(`${C}/certificateRequests/r2`, { status: "IN_PROGRESS", feeAmount: 150, requesterUid: "u1" });
+    const db = asFirestore(fake);
+    await settlePayment(db, "c1", resp());
+    await settlePayment(db, "c1", resp({ order_id: "FMS2", tracking_id: "3200" }));
+    const a = String(fake.read(`${C}/payments/FMS1`)!.receiptNo);
+    const b = String(fake.read(`${C}/payments/FMS2`)!.receiptNo);
+    expect(a).toMatch(/^FR-VIT\/\d{2}\/\d{1,2}\/1$/);
+    expect(b).toMatch(/\/2$/);
+    // settling again never gives a new number
+    await settlePayment(db, "c1", resp());
+    expect(fake.read(`${C}/payments/FMS1`)!.receiptNo).toBe(a);
+  });
+
   it("a failed answer leaves the fee unpaid", async () => {
     seedPayment("FMS1");
     await settlePayment(asFirestore(fake), "c1", resp({ order_status: "Failure" }));
@@ -139,5 +156,18 @@ describe("secretBox", () => {
     process.env.PAYMENT_CONFIG_SECRET = "short";
     expect(() => sealSecret(KEY)).toThrow();
     if (prev === undefined) delete process.env.PAYMENT_CONFIG_SECRET; else process.env.PAYMENT_CONFIG_SECRET = prev;
+  });
+});
+
+describe("fee receipt", () => {
+  it("amount in words, Indian system", () => {
+    expect(rupeesInWords(52500)).toBe("Indian Rupees Fifty Two Thousand Five Hundred Only");
+    expect(rupeesInWords(1)).toBe("Indian Rupees One Only");
+    expect(rupeesInWords(1250000.5)).toBe("Indian Rupees Twelve Lakh Fifty Thousand and Fifty Paise Only");
+    expect(rupeesInWords(31500000)).toBe("Indian Rupees Three Crore Fifteen Lakh Only");
+  });
+  it("receipt number like the college's (IST month)", () => {
+    expect(receiptNumber("VIT", new Date("2022-03-30T10:00:00Z"), 1396)).toBe("FR-VIT/22/3/1396");
+    expect(receiptNumber("VIT", new Date("2026-10-31T20:00:00Z"), 5)).toBe("FR-VIT/26/11/5"); // 1:30 am IST, 1 Nov
   });
 });

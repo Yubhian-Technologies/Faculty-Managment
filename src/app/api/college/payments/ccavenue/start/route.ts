@@ -7,6 +7,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { CERTIFICATE_REQUESTS_COL } from "@/lib/certifications/transitions";
+import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
 import { CCAVENUE_CHECKOUT_URL, ccavEncrypt, ccavRequestString, ccavUrlOk } from "@/lib/payments/ccavenue";
 import { activeCcavenue, appBaseUrl, PaymentError, paymentErrorResponse, paymentRefs } from "@/lib/payments/server";
 import type { CertificateRequest, Payment } from "@/types";
@@ -45,6 +46,8 @@ export async function POST(request: Request) {
     // Order id: short, unique, letters + digits only (CCAvenue allows up to 30).
     const orderId = `FMS${Date.now().toString(36).toUpperCase()}${randomBytes(3).toString("hex").toUpperCase()}`;
     const now = new Date().toISOString();
+    let academicYear = "";
+    try { academicYear = await resolveCollegeAcademicYear(db, session.collegeId); } catch { /* left out */ }
     const userSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
     const u = (userSnap.data() ?? {}) as { email?: string; mobileNo?: string; phone?: string };
     const payment: Omit<Payment, "id"> = {
@@ -52,6 +55,8 @@ export async function POST(request: Request) {
       purpose: { kind: "CERTIFICATE", requestId, label: req.certificateTypeLabel },
       amount, currency: "INR", status: "INITIATED", gateway: "CCAVENUE",
       studentId: req.studentId, studentUid: session.uid, studentName: req.studentName, studentRollNumber: req.studentRollNumber,
+      ...(req.studentYear ? { studentYear: req.studentYear } : {}), ...(req.studentDepartment ? { studentDepartment: req.studentDepartment } : {}),
+      ...(academicYear ? { academicYear } : {}),
       createdAt: now, updatedAt: now,
     };
     await paymentRefs(db, session.collegeId).payments.doc(orderId).create(payment);

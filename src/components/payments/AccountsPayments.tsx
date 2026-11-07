@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Download, KeyRound, RefreshCw, Undo2 } from "lucide-react";
+import { AlertTriangle, Download, KeyRound, Printer, RefreshCw, Undo2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import { downloadCSV, toCSV } from "@/lib/utils/csv";
-import { PAYMENT_STATUS_CLASS, PAYMENT_STATUS_LABEL } from "./payOnline";
+import { PAYMENT_STATUS_CLASS, PAYMENT_STATUS_LABEL, printFeeReceipt } from "./payOnline";
 import type { CcavenueSettingsView, Payment, PaymentStatus } from "@/types";
 
 // Accounts (location) > Payments: for each college of the location - its CCAvenue account (the
@@ -164,8 +164,8 @@ function PaymentsList({ collegeId, proxyConfigured }: { collegeId: string; proxy
   const flagged = (rows ?? []).filter((p) => p.needsRefund);
 
   function exportCsv() {
-    const header = ["Date", "Order no.", "Student", "Regd. No", "For", "Amount", "Status", "CCAvenue ref", "Bank ref", "Mode", "Refunded", "Note"];
-    const body = shown.map((p) => [new Date(p.createdAt).toLocaleString("en-IN"), p.id, p.studentName, p.studentRollNumber, p.purpose.label, String(p.amount), PAYMENT_STATUS_LABEL[p.status], p.trackingId ?? "", p.bankRefNo ?? "", p.paymentMode ?? "", String(p.refundedAmount ?? 0), p.failureMessage ?? ""]);
+    const header = ["Date", "Receipt no.", "Order no.", "Student", "Regd. No", "For", "Amount", "Status", "CCAvenue ref", "Bank ref", "Mode", "Refunded", "Note"];
+    const body = shown.map((p) => [new Date(p.createdAt).toLocaleString("en-IN"), p.receiptNo ?? "", p.id, p.studentName, p.studentRollNumber, p.purpose.label, String(p.amount), PAYMENT_STATUS_LABEL[p.status], p.trackingId ?? "", p.bankRefNo ?? "", p.paymentMode ?? "", String(p.refundedAmount ?? 0), p.failureMessage ?? ""]);
     downloadCSV(toCSV([header, ...body]), `payments_${from || "all"}_${to || "all"}.csv`);
   }
 
@@ -198,7 +198,7 @@ function PaymentsList({ collegeId, proxyConfigured }: { collegeId: string; proxy
             <tbody className="divide-y">
               {shown.map((p) => (
                 <tr key={p.id} className="align-top">
-                  <td className="py-1.5 pr-3 whitespace-nowrap text-xs">{new Date(p.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}<br /><span className="text-muted-foreground">{p.id}</span></td>
+                  <td className="py-1.5 pr-3 whitespace-nowrap text-xs">{new Date(p.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}<br /><span className="text-muted-foreground">{p.receiptNo ?? p.id}</span></td>
                   <td className="py-1.5 pr-3">{p.studentName}<br /><span className="text-xs text-muted-foreground">{p.studentRollNumber}</span></td>
                   <td className="py-1.5 pr-3">{p.purpose.label}</td>
                   <td className="py-1.5 pr-3 text-right tabular-nums" title={p.chargedAmount ? `Student paid Rs. ${p.chargedAmount.toFixed(2)} incl. CCAvenue charges` : undefined}>{p.amount.toFixed(2)}{p.refundedAmount ? <><br /><span className="text-xs text-sky-700">-{p.refundedAmount.toFixed(2)}</span></> : null}</td>
@@ -209,6 +209,9 @@ function PaymentsList({ collegeId, proxyConfigured }: { collegeId: string; proxy
                   </td>
                   <td className="py-1.5 pr-3 text-xs">{p.trackingId ?? "-"}{p.bankRefNo ? <><br /><span className="text-muted-foreground">bank {p.bankRefNo}</span></> : null}</td>
                   <td className="py-1.5 whitespace-nowrap">
+                    {(p.status === "SUCCESS" || p.status === "PARTIALLY_REFUNDED" || p.status === "REFUNDED") && (
+                      <Button size="sm" variant="ghost" title="Print the fee receipt" onClick={() => void printFeeReceipt(`/api/college/payments/${encodeURIComponent(p.id)}/receipt?collegeId=${encodeURIComponent(collegeId)}`).catch((e: unknown) => toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't print" }))}><Printer className="mr-1 h-3.5 w-3.5" />Receipt</Button>
+                    )}
                     {(p.status === "SUCCESS" || p.status === "PARTIALLY_REFUNDED") && <Button size="sm" variant="outline" onClick={() => setRefunding(p)}><Undo2 className="mr-1 h-3.5 w-3.5" />Refund</Button>}
                     {proxyConfigured && (p.status === "INITIATED" || p.status === "FAILED" || p.status === "ABORTED") && (
                       <Button size="sm" variant="ghost" onClick={() => void checkStatus(p)} loading={checking === p.id} title={p.lastCheckedAt ? `Last checked ${new Date(p.lastCheckedAt).toLocaleString("en-IN")}` : undefined}><RefreshCw className="mr-1 h-3.5 w-3.5" />Check status</Button>
