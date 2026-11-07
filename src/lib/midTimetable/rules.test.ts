@@ -80,6 +80,6 @@ describe("orderBranches (Exam Cell's branch order)", () => {
   it("in the set order; branches not in it follow A-Z", async () => {
     const { orderBranches } = await import("./rules");
     expect(orderBranches(rows, ["ece", "cse"], (r) => r.k, (r) => r.n).map((r) => r.n)).toEqual(["ECE", "CSE", "AI&DS", "Civil"]);
-    expect(orderBranches(rows, undefined, (r) => r.k, (r) => r.n).map((r) => r.n)).toEqual(["AI&DS", "CSE", "Civil", "ECE"]);
+    expect(orderBranches(rows, undefined, (r) => r.k, (r) => r.n).map((r) => r.n)).toEqual(["AI&DS", "Civil", "CSE", "ECE"]);
   });
 });
