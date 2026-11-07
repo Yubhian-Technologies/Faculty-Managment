@@ -58,6 +58,9 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
   const [isSaving, setIsSaving] = useState(false);
   const [editError, setEditError] = useState("");
   const [deleting, setDeleting] = useState<Subject | null>(null);
+  // Renaming an assigned subject: preview of what changes, then a job that updates every copy (with progress).
+  const [renamePreview, setRenamePreview] = useState<{ counts: { key: string; label: string; count: number | null }[] } | null>(null);
+  const [renaming, setRenaming] = useState<{ step: string; done: number; total: number } | null>(null);
   // Subject Department: tick subjects, pick a department, Set (Academics / Principal / VP).
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -148,10 +151,49 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageRows = useMemo(() => filtered.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE), [filtered, page]);
 
-  async function handleSave() {
+  /** Name / code changed: show what a rename would update before doing it. */
+  const original = editForm ? subjects.find((x) => x.id === editForm.id) : undefined;
+  const identityChanged = !!(editForm && original && (editForm.name.trim() !== original.name || editForm.code.trim().toUpperCase() !== String(original.code).toUpperCase()));
+
+  async function previewRename() {
+    if (!editForm) return;
+    setIsSaving(true);
+    try {
+      const res = await fetch(`/api/college/subjects/${editForm.id}/rename`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: editForm.name, code: editForm.code, preview: true }) });
+      const j = (await res.json()) as { counts?: { key: string; label: string; count: number | null }[]; error?: string };
+      if (!res.ok || !j.counts) { setEditError(j.error ?? "Couldn't check the rename"); return; }
+      setRenamePreview({ counts: j.counts });
+    } finally { setIsSaving(false); }
+  }
+
+  async function runRename() {
+    if (!editForm) return;
+    setRenamePreview(null);
+    setRenaming({ step: "Renaming the subject", done: 0, total: 1 });
+    try {
+      const res = await fetch(`/api/college/subjects/${editForm.id}/rename`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: editForm.name, code: editForm.code }) });
+      const j = (await res.json()) as { jobId?: string; error?: string };
+      if (!res.ok || !j.jobId) throw new Error(j.error ?? "Couldn't rename");
+      // Work through the job until every copy is updated (each call does a part; safe to repeat).
+      for (let i = 0; i < 500; i++) {
+        const r = await fetch(`/api/college/subjects/rename-jobs/${j.jobId}`, { method: "POST" });
+        const jj = (await r.json()) as { job?: { status: string; progress: { step: string; done: number; total: number } }; error?: string };
+        if (!r.ok || !jj.job) throw new Error(jj.error ?? "The rename stopped - open the subject again to continue");
+        setRenaming(jj.job.progress);
+        if (jj.job.status === "DONE") break;
+      }
+      toast({ variant: "success", title: "Subject renamed everywhere" });
+      await handleSave(true);
+    } catch (e) {
+      setEditError(e instanceof Error ? e.message : "Couldn't rename");
+    } finally { setRenaming(null); }
+  }
+
+  async function handleSave(afterRename = false) {
     if (!editForm) return;
     if (!editForm.name.trim() || !editForm.code.trim()) { toast({ variant: "destructive", title: "Name and code are required" }); return; }
     if (!editForm.category) { toast({ variant: "destructive", title: "Category is required" }); return; }
+    if (identityChanged && !afterRename) { await previewRename(); return; }
     setIsSaving(true);
     try {
       const res = await fetch(`/api/college/subjects/${editForm.id}`, {
@@ -344,7 +386,7 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
                 <div className="space-y-1"><Label>Short Code</Label><Input className="uppercase" value={editForm.shortCode} onChange={(e) => setEditForm({ ...editForm, shortCode: e.target.value })} /></div>
                 <div className="space-y-1"><Label>Second Short Code</Label><Input className="uppercase" placeholder="Asked when placing in the timetable" value={editForm.altShortCode} onChange={(e) => setEditForm({ ...editForm, altShortCode: e.target.value })} /></div>
               </div>
-              <p className="text-xs text-muted-foreground">Code and Name can&apos;t change once the subject is assigned to a semester - add a new subject with the new code instead.</p>
+              <p className="text-xs text-muted-foreground">Changing the Code or Name updates every record that uses this subject (timetables, attendance, marks, results ...) - you&apos;ll see what changes first. The old code still matches results files.</p>
               <div className="space-y-1">
                 <Label>Type</Label>
                 <select className={SELECT_CLASS} value={editForm.type} onChange={(e) => setEditForm({ ...editForm, type: e.target.value as SubjectType })}>
@@ -367,8 +409,38 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditForm(null)}>Cancel</Button>
-            <Button onClick={() => void handleSave()} loading={isSaving}>Save</Button>
+            <Button onClick={() => void handleSave()} loading={isSaving || !!renaming}>{identityChanged ? "Rename & save" : "Save"}</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!renamePreview || !!renaming} onOpenChange={(o) => { if (!o && !renaming) setRenamePreview(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>{renaming ? "Renaming..." : "Rename this subject everywhere?"}</DialogTitle></DialogHeader>
+          {renamePreview && editForm && original && (
+            <div className="space-y-3 text-sm">
+              <p><span className="font-mono">{original.code}</span> {original.name} <b>-&gt;</b> <span className="font-mono">{editForm.code.trim().toUpperCase()}</span> {editForm.name.trim()}</p>
+              <ul className="max-h-64 space-y-0.5 overflow-y-auto rounded-md border p-2 text-xs">
+                {renamePreview.counts.map((c) => (
+                  <li key={c.key} className="flex justify-between gap-2"><span>{c.label}</span><span className="tabular-nums text-muted-foreground">{c.count === null ? "checked while updating" : c.count}</span></li>
+                ))}
+              </ul>
+              <p className="text-xs text-muted-foreground">Past attendance and published results show the new name too. Issued certificates and printed question papers stay as printed. The old code still matches results files.</p>
+            </div>
+          )}
+          {renaming && (
+            <div className="space-y-2 text-sm">
+              <p>{renaming.step}</p>
+              <div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary transition-all" style={{ width: `${Math.round((renaming.done / Math.max(1, renaming.total)) * 100)}%` }} /></div>
+              <p className="text-xs text-muted-foreground">Keep this page open until it finishes.</p>
+            </div>
+          )}
+          {!renaming && (
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setRenamePreview(null)}>Cancel</Button>
+              <Button onClick={() => void runRename()}>Rename everywhere</Button>
+            </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
 
