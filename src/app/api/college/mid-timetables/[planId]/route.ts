@@ -6,7 +6,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { actorName, guardError } from "@/lib/midBank/server";
 import { branchKey } from "@/lib/midBank/sections";
-import { cleanDays, cleanSessions, DEFAULT_MAX_PER_DAY, MAX_SESSIONS } from "@/lib/midTimetable/rules";
+import { cleanDays, cleanSessions, DEFAULT_MAX_PER_DAY, MAX_SESSIONS, orderBranches } from "@/lib/midTimetable/rules";
 import { branchSubjects, examOfPlan, loadPlan, MID_TIMETABLE_EDITORS, midTimetableRefs, midWindow } from "@/lib/midTimetable/server";
 import type { MidTimetable } from "@/types";
 
@@ -30,10 +30,10 @@ export async function GET(_request: Request, { params }: Params) {
       examOfPlan(db, session.collegeId, plan),
     ]);
     const saved = new Map(tts.docs.map((d) => [d.id, { id: d.id, ...(d.data() as Omit<MidTimetable, "id">) }]));
-    const branches = [...subjects.entries()].map(([branch, list]) => {
+    const branches = orderBranches([...subjects.entries()].map(([branch, list]) => {
       const key = branchKey(branch);
       return { branch, key, subjects: list, timetable: saved.get(`${planId}__${key}`) ?? null };
-    });
+    }), plan.branchOrder, (b) => b.key, (b) => b.branch);
     // The range days are picked from: the Mid's published dates, else the plan's own.
     const range = window ? { from: window.from, to: window.to } : plan.from && plan.to ? { from: plan.from, to: plan.to } : null;
     return NextResponse.json({ plan, window, range, branches, exam });

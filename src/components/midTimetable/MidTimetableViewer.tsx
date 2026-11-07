@@ -5,7 +5,8 @@ import { CalendarClock, CalendarDays, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
 import { ordinalYearLabel } from "@/lib/college/courseYears";
-import { dayLabel, timeLabel, usualSessionOf } from "@/lib/midTimetable/rules";
+import { dayLabel, orderBranches, timeLabel, usualSessionOf } from "@/lib/midTimetable/rules";
+import { branchKey } from "@/lib/midBank/sections";
 import { downloadMidTimetablePdf } from "@/lib/pdf/downloadMidTimetable";
 import type { ExamOf } from "@/lib/pdf/examHeader";
 import type { MidExamSession, MidTimetable } from "@/types";
@@ -18,7 +19,7 @@ import { BranchTimetableList, MidTimetableSheet } from "./MidTimetableSheet";
 
 interface Sheet { planId: string; courseName: string; year: number; semester: number; midNumber: number; days: string[]; sessions: MidExamSession[]; rows: MidTimetable[] }
 
-function toSheets(list: MidTimetable[]): Sheet[] {
+function toSheets(list: MidTimetable[], orders: Record<string, string[]> = {}): Sheet[] {
   const by = new Map<string, MidTimetable[]>();
   for (const t of list) by.set(t.planId, [...(by.get(t.planId) ?? []), t]);
   return [...by.entries()].map(([planId, rows]) => {
@@ -29,7 +30,8 @@ function toSheets(list: MidTimetable[]): Sheet[] {
       planId, courseName: rows[0].courseName, year: rows[0].year, semester: rows[0].semester, midNumber: rows[0].midNumber,
       days: [...new Set(rows.flatMap((r) => r.slots.map((s) => s.date)))].sort(),
       sessions: [...sessions.values()].filter((s) => used.has(s.id)).sort((a, b) => a.from.localeCompare(b.from)),
-      rows: [...rows].sort((a, b) => a.branch.localeCompare(b.branch)),
+      // The Exam Cell's branch order; any branch not in it follows A-Z.
+      rows: orderBranches(rows, orders[planId], (r) => branchKey(r.branch), (r) => r.branch),
     };
   }).sort((a, b) => (b.days[0] ?? "").localeCompare(a.days[0] ?? "") || a.courseName.localeCompare(b.courseName) || a.year - b.year);
 }
@@ -39,13 +41,14 @@ export function MidTimetableViewer({ emptyText }: { emptyText: string }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [exams, setExams] = useState<Record<string, ExamOf>>({});
+  const [orders, setOrders] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
     fetch("/api/college/mid-timetables/published")
-      .then(async (r) => { const d = (await r.json()) as { timetables?: MidTimetable[]; exams?: Record<string, ExamOf>; error?: string }; if (!r.ok) throw new Error(d.error ?? "Failed to load"); setExams(d.exams ?? {}); setList(d.timetables ?? []); })
+      .then(async (r) => { const d = (await r.json()) as { timetables?: MidTimetable[]; exams?: Record<string, ExamOf>; orders?: Record<string, string[]>; error?: string }; if (!r.ok) throw new Error(d.error ?? "Failed to load"); setExams(d.exams ?? {}); setOrders(d.orders ?? {}); setList(d.timetables ?? []); })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load"));
   }, []);
-  const sheets = useMemo(() => toSheets(list ?? []), [list]);
+  const sheets = useMemo(() => toSheets(list ?? [], orders), [list, orders]);
 
   async function pdf(s: Sheet, mode: "sheet" | "branches" | "sessions" = s.rows.length === 1 ? "branches" : "sheet") {
     setBusy(`${s.planId}|${mode}`);

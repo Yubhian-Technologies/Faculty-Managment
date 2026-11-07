@@ -182,3 +182,13 @@ export function rescheduleSlots(slots: MidExamSlot[], from: { date: string; sess
   });
   return { slots: next, moved: next.filter((s) => moving.some((m) => m.subjectId === s.subjectId)), clash: [] };
 }
+
+/** Branches in the Exam Cell's order (`branchOrder`, by branch key); any not in it follow, A-Z. */
+export function orderBranches<T>(items: T[], order: string[] | undefined, keyOf: (t: T) => string, nameOf: (t: T) => string): T[] {
+  const rank = new Map((order ?? []).map((k, i) => [k, i]));
+  return [...items].sort((a, b) => {
+    const ra = rank.get(keyOf(a)), rb = rank.get(keyOf(b));
+    if (ra !== undefined || rb !== undefined) return (ra ?? Number.MAX_SAFE_INTEGER) - (rb ?? Number.MAX_SAFE_INTEGER);
+    return nameOf(a).localeCompare(nameOf(b));
+  });
+}
