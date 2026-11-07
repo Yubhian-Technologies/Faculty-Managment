@@ -6,7 +6,7 @@ import type { MidExamSession, MidExamSlot } from "@/types";
 // the college's own sheet: letterhead, exam line, "TIME TABLE", then branches
 // (short codes) down the side and ONE COLUMN PER EXAM SESSION across the top -
 // date, day and that session's time in the header, the subject in the cell -
-// so the whole Mid fits one page; electives share a cell under their heading.
+// so the whole Mid fits one page (no key of the codes); electives share a cell under their heading.
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 const WEEKDAY = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -33,7 +33,7 @@ const STYLE = `${EXAM_HEADER_STYLE}
   table.sheet .branch { width: 70px; }
   table.sheet th, table.sheet td { padding: 6px 4px; font-size: 11.5px; }
   th .th-tm { display: block; font-size: 10.5px; margin-top: 2px; }
-  .key { font-size: 10px; margin: 6px 0 0; line-height: 1.5; }
+
   .tcol { width: 78px; font-size: 11px; font-weight: bold; }
   .tm { display: block; font-size: 10px; font-weight: bold; margin-bottom: 2px; }
   hr.sep { border: 0; border-top: 1px dashed #777; margin: 5px 0; }
@@ -83,8 +83,6 @@ export function getMidTimetableHTML(d: { college: { name: string; affiliation?: 
     const slots = r.slots.filter((x) => x.date === c.day && x.sessionId === c.s.id);
     return `<td>${slots.length ? subjects(slots) : "-"}</td>`;
   }).join("")}</tr>`).join("");
-  // Short codes -> full names, in one line under the table.
-  const key = t.rows.filter((r) => r.branchCode?.trim() && r.branchCode.trim() !== r.branch).map((r) => `<b>${esc(r.branchCode!.trim())}</b> - ${esc(r.branch)}`).join(" &nbsp;·&nbsp; ");
   const months = [...new Set(t.days.map((x) => new Date(`${x}T00:00:00Z`).toLocaleDateString("en-IN", { month: "long", year: "numeric", timeZone: "UTC" }).toUpperCase()))].join(" / ");
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8" /><style>${STYLE}</style></head><body><div class="page">
@@ -95,7 +93,6 @@ export function getMidTimetableHTML(d: { college: { name: string; affiliation?: 
       title: `Time Table${t.sessionTitle ? ` - ${t.sessionTitle} Session` : ""}${months ? ` - ${months}` : ""}`,
     })}
     <table class="sheet"><thead>${head}</thead><tbody>${body}</tbody></table>
-    ${key ? `<p class="key">${key}</p>` : ""}
     <div class="sign"><span>Controller of Examinations</span><span>Principal</span></div>
   </div></body></html>`;
 }

@@ -72,7 +72,7 @@ export async function downloadMidTimetablePdf(sheet: MidTimetableSheetPrint, fil
     fetchCollegeLogoUrl(),
   ]);
   const college = { name: info.name || "College", affiliation: info.affiliation, address: info.address, logoUrl };
-  // Branches print by their short code (CSE, ECE ...) so the sheet fits one page; a key under it names them.
+  // Branches print by their short code (CSE, ECE ...) so the sheet fits one page.
   const codes = new Map<string, string>();
   try {
     const res = await fetch("/api/college/departments");
