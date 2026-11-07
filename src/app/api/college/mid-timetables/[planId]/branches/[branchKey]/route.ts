@@ -50,7 +50,8 @@ export async function PUT(request: Request, { params }: Params) {
       if (Number(body.baseRev ?? 0) !== (cur?.rev ?? 0)) return { status: 409, body: { error: "This timetable was changed in another tab or by someone else - reload it" } };
       const now = new Date();
       const used = new Set(checked.slots.map((s) => s.sessionId));
-      const usual = usualSessionOf(plan.sessions, plan.branchSessions?.[key], action === "unpublish" ? cur?.slots ?? [] : checked.slots);
+      // Worked out from the cells (the session most of its exams are in) - there is no per-branch setting any more.
+      const usual = usualSessionOf(plan.sessions, undefined, action === "unpublish" ? cur?.slots ?? [] : checked.slots);
       const data: Omit<MidTimetable, "id"> = {
         planId, courseName: plan.courseName, courseIds: plan.courseIds, year: plan.year, semester: plan.semester, midNumber: plan.midNumber, branch,
         slots: action === "unpublish" ? (cur?.slots ?? []) : checked.slots,

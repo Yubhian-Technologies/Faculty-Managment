@@ -25,7 +25,9 @@ import type { MidExamPlan, MidExamSession, MidExamSlot, MidTimetable, MidTimetab
 // down the side, exam days across the top. Click a cell to put that branch's
 // subject(s) there (several = electives, with a heading); a subject several
 // branches share can go on the same day for all of them at once. Auto-fill
-// fills the empty days; Save draft / Publish all save every branch.
+// fills the empty days (every session, or the one picked beside it); Save draft /
+// Publish all save every branch. Each exam's cell carries its session - a branch's
+// usual session (seating, PDF) is worked out from its cells, never set by hand.
 
 interface Branch { branch: string; key: string; subjects: BranchSubject[]; timetable: MidTimetable | null }
 interface Data { plan: MidExamPlan; window: { from: string; to: string } | null; range: { from: string; to: string } | null; branches: Branch[]; exam?: ExamOf }
@@ -85,18 +87,10 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
 
   const plan = data?.plan;
   const slotsOf = useCallback((b: Branch): MidExamSlot[] => rowsOf(b).filter((r) => r.date && r.sessionId).map((r) => ({ ...b.subjects.find((s) => s.subjectId === r.subjectId)!, date: r.date, sessionId: r.sessionId, ...(r.group ? { group: r.group } : {}), ...(r.movedFrom ? { movedFrom: r.movedFrom } : {}) })), [rowsOf]);
-  /** A branch's usual session (set on the plan, else the one most of its exams are in). */
-  const usualOf = useCallback((b: Branch) => (plan ? usualSessionOf(plan.sessions, plan.branchSessions?.[b.key], slotsOf(b)) : ""), [plan, slotsOf]);
-
-  async function setUsual(b: Branch, sessionId: string) {
-    if (!plan) return;
-    const branchSessions = { ...(plan.branchSessions ?? {}), [b.key]: sessionId };
-    const res = await fetch(`/api/college/mid-timetables/${encodeURIComponent(planId)}`, {
-      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ days: plan.days, sessions: plan.sessions, branchSessions }),
-    }).catch(() => null);
-    if (!res?.ok) { toast({ variant: "destructive", title: "Could not save the branch's session" }); return; }
-    setData((d) => d && ({ ...d, plan: { ...d.plan, branchSessions } }));
-  }
+  /** A branch's usual session: worked out from its cells (the session most of its exams are in) - nothing to set. */
+  const usualOf = useCallback((b: Branch) => (plan ? usualSessionOf(plan.sessions, undefined, slotsOf(b)) : ""), [plan, slotsOf]);
+  /** Auto-fill: which session(s) to fill ("ALL" = every session, so a branch may get one exam per session a day). */
+  const [fillSession, setFillSession] = useState("ALL");
 
   const sheetRows = useMemo(() => (data?.branches ?? []).map((b) => {
     const slots = slotsOf(b);
@@ -106,12 +100,6 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
       key: b.key, branch: b.branch, slots, usualSessionId: usualOf(b),
       aside: (
         <span className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] font-normal">
-          {(data?.plan.sessions.length ?? 0) > 1 && (
-            <select aria-label={`Usual session of ${b.branch}`} className="h-7 w-full rounded-md border border-input bg-background px-1.5 text-[11px]" value={usualOf(b)}
-              onChange={(e) => void setUsual(b, e.target.value)}>
-              {data!.plan.sessions.map((x) => <option key={x.id} value={x.id}>Writes in: {x.label} ({timeLabel(x.from)})</option>)}
-            </select>
-          )}
           <span className={cn("rounded-full px-2 py-0.5 font-semibold", st === "PUBLISHED" ? "bg-emerald-100 text-emerald-800" : st === "DRAFT" ? "bg-amber-100 text-amber-900" : "bg-muted text-muted-foreground")}>
             {st === "PUBLISHED" ? "Published" : st === "DRAFT" ? "Draft" : "Not saved"}{edits[b.key] ? " · changed" : ""}
           </span>
@@ -177,9 +165,9 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
     const short: string[] = [];
     for (const b of data.branches) {
       const kept = slotsOf(b).filter((s) => plan.days.includes(s.date) && plan.sessions.some((x) => x.id === s.sessionId));
-      // One exam a day in the branch's usual session (a second exam that day is placed by hand).
-      const usual = plan.sessions.filter((x) => x.id === usualOf(b));
-      const { slots, unplaced } = autoFill(b.subjects, kept, plan.days, usual.length ? usual : plan.sessions.slice(0, 1));
+      // The session(s) picked beside the button: every session, or just one (one exam a day then).
+      const chosen = fillSession === "ALL" ? plan.sessions : plan.sessions.filter((x) => x.id === fillSession);
+      const { slots, unplaced } = autoFill(b.subjects, kept, plan.days, chosen.length ? chosen : plan.sessions.slice(0, 1));
       if (unplaced.length) short.push(`${b.branch}: ${unplaced.length}`);
       next[b.key] = b.subjects.map((s) => {
         const x = slots.find((y) => y.subjectId === s.subjectId);
@@ -410,6 +398,12 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
             <p className="text-sm text-muted-foreground">Click a cell to put that branch&rsquo;s subject there. {placed} of {total} placed · {published} of {data.branches.length} branches published{plan.sessions.length === 1 ? ` · Time ${timeLabel(plan.sessions[0].from)} - ${timeLabel(plan.sessions[0].to)}` : ""}</p>
           </div>
           <div className="flex flex-wrap gap-2">
+            {plan.sessions.length > 1 && (
+              <select aria-label="Auto-fill into" className="h-9 rounded-md border border-input bg-background px-2 text-sm" value={fillSession} onChange={(e) => setFillSession(e.target.value)}>
+                <option value="ALL">Fill: every session</option>
+                {plan.sessions.map((x) => <option key={x.id} value={x.id}>Fill: {x.label} only ({timeLabel(x.from)})</option>)}
+              </select>
+            )}
             <Button variant="outline" size="sm" onClick={autoFillAll} disabled={setupDirty || data.branches.length === 0}><Sparkles className="mr-1.5 h-4 w-4" />Auto-fill all branches</Button>
             <Button variant="ghost" size="sm" disabled={setupDirty} onClick={() => setEdits(Object.fromEntries(data.branches.filter((b) => b.timetable?.status !== "PUBLISHED").map((b) => [b.key, b.subjects.map((s) => ({ subjectId: s.subjectId, date: "", sessionId: "" }))])))}><Eraser className="mr-1.5 h-4 w-4" />Clear drafts</Button>
             <Button variant="outline" size="sm" disabled={setupDirty || !data.branches.some((b) => b.timetable)}
