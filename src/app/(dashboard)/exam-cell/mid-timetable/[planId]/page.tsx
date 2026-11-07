@@ -3,7 +3,7 @@
 import { use, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CalendarClock, Check, Download, Eraser, History, Plus, Save, Send, Sparkles, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowUp, CalendarClock, Check, Download, Eraser, History, ListOrdered, Plus, Save, Send, Sparkles, Trash2, X } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -91,6 +91,25 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
   const usualOf = useCallback((b: Branch) => (plan ? usualSessionOf(plan.sessions, undefined, slotsOf(b)) : ""), [plan, slotsOf]);
   /** Auto-fill: which session(s) to fill ("ALL" = every session, so a branch may get one exam per session a day). */
   const [fillSession, setFillSession] = useState("ALL");
+  /** Branch order (Exam Cell): the list being arranged in the dialog, or null when closed. */
+  const [ordering, setOrdering] = useState<{ key: string; branch: string }[] | null>(null);
+  const [savingOrder, setSavingOrder] = useState(false);
+  async function saveOrder() {
+    if (!ordering || !data) return;
+    setSavingOrder(true);
+    try {
+      const res = await fetch(`/api/college/mid-timetables/${encodeURIComponent(planId)}/branch-order`, {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ order: ordering.map((b) => b.key) }),
+      });
+      const j = (await res.json()) as { branchOrder?: string[]; error?: string };
+      if (!res.ok) throw new Error(j.error ?? "Could not save the order");
+      const rank = new Map(ordering.map((b, i) => [b.key, i]));
+      setData((d) => d && ({ ...d, plan: { ...d.plan, branchOrder: j.branchOrder }, branches: [...d.branches].sort((a, b) => (rank.get(a.key) ?? 999) - (rank.get(b.key) ?? 999)) }));
+      setOrdering(null);
+      toast({ variant: "success", title: "Branch order saved - the sheet and every PDF follow it" });
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not save the order" }); }
+    finally { setSavingOrder(false); }
+  }
 
   const sheetRows = useMemo(() => (data?.branches ?? []).map((b) => {
     const slots = slotsOf(b);
@@ -413,6 +432,7 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
                 setMove({ scope: "ALL", fromDate: "", fromSessionId: plan.sessions[0]?.id ?? "", toDate: "", toSessionId: plan.sessions[0]?.id ?? "", reason: "" });
                 setMovePreview(null); setMoveError(""); setMoveOpen(true);
               }}><CalendarClock className="mr-1.5 h-4 w-4" />Reschedule</Button>
+            <Button variant="outline" size="sm" disabled={data.branches.length < 2} onClick={() => setOrdering(data.branches.map((b) => ({ key: b.key, branch: b.branch })))}><ListOrdered className="mr-1.5 h-4 w-4" />Branch order</Button>
             <Button variant="outline" size="sm" loading={busy === "pdf-sessions"} disabled={placed === 0} onClick={() => void printPdf("sessions")}><Download className="mr-1.5 h-4 w-4" />Session-wise PDF</Button>
             <Button variant="outline" size="sm" loading={busy === "pdf-sheet"} disabled={placed === 0} onClick={() => void printPdf("sheet")}><Download className="mr-1.5 h-4 w-4" />Combined PDF</Button>
           </div>
@@ -610,6 +630,30 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
         variant="destructive"
         onConfirm={() => void removePlan()}
       />
+      <Dialog open={!!ordering} onOpenChange={(o) => !o && setOrdering(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Branch order</DialogTitle>
+            <DialogDescription>The order branches are listed in on this sheet, every timetable PDF and the published timetables.</DialogDescription>
+          </DialogHeader>
+          <ol className="max-h-[60vh] space-y-1 overflow-y-auto">
+            {(ordering ?? []).map((b, i, list) => (
+              <li key={b.key} className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-sm">
+                <span className="w-6 text-right text-xs tabular-nums text-muted-foreground">{i + 1}.</span>
+                <span className="min-w-0 flex-1 truncate">{b.branch}</span>
+                <Button size="icon" variant="ghost" className="h-7 w-7" aria-label={`Move ${b.branch} up`} disabled={i === 0}
+                  onClick={() => setOrdering((cur) => { if (!cur) return cur; const n = [...cur]; [n[i - 1], n[i]] = [n[i], n[i - 1]]; return n; })}><ArrowUp className="h-4 w-4" /></Button>
+                <Button size="icon" variant="ghost" className="h-7 w-7" aria-label={`Move ${b.branch} down`} disabled={i === list.length - 1}
+                  onClick={() => setOrdering((cur) => { if (!cur) return cur; const n = [...cur]; [n[i + 1], n[i]] = [n[i], n[i + 1]]; return n; })}><ArrowDown className="h-4 w-4" /></Button>
+              </li>
+            ))}
+          </ol>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOrdering(null)}>Cancel</Button>
+            <Button onClick={() => void saveOrder()} loading={savingOrder}>Save order</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

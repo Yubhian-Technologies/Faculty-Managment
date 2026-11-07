@@ -3,9 +3,10 @@ import { timeLabel } from "@/lib/midTimetable/rules";
 import type { MidExamSession, MidExamSlot } from "@/types";
 
 // Print-ready HTML (A4 landscape) for one Mid's exam timetable, laid out like
-// the college's own sheet: letterhead, "MID-I EXAMINATIONS - TIME TABLE", the
-// course / year / semester and the exam time, then branches down the side and
-// the exam days across the top; electives share a cell under their heading.
+// the college's own sheet: letterhead, exam line, "TIME TABLE", then branches
+// (short codes) down the side and ONE COLUMN PER EXAM SESSION across the top -
+// date, day and that session's time in the header, the subject in the cell -
+// so the whole Mid fits one page (no key of the codes); electives share a cell under their heading.
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 const WEEKDAY = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -29,6 +30,10 @@ const STYLE = `${EXAM_HEADER_STYLE}
   th { font-size: 13px; }
   th .wd { display: block; font-weight: normal; }
   .branch { width: 120px; font-weight: bold; }
+  table.sheet .branch { width: 70px; }
+  table.sheet th, table.sheet td { padding: 6px 4px; font-size: 11.5px; }
+  th .th-tm { display: block; font-size: 10.5px; margin-top: 2px; }
+
   .tcol { width: 78px; font-size: 11px; font-weight: bold; }
   .tm { display: block; font-size: 10px; font-weight: bold; margin-bottom: 2px; }
   hr.sep { border: 0; border-top: 1px dashed #777; margin: 5px 0; }
@@ -44,7 +49,7 @@ const STYLE = `${EXAM_HEADER_STYLE}
 export interface MidTimetableSheetPrint {
   courseName: string; year: number; semester: number; midNumber: number;
   days: string[]; sessions: MidExamSession[];
-  rows: { branch: string; slots: MidExamSlot[]; usualSessionId?: string }[];
+  rows: { branch: string; slots: MidExamSlot[]; usualSessionId?: string; /** Short code (CSE, ECE ...) shown instead of the name. */ branchCode?: string }[];
   /** Session-wise sheets: the session's name, printed beside TIME TABLE. */
   sessionTitle?: string;
   /** For the exam line ("I B.TECH. I SEMESTER MID-1 EXAMINATION") and the academic year in the header. */
@@ -63,26 +68,21 @@ export function splitBySession(sheet: MidTimetableSheetPrint): MidTimetableSheet
 
 export function getMidTimetableHTML(d: { college: { name: string; affiliation?: string; address?: string; logoUrl?: string }; sheet: MidTimetableSheetPrint }): string {
   const t = d.sheet;
-  const ses = (id?: string) => t.sessions.find((x) => x.id === id);
-  const span = (x?: MidExamSession) => (x ? `${timeLabel(x.from)} - ${timeLabel(x.to)}` : "");
   const subjects = (slots: MidExamSlot[]) => {
     const group = slots.find((x) => x.group)?.group;
     const moved = slots.find((x) => x.movedFrom)?.movedFrom;
     return `${moved ? `<span class="moved">Rescheduled (was ${dmy(moved)})</span>` : ""}${group ? `<span class="grp">${esc(group)}</span>` : ""}${slots.map((x, i) => `<span class="subj">${esc(x.subjectName)}<span class="code">(${esc(x.subjectCode)})${i < slots.length - 1 ? " /" : ""}</span></span>`).join("")}`;
   };
-  // One cell per day: each session's subjects, with its time when it isn't the branch's usual one (or two that day).
-  const cell = (slots: MidExamSlot[], usual?: string) => {
-    if (!slots.length) return "-";
-    const ids = [...new Set(slots.map((x) => x.sessionId))].sort((a, b) => (ses(a)?.from ?? "").localeCompare(ses(b)?.from ?? ""));
-    const showTime = ids.length > 1 || ids.some((id) => id !== usual);
-    return ids.map((id, i) => `${i ? '<hr class="sep" />' : ""}${showTime ? `<span class="tm">${span(ses(id))}</span>` : ""}${subjects(slots.filter((x) => x.sessionId === id))}`).join("");
-  };
-  // One time for everyone -> the TIME line; else a Time column per branch.
-  const usuals = [...new Set(t.rows.map((r) => r.usualSessionId))];
-  const oneTime = usuals.length === 1 && t.rows.every((r) => r.slots.every((x) => x.sessionId === usuals[0]));
-  const head = `<tr><th class="branch">Branch</th>${oneTime ? "" : `<th class="tcol">Time</th>`}${t.days.map((day) => `<th>${dmy(day)}<span class="wd">(${WEEKDAY[new Date(`${day}T00:00:00Z`).getUTCDay()]})</span></th>`).join("")}</tr>`;
-  const body = t.rows.map((r) => `<tr><td class="branch">${esc(r.branch)}</td>${oneTime ? "" : `<td class="tcol">${span(ses(r.usualSessionId))}</td>`}${t.days.map((day) => `<td>${cell(r.slots.filter((x) => x.date === day), r.usualSessionId)}</td>`).join("")}</tr>`).join("");
-  const time = oneTime && ses(usuals[0]) ? `TIME: ${span(ses(usuals[0]))}` : "";
+  // One column per (day, session) that has an exam - the time goes in the header, so there is no Time column.
+  const ordered = [...t.sessions].sort((a, b) => a.from.localeCompare(b.from));
+  const cols = t.days.flatMap((day) => ordered.map((x) => ({ day, s: x })))
+    .filter((c) => t.rows.some((r) => r.slots.some((x) => x.date === c.day && x.sessionId === c.s.id)));
+  const label = (r: MidTimetableSheetPrint["rows"][number]) => r.branchCode?.trim() || r.branch;
+  const head = `<tr><th class="branch">Branch</th>${cols.map((c) => `<th>${dmy(c.day)}<span class="wd">(${WEEKDAY[new Date(`${c.day}T00:00:00Z`).getUTCDay()]})</span><span class="th-tm">${timeLabel(c.s.from)} to ${timeLabel(c.s.to)}</span></th>`).join("")}</tr>`;
+  const body = t.rows.map((r) => `<tr><td class="branch" title="${esc(r.branch)}">${esc(label(r))}</td>${cols.map((c) => {
+    const slots = r.slots.filter((x) => x.date === c.day && x.sessionId === c.s.id);
+    return `<td>${slots.length ? subjects(slots) : "-"}</td>`;
+  }).join("")}</tr>`).join("");
   const months = [...new Set(t.days.map((x) => new Date(`${x}T00:00:00Z`).toLocaleDateString("en-IN", { month: "long", year: "numeric", timeZone: "UTC" }).toUpperCase()))].join(" / ");
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8" /><style>${STYLE}</style></head><body><div class="page">
@@ -91,9 +91,8 @@ export function getMidTimetableHTML(d: { college: { name: string; affiliation?: 
       lines: [t.exam ? examLine(t.exam) : `${t.courseName} - Year ${t.year} - Semester ${t.semester} - Mid-${t.midNumber} Examination`.toUpperCase()],
       academicYear: t.academicYear,
       title: `Time Table${t.sessionTitle ? ` - ${t.sessionTitle} Session` : ""}${months ? ` - ${months}` : ""}`,
-      meta: time ? [["", `<b>${esc(time)}</b>`]] : undefined,
     })}
-    <table><thead>${head}</thead><tbody>${body}</tbody></table>
+    <table class="sheet"><thead>${head}</thead><tbody>${body}</tbody></table>
     <div class="sign"><span>Controller of Examinations</span><span>Principal</span></div>
   </div></body></html>`;
 }

@@ -32,6 +32,8 @@ export interface MidExamPlan {
   sessions: MidExamSession[];
   /** Each branch's usual session (branchKey -> session id) - it writes in it for the whole Mid unless an exam says otherwise. */
   branchSessions?: Record<string, string>;
+  /** Exam Cell: the order branches are listed in (branch keys) - the sheet, every PDF and the published views. Missing ones follow A-Z. */
+  branchOrder?: string[];
   /** Most exams a branch may sit in one day (absent = 2). */
   maxPerDay?: number;
   createdBy: string;

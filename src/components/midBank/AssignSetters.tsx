@@ -24,14 +24,24 @@ interface SubjectRow { subjectId: string; subjectName: string; subjectCode: stri
 
 export function AssignSetters({ deadlineId }: { deadlineId: string }) {
   const [data, setData] = useState<{ mode: "SELF" | "HOD"; deadline: { locked: boolean }; subjects: SubjectRow[] } | null>(null);
+  const [failed, setFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
     let off = false;
     fetch(`/api/college/mid-bank-assignments?deadlineId=${encodeURIComponent(deadlineId)}`)
-      .then((r) => (r.ok ? r.json() : null)).then((d) => { if (!off) setData(d); }).catch(() => undefined);
+      .then(async (r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+      .then((d) => { if (!off) { setData(d); setFailed(false); } })
+      .catch(() => { if (!off) setFailed(true); });
     return () => { off = true; };
   }, [deadlineId, reloadKey]);
 
+  // A failed load is said, never a silently missing card (the HOD would see only "Setter not assigned yet").
+  if (failed && !data) return (
+    <Card className="rounded-2xl"><CardContent className="flex items-center justify-between gap-3 p-5 text-sm">
+      <span>Couldn&apos;t load the paper setters to assign.</span>
+      <Button size="sm" variant="outline" onClick={() => { setFailed(false); setReloadKey((k) => k + 1); }}>Retry</Button>
+    </CardContent></Card>
+  );
   if (!data || data.mode !== "HOD") return null;
   const subjects = data.subjects.filter((s) => s.branches.some((b) => b.canAssign) || s.whole?.canAssign);
   const unassigned = subjects.filter((s) => !s.whole?.assignment && s.branches.some((b) => b.canAssign && !b.assignment)).length;

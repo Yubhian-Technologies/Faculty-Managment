@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { guardError } from "@/lib/midBank/server";
-import { examOfPlan, MID_TIMETABLE_VIEWERS, visibleTimetables } from "@/lib/midTimetable/server";
+import { examOfPlan, loadPlan, MID_TIMETABLE_VIEWERS, visibleTimetables } from "@/lib/midTimetable/server";
 
 // The published Mid timetables the caller may see (students: their own branch;
 // faculty: the branches they teach; HOD: also their departments; Exam Cell,
@@ -21,7 +21,10 @@ export async function GET(request: Request) {
     const db = getAdminDb();
     const exams = Object.fromEntries(await Promise.all([...new Map(list.map((t) => [t.planId, t])).values()]
       .map(async (t) => [t.planId, await examOfPlan(db, session.collegeId, t)] as const)));
-    return NextResponse.json({ timetables: list, exams });
+    // Per Mid: the Exam Cell's branch order (the viewers list branches in it).
+    const orders = Object.fromEntries(await Promise.all([...new Set(list.map((t) => t.planId))]
+      .map(async (id) => [id, (await loadPlan(db, session.collegeId, id))?.branchOrder ?? []] as const)));
+    return NextResponse.json({ timetables: list, exams, orders });
   } catch (err) {
     return guardError(err, "[college/mid-timetables/published GET]");
   }

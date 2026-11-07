@@ -74,3 +74,12 @@ describe("mid timetable rules", () => {
     expect(usualSessionOf(S, "gone")).toBe("S1");
   });
 });
+
+describe("orderBranches (Exam Cell's branch order)", () => {
+  const rows = [{ k: "cse", n: "CSE" }, { k: "ece", n: "ECE" }, { k: "aids", n: "AI&DS" }, { k: "civil", n: "Civil" }];
+  it("in the set order; branches not in it follow A-Z", async () => {
+    const { orderBranches } = await import("./rules");
+    expect(orderBranches(rows, ["ece", "cse"], (r) => r.k, (r) => r.n).map((r) => r.n)).toEqual(["ECE", "CSE", "AI&DS", "Civil"]);
+    expect(orderBranches(rows, undefined, (r) => r.k, (r) => r.n).map((r) => r.n)).toEqual(["AI&DS", "Civil", "CSE", "ECE"]);
+  });
+});
