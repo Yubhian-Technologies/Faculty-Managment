@@ -26,7 +26,10 @@ export async function midStartDate(db: FirebaseFirestore.Firestore, collegeId: s
  */
 export async function notifyTeachers(db: FirebaseFirestore.Firestore, collegeId: string, d: MidBankDeadline, title: string): Promise<number> {
   const rows = await teachingFor(db, collegeId, d);
-  if ((await loadMidSettings(db, collegeId)).midAssignment === "HOD") return notifyAssigningHods(db, collegeId, d, title, rows);
+  const settings = await loadMidSettings(db, collegeId);
+  // The menu the person sees: "Mid Question Papers" in a question-papers college, else "Mid Question Bank".
+  const menu = settings.midPreparation === "PAPERS" ? "Mid Question Papers" : "Mid Question Bank";
+  if (settings.midAssignment === "HOD") return notifyAssigningHods(db, collegeId, d, title, rows, menu);
   const subjectsBy = new Map<string, Set<string>>();
   for (const r of rows) subjectsBy.set(r.facultyId, (subjectsBy.get(r.facultyId) ?? new Set()).add(r.subjectName));
   const uids = await loginUidsOf(db, collegeId, [...subjectsBy.keys()]);
@@ -35,13 +38,13 @@ export async function notifyTeachers(db: FirebaseFirestore.Firestore, collegeId:
     const uid = uids.get(facultyId);
     if (!uid) continue;
     await notify(db, collegeId, uid, "MID_BANK_OPEN", title,
-      `${[...subjects].join(", ")} - ${deadlineLabel(d.deadline)}. Prepare it under Question Bank.`, "/panel/mid-bank");
+      `${[...subjects].join(", ")} - ${deadlineLabel(d.deadline)}. Prepare it under ${menu}.`, "/panel/mid-bank");
     sent++;
   }
   return sent;
 }
 
-async function notifyAssigningHods(db: FirebaseFirestore.Firestore, collegeId: string, d: MidBankDeadline, title: string, rows: TeachingRow[]): Promise<number> {
+async function notifyAssigningHods(db: FirebaseFirestore.Firestore, collegeId: string, d: MidBankDeadline, title: string, rows: TeachingRow[], menu: string): Promise<number> {
   const names = await departmentNamesById(db, collegeId);
   const subjectIds = [...new Set(rows.map((r) => r.subjectId))];
   const col = midBankRefs(db, collegeId).college.collection("subjects");
@@ -62,7 +65,7 @@ async function notifyAssigningHods(db: FirebaseFirestore.Firestore, collegeId: s
   }
   for (const [uid, subs] of byUid) {
     await notify(db, collegeId, uid, "MID_BANK_ASSIGN", `${title} - assign the setters`,
-      `${subs.size} subject${subs.size === 1 ? "" : "s"} (${[...subs].slice(0, 6).join(", ")}${subs.size > 6 ? " ..." : ""}) - ${deadlineLabel(d.deadline)}. Assign who prepares each under Mid Question Bank.`, "/hod/question-banks");
+      `${subs.size} subject${subs.size === 1 ? "" : "s"} (${[...subs].slice(0, 6).join(", ")}${subs.size > 6 ? " ..." : ""}) - ${deadlineLabel(d.deadline)}. Assign who prepares each under ${menu}.`, "/hod/question-banks");
   }
   return byUid.size;
 }

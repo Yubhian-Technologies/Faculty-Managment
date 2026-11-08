@@ -45,13 +45,14 @@ export function ApprovalPanel({ bank, isOwner, isHod, onChanged }: { bank: MidQu
     }
   }
 
+  const papers = bank.kind === "PAPERS";
   const canSubmit = isOwner && (stage === "READY" || (stage === "RETURNED" && bank.status === "COMPLETE"));
   const hint =
-    stage === "IN_PROGRESS" ? (isOwner ? "Complete every unit, then submit it to your HOD for approval." : "Being prepared.")
-    : stage === "READY" ? (isOwner ? "Every unit is complete - submit it to your HOD for approval." : "Complete, not yet submitted to the HOD.")
-    : stage === "SUBMITTED" ? (isHod ? "Review the questions below, then approve it or return it with remarks." : "With the HOD for approval - it can't be changed meanwhile.")
+    stage === "IN_PROGRESS" ? (isOwner ? (papers ? "Complete every paper, then submit them to your HOD for approval." : "Complete every unit, then submit it to your HOD for approval.") : "Being prepared.")
+    : stage === "READY" ? (isOwner ? (papers ? "Every paper is complete - submit them to your HOD for approval." : "Every unit is complete - submit it to your HOD for approval.") : "Complete, not yet submitted to the HOD.")
+    : stage === "SUBMITTED" ? (isHod ? (papers ? "Review the papers below, then approve them or return them with remarks." : "Review the questions below, then approve it or return it with remarks.") : "With the HOD for approval - it can't be changed meanwhile.")
     : stage === "RETURNED" ? (isOwner ? "Make the changes asked for, then submit it again." : "Returned to the faculty for changes.")
-    : "Approved by the HOD - the Exam Cell uses it for the question papers.";
+    : papers ? "Approved by the HOD - the Exam Cell picks the paper for the exam from these." : "Approved by the HOD - the Exam Cell uses it for the question papers.";
 
   return (
     <Card>
@@ -82,11 +83,11 @@ export function ApprovalPanel({ bank, isOwner, isHod, onChanged }: { bank: MidQu
       <ConfirmDialog
         open={confirm !== null}
         onOpenChange={(o) => { if (!o) { setConfirm(null); setRemarks(""); } }}
-        title={{ submit: "Submit to the HOD?", withdraw: "Withdraw the submission?", approve: "Approve this question bank?", return: "Return it to the faculty?" }[confirm ?? "submit"]}
+        title={{ submit: "Submit to the HOD?", withdraw: "Withdraw the submission?", approve: papers ? "Approve these question papers?" : "Approve this question bank?", return: "Return it to the faculty?" }[confirm ?? "submit"]}
         description={{
           submit: "The HOD reviews it; it can't be edited while with them. You can withdraw it until they decide.",
           withdraw: "It comes back to you for editing; submit it again when ready.",
-          approve: "It goes to the Exam Cell and is used for the question papers. It can't be changed after this.",
+          approve: papers ? "They go to the Exam Cell, which picks the paper for the exam. They can't be changed after this." : "It goes to the Exam Cell and is used for the question papers. It can't be changed after this.",
           return: "The faculty can edit it again and resubmit. Say what needs changing.",
         }[confirm ?? "submit"]}
         confirmLabel={{ submit: "Submit", withdraw: "Withdraw", approve: "Approve", return: "Return" }[confirm ?? "submit"]}

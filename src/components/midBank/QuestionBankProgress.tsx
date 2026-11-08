@@ -23,6 +23,8 @@ import type { MidBankApprovalEntry, MidBankDeadline, MidQuestionBank } from "@/t
 
 interface Progress {
   deadline: MidBankDeadline & { locked: boolean };
+  /** BANK | PAPERS - the college's Mid preparation, for the wording. */
+  preparation?: string;
   groups: {
     branch: string; subjectId: string; subjectName: string; subjectCode: string;
     /** The departments whose HODs review this subject's banks (the Subject Departments, else the branch); either decides. */
@@ -65,12 +67,14 @@ export function QuestionBankProgress({ deadlineId, base, examCell }: { deadlineI
   const totals = useMemo(() => deadlineProgress(data?.groups ?? []), [data]);
 
   const d = data?.deadline;
+  // A question-papers college reads "question papers" everywhere on this page.
+  const papers = data?.preparation === "PAPERS";
   return (
     <div className="max-w-6xl space-y-6">
       <PageHeader
-        title="Question bank progress"
+        title={papers ? "Question paper progress" : "Question bank progress"}
         description={d ? `${d.courseName} · ${ordinalYearLabel(d.year)} · Semester ${d.semester} · Mid ${d.midNumber}` : undefined}
-        actions={<Button asChild variant="ghost" size="sm"><Link href={base}><ArrowLeft className="mr-1.5 h-4 w-4" />Mid Question Bank</Link></Button>}
+        actions={<Button asChild variant="ghost" size="sm"><Link href={base}><ArrowLeft className="mr-1.5 h-4 w-4" />{papers ? "Mid Question Papers" : "Mid Question Bank"}</Link></Button>}
       />
       {error && <p className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive" role="alert">{error}</p>}
       {!data && !error && <div className="h-80 animate-pulse rounded-lg bg-muted" />}
@@ -110,7 +114,7 @@ export function QuestionBankProgress({ deadlineId, base, examCell }: { deadlineI
             <div className="overflow-x-auto rounded-lg border">
               <table className="w-full text-sm">
                 <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
-                  <tr><th className="p-3">Branch</th><th className="p-3">Subject</th><th className="p-3">Sections</th><th className="p-3">Banks</th></tr>
+                  <tr><th className="p-3">Branch</th><th className="p-3">Subject</th><th className="p-3">Sections</th><th className="p-3">{papers ? "Papers" : "Banks"}</th></tr>
                 </thead>
                 <tbody>
                   {shown.map((g) => (
