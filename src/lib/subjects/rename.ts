@@ -144,7 +144,6 @@ export const RENAME_STEPS: RenameStep[] = [
     run: (ctx, c) => arrayScanStep(ctx, "examMarksCategories", "subjects", "id", "name", "code", c,
       college(ctx.db, ctx.collegeId).collection("examMarksCategories").where("subjectIds", "array-contains", ctx.subjectId)),
   },
-  flat("paperSetters", "midPaperAssignments", "Mid paper setters"),
   flat("outcomes", "subjectOutcomes", "Course outcomes (COs)"),
   flat("bankAssignments", "midBankAssignments", "Question bank assignments"),
   flat("banks", "midQuestionBanks", "Question banks / papers"),

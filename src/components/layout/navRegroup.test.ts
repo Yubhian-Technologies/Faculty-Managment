@@ -90,7 +90,6 @@ const EXPECTED: Record<string, string[]> = {
     "/hod/internal-exam",
     "/hod/results-analysis",
     "/hod/faculty/profile-completion",
-    "/hod/mid-paper-setter",
     "/hod/question-banks",
     "/hod/timetable",
     "/hod/leave-approvals",
