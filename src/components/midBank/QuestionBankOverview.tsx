@@ -126,7 +126,7 @@ export function QuestionBankOverview({ base, examCell }: { base: string; examCel
                           <div className={cn("h-full rounded-full", pct === 100 ? "bg-emerald-500" : "bg-primary")} style={{ width: `${pct}%` }} />
                         </div>
                       </div>
-                      {s.sections > s.covered && <p className="mt-3 text-xs text-amber-700">{s.sections - s.covered} section{s.sections - s.covered === 1 ? "" : "s"} not in any bank yet</p>}
+                      {s.sections > s.covered && <p className="mt-3 text-xs text-amber-700">{s.sections - s.covered} section{s.sections - s.covered === 1 ? "" : "s"} not in any {papers ? "paper" : "bank"} yet</p>}
                       {s.banksSubmitted > 0 && <p className="mt-1 text-xs font-medium text-amber-800">{s.banksSubmitted} {papers ? "set" : "bank"}{s.banksSubmitted === 1 ? "" : "s"} waiting for {examCell ? "the HOD's" : "your"} approval</p>}
                     </>
                   )}

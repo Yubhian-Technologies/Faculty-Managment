@@ -3,10 +3,10 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { getHodDepartmentScope } from "@/lib/departments/scope";
+import { cachedHodScope } from "@/lib/departments/cachedHodScope";
 import { isDeadlineLocked } from "@/lib/midBank/deadline";
 import { sectionsOf } from "@/lib/midBank/sections";
-import { guardError, loadDeadline, MID_BANK_OVERSEERS, midBankRefs, teachingFor } from "@/lib/midBank/server";
+import { guardError, loadDeadline, MID_BANK_OVERSEERS, midBankRefs, teachingForCached } from "@/lib/midBank/server";
 import { departmentNamesById, ownerDepartmentNames, reviewDepartmentsOf } from "@/lib/subjects/ownerDepartment";
 import { reviewingDepartment, seesBranchProgress } from "@/lib/midBank/reviewer";
 import { loadMidSettings } from "@/lib/exams/midSettings";
@@ -28,20 +28,25 @@ export async function GET(_request: Request, { params }: Params) {
     const session = await requireCollegeMember("HOD", ...MID_BANK_OVERSEERS);
     const { id } = await params;
     const db = getAdminDb();
-    const d = await loadDeadline(db, session.collegeId, id);
-    if (!d) return NextResponse.json({ error: "Deadline not found" }, { status: 404 });
-    const [rows, bankSnap] = await Promise.all([
-      teachingFor(db, session.collegeId, d),
+    // Everything that needs only the deadline id starts at once (each read is a trip to the database).
+    const deadline = loadDeadline(db, session.collegeId, id);
+    // "Who teaches what" starts as soon as the deadline is read, not after the HOD's scope.
+    const rowsP = deadline.then((x) => (x ? teachingForCached(db, session.collegeId, x) : []));
+    rowsP.catch(() => undefined);
+    const [d, bankSnap, scope, deptNames, settings, assignments] = await Promise.all([
+      deadline,
       midBankRefs(db, session.collegeId).banks.where("deadlineId", "==", id).get(),
+      session.role === "HOD" ? cachedHodScope(db, session.collegeId, session.uid) : null,
+      departmentNamesById(db, session.collegeId),
+      loadMidSettings(db, session.collegeId),
+      loadAssignments(db, session.collegeId, id),
     ]);
+    if (!d) return NextResponse.json({ error: "Deadline not found" }, { status: 404 });
+    const rows = await rowsP;
     const allBanks = bankSnap.docs.map((b) => ({ id: b.id, ...(b.data() as Omit<MidQuestionBank, "id">) }));
     const subjectIds = [...new Set([...rows.map((r) => r.subjectId), ...allBanks.map((b) => b.subjectId)])];
     const subjectsCol = db.collection("colleges").doc(session.collegeId).collection("subjects");
-    const [scope, subjectSnaps, deptNames] = await Promise.all([
-      session.role === "HOD" ? getHodDepartmentScope(db, session.collegeId, session.uid) : null,
-      subjectIds.length ? db.getAll(...subjectIds.map((sid) => subjectsCol.doc(sid))) : [],
-      departmentNamesById(db, session.collegeId),
-    ]);
+    const subjectSnaps = subjectIds.length ? await db.getAll(...subjectIds.map((sid) => subjectsCol.doc(sid))) : [];
     const subjects = new Map(subjectSnaps.filter((x) => x.exists).map((x) => [x.id, x.data() as Subject]));
     const reviewOf = (branch: string, subjectId: string) => reviewDepartmentsOf(branch, subjects.get(subjectId), deptNames);
     const bySubjectDept = (subjectId: string) => ownerDepartmentNames(subjects.get(subjectId), deptNames).length > 0;
@@ -50,7 +55,6 @@ export async function GET(_request: Request, { params }: Params) {
     const visible = (branch: string, subjectId: string) => !scope || seesBranchProgress(scope, branch, bySubjectDept(subjectId)) || reviews(branch, subjectId);
     // A whole-subject paper (HOD-assigned) belongs to every branch it serves.
     const banks = allBanks.filter((b) => visible(b.branch, b.subjectId) || (b.branches ?? []).some((br) => visible(br, b.subjectId)));
-    const [settings, assignments] = await Promise.all([loadMidSettings(db, session.collegeId), loadAssignments(db, session.collegeId, id)]);
     const hodMode = settings.midAssignment === "HOD";
 
     const keys = new Map<string, { branch: string; subjectId: string; subjectName: string; subjectCode: string }>();

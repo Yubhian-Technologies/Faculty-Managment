@@ -35,3 +35,19 @@ export function cachedCollectionDocs(db: Firestore, collegeId: string, name: "de
   value.catch(() => { if (cache.get(key)?.value === value) cache.delete(key); });
   return value;
 }
+
+// Any slow read several requests need at about the same time (one page opening sends them together), kept per
+// server instance for `ttlMs`; requests made while it loads share the same read. A failed read is not kept.
+// Only for pages that show data - a write must always decide on a fresh read.
+const valueCache = new Map<string, { at: number; value: Promise<unknown> }>();
+const MAX_VALUES = 200;
+
+export function cachedValue<T>(key: string, ttlMs: number, load: () => Promise<T>): Promise<T> {
+  const hit = valueCache.get(key);
+  if (hit && Date.now() - hit.at < ttlMs) return hit.value as Promise<T>;
+  const value = load();
+  if (valueCache.size >= MAX_VALUES) valueCache.clear();
+  valueCache.set(key, { at: Date.now(), value });
+  value.catch(() => { if (valueCache.get(key)?.value === value) valueCache.delete(key); });
+  return value;
+}

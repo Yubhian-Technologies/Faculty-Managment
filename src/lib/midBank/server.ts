@@ -2,6 +2,7 @@ import { getHodDepartmentScope } from "@/lib/departments/scope";
 import { reviewingDepartment } from "./reviewer";
 import { ownerDepartmentNamesLive } from "@/lib/subjects/ownerDepartment";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
+import { cachedValue } from "@/lib/firestore/sharedReads";
 import type { Course, MidBankDeadline, MidBankRules, MidQuestion, MidQuestionBank, Section, Subject, SubjectOutcomes, SubjectSemesterAssignment, TeachingAssignment } from "@/types";
 import { isDeadlineLocked } from "./deadline";
 import { isMidBankSubject, type TeachingRow } from "./sections";
@@ -32,10 +33,11 @@ export const MID_BANK_READ_ROLES = ["PANEL_MEMBER", "HOD", ...MID_BANK_OVERSEERS
 /** Roles that may WRITE (the bank's owner only - checked per bank). */
 export const MID_BANK_WRITE_ROLES = ["PANEL_MEMBER", "HOD"];
 
+/** `in` queries take 30 values: one query per 30, all sent at once (the database is far away - never one after another). */
 async function inChunks<T>(values: string[], run: (chunk: string[]) => Promise<T[]>): Promise<T[]> {
-  const out: T[] = [];
-  for (let i = 0; i < values.length; i += 30) out.push(...(await run(values.slice(i, i + 30))));
-  return out;
+  const chunks: string[][] = [];
+  for (let i = 0; i < values.length; i += 30) chunks.push(values.slice(i, i + 30));
+  return (await Promise.all(chunks.map(run))).flat();
 }
 
 /** Every Course doc of a programme (one per department), by course group key. */
@@ -56,8 +58,11 @@ export async function teachingFor(db: Db, collegeId: string, d: Pick<MidBankDead
   const refs = midBankRefs(db, collegeId);
   if (d.courseIds.length === 0) return [];
   const [sectionDocs, instanceDocs] = await Promise.all([
-    inChunks(d.courseIds, async (ids) => (await refs.college.collection("sections").where("courseId", "in", ids).get()).docs),
-    inChunks(d.courseIds, async (ids) => (await refs.college.collection("subjectSemesterAssignments").where("courseId", "in", ids).get()).docs),
+    // Only the fields used below (smaller answers from a far-away database); the curriculum filtered to the semester
+    // by the database itself (plain equality filters - no index needed).
+    inChunks(d.courseIds, async (ids) => (await refs.college.collection("sections").where("courseId", "in", ids).select("year", "department", "name").get()).docs),
+    inChunks(d.courseIds, async (ids) => (await refs.college.collection("subjectSemesterAssignments").where("courseId", "in", ids).where("semester", "==", d.semester)
+      .select("semester", "subjectId", "subjectName", "subjectCode").get()).docs),
   ]);
   const sections = new Map<string, Section>();
   for (const s of sectionDocs) {
@@ -69,13 +74,16 @@ export async function teachingFor(db: Db, collegeId: string, d: Pick<MidBankDead
     const a = i.data() as SubjectSemesterAssignment;
     if (a.semester === d.semester && a.subjectId) subjects.set(a.subjectId, { name: a.subjectName, code: a.subjectCode });
   }
-  // Mid exam subjects only (the master subject's type and teaching-load tick; the semester copy's snapshot may be stale).
-  if (subjects.size > 0) {
-    const masters = await db.getAll(...[...subjects.keys()].map((id) => refs.college.collection("subjects").doc(id)));
-    for (const m of masters) if (!m.exists || !isMidBankSubject(m.data() as Subject)) subjects.delete(m.id);
-  }
   if (sections.size === 0 || subjects.size === 0) return [];
-  const teachDocs = await inChunks([...sections.keys()], async (ids) => (await refs.college.collection("teachingAssignments").where("sectionId", "in", ids).get()).docs);
+  // The master subjects and the teaching assignments are read together (neither needs the other).
+  const [masters, teachDocs] = await Promise.all([
+    db.getAll(...[...subjects.keys()].map((id) => refs.college.collection("subjects").doc(id))),
+    inChunks([...sections.keys()], async (ids) => (await refs.college.collection("teachingAssignments").where("sectionId", "in", ids)
+      .select("isPast", "sectionId", "subjectId", "subjectName", "subjectCode", "facultyId", "facultyName").get()).docs),
+  ]);
+  // Mid exam subjects only (the master subject's type and teaching-load tick; the semester copy's snapshot may be stale).
+  for (const m of masters) if (!m.exists || !isMidBankSubject(m.data() as Subject)) subjects.delete(m.id);
+  if (subjects.size === 0) return [];
   const rows: TeachingRow[] = [];
   for (const t of teachDocs) {
     const ta = t.data() as TeachingAssignment;
@@ -88,6 +96,12 @@ export async function teachingFor(db: Db, collegeId: string, d: Pick<MidBankDead
     });
   }
   return rows;
+}
+
+/** `teachingFor` kept 60 s per server instance - for pages that SHOW progress / assignments (the progress list and the
+ *  Assign card ask together). Writes (start, assign, save) call `teachingFor` itself. */
+export function teachingForCached(db: Db, collegeId: string, d: Pick<MidBankDeadline, "courseIds" | "year" | "semester">): Promise<TeachingRow[]> {
+  return cachedValue(`teachingFor/${collegeId}/${[...d.courseIds].sort().join(",")}/${d.year}/${d.semester}`, 60_000, () => teachingFor(db, collegeId, d));
 }
 
 export async function loadDeadline(db: Db, collegeId: string, id: string): Promise<MidBankDeadline | null> {

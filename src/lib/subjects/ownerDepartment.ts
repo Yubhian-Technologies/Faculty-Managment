@@ -1,4 +1,5 @@
 import type { Subject } from "@/types";
+import { cachedCollectionDocs } from "@/lib/firestore/sharedReads";
 
 // The Subject Department(s): the department(s) that look after a subject - its syllabus, and the HOD
 // approval of every question bank / question paper prepared for it - whichever branch's sections
@@ -35,10 +36,15 @@ export function reviewDepartmentsOf(branch: string, subject: OwnerDepartmentFiel
 
 /** Firestore department names by id (for `ownerDepartmentNames` / `reviewDepartmentsOf`); all of them without `ids`. */
 export async function departmentNamesById(db: FirebaseFirestore.Firestore, collegeId: string, ids?: readonly string[]): Promise<Map<string, string>> {
-  const col = db.collection("colleges").doc(collegeId).collection("departments");
-  const wanted = [...new Set((ids ?? []).filter(Boolean))];
-  const docs = ids ? (wanted.length ? await db.getAll(...wanted.map((id) => col.doc(id))) : []) : (await col.get()).docs;
   const out = new Map<string, string>();
+  if (!ids) {
+    // All of them: the shared per-instance copy of the departments (refreshed every 20 s).
+    for (const d of await cachedCollectionDocs(db, collegeId, "departments")) out.set(d.id, String((d.data() as { name?: string }).name ?? "").trim());
+    return out;
+  }
+  const col = db.collection("colleges").doc(collegeId).collection("departments");
+  const wanted = [...new Set(ids.filter(Boolean))];
+  const docs = wanted.length ? await db.getAll(...wanted.map((id) => col.doc(id))) : [];
   for (const d of docs) if (d.exists) out.set(d.id, String((d.data() as { name?: string }).name ?? "").trim());
   return out;
 }
