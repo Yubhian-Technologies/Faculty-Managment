@@ -322,7 +322,6 @@ export const NAV_ITEMS: NavItem[] = [
   // No separate "Timetable View" item: it is the Published mode of the Timetable page.
   { label: "Internal Marks", href: "/hod/internal-exam", iconName: "ClipboardCheck", roles: ["HOD"], legacyModule: "Department" },
   { label: "Result Analysis", href: "/hod/results-analysis", iconName: "BarChart3", roles: ["HOD"], legacyModule: "Department" },
-  { label: "Mid Paper Setter", href: "/hod/mid-paper-setter", iconName: "UserCog", roles: ["HOD"], legacyModule: "Department" },
   { label: "Mid Question Bank", href: "/hod/question-banks", iconName: "BookOpenCheck", roles: ["HOD"], legacyModule: "Department" },
   { label: "Leave Approvals", href: "/hod/leave-approvals", iconName: "CalendarClock", roles: ["HOD"], section: "Approvals", module: "leave-approvals" },
   { label: "Leave Register", href: "/hod/leave-history", iconName: "History", roles: ["HOD"], module: "leave-approvals" },
