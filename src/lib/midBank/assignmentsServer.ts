@@ -4,6 +4,7 @@ import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { ownerDepartmentNames, reviewDepartmentsOf } from "@/lib/subjects/ownerDepartment";
 import { ALL_BRANCHES, branchesOf, isAllBranches, sectionsForScope } from "./assignments";
 import { midBankRefs } from "./server";
+import { cachedValue } from "@/lib/firestore/sharedReads";
 import type { TeachingRow } from "./sections";
 import { isFacultyAvailable, type FacultyMember, type MidBankAssignment, type MidQuestionBank, type Subject } from "@/types";
 
@@ -37,8 +38,14 @@ export interface Candidate { facultyId: string; name: string; department: string
  *  built from it in memory, so a deadline with many subjects x branches is not two queries per pair. */
 export interface FacultyIndex { byId: Map<string, FacultyMember>; byDept: Map<string, { id: string; f: FacultyMember }[]> }
 
+/** The faculty index kept 60 s per server instance - for showing the Assign card; an assignment save reads it fresh. */
+export function loadFacultyIndexCached(db: Db, collegeId: string): Promise<FacultyIndex> {
+  return cachedValue(`facultyIndex/${collegeId}`, 60_000, () => loadFacultyIndex(db, collegeId));
+}
+
 export async function loadFacultyIndex(db: Db, collegeId: string): Promise<FacultyIndex> {
-  const snap = await midBankRefs(db, collegeId).college.collection("facultyMembers").get();
+  // Only what the pick lists use (name, title, department, status) - the full records are large.
+  const snap = await midBankRefs(db, collegeId).college.collection("facultyMembers").select("legalName", "honorific", "department", "status").get();
   const byId = new Map<string, FacultyMember>();
   const byDept = new Map<string, { id: string; f: FacultyMember }[]>();
   for (const d of snap.docs) {

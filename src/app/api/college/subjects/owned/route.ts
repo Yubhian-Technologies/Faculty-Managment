@@ -3,7 +3,8 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { facultyManageableDepartmentNames, getHodDepartmentScope } from "@/lib/departments/scope";
+import { facultyManageableDepartmentNames } from "@/lib/departments/scope";
+import { cachedHodScope } from "@/lib/departments/cachedHodScope";
 import { getInChunks } from "@/lib/firestore/inQuery";
 import { departmentNamesById, ownerDepartmentNames } from "@/lib/subjects/ownerDepartment";
 import { subjectErrorResponse } from "@/lib/subjects/http";
@@ -16,7 +17,7 @@ export async function GET() {
     const session = await requireCollegeMember("HOD");
     const db = getAdminDb();
     const [scope, names] = await Promise.all([
-      getHodDepartmentScope(db, session.collegeId, session.uid),
+      cachedHodScope(db, session.collegeId, session.uid),
       departmentNamesById(db, session.collegeId),
     ]);
     // Own department(s) + sub-departments only: a managed branch's subjects belong to that branch's own HOD.

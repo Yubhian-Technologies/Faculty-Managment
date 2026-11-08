@@ -5,13 +5,14 @@ import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
+import { cachedHodScope } from "@/lib/departments/cachedHodScope";
 import { loadMidSettings } from "@/lib/exams/midSettings";
 import { notify } from "@/lib/notify";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { isDeadlineLocked } from "@/lib/midBank/deadline";
 import { ALL_BRANCHES, assignmentIdFor, checkAssignment, isAllBranches, sectionsForScope } from "@/lib/midBank/assignments";
-import { assignmentsCol, branchesOf, candidatesFor, loadFacultyIndex, hodMayAssign, loadAssignments, reviewDepartmentsForScope, startedByAssignment } from "@/lib/midBank/assignmentsServer";
-import { actorName, guardError, loadDeadline, loginUidsOf, MID_BANK_OVERSEERS, midBankRefs, teachingFor } from "@/lib/midBank/server";
+import { assignmentsCol, branchesOf, candidatesFor, loadFacultyIndex, loadFacultyIndexCached, hodMayAssign, loadAssignments, reviewDepartmentsForScope, startedByAssignment } from "@/lib/midBank/assignmentsServer";
+import { actorName, guardError, loadDeadline, loginUidsOf, MID_BANK_OVERSEERS, midBankRefs, teachingFor, teachingForCached } from "@/lib/midBank/server";
 import { departmentNamesById, ownerDepartmentNames } from "@/lib/subjects/ownerDepartment";
 import type { MidBankAssignment, MidBankDeadline, MidQuestionBank, Subject } from "@/types";
 
@@ -24,13 +25,14 @@ import type { MidBankAssignment, MidBankDeadline, MidQuestionBank, Subject } fro
 
 const VIEW_ROLES = ["HOD", ...MID_BANK_OVERSEERS];
 
-async function load(db: FirebaseFirestore.Firestore, collegeId: string, d: MidBankDeadline, scope: Awaited<ReturnType<typeof getHodDepartmentScope>> | null, onlySubject?: string) {
+async function load(db: FirebaseFirestore.Firestore, collegeId: string, d: MidBankDeadline, scope: Awaited<ReturnType<typeof getHodDepartmentScope>> | null, onlySubject?: string, fresh = false) {
+  // GET shows the card from the short server copies; a save (POST, fresh) re-reads everything it decides on.
   const [rows, assignments, bankSnap, names, faculty] = await Promise.all([
-    teachingFor(db, collegeId, d),
+    fresh ? teachingFor(db, collegeId, d) : teachingForCached(db, collegeId, d),
     loadAssignments(db, collegeId, d.id),
     midBankRefs(db, collegeId).banks.where("deadlineId", "==", d.id).get(),
     departmentNamesById(db, collegeId),
-    loadFacultyIndex(db, collegeId),
+    fresh ? loadFacultyIndex(db, collegeId) : loadFacultyIndexCached(db, collegeId),
   ]);
   const banks = bankSnap.docs.map((b) => b.data() as MidQuestionBank);
   const started = startedByAssignment(banks);
@@ -79,10 +81,16 @@ export async function GET(request: Request) {
   try {
     const session = await requireCollegeMember(...VIEW_ROLES);
     const db = getAdminDb();
-    const d = await loadDeadline(db, session.collegeId, new URL(request.url).searchParams.get("deadlineId") ?? "");
+    const deadline = loadDeadline(db, session.collegeId, new URL(request.url).searchParams.get("deadlineId") ?? "");
+    // Warm the shared reads `load` uses while the HOD's scope is still being read (same cached promises, read once).
+    deadline.then((x) => x && teachingForCached(db, session.collegeId, x)).catch(() => undefined);
+    loadFacultyIndexCached(db, session.collegeId).catch(() => undefined);
+    const [d, settings, scope] = await Promise.all([
+      deadline,
+      loadMidSettings(db, session.collegeId),
+      session.role === "HOD" ? cachedHodScope(db, session.collegeId, session.uid) : null,
+    ]);
     if (!d) return NextResponse.json({ error: "Deadline not found" }, { status: 404 });
-    const settings = await loadMidSettings(db, session.collegeId);
-    const scope = session.role === "HOD" ? await getHodDepartmentScope(db, session.collegeId, session.uid) : null;
     const { out } = await load(db, session.collegeId, d, scope);
     return NextResponse.json({ mode: settings.midAssignment, deadline: { ...d, locked: isDeadlineLocked(d.deadline) }, subjects: out });
   } catch (err) {
@@ -106,7 +114,7 @@ export async function POST(request: Request) {
     const facultyIds = [...new Set(Array.isArray(body.facultyIds) ? body.facultyIds.map(String).filter(Boolean) : [])];
 
     const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-    const { out } = await load(db, session.collegeId, d, scope, subjectId);
+    const { out } = await load(db, session.collegeId, d, scope, subjectId, true);
     const subj = out[0];
     if (!subj) return NextResponse.json({ error: "Your department doesn't look after this subject" }, { status: 403 });
     const target = scopeKind === "SUBJECT" ? subj.whole : subj.branches.find((b) => b.branch === branch);
