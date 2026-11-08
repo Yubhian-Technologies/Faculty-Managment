@@ -3,12 +3,12 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { canHodEditDepartment, getHodDepartmentScope } from "@/lib/departments/scope";
+import { getHodDepartmentScope } from "@/lib/departments/scope";
 import { isDeadlineLocked } from "@/lib/midBank/deadline";
 import { sectionsOf } from "@/lib/midBank/sections";
 import { guardError, loadDeadline, MID_BANK_OVERSEERS, midBankRefs, teachingFor } from "@/lib/midBank/server";
 import { departmentNamesById, ownerDepartmentNames, reviewDepartmentsOf } from "@/lib/subjects/ownerDepartment";
-import { reviewingDepartment } from "@/lib/midBank/reviewer";
+import { reviewingDepartment, seesBranchProgress } from "@/lib/midBank/reviewer";
 import { loadMidSettings } from "@/lib/exams/midSettings";
 import { isAllBranches, servesBranch } from "@/lib/midBank/assignments";
 import { loadAssignments } from "@/lib/midBank/assignmentsServer";
@@ -44,8 +44,10 @@ export async function GET(_request: Request, { params }: Params) {
     ]);
     const subjects = new Map(subjectSnaps.filter((x) => x.exists).map((x) => [x.id, x.data() as Subject]));
     const reviewOf = (branch: string, subjectId: string) => reviewDepartmentsOf(branch, subjects.get(subjectId), deptNames);
-    const reviews = (branch: string, subjectId: string) => !scope || !!reviewingDepartment(scope, reviewOf(branch, subjectId), ownerDepartmentNames(subjects.get(subjectId), deptNames).length > 0);
-    const visible = (branch: string, subjectId: string) => !scope || canHodEditDepartment(scope, branch) || reviews(branch, subjectId);
+    const bySubjectDept = (subjectId: string) => ownerDepartmentNames(subjects.get(subjectId), deptNames).length > 0;
+    const reviews = (branch: string, subjectId: string) => !scope || !!reviewingDepartment(scope, reviewOf(branch, subjectId), bySubjectDept(subjectId));
+    // The branch's own HOD keeps the progress of every subject there; a 1st-year coordinator only their own subjects.
+    const visible = (branch: string, subjectId: string) => !scope || seesBranchProgress(scope, branch, bySubjectDept(subjectId)) || reviews(branch, subjectId);
     // A whole-subject paper (HOD-assigned) belongs to every branch it serves.
     const banks = allBanks.filter((b) => visible(b.branch, b.subjectId) || (b.branches ?? []).some((br) => visible(br, b.subjectId)));
     const [settings, assignments] = await Promise.all([loadMidSettings(db, session.collegeId), loadAssignments(db, session.collegeId, id)]);

@@ -12,3 +12,13 @@ export function reviewingDepartment(scope: HodDepartmentScope, departments: stri
   const own = new Set(facultyManageableDepartmentNames(scope));
   return departments.find((d) => own.has(d)) ?? "";
 }
+
+/**
+ * Whether this HOD sees a branch's progress row for a subject they don't review. A subject with a Subject Department:
+ * only the branch's own HOD (own department / sub-department) - a 1st-year coordinator of that branch sees just the
+ * subjects that are theirs. No Subject Department: the branch HOD, managed branches included, as before.
+ */
+export function seesBranchProgress(scope: HodDepartmentScope, branch: string, bySubjectDepartment: boolean): boolean {
+  if (!bySubjectDepartment) return canHodEditDepartment(scope, branch);
+  return facultyManageableDepartmentNames(scope).includes(branch);
+}

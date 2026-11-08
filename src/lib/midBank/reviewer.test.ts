@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { HodDepartmentScope } from "@/lib/departments/scope";
-import { reviewingDepartment } from "./reviewer";
+import { reviewingDepartment, seesBranchProgress } from "./reviewer";
 
 const scope = (s: Partial<HodDepartmentScope>): HodDepartmentScope => ({
   departmentName: "", departmentId: "", ownDepartmentNames: [], ownDepartmentIds: [], childDepartmentNames: [], childDepartmentIds: [],
@@ -24,5 +24,17 @@ describe("reviewingDepartment", () => {
   it("no Subject Department: the branch HOD decides, managed branches included (as before)", () => {
     expect(reviewingDepartment(english, ["Mechanical Engineering"], false)).toBe("Mechanical Engineering");
     expect(reviewingDepartment(english, ["Computer Science and Engineering"], false)).toBe("");
+  });
+});
+
+describe("seesBranchProgress", () => {
+  const civilHod = scope({ ownDepartmentNames: ["Civil Engineering"] });
+  it("a coordinator of a branch's 1st year sees there only subjects without a Subject Department", () => {
+    expect(seesBranchProgress(english, "Civil Engineering", true)).toBe(false);
+    expect(seesBranchProgress(english, "Civil Engineering", false)).toBe(true);
+  });
+  it("the branch's own HOD keeps the progress of every subject there", () => {
+    expect(seesBranchProgress(civilHod, "Civil Engineering", true)).toBe(true);
+    expect(seesBranchProgress(civilHod, "Mechanical Engineering", true)).toBe(false);
   });
 });
