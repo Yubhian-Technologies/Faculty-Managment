@@ -4,7 +4,8 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb, getAdminStorage } from "@/lib/firebase/admin";
-import { canHodEditDepartment, getHodDepartmentScope } from "@/lib/departments/scope";
+import { getHodDepartmentScope } from "@/lib/departments/scope";
+import { reviewingDepartment } from "@/lib/midBank/reviewer";
 import { actorName } from "@/lib/midBank/server";
 import { ownerDepartmentNamesLive } from "@/lib/subjects/ownerDepartment";
 import { CURRICULUM_ROLES, subjectErrorResponse } from "@/lib/subjects/http";
@@ -28,7 +29,7 @@ async function authorize(id: string) {
   if (session.role === "HOD") {
     const owners = await ownerDepartmentNamesLive(db, session.collegeId, subject);
     const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-    if (!owners.some((d) => canHodEditDepartment(scope, d))) {
+    if (!reviewingDepartment(scope, owners, true)) {
       return { error: NextResponse.json({ error: "Only the HOD of this subject's department can change its syllabus" }, { status: 403 }) };
     }
   }

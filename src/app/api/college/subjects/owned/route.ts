@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { editableDepartmentNames, getHodDepartmentScope } from "@/lib/departments/scope";
+import { facultyManageableDepartmentNames, getHodDepartmentScope } from "@/lib/departments/scope";
 import { getInChunks } from "@/lib/firestore/inQuery";
 import { departmentNamesById, ownerDepartmentNames } from "@/lib/subjects/ownerDepartment";
 import { subjectErrorResponse } from "@/lib/subjects/http";
@@ -19,7 +19,8 @@ export async function GET() {
       getHodDepartmentScope(db, session.collegeId, session.uid),
       departmentNamesById(db, session.collegeId),
     ]);
-    const mine = new Set(editableDepartmentNames(scope));
+    // Own department(s) + sub-departments only: a managed branch's subjects belong to that branch's own HOD.
+    const mine = new Set(facultyManageableDepartmentNames(scope));
     const ids = [...names.entries()].filter(([, n]) => mine.has(n)).map(([id]) => id);
     const col = db.collection("colleges").doc(session.collegeId).collection("subjects");
     // The list (two departments possible), and the single field saved before the list existed.
