@@ -1,4 +1,5 @@
-import { canHodEditDepartment, type HodDepartmentScope } from "@/lib/departments/scope";
+import type { HodDepartmentScope } from "@/lib/departments/scope";
+import { reviewingDepartment } from "./reviewer";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { ownerDepartmentNames, reviewDepartmentsOf } from "@/lib/subjects/ownerDepartment";
 import { ALL_BRANCHES, branchesOf, isAllBranches, sectionsForScope } from "./assignments";
@@ -26,7 +27,9 @@ export function reviewDepartmentsForScope(rows: TeachingRow[], subject: Pick<Sub
   return isAllBranches(branch) ? [] : reviewDepartmentsOf(branch, subject, names);
 }
 
-export const hodMayAssign = (scope: HodDepartmentScope | null, departments: string[]) => !scope || departments.some((d) => canHodEditDepartment(scope, d));
+/** Only the reviewing department's HOD assigns (a Subject Department: its own HOD, never a managed-branch coordinator). */
+export const hodMayAssign = (scope: HodDepartmentScope | null, departments: string[], bySubjectDepartment: boolean) =>
+  !scope || !!reviewingDepartment(scope, departments, bySubjectDepartment);
 
 export interface Candidate { facultyId: string; name: string; department: string; teaches: boolean }
 

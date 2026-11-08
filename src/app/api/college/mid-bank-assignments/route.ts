@@ -48,7 +48,7 @@ async function load(db: FirebaseFirestore.Firestore, collegeId: string, d: MidBa
       const depts = reviewDepartmentsForScope(rows, subject, branch, names);
       if (isAllBranches(branch) && depts.length === 0) { items.push(null); continue; }
       // Only the reviewing department's HOD assigns; the Exam Cell / leadership see it read-only.
-      const canAssign = !!scope && hodMayAssign(scope, depts);
+      const canAssign = !!scope && hodMayAssign(scope, depts, ownerDepartmentNames(subject, names).length > 0);
       items.push({ branch, depts, canAssign });
     }
     // HOD: only subjects they review somewhere.

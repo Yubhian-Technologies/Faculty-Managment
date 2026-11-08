@@ -1,4 +1,5 @@
-import { canHodEditDepartment, getHodDepartmentScope } from "@/lib/departments/scope";
+import { getHodDepartmentScope } from "@/lib/departments/scope";
+import { reviewingDepartment } from "./reviewer";
 import { ownerDepartmentNamesLive } from "@/lib/subjects/ownerDepartment";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import type { Course, MidBankDeadline, MidBankRules, MidQuestion, MidQuestionBank, Section, Subject, SubjectOutcomes, SubjectSemesterAssignment, TeachingAssignment } from "@/types";
@@ -140,7 +141,7 @@ export async function bankAccess(db: Db, session: Session, bankId: string): Prom
   let hodDepartment = "";
   if (session.role === "HOD") {
     const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-    hodDepartment = reviewDepartments.find((d) => canHodEditDepartment(scope, d)) ?? "";
+    hodDepartment = reviewingDepartment(scope, reviewDepartments, owners.length > 0);
   }
   const isHod = !!hodDepartment;
   const locked = !deadline || isDeadlineLocked(deadline.deadline);
