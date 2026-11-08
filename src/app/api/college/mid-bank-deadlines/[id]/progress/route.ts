@@ -82,7 +82,7 @@ export async function GET(_request: Request, { params }: Params) {
       };
     }).sort((a, b) => a.branch.localeCompare(b.branch) || a.subjectName.localeCompare(b.subjectName));
 
-    return NextResponse.json({ deadline: { ...d, locked: isDeadlineLocked(d.deadline) }, groups, mode: settings.midAssignment });
+    return NextResponse.json({ deadline: { ...d, locked: isDeadlineLocked(d.deadline) }, groups, mode: settings.midAssignment, preparation: settings.midPreparation });
   } catch (err) {
     return guardError(err, "[college/mid-bank-deadlines/[id]/progress GET]");
   }

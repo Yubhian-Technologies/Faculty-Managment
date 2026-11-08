@@ -90,8 +90,8 @@ export async function PATCH(request: Request, { params }: Params) {
       const uids = await loginUidsOf(db, session.collegeId, added);
       for (const f of added) {
         const uid = uids.get(f);
-        if (uid) await notify(db, session.collegeId, uid, "MID_BANK_SHARED", `${bank.ownerName} is preparing your Mid ${bank.midNumber} question bank`,
-          `${bank.subjectName} (${bank.branch}) - your section is now covered by ${bank.ownerName}'s question bank. You can view it under Question Bank.`, "/panel/mid-bank");
+        if (uid) await notify(db, session.collegeId, uid, "MID_BANK_SHARED", `${bank.ownerName} is preparing your Mid ${bank.midNumber} ${bank.kind === "PAPERS" ? "question papers" : "question bank"}`,
+          `${bank.subjectName} (${bank.branch}) - your section is now covered by ${bank.ownerName}'s ${bank.kind === "PAPERS" ? "question papers" : "question bank"}. You can view it under ${bank.kind === "PAPERS" ? "Mid Question Papers" : "Mid Question Bank"}.`, "/panel/mid-bank");
       }
     }
     return NextResponse.json(result.body, { status: result.status });
