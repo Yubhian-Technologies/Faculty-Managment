@@ -59,7 +59,7 @@ export default function InternalExamPage() {
       const json = (await res.json()) as { final?: MidPaperFinal; error?: string };
       if (!res.ok || !json.final) throw new Error(json.error ?? "Could not load the question paper");
       const f = json.final;
-      await downloadMidPaperFinalPdf(f, { fileName: `MID${f.exam.midNumber}_${f.exam.date}_${f.branchCode}_${f.subject.code}` });
+      await downloadMidPaperFinalPdf(f, { fileName: `MID${f.exam.midNumber}_${f.exam.date}${f.sections.length ? `_${f.branchCode}` : ""}_${f.subject.code}` });
     } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not load the question paper" }); }
     finally { setViewing(""); }
   }
