@@ -240,8 +240,9 @@ export default function HODSubjectsPage() {
   // have no Course-Year Timings of its own at all, reading as "not
   // configured for this year" even when the shared year genuinely is.
   const selectedGroupCourseIds = useMemo(
-    () => (selectedGroup ? Array.from(new Set(selectedGroup.rows.map((c) => c.id))) : selectedCourseId ? [selectedCourseId] : []),
-    [selectedGroup, selectedCourseId]
+    // Plus a taught branch's own course docs (their timings count too).
+    () => (selectedGroup ? Array.from(new Set([...selectedGroup.rows.map((c) => c.id), ...(taughtProgramme?.courseIds ?? [])])) : selectedCourseId ? [selectedCourseId] : []),
+    [selectedGroup, selectedCourseId, taughtProgramme]
   );
   const timingsReady = timingsFor === `${selectedGroupCourseIds.join("|")}|${selectedYear}`;
   const semesterOptions = useMemo(() => {
@@ -388,7 +389,11 @@ export default function HODSubjectsPage() {
   // Changing Semester or Regulation also invalidates the loaded view.
 
   function selectDept(deptId: string) {
-    clearLoaded();
+    // Not clearLoaded(): the semesters come from the course + year, which a department change keeps - clearing them
+    // here left Semester "Not configured" (nothing re-reads them while course and year stay the same).
+    setApplied(null);
+    setSubjects([]);
+    setAssignments([]);
     setPickedDeptId(deptId);
     setPickedYear("");
     setPickedSemester(null);
