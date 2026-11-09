@@ -12,7 +12,7 @@ import { actorName, guardError, loadOutcomes, loadSubject, midBankRefs } from "@
 import { loadPaperQuestions } from "@/lib/midPapers/server";
 import { cleanPrintLayout } from "@/lib/midPapers/printLayout";
 import { partMax } from "@/lib/midPapers/pattern";
-import { servesBranch } from "@/lib/midBank/assignments";
+import { isMultiBranch, paperBranchLabel, servesBranch } from "@/lib/midBank/assignments";
 import type { Course, Department, MidPaperFinal, MidQuestionBank, MidTimetable } from "@/types";
 import type { PaperChoiceRow } from "@/lib/midPapers/clientTypes";
 
@@ -71,7 +71,7 @@ async function day(db: FirebaseFirestore.Firestore, collegeId: string, planId: s
       durationMinutes: mine[0]?.pattern?.durationMinutes ?? 0,
     };
   });
-  return { plan, header, rows } as const;
+  return { plan, header, rows, codeOf } as const;
 }
 
 export async function GET(request: Request) {
@@ -154,7 +154,11 @@ async function finalize(db: FirebaseFirestore.Firestore, session: { uid: string;
       ...(bank.outcomes ? { outcomes: bank.outcomes } : {}),
       cos: (outcomes?.cos ?? []).map((c) => ({ id: c.id, statement: c.statement })), mapping: outcomes?.mapping ?? {},
       subject: { name: bank.subjectName, code: bank.subjectCode, regulation: subject?.regulation ?? "" },
-      branchCode: row.branchCode, sections: bank.sections.filter((s) => !s.branch || s.branch === row.branch).map((s) => s.sectionName),
+      // One branch: its code + sections. A paper of several branches (a group / all branches): every branch it is for,
+      // each with its own sections ("CSE (A, B) · EEE (A)").
+      ...(isMultiBranch(bank.branch)
+        ? (() => { const l = paperBranchLabel(bank, (n) => r.codeOf.get(n) ?? ""); return { branchCode: l.branch, sections: l.sections }; })()
+        : { branchCode: row.branchCode, sections: bank.sections.filter((s) => !s.branch || s.branch === row.branch).map((s) => s.sectionName) }),
       exam: { courseName: r.header.courseCode, year: r.header.year, semester: r.header.semester, semesterInYear: r.header.semesterInYear, midNumber: r.header.midNumber, academicYear: r.header.academicYear, date: r.header.date },
       layout: value,
     };

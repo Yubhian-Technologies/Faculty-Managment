@@ -2,12 +2,21 @@ import { branchKey, type TeachingRow } from "./sections";
 import type { MidBankAssignment, MidBankSection } from "@/types";
 
 // "The HOD assigns" (ExamMidSettings.midAssignment = HOD): the subject's HOD assigns who prepares its bank /
-// papers for a deadline - per branch (each branch its own paper) or one paper for every branch of the subject.
-// Pure rules here; the routes read / write.
+// papers for a deadline - per branch (each branch its own paper), one paper for a GROUP of branches (e.g. CSE + EEE),
+// or one paper for every branch of the subject. Pure rules here; the routes read / write.
 
 /** The `branch` of a whole-subject assignment / paper. */
 export const ALL_BRANCHES = "All branches";
 export const isAllBranches = (branch: string) => branch === ALL_BRANCHES;
+
+/** A group of branches (scope GROUP) is stored under one label: the branch names, sorted, joined by GROUP_JOIN. */
+export const GROUP_JOIN = " + ";
+export const groupBranchLabel = (branches: string[]) => [...new Set(branches)].sort().join(GROUP_JOIN);
+export const isGroupBranch = (branch: string) => branch.includes(GROUP_JOIN);
+/** A paper / assignment for more than one branch (a group, or all branches) - it carries `branches`. */
+export const isMultiBranch = (branch: string) => isAllBranches(branch) || isGroupBranch(branch);
+/** The branches a scope label stands for: one branch, a group's branches, or null = every branch. */
+export const scopeBranches = (branch: string): string[] | null => (isAllBranches(branch) ? null : branch.split(GROUP_JOIN));
 
 export const assignmentIdFor = (deadlineId: string, subjectId: string, branch: string) => `${deadlineId}__${subjectId}__${branchKey(branch)}`;
 
@@ -16,20 +25,35 @@ export function branchesOf(rows: TeachingRow[], subjectId: string): string[] {
   return [...new Set(rows.filter((r) => r.subjectId === subjectId).map((r) => r.branch))].sort();
 }
 
-/** Does a paper of `branch` (a branch, or ALL_BRANCHES with `branches`) serve this exam branch? */
+/** Does a paper of `branch` (a branch, a group, or ALL_BRANCHES with `branches`) serve this exam branch? */
 export const servesBranch = (b: { branch: string; branches?: string[] }, examBranch: string) =>
-  b.branch === examBranch || (isAllBranches(b.branch) && (b.branches ?? []).includes(examBranch));
+  b.branch === examBranch || (isMultiBranch(b.branch) && (b.branches ?? scopeBranches(b.branch) ?? []).includes(examBranch));
 
-/** The sections a scope covers: one branch's, or every branch's (each section tagged with its branch). */
+/** The sections a scope covers: one branch's, a group's or every branch's (each section tagged with its branch). */
 export function sectionsForScope(rows: TeachingRow[], subjectId: string, branch: string): MidBankSection[] {
   const by = new Map<string, MidBankSection>();
+  const only = scopeBranches(branch);
   for (const r of rows) {
-    if (r.subjectId !== subjectId || (!isAllBranches(branch) && r.branch !== branch)) continue;
+    if (r.subjectId !== subjectId || (only && !only.includes(r.branch))) continue;
     const s = by.get(r.sectionId) ?? { sectionId: r.sectionId, sectionName: r.sectionName, facultyIds: [], facultyNames: [], branch: r.branch };
     if (!s.facultyIds.includes(r.facultyId)) { s.facultyIds.push(r.facultyId); s.facultyNames.push(r.facultyName); }
     by.set(r.sectionId, s);
   }
   return [...by.values()].sort((a, b) => (a.branch ?? "").localeCompare(b.branch ?? "") || a.sectionName.localeCompare(b.sectionName, undefined, { numeric: true }));
+}
+
+/**
+ * How a paper names its branches on the printed header (short codes): one branch -> its code with its sections;
+ * several (a group / all branches) -> each branch's code with its own sections, e.g. "CSE (A, B) · EEE (A)".
+ */
+export function paperBranchLabel(b: { branch: string; branches?: string[]; sections: Pick<MidBankSection, "sectionName" | "branch">[] }, codeOf: (name: string) => string): { branch: string; sections: string[] } {
+  if (!isMultiBranch(b.branch)) return { branch: codeOf(b.branch) || b.branch, sections: b.sections.map((s) => s.sectionName) };
+  const names = b.branches?.length ? b.branches : scopeBranches(b.branch) ?? [...new Set(b.sections.map((s) => s.branch ?? ""))].filter(Boolean);
+  const label = [...names].sort().map((n) => {
+    const secs = b.sections.filter((s) => s.branch === n).map((s) => s.sectionName);
+    return `${codeOf(n) || n}${secs.length ? ` (${secs.join(", ")})` : ""}`;
+  }).join(" · ");
+  return { branch: label, sections: [] };
 }
 
 /** Is this faculty member assigned to prepare the subject for this branch (or for all branches)? */
@@ -40,7 +64,7 @@ export function assignedScope(assignments: Pick<MidBankAssignment, "subjectId" |
 export interface AssignmentCheck {
   /** Other assignments of the same subject + deadline. */
   existing: Pick<MidBankAssignment, "branch" | "scope" | "facultyIds" | "facultyNames">[];
-  scope: "BRANCH" | "SUBJECT";
+  scope: "BRANCH" | "GROUP" | "SUBJECT";
   branch: string;
   facultyIds: string[];
   /** Who may be picked (teaching it there, or of the subject's department). */
@@ -60,8 +84,19 @@ export function checkAssignment(c: AssignmentCheck): string[] {
     if (c.scope === "SUBJECT" && others.some((e) => e.scope === "BRANCH" && e.facultyIds.length)) {
       errors.push("This subject already has setters per branch - remove them first to assign one paper for all branches");
     }
-    if (c.scope === "BRANCH" && others.some((e) => e.scope === "SUBJECT" && e.facultyIds.length)) {
+    if (c.scope !== "SUBJECT" && others.some((e) => e.scope === "SUBJECT" && e.facultyIds.length)) {
       errors.push("This subject has one paper for all branches - remove that assignment first to assign per branch");
+    }
+    // A branch is in one paper only: its own, or one group's.
+    if (c.scope !== "SUBJECT") {
+      const mine = scopeBranches(c.branch) ?? [];
+      if (c.scope === "GROUP" && mine.length < 2) errors.push("Pick at least two branches for one paper");
+      for (const e of others) {
+        if (!e.facultyIds.length || e.scope === "SUBJECT") continue;
+        const theirs = scopeBranches(e.branch) ?? [];
+        const shared = mine.filter((b) => theirs.includes(b));
+        if (shared.length) errors.push(`${shared.join(", ")} ${shared.length === 1 ? "already has" : "already have"} a paper (${isGroupBranch(e.branch) ? theirs.join(" + ") : "its own setters"}) - remove that first`);
+      }
     }
     const bad = c.facultyIds.filter((f) => !c.candidateIds.has(f));
     if (bad.length) errors.push("Pick faculty who teach this subject or belong to its department");

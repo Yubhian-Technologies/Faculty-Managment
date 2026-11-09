@@ -148,6 +148,7 @@ export const RENAME_STEPS: RenameStep[] = [
   flat("bankAssignments", "midBankAssignments", "Question bank assignments"),
   flat("banks", "midQuestionBanks", "Question banks / papers"),
   { key: "splits", label: "Mid unit splits", run: (ctx) => singleDocStep(ctx, "midBankSubjectSplits") },
+  { key: "syllabus", label: "Subject syllabus", run: (ctx) => singleDocStep(ctx, "subjectSyllabus") },
   { key: "midTimetables", label: "Mid timetables", run: (ctx, c) => arrayScanStep(ctx, "midTimetables", "slots", "subjectId", "subjectName", "subjectCode", c) },
   { key: "facultyModules", label: "Faculty modules", run: (ctx, c) => arrayScanStep(ctx, "facultyAssignedModules", "modules", "subjectId", "subjectName", "subjectCode", c) },
   { key: "results", label: "Semester results", run: (ctx, c) => resultsStep(ctx, c) },

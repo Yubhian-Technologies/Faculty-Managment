@@ -1,16 +1,19 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { BookOpen, Search } from "lucide-react";
+import Link from "next/link";
+import { BookOpen, FileText, Search } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
+import type { OwnedPlacement, TaughtBranch } from "@/lib/subjects/subjectDepartmentBranches";
+import { SYLLABUS_STATUS_LABEL } from "@/lib/subjects/syllabus";
 import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
-import type { Course, CourseCatalogItem, CourseYearTiming, Department, Subject, SubjectSemesterAssignment } from "@/types";
+import type { Course, CourseCatalogItem, CourseYearTiming, Department, Subject, SubjectSemesterAssignment, SubjectSyllabusStatus } from "@/types";
 import { subjectTypeDisplayLabel } from "@/types";
 import { regulationsForCourseYearByBatch } from "@/lib/college/academicStructure";
 import { feederOnlyYears, managerEffectiveYears, mergeOwnDepartmentOptions } from "@/lib/departments/hodScope";
@@ -66,6 +69,9 @@ export default function HODSubjectsPage() {
   // needing an effect to sync state just to pick a default.
   const [pickedCourseKey, setPickedCourseKey] = useState("");
   const [pickedDeptId, setPickedDeptId] = useState("");
+  // Branches where subjects this HOD's department looks after (Subject Department) are taught - e.g. Maths HOD:
+  // Linear Algebra in CSE, ECE ... Their semester subjects are shown read-only (the server allows only these).
+  const [taught, setTaught] = useState<{ subjectIds: Set<string>; branches: TaughtBranch[]; placements: OwnedPlacement[]; syllabusStatus: Map<string, SubjectSyllabusStatus | null> }>({ subjectIds: new Set(), branches: [], placements: [], syllabusStatus: new Map() });
   const [pickedYear, setPickedYear] = useState("");
   const [pickedSemester, setPickedSemester] = useState<number | null>(null);
   // "" means "All regulations" - lets an HOD tell apart subjects filed under
@@ -108,6 +114,14 @@ export default function HODSubjectsPage() {
   }, [loadCourses]);
 
   useEffect(() => {
+    fetch("/api/college/subjects/owned")
+      .then((r) => (r.ok ? r.json() : null) as Promise<{ subjects?: { id: string; syllabusStatus?: SubjectSyllabusStatus | null }[]; branches?: TaughtBranch[]; placements?: OwnedPlacement[] } | null>)
+      .then((d) => d && setTaught({
+        subjectIds: new Set((d.subjects ?? []).map((x) => x.id)), branches: d.branches ?? [], placements: d.placements ?? [],
+        syllabusStatus: new Map((d.subjects ?? []).map((x) => [x.id, x.syllabusStatus ?? null])),
+      }))
+      .catch(() => { /* the own-department view still works */ });
+
     fetch("/api/college/course-catalog")
       .then((r) => r.json() as Promise<{ items?: CourseCatalogItem[] }>)
       .then((d) => setCatalogItems(d.items ?? []))
@@ -161,7 +175,7 @@ export default function HODSubjectsPage() {
   // Departments whose subjects this HOD may view: own department, its
   // sub-departments, and managed core branches; falls back to the owners of
   // the listed courses.
-  const deptOptions = useMemo(() => {
+  const ownDeptOptions = useMemo(() => {
     if (ownScopeDepartments.length > 0) return ownScopeDepartments;
     const seen = new Map<string, Department>();
     for (const c of courses) {
@@ -170,6 +184,16 @@ export default function HODSubjectsPage() {
     }
     return Array.from(seen.values());
   }, [ownScopeDepartments, courses, departments]);
+  // Plus the branches teaching their department's subjects in the selected programme (not already listed above).
+  const taughtOptions = useMemo(() => {
+    const key = selectedGroup?.key;
+    const own = new Set(ownDeptOptions.map((d) => d.id));
+    return key ? taught.branches.filter((b) => !own.has(b.departmentId) && b.programmes[key]) : [];
+  }, [taught, selectedGroup, ownDeptOptions]);
+  const deptOptions = useMemo(
+    () => [...ownDeptOptions.map((d) => ({ id: d.id, name: d.name })), ...taughtOptions.map((b) => ({ id: b.departmentId, name: b.departmentName }))],
+    [ownDeptOptions, taughtOptions]
+  );
   const selectedDeptId = deptOptions.some((d) => d.id === pickedDeptId) ? pickedDeptId : (deptOptions[0]?.id ?? "");
   // The course row used for timings/years: the selected department's own row
   // when it has one, otherwise the programme's first row.
@@ -179,6 +203,9 @@ export default function HODSubjectsPage() {
   );
   const selectedCourseId = selectedCourse?.id ?? "";
   const selectedDeptName = deptOptions.find((d) => d.id === selectedDeptId)?.name ?? "";
+  // A branch reached only because their department's subjects are taught there (read-only view of it).
+  const taughtBranch = taughtOptions.find((b) => b.departmentId === selectedDeptId) ?? null;
+  const taughtProgramme = taughtBranch && selectedGroup ? taughtBranch.programmes[selectedGroup.key] ?? null : null;
   // Never the raw 1..durationYears span - only the years the Principal
   // actually assigned this HOD's own scope for this course (per-course
   // override included, via managerEffectiveYears). Nothing assigned means no
@@ -187,6 +214,8 @@ export default function HODSubjectsPage() {
   // only when the department doesn't claim it itself (feederOnlyYears).
   const yearOptions = useMemo(() => {
     if (!selectedCourse) return [];
+    // A branch teaching their subjects: the years those subjects are taught there.
+    if (taughtProgramme) return taughtProgramme.years.filter((y) => y <= selectedCourse.durationYears);
     const courseYears = Array.from({ length: selectedCourse.durationYears }, (_, i) => i + 1);
     const assigned = new Set<number>();
     // Checked PER department, not merged into one global exclusion set, so one
@@ -199,7 +228,7 @@ export default function HODSubjectsPage() {
       }
     }
     return courseYears.filter((y) => assigned.has(y));
-  }, [selectedCourse, ownScopeDepartments, departments]);
+  }, [selectedCourse, ownScopeDepartments, departments, taughtProgramme]);
   const selectedYear = pickedYear || (yearOptions.length > 0 ? String(yearOptions[0]) : "");
 
   const selectedCatalogItem = useMemo(
@@ -216,8 +245,9 @@ export default function HODSubjectsPage() {
   // have no Course-Year Timings of its own at all, reading as "not
   // configured for this year" even when the shared year genuinely is.
   const selectedGroupCourseIds = useMemo(
-    () => (selectedGroup ? Array.from(new Set(selectedGroup.rows.map((c) => c.id))) : selectedCourseId ? [selectedCourseId] : []),
-    [selectedGroup, selectedCourseId]
+    // Plus a taught branch's own course docs (their timings count too).
+    () => (selectedGroup ? Array.from(new Set([...selectedGroup.rows.map((c) => c.id), ...(taughtProgramme?.courseIds ?? [])])) : selectedCourseId ? [selectedCourseId] : []),
+    [selectedGroup, selectedCourseId, taughtProgramme]
   );
   const timingsReady = timingsFor === `${selectedGroupCourseIds.join("|")}|${selectedYear}`;
   const semesterOptions = useMemo(() => {
@@ -257,10 +287,33 @@ export default function HODSubjectsPage() {
       : []),
     [selectedCourse, selectedCatalogItem, selectedYear, currentSessionStart]
   );
-  const assignmentsForSemester = useMemo(
-    () => assignments.filter((a) => a.semester === effectiveSemester),
-    [assignments, effectiveSemester]
-  );
+  // Their own department picked: also the subjects it looks after (Subject Department), which are filed under the
+  // branches teaching them - one row per subject, with the branches it is taught in.
+  const ownedForSemester = useMemo(() => {
+    if (!applied || taughtBranch || !selectedGroup || effectiveSemester == null) return [] as (SubjectSemesterAssignment & { taughtIn: string[] })[];
+    const bySubject = new Map<string, SubjectSemesterAssignment & { taughtIn: string[] }>();
+    for (const p of taught.placements) {
+      if (p.programme !== selectedGroup.key || p.year !== Number(applied.year) || p.semester !== effectiveSemester) continue;
+      const row = bySubject.get(p.subjectId);
+      if (row) { if (!row.taughtIn.includes(p.branchName)) row.taughtIn.push(p.branchName); continue; }
+      bySubject.set(p.subjectId, {
+        id: `owned__${p.subjectId}`, subjectId: p.subjectId, subjectName: p.subjectName, subjectCode: p.subjectCode,
+        year: p.year, semester: p.semester, regulation: p.regulation ?? undefined,
+        category: (p.category ?? undefined) as SubjectSemesterAssignment["category"], customCategory: p.customCategory ?? undefined,
+        type: (p.type ?? undefined) as SubjectSemesterAssignment["type"],
+        lectureHours: p.lectureHours ?? undefined, tutorialHours: p.tutorialHours ?? undefined, practicalHours: p.practicalHours ?? undefined,
+        credits: p.credits ?? undefined, hoursPerWeek: p.hoursPerWeek ?? undefined,
+        taughtIn: [p.branchName],
+      } as SubjectSemesterAssignment & { taughtIn: string[] });
+    }
+    for (const row of bySubject.values()) row.taughtIn.sort((a, b) => a.localeCompare(b));
+    return [...bySubject.values()];
+  }, [applied, taughtBranch, selectedGroup, effectiveSemester, taught]);
+  const assignmentsForSemester = useMemo(() => {
+    const own = assignments.filter((a) => a.semester === effectiveSemester);
+    const have = new Set(own.map((a) => a.subjectId));
+    return [...own, ...ownedForSemester.filter((o) => !have.has(o.subjectId))] as (SubjectSemesterAssignment & { taughtIn?: string[] })[];
+  }, [assignments, effectiveSemester, ownedForSemester]);
   const regulationOptions = useMemo(
     () => Array.from(new Set([
       ...catalogRegulations,
@@ -279,8 +332,10 @@ export default function HODSubjectsPage() {
     const filtered = pickedRegulation
       ? assignmentsForSemester.filter((a) => !a.regulation || a.regulation === pickedRegulation)
       : assignmentsForSemester;
-    return [...filtered].sort((a, b) => a.subjectName.localeCompare(b.subjectName));
-  }, [assignmentsForSemester, pickedRegulation]);
+    // In a branch teaching their subjects, their department's subjects first.
+    const mine = (a: SubjectSemesterAssignment) => (taught.subjectIds.has(a.subjectId) ? 0 : 1);
+    return [...filtered].sort((a, b) => mine(a) - mine(b) || a.subjectName.localeCompare(b.subjectName));
+  }, [assignmentsForSemester, pickedRegulation, taught]);
 
   // Subjects (catalogId-scoped, department-independent) alongside Course-Year
   // Timings and this department's own semester assignments - same three-way
@@ -343,8 +398,13 @@ export default function HODSubjectsPage() {
   useEffect(() => {
     if (!applied) return;
     const course = courses.find((c) => c.id === applied.courseId);
-    if (course) void loadAssignments(course, courses.filter((c) => courseKey(c) === courseKey(course)), applied.year, applied.deptId);
-  }, [applied, courses, loadAssignments]);
+    if (!course) return;
+    // The branch's own course docs too (a taught branch's subjects sit under ITS course doc, which the HOD's course
+    // list may not hold).
+    const extra = (taughtProgramme?.courseIds ?? []).map((id) => ({ ...course, id }));
+    const siblings = [...new Map([...courses.filter((c) => courseKey(c) === courseKey(course)), ...extra].map((c) => [c.id, c])).values()];
+    void loadAssignments(course, siblings, applied.year, applied.deptId);
+  }, [applied, courses, loadAssignments, taughtProgramme]);
 
   // A changed Course/Year invalidates what's on screen - cleared here, in the
   // handlers, not in an effect.
@@ -357,7 +417,11 @@ export default function HODSubjectsPage() {
   // Changing Semester or Regulation also invalidates the loaded view.
 
   function selectDept(deptId: string) {
-    clearLoaded();
+    // Not clearLoaded(): the semesters come from the course + year, which a department change keeps - clearing them
+    // here left Semester "Not configured" (nothing re-reads them while course and year stay the same).
+    setApplied(null);
+    setSubjects([]);
+    setAssignments([]);
     setPickedDeptId(deptId);
     setPickedYear("");
     setPickedSemester(null);
@@ -410,7 +474,13 @@ export default function HODSubjectsPage() {
                 <Select value={selectedDeptId} onValueChange={selectDept} disabled={deptOptions.length === 0}>
                   <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
                   <SelectContent>
-                    {deptOptions.map((d) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                    {ownDeptOptions.map((d) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                    {taughtOptions.length > 0 && (
+                      <SelectGroup>
+                        <SelectLabel className="text-xs text-muted-foreground">Branches where your subjects are taught (view only)</SelectLabel>
+                        {taughtOptions.map((b) => <SelectItem key={b.departmentId} value={b.departmentId}>{b.departmentName}</SelectItem>)}
+                      </SelectGroup>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -498,7 +568,9 @@ export default function HODSubjectsPage() {
                   </div>
                 ) : assignmentsForSemester.length === 0 ? (
                   <p className="text-sm text-muted-foreground py-6 text-center">
-                    No subjects assigned to this department for this semester yet.
+                    {!taughtBranch && taughtOptions.length > 0
+                      ? "None of your department's subjects is taught in this semester. Pick a branch in Department above to see its whole semester."
+                      : "No subjects assigned to this department for this semester yet."}
                   </p>
                 ) : visibleAssignments.length === 0 ? (
                   <p className="text-sm text-muted-foreground py-6 text-center">
@@ -531,7 +603,20 @@ export default function HODSubjectsPage() {
                                   ) : "—"}
                                 </td>
                                 <td className="px-4 py-2.5">
-                                  <div className="font-medium text-foreground">{a.subjectName}</div>
+                                  <div className="font-medium text-foreground">
+                                    {a.subjectName}
+                                    {taught.subjectIds.has(a.subjectId) && <Badge className="ml-2 align-middle text-[10px]">Your department</Badge>}
+                                  </div>
+                                  {!!a.taughtIn?.length && <div className="mt-0.5 text-xs text-muted-foreground">Taught in: {a.taughtIn.join(", ")}</div>}
+                                  {taught.subjectIds.has(a.subjectId) && (() => {
+                                    // Their department's subject: its syllabus (units, COs, CO-PO) - prepared here, frozen by Academics.
+                                    const st = taught.syllabusStatus.get(a.subjectId) ?? null;
+                                    return (
+                                      <Link href={`/hod/subjects/syllabus/${encodeURIComponent(a.subjectId)}`} className="mt-1.5 inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium text-primary hover:bg-primary/5">
+                                        <FileText className="h-3.5 w-3.5" />Syllabus · {st ? SYLLABUS_STATUS_LABEL[st] : "Not started"}
+                                      </Link>
+                                    );
+                                  })()}
                                   <div className="flex flex-wrap items-center gap-2 mt-1">
                                     <Badge variant="secondary" className="text-xs font-mono">{a.subjectCode}</Badge>
                                     <Badge variant="outline" className="text-xs">{subjectTypeDisplayLabel(a.type ?? subject?.type)}</Badge>

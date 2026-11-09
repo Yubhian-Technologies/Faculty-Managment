@@ -24,6 +24,7 @@ export * from "./budget";
 export * from "./indent";
 export * from "./webmaster";
 export * from "./midQuestionBank";
+export * from "./subjectSyllabus";
 export * from "./midPaperSet";
 export * from "./midTimetable";
 export * from "./midQuestionPaper";

@@ -9,6 +9,7 @@ import { CURRICULUM_ROLES, subjectErrorResponse } from "@/lib/subjects/http";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { subjectDepartmentBranches } from "@/lib/subjects/subjectDepartmentBranches";
 import { FieldValue } from "firebase-admin/firestore";
 import { getHodDepartmentScope, canHodEditDepartmentId, canHodEditDepartment } from "@/lib/departments/scope";
 import { sectionAssignmentScope } from "@/lib/departments/sectionAssignmentScope";
@@ -53,7 +54,10 @@ export async function GET(request: Request) {
     let hodScope: Awaited<ReturnType<typeof getHodDepartmentScope>> | null = null;
     if (session.role === "HOD") {
       hodScope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (departmentId && !canHodEditDepartmentId(hodScope, departmentId)) {
+      // Also readable: a branch where a subject this HOD's department looks after (Subject Department) is taught -
+      // its semester subjects are shown to them read-only (HOD > Subjects). No other branch.
+      if (departmentId && !canHodEditDepartmentId(hodScope, departmentId)
+        && !(await subjectDepartmentBranches(db, session.collegeId, session.uid, hodScope)).branches.some((b) => b.departmentId === departmentId)) {
         return NextResponse.json({ error: "That department is not yours or one of your sub-departments" }, { status: 403 });
       }
     }

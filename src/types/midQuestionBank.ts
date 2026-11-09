@@ -28,6 +28,8 @@ export interface SyllabusUnit {
 export interface CourseOutcome {
   id: string; // "CO1".."COn"
   statement: string;
+  /** The unit this CO belongs to (subject syllabus); absent in older per-branch setups. */
+  unit?: number;
 }
 
 
@@ -160,7 +162,8 @@ export interface MidBankSection {
 /**
  * "The HOD assigns" colleges (ExamMidSettings.midAssignment = HOD): who prepares a subject's bank / papers for one
  * deadline. colleges/{c}/midBankAssignments/{deadlineId}__{subjectId}__{branchKey | all-branches}.
- * BRANCH = for one branch (each branch its own paper); SUBJECT = one paper used by every branch (`branches`).
+ * BRANCH = for one branch (each branch its own paper); GROUP = one paper for some branches (`branch` = their names
+ * joined by " + ", `branches`); SUBJECT = one paper used by every branch (`branches`).
  * Several setters may be assigned; each prepares their own.
  */
 export interface MidBankAssignment {
@@ -169,8 +172,8 @@ export interface MidBankAssignment {
   subjectId: string;
   subjectName: string;
   subjectCode: string;
-  scope: "BRANCH" | "SUBJECT";
-  /** The branch, or ALL_BRANCHES for a SUBJECT assignment. */
+  scope: "BRANCH" | "GROUP" | "SUBJECT";
+  /** The branch, a group label ("CSE + EEE" in full names) for GROUP, or ALL_BRANCHES for a SUBJECT assignment. */
   branch: string;
   branches: string[];
   facultyIds: string[];
@@ -204,7 +207,7 @@ export interface MidQuestionBank {
   subjectId: string;
   subjectName: string;
   subjectCode: string;
-  /** The branch (the sections' department) - banks are per branch + subject + Mid. ALL_BRANCHES = one paper for every branch in `branches`. */
+  /** The branch (the sections' department) - banks are per branch + subject + Mid. ALL_BRANCHES / a group label = one paper for every branch in `branches`. */
   branch: string;
   /** A paper prepared for the whole subject ("The HOD assigns", SUBJECT scope): every branch it is used by. */
   branches?: string[];
