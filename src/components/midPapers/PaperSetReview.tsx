@@ -8,7 +8,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/hooks/useToast";
 import { outcomeSwitches } from "@/lib/midBank/outcomeSwitches";
 import { choiceText, flexibleQuestions, partFor, partMax, patternMax, setNumbers } from "@/lib/midPapers/pattern";
-import { downloadMidPaperSetPdf } from "@/lib/pdf/downloadMidPaperSet";
+import { downloadMidPaperSetPartsPdf, downloadMidPaperSetPdf } from "@/lib/pdf/downloadMidPaperSet";
+import { defaultPartHeaders } from "@/lib/midPapers/printLayout";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { PaperPreviewButton, paperSetData } from "@/components/midPapers/PaperPreview";
 import { MathText } from "@/components/midBank/MathText";
 import { ApprovalPanel } from "@/components/midBank/ApprovalPanel";
@@ -30,20 +34,24 @@ export function PaperSetReview({ detail, writeHref, onChanged }: { detail: MidBa
   const mySets = setNumbers(pattern);
   const [set, setSet] = useState(mySets[0] ?? 1);
   const [busy, setBusy] = useState(false);
-  const progress = bank.setProgress?.[String(set)];
-  const complete = !!progress && progress.complete >= progress.total && !(progress.problems?.length);
 
   const isDone = (n: number) => { const p = bank.setProgress?.[String(n)]; return !!p && p.complete >= p.total && !(p.problems?.length); };
   // Short file name: Mid, subject code, the branch (one branch only - a paper for several branches would make it
   // hundreds of characters), the paper number.
   const fileName = (n: number) => `MID${bank.midNumber}_${bank.subjectCode}${detail.branchLabel && !detail.branchLabel.sections.length ? "" : `_${detail.branchLabel?.branch ?? bank.branch}`}_Paper-${n}`;
 
-  /** Each paper is its own PDF (its own header and page numbers) - one file per paper. */
-  async function pdf(which: number[]) {
+  /**
+   * Each paper is its own PDF - one file per paper; with `parts`, each PART of it is its own paper too (a file per part,
+   * each with the full header and that part's time + max marks).
+   */
+  async function pdf(which: number[], parts?: { partId: string; durationMinutes: number; maxMarks: number }[]) {
     setBusy(true);
     try {
       const ready = which.filter(isDone);
-      for (const n of ready) await downloadMidPaperSetPdf(paperSetData(detail, n), fileName(n));
+      for (const n of ready) {
+        if (parts) await downloadMidPaperSetPartsPdf(paperSetData(detail, n), parts, fileName(n));
+        else await downloadMidPaperSetPdf(paperSetData(detail, n), fileName(n));
+      }
       const skipped = which.filter((n) => !ready.includes(n));
       if (skipped.length) toast({ title: `Paper ${skipped.join(", ")} not complete yet - not downloaded` });
     } catch (e) {
@@ -51,8 +59,14 @@ export function PaperSetReview({ detail, writeHref, onChanged }: { detail: MidBa
     } finally { setBusy(false); }
   }
 
+  const [downloading, setDownloading] = useState(false);
   return (
     <div className="space-y-4">
+      {downloading && (
+        <DownloadDialog pattern={pattern} current={set} papers={mySets} isDone={isDone} busy={busy}
+          onClose={() => setDownloading(false)}
+          onDownload={(which, parts) => { setDownloading(false); void pdf(which, parts); }} />
+      )}
       <ApprovalPanel bank={bank} isOwner={detail.access.isOwner} isHod={!!detail.access.isHod} onChanged={onChanged} />
       <SuggestionsPanel bankId={bank.id} questions={questions.map((q) => ({ id: q.id, label: `Paper ${q.set} · ${pattern.parts.find((p) => p.id === q.partId)?.label ?? q.partId} Q${q.no}` }))} />
       <Card><CardContent className="flex flex-wrap items-center gap-2 p-4">
@@ -75,10 +89,9 @@ export function PaperSetReview({ detail, writeHref, onChanged }: { detail: MidBa
         {/* Faculty and the HOD preview on screen; only the Exam Cell downloads the PDF. */}
         <div className="ml-auto flex gap-2">
           <PaperPreviewButton detail={detail} initialSet={set} />
-          {detail.access.canDownload && <Button size="sm" onClick={() => void pdf([set])} loading={busy} disabled={!complete} title={complete ? "" : "Complete every question of this paper first"}><FileDown className="mr-1.5 h-4 w-4" />PDF of paper {set}</Button>}
-          {detail.access.canDownload && mySets.length > 1 && (
-            <Button size="sm" variant="outline" onClick={() => void pdf(mySets)} loading={busy} disabled={!mySets.some(isDone)} title="Each paper as its own PDF file">
-              <FileDown className="mr-1.5 h-4 w-4" />All {mySets.length} papers (separate PDFs)
+          {detail.access.canDownload && (
+            <Button size="sm" onClick={() => setDownloading(true)} loading={busy} disabled={!mySets.some(isDone)} title={mySets.some(isDone) ? "" : "Complete a paper first"}>
+              <FileDown className="mr-1.5 h-4 w-4" />Download PDF
             </Button>
           )}
         </div>
@@ -125,5 +138,69 @@ export function PaperSetReview({ detail, writeHref, onChanged }: { detail: MidBa
         ))}
       </CardContent></Card>
     </div>
+  );
+}
+
+/**
+ * Exam Cell: which papers to download (this one, or every paper - one file each) and how: all parts on one paper, or
+ * each part as its own paper (its own full header, time and max marks - a file per part).
+ */
+function DownloadDialog({ pattern, current, papers, isDone, busy, onClose, onDownload }: {
+  pattern: NonNullable<MidBankDetail["bank"]["pattern"]>; current: number; papers: number[]; isDone: (n: number) => boolean; busy: boolean;
+  onClose: () => void; onDownload: (which: number[], parts?: { partId: string; durationMinutes: number; maxMarks: number }[]) => void;
+}) {
+  const [all, setAll] = useState(false);
+  const [separate, setSeparate] = useState(false);
+  const [parts, setParts] = useState(() => defaultPartHeaders(pattern.parts, pattern.durationMinutes).map((p) => ({
+    ...p, label: pattern.parts.find((x) => x.id === p.partId)?.label ?? p.partId, d: String(p.durationMinutes), m: String(p.maxMarks),
+  })));
+  const canSplit = pattern.parts.length > 1;
+  const which = all ? papers.filter(isDone) : [current];
+  const bad = separate && parts.some((p) => !(Number(p.d) >= 1 && Number.isInteger(Number(p.d)) && Number(p.m) >= 1 && Number.isInteger(Number(p.m))));
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Download PDF</DialogTitle>
+          <DialogDescription>Each paper is its own file. Nothing is finalized here - printing for the exam stays on the Mid Question Paper page.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 text-sm">
+          {papers.length > 1 && (
+            <div className="space-y-1.5">
+              <p className="font-medium">Papers</p>
+              <label className="flex items-center gap-2"><input type="radio" checked={!all} onChange={() => setAll(false)} />Paper {current}{isDone(current) ? "" : " (not complete)"}</label>
+              <label className="flex items-center gap-2"><input type="radio" checked={all} onChange={() => setAll(true)} />All complete papers ({papers.filter(isDone).map((n) => `Paper ${n}`).join(", ") || "none yet"})</label>
+            </div>
+          )}
+          <div className="space-y-1.5">
+            <p className="font-medium">Layout</p>
+            <label className="flex items-start gap-2"><input type="radio" className="mt-1" checked={!separate} onChange={() => setSeparate(false)} />
+              <span><b>All parts on one paper</b><br /><span className="text-xs text-muted-foreground">One header, then every part.</span></span></label>
+            <label className={`flex items-start gap-2 ${canSplit ? "" : "opacity-50"}`}><input type="radio" className="mt-1" disabled={!canSplit} checked={separate} onChange={() => setSeparate(true)} />
+              <span><b>Each part as its own paper</b><br /><span className="text-xs text-muted-foreground">{canSplit ? "A file per part, each with its own full header (Regd. No boxes, letterhead), time and max marks." : "This paper has one part."}</span></span></label>
+          </div>
+          {separate && (
+            <div className="space-y-2 rounded-md border p-3">
+              {parts.map((p, i) => (
+                <div key={p.partId} className="grid grid-cols-[minmax(0,1fr)_6rem_6rem] items-end gap-2">
+                  <span className="pb-2 font-medium">{p.label}</span>
+                  <div className="space-y-1"><Label htmlFor={`dl-t-${p.partId}`} className="text-xs">Time (min)</Label>
+                    <Input id={`dl-t-${p.partId}`} inputMode="numeric" value={p.d} onChange={(e) => setParts((c) => c.map((x, j) => (j === i ? { ...x, d: e.target.value } : x)))} /></div>
+                  <div className="space-y-1"><Label htmlFor={`dl-m-${p.partId}`} className="text-xs">Max marks</Label>
+                    <Input id={`dl-m-${p.partId}`} inputMode="numeric" value={p.m} onChange={(e) => setParts((c) => c.map((x, j) => (j === i ? { ...x, m: e.target.value } : x)))} /></div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button loading={busy} disabled={which.length === 0 || !which.every(isDone) || bad}
+            onClick={() => onDownload(which, separate ? parts.map((p) => ({ partId: p.partId, durationMinutes: Number(p.d), maxMarks: Number(p.m) })) : undefined)}>
+            <FileDown className="mr-1.5 h-4 w-4" />Download
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
