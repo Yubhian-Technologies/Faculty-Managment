@@ -3,15 +3,14 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { facultyManageableDepartmentNames } from "@/lib/departments/scope";
 import { cachedHodScope } from "@/lib/departments/cachedHodScope";
-import { getInChunks } from "@/lib/firestore/inQuery";
+import { subjectDepartmentBranches } from "@/lib/subjects/subjectDepartmentBranches";
 import { departmentNamesById, ownerDepartmentNames } from "@/lib/subjects/ownerDepartment";
 import { subjectErrorResponse } from "@/lib/subjects/http";
 import type { Subject } from "@/types";
 
 // HOD: the subjects their department looks after (Subject Department set by Academics), whichever
-// branches they are taught in - for the syllabus. Reads only.
+// branches they are taught in - for the syllabus - and those branches (HOD > Subjects lists them). Reads only.
 export async function GET() {
   try {
     const session = await requireCollegeMember("HOD");
@@ -21,15 +20,7 @@ export async function GET() {
       departmentNamesById(db, session.collegeId),
     ]);
     // Own department(s) + sub-departments only: a managed branch's subjects belong to that branch's own HOD.
-    const mine = new Set(facultyManageableDepartmentNames(scope));
-    const ids = [...names.entries()].filter(([, n]) => mine.has(n)).map(([id]) => id);
-    const col = db.collection("colleges").doc(session.collegeId).collection("subjects");
-    // The list (two departments possible), and the single field saved before the list existed.
-    const [listed, single] = await Promise.all([
-      getInChunks(ids, (chunk) => col.where("ownerDepartmentIds", "array-contains-any", chunk)),
-      getInChunks(ids, (chunk) => col.where("ownerDepartmentId", "in", chunk)),
-    ]);
-    const docs = [...new Map([...listed, ...single].map((d) => [d.id, d])).values()];
+    const { subjects: docs, branches } = await subjectDepartmentBranches(db, session.collegeId, session.uid, scope);
     const subjects = docs.map((d) => {
       const s = d.data() as Subject;
       return {
@@ -39,7 +30,7 @@ export async function GET() {
         isActive: s.isActive !== false,
       };
     }).sort((a, b) => a.courseName.localeCompare(b.courseName) || a.regulation.localeCompare(b.regulation) || a.code.localeCompare(b.code));
-    return NextResponse.json({ subjects });
+    return NextResponse.json({ subjects, branches });
   } catch (err) {
     return subjectErrorResponse(err, "[subjects/owned GET]");
   }
