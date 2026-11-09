@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { answeredCount, choiceText, cleanPaperQuestion, cleanPattern, flexibleProblem, paperProgress, paperQuestionErrors, partMax, patternMax, questionSlots } from "./pattern";
+import { answeredCount, choiceText, cleanPaperQuestion, cleanPattern, flexibleProblem, paperProgress, paperQuestionErrors, partMax, patternMax, questionSlots, setNumbers, checkSetShare } from "./pattern";
 import type { PaperPartDef } from "@/types";
 
 const partA: PaperPartDef = { id: "A", label: "Part A", title: "Choose the correct answer", kind: "MCQ", questions: 10, marksEach: 1, choice: { kind: "ALL" }, options: 4 };
@@ -152,5 +152,20 @@ describe("updating a started paper to a newer pattern", () => {
     // Back to 1 per unit: the second question of unit 1 has no place - refused, never lost.
     const two = [{ id: "1_B_1", set: 1, partId: "B", no: 1, unit: 1 }, { id: "1_B_2", set: 1, partId: "B", no: 2, unit: 1 }];
     expect(remapQuestions(newPat, oldPat, two, [1, 2, 3]).dropped).toEqual(["1_B_2"]);
+  });
+});
+
+describe("papers shared among the setters", () => {
+  it("a setter writes only their own papers", () => {
+    expect(setNumbers({ setsPerFaculty: 3 })).toEqual([1, 2, 3]);
+    expect(setNumbers({ setsPerFaculty: 3, sets: [2] })).toEqual([2]);
+    expect(setNumbers({ setsPerFaculty: 3, sets: [3, 1, 9] })).toEqual([1, 3]);
+  });
+  it("every paper to exactly one setter, each setter at least one", () => {
+    expect(checkSetShare({ a: [1], b: [2], c: [3] }, ["a", "b", "c"], 3)).toEqual({ value: { a: [1], b: [2], c: [3] }, errors: [] });
+    expect(checkSetShare({ a: [1, 2], b: [3] }, ["a", "b"], 3).errors).toEqual([]);
+    expect(checkSetShare({ a: [1], b: [1] }, ["a", "b"], 2).errors).toEqual(["Paper 1 is given to both a and b", "Paper 2 has no setter"]);
+    expect(checkSetShare({ a: [1], b: [] }, ["a", "b"], 2).errors).toEqual(["Give b at least one paper", "Paper 2 has no setter"]);
+    expect(checkSetShare({ a: [1, 4] }, ["a"], 1).errors).toEqual(["There is no Paper 4 - the subject has 1"]);
   });
 });

@@ -11,7 +11,7 @@ import { loadPlan, midTimetableRefs } from "@/lib/midTimetable/server";
 import { actorName, guardError, loadOutcomes, loadSubject, midBankRefs } from "@/lib/midBank/server";
 import { loadPaperQuestions } from "@/lib/midPapers/server";
 import { cleanPrintLayout } from "@/lib/midPapers/printLayout";
-import { partMax } from "@/lib/midPapers/pattern";
+import { partMax, setNumbers } from "@/lib/midPapers/pattern";
 import { isMultiBranch, paperBranchLabel, servesBranch } from "@/lib/midBank/assignments";
 import type { Course, Department, MidPaperFinal, MidQuestionBank, MidTimetable } from "@/types";
 import type { PaperChoiceRow } from "@/lib/midPapers/clientTypes";
@@ -61,7 +61,7 @@ async function day(db: FirebaseFirestore.Firestore, collegeId: string, planId: s
     const c = chosen.get(`${slot.subjectId}|${slot.branch}`) as (Record<string, unknown> & { final?: MidPaperFinal }) | undefined;
     return {
       subjectId: slot.subjectId, subjectName: slot.subjectName, subjectCode: slot.subjectCode, branch: slot.branch, branchCode: codeOf.get(slot.branch) || slot.branch,
-      papers: approved.flatMap((b) => Array.from({ length: b.pattern?.setsPerFaculty ?? 0 }, (_, i) => ({ bankId: b.id, ownerName: b.ownerName, sections: b.sections.map((s) => s.sectionName), setNo: i + 1 }))),
+      papers: approved.flatMap((b) => (b.pattern ? setNumbers(b.pattern) : []).map((setNo) => ({ bankId: b.id, ownerName: b.ownerName, sections: b.sections.map((s) => s.sectionName), setNo }))),
       pending: mine.filter((b) => !approved.includes(b)).map((b) => ({ ownerName: b.ownerName, stage: b.approval === "SUBMITTED" ? "with the HOD" : b.approval === "RETURNED" ? "returned by the HOD" : b.status === "COMPLETE" ? "complete, not submitted" : `${b.completeCount}/${b.totalCount} questions written` })),
       choice: c ? {
         bankId: String(c.bankId), setNo: Number(c.setNo), chosenByName: String(c.chosenByName ?? ""), at: String(c.at ?? ""),

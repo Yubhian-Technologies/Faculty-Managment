@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/hooks/useToast";
 import { outcomeSwitches } from "@/lib/midBank/outcomeSwitches";
-import { choiceText, flexibleQuestions, partFor, partMax, patternMax } from "@/lib/midPapers/pattern";
+import { choiceText, flexibleQuestions, partFor, partMax, patternMax, setNumbers } from "@/lib/midPapers/pattern";
 import { downloadMidPaperSetPdf } from "@/lib/pdf/downloadMidPaperSet";
 import { PaperPreviewButton, paperSetData } from "@/components/midPapers/PaperPreview";
 import { MathText } from "@/components/midBank/MathText";
@@ -27,7 +27,8 @@ export function PaperSetReview({ detail, writeHref, onChanged }: { detail: MidBa
   const sw = outcomeSwitches(bank.outcomes);
   const questions = detail.questions as unknown as MidPaperQuestion[];
   const byId = new Map(questions.map((q) => [q.id, q]));
-  const [set, setSet] = useState(1);
+  const mySets = setNumbers(pattern);
+  const [set, setSet] = useState(mySets[0] ?? 1);
   const [busy, setBusy] = useState(false);
   const progress = bank.setProgress?.[String(set)];
   const complete = !!progress && progress.complete >= progress.total && !(progress.problems?.length);
@@ -48,13 +49,13 @@ export function PaperSetReview({ detail, writeHref, onChanged }: { detail: MidBa
       <Card><CardContent className="flex flex-wrap items-center gap-2 p-4">
         <div className="min-w-0 flex-1">
           <p className="font-semibold">{bank.subjectName} ({bank.subjectCode}) · {bank.branch} · Mid {bank.midNumber}</p>
-          <p className="text-xs text-muted-foreground">{bank.ownerName} · sections {bank.sections.map((s) => s.sectionName).join(", ")} · {pattern.setsPerFaculty} question paper{pattern.setsPerFaculty === 1 ? "" : "s"} · {patternMax(pattern)} marks · {bank.completeCount}/{bank.totalCount} questions done</p>
+          <p className="text-xs text-muted-foreground">{bank.ownerName} · sections {bank.sections.map((s) => s.sectionName).join(", ")} · {pattern.sets?.length ? `Paper ${mySets.join(", ")} of ${pattern.setsPerFaculty}` : `${pattern.setsPerFaculty} question paper${pattern.setsPerFaculty === 1 ? "" : "s"}`} · {patternMax(pattern)} marks · {bank.completeCount}/{bank.totalCount} questions done</p>
         </div>
         {writeHref && detail.access.canWrite && <Button asChild variant="outline" size="sm"><Link href={writeHref}><Pencil className="mr-1.5 h-4 w-4" />Continue writing</Link></Button>}
       </CardContent></Card>
 
       <div className="flex flex-wrap items-center gap-2">
-        {Array.from({ length: pattern.setsPerFaculty }, (_, i) => i + 1).map((n) => {
+        {mySets.map((n) => {
           const p = bank.setProgress?.[String(n)];
           return (
             <button key={n} type="button" onClick={() => setSet(n)} className={`rounded-full border px-3.5 py-1.5 text-sm font-medium ${n === set ? "border-primary bg-primary text-primary-foreground" : "bg-background"}`}>

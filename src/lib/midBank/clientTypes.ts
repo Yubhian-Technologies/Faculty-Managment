@@ -43,7 +43,7 @@ export interface MidBankPrepare {
   /** Units / COs / mapping come from the subject's syllabus (HOD prepares, Academics freezes); null = an older bank's own setup. */
   syllabus?: { status: string | null; frozenAt: string | null; frozenByName: string | null; subjectDepartments: string[] } | null;
   /** "The HOD assigns": the assignment this caller prepares under (its sections are fixed - all of the scope). */
-  assignment?: { scope: "BRANCH" | "SUBJECT"; assignedByName: string; facultyNames: string[]; branches: string[] } | null;
+  assignment?: { scope: "BRANCH" | "GROUP" | "SUBJECT"; assignedByName: string; facultyNames: string[]; branches: string[]; sets?: number[] } | null;
   /** The college's academic tags and how it prepares Mids. */
   outcomeSwitches?: import("@/types").MidOutcomeSwitches;
   midPreparation?: import("@/types").MidPreparation;

@@ -136,10 +136,40 @@ export function cleanPattern(raw: unknown): { value: Pick<MidPaperPattern, "sets
 
 export const questionId = (set: number, partId: string, no: number) => `${set}_${partId}_${no}`;
 
+/** The papers a paper set writes: its own share when the HOD shared the papers (`sets`), else 1..setsPerFaculty. */
+export function setNumbers(pat: Pick<MidPaperPattern, "setsPerFaculty"> & { sets?: number[] }): number[] {
+  const all = Array.from({ length: Math.max(0, pat.setsPerFaculty) }, (_, i) => i + 1);
+  const mine = (pat.sets ?? []).filter((n) => all.includes(n));
+  return mine.length ? [...new Set(mine)].sort((a, b) => a - b) : all;
+}
+
+/**
+ * The HOD sharing a subject's `total` papers among its setters: every paper to exactly one of them, each setter at
+ * least one. Returns the clean share or the problems.
+ */
+export function checkSetShare(raw: unknown, facultyIds: string[], total: number, nameOf: (id: string) => string = (x) => x): { value: Record<string, number[]>; errors: string[] } {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const value: Record<string, number[]> = {};
+  const errors: string[] = [];
+  const owner = new Map<number, string>();
+  for (const f of facultyIds) {
+    const sets = [...new Set((Array.isArray(r[f]) ? r[f] as unknown[] : []).map(Number).filter((n) => Number.isInteger(n)))].sort((a, b) => a - b);
+    for (const n of sets) {
+      if (n < 1 || n > total) { errors.push(`There is no Paper ${n} - the subject has ${total}`); continue; }
+      if (owner.has(n)) errors.push(`Paper ${n} is given to both ${nameOf(owner.get(n)!)} and ${nameOf(f)}`);
+      owner.set(n, f);
+    }
+    if (sets.length === 0) errors.push(`Give ${nameOf(f)} at least one paper`);
+    value[f] = sets.filter((n) => n >= 1 && n <= total);
+  }
+  for (let n = 1; n <= total; n++) if (!owner.has(n)) errors.push(`Paper ${n} has no setter`);
+  return { value, errors: [...new Set(errors)] };
+}
+
 /** Every question slot of every set, in paper order. */
-export function questionSlots(pat: Pick<MidPaperPattern, "parts" | "setsPerFaculty">): { set: number; partId: string; no: number; id: string }[] {
+export function questionSlots(pat: Pick<MidPaperPattern, "parts" | "setsPerFaculty" | "sets">): { set: number; partId: string; no: number; id: string }[] {
   const out: { set: number; partId: string; no: number; id: string }[] = [];
-  for (let set = 1; set <= pat.setsPerFaculty; set++) for (const p of pat.parts) if (!p.flexible) for (let no = 1; no <= p.questions; no++) out.push({ set, partId: p.id, no, id: questionId(set, p.id, no) });
+  for (const set of setNumbers(pat)) for (const p of pat.parts) if (!p.flexible) for (let no = 1; no <= p.questions; no++) out.push({ set, partId: p.id, no, id: questionId(set, p.id, no) });
   return out;
 }
 
@@ -233,10 +263,11 @@ export function paperQuestionErrors(q: ReturnType<typeof cleanPaperQuestion>, se
 }
 
 /** Each set's progress and the paper set's totals from its questions. */
-export function paperProgress(pat: Pick<MidPaperPattern, "parts" | "setsPerFaculty">, questions: Pick<MidPaperQuestion, "set" | "state" | "partId" | "no" | "marks">[]): { setProgress: PaperSetProgress; completeCount: number; totalCount: number; allComplete: boolean } {
+export function paperProgress(pat: Pick<MidPaperPattern, "parts" | "setsPerFaculty" | "sets">, questions: Pick<MidPaperQuestion, "set" | "state" | "partId" | "no" | "marks">[]): { setProgress: PaperSetProgress; completeCount: number; totalCount: number; allComplete: boolean } {
   const setProgress: PaperSetProgress = {};
   let allFit = true;
-  for (let s = 1; s <= pat.setsPerFaculty; s++) {
+  // Only the papers this setter writes (the HOD may have shared them among several setters).
+  for (const s of setNumbers(pat)) {
     const mine = questions.filter((q) => q.set === s);
     // Fixed parts have a set number of questions; a faculty-decides part as many as written (at least one).
     const flexTotal = pat.parts.filter((p) => p.flexible).reduce((n, p) => n + Math.max(1, flexibleQuestions(mine, s, p.id).length), 0);

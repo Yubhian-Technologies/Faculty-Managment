@@ -188,7 +188,7 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
     { n: 1, label: "Sections", hint: "Who this bank is for", done: pickedMine },
     { n: 2, label: sw.cos ? "Course Outcomes" : "Units", hint: sw.cos ? "Units and COs" : "The subject's units", done: Boolean(outcomes) },
     ...(sw.poMapping ? [{ n: 3 as const, label: "CO-PO Mapping", hint: "POs / PSOs per CO", done: Boolean(outcomes) && !setup.issues.some((i) => i.code === "MAPPING_MISSING" || i.code === "NO_OUTCOMES") }] : []),
-    { n: 4, label: papers ? "Question Papers" : "Question Bank", hint: papers ? `Write ${pattern?.setsPerFaculty ?? ""} question paper${pattern?.setsPerFaculty === 1 ? "" : "s"}` : "Write the questions", done: Boolean(myBankId) },
+    { n: 4, label: papers ? "Question Papers" : "Question Bank", hint: papers ? (assigned?.sets?.length ? `Write Paper ${assigned.sets.join(", ")}` : `Write ${pattern?.setsPerFaculty ?? ""} question paper${pattern?.setsPerFaculty === 1 ? "" : "s"}`) : "Write the questions", done: Boolean(myBankId) },
   ];
   const left = daysLeft(deadline.deadline);
   const pickedCount = sections.filter((s) => picked.has(s.sectionId)).length;
@@ -269,7 +269,7 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
         {(papers ? pattern : rules) && examCellIssues.length === 0 && (
           <div className="grid gap-2 sm:grid-cols-3">
             {(papers && pattern ? [
-              { icon: Layers, label: "Question papers", value: `${pattern.setsPerFaculty} to write` },
+              { icon: Layers, label: "Question papers", value: assigned?.sets?.length ? `Paper ${assigned.sets.join(", ")} of ${pattern.setsPerFaculty} (yours)` : `${pattern.setsPerFaculty} to write` },
               { icon: FileText, label: "Each paper", value: `${patternMax(pattern)} marks · ${pattern.durationMinutes} min` },
               { icon: ListChecks, label: "Parts", value: pattern.parts.map((p) => (p.flexible ? `${p.label}: ${p.maxMarks} marks, your own questions` : `${p.label}: ${p.questions} x ${p.marksEach}`)).join(" · ") },
             ] : rules ? [

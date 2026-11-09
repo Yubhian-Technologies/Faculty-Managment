@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { cn } from "@/lib/utils";
 import { getMidPaperSetHTML, type PaperSetPdfData } from "@/lib/pdf/midPaperSetTemplate";
 import { paperLetterhead } from "@/lib/pdf/downloadMidPaperSet";
+import { setNumbers } from "@/lib/midPapers/pattern";
 import type { MidBankDetail } from "@/lib/midBank/clientTypes";
 import type { MidPaperQuestion } from "@/types";
 
@@ -32,7 +33,7 @@ export function PaperPreviewButton({ detail, initialSet = 1, size = "sm" }: { de
   const [set, setSet] = useState(initialSet);
   const [html, setHtml] = useState("");
   const [error, setError] = useState("");
-  const sets = detail.bank.pattern?.setsPerFaculty ?? 1;
+  const sets = detail.bank.pattern ? setNumbers(detail.bank.pattern) : [1];
 
   useEffect(() => {
     if (!open) return;
@@ -52,9 +53,9 @@ export function PaperPreviewButton({ detail, initialSet = 1, size = "sm" }: { de
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="flex h-[90vh] max-w-4xl flex-col gap-3">
           <DialogHeader><DialogTitle>Preview - as it prints</DialogTitle></DialogHeader>
-          {sets > 1 && (
+          {sets.length > 1 && (
             <div className="flex flex-wrap gap-2">
-              {Array.from({ length: sets }, (_, i) => i + 1).map((n) => (
+              {sets.map((n) => (
                 <button key={n} type="button" onClick={() => { setHtml(""); setSet(n); }}
                   className={cn("rounded-full border px-3 py-1 text-sm font-medium", n === set ? "border-primary bg-primary text-primary-foreground" : "bg-background")}>Question paper {n}</button>
               ))}

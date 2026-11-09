@@ -7,7 +7,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { actorName, bankAccess, guardError, loadOutcomes, MID_BANK_WRITE_ROLES, midBankRefs, writeRefusal } from "@/lib/midBank/server";
 import { textKey } from "@/lib/midBank/duplicates";
 import { outcomeSwitches } from "@/lib/midBank/outcomeSwitches";
-import { cleanPaperQuestion, unitOfQuestion, FLEXIBLE_MAX_QUESTIONS, flexibleQuestions, paperProgress, paperQuestionErrors, questionId, questionTexts } from "@/lib/midPapers/pattern";
+import { cleanPaperQuestion, unitOfQuestion, FLEXIBLE_MAX_QUESTIONS, flexibleQuestions, paperProgress, paperQuestionErrors, questionId, questionTexts, setNumbers } from "@/lib/midPapers/pattern";
 import type { MidPaperQuestion, MidQuestionBank } from "@/types";
 
 // Saves one question of a faculty member's question papers (qid = `${set}_${partId}_${no}`).
@@ -40,7 +40,7 @@ export async function PATCH(request: Request, { params }: Params) {
     const set = m ? Number(m[1]) : 0, partId = m?.[2] ?? "", no = m ? Number(m[3]) : 0;
     const part = pattern.parts.find((p) => p.id === partId);
     // A fixed part has its set number of questions; a faculty-decides part as many as the faculty write (checked below).
-    if (!m || !part || set < 1 || set > pattern.setsPerFaculty || no < 1 || (!part.flexible && no > part.questions) || no > FLEXIBLE_MAX_QUESTIONS) return NextResponse.json({ error: "Unknown question" }, { status: 400 });
+    if (!m || !part || !setNumbers(pattern).includes(set) || no < 1 || (!part.flexible && no > part.questions) || no > FLEXIBLE_MAX_QUESTIONS) return NextResponse.json({ error: "Unknown question" }, { status: 400 });
     if (action === "remove" && !part.flexible) return NextResponse.json({ error: "Only a question of a part you build yourself can be removed" }, { status: 400 });
 
     const sw = outcomeSwitches(access.bank.outcomes);

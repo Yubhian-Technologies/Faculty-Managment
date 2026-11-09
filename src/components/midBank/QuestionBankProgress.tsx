@@ -36,7 +36,7 @@ interface Progress {
     /** "The HOD assigns": who prepares it; null = not assigned yet; absent = the faculty start their own. */
     assigned?: { facultyNames: string[]; allBranches: boolean; group?: string[] | null; byName: string } | null;
     sections: { sectionId: string; sectionName: string; facultyNames: string[]; bankId: string | null; ownerName: string | null }[];
-    banks: { id: string; ownerName: string; sections: string[]; status: MidQuestionBank["status"]; approval: MidQuestionBank["approval"] | null; lastApproval: MidBankApprovalEntry | null; completeCount: number; totalCount: number; updatedAt: string | null }[];
+    banks: { id: string; ownerName: string; papers?: number[] | null; sections: string[]; status: MidQuestionBank["status"]; approval: MidQuestionBank["approval"] | null; lastApproval: MidBankApprovalEntry | null; completeCount: number; totalCount: number; updatedAt: string | null }[];
   }[];
 }
 
@@ -153,6 +153,7 @@ export function QuestionBankProgress({ deadlineId, base, examCell }: { deadlineI
                                   {g.canOpen === false
                                     ? <span>{b.ownerName}</span>
                                     : <Link className="text-primary underline" href={`${base}/${encodeURIComponent(deadlineId)}/${encodeURIComponent(b.id)}`}>{b.ownerName}</Link>}
+                                  {b.papers?.length ? <span className="text-xs text-muted-foreground">Paper {b.papers.join(", ")}</span> : null}
                                   <span className="text-xs text-muted-foreground">sec {b.sections.join(", ")}</span>
                                   {(() => { const st = bankStage({ status: b.status, approval: b.approval ?? undefined }); return (
                                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${STAGE_CLASS[st]}`} title={b.lastApproval ? `${b.lastApproval.byName}${b.lastApproval.remarks ? ` - ${b.lastApproval.remarks}` : ""}` : undefined}>
