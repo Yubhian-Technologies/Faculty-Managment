@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { TaughtBranch } from "@/lib/subjects/subjectDepartmentBranches";
+import type { OwnedPlacement, TaughtBranch } from "@/lib/subjects/subjectDepartmentBranches";
 import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import type { Course, CourseCatalogItem, CourseYearTiming, Department, Subject, SubjectSemesterAssignment } from "@/types";
@@ -69,7 +69,7 @@ export default function HODSubjectsPage() {
   const [pickedDeptId, setPickedDeptId] = useState("");
   // Branches where subjects this HOD's department looks after (Subject Department) are taught - e.g. Maths HOD:
   // Linear Algebra in CSE, ECE ... Their semester subjects are shown read-only (the server allows only these).
-  const [taught, setTaught] = useState<{ subjectIds: Set<string>; branches: TaughtBranch[] }>({ subjectIds: new Set(), branches: [] });
+  const [taught, setTaught] = useState<{ subjectIds: Set<string>; branches: TaughtBranch[]; placements: OwnedPlacement[] }>({ subjectIds: new Set(), branches: [], placements: [] });
   const [pickedYear, setPickedYear] = useState("");
   const [pickedSemester, setPickedSemester] = useState<number | null>(null);
   // "" means "All regulations" - lets an HOD tell apart subjects filed under
@@ -113,8 +113,8 @@ export default function HODSubjectsPage() {
 
   useEffect(() => {
     fetch("/api/college/subjects/owned")
-      .then((r) => (r.ok ? r.json() : null) as Promise<{ subjects?: { id: string }[]; branches?: TaughtBranch[] } | null>)
-      .then((d) => d && setTaught({ subjectIds: new Set((d.subjects ?? []).map((x) => x.id)), branches: d.branches ?? [] }))
+      .then((r) => (r.ok ? r.json() : null) as Promise<{ subjects?: { id: string }[]; branches?: TaughtBranch[]; placements?: OwnedPlacement[] } | null>)
+      .then((d) => d && setTaught({ subjectIds: new Set((d.subjects ?? []).map((x) => x.id)), branches: d.branches ?? [], placements: d.placements ?? [] }))
       .catch(() => { /* the own-department view still works */ });
 
     fetch("/api/college/course-catalog")
@@ -282,10 +282,33 @@ export default function HODSubjectsPage() {
       : []),
     [selectedCourse, selectedCatalogItem, selectedYear, currentSessionStart]
   );
-  const assignmentsForSemester = useMemo(
-    () => assignments.filter((a) => a.semester === effectiveSemester),
-    [assignments, effectiveSemester]
-  );
+  // Their own department picked: also the subjects it looks after (Subject Department), which are filed under the
+  // branches teaching them - one row per subject, with the branches it is taught in.
+  const ownedForSemester = useMemo(() => {
+    if (!applied || taughtBranch || !selectedGroup || effectiveSemester == null) return [] as (SubjectSemesterAssignment & { taughtIn: string[] })[];
+    const bySubject = new Map<string, SubjectSemesterAssignment & { taughtIn: string[] }>();
+    for (const p of taught.placements) {
+      if (p.programme !== selectedGroup.key || p.year !== Number(applied.year) || p.semester !== effectiveSemester) continue;
+      const row = bySubject.get(p.subjectId);
+      if (row) { if (!row.taughtIn.includes(p.branchName)) row.taughtIn.push(p.branchName); continue; }
+      bySubject.set(p.subjectId, {
+        id: `owned__${p.subjectId}`, subjectId: p.subjectId, subjectName: p.subjectName, subjectCode: p.subjectCode,
+        year: p.year, semester: p.semester, regulation: p.regulation ?? undefined,
+        category: (p.category ?? undefined) as SubjectSemesterAssignment["category"], customCategory: p.customCategory ?? undefined,
+        type: (p.type ?? undefined) as SubjectSemesterAssignment["type"],
+        lectureHours: p.lectureHours ?? undefined, tutorialHours: p.tutorialHours ?? undefined, practicalHours: p.practicalHours ?? undefined,
+        credits: p.credits ?? undefined, hoursPerWeek: p.hoursPerWeek ?? undefined,
+        taughtIn: [p.branchName],
+      } as SubjectSemesterAssignment & { taughtIn: string[] });
+    }
+    for (const row of bySubject.values()) row.taughtIn.sort((a, b) => a.localeCompare(b));
+    return [...bySubject.values()];
+  }, [applied, taughtBranch, selectedGroup, effectiveSemester, taught]);
+  const assignmentsForSemester = useMemo(() => {
+    const own = assignments.filter((a) => a.semester === effectiveSemester);
+    const have = new Set(own.map((a) => a.subjectId));
+    return [...own, ...ownedForSemester.filter((o) => !have.has(o.subjectId))] as (SubjectSemesterAssignment & { taughtIn?: string[] })[];
+  }, [assignments, effectiveSemester, ownedForSemester]);
   const regulationOptions = useMemo(
     () => Array.from(new Set([
       ...catalogRegulations,
@@ -305,9 +328,9 @@ export default function HODSubjectsPage() {
       ? assignmentsForSemester.filter((a) => !a.regulation || a.regulation === pickedRegulation)
       : assignmentsForSemester;
     // In a branch teaching their subjects, their department's subjects first.
-    const mine = (a: SubjectSemesterAssignment) => (taughtBranch && taught.subjectIds.has(a.subjectId) ? 0 : 1);
+    const mine = (a: SubjectSemesterAssignment) => (taught.subjectIds.has(a.subjectId) ? 0 : 1);
     return [...filtered].sort((a, b) => mine(a) - mine(b) || a.subjectName.localeCompare(b.subjectName));
-  }, [assignmentsForSemester, pickedRegulation, taughtBranch, taught]);
+  }, [assignmentsForSemester, pickedRegulation, taught]);
 
   // Subjects (catalogId-scoped, department-independent) alongside Course-Year
   // Timings and this department's own semester assignments - same three-way
@@ -541,7 +564,7 @@ export default function HODSubjectsPage() {
                 ) : assignmentsForSemester.length === 0 ? (
                   <p className="text-sm text-muted-foreground py-6 text-center">
                     {!taughtBranch && taughtOptions.length > 0
-                      ? "Your department's subjects are filed under the branches they're taught in - pick a branch in Department above."
+                      ? "None of your department's subjects is taught in this semester. Pick a branch in Department above to see its whole semester."
                       : "No subjects assigned to this department for this semester yet."}
                   </p>
                 ) : visibleAssignments.length === 0 ? (
@@ -577,8 +600,9 @@ export default function HODSubjectsPage() {
                                 <td className="px-4 py-2.5">
                                   <div className="font-medium text-foreground">
                                     {a.subjectName}
-                                    {taughtBranch && taught.subjectIds.has(a.subjectId) && <Badge className="ml-2 align-middle text-[10px]">Your department</Badge>}
+                                    {taught.subjectIds.has(a.subjectId) && <Badge className="ml-2 align-middle text-[10px]">Your department</Badge>}
                                   </div>
+                                  {!!a.taughtIn?.length && <div className="mt-0.5 text-xs text-muted-foreground">Taught in: {a.taughtIn.join(", ")}</div>}
                                   <div className="flex flex-wrap items-center gap-2 mt-1">
                                     <Badge variant="secondary" className="text-xs font-mono">{a.subjectCode}</Badge>
                                     <Badge variant="outline" className="text-xs">{subjectTypeDisplayLabel(a.type ?? subject?.type)}</Badge>

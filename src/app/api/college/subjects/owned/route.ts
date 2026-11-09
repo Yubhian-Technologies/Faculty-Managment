@@ -20,7 +20,7 @@ export async function GET() {
       departmentNamesById(db, session.collegeId),
     ]);
     // Own department(s) + sub-departments only: a managed branch's subjects belong to that branch's own HOD.
-    const { subjects: docs, branches } = await subjectDepartmentBranches(db, session.collegeId, session.uid, scope);
+    const { subjects: docs, branches, placements } = await subjectDepartmentBranches(db, session.collegeId, session.uid, scope);
     const subjects = docs.map((d) => {
       const s = d.data() as Subject;
       return {
@@ -30,7 +30,7 @@ export async function GET() {
         isActive: s.isActive !== false,
       };
     }).sort((a, b) => a.courseName.localeCompare(b.courseName) || a.regulation.localeCompare(b.regulation) || a.code.localeCompare(b.code));
-    return NextResponse.json({ subjects, branches });
+    return NextResponse.json({ subjects, branches, placements });
   } catch (err) {
     return subjectErrorResponse(err, "[subjects/owned GET]");
   }

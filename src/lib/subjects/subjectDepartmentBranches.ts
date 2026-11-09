@@ -18,10 +18,22 @@ export interface TaughtBranch {
   programmes: Record<string, { courseIds: string[]; years: number[] }>;
 }
 
+/** One semester placement of a subject their department looks after, in one branch (read-only view rows). */
+export interface OwnedPlacement {
+  id: string;
+  subjectId: string; subjectName: string; subjectCode: string;
+  branchId: string; branchName: string;
+  /** Programme key (catalogId, else "name:<course name>"), year and semester it sits in. */
+  programme: string; year: number; semester: number;
+  regulation: string | null; category: string | null; customCategory: string | null; type: string | null;
+  lectureHours: number | null; tutorialHours: number | null; practicalHours: number | null; credits: number | null; hoursPerWeek: number | null;
+}
+
 export interface SubjectDepartmentBranches {
   /** Master subjects whose Subject Department is the HOD's (own / sub-department). */
   subjects: FirebaseFirestore.QueryDocumentSnapshot[];
   branches: TaughtBranch[];
+  placements: OwnedPlacement[];
 }
 
 async function load(db: Db, collegeId: string, scope: HodDepartmentScope): Promise<SubjectDepartmentBranches> {
@@ -43,7 +55,11 @@ async function load(db: Db, collegeId: string, scope: HodDepartmentScope): Promi
   ]);
   const subjects = [...new Map([...listed, ...single].map((d) => [d.id, d])).values()];
   const placed = await getInChunks(subjects.map((s) => s.id), (chunk) =>
-    college.collection("subjectSemesterAssignments").where("subjectId", "in", chunk).select("departmentId", "courseId", "year", "secondaryDepartmentNames"));
+    college.collection("subjectSemesterAssignments").where("subjectId", "in", chunk).select("departmentId", "courseId", "year", "semester", "secondaryDepartmentNames", "subjectId", "subjectName", "subjectCode", "regulation",
+      "category", "customCategory", "type", "lectureHours", "tutorialHours", "practicalHours", "credits", "hoursPerWeek"));
+  const placements: OwnedPlacement[] = [];
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  const str = (v: unknown) => (typeof v === "string" && v ? v : null);
   const byBranch = new Map<string, Map<string, { courseIds: Set<string>; years: Set<number> }>>();
   const add = (departmentId: string, courseId: string, year: unknown) => {
     const key = programmeOf.get(courseId);
@@ -59,13 +75,24 @@ async function load(db: Db, collegeId: string, scope: HodDepartmentScope): Promi
     const a = p.data() as { departmentId?: string; courseId?: string; year?: number; secondaryDepartmentNames?: string[] };
     const narrowed = (a.secondaryDepartmentNames ?? []).map((n) => idOf.get(n)).filter((x): x is string => !!x);
     // A row narrowed to core branches ("Target core departments") is theirs; otherwise the department it is filed under.
-    for (const id of narrowed.length ? narrowed : [a.departmentId ?? ""]) add(id, a.courseId ?? "", a.year);
+    for (const id of narrowed.length ? narrowed : [a.departmentId ?? ""]) {
+      add(id, a.courseId ?? "", a.year);
+      const programme = programmeOf.get(a.courseId ?? "");
+      if (!programme || !nameOf.has(id)) continue;
+      const x = p.data() as Record<string, unknown>;
+      placements.push({
+        id: `${p.id}__${id}`, subjectId: String(x.subjectId ?? ""), subjectName: String(x.subjectName ?? ""), subjectCode: String(x.subjectCode ?? ""),
+        branchId: id, branchName: nameOf.get(id) ?? "", programme, year: Number(a.year) || 0, semester: Number(x.semester) || 0,
+        regulation: str(x.regulation), category: str(x.category), customCategory: str(x.customCategory), type: str(x.type),
+        lectureHours: num(x.lectureHours), tutorialHours: num(x.tutorialHours), practicalHours: num(x.practicalHours), credits: num(x.credits), hoursPerWeek: num(x.hoursPerWeek),
+      });
+    }
   }
   const branches = [...byBranch].map(([id, b]) => ({
     departmentId: id, departmentName: nameOf.get(id) ?? "",
     programmes: Object.fromEntries([...b].map(([key, p]) => [key, { courseIds: [...p.courseIds], years: [...p.years].sort((x, y) => x - y) }])),
   })).sort((a, b) => a.departmentName.localeCompare(b.departmentName));
-  return { subjects, branches };
+  return { subjects, branches, placements };
 }
 
 /** Kept 60 s per server instance - read-only views only. */
