@@ -10,7 +10,8 @@ import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
-import { BLOOM_LABELS, BLOOM_LEVELS, BLOOM_MIN_PER_UNIT, PROGRAM_OUTCOMES, QUESTIONS_PER_UNIT } from "@/lib/midBank/constants";
+import { PROGRAM_OUTCOMES, QUESTIONS_PER_UNIT } from "@/lib/midBank/constants";
+import { bloomLevelsOf } from "@/lib/midBank/bloom";
 import { derivePoPso } from "@/lib/midBank/outcomes";
 import { cosOfUnit } from "@/lib/subjects/syllabus";
 import { outcomeSwitches } from "@/lib/midBank/outcomeSwitches";
@@ -87,6 +88,7 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
   const isComplete = current?.state === "COMPLETE";
   // The academic tags this bank started with (older banks: all on).
   const sw = outcomeSwitches(bank.outcomes);
+  const bloomLevels = bloomLevelsOf(bank.bloomLevels);
   const unitStatus: MidUnitStatus = bank.unitStatus[String(cur.unit)] ?? { complete: false, completeCount: 0, draftCount: 0, bloom: { L2: 0, L3: 0, L4: 0 } };
   const unitTitle = (u: number) => outcomes.units.find((x) => x.no === u)?.title ?? "";
 
@@ -549,9 +551,10 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
 
                     {sw.bloom && <fieldset className="space-y-2">
                       <legend className="text-sm font-medium">Bloom&rsquo;s level</legend>
-                      <div className="grid grid-cols-3 gap-1.5">
-                        {BLOOM_LEVELS.map((l) => {
-                          const [code, word] = BLOOM_LABELS[l].split(" - ");
+                      <div className={cn("grid gap-1.5", bloomLevels.length > 4 ? "grid-cols-3 sm:grid-cols-6" : "grid-cols-3")}>
+                        {/* The bank's own Bloom's levels (the college's list when it started). */}
+                        {bloomLevels.map(({ id: l, name: word }) => {
+                          const code = l;
                           return (
                             <label key={l} className={cn("flex cursor-pointer flex-col items-center rounded-xl border px-2 py-1.5 text-center transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
                               p.bloom === l ? "border-primary bg-primary text-primary-foreground shadow-sm" : "bg-background hover:border-primary/50")}>
@@ -599,14 +602,14 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
           <div className="rounded-2xl border bg-card p-4 shadow-sm">
             <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><BarChart3 className="h-3.5 w-3.5" />Unit {cur.unit} {sw.bloom ? <>Bloom&rsquo;s levels</> : "progress"}</p>
             {sw.bloom && <ul className="space-y-3">
-              {bloomNeeds(unitStatus.bloom).map((b) => (
+              {bloomNeeds(unitStatus.bloom, bloomLevels).map((b) => (
                 <li key={b.level}>
                   <div className="mb-1 flex justify-between text-xs">
-                    <span className="font-medium">{BLOOM_LABELS[b.level as BloomLevel] ?? b.level} <span className="text-muted-foreground">· {b.count}</span></span>
+                    <span className="font-medium">{b.level} - {bloomLevels.find((x) => x.id === b.level)?.name ?? ""} <span className="text-muted-foreground">· {b.count}{b.min ? ` of ${b.min}` : ""}</span></span>
                     <span className={b.need ? "font-medium text-amber-700" : "font-medium text-emerald-700"}>{b.need ? `Need ${b.need} more` : "Done"}</span>
                   </div>
                   <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                    <div className={cn("h-full rounded-full", b.need ? "bg-amber-400" : "bg-emerald-500")} style={{ width: `${Math.min(100, (b.count / BLOOM_MIN_PER_UNIT) * 100)}%` }} />
+                    <div className={cn("h-full rounded-full", b.need ? "bg-amber-400" : "bg-emerald-500")} style={{ width: `${b.min ? Math.min(100, (b.count / b.min) * 100) : 100}%` }} />
                   </div>
                 </li>
               ))}

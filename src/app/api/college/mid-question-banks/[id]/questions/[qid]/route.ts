@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { bloomLevelsOf } from "@/lib/midBank/bloom";
 import { outcomeSwitches } from "@/lib/midBank/outcomeSwitches";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -64,6 +65,8 @@ export async function PATCH(request: Request, { params }: Params) {
       const bank = bankSnap.data() as MidQuestionBank;
       // The academic tags this bank started with (older banks: all on).
       const sw = outcomeSwitches(bank.outcomes);
+      // The Bloom's levels this bank started with (the college's list then; older banks: L2-L4).
+      const levels = bloomLevelsOf(bank.bloomLevels);
       // Submitted / approved meanwhile (another tab) - read-only until returned.
       if (bank.withdrawn || bank.approval === "SUBMITTED" || bank.approval === "APPROVED") return { status: 409, body: { error: writeRefusal({ frozen: true, bank }) } };
       if (!bank.units.includes(unit)) return { status: 400, body: { error: `Mid ${bank.midNumber} doesn't cover Unit ${unit}` } };
@@ -79,7 +82,7 @@ export async function PATCH(request: Request, { params }: Params) {
 
       const allowed = bankFormats(bank, liveRules);
       const format = questionFormat(formatsFor(allowed, current ? formatOf(current, allowedFormats(bank)) : null), body.format);
-      const parts = cleanParts(body.parts, format, coIds, bank.marks);
+      const parts = cleanParts(body.parts, format, coIds, bank.marks, levels.map((l) => l.id));
       const keys = parts.map((p) => textKey(p.text));
       const others = all.filter((q) => q.id !== qid);
       const dup = findDuplicates(keys, others);
@@ -100,12 +103,12 @@ export async function PATCH(request: Request, { params }: Params) {
           // Clearing an empty slot.
           if (!current) return { status: 200, body: { question: null, unitStatus: bank.unitStatus[String(unit)], warnings: [] } };
           if (current.state === "COMPLETE") {
-            const after = unitStatus(others, unit, sw);
-            const broken = breaksCompletedUnit(bank.unitStatus[String(unit)], after);
+            const after = unitStatus(others, unit, sw, levels);
+            const broken = breaksCompletedUnit(bank.unitStatus[String(unit)], after, levels);
             if (broken) return { status: 409, body: { error: broken } };
           }
           tx.delete(qRef);
-          const statuses = { ...bank.unitStatus, [String(unit)]: unitStatus(others, unit, sw) };
+          const statuses = { ...bank.unitStatus, [String(unit)]: unitStatus(others, unit, sw, levels) };
           const totals = bankTotals(bank.units, statuses);
           tx.update(bankRef, { unitStatus: statuses, completeCount: totals.completeCount, totalCount: totals.totalCount, status: totals.allComplete ? "COMPLETE" : "IN_PROGRESS", updatedAt: new Date() });
           return { status: 200, body: { question: null, unitStatus: statuses[String(unit)], bank: { ...totals, status: totals.allComplete ? "COMPLETE" : "IN_PROGRESS" }, warnings: [] } };
@@ -117,8 +120,8 @@ export async function PATCH(request: Request, { params }: Params) {
         unit, slot, format, parts, state, rev: rev + 1, textKeys: keys,
         updatedBy: session.uid, updatedByName: name, updatedAt: new Date() as unknown as MidQuestion["updatedAt"],
       };
-      const after = unitStatus([...others, { ...next, id: qid }], unit, sw);
-      const broken = breaksCompletedUnit(bank.unitStatus[String(unit)], after);
+      const after = unitStatus([...others, { ...next, id: qid }], unit, sw, levels);
+      const broken = breaksCompletedUnit(bank.unitStatus[String(unit)], after, levels);
       if (broken) return { status: 409, body: { error: broken } };
 
       tx.set(qRef, next);

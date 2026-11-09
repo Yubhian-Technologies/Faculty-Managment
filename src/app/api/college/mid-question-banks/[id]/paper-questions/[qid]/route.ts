@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { bloomLevelsOf } from "@/lib/midBank/bloom";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -79,7 +80,7 @@ export async function PATCH(request: Request, { params }: Params) {
       }
       if (Number(body.baseRev ?? 0) !== rev) return { status: 409, body: { error: "This question was changed in another tab or window - reload it before saving", question: current } };
 
-      const q = cleanPaperQuestion(body.question, part, coIds);
+      const q = cleanPaperQuestion(body.question, part, coIds, bloomLevelsOf(access.bank.bloomLevels).map((l) => l.id));
       // A per-unit part: each question belongs to its unit (by position), whatever the editor sent.
       const unitOf = unitOfQuestion(part, access.bank.units ?? [], no);
       if (unitOf) q.unit = unitOf;

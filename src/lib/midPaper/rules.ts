@@ -1,5 +1,5 @@
 import type { BloomLevel, MidQuestion } from "@/types/midQuestionBank";
-import { BLOOM_LEVELS } from "@/lib/midBank/constants";
+import { BLOOM_IDS } from "@/lib/midBank/bloom";
 
 // Mid Question Paper rules (pure): the Exam Cell's template, and picking a
 // paper's 6 questions from a complete question bank.
@@ -7,11 +7,18 @@ import { BLOOM_LEVELS } from "@/lib/midBank/constants";
 export const PAPER_QUESTIONS = 6;
 export const PAPER_PAIRS = 3;
 export const DEFAULT_INSTRUCTION = "Answer one question from each unit. All questions carry equal marks.";
-export const DEFAULT_SEQUENCES: Record<BloomLevel, BloomLevel[]> = {
+export const DEFAULT_SEQUENCES: Partial<Record<BloomLevel, BloomLevel[]>> = {
   L2: ["L2", "L3", "L3", "L4", "L4", "L2"],
   L3: ["L3", "L3", "L4", "L4", "L2", "L2"],
   L4: ["L4", "L4", "L2", "L2", "L3", "L3"],
 };
+/** A start level's default sequence among the college's levels: the old default when it fits, else the levels in turn. */
+export function defaultSequenceFor(start: BloomLevel, ids: BloomLevel[]): BloomLevel[] {
+  const old = DEFAULT_SEQUENCES[start];
+  if (old && old.every((l) => ids.includes(l))) return old;
+  const from = Math.max(0, ids.indexOf(start));
+  return Array.from({ length: PAPER_QUESTIONS }, (_, i) => ids[(from + i) % ids.length]);
+}
 /** Default unit of Questions 1-6 for a Mid of N units (positions, 1 = the Mid's first unit). */
 export function defaultUnits(n: number): number[] {
   if (n === 2) return [1, 1, 2, 2, 1, 2];
@@ -23,18 +30,22 @@ export const DEFAULT_REGD_BOXES = 12;
 export const REGD_BOXES_MIN = 6;
 export const REGD_BOXES_MAX = 20;
 
-const isLevel = (x: unknown): x is BloomLevel => BLOOM_LEVELS.includes(x as BloomLevel);
+const isLevel = (x: unknown): x is BloomLevel => BLOOM_IDS.includes(x as BloomLevel);
 
-/** The template sent by the settings form, checked. Every unit of a Mid must carry the same number of questions. */
-export function cleanTemplate(raw: { sequences?: unknown; units?: unknown; instruction?: unknown; maxMarks?: unknown; regdBoxes?: unknown }) {
+/**
+ * The template sent by the settings form, checked. Every unit of a Mid must carry the same number of questions. `ids` =
+ * the college's Bloom's levels (Exam Cell, `bloom.ts`): a sequence per start level, using only those levels.
+ */
+export function cleanTemplate(raw: { sequences?: unknown; units?: unknown; instruction?: unknown; maxMarks?: unknown; regdBoxes?: unknown }, ids: BloomLevel[] = ["L2", "L3", "L4"]) {
   const errors: string[] = [];
   const seqIn = (raw.sequences ?? {}) as Record<string, unknown>;
-  const sequences = {} as Record<BloomLevel, BloomLevel[]>;
-  for (const start of BLOOM_LEVELS) {
+  const sequences = {} as Partial<Record<BloomLevel, BloomLevel[]>>;
+  const ok = (x: unknown): x is BloomLevel => isLevel(x) && ids.includes(x);
+  for (const start of ids) {
     const list = Array.isArray(seqIn[start]) ? (seqIn[start] as unknown[]) : [];
-    if (list.length !== PAPER_QUESTIONS || !list.every(isLevel)) errors.push(`Starting at ${start}: pick a level for each of the ${PAPER_QUESTIONS} questions`);
+    if (list.length !== PAPER_QUESTIONS || !list.every(ok)) errors.push(`Starting at ${start}: pick a level for each of the ${PAPER_QUESTIONS} questions`);
     else if (list[0] !== start) errors.push(`Starting at ${start}: Question 1 must be ${start}`);
-    sequences[start] = list.filter(isLevel);
+    sequences[start] = list.filter(ok);
   }
   const unitsIn = (raw.units ?? {}) as Record<string, unknown>;
   const units: Record<string, number[]> = {};

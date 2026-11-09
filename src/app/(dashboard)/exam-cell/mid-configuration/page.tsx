@@ -17,6 +17,7 @@ import { ExamMarksCategoriesCard } from "@/components/exams/ExamMarksCategoriesC
 import { MidPaperTemplateCard } from "@/components/exams/MidPaperTemplateCard";
 import { MidPaperPatternCard } from "@/components/exams/MidPaperPatternCard";
 import { MidSubjectSplitsCard } from "@/components/exams/MidSubjectSplitsCard";
+import { BloomLevelsCard } from "@/components/exams/BloomLevelsCard";
 import { cn } from "@/lib/utils";
 import type { ExamMidSettings, MidAssignment, MidOutcomeSwitches, MidPreparation } from "@/types";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -194,7 +195,7 @@ function MidSettings() {
             {([
               ["cos", "Course Outcomes (CO)", "Units and COs are set up per subject; each question names its COs."],
               ["poMapping", "CO-PO / PSO mapping", "Each CO is mapped to POs / PSOs (needs Course Outcomes)."],
-              ["bloom", "Bloom's levels (L2 / L3 / L4)", "Each question names its level; a bank unit needs 3 of each."],
+              ["bloom", "Bloom's levels", "Each question names its level - which levels, and how many a bank unit needs, are set in the Bloom's levels card below."],
             ] as const).map(([k, label, hint]) => (
               <label key={k} className="flex items-start gap-3 text-sm">
                 <Checkbox className="mt-0.5" checked={outcomes[k]} disabled={k === "poMapping" && !outcomes.cos}
@@ -212,6 +213,9 @@ function MidSettings() {
           Save Settings
         </Button>
       </div>
+
+      {/* The college's Bloom's levels (names, per-unit minimums for banks). */}
+      {(settings?.outcomes?.bloom ?? true) && <BloomLevelsCard bank={settings?.midPreparation !== "PAPERS"} />}
 
       {/* Which units each Mid covers: the bank rules, or (question papers) only the units - for per-unit paper parts. */}
       <MidBankRulesCard midCount={settings?.midCount ?? Number(midCount)} papers={settings?.midPreparation === "PAPERS"} />
