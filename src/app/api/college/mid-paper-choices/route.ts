@@ -56,7 +56,8 @@ async function day(db: FirebaseFirestore.Firestore, collegeId: string, planId: s
   };
   const rows: PaperChoiceRow[] = onDay.sort((a, b) => a.branch.localeCompare(b.branch) || a.subjectName.localeCompare(b.subjectName)).map((slot) => {
     // A paper prepared for the whole subject serves every branch it lists.
-    const mine = sets.filter((b) => b.subjectId === slot.subjectId && servesBranch(b, slot.branch));
+    // A set the HOD withdrew (setter removed) is never offered.
+    const mine = sets.filter((b) => !b.withdrawn && b.subjectId === slot.subjectId && servesBranch(b, slot.branch));
     const approved = mine.filter((b) => b.approval === "APPROVED" && b.status === "COMPLETE");
     const c = chosen.get(`${slot.subjectId}|${slot.branch}`) as (Record<string, unknown> & { final?: MidPaperFinal }) | undefined;
     return {

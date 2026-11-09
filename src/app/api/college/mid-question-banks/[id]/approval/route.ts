@@ -43,6 +43,7 @@ export async function POST(request: Request, { params }: Params) {
       const snap = await tx.get(ref);
       if (!snap.exists) return { status: 404, body: { error: "Question bank not found" } };
       const bank = { ...(snap.data() as MidQuestionBank), id };
+      if (bank.withdrawn) return { status: 409, body: { error: "The HOD removed this setter - it is withdrawn, nothing to submit or decide" } };
       const next = nextApproval(bank, action, { isOwner: access.isOwner, isHod: access.isHod }, remarks);
       if ("error" in next) return { status: 409, body: { error: next.error } };
       const entry: MidBankApprovalEntry = { at: new Date().toISOString(), byUid: session.uid, byName: name, action: action === "withdraw" ? "WITHDRAWN" : next.approval!, ...(remarks ? { remarks } : {}), department: action === "approve" || action === "return" ? access.hodDepartment : access.reviewDepartments.join(", ") };

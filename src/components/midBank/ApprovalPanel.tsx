@@ -46,6 +46,13 @@ export function ApprovalPanel({ bank, isOwner, isHod, onChanged }: { bank: MidQu
   }
 
   const papers = bank.kind === "PAPERS";
+  // The HOD removed this setter: kept, read-only - nothing to submit or decide.
+  if (bank.withdrawn) return (
+    <Card><CardContent className="p-4 text-sm">
+      <span className="rounded-full bg-muted px-3 py-1 text-xs font-semibold">Withdrawn by the HOD</span>
+      <span className="ml-3 text-muted-foreground">{bank.withdrawn.byName} removed {isOwner ? "you" : bank.ownerName} as setter on {new Date(bank.withdrawn.at).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric" })}. Everything written is kept; it isn&apos;t sent to the Exam Cell.</span>
+    </CardContent></Card>
+  );
   const canSubmit = isOwner && (stage === "READY" || (stage === "RETURNED" && bank.status === "COMPLETE"));
   const hint =
     stage === "IN_PROGRESS" ? (isOwner ? (papers ? "Complete every paper, then submit them to your HOD for approval." : "Complete every unit, then submit it to your HOD for approval.") : "Being prepared.")

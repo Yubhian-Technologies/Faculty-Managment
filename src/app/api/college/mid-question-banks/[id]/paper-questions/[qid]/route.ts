@@ -55,7 +55,7 @@ export async function PATCH(request: Request, { params }: Params) {
       const bankSnap = await tx.get(bankRef);
       const bank = bankSnap.data() as MidQuestionBank | undefined;
       if (!bank) return { status: 404, body: { error: "Question papers not found" } };
-      if (bank.approval === "SUBMITTED" || bank.approval === "APPROVED") return { status: 409, body: { error: writeRefusal({ frozen: true, bank }).replace("question bank", "question papers") } };
+      if (bank.withdrawn || bank.approval === "SUBMITTED" || bank.approval === "APPROVED") return { status: 409, body: { error: writeRefusal({ frozen: true, bank }).replace("question bank", "question papers") } };
       const all = (await tx.get(refs.questions(id))).docs.map((d) => ({ id: d.id, ...(d.data() as Omit<MidPaperQuestion, "id">) }));
       const current = all.find((q) => q.id === qid) ?? null;
       const rev = current?.rev ?? 0;

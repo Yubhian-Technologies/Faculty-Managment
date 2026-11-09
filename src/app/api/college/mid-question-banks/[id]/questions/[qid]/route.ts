@@ -65,7 +65,7 @@ export async function PATCH(request: Request, { params }: Params) {
       // The academic tags this bank started with (older banks: all on).
       const sw = outcomeSwitches(bank.outcomes);
       // Submitted / approved meanwhile (another tab) - read-only until returned.
-      if (bank.approval === "SUBMITTED" || bank.approval === "APPROVED") return { status: 409, body: { error: writeRefusal({ frozen: true, bank }) } };
+      if (bank.withdrawn || bank.approval === "SUBMITTED" || bank.approval === "APPROVED") return { status: 409, body: { error: writeRefusal({ frozen: true, bank }) } };
       if (!bank.units.includes(unit)) return { status: 400, body: { error: `Mid ${bank.midNumber} doesn't cover Unit ${unit}` } };
       const locked = lockReason(bank.units, bank.unitStatus, unit);
       if (locked) return { status: 403, body: { error: `Unit ${unit} is locked - ${locked.toLowerCase()}` } };

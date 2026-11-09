@@ -82,7 +82,7 @@ export async function POST(request: Request) {
         regulation: "", sections: [] as string[], ownerName: "", slots: [], picked: [], candidates: {}, questions: {}, unitTitles: {}, cos: [], mapping: {},
         marks: 0, maxMarks: 0, instruction: DEFAULT_INSTRUCTION, regdBoxes: DEFAULT_REGD_BOXES, startLevel: start,
       };
-      const mine = banks.filter((b) => b.subjectId === slot.subjectId && servesBranch(b, slot.branch));
+      const mine = banks.filter((b) => !b.withdrawn && b.subjectId === slot.subjectId && servesBranch(b, slot.branch));
       if (mine.length === 0) { papers.push({ ...base, key: `${slot.branch}|${slot.subjectId}`, error: "No question bank has been prepared for this subject in this branch" }); continue; }
       for (const bank of mine) {
         const key = bank.id;

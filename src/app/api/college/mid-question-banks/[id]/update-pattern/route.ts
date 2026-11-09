@@ -57,7 +57,7 @@ export async function POST(_request: Request, { params }: Params) {
     await db.runTransaction(async (tx) => {
       const snap = await tx.get(bankRef);
       const bank = snap.data() as MidQuestionBank | undefined;
-      if (!bank || bank.approval === "SUBMITTED" || bank.approval === "APPROVED") throw new Error("FROZEN");
+      if (!bank || bank.withdrawn || bank.approval === "SUBMITTED" || bank.approval === "APPROVED") throw new Error("FROZEN");
       const byId = new Map(p.questions.map((q) => [q.id, q]));
       const targets = new Set(p.remap.moves.map((m) => m.to));
       const moved: MidPaperQuestion[] = [];

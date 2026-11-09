@@ -126,7 +126,7 @@ export type MidQuestionBankStatus = "IN_PROGRESS" | "COMPLETE";
  * with remarks (the faculty can edit and submit again). Absent = not submitted.
  */
 export type MidBankApproval = "SUBMITTED" | "APPROVED" | "RETURNED";
-export interface MidBankApprovalEntry { at: string; byUid: string; byName: string; action: MidBankApproval | "WITHDRAWN"; remarks?: string; /** The department whose HOD it went to / decided it (the subject's department, else the branch). */ department?: string }
+export interface MidBankApprovalEntry { at: string; byUid: string; byName: string; action: MidBankApproval | "WITHDRAWN" | "PAPERS_CHANGED"; remarks?: string; /** The department whose HOD it went to / decided it (the subject's department, else the branch). */ department?: string }
 
 /**
  * Exam Cell: the question bank deadline for one Course + Year + Semester + Mid.
@@ -244,6 +244,9 @@ export interface MidQuestionBank {
   setProgress?: import("./midPaperSet").PaperSetProgress;
   approval?: MidBankApproval;
   approvalHistory?: MidBankApprovalEntry[];
+  /** The HOD removed this setter after they started: kept with every question, read-only, out of the Exam Cell's
+   *  choice; cleared when the HOD assigns them again. */
+  withdrawn?: { at: string; byUid: string; byName: string };
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

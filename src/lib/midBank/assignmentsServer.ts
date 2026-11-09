@@ -79,9 +79,9 @@ export function candidatesFor(index: FacultyIndex, rows: TeachingRow[], subjectI
 }
 
 /** Faculty who already started a bank / paper under each assignment. */
-export function startedByAssignment(banks: Pick<MidQuestionBank, "assignmentId" | "ownerFacultyId">[]): Map<string, Set<string>> {
+export function startedByAssignment(banks: Pick<MidQuestionBank, "assignmentId" | "ownerFacultyId" | "withdrawn">[]): Map<string, Set<string>> {
   const m = new Map<string, Set<string>>();
-  for (const b of banks) if (b.assignmentId) m.set(b.assignmentId, (m.get(b.assignmentId) ?? new Set()).add(b.ownerFacultyId));
+  for (const b of banks) if (b.assignmentId && !b.withdrawn) m.set(b.assignmentId, (m.get(b.assignmentId) ?? new Set()).add(b.ownerFacultyId));
   return m;
 }
 
