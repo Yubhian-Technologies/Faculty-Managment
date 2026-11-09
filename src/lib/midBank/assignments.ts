@@ -69,8 +69,6 @@ export interface AssignmentCheck {
   facultyIds: string[];
   /** Who may be picked (teaching it there, or of the subject's department). */
   candidateIds: Set<string>;
-  /** Faculty who already started a bank / paper under this assignment - they can't be removed. */
-  startedIds: Set<string>;
   /** The current assignment's setters (to know who is being removed). */
   currentIds: string[];
   namesById: Map<string, string>;
@@ -102,7 +100,69 @@ export function checkAssignment(c: AssignmentCheck): string[] {
     if (bad.length) errors.push("Pick faculty who teach this subject or belong to its department");
     if (c.facultyIds.length > 10) errors.push("At most 10 setters");
   }
-  const removed = c.currentIds.filter((f) => !c.facultyIds.includes(f) && c.startedIds.has(f));
-  if (removed.length) errors.push(`${removed.map((f) => c.namesById.get(f) ?? "A setter").join(", ")} already started - they can't be removed`);
+  // A setter who already started may be removed or given other papers: their work is withdrawn / kept, never deleted
+  // (planSetterChanges).
   return errors;
+}
+
+/** A setter's paper set / bank under one assignment, as the HOD's change will find it. */
+export interface SetterBank {
+  bankId: string;
+  facultyId: string;
+  name: string;
+  withdrawn: boolean;
+  /** The papers it writes now ([] = a question bank, no papers). */
+  sets: number[];
+  approval?: string | null;
+  /** Papers the Exam Cell already chose (or printed) for an exam - never taken away. */
+  chosenSets: number[];
+  /** Questions written so far, per paper (for the HOD's confirmation). */
+  written: Record<number, number>;
+}
+
+export interface SetterChange {
+  kind: "WITHDRAW" | "RESTORE" | "PAPERS";
+  bankId: string;
+  facultyId: string;
+  name: string;
+  from: number[];
+  to: number[];
+  /** Submitted / approved work whose papers change goes back to the setter to submit again. */
+  resetsApproval: boolean;
+  /** Questions written in papers it loses (kept, hidden until given back). */
+  hiddenQuestions: number;
+}
+
+/**
+ * What a reassignment does to work already started, and what it may not do. Removed setter -> WITHDRAW (kept,
+ * read-only, out of the Exam Cell's choice); setter added back -> RESTORE; other papers -> PAPERS. Refused: taking away
+ * a paper (or a whole set) the Exam Cell already chose for an exam. `total` = papers per subject (0 = question bank).
+ */
+export function planSetterChanges(banks: SetterBank[], next: { facultyIds: string[]; setShare?: Record<string, number[]>; total: number }): { changes: SetterChange[]; errors: string[] } {
+  const all = Array.from({ length: next.total }, (_, i) => i + 1);
+  const changes: SetterChange[] = [];
+  const errors: string[] = [];
+  const same = (a: number[], b: number[]) => a.length === b.length && a.every((x, i) => x === b[i]);
+  const decided = (b: SetterBank) => b.approval === "SUBMITTED" || b.approval === "APPROVED";
+  for (const b of banks) {
+    const keep = next.facultyIds.includes(b.facultyId);
+    const to = next.total ? [...(next.setShare?.[b.facultyId] ?? all)].sort((x, y) => x - y) : [];
+    const lost = b.sets.filter((n) => !keep || !to.includes(n));
+    const chosenLost = lost.filter((n) => b.chosenSets.includes(n));
+    if (!keep) {
+      if (b.withdrawn) continue;
+      if (b.chosenSets.length) { errors.push(`${b.name}'s Paper ${b.chosenSets.join(", ")} is already chosen for the exam - ask the Exam Cell`); continue; }
+      changes.push({ kind: "WITHDRAW", bankId: b.bankId, facultyId: b.facultyId, name: b.name, from: b.sets, to: [], resetsApproval: false, hiddenQuestions: 0 });
+      continue;
+    }
+    if (chosenLost.length) { errors.push(`${b.name}'s Paper ${chosenLost.join(", ")} is already chosen for the exam - ask the Exam Cell`); continue; }
+    const papersChange = next.total > 0 && !same(b.sets, to);
+    if (!b.withdrawn && !papersChange) continue;
+    changes.push({
+      kind: b.withdrawn ? "RESTORE" : "PAPERS", bankId: b.bankId, facultyId: b.facultyId, name: b.name, from: b.sets, to,
+      resetsApproval: papersChange && decided(b),
+      hiddenQuestions: lost.reduce((n, p) => n + (b.written[p] ?? 0), 0),
+    });
+  }
+  return { changes, errors };
 }

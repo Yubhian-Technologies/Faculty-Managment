@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/useToast";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { cn } from "@/lib/utils";
 
 // HOD ("The HOD assigns" colleges): for one deadline, each subject their department looks after - assign who
@@ -24,6 +25,13 @@ interface Scope {
 interface SubjectRow { subjectId: string; subjectName: string; subjectCode: string; ownerDepartments: string[]; branches: Scope[]; groups?: Scope[]; whole: Scope | null; paperCount?: number | null }
 
 const GROUP_JOIN = " + ";
+
+/** What saving does to work a setter already started (from the server's dry run). */
+interface StartedChange { kind: "WITHDRAW" | "RESTORE" | "PAPERS"; name: string; from: number[]; to: number[]; resetsApproval: boolean; hiddenQuestions: number }
+const changeText = (c: StartedChange) =>
+  c.kind === "WITHDRAW" ? `${c.name} is removed: what they wrote is kept, read-only, and the Exam Cell won't see it.`
+  : c.kind === "RESTORE" ? `${c.name} is assigned again: their earlier work comes back${c.to.length ? ` (Paper ${c.to.join(", ")})` : ""}.`
+  : `${c.name}: Paper ${c.from.join(", ")} becomes Paper ${c.to.join(", ")}.${c.hiddenQuestions ? ` ${c.hiddenQuestions} question${c.hiddenQuestions === 1 ? "" : "s"} written in the papers taken away are kept, hidden until given back.` : ""}${c.resetsApproval ? " It was submitted / approved - it goes back to them to submit again." : ""}`;
 const groupOf = (branches: string[]) => [...new Set(branches)].sort().join(GROUP_JOIN);
 
 export function AssignSetters({ deadlineId, onChanged }: { deadlineId: string; /** After a save (the page refreshes its progress). */ onChanged?: () => void }) {
@@ -169,16 +177,22 @@ function ScopeAssign({ deadlineId, subjectId, scope, kind, locked, onSaved, star
     return { ...m, [f]: cur.includes(n) ? cur.filter((x) => x !== n) : [...cur, n].sort((a, b) => a - b) };
   });
 
-  async function save(ids: string[]) {
+  // Work already started that a save would change (withdrawn / restored / other papers) - shown before saving.
+  const [confirmChanges, setConfirmChanges] = useState<{ ids: string[]; changes: StartedChange[] } | null>(null);
+
+  async function save(ids: string[], confirmed = false) {
     setBusy(true);
     try {
+      if (!confirmed) {
+        const pre = await fetch("/api/college/mid-bank-assignments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...payload(ids), dryRun: true }) });
+        const pj = (await pre.json()) as { error?: string; changes?: StartedChange[] };
+        if (!pre.ok) throw new Error(pj.error ?? "Could not save");
+        if (pj.changes?.length) { setConfirmChanges({ ids, changes: pj.changes }); return; }
+      }
+      setConfirmChanges(null);
       const res = await fetch("/api/college/mid-bank-assignments", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          deadlineId, subjectId, scope: kind, branch: scope.branch, ...(kind === "GROUP" ? { branches: scope.branch.split(GROUP_JOIN) } : {}), facultyIds: ids,
-          // Shared: { facultyId: [paper numbers] } - only when some setter writes fewer than every paper.
-          ...(shared ? { setShare: Object.fromEntries(ids.map((f) => [f, mine(f)])) } : {}),
-        }),
+        body: JSON.stringify(payload(ids)),
       });
       const j = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(j.error ?? "Could not save");
@@ -187,6 +201,14 @@ function ScopeAssign({ deadlineId, subjectId, scope, kind, locked, onSaved, star
       onSaved();
     } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not save" }); }
     finally { setBusy(false); }
+  }
+
+  function payload(ids: string[]) {
+    return {
+      deadlineId, subjectId, scope: kind, branch: scope.branch, ...(kind === "GROUP" ? { branches: scope.branch.split(GROUP_JOIN) } : {}), facultyIds: ids,
+      // Shared: { facultyId: [paper numbers] } - only when some setter writes fewer than every paper.
+      ...(shared ? { setShare: Object.fromEntries(ids.map((f) => [f, mine(f)])) } : {}),
+    };
   }
 
   return (
@@ -217,7 +239,7 @@ function ScopeAssign({ deadlineId, subjectId, scope, kind, locked, onSaved, star
               return (
                 <li key={c.facultyId} className="flex flex-wrap items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted/60">
                   <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
-                    <Checkbox checked={picked.has(c.facultyId)} disabled={lockedIn} onCheckedChange={(v) => tick(c.facultyId, v === true)} />
+                    <Checkbox checked={picked.has(c.facultyId)} onCheckedChange={(v) => tick(c.facultyId, v === true)} />
                     <span className="min-w-0 flex-1 truncate">{c.name}</span>
                   </label>
                   {/* The papers this setter writes (Exam Cell's pattern gives the subject more than one). */}
@@ -227,7 +249,7 @@ function ScopeAssign({ deadlineId, subjectId, scope, kind, locked, onSaved, star
                       {papers.map((n) => {
                         const on = mine(c.facultyId).includes(n);
                         return (
-                          <button key={n} type="button" aria-pressed={on} disabled={lockedIn} onClick={() => togglePaper(c.facultyId, n)}
+                          <button key={n} type="button" aria-pressed={on} onClick={() => togglePaper(c.facultyId, n)}
                             className={cn("h-6 min-w-6 rounded-full border px-1.5 text-xs font-semibold disabled:opacity-60", on ? "border-primary bg-primary text-primary-foreground" : "bg-background text-muted-foreground")}>{n}</button>
                         );
                       })}
@@ -245,10 +267,21 @@ function ScopeAssign({ deadlineId, subjectId, scope, kind, locked, onSaved, star
               {[uncovered.length ? `Paper ${uncovered.join(", ")} ${uncovered.length === 1 ? "has" : "have"} no setter` : "", empty.length ? `${empty.map((f) => scope.candidates.find((c) => c.facultyId === f)?.name ?? "A setter").join(", ")}: pick at least one paper` : ""].filter(Boolean).join(" · ")}
             </p>
           )}
+          <ConfirmDialog
+            open={confirmChanges !== null}
+            onOpenChange={(o) => { if (!o) setConfirmChanges(null); }}
+            title="This changes work already started"
+            description="Nothing written is deleted. Continue?"
+            confirmLabel="Save"
+            loading={busy}
+            onConfirm={() => (confirmChanges ? save(confirmChanges.ids, true) : undefined)}
+          >
+            <ul className="list-disc space-y-1 pl-5 text-sm">{(confirmChanges?.changes ?? []).map((c, i) => <li key={i}>{changeText(c)}</li>)}</ul>
+          </ConfirmDialog>
           <div className="flex flex-wrap gap-2">
             <Button size="sm" onClick={() => void save([...picked])} loading={busy} disabled={picked.size === 0 || uncovered.length > 0 || empty.length > 0}>Save {picked.size ? `(${picked.size})` : ""}</Button>
             <Button size="sm" variant="ghost" onClick={() => { setEditing(false); onCancel?.(); }}>Cancel</Button>
-            {scope.assignment && started.size === 0 && <Button size="sm" variant="ghost" className="ml-auto text-destructive" onClick={() => void save([])} loading={busy}>Remove assignment</Button>}
+            {scope.assignment && <Button size="sm" variant="ghost" className="ml-auto text-destructive" onClick={() => void save([])} loading={busy}>Remove assignment</Button>}
           </div>
         </div>
       )}

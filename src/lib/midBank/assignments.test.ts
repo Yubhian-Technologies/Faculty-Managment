@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ALL_BRANCHES, assignedScope, branchesOf, checkAssignment, groupBranchLabel, isMultiBranch, paperBranchLabel, scopeBranches, sectionsForScope, servesBranch } from "./assignments";
+import { ALL_BRANCHES, assignedScope, branchesOf, checkAssignment, planSetterChanges, type SetterBank, groupBranchLabel, isMultiBranch, paperBranchLabel, scopeBranches, sectionsForScope, servesBranch } from "./assignments";
 import type { TeachingRow } from "./sections";
 
 const row = (branch: string, sectionId: string, facultyId: string): TeachingRow => ({ subjectId: "m1", subjectName: "Maths", subjectCode: "MA", branch, sectionId, sectionName: sectionId, facultyId, facultyName: facultyId });
@@ -21,15 +21,15 @@ describe("HOD-assigned setters", () => {
   it("who is assigned where", () => {
     expect(assignedScope([{ subjectId: "m1", branch: "CSE", facultyIds: ["f9", "f8"] }, { subjectId: "m1", branch: "ECE", facultyIds: ["f9"] }], "m1", "f9")).toEqual(["CSE", "ECE"]);
   });
-  const base = { candidateIds: new Set(["f1", "f2", "f9"]), startedIds: new Set<string>(), currentIds: [] as string[], namesById: new Map([["f2", "Ravi"]]) };
+  const base = { candidateIds: new Set(["f1", "f2", "f9"]), currentIds: [] as string[], namesById: new Map([["f2", "Ravi"]]) };
   it("per branch and whole subject can't be mixed", () => {
     expect(checkAssignment({ ...base, existing: [{ branch: "CSE", scope: "BRANCH", facultyIds: ["f1"], facultyNames: [] }], scope: "SUBJECT", branch: ALL_BRANCHES, facultyIds: ["f9"] })).toHaveLength(1);
     expect(checkAssignment({ ...base, existing: [{ branch: ALL_BRANCHES, scope: "SUBJECT", facultyIds: ["f9"], facultyNames: [] }], scope: "BRANCH", branch: "CSE", facultyIds: ["f1"] })).toHaveLength(1);
     expect(checkAssignment({ ...base, existing: [{ branch: "ECE", scope: "BRANCH", facultyIds: ["f1"], facultyNames: [] }], scope: "BRANCH", branch: "CSE", facultyIds: ["f1", "f2"] })).toEqual([]);
   });
-  it("only candidates; a setter who started can't be removed", () => {
+  it("only candidates; removing a setter is allowed (their work is withdrawn, see planSetterChanges)", () => {
     expect(checkAssignment({ ...base, existing: [], scope: "BRANCH", branch: "CSE", facultyIds: ["zz"] })).toHaveLength(1);
-    expect(checkAssignment({ ...base, startedIds: new Set(["f2"]), currentIds: ["f1", "f2"], existing: [], scope: "BRANCH", branch: "CSE", facultyIds: ["f1"] })).toEqual(["Ravi already started - they can't be removed"]);
+    expect(checkAssignment({ ...base, currentIds: ["f1", "f2"], existing: [], scope: "BRANCH", branch: "CSE", facultyIds: ["f1"] })).toEqual([]);
     expect(checkAssignment({ ...base, currentIds: ["f1"], existing: [], scope: "BRANCH", branch: "CSE", facultyIds: [] })).toEqual([]);
   });
 });
@@ -41,7 +41,7 @@ describe("one paper for a group of branches", () => {
     { subjectId: "s", subjectName: "M", subjectCode: "M1", branch: "ECE", sectionId: "x1", sectionName: "A", facultyId: "f3", facultyName: "F3" },
   ];
   const group = groupBranchLabel(["EEE", "CSE"]);
-  const base = { candidateIds: new Set(["f1", "f2"]), startedIds: new Set<string>(), currentIds: [], namesById: new Map<string, string>() };
+  const base = { candidateIds: new Set(["f1", "f2"]), currentIds: [], namesById: new Map<string, string>() };
 
   it("is labelled by its branches and covers only their sections", () => {
     expect(group).toBe("CSE + EEE");
@@ -66,5 +66,25 @@ describe("one paper for a group of branches", () => {
     expect(paperBranchLabel({ branch: group, branches: ["CSE", "EEE"], sections: [{ sectionName: "A", branch: "CSE" }, { sectionName: "B", branch: "CSE" }, { sectionName: "A", branch: "EEE" }] }, code))
       .toEqual({ branch: "CSE (A, B) · EEE (A)", sections: [] });
     expect(paperBranchLabel({ branch: "CSE", sections: [{ sectionName: "A" }] }, code)).toEqual({ branch: "CSE", sections: ["A"] });
+  });
+});
+
+describe("changing setters after they started", () => {
+  const bank = (o: Partial<SetterBank>): SetterBank => ({ bankId: "b", facultyId: "f", name: "Ravi", withdrawn: false, sets: [1, 2, 3], approval: null, chosenSets: [], written: {}, ...o });
+  it("a removed setter's work is withdrawn, not deleted - unless the Exam Cell chose their paper", () => {
+    expect(planSetterChanges([bank({})], { facultyIds: [], total: 3 }).changes).toMatchObject([{ kind: "WITHDRAW" }]);
+    expect(planSetterChanges([bank({ chosenSets: [2] })], { facultyIds: [], total: 3 }).errors).toEqual(["Ravi's Paper 2 is already chosen for the exam - ask the Exam Cell"]);
+    expect(planSetterChanges([bank({ withdrawn: true })], { facultyIds: [], total: 3 }).changes).toEqual([]);
+  });
+  it("added back = restored; other papers = their papers change (questions of a lost paper kept, approval redone)", () => {
+    expect(planSetterChanges([bank({ withdrawn: true })], { facultyIds: ["f"], total: 3 }).changes).toMatchObject([{ kind: "RESTORE", to: [1, 2, 3] }]);
+    const p = planSetterChanges([bank({ sets: [1, 2], approval: "APPROVED", written: { 2: 7 } })], { facultyIds: ["f"], setShare: { f: [1, 3] }, total: 3 });
+    expect(p.changes).toMatchObject([{ kind: "PAPERS", from: [1, 2], to: [1, 3], resetsApproval: true, hiddenQuestions: 7 }]);
+    expect(planSetterChanges([bank({ sets: [1, 2], chosenSets: [2] })], { facultyIds: ["f"], setShare: { f: [1] }, total: 3 }).errors).toHaveLength(1);
+    expect(planSetterChanges([bank({})], { facultyIds: ["f"], total: 3 }).changes).toEqual([]); // nothing moves
+  });
+  it("a question bank (no papers) is only withdrawn or restored", () => {
+    expect(planSetterChanges([bank({ sets: [], withdrawn: true })], { facultyIds: ["f"], total: 0 }).changes).toMatchObject([{ kind: "RESTORE", to: [] }]);
+    expect(planSetterChanges([bank({ sets: [] })], { facultyIds: ["f"], total: 0 }).changes).toEqual([]);
   });
 });

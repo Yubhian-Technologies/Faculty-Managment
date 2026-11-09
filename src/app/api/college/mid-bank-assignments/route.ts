@@ -1,7 +1,8 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { checkSetShare } from "@/lib/midPapers/pattern";
+import { FieldValue } from "firebase-admin/firestore";
+import { checkSetShare, paperProgress, setNumbers } from "@/lib/midPapers/pattern";
 import { patternForSubject } from "@/lib/midPapers/server";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -12,11 +13,11 @@ import { loadMidSettings } from "@/lib/exams/midSettings";
 import { notify } from "@/lib/notify";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { isDeadlineLocked } from "@/lib/midBank/deadline";
-import { ALL_BRANCHES, assignmentIdFor, checkAssignment, groupBranchLabel, isAllBranches, isGroupBranch, scopeBranches, sectionsForScope } from "@/lib/midBank/assignments";
+import { ALL_BRANCHES, assignmentIdFor, checkAssignment, planSetterChanges, groupBranchLabel, isAllBranches, isGroupBranch, scopeBranches, sectionsForScope } from "@/lib/midBank/assignments";
 import { assignmentsCol, branchesOf, candidatesFor, loadFacultyIndex, loadFacultyIndexCached, hodMayAssign, loadAssignments, reviewDepartmentsForScope, startedByAssignment } from "@/lib/midBank/assignmentsServer";
 import { actorName, guardError, loadDeadline, loginUidsOf, MID_BANK_OVERSEERS, midBankRefs, teachingFor, teachingForCached } from "@/lib/midBank/server";
 import { departmentNamesById, ownerDepartmentNames } from "@/lib/subjects/ownerDepartment";
-import type { MidBankAssignment, MidBankDeadline, MidQuestionBank, Subject } from "@/types";
+import type { MidBankAssignment, MidBankDeadline, MidPaperQuestion, MidQuestionBank, Subject } from "@/types";
 
 // "The HOD assigns" colleges: who prepares each subject's bank / papers for one deadline.
 //   GET  ?deadlineId=   the subjects (HOD: those their department reviews; Exam Cell / leadership: all), per branch and
@@ -122,7 +123,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD");
-    const body = (await readJsonBody(request)) as { deadlineId?: string; subjectId?: string; scope?: string; branch?: string; branches?: unknown; facultyIds?: unknown; setShare?: unknown };
+    const body = (await readJsonBody(request)) as { deadlineId?: string; subjectId?: string; scope?: string; branch?: string; branches?: unknown; facultyIds?: unknown; setShare?: unknown; dryRun?: boolean };
     const db = getAdminDb();
     const settings = await loadMidSettings(db, session.collegeId);
     if (settings.midAssignment !== "HOD") return NextResponse.json({ error: "In this college faculty start their own - the Exam Cell can switch to \"The HOD assigns\" in Mid Configuration" }, { status: 409 });
@@ -154,12 +155,12 @@ export async function POST(request: Request) {
     const errors = checkAssignment({
       existing, scope: scopeKind, branch, facultyIds,
       candidateIds: new Set([...target.candidates.map((c) => c.facultyId), ...(target.assignment?.facultyIds ?? [])]),
-      startedIds: new Set(target.assignment?.started ?? []), currentIds: target.assignment?.facultyIds ?? [], namesById: names,
+      currentIds: target.assignment?.facultyIds ?? [], namesById: names,
     });
     if (errors.length) return NextResponse.json({ error: errors[0], errors }, { status: 409 });
 
     // Question papers shared among the setters (A: Paper 1, B: Paper 2 ...): every paper has a setter, every setter a
-    // paper. A setter who already started keeps the papers they started with.
+    // paper.
     let setShare: Record<string, number[]> | undefined;
     if (papers && body.setShare && facultyIds.length > 0) {
       const total = subj.paperCount ?? 0;
@@ -168,15 +169,67 @@ export async function POST(request: Request) {
       if (share.errors.length) return NextResponse.json({ error: share.errors[0], errors: share.errors }, { status: 400 });
       setShare = share.value;
     }
-    const papersOf = (sh: Record<string, number[]> | undefined, f: string) => JSON.stringify(sh?.[f] ?? "all");
-    const moved = (target.assignment?.started ?? []).filter((f) => facultyIds.includes(f) && papersOf(target.assignment?.setShare, f) !== papersOf(setShare, f));
-    if (moved.length) return NextResponse.json({ error: `${moved.map((f) => names.get(f) || "A setter").join(", ")} already started - their papers can't change` }, { status: 409 });
-
     const id = assignmentIdFor(d.id, subjectId, branch);
+    // Work already started under this assignment: a removed setter's is withdrawn (kept), one added back restored,
+    // changed papers applied - never what the Exam Cell already chose for the exam (planSetterChanges).
+    const refs = midBankRefs(db, session.collegeId);
+    const started = (await refs.banks.where("deadlineId", "==", d.id).get()).docs
+      .map((x) => ({ ...(x.data() as Omit<MidQuestionBank, "id">), id: x.id }))
+      .filter((b) => b.assignmentId === id);
+    const total = papers ? subj.paperCount ?? 0 : 0;
+    const allPapers = Array.from({ length: total }, (_, i) => i + 1);
+    const chosen = new Map<string, number[]>();
+    for (const c of started.length ? (await refs.college.collection("midPaperChoices").where("bankId", "in", started.slice(0, 30).map((b) => b.id)).get()).docs : []) {
+      const bid = String(c.get("bankId"));
+      chosen.set(bid, [...(chosen.get(bid) ?? []), Number(c.get("setNo"))]);
+    }
+    const questionsOf = new Map<string, { set?: number; text?: string }[]>();
+    await Promise.all(started.map(async (b) => questionsOf.set(b.id, (await refs.questions(b.id).get()).docs.map((q) => q.data() as { set?: number; text?: string }))));
+    const plan = planSetterChanges(started.map((b) => {
+      const written: Record<number, number> = {};
+      for (const q of questionsOf.get(b.id) ?? []) if (q.set) written[q.set] = (written[q.set] ?? 0) + 1;
+      return {
+        bankId: b.id, facultyId: b.ownerFacultyId, name: b.ownerName || names.get(b.ownerFacultyId) || "A setter", withdrawn: !!b.withdrawn,
+        sets: b.kind === "PAPERS" && b.pattern ? setNumbers(b.pattern) : [], approval: b.approval ?? null, chosenSets: chosen.get(b.id) ?? [], written,
+      };
+    }), { facultyIds, setShare, total: started.some((b) => b.kind === "PAPERS") ? total : 0 });
+    if (plan.errors.length) return NextResponse.json({ error: plan.errors[0], errors: plan.errors }, { status: 409 });
+    // The HOD's page asks first (dryRun) and shows what will happen before saving.
+    if (body.dryRun) return NextResponse.json({ changes: plan.changes });
+
     const ref = assignmentsCol(db, session.collegeId).doc(id);
     const byName = (await actorName(db, session.collegeId, session.uid)) || session.email;
     const now = new Date().toISOString();
     const before = target.assignment?.facultyIds ?? [];
+    // Apply the changes to started work first (each in its own transaction).
+    for (const ch of plan.changes) {
+      const bankRef = refs.banks.doc(ch.bankId);
+      await db.runTransaction(async (tx) => {
+        const snap = await tx.get(bankRef);
+        if (!snap.exists) return;
+        const bank = snap.data() as MidQuestionBank;
+        if (ch.kind === "WITHDRAW") {
+          tx.update(bankRef, { withdrawn: { at: now, byUid: session.uid, byName }, updatedAt: new Date() });
+          return;
+        }
+        const update: Record<string, unknown> = { withdrawn: FieldValue.delete(), updatedAt: new Date() };
+        if (bank.kind === "PAPERS" && bank.pattern && total > 0) {
+          const nextPattern = { ...bank.pattern, sets: ch.to.length === allPapers.length ? FieldValue.delete() : ch.to };
+          const forProgress = { ...bank.pattern, sets: ch.to.length === allPapers.length ? undefined : ch.to };
+          const prog = paperProgress(forProgress, (questionsOf.get(ch.bankId) ?? []) as MidPaperQuestion[]);
+          Object.assign(update, {
+            "pattern.sets": nextPattern.sets, setProgress: prog.setProgress, completeCount: prog.completeCount, totalCount: prog.totalCount,
+            status: prog.allComplete ? "COMPLETE" : "IN_PROGRESS",
+          });
+          // The HOD approved / was sent other papers: back to the setter to submit again.
+          if (ch.resetsApproval) Object.assign(update, {
+            approval: FieldValue.delete(),
+            approvalHistory: [...(bank.approvalHistory ?? []), { at: now, byUid: session.uid, byName, action: "PAPERS_CHANGED", remarks: `Papers changed by the HOD: now Paper ${ch.to.join(", ")} - submit again` }],
+          });
+        }
+        tx.update(bankRef, update);
+      });
+    }
     if (facultyIds.length === 0) {
       await ref.delete();
     } else {
@@ -192,10 +245,24 @@ export async function POST(request: Request) {
     }
     await writeAuditLogSafe(db, session.collegeId, {
       action: "MID_BANK_ASSIGNED", performedBy: session.uid, performedByName: byName, targetId: id,
-      details: { subject: `${subj.subjectName} (${subj.subjectCode})`, branch, setters: facultyIds.map((f) => `${names.get(f) ?? f}${setShare ? ` (Paper ${setShare[f].join(", ")})` : ""}`) },
+      details: {
+        subject: `${subj.subjectName} (${subj.subjectCode})`, branch, setters: facultyIds.map((f) => `${names.get(f) ?? f}${setShare ? ` (Paper ${setShare[f].join(", ")})` : ""}`),
+        ...(plan.changes.length ? { startedWork: plan.changes.map((c) => `${c.name}: ${c.kind === "WITHDRAW" ? "withdrawn" : c.kind === "RESTORE" ? "restored" : `Paper ${c.from.join(", ")} -> ${c.to.join(", ")}`}`) } : {}),
+      },
     });
-    // Tell the newly assigned setters.
-    const added = facultyIds.filter((f) => !before.includes(f));
+    // Tell setters whose started work changed.
+    const changedUids = await loginUidsOf(db, session.collegeId, plan.changes.map((c) => c.facultyId));
+    for (const c of plan.changes) {
+      const uid = changedUids.get(c.facultyId);
+      if (!uid) continue;
+      const msg = c.kind === "WITHDRAW"
+        ? `${byName} removed you as setter of ${subj.subjectName} (${subj.subjectCode}). What you wrote is kept, read-only.`
+        : c.kind === "RESTORE" ? `${byName} assigned you ${subj.subjectName} (${subj.subjectCode}) again - your earlier work is back.`
+        : `${byName} changed your ${subj.subjectName} papers to Paper ${c.to.join(", ")}.${c.resetsApproval ? " Submit it to the HOD again." : ""}`;
+      await notify(db, session.collegeId, uid, "MID_BANK_ASSIGNED", `Mid ${d.midNumber} setters changed: ${subj.subjectName}`, msg, "/panel/mid-bank");
+    }
+    // Tell the newly assigned setters (not those just told their work was restored).
+    const added = facultyIds.filter((f) => !before.includes(f) && !plan.changes.some((c) => c.facultyId === f && c.kind === "RESTORE"));
     const uids = await loginUidsOf(db, session.collegeId, added);
     const what = settings.midPreparation === "PAPERS" ? "question papers" : "question bank";
     for (const f of added) {

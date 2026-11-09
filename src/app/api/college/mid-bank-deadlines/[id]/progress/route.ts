@@ -43,7 +43,8 @@ export async function GET(_request: Request, { params }: Params) {
     ]);
     if (!d) return NextResponse.json({ error: "Deadline not found" }, { status: 404 });
     const rows = await rowsP;
-    const allBanks = bankSnap.docs.map((b) => ({ id: b.id, ...(b.data() as Omit<MidQuestionBank, "id">) }));
+    // Withdrawn sets (the HOD removed their setter) don't count towards progress.
+    const allBanks = bankSnap.docs.map((b) => ({ id: b.id, ...(b.data() as Omit<MidQuestionBank, "id">) })).filter((b) => !b.withdrawn);
     const subjectIds = [...new Set([...rows.map((r) => r.subjectId), ...allBanks.map((b) => b.subjectId)])];
     const subjectsCol = db.collection("colleges").doc(session.collegeId).collection("subjects");
     const sylCol = db.collection("colleges").doc(session.collegeId).collection("subjectSyllabus");

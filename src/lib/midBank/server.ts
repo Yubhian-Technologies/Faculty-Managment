@@ -132,6 +132,7 @@ export interface BankAccess {
 
 /** Why the owner can't write (for the 403). */
 export function writeRefusal(a: Pick<BankAccess, "frozen" | "bank">): string {
+  if (a.bank.withdrawn) return `Your HOD removed you as setter for this subject (${a.bank.withdrawn.byName}) - it is kept, read-only`;
   if (a.frozen) return a.bank.approval === "APPROVED"
     ? "This question bank is approved by the HOD - it can't be changed"
     : "This question bank is with the HOD for approval - withdraw it or wait for it to be returned to make changes";
@@ -161,7 +162,8 @@ export async function bankAccess(db: Db, session: Session, bankId: string): Prom
   }
   const isHod = !!hodDepartment;
   const locked = !deadline || isDeadlineLocked(deadline.deadline);
-  const frozen = bank.approval === "SUBMITTED" || bank.approval === "APPROVED";
+  // Submitted / approved, or withdrawn by the HOD (removed as setter): nobody edits it.
+  const frozen = !!bank.withdrawn || bank.approval === "SUBMITTED" || bank.approval === "APPROVED";
   return {
     bank, deadline, locked, isOwner, isIncluded, isHod, reviewDepartments, hodDepartment, frozen,
     canRead: isOwner || isIncluded || isHod || MID_BANK_OVERSEERS.includes(session.role),
