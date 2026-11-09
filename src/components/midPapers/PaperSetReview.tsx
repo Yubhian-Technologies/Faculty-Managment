@@ -9,6 +9,7 @@ import { toast } from "@/hooks/useToast";
 import { outcomeSwitches } from "@/lib/midBank/outcomeSwitches";
 import { choiceText, flexibleQuestions, partFor, partMax, patternMax } from "@/lib/midPapers/pattern";
 import { downloadMidPaperSetPdf } from "@/lib/pdf/downloadMidPaperSet";
+import { PaperPreviewButton, paperSetData } from "@/components/midPapers/PaperPreview";
 import { MathText } from "@/components/midBank/MathText";
 import { ApprovalPanel } from "@/components/midBank/ApprovalPanel";
 import { SuggestionsPanel } from "@/components/midBank/SuggestionsPanel";
@@ -34,12 +35,7 @@ export function PaperSetReview({ detail, writeHref, onChanged }: { detail: MidBa
   async function pdf() {
     setBusy(true);
     try {
-      await downloadMidPaperSetPdf({
-        exam: { courseName: detail.subject.courseName, year: bank.year, semester: bank.semester, midNumber: bank.midNumber },
-        subject: { name: bank.subjectName, code: bank.subjectCode, regulation: detail.subject.regulation },
-        branch: bank.branch, sections: bank.sections.map((s) => s.sectionName), pattern, set, questions, units: bank.units,
-        outcomes: bank.outcomes, cos: detail.outcomes?.cos ?? [], mapping: detail.outcomes?.mapping ?? {},
-      }, `MID${bank.midNumber}_${bank.subjectCode}_${bank.branch}_paper-${set}`);
+      await downloadMidPaperSetPdf(paperSetData(detail, set), `MID${bank.midNumber}_${bank.subjectCode}_${detail.branchLabel?.branch ?? bank.branch}_paper-${set}`);
     } catch (e) {
       toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't build the PDF" });
     } finally { setBusy(false); }
@@ -66,7 +62,11 @@ export function PaperSetReview({ detail, writeHref, onChanged }: { detail: MidBa
             </button>
           );
         })}
-        <Button size="sm" className="ml-auto" onClick={() => void pdf()} loading={busy} disabled={!complete} title={complete ? "" : "Complete every question of this paper first"}><FileDown className="mr-1.5 h-4 w-4" />PDF of paper {set}</Button>
+        {/* Faculty and the HOD preview on screen; only the Exam Cell downloads the PDF. */}
+        <div className="ml-auto flex gap-2">
+          <PaperPreviewButton detail={detail} initialSet={set} />
+          {detail.access.canDownload && <Button size="sm" onClick={() => void pdf()} loading={busy} disabled={!complete} title={complete ? "" : "Complete every question of this paper first"}><FileDown className="mr-1.5 h-4 w-4" />PDF of paper {set}</Button>}
+        </div>
       </div>
 
       {(bank.setProgress?.[String(set)]?.problems ?? []).length > 0 && (

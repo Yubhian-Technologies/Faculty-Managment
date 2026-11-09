@@ -2,7 +2,7 @@ import type { HodDepartmentScope } from "@/lib/departments/scope";
 import { reviewingDepartment } from "./reviewer";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { ownerDepartmentNames, reviewDepartmentsOf } from "@/lib/subjects/ownerDepartment";
-import { ALL_BRANCHES, branchesOf, isAllBranches, sectionsForScope } from "./assignments";
+import { ALL_BRANCHES, branchesOf, isAllBranches, scopeBranches, sectionsForScope } from "./assignments";
 import { midBankRefs } from "./server";
 import { cachedValue } from "@/lib/firestore/sharedReads";
 import type { TeachingRow } from "./sections";
@@ -24,8 +24,10 @@ export async function loadAssignments(db: Db, collegeId: string, deadlineId: str
 export function reviewDepartmentsForScope(rows: TeachingRow[], subject: Pick<Subject, "ownerDepartments" | "ownerDepartmentId" | "ownerDepartmentName">, branch: string, names: ReadonlyMap<string, string>): string[] {
   const owners = ownerDepartmentNames(subject, names);
   if (owners.length) return owners;
-  // No Subject Department: a whole-subject paper has no single HOD - only per branch then.
-  return isAllBranches(branch) ? [] : reviewDepartmentsOf(branch, subject, names);
+  // No Subject Department: a whole-subject paper has no single HOD - only per branch then; a group of branches is
+  // reviewed by its branches' HODs.
+  if (isAllBranches(branch)) return [];
+  return [...new Set((scopeBranches(branch) ?? []).flatMap((b) => reviewDepartmentsOf(b, subject, names)))];
 }
 
 /** Only the reviewing department's HOD assigns (a Subject Department: its own HOD, never a managed-branch coordinator). */

@@ -10,8 +10,9 @@ import { toast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
 
 // HOD ("The HOD assigns" colleges): for one deadline, each subject their department looks after - assign who
-// prepares it: per branch (each branch its own paper) or one paper for all branches. The list offers faculty
-// teaching it there first, then the department's own faculty. Several may be picked; each prepares their own.
+// prepares it: per branch (each branch its own paper), one paper for a group of branches (e.g. CSE + EEE - the
+// paper prints those branches), or one paper for all branches. The list offers faculty teaching it there first,
+// then the department's own faculty. Several may be picked; each prepares their own.
 
 interface Candidate { facultyId: string; name: string; department: string; teaches: boolean }
 interface Scope {
@@ -20,7 +21,10 @@ interface Scope {
   assignment: { facultyIds: string[]; facultyNames: string[]; assignedByName: string; at: string; started: string[] } | null;
   candidates: Candidate[];
 }
-interface SubjectRow { subjectId: string; subjectName: string; subjectCode: string; ownerDepartments: string[]; branches: Scope[]; whole: Scope | null }
+interface SubjectRow { subjectId: string; subjectName: string; subjectCode: string; ownerDepartments: string[]; branches: Scope[]; groups?: Scope[]; whole: Scope | null }
+
+const GROUP_JOIN = " + ";
+const groupOf = (branches: string[]) => [...new Set(branches)].sort().join(GROUP_JOIN);
 
 export function AssignSetters({ deadlineId }: { deadlineId: string }) {
   const [data, setData] = useState<{ mode: "SELF" | "HOD"; deadline: { locked: boolean }; subjects: SubjectRow[] } | null>(null);
@@ -61,9 +65,28 @@ export function AssignSetters({ deadlineId }: { deadlineId: string }) {
 
 function SubjectAssign({ deadlineId, s, locked, onSaved }: { deadlineId: string; s: SubjectRow; locked: boolean; onSaved: () => void }) {
   const wholeOn = !!s.whole?.assignment;
-  const branchOn = s.branches.some((b) => b.assignment);
+  const branchOn = s.branches.some((b) => b.assignment) || (s.groups ?? []).some((g) => g.assignment);
   const [mode, setMode] = useState<"BRANCH" | "SUBJECT">(wholeOn ? "SUBJECT" : "BRANCH");
   const canWhole = !!s.whole?.canAssign && s.branches.length > 1;
+  // Saved groups (one paper for several branches) and the one being set up now.
+  const groups = (s.groups ?? []).filter((g) => g.assignment);
+  const grouped = new Set(groups.flatMap((g) => g.branch.split(GROUP_JOIN)));
+  const free = s.branches.filter((b) => b.canAssign && !b.assignment && !grouped.has(b.branch));
+  const [picking, setPicking] = useState(false);
+  const [pick, setPick] = useState<Set<string>>(new Set());
+  const [draftGroup, setDraftGroup] = useState<Scope | null>(null);
+  function startGroup() {
+    const members = s.branches.filter((b) => pick.has(b.branch));
+    const seen = new Map<string, Candidate>();
+    for (const b of members) for (const c of b.candidates) seen.set(c.facultyId, seen.has(c.facultyId) ? { ...c, teaches: c.teaches || seen.get(c.facultyId)!.teaches } : c);
+    setDraftGroup({
+      branch: groupOf(members.map((b) => b.branch)), canAssign: true, reviewDepartments: [...new Set(members.flatMap((b) => b.reviewDepartments))],
+      sections: members.flatMap((b) => b.sections.map((x) => ({ ...x, branch: b.branch }))), assignment: null,
+      candidates: [...seen.values()].sort((a, b) => Number(b.teaches) - Number(a.teaches) || a.name.localeCompare(b.name)),
+    });
+    setPicking(false);
+    setPick(new Set());
+  }
   return (
     <div className="space-y-3 rounded-xl border p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -83,13 +106,39 @@ function SubjectAssign({ deadlineId, s, locked, onSaved }: { deadlineId: string;
       </div>
       {mode === "SUBJECT" && s.whole
         ? <ScopeAssign deadlineId={deadlineId} subjectId={s.subjectId} scope={s.whole} kind="SUBJECT" locked={locked} onSaved={onSaved} />
-        : s.branches.filter((b) => b.canAssign).map((b) => <ScopeAssign key={b.branch} deadlineId={deadlineId} subjectId={s.subjectId} scope={b} kind="BRANCH" locked={locked} onSaved={onSaved} />)}
+        : <>
+          {groups.map((g) => <ScopeAssign key={g.branch} deadlineId={deadlineId} subjectId={s.subjectId} scope={g} kind="GROUP" locked={locked} onSaved={onSaved} />)}
+          {draftGroup && <ScopeAssign key={`new-${draftGroup.branch}`} deadlineId={deadlineId} subjectId={s.subjectId} scope={draftGroup} kind="GROUP" locked={locked} startEditing
+            onCancel={() => setDraftGroup(null)} onSaved={() => { setDraftGroup(null); onSaved(); }} />}
+          {s.branches.filter((b) => b.canAssign && !grouped.has(b.branch) && !(draftGroup?.branch.split(GROUP_JOIN).includes(b.branch))).map((b) => <ScopeAssign key={b.branch} deadlineId={deadlineId} subjectId={s.subjectId} scope={b} kind="BRANCH" locked={locked} onSaved={onSaved} />)}
+          {/* One paper for several branches: tick the branches (those without setters yet), then pick the setters. */}
+          {!locked && !draftGroup && free.length >= 2 && (picking ? (
+            <div className="space-y-2 rounded-lg border border-dashed p-3">
+              <p className="text-xs font-medium">One paper for these branches (it prints only them):</p>
+              <div className="flex flex-wrap gap-3">
+                {free.map((b) => (
+                  <label key={b.branch} className="flex items-center gap-1.5 text-sm">
+                    <Checkbox checked={pick.has(b.branch)} onCheckedChange={(v) => setPick((p) => { const n = new Set(p); if (v === true) n.add(b.branch); else n.delete(b.branch); return n; })} />{b.branch}
+                  </label>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" disabled={pick.size < 2} onClick={startGroup}>Next - pick setters</Button>
+                <Button size="sm" variant="ghost" onClick={() => { setPicking(false); setPick(new Set()); }}>Cancel</Button>
+              </div>
+            </div>
+          ) : (
+            <Button size="sm" variant="outline" onClick={() => setPicking(true)}><Users className="mr-1.5 h-4 w-4" />One paper for several branches</Button>
+          ))}
+        </>}
     </div>
   );
 }
 
-function ScopeAssign({ deadlineId, subjectId, scope, kind, locked, onSaved }: { deadlineId: string; subjectId: string; scope: Scope; kind: "BRANCH" | "SUBJECT"; locked: boolean; onSaved: () => void }) {
-  const [editing, setEditing] = useState(false);
+function ScopeAssign({ deadlineId, subjectId, scope, kind, locked, onSaved, startEditing = false, onCancel }: {
+  deadlineId: string; subjectId: string; scope: Scope; kind: "BRANCH" | "GROUP" | "SUBJECT"; locked: boolean; onSaved: () => void; startEditing?: boolean; onCancel?: () => void;
+}) {
+  const [editing, setEditing] = useState(startEditing);
   const [picked, setPicked] = useState<Set<string>>(() => new Set(scope.assignment?.facultyIds ?? []));
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
@@ -101,7 +150,7 @@ function ScopeAssign({ deadlineId, subjectId, scope, kind, locked, onSaved }: { 
     try {
       const res = await fetch("/api/college/mid-bank-assignments", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deadlineId, subjectId, scope: kind, branch: scope.branch, facultyIds: ids }),
+        body: JSON.stringify({ deadlineId, subjectId, scope: kind, branch: scope.branch, ...(kind === "GROUP" ? { branches: scope.branch.split(GROUP_JOIN) } : {}), facultyIds: ids }),
       });
       const j = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(j.error ?? "Could not save");
@@ -116,7 +165,7 @@ function ScopeAssign({ deadlineId, subjectId, scope, kind, locked, onSaved }: { 
     <div className="space-y-2 rounded-lg bg-muted/40 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
         <div className="min-w-0">
-          <span className="font-medium">{kind === "SUBJECT" ? "All branches" : scope.branch}</span>
+          <span className="font-medium">{kind === "SUBJECT" ? "All branches" : kind === "GROUP" ? `One paper: ${scope.branch.split(GROUP_JOIN).join(", ")}` : scope.branch}</span>
           <span className="ml-2 text-xs text-muted-foreground">{scope.sections.length} section{scope.sections.length === 1 ? "" : "s"}</span>
           <p className={cn("text-xs", scope.assignment ? "text-muted-foreground" : "font-medium text-amber-700")}>
             {scope.assignment ? `Setters: ${scope.assignment.facultyNames.join(", ")}${started.size ? ` · ${started.size} started` : ""}` : "No setter assigned yet"}
@@ -149,7 +198,7 @@ function ScopeAssign({ deadlineId, subjectId, scope, kind, locked, onSaved }: { 
           </ul>
           <div className="flex flex-wrap gap-2">
             <Button size="sm" onClick={() => void save([...picked])} loading={busy} disabled={picked.size === 0}>Save {picked.size ? `(${picked.size})` : ""}</Button>
-            <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
+            <Button size="sm" variant="ghost" onClick={() => { setEditing(false); onCancel?.(); }}>Cancel</Button>
             {scope.assignment && started.size === 0 && <Button size="sm" variant="ghost" className="ml-auto text-destructive" onClick={() => void save([])} loading={busy}>Remove assignment</Button>}
           </div>
         </div>

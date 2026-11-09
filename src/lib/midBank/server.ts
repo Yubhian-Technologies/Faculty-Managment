@@ -152,7 +152,8 @@ export async function bankAccess(db: Db, session: Session, bankId: string): Prom
   // The subject's department reviews it (a Maths bank for CSE goes to the Maths HOD); a subject with
   // none set keeps going to the branch's HOD. Only that HOD reads / decides it.
   const owners = await ownerDepartmentNamesLive(db, session.collegeId, subject);
-  const reviewDepartments = owners.length ? owners : [bank.branch];
+  // No Subject Department: the branch's HOD - for a paper of several branches (a group), any of their HODs.
+  const reviewDepartments = owners.length ? owners : bank.branches?.length ? bank.branches : [bank.branch];
   let hodDepartment = "";
   if (session.role === "HOD") {
     const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);

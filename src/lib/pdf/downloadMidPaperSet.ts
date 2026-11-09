@@ -6,7 +6,7 @@ import type { MidPaperFinal, MidPaperQuestion } from "@/types";
 
 const safeName = (n: string) => `${n.replace(/[^a-zA-Z0-9-_]+/g, "-")}.pdf`;
 
-async function letterhead() {
+export async function paperLetterhead() {
   const [info, logoUrl, formula] = await Promise.all([
     fetch("/api/college/info").then((r) => (r.ok ? r.json() : {})).catch(() => ({})) as Promise<{ name?: string; academicYear?: string }>,
     fetchCollegeLogoUrl(),
@@ -17,7 +17,7 @@ async function letterhead() {
 
 // Builds one question paper (or its answer key) as a PDF in the browser; only the letterhead is fetched.
 export async function downloadMidPaperSetPdf(data: Omit<PaperSetPdfData, "college" | "formula">, fileName: string): Promise<void> {
-  const { info, college, formula } = await letterhead();
+  const { info, college, formula } = await paperLetterhead();
   const html = getMidPaperSetHTML({ ...data, exam: { academicYear: info.academicYear, ...data.exam }, college, formula });
   await renderHtmlToPdf(html, safeName(fileName));
 }
@@ -27,7 +27,7 @@ export async function downloadMidPaperSetPdf(data: Omit<PaperSetPdfData, "colleg
  * or each part on its own page(s) with its own header (time + max marks). `answerKey` = the objective answers.
  */
 export async function downloadMidPaperFinalPdf(final: MidPaperFinal, opts: { answerKey?: boolean; fileName: string }): Promise<void> {
-  const { college, formula } = await letterhead();
+  const { college, formula } = await paperLetterhead();
   const base: PaperSetPdfData = {
     college, formula, answerKey: opts.answerKey,
     exam: final.exam, subject: final.subject, branch: final.branchCode, sections: final.sections, pattern: final.pattern,

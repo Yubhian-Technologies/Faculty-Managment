@@ -1,6 +1,8 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { cachedCollectionDocs } from "@/lib/firestore/sharedReads";
+import { paperBranchLabel } from "@/lib/midBank/assignments";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -29,11 +31,15 @@ export async function GET(_request: Request, { params }: Params) {
     if (!access.canRead) return NextResponse.json({ error: "This question bank isn't yours" }, { status: 403 });
     const { bank, deadline } = access;
     const subject = await loadSubject(db, session.collegeId, bank.subjectId);
-    const [outcomes, rules, questions] = await Promise.all([
+    const [outcomes, rules, questions, departments] = await Promise.all([
       loadOutcomes(db, session.collegeId, bank.outcomesId),
       subject ? rulesForSubject(db, session.collegeId, subject) : null,
       loadQuestions(db, session.collegeId, id),
+      cachedCollectionDocs(db, session.collegeId, "departments"),
     ]);
+    // How the paper names its branches on the header (short codes; several branches each with their own sections).
+    const codeOf = new Map(departments.map((x) => { const v = x.data() as { name?: string; code?: string }; return [v.name ?? "", v.code ?? ""]; }));
+    const branchLabel = paperBranchLabel(bank, (n) => codeOf.get(n) ?? "");
     // Question papers: the answers (MCQ key, blanks) are for the owner, the HOD reviewing and the Exam Cell -
     // not for colleagues who only read the papers.
     const seesAnswers = access.isOwner || access.isHod || MID_BANK_OVERSEERS.includes(session.role);
@@ -41,13 +47,15 @@ export async function GET(_request: Request, { params }: Params) {
       ? questions.map((q) => { const { answer: _answer, ...rest } = q as typeof q & { answer?: string }; void _answer; return rest; })
       : questions;
     return NextResponse.json({
-      bank, deadline, outcomes, rules, questions: shown,
+      bank, deadline, outcomes, rules, questions: shown, branchLabel,
       subject: {
         id: bank.subjectId, name: bank.subjectName, code: bank.subjectCode, courseName: bank.courseName,
         regulation: subject?.regulation ?? "", year: bank.year, semester: bank.semester, branch: bank.branch,
         syllabusUrl: subject?.syllabusUrl ?? null, syllabusFileName: subject?.syllabusFileName ?? null,
       },
-      access: { isOwner: access.isOwner, isIncluded: access.isIncluded, canWrite: access.canWrite, locked: access.locked, isHod: access.isHod, frozen: access.frozen, reviewDepartments: access.reviewDepartments },
+      access: { isOwner: access.isOwner, isIncluded: access.isIncluded, canWrite: access.canWrite, locked: access.locked, isHod: access.isHod, frozen: access.frozen, reviewDepartments: access.reviewDepartments,
+        // The PDF of a paper is the Exam Cell's; faculty and HODs preview it on screen.
+        canDownload: session.role === "EXAM_CELL" || session.role === "SUPER_ADMIN" },
     });
   } catch (err) {
     return guardError(err, "[college/mid-question-banks/[id] GET]");

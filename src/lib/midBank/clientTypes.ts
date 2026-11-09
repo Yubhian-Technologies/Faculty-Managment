@@ -59,5 +59,7 @@ export interface MidBankDetail {
   outcomes: SubjectOutcomes | null;
   rules: MidBankRules | null;
   questions: MidQuestion[];
-  access: { isOwner: boolean; isIncluded: boolean; canWrite: boolean; locked: boolean; isHod?: boolean; frozen?: boolean; reviewDepartments?: string[] };
+  /** The header's "Branch & Sections" (short codes; a paper of several branches lists each with its sections). */
+  branchLabel?: { branch: string; sections: string[] };
+  access: { isOwner: boolean; isIncluded: boolean; canWrite: boolean; locked: boolean; isHod?: boolean; frozen?: boolean; reviewDepartments?: string[]; canDownload?: boolean };
 }

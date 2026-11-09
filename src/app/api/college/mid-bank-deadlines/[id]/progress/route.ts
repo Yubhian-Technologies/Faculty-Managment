@@ -10,7 +10,7 @@ import { guardError, loadDeadline, MID_BANK_OVERSEERS, midBankRefs, teachingForC
 import { departmentNamesById, ownerDepartmentNames, reviewDepartmentsOf } from "@/lib/subjects/ownerDepartment";
 import { reviewingDepartment, seesBranchProgress } from "@/lib/midBank/reviewer";
 import { loadMidSettings } from "@/lib/exams/midSettings";
-import { isAllBranches, servesBranch } from "@/lib/midBank/assignments";
+import { isAllBranches, isGroupBranch, isMultiBranch, servesBranch } from "@/lib/midBank/assignments";
 import { loadAssignments } from "@/lib/midBank/assignmentsServer";
 import type { MidQuestionBank, Subject } from "@/types";
 
@@ -65,21 +65,23 @@ export async function GET(_request: Request, { params }: Params) {
     const keys = new Map<string, { branch: string; subjectId: string; subjectName: string; subjectCode: string }>();
     for (const r of rows) if (visible(r.branch, r.subjectId)) keys.set(`${r.branch}|${r.subjectId}`, { branch: r.branch, subjectId: r.subjectId, subjectName: r.subjectName, subjectCode: r.subjectCode });
     for (const b of banks) {
-      for (const br of isAllBranches(b.branch) ? (b.branches ?? []) : [b.branch]) {
+      for (const br of isMultiBranch(b.branch) ? (b.branches ?? []) : [b.branch]) {
         if (!keys.has(`${br}|${b.subjectId}`) && visible(br, b.subjectId)) keys.set(`${br}|${b.subjectId}`, { branch: br, subjectId: b.subjectId, subjectName: b.subjectName, subjectCode: b.subjectCode });
       }
     }
 
     const groups = [...keys.values()].map((k) => {
       const mine = banks.filter((b) => b.subjectId === k.subjectId && servesBranch(b, k.branch));
-      const covering = assignments.filter((a) => a.subjectId === k.subjectId && (a.branch === k.branch || (isAllBranches(a.branch) && a.branches.includes(k.branch))));
+      const covering = assignments.filter((a) => a.subjectId === k.subjectId && servesBranch(a, k.branch));
       const heldBy = new Map<string, (typeof mine)[number]>();
       for (const b of mine) for (const s of b.sections) heldBy.set(s.sectionId, b);
       return {
         ...k,
         reviewDepartments: reviewOf(k.branch, k.subjectId),
         // "The HOD assigns": who prepares it (null = the HOD hasn't assigned yet); absent in the other flow.
-        ...(hodMode ? { assigned: covering.length ? { facultyNames: [...new Set(covering.flatMap((a) => a.facultyNames))].filter(Boolean), allBranches: covering.some((a) => isAllBranches(a.branch)), byName: covering[0].assignedByName } : null } : {}),
+        ...(hodMode ? { assigned: covering.length ? { facultyNames: [...new Set(covering.flatMap((a) => a.facultyNames))].filter(Boolean), allBranches: covering.some((a) => isAllBranches(a.branch)),
+          // One paper for a group of branches (e.g. CSE + EEE): the group's branches.
+          group: covering.find((a) => isGroupBranch(a.branch))?.branches ?? null, byName: covering[0].assignedByName } : null } : {}),
         canOpen: reviews(k.branch, k.subjectId),
         syllabus: syllabusStatus.get(k.subjectId) ?? null,
         sections: sectionsOf(rows, k.subjectId, k.branch).map((s) => ({ ...s, bankId: heldBy.get(s.sectionId)?.id ?? null, ownerName: heldBy.get(s.sectionId)?.ownerName ?? null })),

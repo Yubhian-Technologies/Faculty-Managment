@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { BLOOM_LEVELS } from "@/lib/midBank/constants";
 import { outcomeSwitches } from "@/lib/midBank/outcomeSwitches";
 import { cosOfUnit } from "@/lib/subjects/syllabus";
+import { PaperPreviewButton } from "@/components/midPapers/PaperPreview";
 import { derivePoPso } from "@/lib/midBank/outcomes";
 import { choiceText, unitOfQuestion, FLEXIBLE_MAX_QUESTIONS, flexibleProblem, flexibleQuestions, PART_KINDS, paperQuestionErrors, partFor, partMax, patternMax, questionId } from "@/lib/midPapers/pattern";
 import { MathText, QuestionTextField } from "@/components/midBank/MathText";
@@ -229,6 +230,11 @@ export function PaperSetWorkspace({ detail }: { detail: MidBankDetail }) {
           );
         })}
         <span className="ml-auto text-sm text-muted-foreground">{patternMax(pattern)} marks · {pattern.durationMinutes} min · {bank.completeCount}/{bank.totalCount} questions done</span>
+        {/* The whole paper as it prints - including the question being typed (saved or not). Preview only. */}
+        <PaperPreviewButton initialSet={set} detail={{
+          ...detail, bank,
+          questions: Object.values({ ...questions, [qid]: { ...(questions[qid] ?? { id: qid, set, partId: cur.partId, no: cur.no, state: "DRAFT" }), ...q } as MidPaperQuestion }) as unknown as MidBankDetail["questions"],
+        }} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[16rem_minmax(0,1fr)_18rem]">
