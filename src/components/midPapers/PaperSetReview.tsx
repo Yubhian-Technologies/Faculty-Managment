@@ -33,10 +33,19 @@ export function PaperSetReview({ detail, writeHref, onChanged }: { detail: MidBa
   const progress = bank.setProgress?.[String(set)];
   const complete = !!progress && progress.complete >= progress.total && !(progress.problems?.length);
 
-  async function pdf() {
+  const isDone = (n: number) => { const p = bank.setProgress?.[String(n)]; return !!p && p.complete >= p.total && !(p.problems?.length); };
+  // Short file name: Mid, subject code, the branch (one branch only - a paper for several branches would make it
+  // hundreds of characters), the paper number.
+  const fileName = (n: number) => `MID${bank.midNumber}_${bank.subjectCode}${detail.branchLabel && !detail.branchLabel.sections.length ? "" : `_${detail.branchLabel?.branch ?? bank.branch}`}_Paper-${n}`;
+
+  /** Each paper is its own PDF (its own header and page numbers) - one file per paper. */
+  async function pdf(which: number[]) {
     setBusy(true);
     try {
-      await downloadMidPaperSetPdf(paperSetData(detail, set), `MID${bank.midNumber}_${bank.subjectCode}_${detail.branchLabel?.branch ?? bank.branch}_paper-${set}`);
+      const ready = which.filter(isDone);
+      for (const n of ready) await downloadMidPaperSetPdf(paperSetData(detail, n), fileName(n));
+      const skipped = which.filter((n) => !ready.includes(n));
+      if (skipped.length) toast({ title: `Paper ${skipped.join(", ")} not complete yet - not downloaded` });
     } catch (e) {
       toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't build the PDF" });
     } finally { setBusy(false); }
@@ -66,7 +75,12 @@ export function PaperSetReview({ detail, writeHref, onChanged }: { detail: MidBa
         {/* Faculty and the HOD preview on screen; only the Exam Cell downloads the PDF. */}
         <div className="ml-auto flex gap-2">
           <PaperPreviewButton detail={detail} initialSet={set} />
-          {detail.access.canDownload && <Button size="sm" onClick={() => void pdf()} loading={busy} disabled={!complete} title={complete ? "" : "Complete every question of this paper first"}><FileDown className="mr-1.5 h-4 w-4" />PDF of paper {set}</Button>}
+          {detail.access.canDownload && <Button size="sm" onClick={() => void pdf([set])} loading={busy} disabled={!complete} title={complete ? "" : "Complete every question of this paper first"}><FileDown className="mr-1.5 h-4 w-4" />PDF of paper {set}</Button>}
+          {detail.access.canDownload && mySets.length > 1 && (
+            <Button size="sm" variant="outline" onClick={() => void pdf(mySets)} loading={busy} disabled={!mySets.some(isDone)} title="Each paper as its own PDF file">
+              <FileDown className="mr-1.5 h-4 w-4" />All {mySets.length} papers (separate PDFs)
+            </Button>
+          )}
         </div>
       </div>
 
