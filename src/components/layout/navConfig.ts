@@ -413,6 +413,7 @@ export const NAV_ITEMS: NavItem[] = [
   // Academics
   { label: "Dashboard", href: "/academics", iconName: "LayoutDashboard", roles: ["ACADEMICS"] },
   { label: "Curriculum", href: "/academics/course-structure", iconName: "Library", roles: ["ACADEMICS"], section: "Academics" },
+  { label: "Syllabus Approvals", href: "/academics/syllabus-approvals", iconName: "BookOpenCheck", roles: ["ACADEMICS"] },
   { label: "Timetable View", href: "/academics/timetable-view", iconName: "CalendarDays", roles: ["ACADEMICS"], section: "Academics" },
   { label: "Holidays", href: "/academics/holidays", iconName: "CalendarDays", roles: ["ACADEMICS"], section: "Academics" },
   { label: "Incident Record", href: "/academics/incident-record", iconName: "ClipboardList", roles: ["ACADEMICS"] },

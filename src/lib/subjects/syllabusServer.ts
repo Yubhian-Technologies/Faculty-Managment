@@ -47,5 +47,5 @@ export async function notifyHods(db: Db, collegeId: string, owners: string[], ty
 }
 
 export async function notifyAcademics(db: Db, collegeId: string, type: string, title: string, message: string, subjectId: string) {
-  await notifyRole(db, collegeId, "ACADEMICS", type, title, message, `/academics/syllabus/${encodeURIComponent(subjectId)}`);
+  await notifyRole(db, collegeId, "ACADEMICS", type, title, message, `/academics/syllabus-approvals/${encodeURIComponent(subjectId)}`);
 }

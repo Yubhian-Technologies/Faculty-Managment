@@ -3,8 +3,8 @@ import { initializeApp, getApps, getApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 
 // The Mid Question Bank through its REAL routes on a real Firestore (the local
-// emulator): a deadline opens the module, a faculty member sets up the branch's
-// outcomes and starts a bank for their section + a colleague's, sections can't be
+// emulator): a deadline opens the module, the subject's syllabus is frozen (units /
+// COs / mapping) and a faculty member starts a bank for their section + a colleague's, sections can't be
 // claimed twice, the colleague reads only, the deadline locks writes and an
 // extension reopens them, and the question rules (rev, unit order, checks,
 // duplicates, completed units, per-question format).
@@ -18,6 +18,11 @@ vi.mock("@/lib/firebase/admin", () => {
   const app = () => (getApps().length ? getApp() : initializeApp({ projectId: "demo-mb" }));
   return { getAdminDb: () => getFirestore(app()), getAdminAuth: async () => ({}), getAdminStorage: () => ({}) };
 });
+vi.mock("@/lib/departments/scope", async (orig) => ({
+  ...(await orig() as object),
+  getHodDepartmentScope: async () => ({ departmentName: "Information Technology", departmentId: "it", ownDepartmentNames: ["Information Technology"], ownDepartmentIds: ["it"],
+    childDepartmentNames: [], childDepartmentIds: [], managedDepartmentNames: [], managedDepartmentIds: [], parentDepartmentIds: [] }),
+}));
 vi.mock("@/lib/auth/verifySession", () => ({
   requireCollegeMember: async (...roles: string[]) => {
     if (roles.length && !roles.includes(who.role)) throw new Error("UNAUTHORIZED");
@@ -30,7 +35,6 @@ const C = "c1";
 const D = "d1";
 const BRANCH = "Information Technology";
 const BANK = `${D}__sub1__information-technology__fm1`;
-const OUTCOMES = "sub1__information-technology";
 const FUTURE = "2099-12-31";
 
 describe.skipIf(!EMULATOR)("Mid Question Bank (real Firestore)", () => {
@@ -38,9 +42,18 @@ describe.skipIf(!EMULATOR)("Mid Question Bank (real Firestore)", () => {
   const col = (n: string) => db().collection("colleges").doc(C).collection(n);
   const res = async (r: Response) => ({ status: r.status, json: (await r.json()) as Json });
 
-  const putOutcomes = async (body: unknown) => {
-    const { PUT } = await import("@/app/api/college/subject-outcomes/[id]/route");
-    return res(await PUT(new Request("http://x", { method: "PUT", body: JSON.stringify(body) }), { params: Promise.resolve({ id: OUTCOMES }) }));
+  // Units / COs / mapping now come from the subject's FROZEN syllabus (HOD prepares, Academics freezes).
+  const syllabusRoute = async () => import("@/app/api/college/subjects/[id]/syllabus-outcomes/route");
+  const putSyllabus = async (body: unknown) => { const { PUT } = await syllabusRoute(); return res((await PUT(new Request("http://x", { method: "PUT", body: JSON.stringify(body) }), { params: Promise.resolve({ id: "sub1" }) })) as Response); };
+  const syllabusStep = async (action: string, baseVersion: number, remarks = "") => { const { POST } = await syllabusRoute(); return res((await POST(new Request("http://x", { method: "POST", body: JSON.stringify({ action, baseVersion, remarks }) }), { params: Promise.resolve({ id: "sub1" }) })) as Response); };
+  /** Freeze the subject's syllabus straight in the database (what HOD + Academics produce). */
+  const putOutcomes = async (body: { units: { title: string }[]; cos: { statement: string }[]; mapping: Record<string, string[]> }) => {
+    await col("subjectSyllabus").doc("sub1").set({
+      subjectId: "sub1", subjectName: "Discrete Maths", subjectCode: "DM101", courseName: "B.Tech", regulation: "R23",
+      units: body.units.map((u, i) => ({ no: i + 1, title: u.title })), cos: body.cos.map((c, i) => ({ id: `CO${i + 1}`, statement: c.statement, unit: 1 })),
+      mapping: body.mapping, status: "FROZEN", version: 3, frozenAt: "2026-11-01T00:00:00.000Z", frozenByName: "Dean", updatedAt: "2026-11-01T00:00:00.000Z", updatedByUid: "u-ac", updatedByName: "Dean", history: [],
+    });
+    return { status: 200, json: {} };
   };
   const startBank = async (sectionIds: string[]) => {
     const { POST } = await import("@/app/api/college/mid-question-banks/route");
@@ -68,7 +81,7 @@ describe.skipIf(!EMULATOR)("Mid Question Bank (real Firestore)", () => {
   const asFaculty = (uid: string) => { who.uid = uid; who.role = "PANEL_MEMBER"; };
 
   beforeEach(async () => {
-    for (const n of ["midBankDeadlines", "midQuestionBanks", "midBankSectionClaims", "subjectOutcomes", "midBankRules", "subjects", "facultyMembers",
+    for (const n of ["midBankDeadlines", "midQuestionBanks", "midBankSectionClaims", "subjectOutcomes", "subjectSyllabus", "departments", "auditLogs", "midBankRules", "subjects", "facultyMembers",
       "users", "courses", "sections", "subjectSemesterAssignments", "teachingAssignments", "examMidSchedules", "notifications", "examSettings"]) {
       for (const d of (await col(n).get()).docs) {
         for (const sub of await d.ref.listCollections()) for (const x of (await sub.get()).docs) await x.ref.delete();
@@ -81,7 +94,8 @@ describe.skipIf(!EMULATOR)("Mid Question Bank (real Firestore)", () => {
     await col("facultyMembers").doc("fm1").set({ userUid: "u-fac", name: "Dr A" });
     await col("facultyMembers").doc("fm2").set({ userUid: "u-other", name: "Dr B" });
     await col("courses").doc("crs").set({ name: "B.Tech", catalogId: "btech", durationYears: 4, departmentId: "it" });
-    await col("subjects").doc("sub1").set({ name: "Discrete Maths", code: "DM101", catalogId: "btech", courseName: "B.Tech", regulation: "R23" });
+    await col("subjects").doc("sub1").set({ name: "Discrete Maths", code: "DM101", catalogId: "btech", courseName: "B.Tech", regulation: "R23", ownerDepartments: [{ id: "it", name: BRANCH }], ownerDepartmentIds: ["it"] });
+    await col("departments").doc("it").set({ name: BRANCH });
     await col("sections").doc("sA").set({ name: "A", courseId: "crs", year: 2, department: BRANCH, batch: "2025-2029" });
     await col("sections").doc("sB").set({ name: "B", courseId: "crs", year: 2, department: BRANCH, batch: "2025-2029" });
     await col("subjectSemesterAssignments").doc("i1").set({ courseId: "crs", semester: 3, year: 2, subjectId: "sub1", subjectName: "Discrete Maths", subjectCode: "DM101", departmentId: "it" });
@@ -92,7 +106,9 @@ describe.skipIf(!EMULATOR)("Mid Question Bank (real Firestore)", () => {
   });
 
   it("starts only after the branch setup; covers a colleague's section, who then reads it but can't claim it", async () => {
-    expect((await startBank(["sA", "sB"])).status).toBe(400); // no outcomes yet
+    const early = await startBank(["sA", "sB"]); // the syllabus isn't frozen yet
+    expect(early.status).toBe(400);
+    expect(early.json.issues[0].code).toBe("NO_SYLLABUS");
     expect((await putOutcomes(outcomes)).status).toBe(200);
     const started = await startBank(["sA", "sB"]);
     expect(started.status).toBe(201);
@@ -103,6 +119,33 @@ describe.skipIf(!EMULATOR)("Mid Question Bank (real Firestore)", () => {
     expect((await startBank(["sB"])).json.error).toBe("Section B is already in Dr A's question bank");
     expect((await getBank()).json.access).toMatchObject({ isOwner: false, isIncluded: true, canWrite: false });
     expect((await save("1_1", "draft", [part("x", "")])).status).toBe(403);
+  });
+
+  it("syllabus: the HOD prepares and submits, Academics freezes; then only Academics edits, and each change is recorded", async () => {
+    const form = { units: [{ title: "Sets" }, { title: "Relations" }], cos: [{ statement: "Explain sets", unit: 1 }, { statement: "Apply relations", unit: 2 }], mapping: { CO1: ["PO1"], CO2: ["PO2"] } };
+    who.uid = "u-hod"; who.role = "HOD";
+    expect((await putSyllabus({ ...form, cos: [{ statement: "Explain sets" }], baseVersion: 0 })).json.error).toBe("CO1: pick its unit");
+    const draft = await putSyllabus({ ...form, baseVersion: 0 });
+    expect(draft.json.syllabus).toMatchObject({ status: "DRAFT", version: 1 });
+    expect((await putSyllabus({ ...form, baseVersion: 0 })).status).toBe(409); // stale version
+    expect((await syllabusStep("SUBMIT", 1)).json.syllabus.status).toBe("SUBMITTED");
+    expect((await putSyllabus({ ...form, baseVersion: 2 })).status).toBe(409); // with Academics: the HOD can't change it
+    expect((await syllabusStep("FREEZE", 2)).status).toBe(403); // only Academics freezes
+
+    who.uid = "u-ac"; who.role = "ACADEMICS";
+    expect((await syllabusStep("RETURN", 2)).status).toBe(400); // remarks needed
+    expect((await syllabusStep("FREEZE", 2)).json.syllabus).toMatchObject({ status: "FROZEN", version: 3 });
+    const edited = await putSyllabus({ ...form, units: [{ title: "Sets and logic" }, { title: "Relations" }], baseVersion: 3 });
+    expect(edited.json.syllabus.status).toBe("FROZEN");
+    expect(edited.json.syllabus.history.at(-1)).toMatchObject({ action: "EDITED_AFTER_FREEZE", role: "ACADEMICS", changes: [{ field: "Unit 1 title", before: "Sets", after: "Sets and logic" }] });
+
+    who.uid = "u-hod"; who.role = "HOD";
+    expect((await putSyllabus({ ...form, baseVersion: 4 })).json.error).toContain("only Academics");
+    // Faculty start on it.
+    asFaculty("u-fac");
+    const started = await startBank(["sA"]);
+    expect(started.status).toBe(201);
+    expect(started.json.bank.outcomesId).toBe("syllabus__sub1");
   });
 
   it("a practical (non-theory) subject has no question bank", async () => {
@@ -163,10 +206,12 @@ describe.skipIf(!EMULATOR)("Mid Question Bank (real Firestore)", () => {
       expect(breaking.json.error).toContain("L4 would drop to 2");
     });
 
-    it("once questions use the setup, a colleague who isn't an owner or its author can't change it", async () => {
+    it("once questions use the frozen syllabus, Academics can't remove a unit / CO they use", async () => {
       await save("1_1", "draft", [part("Define a set", "", ["CO2"])]);
-      asFaculty("u-other");
-      expect((await putOutcomes({ ...outcomes, baseVersion: 1 })).status).toBe(403);
+      who.uid = "u-ac"; who.role = "ACADEMICS";
+      const cut = await putSyllabus({ units: [{ title: "Sets" }, { title: "Relations" }, { title: "Graphs" }], cos: [{ statement: "Explain sets", unit: 1 }], mapping: { CO1: ["PO1"] }, baseVersion: 3 });
+      expect(cut.status).toBe(409);
+      expect(cut.json.error).toBe("CO2 is used by questions and can't be removed");
     });
   });
 });

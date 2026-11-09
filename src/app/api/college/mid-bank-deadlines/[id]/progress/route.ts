@@ -46,7 +46,12 @@ export async function GET(_request: Request, { params }: Params) {
     const allBanks = bankSnap.docs.map((b) => ({ id: b.id, ...(b.data() as Omit<MidQuestionBank, "id">) }));
     const subjectIds = [...new Set([...rows.map((r) => r.subjectId), ...allBanks.map((b) => b.subjectId)])];
     const subjectsCol = db.collection("colleges").doc(session.collegeId).collection("subjects");
-    const subjectSnaps = subjectIds.length ? await db.getAll(...subjectIds.map((sid) => subjectsCol.doc(sid))) : [];
+    const sylCol = db.collection("colleges").doc(session.collegeId).collection("subjectSyllabus");
+    const [subjectSnaps, sylSnaps] = subjectIds.length
+      ? await Promise.all([db.getAll(...subjectIds.map((sid) => subjectsCol.doc(sid))), db.getAll(...subjectIds.map((sid) => sylCol.doc(sid)), { fieldMask: ["status"] })])
+      : [[], []];
+    // Each subject's syllabus status: banks / papers can start only once it is frozen.
+    const syllabusStatus = new Map(sylSnaps.map((x) => [x.id, x.exists ? String(x.get("status")) : null]));
     const subjects = new Map(subjectSnaps.filter((x) => x.exists).map((x) => [x.id, x.data() as Subject]));
     const reviewOf = (branch: string, subjectId: string) => reviewDepartmentsOf(branch, subjects.get(subjectId), deptNames);
     const bySubjectDept = (subjectId: string) => ownerDepartmentNames(subjects.get(subjectId), deptNames).length > 0;
@@ -76,6 +81,7 @@ export async function GET(_request: Request, { params }: Params) {
         // "The HOD assigns": who prepares it (null = the HOD hasn't assigned yet); absent in the other flow.
         ...(hodMode ? { assigned: covering.length ? { facultyNames: [...new Set(covering.flatMap((a) => a.facultyNames))].filter(Boolean), allBranches: covering.some((a) => isAllBranches(a.branch)), byName: covering[0].assignedByName } : null } : {}),
         canOpen: reviews(k.branch, k.subjectId),
+        syllabus: syllabusStatus.get(k.subjectId) ?? null,
         sections: sectionsOf(rows, k.subjectId, k.branch).map((s) => ({ ...s, bankId: heldBy.get(s.sectionId)?.id ?? null, ownerName: heldBy.get(s.sectionId)?.ownerName ?? null })),
         banks: mine.map((b) => ({
           id: b.id, ownerName: b.ownerName, sections: b.sections.map((s) => s.sectionName), status: b.status, approval: b.approval ?? null,

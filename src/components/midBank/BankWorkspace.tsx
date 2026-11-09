@@ -12,6 +12,7 @@ import { toast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
 import { BLOOM_LABELS, BLOOM_LEVELS, BLOOM_MIN_PER_UNIT, PROGRAM_OUTCOMES, QUESTIONS_PER_UNIT } from "@/lib/midBank/constants";
 import { derivePoPso } from "@/lib/midBank/outcomes";
+import { cosOfUnit } from "@/lib/subjects/syllabus";
 import { outcomeSwitches } from "@/lib/midBank/outcomeSwitches";
 import { bloomNeeds, lockReason } from "@/lib/midBank/rules";
 import { allowedFormats, bankFormats, defaultSplit, formatsFor, formatName, formatOf, isBlankPart, partLabel, partLetter, partMarks, partsFor, questionErrors, questionFormat, splitAfterEdit } from "@/lib/midBank/validateQuestion";
@@ -276,6 +277,7 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
     setDirty(true);
   }
   const allCos = [...new Set(parts.flatMap((p) => p.cos))];
+  const unitCoIds = new Set(cosOfUnit(outcomes.cos, cur.unit).map((c) => c.id));
   const poPso = derivePoPso(allCos, outcomes.mapping);
   const lockedHere = lockReason(bank.units, bank.unitStatus, cur.unit);
   const others = Object.values(questions).filter((q) => q.id !== qid && q.parts.some((p) => p.text.trim())).sort((a, b) => a.unit - b.unit || a.slot - b.slot);
@@ -529,10 +531,11 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
                     {sw.cos && <div className="space-y-2">
                       <span className="text-sm font-medium" id={`${pre}-co-label`}>Course Outcome(s)</span>
                       <div className="flex flex-wrap gap-1.5" role="group" aria-labelledby={`${pre}-co-label`}>
-                        {outcomes.cos.map((c) => {
+                        {/* The question's unit's COs (syllabus), plus any picked earlier; hover shows its POs. */}
+                        {outcomes.cos.filter((c) => unitCoIds.has(c.id) || p.cos.includes(c.id)).map((c) => {
                           const on = p.cos.includes(c.id);
                           return (
-                            <button key={c.id} type="button" aria-pressed={on} title={c.statement}
+                            <button key={c.id} type="button" aria-pressed={on} title={`${c.statement}${(outcomes.mapping[c.id] ?? []).length ? ` - ${(outcomes.mapping[c.id] ?? []).join(", ")}` : ""}`}
                               onClick={() => edit(i, { cos: on ? p.cos.filter((x) => x !== c.id) : [...p.cos, c.id] })}
                               className={cn("inline-flex h-8 items-center gap-1 rounded-full border px-3 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                                 on ? "border-primary bg-primary text-primary-foreground shadow-sm" : "bg-background hover:border-primary/50")}>

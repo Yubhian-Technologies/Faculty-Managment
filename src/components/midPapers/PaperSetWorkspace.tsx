@@ -9,6 +9,8 @@ import { toast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
 import { BLOOM_LEVELS } from "@/lib/midBank/constants";
 import { outcomeSwitches } from "@/lib/midBank/outcomeSwitches";
+import { cosOfUnit } from "@/lib/subjects/syllabus";
+import { derivePoPso } from "@/lib/midBank/outcomes";
 import { choiceText, unitOfQuestion, FLEXIBLE_MAX_QUESTIONS, flexibleProblem, flexibleQuestions, PART_KINDS, paperQuestionErrors, partFor, partMax, patternMax, questionId } from "@/lib/midPapers/pattern";
 import { MathText, QuestionTextField } from "@/components/midBank/MathText";
 import { ApprovalPanel } from "@/components/midBank/ApprovalPanel";
@@ -47,6 +49,10 @@ export function PaperSetWorkspace({ detail }: { detail: MidBankDetail }) {
   const setPart = pattern.parts.find((p) => p.id === cur.partId)!;
   const qid = questionId(set, cur.partId, cur.no);
   const [q, setQ] = useState<Editable>(() => questions[qid] ?? blank(setPart));
+  const mapping = detail.outcomes?.mapping ?? {};
+  // The question's unit: picked on the question, else fixed by a per-unit part. Its COs come first (syllabus).
+  const qUnit = q.unit ?? unitOfQuestion(setPart, bank.units ?? [], cur.no) ?? null;
+  const qUnitCoIds = new Set(cosOfUnit(cos, qUnit).map((c) => c.id));
   // The part as this question sees it (a faculty-decides part: the question's own kind and marks).
   const part = partFor(setPart, q);
   const flexList = (pid: string) => flexibleQuestions(Object.values(questions), set, pid);
@@ -359,12 +365,14 @@ export function PaperSetWorkspace({ detail }: { detail: MidBankDetail }) {
               {sw.cos && (
                 <div className="space-y-1.5"><span className="text-sm font-medium">Course Outcome(s)</span>
                   <div className="flex flex-wrap gap-1.5">
-                    {cos.map((c) => {
+                    {/* The question's unit's COs (syllabus), plus any picked earlier; hover shows its POs. */}
+                    {cos.filter((c) => qUnitCoIds.has(c.id) || q.cos.includes(c.id)).map((c) => {
                       const on = q.cos.includes(c.id);
-                      return <button key={c.id} type="button" aria-pressed={on} title={c.statement} onClick={() => edit({ cos: on ? q.cos.filter((x) => x !== c.id) : [...q.cos, c.id] })}
+                      return <button key={c.id} type="button" aria-pressed={on} title={`${c.statement}${(mapping[c.id] ?? []).length ? ` - ${(mapping[c.id] ?? []).join(", ")}` : ""}`} onClick={() => edit({ cos: on ? q.cos.filter((x) => x !== c.id) : [...q.cos, c.id] })}
                         className={cn("h-8 rounded-full border px-3 text-xs font-semibold", on ? "border-primary bg-primary text-primary-foreground" : "bg-background")}>{c.id}</button>;
                     })}
                   </div>
+                  {q.cos.length > 0 && <p className="text-xs text-muted-foreground">Maps to: {derivePoPso(q.cos, mapping).join(", ") || "-"}</p>}
                 </div>
               )}
               {sw.bloom && (

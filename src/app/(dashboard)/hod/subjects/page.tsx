@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { BookOpen, Search } from "lucide-react";
+import Link from "next/link";
+import { BookOpen, FileText, Search } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,9 +10,10 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { OwnedPlacement, TaughtBranch } from "@/lib/subjects/subjectDepartmentBranches";
+import { SYLLABUS_STATUS_LABEL } from "@/lib/subjects/syllabus";
 import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
-import type { Course, CourseCatalogItem, CourseYearTiming, Department, Subject, SubjectSemesterAssignment } from "@/types";
+import type { Course, CourseCatalogItem, CourseYearTiming, Department, Subject, SubjectSemesterAssignment, SubjectSyllabusStatus } from "@/types";
 import { subjectTypeDisplayLabel } from "@/types";
 import { regulationsForCourseYearByBatch } from "@/lib/college/academicStructure";
 import { feederOnlyYears, managerEffectiveYears, mergeOwnDepartmentOptions } from "@/lib/departments/hodScope";
@@ -69,7 +71,7 @@ export default function HODSubjectsPage() {
   const [pickedDeptId, setPickedDeptId] = useState("");
   // Branches where subjects this HOD's department looks after (Subject Department) are taught - e.g. Maths HOD:
   // Linear Algebra in CSE, ECE ... Their semester subjects are shown read-only (the server allows only these).
-  const [taught, setTaught] = useState<{ subjectIds: Set<string>; branches: TaughtBranch[]; placements: OwnedPlacement[] }>({ subjectIds: new Set(), branches: [], placements: [] });
+  const [taught, setTaught] = useState<{ subjectIds: Set<string>; branches: TaughtBranch[]; placements: OwnedPlacement[]; syllabusStatus: Map<string, SubjectSyllabusStatus | null> }>({ subjectIds: new Set(), branches: [], placements: [], syllabusStatus: new Map() });
   const [pickedYear, setPickedYear] = useState("");
   const [pickedSemester, setPickedSemester] = useState<number | null>(null);
   // "" means "All regulations" - lets an HOD tell apart subjects filed under
@@ -113,8 +115,11 @@ export default function HODSubjectsPage() {
 
   useEffect(() => {
     fetch("/api/college/subjects/owned")
-      .then((r) => (r.ok ? r.json() : null) as Promise<{ subjects?: { id: string }[]; branches?: TaughtBranch[]; placements?: OwnedPlacement[] } | null>)
-      .then((d) => d && setTaught({ subjectIds: new Set((d.subjects ?? []).map((x) => x.id)), branches: d.branches ?? [], placements: d.placements ?? [] }))
+      .then((r) => (r.ok ? r.json() : null) as Promise<{ subjects?: { id: string; syllabusStatus?: SubjectSyllabusStatus | null }[]; branches?: TaughtBranch[]; placements?: OwnedPlacement[] } | null>)
+      .then((d) => d && setTaught({
+        subjectIds: new Set((d.subjects ?? []).map((x) => x.id)), branches: d.branches ?? [], placements: d.placements ?? [],
+        syllabusStatus: new Map((d.subjects ?? []).map((x) => [x.id, x.syllabusStatus ?? null])),
+      }))
       .catch(() => { /* the own-department view still works */ });
 
     fetch("/api/college/course-catalog")
@@ -603,6 +608,15 @@ export default function HODSubjectsPage() {
                                     {taught.subjectIds.has(a.subjectId) && <Badge className="ml-2 align-middle text-[10px]">Your department</Badge>}
                                   </div>
                                   {!!a.taughtIn?.length && <div className="mt-0.5 text-xs text-muted-foreground">Taught in: {a.taughtIn.join(", ")}</div>}
+                                  {taught.subjectIds.has(a.subjectId) && (() => {
+                                    // Their department's subject: its syllabus (units, COs, CO-PO) - prepared here, frozen by Academics.
+                                    const st = taught.syllabusStatus.get(a.subjectId) ?? null;
+                                    return (
+                                      <Link href={`/hod/subjects/syllabus/${encodeURIComponent(a.subjectId)}`} className="mt-1.5 inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium text-primary hover:bg-primary/5">
+                                        <FileText className="h-3.5 w-3.5" />Syllabus · {st ? SYLLABUS_STATUS_LABEL[st] : "Not started"}
+                                      </Link>
+                                    );
+                                  })()}
                                   <div className="flex flex-wrap items-center gap-2 mt-1">
                                     <Badge variant="secondary" className="text-xs font-mono">{a.subjectCode}</Badge>
                                     <Badge variant="outline" className="text-xs">{subjectTypeDisplayLabel(a.type ?? subject?.type)}</Badge>

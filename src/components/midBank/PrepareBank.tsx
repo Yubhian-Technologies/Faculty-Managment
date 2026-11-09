@@ -40,7 +40,7 @@ const resize = (list: string[], n: number) => Array.from({ length: n }, (_, i) =
 const initials = (name: string) => name.replace(/^(dr|mr|mrs|ms|prof)\.?\s*/i, "").split(/[\s.]+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("") || "?";
 
 /** "Number of units: [-] 5 [+]" - typing a number works too. */
-function CountInput({ id, label, value, max, disabled, onChange }: { id: string; label: string; value: number; max: number; disabled?: boolean; onChange: (n: number) => void }) {
+export function CountInput({ id, label, value, max, disabled, onChange }: { id: string; label: string; value: number; max: number; disabled?: boolean; onChange: (n: number) => void }) {
   const set = (n: number) => onChange(Math.max(1, Math.min(max, Math.floor(n || 1))));
   return (
     <div className="flex items-center gap-3">
@@ -64,7 +64,7 @@ function CountInput({ id, label, value, max, disabled, onChange }: { id: string;
 }
 
 /** One CO's POs / PSOs as toggle chips (PO1-PO11, PSO1, PSO2); hover a chip for the PO's title. */
-function MappingChips({ co, value, onChange, disabled }: { co: string; value: string[]; onChange: (v: string[]) => void; disabled?: boolean }) {
+export function MappingChips({ co, value, onChange, disabled }: { co: string; value: string[]; onChange: (v: string[]) => void; disabled?: boolean }) {
   return (
     <div role="group" aria-label={`POs and PSOs for ${co}`} className="flex flex-wrap gap-1.5">
       {MAPPING_TARGETS.map((t) => {
@@ -123,7 +123,11 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
   const locked = deadline.locked;
   const readOnly = locked || !canEditOutcomes;
   const pickedMine = assigned ? true : sections.some((s) => s.mine && picked.has(s.sectionId));
-  const examCellIssues = setup.issues.filter((i) => i.who === "EXAM_CELL");
+  // What the faculty can't fix themselves (the Exam Cell's rules, the syllabus) blocks starting.
+  const examCellIssues = setup.issues.filter((i) => i.who !== "FACULTY");
+  // Units / COs / mapping are read from the subject's syllabus; not frozen yet = nothing to show in steps 2-3.
+  const fromSyllabus = data.syllabus ?? null;
+  const noSyllabus = Boolean(fromSyllabus) && !outcomes;
   const bankHref = myBankId ? `/panel/mid-bank/${encodeURIComponent(myBankId)}` : null;
 
   async function putOutcomes(): Promise<boolean> {
@@ -346,7 +350,16 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
           </Card>
         )}
 
-        {step === 2 && (
+        {(step === 2 || step === 3) && fromSyllabus && (
+          <p className={cn("flex flex-wrap items-center gap-2 rounded-xl border p-3 text-sm", noSyllabus ? "border-amber-200 bg-amber-50 text-amber-900" : "border-emerald-200 bg-emerald-50 text-emerald-900")}>
+            <Lock className="h-4 w-4 shrink-0" />
+            {noSyllabus
+              ? setup.issues.find((i) => i.code === "NO_SYLLABUS")?.message ?? "The syllabus isn't frozen yet."
+              : `From the subject's syllabus, frozen by ${fromSyllabus?.frozenByName || "Academics"}${fromSyllabus?.frozenAt ? ` on ${new Date(fromSyllabus.frozenAt).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric" })}` : ""} - read-only.`}
+            <a href={`/panel/syllabus/${encodeURIComponent(subject.id)}`} className="ml-auto font-medium underline underline-offset-2">View syllabus</a>
+          </p>
+        )}
+        {step === 2 && !noSyllabus && (
           <Card className="rounded-2xl">
             <CardContent className="space-y-6 p-6">
               <StepHeading icon={BookOpen} title="Course Outcomes">
@@ -357,7 +370,7 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
                 {outcomes && (
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-muted-foreground"><Check className="h-3.5 w-3.5 text-emerald-600" />Last saved by {outcomes.updatedByName || "a colleague"}</span>
                 )}
-                {!canEditOutcomes && !locked && (
+                {!canEditOutcomes && !locked && !fromSyllabus && (
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 font-medium text-amber-900"><Lock className="h-3.5 w-3.5" />Set by {outcomes?.updatedByName || "a colleague"} - read-only for you</span>
                 )}
               </div>
@@ -454,7 +467,7 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
           </Card>
         )}
 
-        {step === 3 && (
+        {step === 3 && !noSyllabus && (
           <Card className="rounded-2xl">
             <CardContent className="space-y-5 p-6">
               <StepHeading icon={Target} title="CO-PO Mapping">
