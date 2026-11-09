@@ -6,7 +6,35 @@ import { ALL_OUTCOMES_ON } from "./outcomeSwitches";
 // What still stands between an assignment and its question bank. Each issue
 // says who resolves it, so a faculty member is never left with a bare error.
 
-export interface SetupIssue { code: "NO_RULES" | "NO_MID_IN_RULES" | "NO_OUTCOMES" | "UNITS_MISSING" | "MAPPING_MISSING" | "NO_PATTERN"; message: string; who: "EXAM_CELL" | "FACULTY" }
+export interface SetupIssue {
+  code: "NO_RULES" | "NO_MID_IN_RULES" | "NO_OUTCOMES" | "UNITS_MISSING" | "MAPPING_MISSING" | "NO_PATTERN" | "NO_SYLLABUS";
+  message: string;
+  /** Who fixes it. Anything but FACULTY blocks starting (the faculty can't fix it themselves). */
+  who: "EXAM_CELL" | "FACULTY" | "SYLLABUS";
+}
+
+/**
+ * Banks / papers work to the subject's FROZEN syllabus (HOD prepares, Academics freezes) - the faculty no longer
+ * enter units / COs / mapping. Their "enter the outcomes" issues become one syllabus issue: not frozen yet (or no
+ * Subject Department to prepare it), or a frozen syllabus that lacks what the Mid needs (Academics changes it).
+ */
+export function withSyllabus(issues: SetupIssue[], syllabus: { status: string | null; subjectDepartments: string[] }): SetupIssue[] {
+  const outcomeCodes = new Set<SetupIssue["code"]>(["NO_OUTCOMES", "UNITS_MISSING", "MAPPING_MISSING"]);
+  const rest = issues.filter((i) => !outcomeCodes.has(i.code));
+  if (syllabus.status !== "FROZEN") {
+    const message = syllabus.subjectDepartments.length === 0
+      ? "This subject has no Subject Department yet - Academics sets it, then its HOD prepares the syllabus (units, COs, CO-PO mapping)."
+      : syllabus.status === "SUBMITTED"
+        ? "The syllabus (units, COs, CO-PO mapping) is with Academics for freezing - you can start once it is frozen."
+        : `The syllabus (units, COs, CO-PO mapping) isn't frozen yet - the ${syllabus.subjectDepartments.join(" / ")} HOD prepares it and Academics freezes it.`;
+    return [{ code: "NO_SYLLABUS", who: "SYLLABUS", message }, ...rest];
+  }
+  const fromSyllabus = issues.filter((i) => outcomeCodes.has(i.code)).map((i) => ({
+    ...i, who: "SYLLABUS" as const,
+    message: i.code === "UNITS_MISSING" ? `${i.message.replace(/ - add the unit\(s\)\.?$/, "")} - the frozen syllabus needs it: ask Academics.` : `${i.message} The syllabus is frozen - ask Academics.`,
+  }));
+  return [...fromSyllabus, ...rest];
+}
 
 /**
  * A college that prepares question papers: the Exam Cell's paper pattern for the course, and - only when the

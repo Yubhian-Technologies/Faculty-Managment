@@ -3,7 +3,8 @@ import { reviewingDepartment } from "./reviewer";
 import { ownerDepartmentNamesLive } from "@/lib/subjects/ownerDepartment";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { cachedValue } from "@/lib/firestore/sharedReads";
-import type { Course, MidBankDeadline, MidBankRules, MidQuestion, MidQuestionBank, Section, Subject, SubjectOutcomes, SubjectSemesterAssignment, TeachingAssignment } from "@/types";
+import type { Course, MidBankDeadline, MidBankRules, MidQuestion, MidQuestionBank, Section, Subject, SubjectOutcomes, SubjectSemesterAssignment, SubjectSyllabus, TeachingAssignment } from "@/types";
+import { syllabusAsOutcomes, syllabusSubjectOf } from "@/lib/subjects/syllabus";
 import { isDeadlineLocked } from "./deadline";
 import { isMidBankSubject, type TeachingRow } from "./sections";
 
@@ -203,7 +204,16 @@ export async function loadSubject(db: Db, collegeId: string, subjectId: string):
   return s.exists ? ({ id: s.id, ...(s.data() as Omit<Subject, "id">) }) : null;
 }
 
+/**
+ * The units / COs / mapping a bank works to: the subject's FROZEN syllabus (`syllabus__{subjectId}` - banks and papers
+ * started since the syllabus flow), else an older per-branch setup (`{subjectId}__{branchKey}`).
+ */
 export async function loadOutcomes(db: Db, collegeId: string, outcomesId: string): Promise<SubjectOutcomes | null> {
+  const subjectId = syllabusSubjectOf(outcomesId);
+  if (subjectId) {
+    const s = await midBankRefs(db, collegeId).college.collection("subjectSyllabus").doc(subjectId).get();
+    return syllabusAsOutcomes(s.exists ? (s.data() as SubjectSyllabus) : null);
+  }
   const snap = await midBankRefs(db, collegeId).outcomes.doc(outcomesId).get();
   return snap.exists ? (snap.data() as SubjectOutcomes) : null;
 }

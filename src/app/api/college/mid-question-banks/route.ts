@@ -2,6 +2,9 @@ export const dynamic = "force-dynamic";
 
 import { allowedFormats } from "@/lib/midBank/validateQuestion";
 import { NextResponse } from "next/server";
+import { ownerDepartmentNamesLive } from "@/lib/subjects/ownerDepartment";
+import { loadSyllabus } from "@/lib/subjects/syllabusServer";
+import { syllabusOutcomesId } from "@/lib/subjects/syllabus";
 import { loadMidSettings } from "@/lib/exams/midSettings";
 import { patternForSubject } from "@/lib/midPapers/server";
 import { expandPattern, paperProgress } from "@/lib/midPapers/pattern";
@@ -12,8 +15,8 @@ import { notify } from "@/lib/notify";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { isDeadlineLocked } from "@/lib/midBank/deadline";
 import { bankTotals, unitStatuses } from "@/lib/midBank/rules";
-import { paperSetupIssues, setupIssues } from "@/lib/midBank/setup";
-import { bankIdFor, checkSectionPick, claimIdFor, outcomesIdFor, sectionsOf, type TeachingRow } from "@/lib/midBank/sections";
+import { paperSetupIssues, setupIssues, withSyllabus } from "@/lib/midBank/setup";
+import { bankIdFor, checkSectionPick, claimIdFor, sectionsOf, type TeachingRow } from "@/lib/midBank/sections";
 import {
   actorName, guardError, loadOutcomes, loadSubject, loginUidsOf, MID_BANK_WRITE_ROLES, midBankRefs, rulesForSubject, teachingFor, subjectSplitFor } from "@/lib/midBank/server";
 import { assignmentIdFor, isAllBranches, sectionsForScope, servesBranch } from "@/lib/midBank/assignments";
@@ -106,8 +109,12 @@ export async function POST(request: Request) {
       loadSubject(db, session.collegeId, subjectId),
     ]);
     if (!subject) return NextResponse.json({ error: "Subject not found" }, { status: 404 });
-    const outcomesId = outcomesIdFor(subjectId, branch);
-    const [rules, outcomes, exception, settings] = await Promise.all([rulesForSubject(db, session.collegeId, subject), loadOutcomes(db, session.collegeId, outcomesId), subjectSplitFor(db, session.collegeId, subjectId), loadMidSettings(db, session.collegeId)]);
+    // Units / COs / mapping come from the subject's frozen syllabus (HOD prepares, Academics freezes).
+    const outcomesId = syllabusOutcomesId(subjectId);
+    const [rules, outcomes, exception, settings, syllabus, subjectDepartments] = await Promise.all([
+      rulesForSubject(db, session.collegeId, subject), loadOutcomes(db, session.collegeId, outcomesId), subjectSplitFor(db, session.collegeId, subjectId), loadMidSettings(db, session.collegeId),
+      loadSyllabus(db, session.collegeId, subjectId), ownerDepartmentNamesLive(db, session.collegeId, subject),
+    ]);
     // "The HOD assigns": only an assigned setter starts it, for every section of the scope (a branch or all branches).
     const hodMode = settings.midAssignment === "HOD";
     const assignmentId = assignmentIdFor(d.id, subjectId, branch);
@@ -122,7 +129,9 @@ export async function POST(request: Request) {
     const papers = settings.midPreparation === "PAPERS";
     const pattern = papers ? await patternForSubject(db, session.collegeId, subject) : null;
     const paperSetup = papers ? paperSetupIssues(subject, pattern, outcomes, sw, { midNumber: d.midNumber, rules, exception, midCount: settings.midCount }) : null;
-    const { issues, units } = paperSetup ?? setupIssues(subject, d.midNumber, rules, outcomes, exception, sw);
+    const setup = paperSetup ?? setupIssues(subject, d.midNumber, rules, outcomes, exception, sw);
+    const { units } = setup;
+    const issues = withSyllabus(setup.issues, { status: syllabus?.status ?? null, subjectDepartments });
     const shared = paperSetup?.shared ?? [];
     if (issues.length > 0 || (papers ? !pattern : !rules)) return NextResponse.json({ error: issues[0]?.message ?? "Setup is incomplete", issues }, { status: 400 });
 

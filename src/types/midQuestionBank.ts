@@ -28,6 +28,8 @@ export interface SyllabusUnit {
 export interface CourseOutcome {
   id: string; // "CO1".."COn"
   statement: string;
+  /** The unit this CO belongs to (subject syllabus); absent in older per-branch setups. */
+  unit?: number;
 }
 
 
