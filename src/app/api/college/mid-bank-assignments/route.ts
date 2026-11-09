@@ -158,10 +158,10 @@ export async function POST(request: Request) {
     });
     if (errors.length) return NextResponse.json({ error: errors[0], errors }, { status: 409 });
 
-    // Question papers shared among the setters (Paper 1 -> A, Paper 2 -> B ...): every paper to one setter. A setter
-    // who already started keeps the papers they started with.
+    // Question papers shared among the setters (A: Paper 1, B: Paper 2 ...): every paper has a setter, every setter a
+    // paper. A setter who already started keeps the papers they started with.
     let setShare: Record<string, number[]> | undefined;
-    if (papers && body.setShare && facultyIds.length > 1) {
+    if (papers && body.setShare && facultyIds.length > 0) {
       const total = subj.paperCount ?? 0;
       if (total < 2) return NextResponse.json({ error: "This subject has only one question paper - nothing to share" }, { status: 400 });
       const share = checkSetShare(body.setShare, facultyIds, total, (f) => names.get(f) || "A setter");

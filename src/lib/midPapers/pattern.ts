@@ -144,8 +144,9 @@ export function setNumbers(pat: Pick<MidPaperPattern, "setsPerFaculty"> & { sets
 }
 
 /**
- * The HOD sharing a subject's `total` papers among its setters: every paper to exactly one of them, each setter at
- * least one. Returns the clean share or the problems.
+ * The HOD sharing a subject's `total` papers among its setters: every paper has at least one setter, each setter at
+ * least one paper (two setters may write the same paper - the Exam Cell picks among them). Returns the clean share or
+ * the problems.
  */
 export function checkSetShare(raw: unknown, facultyIds: string[], total: number, nameOf: (id: string) => string = (x) => x): { value: Record<string, number[]>; errors: string[] } {
   const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
@@ -156,7 +157,6 @@ export function checkSetShare(raw: unknown, facultyIds: string[], total: number,
     const sets = [...new Set((Array.isArray(r[f]) ? r[f] as unknown[] : []).map(Number).filter((n) => Number.isInteger(n)))].sort((a, b) => a - b);
     for (const n of sets) {
       if (n < 1 || n > total) { errors.push(`There is no Paper ${n} - the subject has ${total}`); continue; }
-      if (owner.has(n)) errors.push(`Paper ${n} is given to both ${nameOf(owner.get(n)!)} and ${nameOf(f)}`);
       owner.set(n, f);
     }
     if (sets.length === 0) errors.push(`Give ${nameOf(f)} at least one paper`);

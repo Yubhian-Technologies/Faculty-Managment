@@ -26,7 +26,7 @@ interface SubjectRow { subjectId: string; subjectName: string; subjectCode: stri
 const GROUP_JOIN = " + ";
 const groupOf = (branches: string[]) => [...new Set(branches)].sort().join(GROUP_JOIN);
 
-export function AssignSetters({ deadlineId }: { deadlineId: string }) {
+export function AssignSetters({ deadlineId, onChanged }: { deadlineId: string; /** After a save (the page refreshes its progress). */ onChanged?: () => void }) {
   const [data, setData] = useState<{ mode: "SELF" | "HOD"; deadline: { locked: boolean }; subjects: SubjectRow[] } | null>(null);
   const [failed, setFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -58,7 +58,7 @@ export function AssignSetters({ deadlineId }: { deadlineId: string }) {
         </p>
       </div>
       {subjects.length === 0 && <p className="text-sm text-muted-foreground">No subjects of this semester are looked after by your department.</p>}
-      {subjects.map((s) => <SubjectAssign key={s.subjectId} deadlineId={deadlineId} s={s} locked={data.deadline.locked} onSaved={() => setReloadKey((k) => k + 1)} />)}
+      {subjects.map((s) => <SubjectAssign key={s.subjectId} deadlineId={deadlineId} s={s} locked={data.deadline.locked} onSaved={() => { setReloadKey((k) => k + 1); onChanged?.(); }} />)}
     </CardContent></Card>
   );
 }
@@ -137,27 +137,37 @@ function SubjectAssign({ deadlineId, s, locked, onSaved }: { deadlineId: string;
 
 function ScopeAssign({ deadlineId, subjectId, scope, kind, locked, onSaved, startEditing = false, onCancel, paperCount = 0 }: {
   deadlineId: string; subjectId: string; scope: Scope; kind: "BRANCH" | "GROUP" | "SUBJECT"; locked: boolean; onSaved: () => void; startEditing?: boolean; onCancel?: () => void;
-  /** Question papers the subject gets (Exam Cell's pattern); with 2+ setters the HOD may share them out. */
+  /** Question papers the subject gets (Exam Cell's pattern); each setter writes the papers ticked on their row. */
   paperCount?: number;
 }) {
-  // Paper number -> the setter who writes it (shared mode), from the saved assignment.
-  const savedShare = () => {
-    const m: Record<number, string> = {};
-    for (const [f, sets] of Object.entries(scope.assignment?.setShare ?? {})) for (const n of sets) m[n] = f;
-    return m;
-  };
-  const [sharing, setSharing] = useState(() => !!scope.assignment?.setShare);
-  const [share, setShare] = useState<Record<number, string>>(savedShare);
+  const papers = Array.from({ length: paperCount }, (_, i) => i + 1);
+  // Setter -> the papers they write (saved share, else every paper).
+  const savedPapers = () => Object.fromEntries((scope.assignment?.facultyIds ?? []).map((f) => [f, scope.assignment?.setShare?.[f] ?? papers]));
+  const [papersOf, setPapersOf] = useState<Record<string, number[]>>(savedPapers);
   const [editing, setEditing] = useState(startEditing);
   const [picked, setPicked] = useState<Set<string>>(() => new Set(scope.assignment?.facultyIds ?? []));
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   const started = new Set(scope.assignment?.started ?? []);
   const list = useMemo(() => scope.candidates.filter((c) => !q.trim() || `${c.name} ${c.department}`.toLowerCase().includes(q.trim().toLowerCase())), [scope.candidates, q]);
-  const papers = Array.from({ length: paperCount }, (_, i) => i + 1);
-  const canShare = paperCount > 1 && picked.size > 1;
-  const nameOf = (f: string) => scope.candidates.find((c) => c.facultyId === f)?.name ?? scope.assignment?.facultyNames[scope.assignment.facultyIds.indexOf(f)] ?? "";
-  const shareGaps = canShare && sharing ? papers.filter((n) => !share[n] || !picked.has(share[n])) : [];
+  const multi = paperCount > 1;
+  const mine = (f: string) => papersOf[f] ?? papers;
+  // Every paper needs a setter; every setter a paper. All setters on every paper = "each writes all" (nothing shared).
+  const uncovered = multi ? papers.filter((n) => ![...picked].some((f) => mine(f).includes(n))) : [];
+  const empty = multi ? [...picked].filter((f) => mine(f).length === 0) : [];
+  const shared = multi && [...picked].some((f) => mine(f).length < paperCount);
+  function tick(f: string, on: boolean) {
+    setPicked((p) => { const n = new Set(p); if (on) n.add(f); else n.delete(f); return n; });
+    // A newly ticked setter takes the papers nobody has yet - or every paper when all are covered.
+    if (on) setPapersOf((m) => {
+      const free = papers.filter((n) => ![...picked].some((x) => (m[x] ?? papers).includes(n)));
+      return { ...m, [f]: free.length ? free : papers };
+    });
+  }
+  const togglePaper = (f: string, n: number) => setPapersOf((m) => {
+    const cur = m[f] ?? papers;
+    return { ...m, [f]: cur.includes(n) ? cur.filter((x) => x !== n) : [...cur, n].sort((a, b) => a - b) };
+  });
 
   async function save(ids: string[]) {
     setBusy(true);
@@ -166,8 +176,8 @@ function ScopeAssign({ deadlineId, subjectId, scope, kind, locked, onSaved, star
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           deadlineId, subjectId, scope: kind, branch: scope.branch, ...(kind === "GROUP" ? { branches: scope.branch.split(GROUP_JOIN) } : {}), facultyIds: ids,
-          // Shared: { facultyId: [paper numbers] } - each paper to one of the picked setters.
-          ...(canShare && sharing && ids.length > 1 ? { setShare: Object.fromEntries(ids.map((f) => [f, papers.filter((n) => share[n] === f)])) } : {}),
+          // Shared: { facultyId: [paper numbers] } - only when some setter writes fewer than every paper.
+          ...(shared ? { setShare: Object.fromEntries(ids.map((f) => [f, mine(f)])) } : {}),
         }),
       });
       const j = (await res.json()) as { error?: string };
@@ -188,12 +198,12 @@ function ScopeAssign({ deadlineId, subjectId, scope, kind, locked, onSaved, star
           <p className={cn("text-xs", scope.assignment ? "text-muted-foreground" : "font-medium text-amber-700")}>
             {scope.assignment
               ? scope.assignment.setShare
-                ? `Papers shared: ${Object.entries(scope.assignment.setShare).flatMap(([f, sets]) => sets.map((n) => [n, f] as const)).sort((a, b) => a[0] - b[0]).map(([n, f]) => `Paper ${n} - ${scope.assignment!.facultyNames[scope.assignment!.facultyIds.indexOf(f)] || "?"}`).join(" · ")}${started.size ? ` · ${started.size} started` : ""}`
+                ? `Setters: ${scope.assignment.facultyIds.map((f, i) => `${scope.assignment!.facultyNames[i] || "?"} (Paper ${(scope.assignment!.setShare![f] ?? papers).join(", ")})`).join(" · ")}${started.size ? ` · ${started.size} started` : ""}`
                 : `Setters: ${scope.assignment.facultyNames.join(", ")}${paperCount > 1 ? ` · each writes all ${paperCount} papers` : ""}${started.size ? ` · ${started.size} started` : ""}`
               : "No setter assigned yet"}
           </p>
         </div>
-        {!locked && !editing && <Button size="sm" variant={scope.assignment ? "outline" : "default"} onClick={() => { setPicked(new Set(scope.assignment?.facultyIds ?? [])); setEditing(true); }}><Users className="mr-1.5 h-4 w-4" />{scope.assignment ? "Change" : "Assign"}</Button>}
+        {!locked && !editing && <Button size="sm" variant={scope.assignment ? "outline" : "default"} onClick={() => { setPicked(new Set(scope.assignment?.facultyIds ?? [])); setPapersOf(savedPapers()); setEditing(true); }}><Users className="mr-1.5 h-4 w-4" />{scope.assignment ? "Change" : "Assign"}</Button>}
       </div>
       {editing && (
         <div className="space-y-2">
@@ -205,44 +215,38 @@ function ScopeAssign({ deadlineId, subjectId, scope, kind, locked, onSaved, star
             {list.map((c) => {
               const lockedIn = started.has(c.facultyId);
               return (
-                <li key={c.facultyId}>
-                  <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted/60">
-                    <Checkbox checked={picked.has(c.facultyId)} disabled={lockedIn}
-                      onCheckedChange={(v) => setPicked((p) => { const n = new Set(p); if (v === true) n.add(c.facultyId); else n.delete(c.facultyId); return n; })} />
+                <li key={c.facultyId} className="flex flex-wrap items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted/60">
+                  <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
+                    <Checkbox checked={picked.has(c.facultyId)} disabled={lockedIn} onCheckedChange={(v) => tick(c.facultyId, v === true)} />
                     <span className="min-w-0 flex-1 truncate">{c.name}</span>
-                    <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold", c.teaches ? "bg-emerald-100 text-emerald-800" : "bg-muted text-muted-foreground")}>{c.teaches ? "Teaches it" : c.department || "Department"}</span>
-                    {lockedIn && <span className="shrink-0 text-[10px] text-muted-foreground">started</span>}
                   </label>
+                  {/* The papers this setter writes (Exam Cell's pattern gives the subject more than one). */}
+                  {multi && picked.has(c.facultyId) && (
+                    <span className="flex items-center gap-1" role="group" aria-label={`Papers ${c.name} writes`}>
+                      <span className="text-[11px] text-muted-foreground">Paper</span>
+                      {papers.map((n) => {
+                        const on = mine(c.facultyId).includes(n);
+                        return (
+                          <button key={n} type="button" aria-pressed={on} disabled={lockedIn} onClick={() => togglePaper(c.facultyId, n)}
+                            className={cn("h-6 min-w-6 rounded-full border px-1.5 text-xs font-semibold disabled:opacity-60", on ? "border-primary bg-primary text-primary-foreground" : "bg-background text-muted-foreground")}>{n}</button>
+                        );
+                      })}
+                    </span>
+                  )}
+                  <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold", c.teaches ? "bg-emerald-100 text-emerald-800" : "bg-muted text-muted-foreground")}>{c.teaches ? "Teaches it" : c.department || "Department"}</span>
+                  {lockedIn && <span className="shrink-0 text-[10px] text-muted-foreground">started</span>}
                 </li>
               );
             })}
             {list.length === 0 && <li className="px-2 py-3 text-center text-xs text-muted-foreground">No faculty found.</li>}
           </ul>
-          {canShare && (
-            <div className="space-y-2 rounded-md border bg-background p-2.5">
-              <div className="flex flex-wrap gap-4 text-sm" role="radiogroup" aria-label="How the papers are written">
-                <label className="flex items-center gap-1.5"><input type="radio" checked={!sharing} onChange={() => setSharing(false)} />Each writes all {paperCount} papers</label>
-                <label className="flex items-center gap-1.5"><input type="radio" checked={sharing} onChange={() => setSharing(true)} />Share the {paperCount} papers among them</label>
-              </div>
-              {sharing && (
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {papers.map((n) => (
-                    <label key={n} className="flex items-center gap-2 text-sm">
-                      <span className="w-16 shrink-0 font-medium">Paper {n}</span>
-                      <select className="h-8 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-sm" value={picked.has(share[n] ?? "") ? share[n] : ""}
-                        onChange={(e) => setShare((m) => ({ ...m, [n]: e.target.value }))}>
-                        <option value="">Pick a setter</option>
-                        {[...picked].map((f) => <option key={f} value={f}>{nameOf(f)}</option>)}
-                      </select>
-                    </label>
-                  ))}
-                </div>
-              )}
-              {sharing && shareGaps.length > 0 && <p className="text-xs text-amber-700">Give Paper {shareGaps.join(", ")} to a setter.</p>}
-            </div>
+          {multi && picked.size > 0 && (uncovered.length > 0 || empty.length > 0) && (
+            <p className="text-xs text-amber-700">
+              {[uncovered.length ? `Paper ${uncovered.join(", ")} ${uncovered.length === 1 ? "has" : "have"} no setter` : "", empty.length ? `${empty.map((f) => scope.candidates.find((c) => c.facultyId === f)?.name ?? "A setter").join(", ")}: pick at least one paper` : ""].filter(Boolean).join(" · ")}
+            </p>
           )}
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" onClick={() => void save([...picked])} loading={busy} disabled={picked.size === 0 || shareGaps.length > 0}>Save {picked.size ? `(${picked.size})` : ""}</Button>
+            <Button size="sm" onClick={() => void save([...picked])} loading={busy} disabled={picked.size === 0 || uncovered.length > 0 || empty.length > 0}>Save {picked.size ? `(${picked.size})` : ""}</Button>
             <Button size="sm" variant="ghost" onClick={() => { setEditing(false); onCancel?.(); }}>Cancel</Button>
             {scope.assignment && started.size === 0 && <Button size="sm" variant="ghost" className="ml-auto text-destructive" onClick={() => void save([])} loading={busy}>Remove assignment</Button>}
           </div>

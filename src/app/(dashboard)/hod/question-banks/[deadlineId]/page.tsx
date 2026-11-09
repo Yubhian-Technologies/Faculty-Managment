@@ -1,6 +1,6 @@
 "use client";
 
-import { use } from "react";
+import { use, useState } from "react";
 import { QuestionBankProgress } from "@/components/midBank/QuestionBankProgress";
 import { AssignSetters } from "@/components/midBank/AssignSetters";
 
@@ -9,10 +9,12 @@ import { AssignSetters } from "@/components/midBank/AssignSetters";
 // assigns the setters, assigning them comes first.
 export default function HodQuestionBankProgressPage({ params }: { params: Promise<{ deadlineId: string }> }) {
   const { deadlineId } = use(params);
+  // A saved assignment shows in the progress below at once (it re-reads).
+  const [progressKey, setProgressKey] = useState(0);
   return (
     <div className="space-y-6">
-      <AssignSetters deadlineId={deadlineId} />
-      <QuestionBankProgress deadlineId={deadlineId} base="/hod/question-banks" examCell={false} />
+      <AssignSetters deadlineId={deadlineId} onChanged={() => setProgressKey((k) => k + 1)} />
+      <QuestionBankProgress key={progressKey} deadlineId={deadlineId} base="/hod/question-banks" examCell={false} />
     </div>
   );
 }

@@ -161,10 +161,12 @@ describe("papers shared among the setters", () => {
     expect(setNumbers({ setsPerFaculty: 3, sets: [2] })).toEqual([2]);
     expect(setNumbers({ setsPerFaculty: 3, sets: [3, 1, 9] })).toEqual([1, 3]);
   });
-  it("every paper to exactly one setter, each setter at least one", () => {
+  it("every paper has a setter, each setter at least one paper", () => {
     expect(checkSetShare({ a: [1], b: [2], c: [3] }, ["a", "b", "c"], 3)).toEqual({ value: { a: [1], b: [2], c: [3] }, errors: [] });
     expect(checkSetShare({ a: [1, 2], b: [3] }, ["a", "b"], 3).errors).toEqual([]);
-    expect(checkSetShare({ a: [1], b: [1] }, ["a", "b"], 2).errors).toEqual(["Paper 1 is given to both a and b", "Paper 2 has no setter"]);
+    expect(checkSetShare({ a: [1], b: [1] }, ["a", "b"], 2).errors).toEqual(["Paper 2 has no setter"]);
+    expect(checkSetShare({ a: [1, 2], b: [2] }, ["a", "b"], 2).errors).toEqual([]); // two setters may write the same paper
+    expect(checkSetShare({ a: [1] }, ["a"], 2).errors).toEqual(["Paper 2 has no setter"]);
     expect(checkSetShare({ a: [1], b: [] }, ["a", "b"], 2).errors).toEqual(["Give b at least one paper", "Paper 2 has no setter"]);
     expect(checkSetShare({ a: [1, 4] }, ["a"], 1).errors).toEqual(["There is no Paper 4 - the subject has 1"]);
   });
