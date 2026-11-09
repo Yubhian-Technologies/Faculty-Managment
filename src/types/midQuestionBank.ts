@@ -16,7 +16,8 @@ import type { Timestamp } from "firebase/firestore";
 //      a section belongs to one bank only.
 //  .../midQuestionBanks/{id}/questions/{unit}_{slot}   one doc per slot.
 
-export type BloomLevel = "L2" | "L3" | "L4";
+/** Bloom's taxonomy level ids; which of them a college uses (and their names) is the Exam Cell's (`lib/midBank/bloom.ts`). */
+export type BloomLevel = "L1" | "L2" | "L3" | "L4" | "L5" | "L6";
 
 export interface SyllabusUnit {
   no: number; // 1..n, in order
@@ -115,7 +116,8 @@ export interface MidUnitStatus {
   complete: boolean;
   completeCount: number;
   draftCount: number;
-  bloom: Record<BloomLevel, number>;
+  /** Parts per Bloom's level among the unit's complete questions (the bank's levels). */
+  bloom: Partial<Record<BloomLevel, number>>;
 }
 
 export type MidQuestionBankStatus = "IN_PROGRESS" | "COMPLETE";
@@ -244,6 +246,8 @@ export interface MidQuestionBank {
   setProgress?: import("./midPaperSet").PaperSetProgress;
   approval?: MidBankApproval;
   approvalHistory?: MidBankApprovalEntry[];
+  /** The college's Bloom's levels when this bank / paper set started (absent = the default L2-L4, min 3 each). */
+  bloomLevels?: import("@/lib/midBank/bloom").BloomLevelDef[];
   /** The HOD removed this setter after they started: kept with every question, read-only, out of the Exam Cell's
    *  choice; cleared when the HOD assigns them again. */
   withdrawn?: { at: string; byUid: string; byName: string };

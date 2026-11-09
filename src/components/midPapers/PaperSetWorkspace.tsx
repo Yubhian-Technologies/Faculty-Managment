@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
-import { BLOOM_LEVELS } from "@/lib/midBank/constants";
+import { bloomLevelsOf } from "@/lib/midBank/bloom";
 import { outcomeSwitches } from "@/lib/midBank/outcomeSwitches";
 import { cosOfUnit } from "@/lib/subjects/syllabus";
 import { PaperPreviewButton } from "@/components/midPapers/PaperPreview";
@@ -385,9 +385,10 @@ export function PaperSetWorkspace({ detail }: { detail: MidBankDetail }) {
               )}
               {sw.bloom && (
                 <fieldset className="space-y-1.5"><legend className="text-sm font-medium">Bloom&rsquo;s level</legend>
-                  <div className="flex gap-1.5">
-                    {BLOOM_LEVELS.map((l) => (
-                      <button key={l} type="button" aria-pressed={q.bloom === l} onClick={() => edit({ bloom: l as BloomLevel })}
+                  <div className="flex flex-wrap gap-1.5">
+                    {/* The paper set's own Bloom's levels (the college's list when it started); hover for the name. */}
+                    {bloomLevelsOf(bank.bloomLevels).map(({ id: l, name }) => (
+                      <button key={l} type="button" aria-pressed={q.bloom === l} title={name} onClick={() => edit({ bloom: l as BloomLevel })}
                         className={cn("h-8 rounded-lg border px-3 text-sm font-semibold", q.bloom === l ? "border-primary bg-primary text-primary-foreground" : "bg-background")}>{l}</button>
                     ))}
                   </div>

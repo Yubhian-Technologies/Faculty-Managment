@@ -1,6 +1,7 @@
 "use client";
 
 import { outcomeSwitches } from "@/lib/midBank/outcomeSwitches";
+import { bloomLevelsOf } from "@/lib/midBank/bloom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, CheckCircle2, FileDown, Info, Lock } from "lucide-react";
@@ -58,7 +59,7 @@ export function BankReview({ id, editHref, writeHref, autoDownload }: { id: stri
       const st = b.unitStatus[String(u)];
       const empty = QUESTIONS_PER_UNIT - qs.filter((q) => q.unit === u).length;
       if (empty > 0) out.push({ level: "error", text: `Unit ${u}: ${empty} question slot${empty > 1 ? "s" : ""} still empty` });
-      if (sw.bloom) for (const n of bloomNeeds(st?.bloom ?? { L2: 0, L3: 0, L4: 0 })) if (n.need) out.push({ level: "error", text: `Unit ${u}: ${n.level} used ${n.count} time${n.count === 1 ? "" : "s"} - needs ${n.need} more` });
+      if (sw.bloom) for (const n of bloomNeeds(st?.bloom ?? {}, bloomLevelsOf(detail?.bank?.bloomLevels))) if (n.need) out.push({ level: "error", text: `Unit ${u}: ${n.level} used ${n.count} time${n.count === 1 ? "" : "s"} - needs ${n.need} more` });
     }
     for (const q of [...qs].sort((a, b2) => a.unit - b2.unit || a.slot - b2.slot)) {
       if (q.state === "DRAFT") {
@@ -147,7 +148,7 @@ export function BankReview({ id, editHref, writeHref, autoDownload }: { id: stri
               <div key={u} className="flex flex-wrap items-center gap-2">
                 <span className="w-16 font-medium">Unit {u}</span>
                 <Badge variant={st?.complete ? "default" : "outline"}>{st?.complete ? "Complete" : `${st?.completeCount ?? 0}/${QUESTIONS_PER_UNIT}`}</Badge>
-                {sw.bloom && bloomNeeds(st?.bloom ?? { L2: 0, L3: 0, L4: 0 }).map((b) => (
+                {sw.bloom && bloomNeeds(st?.bloom ?? {}, bloomLevelsOf(bank?.bloomLevels)).map((b) => (
                   <Badge key={b.level} variant="outline" className={b.need ? "border-amber-500/60 text-amber-800" : "border-green-600/50 text-green-800"}>{b.level}: {b.count}</Badge>
                 ))}
               </div>

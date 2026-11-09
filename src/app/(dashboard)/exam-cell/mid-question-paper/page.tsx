@@ -47,20 +47,25 @@ function repick(p: GeneratedPaper): string[] {
 /** Question bank colleges generate papers from banks; question paper colleges choose one of the faculty's papers. */
 export default function MidQuestionPaperPage() {
   const [mode, setMode] = useState<"BANK" | "PAPERS" | null>(null);
+  const [levels, setLevels] = useState<BloomLevel[]>(BLOOM_LEVELS);
   useEffect(() => {
     fetch("/api/college/exam-mid-settings").then((r) => (r.ok ? r.json() : null))
-      .then((d: { settings?: { midPreparation?: string } } | null) => setMode(d?.settings?.midPreparation === "PAPERS" ? "PAPERS" : "BANK")).catch(() => setMode("BANK"));
+      .then((d: { settings?: { midPreparation?: string; bloomLevels?: { id: BloomLevel }[] } } | null) => {
+        setMode(d?.settings?.midPreparation === "PAPERS" ? "PAPERS" : "BANK");
+        // The college's Bloom's levels (Exam Cell > Mid Configuration).
+        if (d?.settings?.bloomLevels?.length) setLevels(d.settings.bloomLevels.map((l) => l.id));
+      }).catch(() => setMode("BANK"));
   }, []);
   if (!mode) return <div className="h-64 animate-pulse rounded-lg bg-muted" />;
-  return mode === "PAPERS" ? <PaperChoices /> : <BankPaperGenerator />;
+  return mode === "PAPERS" ? <PaperChoices /> : <BankPaperGenerator levels={levels} />;
 }
 
-function BankPaperGenerator() {
+function BankPaperGenerator({ levels }: { levels: BloomLevel[] }) {
   const [plans, setPlans] = useState<Plan[] | null>(null);
   const [planId, setPlanId] = useState("");
   const [detail, setDetail] = useState<PlanDetail | null>(null);
   const [date, setDate] = useState("");
-  const [start, setStart] = useState<BloomLevel>("L2");
+  const [start, setStart] = useState<BloomLevel>(levels.includes("L2") ? "L2" : levels[0]);
   const [result, setResult] = useState<GeneratedPapers | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -155,7 +160,7 @@ function BankPaperGenerator() {
             <fieldset className="space-y-1.5">
               <legend className="text-sm font-medium">Level of Question 1</legend>
               <div className="inline-flex w-full rounded-lg border bg-muted/40 p-1">
-                {BLOOM_LEVELS.map((l) => (
+                {levels.map((l) => (
                   <label key={l} className={cn("flex-1 cursor-pointer rounded-md py-1 text-center text-sm font-medium has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring", start === l ? "bg-background shadow-sm" : "text-muted-foreground")}>
                     <input type="radio" name="qp-start" className="sr-only" checked={start === l} onChange={() => { setStart(l); setResult(null); }} />{l}
                   </label>

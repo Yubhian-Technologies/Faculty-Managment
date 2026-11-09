@@ -149,7 +149,7 @@ export async function POST(request: Request) {
       if (pick.error) return { status: 409, body: { error: pick.error } };
 
       const now = new Date();
-      const unitStatus = unitStatuses(units, [], sw);
+      const unitStatus = unitStatuses(units, [], sw, settings.bloomLevels);
       // Papers shared among the setters by the HOD: this setter writes only theirs (e.g. Paper 2).
       const myShare = assignment?.setShare?.[me];
       const myPattern = papers ? { ...expandPattern(pattern!, units, shared), ...(myShare?.length ? { sets: myShare } : {}) } : null;
@@ -161,6 +161,8 @@ export async function POST(request: Request) {
         sections: pick.sections, ownerFacultyId: me, ownerName, ownerUid: session.uid,
         viewerFacultyIds: [...new Set(pick.sections.flatMap((s) => s.facultyIds))],
         units, formats: papers ? [] : allowedFormats(rules!), marks: papers ? 0 : rules!.marks, unitStatus, status: "IN_PROGRESS", outcomes: sw,
+        // The college's Bloom's levels now - kept for this bank / paper set (a later change never breaks it).
+        bloomLevels: settings.bloomLevels,
         // A per-unit part gets a question for each of the Mid's units (fixed in this paper's copy of the pattern).
         ...(papers ? { kind: "PAPERS" as const, pattern: myPattern!, setProgress: paperProgress(myPattern!, []).setProgress } : {}),
         completeCount: totals.completeCount, totalCount: totals.totalCount,

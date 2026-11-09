@@ -1,31 +1,32 @@
 import type { BloomLevel, MidQuestion, MidUnitStatus } from "@/types/midQuestionBank";
 import type { MidOutcomeSwitches } from "@/types/examMidSchedule";
-import { BLOOM_LEVELS, BLOOM_MIN_PER_UNIT, QUESTIONS_PER_UNIT } from "./constants";
+import { QUESTIONS_PER_UNIT } from "./constants";
 import { ALL_OUTCOMES_ON } from "./outcomeSwitches";
+import { DEFAULT_BLOOM_LEVELS, type BloomLevelDef } from "./bloom";
 
 // Unit progress of a bank. A unit is COMPLETE when all QUESTIONS_PER_UNIT
-// slots hold a complete question AND every Bloom level L2/L3/L4 is used at
-// least BLOOM_MIN_PER_UNIT times among those questions' parts (only for a college that uses Bloom's levels). Units open in
-// the Mid's order: a unit is writable once every unit before it is complete.
+// slots hold a complete question AND each of the college's Bloom's levels is used at least its minimum number of times
+// among those questions' parts (the Exam Cell's list, kept on the bank - `bloom.ts`; only for a college that uses
+// Bloom's levels). Units open in the Mid's order: a unit is writable once every unit before it is complete.
 
 type Q = Pick<MidQuestion, "unit" | "state" | "parts">;
 
-export function unitStatus(questions: Q[], unit: number, sw: MidOutcomeSwitches = ALL_OUTCOMES_ON): MidUnitStatus {
-  const bloom: Record<BloomLevel, number> = { L2: 0, L3: 0, L4: 0 };
+export function unitStatus(questions: Q[], unit: number, sw: MidOutcomeSwitches = ALL_OUTCOMES_ON, levels: BloomLevelDef[] = DEFAULT_BLOOM_LEVELS): MidUnitStatus {
+  const bloom: Partial<Record<BloomLevel, number>> = Object.fromEntries(levels.map((l) => [l.id, 0]));
   let completeCount = 0, draftCount = 0;
   for (const q of questions) {
     if (q.unit !== unit) continue;
     if (q.state === "COMPLETE") {
       completeCount++;
-      for (const p of q.parts) if (p.bloom) bloom[p.bloom]++;
+      for (const p of q.parts) if (p.bloom) bloom[p.bloom] = (bloom[p.bloom] ?? 0) + 1;
     } else draftCount++;
   }
-  const complete = completeCount >= QUESTIONS_PER_UNIT && (!sw.bloom || BLOOM_LEVELS.every((l) => bloom[l] >= BLOOM_MIN_PER_UNIT));
+  const complete = completeCount >= QUESTIONS_PER_UNIT && (!sw.bloom || levels.every((l) => (bloom[l.id] ?? 0) >= l.min));
   return { complete, completeCount, draftCount, bloom };
 }
 
-export function unitStatuses(units: number[], questions: Q[], sw: MidOutcomeSwitches = ALL_OUTCOMES_ON): Record<string, MidUnitStatus> {
-  return Object.fromEntries(units.map((u) => [String(u), unitStatus(questions, u, sw)]));
+export function unitStatuses(units: number[], questions: Q[], sw: MidOutcomeSwitches = ALL_OUTCOMES_ON, levels: BloomLevelDef[] = DEFAULT_BLOOM_LEVELS): Record<string, MidUnitStatus> {
+  return Object.fromEntries(units.map((u) => [String(u), unitStatus(questions, u, sw, levels)]));
 }
 
 /** The units a faculty member may write in now: the first, and each one whose predecessors are all complete. */
@@ -45,20 +46,20 @@ export function lockReason(units: number[], statuses: Record<string, MidUnitStat
   return blocking !== undefined ? `Opens when Unit ${blocking} is complete` : "";
 }
 
-/** Live Bloom tally lines: "L3: 2 - need 1 more". */
-export function bloomNeeds(bloom: Record<BloomLevel, number>): { level: BloomLevel; count: number; need: number }[] {
-  return BLOOM_LEVELS.map((level) => ({ level, count: bloom[level], need: Math.max(0, BLOOM_MIN_PER_UNIT - bloom[level]) }));
+/** Live Bloom tally lines: "L3: 2 - need 1 more" (each of the college's levels against its minimum). */
+export function bloomNeeds(bloom: Partial<Record<BloomLevel, number>>, levels: BloomLevelDef[] = DEFAULT_BLOOM_LEVELS): { level: BloomLevel; count: number; need: number; min: number }[] {
+  return levels.map((l) => ({ level: l.id, count: bloom[l.id] ?? 0, min: l.min, need: Math.max(0, l.min - (bloom[l.id] ?? 0)) }));
 }
 
 /**
  * A completed unit must stay complete: an edit that would turn it back (a
  * question made a draft, or a Bloom level falling below the minimum) is refused.
  */
-export function breaksCompletedUnit(before: MidUnitStatus | undefined, after: MidUnitStatus): string {
+export function breaksCompletedUnit(before: MidUnitStatus | undefined, after: MidUnitStatus, levels: BloomLevelDef[] = DEFAULT_BLOOM_LEVELS): string {
   if (!before?.complete || after.complete) return "";
   if (after.completeCount < QUESTIONS_PER_UNIT) return "This unit is complete - a question in it can't go back to a draft";
-  const short = bloomNeeds(after.bloom).filter((b) => b.need > 0).map((b) => `${b.level} would drop to ${b.count}`);
-  return `This unit is complete and needs at least ${BLOOM_MIN_PER_UNIT} of each Bloom level - ${short.join(", ")}`;
+  const short = bloomNeeds(after.bloom, levels).filter((b) => b.need > 0).map((b) => `${b.level} would drop to ${b.count} (needs ${b.min})`);
+  return `This unit is complete and needs its Bloom's levels - ${short.join(", ")}`;
 }
 
 export function bankTotals(units: number[], statuses: Record<string, MidUnitStatus>) {

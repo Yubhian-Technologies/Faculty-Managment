@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { loadMidSettings } from "@/lib/exams/midSettings";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -41,9 +42,10 @@ export async function PUT(request: Request) {
     const courseName = String(body.courseName ?? "").trim();
     const regulation = String(body.regulation ?? "").trim().toUpperCase() || "ALL";
     if (!courseKey || !courseName) return NextResponse.json({ error: "Pick a course" }, { status: 400 });
-    const { value, errors } = cleanTemplate(body);
-    if (errors.length) return NextResponse.json({ error: errors[0], errors }, { status: 400 });
     const db = getAdminDb();
+    // Level sequences use the college's Bloom's levels (Exam Cell > Mid Configuration).
+    const { value, errors } = cleanTemplate(body, (await loadMidSettings(db, session.collegeId)).bloomLevels.map((l) => l.id));
+    if (errors.length) return NextResponse.json({ error: errors[0], errors }, { status: 400 });
     if (regulation !== "ALL") {
       const cat = courseKey.startsWith("name:") ? null : await midBankRefs(db, session.collegeId).college.collection("courseCatalog").doc(courseKey).get();
       const regs = ((cat?.get("regulations") as string[] | undefined) ?? []).map((r) => String(r).trim().toUpperCase());

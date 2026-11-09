@@ -8,7 +8,8 @@ export const QUESTIONS_PER_UNIT = 10;
 export const BLOOM_LEVELS: BloomLevel[] = ["L2", "L3", "L4"];
 export const BLOOM_MIN_PER_UNIT = 3;
 
-export const BLOOM_LABELS: Record<BloomLevel, string> = {
+/** The default levels' labels (L2-L4); a college's own list and names are in `bloom.ts` (`bloomLevelsOf`). */
+export const BLOOM_LABELS: Partial<Record<BloomLevel, string>> = {
   L2: "L2 - Understand",
   L3: "L3 - Apply",
   L4: "L4 - Analyse",

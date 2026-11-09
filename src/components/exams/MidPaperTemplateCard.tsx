@@ -10,7 +10,7 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { buildCourseGroups } from "@/lib/departments/hodScope";
 import { BLOOM_LEVELS } from "@/lib/midBank/constants";
-import { DEFAULT_INSTRUCTION, DEFAULT_REGD_BOXES, DEFAULT_SEQUENCES, defaultUnits, PAPER_QUESTIONS, REGD_BOXES_MAX, REGD_BOXES_MIN, UNIT_COUNTS } from "@/lib/midPaper/rules";
+import { DEFAULT_INSTRUCTION, DEFAULT_REGD_BOXES, defaultSequenceFor, defaultUnits, PAPER_QUESTIONS, REGD_BOXES_MAX, REGD_BOXES_MIN, UNIT_COUNTS } from "@/lib/midPaper/rules";
 import type { BloomLevel, Course, MidPaperTemplate } from "@/types";
 
 // Exam Cell > Mid Configuration > Question paper: the Mid question paper
@@ -30,7 +30,10 @@ export function MidPaperTemplateCard() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [courseKey, setCourseKey] = useState("");
   const [regulation, setRegulation] = useState("");
-  const [sequences, setSequences] = useState<Record<BloomLevel, BloomLevel[]>>(DEFAULT_SEQUENCES);
+  // The college's Bloom's levels (Exam Cell > Mid Configuration); one level-sequence row per level Q1 may start at.
+  const [levels, setLevels] = useState<BloomLevel[]>(BLOOM_LEVELS);
+  const seqDefaults = (ids: BloomLevel[]) => Object.fromEntries(ids.map((l) => [l, defaultSequenceFor(l, ids)])) as Partial<Record<BloomLevel, BloomLevel[]>>;
+  const [sequences, setSequences] = useState<Partial<Record<BloomLevel, BloomLevel[]>>>(() => seqDefaults(BLOOM_LEVELS));
   const [units, setUnits] = useState<Record<string, number[]>>(blankUnits);
   const [instruction, setInstruction] = useState(DEFAULT_INSTRUCTION);
   const [maxMarks, setMaxMarks] = useState("");
@@ -53,14 +56,19 @@ export function MidPaperTemplateCard() {
   useEffect(() => {
     load();
     fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses?: Course[] }>).then((d) => setCourses(d.courses ?? [])).catch(() => undefined);
+    fetch("/api/college/exam-mid-settings").then((r) => (r.ok ? r.json() : null))
+      .then((d: { settings?: { bloomLevels?: { id: BloomLevel }[] } } | null) => {
+        const ids = d?.settings?.bloomLevels?.map((l) => l.id);
+        if (ids?.length) { setLevels(ids); setSequences((cur) => ({ ...seqDefaults(ids), ...Object.fromEntries(Object.entries(cur).filter(([k, v]) => ids.includes(k as BloomLevel) && (v ?? []).every((x) => ids.includes(x)))) })); }
+      }).catch(() => undefined);
   }, []);
 
   function reset() {
-    setEditingId(null); setCourseKey(""); setRegulation(""); setSequences(DEFAULT_SEQUENCES); setUnits(blankUnits()); setInstruction(DEFAULT_INSTRUCTION); setMaxMarks(""); setRegdBoxes(String(DEFAULT_REGD_BOXES));
+    setEditingId(null); setCourseKey(""); setRegulation(""); setSequences(seqDefaults(levels)); setUnits(blankUnits()); setInstruction(DEFAULT_INSTRUCTION); setMaxMarks(""); setRegdBoxes(String(DEFAULT_REGD_BOXES));
   }
   function edit(t: MidPaperTemplate) {
     setEditingId(t.id); setCourseKey(t.courseKey); setRegulation(t.regulation === "ALL" ? "" : t.regulation);
-    setSequences({ ...DEFAULT_SEQUENCES, ...t.sequences }); setUnits({ ...blankUnits(), ...t.units });
+    setSequences({ ...seqDefaults(levels), ...Object.fromEntries(Object.entries(t.sequences ?? {}).filter(([k]) => levels.includes(k as BloomLevel))) }); setUnits({ ...blankUnits(), ...t.units });
     setInstruction(t.instruction || DEFAULT_INSTRUCTION); setMaxMarks(t.maxMarks ? String(t.maxMarks) : ""); setRegdBoxes(String(t.regdBoxes ?? DEFAULT_REGD_BOXES));
   }
 
@@ -160,15 +168,15 @@ export function MidPaperTemplateCard() {
                 <tr><th className="p-2 text-left">Question 1 at</th>{Array.from({ length: PAPER_QUESTIONS }, (_, i) => <th key={i} className="p-2">Q{i + 1}{i % 2 === 1 ? " (OR)" : ""}</th>)}</tr>
               </thead>
               <tbody>
-                {BLOOM_LEVELS.map((start) => (
+                {levels.map((start) => (
                   <tr key={start} className="border-t">
                     <th scope="row" className="p-2 text-left font-semibold">{start}</th>
                     {Array.from({ length: PAPER_QUESTIONS }, (_, i) => (
                       <td key={i} className="p-1.5">
                         {i === 0 ? <p className="text-center font-medium">{start}</p> : (
-                          <select aria-label={`Starting at ${start}: level of Question ${i + 1}`} className={selectClass} value={sequences[start][i] ?? ""}
-                            onChange={(e) => setSequences((s) => ({ ...s, [start]: s[start].map((x, j) => (j === i ? (e.target.value as BloomLevel) : j === 0 ? start : x)) }))}>
-                            {BLOOM_LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
+                          <select aria-label={`Starting at ${start}: level of Question ${i + 1}`} className={selectClass} value={sequences[start]?.[i] ?? ""}
+                            onChange={(e) => setSequences((s) => ({ ...s, [start]: (s[start] ?? defaultSequenceFor(start, levels)).map((x, j) => (j === i ? (e.target.value as BloomLevel) : j === 0 ? start : x)) }))}>
+                            {levels.map((l) => <option key={l} value={l}>{l}</option>)}
                           </select>
                         )}
                       </td>

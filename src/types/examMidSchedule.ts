@@ -11,6 +11,8 @@ export interface ExamMidSettings {
   midAssignment?: MidAssignment;
   /** Which academic tags this college uses on questions (missing = all on). */
   outcomes?: Partial<MidOutcomeSwitches>;
+  /** The Bloom's levels this college uses, their names and per-unit minimums (missing = L2-L4, 3 each; `lib/midBank/bloom.ts`). */
+  bloomLevels?: { id: string; name: string; min: number }[];
   updatedAt?: Timestamp;
   updatedByName?: string;
 }

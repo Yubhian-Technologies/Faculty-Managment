@@ -142,7 +142,7 @@ describe("unit rules", () => {
     expect(unitStatus(fullUnit(1), 1)).toEqual({ complete: true, completeCount: 10, draftCount: 0, bloom: { L2: 4, L3: 3, L4: 3 } });
     const lopsided = [...Array.from({ length: 8 }, () => q(1, "COMPLETE", "L2")), q(1, "COMPLETE", "L3"), q(1, "COMPLETE", "L4")];
     expect(unitStatus(lopsided, 1).complete).toBe(false);
-    expect(bloomNeeds(unitStatus(lopsided, 1).bloom)).toEqual([{ level: "L2", count: 8, need: 0 }, { level: "L3", count: 1, need: 2 }, { level: "L4", count: 1, need: 2 }]);
+    expect(bloomNeeds(unitStatus(lopsided, 1).bloom)).toEqual([{ level: "L2", count: 8, need: 0, min: 3 }, { level: "L3", count: 1, need: 2, min: 3 }, { level: "L4", count: 1, need: 2, min: 3 }]);
   });
 
   it("parts (a) and (b) each count towards the Bloom tally; drafts don't", () => {
@@ -160,7 +160,7 @@ describe("unit rules", () => {
   it("a completed unit can't be broken by a later edit", () => {
     const before = unitStatus(fullUnit(1), 1);
     const edited = fullUnit(1); edited[9] = q(1, "COMPLETE", "L2"); // an L4 becomes L2
-    expect(breaksCompletedUnit(before, unitStatus(edited, 1))).toBe("This unit is complete and needs at least 3 of each Bloom level - L4 would drop to 2");
+    expect(breaksCompletedUnit(before, unitStatus(edited, 1))).toBe("This unit is complete and needs its Bloom's levels - L4 would drop to 2 (needs 3)");
     const drafted = fullUnit(1); drafted[0] = q(1, "DRAFT", "L2");
     expect(breaksCompletedUnit(before, unitStatus(drafted, 1))).toBe("This unit is complete - a question in it can't go back to a draft");
     expect(breaksCompletedUnit(before, unitStatus(fullUnit(1), 1))).toBe("");

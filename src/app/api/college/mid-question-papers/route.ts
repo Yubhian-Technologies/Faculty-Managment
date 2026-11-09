@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { loadMidSettings } from "@/lib/exams/midSettings";
 import { outcomeSwitches } from "@/lib/midBank/outcomeSwitches";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -9,7 +10,6 @@ import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
 import { loadEffectiveTiming } from "@/lib/college/semester";
 import { courseKeyForSubject, guardError, loadOutcomes, loadQuestions, loadSubject, midBankRefs } from "@/lib/midBank/server";
 import { allowedFormats, formatOf } from "@/lib/midBank/validateQuestion";
-import { BLOOM_LEVELS } from "@/lib/midBank/constants";
 import { DEFAULT_INSTRUCTION, DEFAULT_REGD_BOXES, paperSlots, pickPaper } from "@/lib/midPaper/rules";
 import { loadPlan, midTimetableRefs } from "@/lib/midTimetable/server";
 import { servesBranch } from "@/lib/midBank/assignments";
@@ -43,9 +43,9 @@ export async function POST(request: Request) {
     const session = await requireCollegeMember("EXAM_CELL", "SUPER_ADMIN");
     const body = (await readJsonBody(request)) as { planId?: string; date?: string; startLevel?: string };
     const start = body.startLevel as BloomLevel;
-    if (!BLOOM_LEVELS.includes(start)) return NextResponse.json({ error: "Pick the level of Question 1" }, { status: 400 });
     const date = String(body.date ?? "");
     const db = getAdminDb();
+    if (!(await loadMidSettings(db, session.collegeId)).bloomLevels.some((l) => l.id === start)) return NextResponse.json({ error: "Pick the level of Question 1" }, { status: 400 });
     const plan = await loadPlan(db, session.collegeId, String(body.planId ?? ""));
     if (!plan) return NextResponse.json({ error: "Mid timetable not found" }, { status: 404 });
 

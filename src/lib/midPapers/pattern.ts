@@ -217,11 +217,12 @@ export function flexibleProblem(part: PaperPartDef, qs: Pick<MidPaperQuestion, "
 }
 
 /** Shape a question as the editor sent it, for its part (drafts keep whatever is the right shape). */
-export function cleanPaperQuestion(raw: unknown, setPart: PaperPartDef, coIds: Set<string>): Pick<MidPaperQuestion, "text" | "imageUrl" | "imageCaption" | "options" | "answer" | "subParts" | "cos" | "bloom" | "unit" | "kind" | "marks"> {
+export function cleanPaperQuestion(raw: unknown, setPart: PaperPartDef, coIds: Set<string>, bloomIds: BloomLevel[] = BLOOM_LEVELS): Pick<MidPaperQuestion, "text" | "imageUrl" | "imageCaption" | "options" | "answer" | "subParts" | "cos" | "bloom" | "unit" | "kind" | "marks"> {
   const r = (raw ?? {}) as Partial<MidPaperQuestion>;
   const part = partFor(setPart, r);
   const cos = Array.isArray(r.cos) ? [...new Set(r.cos.map(String).filter((c) => coIds.has(c)))].sort((a, b) => Number(a.slice(2)) - Number(b.slice(2))) : [];
-  const bloom = BLOOM_LEVELS.includes(r.bloom as BloomLevel) ? (r.bloom as BloomLevel) : "";
+  // Only the paper set's Bloom's levels (the college's list when it started).
+  const bloom = bloomIds.includes(r.bloom as BloomLevel) ? (r.bloom as BloomLevel) : "";
   const unit = Number.isInteger(r.unit) && (r.unit as number) > 0 ? (r.unit as number) : undefined;
   const out: ReturnType<typeof cleanPaperQuestion> = {
     text: cleanText(r.text), ...cleanImage(r), cos, bloom, ...(unit ? { unit } : {}),

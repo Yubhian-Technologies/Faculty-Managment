@@ -93,14 +93,15 @@ export const partMarks = (p: MidQuestionPart, i: number, format: MidQuestionForm
   format === "SINGLE" ? total : (typeof p.marks === "number" && p.marks > 0 ? p.marks : defaultSplit(format, total)[i]);
 
 /** Shape the parts sent by the editor: right count, trimmed, capped, only known CO ids, whole-number marks. */
-export function cleanParts(raw: unknown, format: MidQuestionFormat, coIds: Set<string>, total: number): MidQuestionPart[] {
+export function cleanParts(raw: unknown, format: MidQuestionFormat, coIds: Set<string>, total: number, bloomIds: BloomLevel[] = BLOOM_LEVELS): MidQuestionPart[] {
   const list = Array.isArray(raw) ? raw : [];
   const split = defaultSplit(format, total);
   return Array.from({ length: partsFor(format) }, (_, i) => {
     const p = (list[i] ?? {}) as Partial<MidQuestionPart>;
     const imageUrl = typeof p.imageUrl === "string" && p.imageUrl.startsWith(MID_IMAGE_URL_PREFIX) ? p.imageUrl : "";
     const cos = Array.isArray(p.cos) ? [...new Set(p.cos.map(String).filter((c) => coIds.has(c)))].sort((a, b) => Number(a.slice(2)) - Number(b.slice(2))) : [];
-    const bloom = BLOOM_LEVELS.includes(p.bloom as BloomLevel) ? (p.bloom as BloomLevel) : "";
+    // Only the bank's Bloom's levels (the college's list when it started).
+    const bloom = bloomIds.includes(p.bloom as BloomLevel) ? (p.bloom as BloomLevel) : "";
     const m = Number(p.marks);
     const marks = format === "SINGLE" ? total : Number.isInteger(m) && m >= 0 && m <= total ? m : split[i];
     return {
