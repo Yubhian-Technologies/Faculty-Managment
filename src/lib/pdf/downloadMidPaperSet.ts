@@ -23,6 +23,24 @@ export async function downloadMidPaperSetPdf(data: Omit<PaperSetPdfData, "colleg
 }
 
 /**
+ * One paper with each part as its OWN paper: a separate PDF per part (`<fileName>_<part label>.pdf`), each with the full
+ * header (Regd. No boxes, letterhead, exam line, branches) and that part's own time + max marks. Numbers stay as on the
+ * full paper.
+ */
+export async function downloadMidPaperSetPartsPdf(
+  data: Omit<PaperSetPdfData, "college" | "formula">,
+  parts: { partId: string; durationMinutes: number; maxMarks: number }[],
+  fileName: string,
+): Promise<void> {
+  const { info, college, formula } = await paperLetterhead();
+  const base = { ...data, exam: { academicYear: info.academicYear, ...data.exam }, college, formula };
+  for (const p of parts) {
+    const label = data.pattern.parts.find((x) => x.id === p.partId)?.label ?? p.partId;
+    await renderHtmlToPdf(getMidPaperSetHTML({ ...base, onlyPartId: p.partId, partHeader: { durationMinutes: p.durationMinutes, maxMarks: p.maxMarks } }), safeName(`${fileName}_${label}`));
+  }
+}
+
+/**
  * The FINALIZED paper (the frozen copy the Exam Cell printed), laid out as it was finalized: all parts on one paper,
  * or each part on its own page(s) with its own header (time + max marks). `answerKey` = the objective answers.
  */
