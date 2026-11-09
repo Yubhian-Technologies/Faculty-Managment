@@ -70,9 +70,11 @@ export async function POST(_request: Request, { params }: Params) {
         moved.push({ ...q, id: m.to, no });
       }
       for (const m of p.remap.moves) if (m.from !== m.to && !targets.has(m.from)) tx.delete(refs.questions(id).doc(m.from));
-      const prog = paperProgress(p.live.pattern, moved);
+      // A setter writing only some papers (shared by the HOD) keeps that share.
+      const nextPattern = bank.pattern?.sets?.length ? { ...p.live.pattern, sets: bank.pattern.sets } : p.live.pattern;
+      const prog = paperProgress(nextPattern, moved);
       tx.update(bankRef, {
-        pattern: p.live.pattern, units: p.live.units, setProgress: prog.setProgress, completeCount: prog.completeCount, totalCount: prog.totalCount,
+        pattern: nextPattern, units: p.live.units, setProgress: prog.setProgress, completeCount: prog.completeCount, totalCount: prog.totalCount,
         status: prog.allComplete ? "COMPLETE" : "IN_PROGRESS", updatedAt: new Date(),
       });
     });

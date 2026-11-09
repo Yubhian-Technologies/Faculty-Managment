@@ -12,7 +12,7 @@ import { outcomeSwitches } from "@/lib/midBank/outcomeSwitches";
 import { cosOfUnit } from "@/lib/subjects/syllabus";
 import { PaperPreviewButton } from "@/components/midPapers/PaperPreview";
 import { derivePoPso } from "@/lib/midBank/outcomes";
-import { choiceText, unitOfQuestion, FLEXIBLE_MAX_QUESTIONS, flexibleProblem, flexibleQuestions, PART_KINDS, paperQuestionErrors, partFor, partMax, patternMax, questionId } from "@/lib/midPapers/pattern";
+import { choiceText, unitOfQuestion, FLEXIBLE_MAX_QUESTIONS, flexibleProblem, flexibleQuestions, PART_KINDS, paperQuestionErrors, partFor, partMax, patternMax, questionId, setNumbers } from "@/lib/midPapers/pattern";
 import { MathText, QuestionTextField } from "@/components/midBank/MathText";
 import { ApprovalPanel } from "@/components/midBank/ApprovalPanel";
 import type { MidBankDetail } from "@/lib/midBank/clientTypes";
@@ -45,7 +45,9 @@ export function PaperSetWorkspace({ detail }: { detail: MidBankDetail }) {
   const units = detail.outcomes?.units ?? [];
   const [questions, setQuestions] = useState<Record<string, MidPaperQuestion>>(() =>
     Object.fromEntries((detail.questions as unknown as MidPaperQuestion[]).map((q) => [q.id, q])));
-  const [set, setSet] = useState(1);
+  // The papers this setter writes (all of them, or the HOD's share - e.g. Paper 2 only).
+  const mySets = setNumbers(pattern);
+  const [set, setSet] = useState(mySets[0] ?? 1);
   const [cur, setCur] = useState<{ partId: string; no: number }>({ partId: pattern.parts[0].id, no: 1 });
   const setPart = pattern.parts.find((p) => p.id === cur.partId)!;
   const qid = questionId(set, cur.partId, cur.no);
@@ -219,7 +221,7 @@ export function PaperSetWorkspace({ detail }: { detail: MidBankDetail }) {
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        {Array.from({ length: pattern.setsPerFaculty }, (_, i) => i + 1).map((n) => {
+        {mySets.map((n) => {
           const p = bank.setProgress?.[String(n)];
           const done = p && p.complete >= p.total;
           return (

@@ -88,7 +88,11 @@ export async function GET(request: Request) {
       syllabus: onSyllabus ? { status: syllabus?.status ?? null, frozenAt: syllabus?.frozenAt ?? null, frozenByName: syllabus?.frozenByName ?? null, subjectDepartments } : null,
       outcomeSwitches: settings.outcomes, midPreparation: settings.midPreparation, pattern,
       myBankId: myBank.exists ? myBankId : null,
-      assignment: assignment ? { scope: assignment.scope, assignedByName: assignment.assignedByName, facultyNames: assignment.facultyNames, branches: assignment.branches } : null,
+      assignment: assignment ? {
+        scope: assignment.scope, assignedByName: assignment.assignedByName, facultyNames: assignment.facultyNames, branches: assignment.branches,
+        // The papers this setter writes when the HOD shared them (else every paper).
+        ...(assignment.setShare?.[me]?.length ? { sets: assignment.setShare[me] } : {}),
+      } : null,
       canEditOutcomes,
     });
   } catch (err) {

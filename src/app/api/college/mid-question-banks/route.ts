@@ -150,7 +150,10 @@ export async function POST(request: Request) {
 
       const now = new Date();
       const unitStatus = unitStatuses(units, [], sw);
-      const totals = papers ? paperProgress(expandPattern(pattern!, units, shared), []) : bankTotals(units, unitStatus);
+      // Papers shared among the setters by the HOD: this setter writes only theirs (e.g. Paper 2).
+      const myShare = assignment?.setShare?.[me];
+      const myPattern = papers ? { ...expandPattern(pattern!, units, shared), ...(myShare?.length ? { sets: myShare } : {}) } : null;
+      const totals = papers ? paperProgress(myPattern!, []) : bankTotals(units, unitStatus);
       const data: Omit<MidQuestionBank, "id"> = {
         deadlineId: d.id, courseName: d.courseName, year: d.year, semester: d.semester, midNumber: d.midNumber,
         subjectId, subjectName: subject.name, subjectCode: subject.code, branch, outcomesId,
@@ -159,7 +162,7 @@ export async function POST(request: Request) {
         viewerFacultyIds: [...new Set(pick.sections.flatMap((s) => s.facultyIds))],
         units, formats: papers ? [] : allowedFormats(rules!), marks: papers ? 0 : rules!.marks, unitStatus, status: "IN_PROGRESS", outcomes: sw,
         // A per-unit part gets a question for each of the Mid's units (fixed in this paper's copy of the pattern).
-        ...(papers ? { kind: "PAPERS" as const, pattern: expandPattern(pattern!, units, shared), setProgress: paperProgress(expandPattern(pattern!, units, shared), []).setProgress } : {}),
+        ...(papers ? { kind: "PAPERS" as const, pattern: myPattern!, setProgress: paperProgress(myPattern!, []).setProgress } : {}),
         completeCount: totals.completeCount, totalCount: totals.totalCount,
         createdAt: now as unknown as MidQuestionBank["createdAt"], updatedAt: now as unknown as MidQuestionBank["updatedAt"],
       };
@@ -226,7 +229,7 @@ async function hodModeItems(db: FirebaseFirestore.Firestore, collegeId: string, 
         sharedBanks: [],
         // Something left to prepare: shows the Prepare button until started.
         uncovered: own ? [] : ["all"],
-        note: `Assigned by ${a.assignedByName || "your HOD"}${a.scope === "SUBJECT" || a.scope === "GROUP" ? ` - one paper for ${a.branches.join(", ")}` : ""}${others.length ? ` · also preparing: ${others.join(", ")}` : ""}`,
+        note: `Assigned by ${a.assignedByName || "your HOD"}${a.setShare?.[me]?.length ? ` - you write Paper ${a.setShare[me].join(", ")}` : ""}${a.scope === "SUBJECT" || a.scope === "GROUP" ? ` - one paper for ${a.branches.join(", ")}` : ""}${others.length ? ` · also preparing: ${others.join(", ")}` : ""}`,
       });
     }
     // 2. What I teach but don't prepare: read-only view of the papers that serve my branch, with suggestions.

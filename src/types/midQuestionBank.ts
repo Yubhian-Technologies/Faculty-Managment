@@ -178,6 +178,9 @@ export interface MidBankAssignment {
   branches: string[];
   facultyIds: string[];
   facultyNames: string[];
+  /** Question papers shared among the setters (facultyId -> the papers they write, e.g. { A: [1], B: [2], C: [3] });
+   *  absent = each setter writes every paper. */
+  setShare?: Record<string, number[]>;
   assignedByUid: string;
   assignedByName: string;
   at: string;

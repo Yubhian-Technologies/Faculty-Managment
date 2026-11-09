@@ -53,8 +53,12 @@ export interface MidPaperPattern {
   courseName: string;
   /** "ALL" = every regulation of the course without a pattern of its own. */
   regulation: string;
-  /** How many question papers (sets) each faculty member submits for a subject. */
+  /** How many question papers (sets) each faculty member submits for a subject - or, when the HOD shares them among
+   *  the setters, how many papers the subject gets in all. */
   setsPerFaculty: number;
+  /** On a paper set's own copy only: the papers (1..setsPerFaculty) this setter writes, when the HOD shared them
+   *  (e.g. [2] = Paper 2 only). Absent = every paper. */
+  sets?: number[];
   durationMinutes: number;
   instruction: string;
   regdBoxes: number;
