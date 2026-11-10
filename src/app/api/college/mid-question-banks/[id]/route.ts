@@ -1,6 +1,8 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { patternForSubject } from "@/lib/midPapers/server";
+import { withCurrentNames } from "@/lib/midPapers/pattern";
 import { cachedCollectionDocs } from "@/lib/firestore/sharedReads";
 import { paperBranchLabel } from "@/lib/midBank/assignments";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
@@ -47,7 +49,9 @@ export async function GET(_request: Request, { params }: Params) {
       ? questions.map((q) => { const { answer: _answer, ...rest } = q as typeof q & { answer?: string }; void _answer; return rest; })
       : questions;
     return NextResponse.json({
-      bank, deadline, outcomes, rules, questions: shown, branchLabel,
+      // Part names (Name + Heading) follow the Exam Cell's current pattern on every paper (wording only).
+      bank: bank.kind === "PAPERS" && bank.pattern && subject ? { ...bank, pattern: withCurrentNames(bank.pattern, await patternForSubject(db, session.collegeId, subject)) } : bank,
+      deadline, outcomes, rules, questions: shown, branchLabel,
       subject: {
         id: bank.subjectId, name: bank.subjectName, code: bank.subjectCode, courseName: bank.courseName,
         regulation: subject?.regulation ?? "", year: bank.year, semester: bank.semester, branch: bank.branch,

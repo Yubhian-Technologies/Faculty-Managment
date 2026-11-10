@@ -1,6 +1,8 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { patternForSubject } from "@/lib/midPapers/server";
+import { withCurrentNames } from "@/lib/midPapers/pattern";
 import { FieldValue } from "firebase-admin/firestore";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -54,6 +56,12 @@ async function day(db: FirebaseFirestore.Firestore, collegeId: string, planId: s
     courseName: plan.courseName, courseCode: (course?.data() as Course | undefined)?.code || plan.courseName, year: plan.year, semester: plan.semester,
     semesterInYear: semsOfYear.includes(plan.semester) ? semsOfYear.indexOf(plan.semester) + 1 : null, midNumber: plan.midNumber, academicYear, date,
   };
+  // Each subject's current pattern: part names (wording) follow the Exam Cell on every paper not yet printed.
+  const subjectIds = [...new Set(onDay.map((x) => x.subjectId))];
+  const currentPattern = new Map(await Promise.all(subjectIds.map(async (id) => {
+    const sub = await loadSubject(db, collegeId, id);
+    return [id, sub ? await patternForSubject(db, collegeId, sub) : null] as const;
+  })));
   const rows: PaperChoiceRow[] = onDay.sort((a, b) => a.branch.localeCompare(b.branch) || a.subjectName.localeCompare(b.subjectName)).map((slot) => {
     // A paper prepared for the whole subject serves every branch it lists.
     // A set the HOD withdrew (setter removed) is never offered.
@@ -68,7 +76,7 @@ async function day(db: FirebaseFirestore.Firestore, collegeId: string, planId: s
         bankId: String(c.bankId), setNo: Number(c.setNo), chosenByName: String(c.chosenByName ?? ""), at: String(c.at ?? ""),
         final: c.final ? { at: c.final.at, byName: c.final.byName, layout: c.final.layout } : null,
       } : null,
-      parts: (mine[0]?.pattern?.parts ?? []).map((p) => ({ id: p.id, label: p.label, max: partMax(p) })),
+      parts: (mine[0]?.pattern ? withCurrentNames(mine[0].pattern, currentPattern.get(slot.subjectId)).parts : []).map((p) => ({ id: p.id, label: p.label, max: partMax(p) })),
       durationMinutes: mine[0]?.pattern?.durationMinutes ?? 0,
     };
   });
@@ -145,7 +153,8 @@ async function finalize(db: FirebaseFirestore.Firestore, session: { uid: string;
     ]);
     final = {
       at: new Date().toISOString(), byUid: session.uid, byName, bankId: bank.id, setNo: row.choice.setNo, ownerName: bank.ownerName,
-      pattern: { parts: bank.pattern.parts, durationMinutes: bank.pattern.durationMinutes, instruction: bank.pattern.instruction, regdBoxes: bank.pattern.regdBoxes },
+      // The Exam Cell's current part names (wording only) - printed and frozen with this copy.
+      pattern: { parts: withCurrentNames(bank.pattern, subject ? await patternForSubject(db, session.collegeId, subject) : null).parts, durationMinutes: bank.pattern.durationMinutes, instruction: bank.pattern.instruction, regdBoxes: bank.pattern.regdBoxes },
       units: bank.units ?? [],
       questions: questions.filter((q) => q.set === row.choice!.setNo).map((q) => {
         const { updatedAt: _u, rev: _r, textKeys: _t, updatedBy: _b, updatedByName: _n, ...rest } = q;
