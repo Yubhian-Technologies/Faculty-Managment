@@ -10,11 +10,11 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
 import { loadEffectiveTiming } from "@/lib/college/semester";
 import { loadPlan, midTimetableRefs } from "@/lib/midTimetable/server";
-import { actorName, guardError, loadOutcomes, loadSubject, midBankRefs } from "@/lib/midBank/server";
+import { actorName, guardError, loadOutcomes, loadSubject, midBankRefs, loadDeadline, teachingForCached } from "@/lib/midBank/server";
 import { loadPaperQuestions } from "@/lib/midPapers/server";
 import { cleanPrintLayout } from "@/lib/midPapers/printLayout";
 import { partMax, setNumbers } from "@/lib/midPapers/pattern";
-import { isMultiBranch, paperBranchLabel, servesBranch } from "@/lib/midBank/assignments";
+import { isMultiBranch, paperBranchLabel, sectionCountsByBranch, servesBranch } from "@/lib/midBank/assignments";
 import type { Course, Department, MidPaperFinal, MidQuestionBank, MidTimetable } from "@/types";
 import type { PaperChoiceRow } from "@/lib/midPapers/clientTypes";
 
@@ -164,11 +164,14 @@ async function finalize(db: FirebaseFirestore.Firestore, session: { uid: string;
       ...(bank.outcomes ? { outcomes: bank.outcomes } : {}),
       cos: (outcomes?.cos ?? []).map((c) => ({ id: c.id, statement: c.statement })), mapping: outcomes?.mapping ?? {},
       subject: { name: bank.subjectName, code: bank.subjectCode, regulation: subject?.regulation ?? "" },
-      // One branch: its code + sections. A paper of several branches (a group / all branches): every branch it is for,
-      // each with its own sections ("CSE (A, B) · EEE (A)").
-      ...(isMultiBranch(bank.branch)
-        ? (() => { const l = paperBranchLabel(bank, (n) => r.codeOf.get(n) ?? ""); return { branchCode: l.branch, sections: l.sections }; })()
-        : { branchCode: row.branchCode, sections: bank.sections.filter((s) => !s.branch || s.branch === row.branch).map((s) => s.sectionName) }),
+      // Short codes; sections only for a branch the paper covers in part ("AIDS · CSE (A, B)"). A paper of several
+      // branches names every branch it is for.
+      ...(await (async () => {
+        const dl = await loadDeadline(db, session.collegeId, bank.deadlineId);
+        const totals = dl ? sectionCountsByBranch(await teachingForCached(db, session.collegeId, dl), bank.subjectId) : undefined;
+        const l = paperBranchLabel(isMultiBranch(bank.branch) ? bank : { ...bank, sections: bank.sections.filter((s) => !s.branch || s.branch === row.branch) }, (n) => r.codeOf.get(n) ?? "", totals);
+        return { branchCode: isMultiBranch(bank.branch) ? l.branch : row.branchCode, sections: l.sections };
+      })()),
       exam: { courseName: r.header.courseCode, year: r.header.year, semester: r.header.semester, semesterInYear: r.header.semesterInYear, midNumber: r.header.midNumber, academicYear: r.header.academicYear, date: r.header.date },
       layout: value,
     };

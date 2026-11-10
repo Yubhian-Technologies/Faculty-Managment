@@ -43,17 +43,34 @@ export function sectionsForScope(rows: TeachingRow[], subjectId: string, branch:
 }
 
 /**
- * How a paper names its branches on the printed header (short codes): one branch -> its code with its sections;
- * several (a group / all branches) -> each branch's code with its own sections, e.g. "CSE (A, B) · EEE (A)".
+ * How a paper names its branches on the printed header (short codes). A branch whose EVERY section the paper covers is
+ * just its code; only a branch it covers in part lists those sections: one branch -> "CSE" or "CSE" + ["A", "B"];
+ * several (a group / all branches) -> "AIDS · CSE (A, B) · EEE". `totalSections` = sections of the subject per branch
+ * (unknown = list the sections, as before).
  */
-export function paperBranchLabel(b: { branch: string; branches?: string[]; sections: Pick<MidBankSection, "sectionName" | "branch">[] }, codeOf: (name: string) => string): { branch: string; sections: string[] } {
-  if (!isMultiBranch(b.branch)) return { branch: codeOf(b.branch) || b.branch, sections: b.sections.map((s) => s.sectionName) };
+export function paperBranchLabel(
+  b: { branch: string; branches?: string[]; sections: Pick<MidBankSection, "sectionName" | "branch">[] },
+  codeOf: (name: string) => string,
+  totalSections?: ReadonlyMap<string, number>,
+): { branch: string; sections: string[] } {
+  const whole = (n: string, covered: number) => totalSections?.has(n) === true && covered >= (totalSections.get(n) ?? Infinity);
+  if (!isMultiBranch(b.branch)) {
+    const secs = b.sections.map((s) => s.sectionName);
+    return { branch: codeOf(b.branch) || b.branch, sections: whole(b.branch, secs.length) ? [] : secs };
+  }
   const names = b.branches?.length ? b.branches : scopeBranches(b.branch) ?? [...new Set(b.sections.map((s) => s.branch ?? ""))].filter(Boolean);
   const label = [...names].sort().map((n) => {
     const secs = b.sections.filter((s) => s.branch === n).map((s) => s.sectionName);
-    return `${codeOf(n) || n}${secs.length ? ` (${secs.join(", ")})` : ""}`;
+    return `${codeOf(n) || n}${secs.length && !whole(n, secs.length) ? ` (${secs.join(", ")})` : ""}`;
   }).join(" · ");
   return { branch: label, sections: [] };
+}
+
+/** Sections of a subject per branch (for `paperBranchLabel`'s "every section" check). */
+export function sectionCountsByBranch(rows: TeachingRow[], subjectId: string): Map<string, number> {
+  const m = new Map<string, Set<string>>();
+  for (const r of rows) if (r.subjectId === subjectId) m.set(r.branch, (m.get(r.branch) ?? new Set()).add(r.sectionId));
+  return new Map([...m].map(([k, v]) => [k, v.size]));
 }
 
 /** Is this faculty member assigned to prepare the subject for this branch (or for all branches)? */

@@ -4,15 +4,14 @@ import { NextResponse } from "next/server";
 import { patternForSubject } from "@/lib/midPapers/server";
 import { withCurrentNames } from "@/lib/midPapers/pattern";
 import { cachedCollectionDocs } from "@/lib/firestore/sharedReads";
-import { paperBranchLabel } from "@/lib/midBank/assignments";
+import { paperBranchLabel, sectionCountsByBranch } from "@/lib/midBank/assignments";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { notify } from "@/lib/notify";
 import { checkSectionPick, claimIdFor, sectionsOf } from "@/lib/midBank/sections";
 import {
-  bankAccess, guardError, writeRefusal, MID_BANK_OVERSEERS, loadOutcomes, loadQuestions, loadSubject, loginUidsOf, MID_BANK_READ_ROLES, MID_BANK_WRITE_ROLES, midBankRefs, rulesForSubject, teachingFor,
-} from "@/lib/midBank/server";
+  bankAccess, guardError, writeRefusal, MID_BANK_OVERSEERS, loadOutcomes, loadQuestions, loadSubject, loginUidsOf, MID_BANK_READ_ROLES, MID_BANK_WRITE_ROLES, midBankRefs, rulesForSubject, teachingFor, teachingForCached } from "@/lib/midBank/server";
 
 // One question bank.
 //   GET    everything the workspace / review need; the owner may write until the
@@ -41,7 +40,9 @@ export async function GET(_request: Request, { params }: Params) {
     ]);
     // How the paper names its branches on the header (short codes; several branches each with their own sections).
     const codeOf = new Map(departments.map((x) => { const v = x.data() as { name?: string; code?: string }; return [v.name ?? "", v.code ?? ""]; }));
-    const branchLabel = paperBranchLabel(bank, (n) => codeOf.get(n) ?? "");
+    // A branch whose every section the paper covers prints as its code alone.
+    const totals = deadline ? sectionCountsByBranch(await teachingForCached(db, session.collegeId, deadline), bank.subjectId) : undefined;
+    const branchLabel = paperBranchLabel(bank, (n) => codeOf.get(n) ?? "", totals);
     // Question papers: the answers (MCQ key, blanks) are for the owner, the HOD reviewing and the Exam Cell -
     // not for colleagues who only read the papers.
     const seesAnswers = access.isOwner || access.isHod || MID_BANK_OVERSEERS.includes(session.role);

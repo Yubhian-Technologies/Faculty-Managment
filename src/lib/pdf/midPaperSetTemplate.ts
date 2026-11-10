@@ -110,7 +110,7 @@ export function getMidPaperSetHTML(d: PaperSetPdfData): string {
         ${only ? `<p class="line"><b>${esc(only.label.toUpperCase())}</b></p>` : ""}
       </div><span></span>
     </div>
-    <div class="meta"><span>Branch &amp; Sections: <b>${esc(d.branch)}${d.sections.length ? ` - ${esc(d.sections.join(", "))}` : ""}</b></span><span>${d.exam.date ? `Date: <b>${dmy(d.exam.date)}</b>` : `Question paper ${d.set}`}</span></div>
+    <div class="meta"><span>${d.sections.length || d.branch.includes("(") ? "Branch &amp; Sections" : "Branch"}: <b>${esc(d.branch)}${d.sections.length ? ` - ${esc(d.sections.join(", "))}` : ""}</b></span><span>${d.exam.date ? `Date: <b>${dmy(d.exam.date)}</b>` : ""}</span></div>
     <div class="meta"><span>Time: <b>${duration} Mins.</b></span><span>Max. Marks: <b>${maxMarks}</b></span></div>
     <hr />
     ${d.pattern.instruction && !d.answerKey ? `<p class="instr">${esc(d.pattern.instruction)}</p>` : ""}
