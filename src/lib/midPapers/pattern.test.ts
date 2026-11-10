@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { answeredCount, choiceText, cleanPaperQuestion, cleanPattern, flexibleProblem, paperProgress, paperQuestionErrors, partMax, patternMax, questionSlots, setNumbers, checkSetShare } from "./pattern";
+import { answeredCount, choiceText, cleanPaperQuestion, cleanPattern, flexibleProblem, paperProgress, paperQuestionErrors, partMax, patternMax, questionSlots, setNumbers, checkSetShare, withCurrentNames, patternShape } from "./pattern";
 import type { PaperPartDef } from "@/types";
 
 const partA: PaperPartDef = { id: "A", label: "Part A", title: "Choose the correct answer", kind: "MCQ", questions: 10, marksEach: 1, choice: { kind: "ALL" }, options: 4 };
@@ -169,5 +169,17 @@ describe("papers shared among the setters", () => {
     expect(checkSetShare({ a: [1] }, ["a"], 2).errors).toEqual(["Paper 2 has no setter"]);
     expect(checkSetShare({ a: [1], b: [] }, ["a", "b"], 2).errors).toEqual(["Give b at least one paper", "Paper 2 has no setter"]);
     expect(checkSetShare({ a: [1, 4] }, ["a"], 1).errors).toEqual(["There is no Paper 4 - the subject has 1"]);
+  });
+});
+
+describe("part names follow the Exam Cell", () => {
+  const own = { parts: [{ id: "A", label: "PART - A", title: "PART - A", kind: "SHORT", questions: 5, marksEach: 2, choice: { kind: "ALL" } }] } as unknown as Parameters<typeof withCurrentNames>[0];
+  const now = { parts: [{ ...own.parts[0], label: "Section I", title: "Short answers" }] } as unknown as Parameters<typeof withCurrentNames>[1];
+  it("a paper shows the current Name and Heading of each part", () => {
+    expect(withCurrentNames(own, now).parts[0]).toMatchObject({ label: "Section I", title: "Short answers", questions: 5 });
+    expect(withCurrentNames(own, null)).toBe(own);
+  });
+  it("a name-only change doesn't ask the setter to move onto the new pattern", () => {
+    expect(patternShape({ ...own, setsPerFaculty: 2, durationMinutes: 90 } as never)).toBe(patternShape({ ...now!, setsPerFaculty: 2, durationMinutes: 90 } as never));
   });
 });

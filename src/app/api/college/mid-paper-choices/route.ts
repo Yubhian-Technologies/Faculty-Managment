@@ -1,6 +1,8 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { patternForSubject } from "@/lib/midPapers/server";
+import { withCurrentNames } from "@/lib/midPapers/pattern";
 import { FieldValue } from "firebase-admin/firestore";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -8,11 +10,11 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
 import { loadEffectiveTiming } from "@/lib/college/semester";
 import { loadPlan, midTimetableRefs } from "@/lib/midTimetable/server";
-import { actorName, guardError, loadOutcomes, loadSubject, midBankRefs } from "@/lib/midBank/server";
+import { actorName, guardError, loadOutcomes, loadSubject, midBankRefs, loadDeadline, teachingForCached } from "@/lib/midBank/server";
 import { loadPaperQuestions } from "@/lib/midPapers/server";
 import { cleanPrintLayout } from "@/lib/midPapers/printLayout";
 import { partMax, setNumbers } from "@/lib/midPapers/pattern";
-import { isMultiBranch, paperBranchLabel, servesBranch } from "@/lib/midBank/assignments";
+import { isMultiBranch, paperBranchLabel, sectionCountsByBranch, servesBranch } from "@/lib/midBank/assignments";
 import type { Course, Department, MidPaperFinal, MidQuestionBank, MidTimetable } from "@/types";
 import type { PaperChoiceRow } from "@/lib/midPapers/clientTypes";
 
@@ -54,6 +56,12 @@ async function day(db: FirebaseFirestore.Firestore, collegeId: string, planId: s
     courseName: plan.courseName, courseCode: (course?.data() as Course | undefined)?.code || plan.courseName, year: plan.year, semester: plan.semester,
     semesterInYear: semsOfYear.includes(plan.semester) ? semsOfYear.indexOf(plan.semester) + 1 : null, midNumber: plan.midNumber, academicYear, date,
   };
+  // Each subject's current pattern: part names (wording) follow the Exam Cell on every paper not yet printed.
+  const subjectIds = [...new Set(onDay.map((x) => x.subjectId))];
+  const currentPattern = new Map(await Promise.all(subjectIds.map(async (id) => {
+    const sub = await loadSubject(db, collegeId, id);
+    return [id, sub ? await patternForSubject(db, collegeId, sub) : null] as const;
+  })));
   const rows: PaperChoiceRow[] = onDay.sort((a, b) => a.branch.localeCompare(b.branch) || a.subjectName.localeCompare(b.subjectName)).map((slot) => {
     // A paper prepared for the whole subject serves every branch it lists.
     // A set the HOD withdrew (setter removed) is never offered.
@@ -68,7 +76,7 @@ async function day(db: FirebaseFirestore.Firestore, collegeId: string, planId: s
         bankId: String(c.bankId), setNo: Number(c.setNo), chosenByName: String(c.chosenByName ?? ""), at: String(c.at ?? ""),
         final: c.final ? { at: c.final.at, byName: c.final.byName, layout: c.final.layout } : null,
       } : null,
-      parts: (mine[0]?.pattern?.parts ?? []).map((p) => ({ id: p.id, label: p.label, max: partMax(p) })),
+      parts: (mine[0]?.pattern ? withCurrentNames(mine[0].pattern, currentPattern.get(slot.subjectId)).parts : []).map((p) => ({ id: p.id, label: p.label, max: partMax(p) })),
       durationMinutes: mine[0]?.pattern?.durationMinutes ?? 0,
     };
   });
@@ -145,7 +153,8 @@ async function finalize(db: FirebaseFirestore.Firestore, session: { uid: string;
     ]);
     final = {
       at: new Date().toISOString(), byUid: session.uid, byName, bankId: bank.id, setNo: row.choice.setNo, ownerName: bank.ownerName,
-      pattern: { parts: bank.pattern.parts, durationMinutes: bank.pattern.durationMinutes, instruction: bank.pattern.instruction, regdBoxes: bank.pattern.regdBoxes },
+      // The Exam Cell's current part names (wording only) - printed and frozen with this copy.
+      pattern: { parts: withCurrentNames(bank.pattern, subject ? await patternForSubject(db, session.collegeId, subject) : null).parts, durationMinutes: bank.pattern.durationMinutes, instruction: bank.pattern.instruction, regdBoxes: bank.pattern.regdBoxes },
       units: bank.units ?? [],
       questions: questions.filter((q) => q.set === row.choice!.setNo).map((q) => {
         const { updatedAt: _u, rev: _r, textKeys: _t, updatedBy: _b, updatedByName: _n, ...rest } = q;
@@ -155,11 +164,14 @@ async function finalize(db: FirebaseFirestore.Firestore, session: { uid: string;
       ...(bank.outcomes ? { outcomes: bank.outcomes } : {}),
       cos: (outcomes?.cos ?? []).map((c) => ({ id: c.id, statement: c.statement })), mapping: outcomes?.mapping ?? {},
       subject: { name: bank.subjectName, code: bank.subjectCode, regulation: subject?.regulation ?? "" },
-      // One branch: its code + sections. A paper of several branches (a group / all branches): every branch it is for,
-      // each with its own sections ("CSE (A, B) · EEE (A)").
-      ...(isMultiBranch(bank.branch)
-        ? (() => { const l = paperBranchLabel(bank, (n) => r.codeOf.get(n) ?? ""); return { branchCode: l.branch, sections: l.sections }; })()
-        : { branchCode: row.branchCode, sections: bank.sections.filter((s) => !s.branch || s.branch === row.branch).map((s) => s.sectionName) }),
+      // Short codes; sections only for a branch the paper covers in part ("AIDS · CSE (A, B)"). A paper of several
+      // branches names every branch it is for.
+      ...(await (async () => {
+        const dl = await loadDeadline(db, session.collegeId, bank.deadlineId);
+        const totals = dl ? sectionCountsByBranch(await teachingForCached(db, session.collegeId, dl), bank.subjectId) : undefined;
+        const l = paperBranchLabel(isMultiBranch(bank.branch) ? bank : { ...bank, sections: bank.sections.filter((s) => !s.branch || s.branch === row.branch) }, (n) => r.codeOf.get(n) ?? "", totals);
+        return { branchCode: isMultiBranch(bank.branch) ? l.branch : row.branchCode, sections: l.sections };
+      })()),
       exam: { courseName: r.header.courseCode, year: r.header.year, semester: r.header.semester, semesterInYear: r.header.semesterInYear, midNumber: r.header.midNumber, academicYear: r.header.academicYear, date: r.header.date },
       layout: value,
     };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ALL_BRANCHES, assignedScope, branchesOf, checkAssignment, planSetterChanges, type SetterBank, groupBranchLabel, isMultiBranch, paperBranchLabel, scopeBranches, sectionsForScope, servesBranch } from "./assignments";
+import { ALL_BRANCHES, assignedScope, branchesOf, checkAssignment, planSetterChanges, type SetterBank, groupBranchLabel, isMultiBranch, paperBranchLabel, scopeBranches, sectionCountsByBranch, sectionsForScope, servesBranch } from "./assignments";
 import type { TeachingRow } from "./sections";
 
 const row = (branch: string, sectionId: string, facultyId: string): TeachingRow => ({ subjectId: "m1", subjectName: "Maths", subjectCode: "MA", branch, sectionId, sectionName: sectionId, facultyId, facultyName: facultyId });
@@ -86,5 +86,21 @@ describe("changing setters after they started", () => {
   it("a question bank (no papers) is only withdrawn or restored", () => {
     expect(planSetterChanges([bank({ sets: [], withdrawn: true })], { facultyIds: ["f"], total: 0 }).changes).toMatchObject([{ kind: "RESTORE", to: [] }]);
     expect(planSetterChanges([bank({ sets: [] })], { facultyIds: ["f"], total: 0 }).changes).toEqual([]);
+  });
+});
+
+describe("branches on the paper header", () => {
+  const code = (n: string) => ({ "Computer Science and Engineering": "CSE", "Electrical and Electronics Engineering": "EEE" } as Record<string, string>)[n] ?? "";
+  const cse = "Computer Science and Engineering", eee = "Electrical and Electronics Engineering";
+  it("every section of a branch = its code alone; a branch covered in part lists its sections", () => {
+    const totals = new Map([[cse, 2], [eee, 2]]);
+    const both = { branch: `${cse} + ${eee}`, branches: [cse, eee], sections: [{ sectionName: "CSE-A", branch: cse }, { sectionName: "CSE-B", branch: cse }, { sectionName: "EEE-A", branch: eee }] };
+    expect(paperBranchLabel(both, code, totals)).toEqual({ branch: "CSE · EEE (EEE-A)", sections: [] });
+    expect(paperBranchLabel({ branch: cse, sections: [{ sectionName: "A" }, { sectionName: "B" }] }, code, totals)).toEqual({ branch: "CSE", sections: [] });
+    expect(paperBranchLabel({ branch: cse, sections: [{ sectionName: "A" }] }, code, totals)).toEqual({ branch: "CSE", sections: ["A"] });
+  });
+  it("section counts per branch of a subject", () => {
+    const row = (branch: string, sectionId: string) => ({ subjectId: "s", subjectName: "", subjectCode: "", branch, sectionId, sectionName: sectionId, facultyId: "f", facultyName: "" });
+    expect([...sectionCountsByBranch([row(cse, "a"), row(cse, "b"), row(cse, "a"), row(eee, "c")], "s")]).toEqual([[cse, 2], [eee, 1]]);
   });
 });

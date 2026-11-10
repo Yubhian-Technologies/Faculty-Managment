@@ -289,9 +289,22 @@ export const questionTexts = (q: Pick<MidPaperQuestion, "text" | "subParts" | "o
   [q.text, ...(q.subParts ?? []).map((s) => s.text)].filter((t) => t.trim());
 
 /** The parts of a pattern as they shape a paper (what "the pattern changed" compares - not who saved it or when). */
+/**
+ * The Exam Cell's current part names (Name + Heading) on a paper's own copy of the pattern, matched by part id. Names
+ * are wording only - they follow the Exam Cell on every paper not yet printed, with nothing for the setter to do.
+ */
+export function withCurrentNames<P extends Pick<MidPaperPattern, "parts">>(own: P, current: Pick<MidPaperPattern, "parts"> | null | undefined): P {
+  if (!current) return own;
+  return { ...own, parts: own.parts.map((p) => {
+    const c = current.parts.find((x) => x.id === p.id);
+    return c ? { ...p, label: c.label, title: c.title } : p;
+  }) };
+}
+
+/** What a pattern change means for papers already started - names (label / title) left out: they follow by themselves. */
 export const patternShape = (pat: Pick<MidPaperPattern, "parts" | "setsPerFaculty" | "durationMinutes">) => JSON.stringify({
   sets: pat.setsPerFaculty, minutes: pat.durationMinutes,
-  parts: pat.parts.map((p) => ({ id: p.id, label: p.label, title: p.title, flexible: !!p.flexible, kind: p.kind, perUnit: p.perUnit ?? 0, maxMarks: p.maxMarks ?? 0,
+  parts: pat.parts.map((p) => ({ id: p.id, flexible: !!p.flexible, kind: p.kind, perUnit: p.perUnit ?? 0, maxMarks: p.maxMarks ?? 0,
     marksEach: p.marksEach, choice: p.choice, options: p.options ?? 0, maxSubParts: p.maxSubParts ?? 0, questions: p.perUnit || p.flexible ? 0 : p.questions })),
 });
 
