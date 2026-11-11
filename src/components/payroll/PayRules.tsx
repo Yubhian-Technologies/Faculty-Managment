@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/useToast";
-import type { PayDeduction, PayEarning, PayrollSettings } from "@/types/payroll";
+import type { PayDeduction, PayEarning, PayrollSettings, PfRuleChange } from "@/types/payroll";
 import { collegeQs, payrollFetch, selectClass } from "./payrollClient";
 
 // Pay parts (earnings) and deduction rules of a college. Accounts edit; the College Office reads.
@@ -85,7 +85,7 @@ export function PayRules({ collegeId }: { collegeId?: string }) {
               if (!kind) return;
               const base = { id: "", label: "", active: true };
               const d: PayDeduction = kind === "FLAT" ? { kind, ...base, amount: 0 } : kind === "SLAB" ? { kind, ...base, slabs: [{ upTo: null, amount: 0 }] }
-                : kind === "PF" ? { kind, ...base, percent: 12, cap: 0 } : kind === "ESI" ? { kind, ...base, percent: 0.75, wageLimit: 21000, roundUp: true } : { kind, ...base };
+                : kind === "PF" ? { kind, ...base, percent: 12, cap: 3000, wageCeiling: 25000, epsCeiling: 15000 } : kind === "ESI" ? { kind, ...base, percent: 0.75, wageLimit: 21000, roundUp: true } : { kind, ...base };
               setS({ ...s, deductions: [...s.deductions, d] });
             }}>
               <option value="">Add deduction...</option>
@@ -101,12 +101,7 @@ export function PayRules({ collegeId }: { collegeId?: string }) {
               <p className="pb-1.5 text-xs text-muted-foreground">{KIND_LABEL[d.kind]}</p>
               <label className="ml-auto flex items-center gap-2 pb-1.5 text-sm"><Checkbox disabled={ro} checked={d.active} onCheckedChange={(c) => setD(i, { active: !!c })} />In use</label>
             </div>
-            {d.kind === "PF" && (
-              <div className="mt-2 flex flex-wrap gap-3">
-                <div className="space-y-1"><Label className="text-xs">Percent of PF wage</Label><Input disabled={ro} inputMode="decimal" value={d.percent} onChange={(ev) => setD(i, { percent: num(ev.target.value) })} className="h-8 w-24" /></div>
-                <div className="space-y-1"><Label className="text-xs">Cap (Rs.)</Label><Input disabled={ro} inputMode="numeric" value={d.cap} onChange={(ev) => setD(i, { cap: num(ev.target.value) })} className="h-8 w-28" /></div>
-              </div>
-            )}
+            {d.kind === "PF" && <PfRuleFields d={d} ro={ro} onChange={(patch) => setD(i, patch)} />}
             {d.kind === "ESI" && (
               <div className="mt-2 flex flex-wrap items-end gap-3">
                 <div className="space-y-1"><Label className="text-xs">Percent of ESI wage</Label><Input disabled={ro} inputMode="decimal" value={d.percent} onChange={(ev) => setD(i, { percent: num(ev.target.value) })} className="h-8 w-24" /></div>
@@ -165,3 +160,47 @@ export function PayRules({ collegeId }: { collegeId?: string }) {
 }
 
 const rupeesOr = (v: number | null | undefined) => (typeof v === "number" ? `Rs. ${v.toLocaleString("en-IN")}` : "");
+
+// PF: percent of the PF wage, counted up to the wage ceiling (the most PF a month = percent x ceiling), plus the
+// pension (EPS) ceiling for the EPFO return. A government change is added as a rule from a month on - months
+// before it keep the earlier rule, so a released or re-worked month is never priced with the wrong one.
+type PfDeduction = Extract<PayDeduction, { kind: "PF" }>;
+function PfRuleFields({ d, ro, onChange }: { d: PfDeduction; ro: boolean; onChange: (patch: Partial<PfDeduction>) => void }) {
+  const ceiling = d.wageCeiling ?? (d.percent > 0 ? Math.round((d.cap * 100) / d.percent) : 0);
+  const eps = d.epsCeiling ?? 15000;
+  const max = (r: { percent: number; wageCeiling: number }) => Math.round((r.wageCeiling * r.percent) / 100);
+  const changes = d.changes ?? [];
+  const setBase = (patch: Partial<{ percent: number; wageCeiling: number; epsCeiling: number }>) => {
+    const next = { percent: d.percent, wageCeiling: ceiling, epsCeiling: eps, ...patch };
+    onChange({ ...next, cap: max(next) });
+  };
+  const setChange = (k: number, patch: Partial<PfRuleChange>) => onChange({ changes: changes.map((c, j) => (j === k ? { ...c, ...patch } : c)) });
+  const now = new Date();
+  const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  return (
+    <div className="mt-2 space-y-3">
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="space-y-1"><Label className="text-xs">{changes.length ? "Before the first change: percent" : "Percent of PF wage"}</Label><Input disabled={ro} inputMode="decimal" value={d.percent} onChange={(ev) => setBase({ percent: num(ev.target.value) })} className="h-8 w-24" /></div>
+        <div className="space-y-1"><Label className="text-xs">PF wage ceiling (Rs.)</Label><Input disabled={ro} inputMode="numeric" value={ceiling} onChange={(ev) => setBase({ wageCeiling: num(ev.target.value) })} className="h-8 w-28" /></div>
+        <div className="space-y-1"><Label className="text-xs">Pension (EPS) wage ceiling (Rs.)</Label><Input disabled={ro} inputMode="numeric" value={eps} onChange={(ev) => setBase({ epsCeiling: num(ev.target.value) })} className="h-8 w-28" /></div>
+        <p className="pb-1.5 text-xs text-muted-foreground">Most PF a month: Rs. {max({ percent: d.percent, wageCeiling: ceiling }).toLocaleString("en-IN")}</p>
+      </div>
+      {changes.map((c, k) => (
+        <div key={k} className="flex flex-wrap items-end gap-3 rounded-md bg-muted/40 p-2">
+          <div className="space-y-1"><Label className="text-xs">From month</Label><Input disabled={ro} type="month" value={c.from} onChange={(ev) => setChange(k, { from: ev.target.value })} className="h-8 w-40" /></div>
+          <div className="space-y-1"><Label className="text-xs">Percent</Label><Input disabled={ro} inputMode="decimal" value={c.percent} onChange={(ev) => setChange(k, { percent: num(ev.target.value) })} className="h-8 w-20" /></div>
+          <div className="space-y-1"><Label className="text-xs">PF wage ceiling</Label><Input disabled={ro} inputMode="numeric" value={c.wageCeiling} onChange={(ev) => setChange(k, { wageCeiling: num(ev.target.value) })} className="h-8 w-28" /></div>
+          <div className="space-y-1"><Label className="text-xs">EPS ceiling</Label><Input disabled={ro} inputMode="numeric" value={c.epsCeiling} onChange={(ev) => setChange(k, { epsCeiling: num(ev.target.value) })} className="h-8 w-28" /></div>
+          <p className="pb-1.5 text-xs text-muted-foreground">Most PF: Rs. {max(c).toLocaleString("en-IN")}</p>
+          {!ro && <Button type="button" variant="ghost" size="sm" className="text-red-600" onClick={() => onChange({ changes: changes.filter((_, j) => j !== k) })}>Remove</Button>}
+        </div>
+      ))}
+      {!ro && (
+        <Button type="button" variant="outline" size="sm" onClick={() => onChange({ changes: [...changes, { from: thisMonth, percent: d.percent, wageCeiling: ceiling, epsCeiling: eps }] })}>
+          <Plus className="mr-1 h-4 w-4" />PF rule changes from a month
+        </Button>
+      )}
+      <p className="text-xs text-muted-foreground">Each month uses the latest rule starting on or before it. A month already prepared picks up a change on Recalculate; released months never change.</p>
+    </div>
+  );
+}

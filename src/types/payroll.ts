@@ -40,10 +40,15 @@ export interface PayEarning {
   active: boolean;              // retired parts stay for old months, never deleted
 }
 
+export interface PfRuleChange { from: string; percent: number; wageCeiling: number; epsCeiling: number }   // from = YYYY-MM
+
 export interface PtSlab { upTo: number | null; amount: number }   // null = and above
 
 export type PayDeduction =
-  | { kind: "PF"; id: string; label: string; active: boolean; percent: number; cap: number }
+  // PF = percent of the earned PF wage, the wage counted only up to `wageCeiling` (cap = the most PF in a month,
+  // worked out from the two). `epsCeiling` = the pension (EPS) wage ceiling for the EPFO return. A rule change
+  // from a month on goes in `changes` (that month and later use it); the plain fields are the rule before the first.
+  | { kind: "PF"; id: string; label: string; active: boolean; percent: number; cap: number; wageCeiling?: number; epsCeiling?: number; changes?: PfRuleChange[] }
   | { kind: "SLAB"; id: string; label: string; active: boolean; slabs: PtSlab[] }
   | { kind: "ESI"; id: string; label: string; active: boolean; percent: number; wageLimit: number; roundUp: boolean }
   | { kind: "FLAT"; id: string; label: string; active: boolean; amount: number }

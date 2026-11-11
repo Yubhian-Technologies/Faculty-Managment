@@ -3,7 +3,7 @@ import { istDateKey } from "@/lib/attendance/istTime";
 import type { EmployeePay, PayrollSettings, PayrollTaxProfile, PayrollTaxRules } from "@/types/payroll";
 import { computeLine } from "./calc";
 import { lineTax, monthFigures, priorFigures, type PersonTaxContext, type TaxFigures } from "./lineTax";
-import { revisionFor } from "./rules";
+import { revisionFor, settingsForMonth } from "./rules";
 import { financialYear } from "./run";
 import { annualTax, emptyTaxProfile } from "./tax";
 import { payrollRefs, type PayEmployee } from "./server";
@@ -88,7 +88,7 @@ export function estimateMonth(fy: string): string {
 export function estimatePerson(pay: EmployeePay | undefined, month: string, settings: PayrollSettings, ctx: PersonTaxContext, lastWorkingDate?: string) {
   const rev = pay ? revisionFor(pay.revisions, month) : null;
   if (!rev) return null;
-  const result = computeLine({ settings, amounts: rev.amounts, exempt: rev.exempt, monthDays: 30, payDays: 30 });
+  const result = computeLine({ settings: settingsForMonth(settings, month), amounts: rev.amounts, exempt: rev.exempt, monthDays: 30, payDays: 30 });
   const t = lineTax({ amounts: rev.amounts, exempt: rev.exempt, result, lastWorkingDate }, month, settings, ctx);
   const breakdown = ctx.rules ? annualTax(ctx.profile.regime, t.year, ctx.profile, ctx.rules) : null;
   const other = ctx.rules ? annualTax(ctx.profile.regime === "NEW" ? "OLD" : "NEW", t.year, ctx.profile, ctx.rules) : null;

@@ -6,7 +6,7 @@ import type { LeaveRequest } from "@/types/leave";
 import type { EmployeePay, PayrollLine, PayrollRun, PayrollSettings, PayrollTotals, SalaryAdvance } from "@/types/payroll";
 import { advanceDues, allocateRecovery, balanceBefore } from "./advance";
 import { employedInMonth, monthBounds, payDaysFor } from "./lop";
-import { revisionFor } from "./rules";
+import { revisionFor, settingsForMonth } from "./rules";
 import { financialYear, runTotals } from "./run";
 import { priceWithTax } from "./lineTax";
 import { loadTaxContexts } from "./taxServer";
@@ -79,7 +79,8 @@ async function loadMonthInputs(db: Firestore, collegeId: string, month: string):
     absencesByUid.set(a.facultyId, [...(absencesByUid.get(a.facultyId) ?? []), { date: a.dateKey, half: a.status === "HALF_DAY" }]);
   }
   return {
-    settings, employees,
+    // The month's own PF rule (a change from a month on applies to that month and later).
+    settings: settingsForMonth(settings, month), employees,
     pays: new Map(paySnap.docs.map((d) => [d.id, d.data() as EmployeePay])),
     leaveByUid, holidayLeaveKeys, holidayIso: new Set([...holidayLeaveKeys].map(isoFromLeaveKey)), absencesByUid, advancesByKey,
   };
