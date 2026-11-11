@@ -5,7 +5,7 @@ import { isMidBankSubject } from "@/lib/midBank/sections";
 import { loadSyllabus, syllabusRoleOf } from "@/lib/subjects/syllabusServer";
 import type { CeaPlan, CeaSettings, PaperPartDef, Subject } from "@/types";
 import { ceaPart } from "./paper";
-import { CeaRuleError, DEFAULT_CEA_PAPER, midOf } from "./rules";
+import { CeaRuleError, midOf } from "./rules";
 
 // Server side of CEA: where it lives, which subjects it covers and who may plan them.
 // Settings: Exam Cell (per course + regulation). Plan: the HOD of the subject's Subject Department (as for the
@@ -98,7 +98,7 @@ export async function ceaPartForMid(db: Db, collegeId: string, subject: Subject,
   const plan = (await ceaRefs(db, collegeId).plans.doc(subject.id).get()).data() as CeaPlan | undefined;
   if (!plan) return { part: null, issue: `The Subject Department hasn't made the CEA plan for ${subject.code} yet (HOD > CEA) - it says which unit's CEA paper goes with this Mid.` };
   const unit = plan.units.find((u) => midOf(u.when) === midNumber);
-  return { part: unit ? ceaPart({ paper: settings.paper ?? DEFAULT_CEA_PAPER, paperMinutes: settings.paperMinutes }, unit.unit) : null };
+  return { part: unit ? ceaPart({ unitMarks: settings.unitMarks, paperMinutes: settings.paperMinutes }, unit.unit) : null };
 }
 
 /** Mids whose paper the Exam Cell already printed (finalized) for this subject - their CEA unit can't change any more. */

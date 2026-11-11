@@ -54,8 +54,8 @@ export function expandPattern<P extends Pick<MidPaperPattern, "parts">>(pat: P, 
   }) };
 }
 /** The unit a per-unit part's question is for (its laid-out order; older copies: `perUnit` per unit). */
-export const unitOfQuestion = (p: Pick<PaperPartDef, "perUnit" | "unitLayout">, units: number[], no: number): number | undefined =>
-  p.unitLayout ? p.unitLayout[no - 1] : p.perUnit ? units[Math.floor((no - 1) / p.perUnit)] : undefined;
+export const unitOfQuestion = (p: Pick<PaperPartDef, "perUnit" | "unitLayout"> & Partial<Pick<PaperPartDef, "cea">>, units: number[], no: number): number | undefined =>
+  p.cea ? p.cea.unit : p.unitLayout ? p.unitLayout[no - 1] : p.perUnit ? units[Math.floor((no - 1) / p.perUnit)] : undefined;
 export function choiceText(p: Pick<PaperPartDef, "questions" | "choice"> & Partial<Pick<PaperPartDef, "flexible">>, written?: number): string {
   const n = p.flexible ? written : p.questions;
   if (p.choice.kind === "ANY") return n ? `Answer any ${p.choice.answer} of the ${n} questions` : `Answer any ${p.choice.answer} questions`;

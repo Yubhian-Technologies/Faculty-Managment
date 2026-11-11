@@ -11,21 +11,15 @@ export const DEFAULT_CEA_TYPES = [
 
 export class CeaRuleError extends Error {}
 
-/** 5 short questions x 2 marks, answer all = 10. */
-export const DEFAULT_CEA_PAPER: CeaSettings["paper"] = { kind: "SHORT", questions: 5, marksEach: 2, answer: null };
-const PAPER_KINDS = ["MCQ", "FILL_BLANK", "SHORT", "DESCRIPTIVE"] as const;
-/** Marks a CEA paper counts: questions answered x marks each. */
-export const ceaPaperMax = (p: CeaSettings["paper"]) => (p.answer ? Math.min(p.answer, p.questions) : p.questions) * p.marksEach;
-
 export const ceaSettingsId = (courseKey: string, regulation: string) => `${courseKey}__${regulation}`.replace(/[/\s]+/g, "-").slice(0, 300);
 
 export function defaultCeaSettings(courseKey: string, courseName: string, regulation: string): CeaSettings {
-  return { id: ceaSettingsId(courseKey, regulation), courseKey, courseName, regulation, enabled: true, unitMarks: 10, types: DEFAULT_CEA_TYPES.map((t) => ({ ...t })), paperMinutes: 20, paper: { ...DEFAULT_CEA_PAPER }, version: 0 };
+  return { id: ceaSettingsId(courseKey, regulation), courseKey, courseName, regulation, enabled: true, unitMarks: 10, types: DEFAULT_CEA_TYPES.map((t) => ({ ...t })), paperMinutes: 20, version: 0 };
 }
 
 const int = (v: unknown) => (Number.isFinite(Number(v)) ? Math.round(Number(v)) : NaN);
 
-export function cleanCeaSettings(raw: unknown): Pick<CeaSettings, "courseKey" | "courseName" | "regulation" | "enabled" | "unitMarks" | "types" | "paperMinutes" | "paper"> {
+export function cleanCeaSettings(raw: unknown): Pick<CeaSettings, "courseKey" | "courseName" | "regulation" | "enabled" | "unitMarks" | "types" | "paperMinutes"> {
   const b = (raw ?? {}) as Partial<CeaSettings>;
   const courseKey = String(b.courseKey ?? "").trim();
   const courseName = String(b.courseName ?? "").trim();
@@ -47,16 +41,7 @@ export function cleanCeaSettings(raw: unknown): Pick<CeaSettings, "courseKey" | 
   });
   if (!seen.has(WRITTEN)) types.unshift({ id: WRITTEN, label: "Written test" });
   if (types.length > 15) throw new CeaRuleError("At most 15 assessment types");
-  const pr = (b.paper ?? DEFAULT_CEA_PAPER) as Partial<CeaSettings["paper"]>;
-  const kind = PAPER_KINDS.find((k) => k === pr.kind);
-  const questions = int(pr.questions), marksEach = int(pr.marksEach);
-  const answer = pr.answer === null || pr.answer === undefined || (pr.answer as unknown) === "" || Number(pr.answer) === 0 ? null : int(pr.answer);
-  if (!kind) throw new CeaRuleError("Pick the kind of questions on a CEA paper");
-  if (!(questions >= 1 && questions <= 40) || !(marksEach >= 1 && marksEach <= 100)) throw new CeaRuleError("A CEA paper needs 1-40 questions of at least 1 mark");
-  if (answer !== null && !(answer >= 1 && answer < questions)) throw new CeaRuleError('"Answer any" must be fewer than the questions');
-  const paper = { kind, questions, marksEach, answer };
-  if (ceaPaperMax(paper) !== unitMarks) throw new CeaRuleError(`The CEA paper adds up to ${ceaPaperMax(paper)} - it must be the unit's ${unitMarks} marks`);
-  return { courseKey, courseName, regulation, enabled: b.enabled !== false, unitMarks, types, paperMinutes, paper };
+  return { courseKey, courseName, regulation, enabled: b.enabled !== false, unitMarks, types, paperMinutes };
 }
 
 export const midOf = (when: CeaWhen): number | null => (when.startsWith("MID") ? Number(when.slice(3)) || null : null);
