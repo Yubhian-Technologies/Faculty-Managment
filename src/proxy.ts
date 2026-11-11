@@ -52,51 +52,54 @@ const LEAVE_ADJUSTMENTS_PATH = "/leave";
 // any college role, the student's mentor or a named person, so every college staff role reaches it; the API
 // decides what each one sees (only requests waiting on them, the register / setup for their roles).
 const CERTIFICATES_PATH = "/certificates";
+// /payslips: a faculty / staff member's own payslips and tax statement - every college staff role; the API
+// only ever returns the signed-in person's own (found from their uid).
+const PAYSLIPS_PATH = "/payslips";
 
 // Per-role *own* (and explicitly-shared) path prefixes. Inherited lower-level
 // dashboard paths are added on top of these by allowedPathsForRole().
 const ROLE_PATH_MAP: Record<string, string[]> = {
   SUPER_ADMIN: ["/super-admin", PANEL_INTERVIEWS_PATH, EVALUATION_PATH],
   MANAGEMENT: ["/management"],
-  WEBMASTER: ["/webmaster", LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH],
+  WEBMASTER: ["/webmaster", LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH, PAYSLIPS_PATH],
   ADMINISTRATION: ["/administration", "/location-staff-admin", "/location-dept-head"],
   HR_ADMIN: ["/hr-admin"],
   ADMIN_OFFICE: ["/admin-office"],
   LOCATION_STAFF_ADMIN: ["/location-staff-admin", "/location-dept-head"],
-  PLACEMENT_DEPT: ["/placement-dept", LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH],
-  LIBRARY: ["/library", LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH],
-  HOSTEL: ["/hostel", LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH],
-  PD: ["/pd", LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH],
-  EXAM_CELL: ["/exam-cell", LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH],
+  PLACEMENT_DEPT: ["/placement-dept", LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH, PAYSLIPS_PATH],
+  LIBRARY: ["/library", LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH, PAYSLIPS_PATH],
+  HOSTEL: ["/hostel", LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH, PAYSLIPS_PATH],
+  PD: ["/pd", LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH, PAYSLIPS_PATH],
+  EXAM_CELL: ["/exam-cell", LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH, PAYSLIPS_PATH],
   LOCATION_DEPT_HEAD: ["/location-dept-head"],
-  PRINCIPAL: ["/principal", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH, LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH],
+  PRINCIPAL: ["/principal", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH, LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH, PAYSLIPS_PATH],
   // Vice Principal mirrors Principal's authority (see AGENTS.md) - full access
   // to /principal/* alongside its own /vice-principal home.
-  VICE_PRINCIPAL: ["/vice-principal", "/principal", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH, LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH],
+  VICE_PRINCIPAL: ["/vice-principal", "/principal", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH, LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH, PAYSLIPS_PATH],
   // College Admin has its own dashboard under /college-admin (its pages are the Principal's, served at
   // this prefix by next.config.ts rewrites, plus the R&D modules at /college-admin/r-and-d). Its role is
   // still normalized to PRINCIPAL for auth (src/app/api/auth/session/route.ts, src/hooks/useAuth.ts), so
   // this entry is reached through the cookie's realRole - see the heldRoles line below. "/principal"
   // stays reachable so a link inside a shared page never dead-ends; the dashboard layout moves such a
   // visit back under /college-admin.
-  COLLEGE_ADMIN: ["/college-admin", "/principal", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH, LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH],
+  COLLEGE_ADMIN: ["/college-admin", "/principal", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH, LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH, PAYSLIPS_PATH],
   // Director mirrors Principal's authority exactly, same as College Admin
   // above - normalized to PRINCIPAL for auth (api/auth/session, useAuth.ts).
-  DIRECTOR: ["/principal", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH, LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH],
-  HOD: ["/hod", "/coordinator", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH, LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH],
+  DIRECTOR: ["/principal", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH, LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH, PAYSLIPS_PATH],
+  HOD: ["/hod", "/coordinator", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH, LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH, PAYSLIPS_PATH],
   // Normalized to HOD before the cookie is written (api/auth/session), so
   // this is only reached by a session issued before that existed - same paths.
-  DEPARTMENT_OFFICE: ["/hod", "/coordinator", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH, LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH],
-  COLLEGE_OFFICE: ["/college-office", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH, LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH],
-  COLLEGE_STAFF: ["/college-staff", LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH],
-  ACADEMICS: ["/academics", LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH],
-  IQAC_COORDINATOR: ["/iqac-coordinator", LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH],
-  T_AND_P: ["/t-and-p", LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH],
-  R_AND_D: ["/r-and-d", LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH],
+  DEPARTMENT_OFFICE: ["/hod", "/coordinator", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH, LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH, PAYSLIPS_PATH],
+  COLLEGE_OFFICE: ["/college-office", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH, LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH, PAYSLIPS_PATH],
+  COLLEGE_STAFF: ["/college-staff", LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH, PAYSLIPS_PATH],
+  ACADEMICS: ["/academics", LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH, PAYSLIPS_PATH],
+  IQAC_COORDINATOR: ["/iqac-coordinator", LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH, PAYSLIPS_PATH],
+  T_AND_P: ["/t-and-p", LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH, PAYSLIPS_PATH],
+  R_AND_D: ["/r-and-d", LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH, PAYSLIPS_PATH],
   RND_COORDINATOR: ["/rnd-coordinator"],
-  PANEL_MEMBER: ["/panel", "/coordinator", EVALUATION_PATH, LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH],
+  PANEL_MEMBER: ["/panel", "/coordinator", EVALUATION_PATH, LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH, PAYSLIPS_PATH],
   ACCOUNTS: ["/accounts", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH, LEAVE_ADJUSTMENTS_PATH],
-  COLLEGE_ACCOUNTS: ["/college-accounts", CANDIDATE_PROFILE_PATH, CERTIFICATES_PATH],
+  COLLEGE_ACCOUNTS: ["/college-accounts", CANDIDATE_PROFILE_PATH, CERTIFICATES_PATH, PAYSLIPS_PATH],
   FINANCE: ["/finance", LEAVE_ADJUSTMENTS_PATH],
   PURCHASE_DEPT: ["/purchase", LEAVE_ADJUSTMENTS_PATH],
   CLASS_LEADER: ["/class-leader"],
