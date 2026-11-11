@@ -159,11 +159,29 @@ function computeMonthSummary(
     };
   }
 
+  const otherDays = allApproved.filter((r) => r.isOtherRequest).reduce((s, r) => s + daysInMonth(r), 0);
+  const lopDays = leaveLopDaysInMonth(allApproved, holidayDates, year, month, asOf).total;
+
+  return { types, lopDays, otherDays };
+}
+
+// Loss of Pay days of one month, by source - the single rule shared by the leave register above and
+// payroll (lib/payroll/lop.ts), so the two can never disagree. Pure: takes the person's APPROVED requests.
+export function leaveLopDaysInMonth(
+  allApproved: LeaveRequest[],
+  holidayDates: Set<string>,
+  year: number,
+  month: number, // 1-12
+  asOf: Date = new Date()
+): { standard: number; otherUnpaid: number; unprovenOD: number; total: number } {
+  const approved = allApproved.filter((r) => r.leaveTypeCode);
+  const monthStart = new Date(year, month - 1, 1);
+  const monthEndExclusive = new Date(year, month, 1);
+  const daysInMonth = (r: LeaveRequest) => daysWithinWindow(r, monthStart, monthEndExclusive, holidayDates);
   const standardLopDays = approved
     .reduce((s, r) => s + (r.lopDays ?? 0) * shareOfRequest(r, monthStart, monthEndExclusive, holidayDates), 0);
 
   const otherRequests = allApproved.filter((r) => r.isOtherRequest);
-  const otherDays = otherRequests.reduce((s, r) => s + daysInMonth(r), 0);
   // An "Other" request the HOD tagged unpaid (isPaidLeave: false) when
   // forwarding it - see types/leave.ts - is Loss of Pay by definition, so
   // those days count toward LOP same as a standard type's balance overflow,
@@ -179,9 +197,7 @@ function computeMonthSummary(
   // swept in. Note these days still count as *taken* in the OD column above -
   // LOP has always been a parallel tally, never a deduction from taken.
   const odLopDays = unprovenODLopDays(approved, daysInMonth, asOf);
-  const lopDays = standardLopDays + otherLopDays + odLopDays;
-
-  return { types, lopDays, otherDays };
+  return { standard: standardLopDays, otherUnpaid: otherLopDays, unprovenOD: odLopDays, total: standardLopDays + otherLopDays + odLopDays };
 }
 
 // Fetched once and reused by both computeMonthlyLeaveSummary (one month) and

@@ -41,10 +41,13 @@ export async function livePaperLayout(db: Db, collegeId: string, bank: import("@
   ]);
   if (!pattern) return null;
   const setup = paperSetupIssues(subject, pattern, outcomes, outcomeSwitchesOf(bank), { midNumber: bank.midNumber, rules, exception, midCount: settings.midCount });
-  const expanded = expandPattern(pattern, setup.units, setup.shared);
+  const { ceaPartForMid } = await import("@/lib/cea/server");
+  const { withCeaPart } = await import("@/lib/cea/paper");
+  const cea = await ceaPartForMid(db, collegeId, subject, bank.midNumber);
+  const expanded = withCeaPart(expandPattern(pattern, setup.units, setup.shared), cea.part);
   const layout = (p: MidPaperPattern) => JSON.stringify(p.parts.map((x) => x.unitLayout ?? x.questions));
   const changed = patternShape(expanded) !== patternShape(bank.pattern) || layout(expanded) !== layout(bank.pattern);
-  return { pattern: expanded, units: setup.units, changed, issues: setup.issues };
+  return { pattern: expanded, units: setup.units, changed, issues: cea.issue ? [...setup.issues, { message: cea.issue }] : setup.issues };
 }
 
 const outcomeSwitchesOf = (bank: import("@/types").MidQuestionBank) => ({

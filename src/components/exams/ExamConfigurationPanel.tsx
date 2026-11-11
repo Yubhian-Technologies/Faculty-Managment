@@ -30,6 +30,7 @@ interface ComponentForm {
   isActive: boolean;
   /** Marks from Mid N's question paper (question by question), or none = typed as one number. */
   midNumber?: number;
+  cea?: boolean;
 }
 
 function emptyComponent(): ComponentForm {
@@ -202,7 +203,7 @@ function ExamCellConfigureForm({ embedded }: { embedded: boolean }) {
           setComponents(
             [...cfg.components]
               .sort((a, b) => a.order - b.order)
-              .map((c) => ({ id: c.id, name: c.name, maxMarks: String(c.maxMarks), description: c.description ?? "", isActive: c.isActive, ...(c.midNumber ? { midNumber: c.midNumber } : {}) }))
+              .map((c) => ({ id: c.id, name: c.name, maxMarks: String(c.maxMarks), description: c.description ?? "", isActive: c.isActive, ...(c.midNumber ? { midNumber: c.midNumber } : {}), ...(c.cea ? { cea: true } : {}) }))
           );
         } else {
           setExistingConfig(null);
@@ -232,15 +233,15 @@ function ExamCellConfigureForm({ embedded }: { embedded: boolean }) {
   }, []);
 
   /** Saved configurations can still change where a component's marks come from (nothing else). */
-  async function linkMid(componentId: string, midNumber: number | null) {
-    updateComponent(componentId, { midNumber: midNumber ?? undefined });
+  async function linkMid(componentId: string, midNumber: number | null, cea = false) {
+    updateComponent(componentId, { midNumber: midNumber ?? undefined, cea: cea || undefined });
     if (!existingConfig) return;
     const res = await fetch("/api/college/exam-configurations", {
-      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: existingConfig.id, componentId, midNumber }),
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: existingConfig.id, componentId, midNumber, cea }),
     });
     const json = (await res.json().catch(() => ({}))) as { error?: string };
     if (!res.ok) toast({ variant: "destructive", title: json.error ?? "Couldn't save" });
-    else toast({ variant: "success", title: midNumber ? `Marks now come from the Mid ${midNumber} question paper` : "Marks are typed as one number" });
+    else toast({ variant: "success", title: cea ? "Marks now come from CEA (the units added up and scaled)" : midNumber ? `Marks now come from the Mid ${midNumber} question paper` : "Marks are typed as one number" });
   }
 
   function updateComponent(id: string, patch: Partial<ComponentForm>) {
@@ -295,6 +296,7 @@ function ExamCellConfigureForm({ embedded }: { embedded: boolean }) {
             order: i,
             isActive: c.isActive,
             ...(c.midNumber ? { midNumber: c.midNumber } : {}),
+            ...(c.cea ? { cea: true } : {}),
           })),
         }),
       });
@@ -452,11 +454,12 @@ function ExamCellConfigureForm({ embedded }: { embedded: boolean }) {
                         />
                       </div>
                       <div className="flex items-center gap-3">
-                        {paperMids > 0 && (
+                        {existingConfig && (
                           <select aria-label={`Where ${c.name || "this component"}'s marks come from`} className="h-9 rounded-md border border-input bg-background px-2 text-xs"
-                            value={c.midNumber ?? ""} onChange={(e) => void linkMid(c.id, e.target.value ? Number(e.target.value) : null)}>
+                            value={c.cea ? "CEA" : c.midNumber ?? ""} onChange={(e) => void (e.target.value === "CEA" ? linkMid(c.id, null, true) : linkMid(c.id, e.target.value ? Number(e.target.value) : null))}>
                             <option value="">Typed as one number</option>
                             {Array.from({ length: paperMids }, (_, i) => i + 1).map((n) => <option key={n} value={n}>From Mid {n} paper (per question)</option>)}
+                            <option value="CEA">From CEA (R26 units, added up)</option>
                           </select>
                         )}
                         <label className="flex items-center gap-1.5 text-xs text-muted-foreground">

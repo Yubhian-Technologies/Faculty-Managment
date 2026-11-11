@@ -207,7 +207,7 @@ export async function POST(request: Request) {
       ...(c.description?.trim() ? { description: c.description.trim() } : {}),
       order: c.order ?? i,
       isActive: c.isActive !== false,
-      ...(Number.isInteger(c.midNumber) && c.midNumber! >= 1 && c.midNumber! <= 10 ? { midNumber: c.midNumber } : {}),
+      ...(c.cea ? { cea: true } : Number.isInteger(c.midNumber) && c.midNumber! >= 1 && c.midNumber! <= 10 ? { midNumber: c.midNumber } : {}),
     }));
 
     // Written via .set() with a plain object (not typed against ExamConfiguration)
@@ -247,14 +247,14 @@ export async function POST(request: Request) {
 }
 
 /**
- * { id, componentId, midNumber | null } - a saved configuration's component takes its marks from Mid N's question
- * paper (question by question) or goes back to one typed number. Nothing else of a saved configuration changes,
+ * { id, componentId, midNumber | null, cea? } - a saved configuration's component takes its marks from Mid N's question
+ * paper (question by question), from CEA (the R26 unit marks, added up and scaled), or goes back to one typed number. Nothing else of a saved configuration changes,
  * and marks already entered stay as they are.
  */
 export async function PATCH(request: Request) {
   try {
     const session = await requireCollegeMember("EXAM_CELL", "SUPER_ADMIN");
-    const body = (await readJsonBody(request)) as { id?: string; componentId?: string; midNumber?: number | null };
+    const body = (await readJsonBody(request)) as { id?: string; componentId?: string; midNumber?: number | null; cea?: boolean };
     const mid = body.midNumber == null ? null : Number(body.midNumber);
     if (mid !== null && !(Number.isInteger(mid) && mid >= 1 && mid <= 10)) return NextResponse.json({ error: "Pick a Mid" }, { status: 400 });
     const db = getAdminDb();
@@ -266,9 +266,11 @@ export async function PATCH(request: Request) {
       if (!comps.some((c) => c.id === body.componentId)) return "NO_COMPONENT";
       tx.update(ref, {
         components: comps.map((c) => {
+          if (body.cea === true && c.id !== body.componentId && c.cea) { const { cea: _x, ...rest } = c; void _x; return rest; }
           if (c.id !== body.componentId) return c;
-          const { midNumber: _old, ...rest } = c; void _old;
-          return mid ? { ...rest, midNumber: mid } : rest;
+          const { midNumber: _old, cea: _cea, ...rest } = c; void _old; void _cea;
+          // One CEA component per configuration.
+          return body.cea === true ? { ...rest, cea: true } : mid ? { ...rest, midNumber: mid } : rest;
         }),
         updatedAt: new Date(),
       });

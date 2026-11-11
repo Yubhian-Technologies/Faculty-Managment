@@ -63,18 +63,23 @@ const ALLOWED_GET_PATHS = new Set([
   "/api/college/notifications",
   "/api/college/settings/general",
   "/api/college/info",
+  // Their own payslips and tax statement (payroll) - found from the session's uid, never anyone else's.
+  "/api/college/payroll/my",
+  "/api/college/payroll/my/tax",
 ]);
 // One leave application by id (GET /api/leave/applications/<id>) - no deeper segments.
 const LEAVE_APPLICATION_BY_ID = /^\/api\/leave\/applications\/[^/]+$/;
+// One own payslip (GET /api/college/payroll/my/<YYYY-MM>).
+const OWN_PAYSLIP = /^\/api\/college\/payroll\/my\/\d{4}-\d{2}$/;
 
 export function isAllowedReadOnlyRequest(method: string | null | undefined, path: string | null | undefined): boolean {
   if (!isReadMethod(method) || !path) return false;
   const clean = path.length > 1 ? path.replace(/\/+$/, "") : path;
-  return ALLOWED_GET_PATHS.has(clean) || LEAVE_APPLICATION_BY_ID.test(clean);
+  return ALLOWED_GET_PATHS.has(clean) || LEAVE_APPLICATION_BY_ID.test(clean) || OWN_PAYSLIP.test(clean);
 }
 
 /** The panel pages (UI) a read-only person may open. The server is the authority; this only avoids a wall of failed calls. */
 export function isAllowedReadOnlyPage(pathname: string): boolean {
   if (/\/edit(\/|$)/.test(pathname) || pathname.startsWith("/panel/leave/apply")) return false;
-  return ["/panel/profile", "/panel/attendance", "/panel/leave"].some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  return ["/panel/profile", "/panel/attendance", "/panel/leave", "/payslips"].some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }

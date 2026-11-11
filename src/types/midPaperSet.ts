@@ -45,6 +45,12 @@ export interface PaperPartDef {
   options?: number;
   /** Descriptive: a question may be split into up to this many sub-parts (a), (b) ... whose marks add up. 1 = no split. */
   maxSubParts?: number;
+  /**
+   * A CEA paper (Continuous Evaluation, lib/cea/paper.ts): one unit's written test held in this Mid's sitting -
+   * printed as its OWN paper with its own time, never counted in the Mid's marks. Added to a paper set from the
+   * subject's CEA plan; the Mid's time is the pattern's minus `minutes`.
+   */
+  cea?: { unit: number; minutes: number };
 }
 
 export interface MidPaperPattern {

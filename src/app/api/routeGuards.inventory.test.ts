@@ -60,7 +60,7 @@ const EXEMPT = new Set([
 ]);
 
 // Calls that ARE a role guard (the require* family, plus the wrappers that call it).
-const GUARD_CALLS = /\b(requireSuperAdmin|requireManagement|requireRole|requireCollegeContext|requireCollegeMember|requireLocationMember|requireSeatManager|authenticate|hodContext|requirePaymentsManager)\s*\(/;
+const GUARD_CALLS = /\b(requireSuperAdmin|requireManagement|requireRole|requireCollegeContext|requireCollegeMember|requireLocationMember|requireSeatManager|authenticate|hodContext|requirePaymentsManager|requirePayrollAccounts|requirePayrollReader|requirePayrollActor|requirePayrollRunReader)\s*\(/;
 
 interface Handler { rel: string; method: string; guarded: boolean; roles: string[]; url: string }
 

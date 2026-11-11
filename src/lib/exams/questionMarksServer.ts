@@ -4,13 +4,15 @@ import { loadSubject, midBankRefs } from "@/lib/midBank/server";
 import { loadPlan } from "@/lib/midTimetable/server";
 import { loadPaperQuestions, patternForSubject } from "@/lib/midPapers/server";
 import { sheetFromPattern, type QuestionSheet } from "@/lib/exams/questionMarks";
+import { withoutCea } from "@/lib/cea/paper";
 
 type Db = FirebaseFirestore.Firestore;
 
 /**
  * The question sheet of each component linked to a Mid (ExamConfigComponent.midNumber), for a college that prepares
  * question papers: the paper the Exam Cell chose for this subject + branch in that Mid (same year), else the
- * course's paper pattern. A component without a sheet is entered as one number, as before.
+ * course's paper pattern. A component without a sheet is entered as one number, as before. A CEA paper printed
+ * in the same sitting (lib/cea/paper.ts) is never part of the Mid's sheet - its marks are the unit's CEA marks.
  */
 export async function questionSheetsFor(db: Db, collegeId: string, batch: Pick<InternalExamMarksBatch, "subjectId" | "department" | "year">, config: Pick<ExamConfiguration, "components">): Promise<Record<string, QuestionSheet>> {
   const linked = config.components.filter((c) => c.isActive && c.midNumber);
@@ -32,14 +34,14 @@ export async function questionSheetsFor(db: Db, collegeId: string, batch: Pick<I
     let sheet = null;
     if (choice?.final) {
       // Finalized (printed): exactly the paper the students wrote - the frozen copy, never the live paper.
-      sheet = sheetFromPattern(choice.final.pattern, "CHOSEN", { set: choice.final.setNo, questions: choice.final.questions });
+      sheet = sheetFromPattern(withoutCea(choice.final.pattern), "CHOSEN", { set: choice.final.setNo, questions: choice.final.questions });
       if (sheet) sheet = { ...sheet, paper: { choiceId: choice.id, date: choice.date } };
     } else if (choice) {
       const bank = await midBankRefs(db, collegeId).banks.doc(choice.bankId).get();
       const pattern = (bank.data() as MidQuestionBank | undefined)?.pattern ?? null;
       // A part the faculty built is laid out from the chosen paper's own questions.
       const questions = pattern?.parts.some((p) => p.flexible) ? await loadPaperQuestions(db, collegeId, choice.bankId) : [];
-      if (pattern) sheet = sheetFromPattern(pattern, "CHOSEN", { set: choice.setNo, questions });
+      if (pattern) sheet = sheetFromPattern(withoutCea(pattern), "CHOSEN", { set: choice.setNo, questions });
     }
     // No paper chosen yet: the course pattern, when it has no faculty-decides part (else typed as one number).
     if (!sheet && fallback) sheet = sheetFromPattern(fallback, "PATTERN");

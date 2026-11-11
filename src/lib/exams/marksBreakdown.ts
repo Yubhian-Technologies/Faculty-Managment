@@ -25,7 +25,7 @@ export function checkMarksBreakdown(input: { internalMaxMarks?: unknown; externa
       id: c.id || `c${i}_${Date.now().toString(36)}`, name: String(c.name).trim(), maxMarks: c.maxMarks!,
       ...(String(c.description ?? "").trim() ? { description: String(c.description).trim() } : {}),
       order: c.order ?? i, isActive: c.isActive !== false,
-      ...(Number.isInteger(c.midNumber) && c.midNumber! >= 1 && c.midNumber! <= 10 ? { midNumber: c.midNumber } : {}),
+      ...(c.cea ? { cea: true } : Number.isInteger(c.midNumber) && c.midNumber! >= 1 && c.midNumber! <= 10 ? { midNumber: c.midNumber } : {}),
     })),
   };
 }

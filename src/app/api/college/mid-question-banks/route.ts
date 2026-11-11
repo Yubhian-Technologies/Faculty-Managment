@@ -8,6 +8,8 @@ import { syllabusOutcomesId } from "@/lib/subjects/syllabus";
 import { loadMidSettings } from "@/lib/exams/midSettings";
 import { patternForSubject } from "@/lib/midPapers/server";
 import { expandPattern, paperProgress } from "@/lib/midPapers/pattern";
+import { ceaPartForMid } from "@/lib/cea/server";
+import { withCeaPart } from "@/lib/cea/paper";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -132,6 +134,9 @@ export async function POST(request: Request) {
     const setup = paperSetup ?? setupIssues(subject, d.midNumber, rules, outcomes, exception, sw);
     const { units } = setup;
     const issues = withSyllabus(setup.issues, { status: syllabus?.status ?? null, subjectDepartments });
+    // R26 Continuous Evaluation: the unit planned "with this Mid" adds its own CEA paper to the set.
+    const cea = papers ? await ceaPartForMid(db, session.collegeId, subject, d.midNumber) : { part: null };
+    if (cea.issue) issues.push({ code: "NO_CEA_PLAN", who: "SYLLABUS", message: cea.issue });
     const shared = paperSetup?.shared ?? [];
     if (issues.length > 0 || (papers ? !pattern : !rules)) return NextResponse.json({ error: issues[0]?.message ?? "Setup is incomplete", issues }, { status: 400 });
 
@@ -152,7 +157,7 @@ export async function POST(request: Request) {
       const unitStatus = unitStatuses(units, [], sw, settings.bloomLevels);
       // Papers shared among the setters by the HOD: this setter writes only theirs (e.g. Paper 2).
       const myShare = assignment?.setShare?.[me];
-      const myPattern = papers ? { ...expandPattern(pattern!, units, shared), ...(myShare?.length ? { sets: myShare } : {}) } : null;
+      const myPattern = papers ? { ...withCeaPart(expandPattern(pattern!, units, shared), cea.part), ...(myShare?.length ? { sets: myShare } : {}) } : null;
       const totals = papers ? paperProgress(myPattern!, []) : bankTotals(units, unitStatus);
       const data: Omit<MidQuestionBank, "id"> = {
         deadlineId: d.id, courseName: d.courseName, year: d.year, semester: d.semester, midNumber: d.midNumber,

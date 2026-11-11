@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { questionSheetsFor } from "@/lib/exams/questionMarksServer";
+import { ceaValuesForBatch } from "@/lib/cea/marksServer";
 import { cleanQuestionValues, paperTotal, questionMarksError, scaleToComponent } from "@/lib/exams/questionMarks";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -166,6 +167,9 @@ export async function PATCH(
         return { ...e, componentMarks: merged, ...(q ? { questionMarks: { ...(e.questionMarks ?? {}), ...q } } : {}) };
       });
     }
+    // R26 CEA: the component linked to CEA is worked out from the submitted CEA units - never typed.
+    const cea = await ceaValuesForBatch(db, session.collegeId, existing, config);
+    if (cea) entries = entries.map((e) => ({ ...e, componentMarks: { ...e.componentMarks, [cea.componentId]: cea.values.get(e.studentId) ?? null } }));
     const enteredCount = countEntered(entries, config);
 
     const now = new Date();

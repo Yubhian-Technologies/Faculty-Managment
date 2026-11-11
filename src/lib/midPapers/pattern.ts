@@ -26,7 +26,8 @@ export function answeredCount(p: Pick<PaperPartDef, "questions" | "choice">): nu
 }
 export const partMax = (p: Pick<PaperPartDef, "questions" | "choice" | "marksEach"> & Partial<Pick<PaperPartDef, "flexible" | "maxMarks">>) =>
   p.flexible ? p.maxMarks ?? 0 : answeredCount(p) * p.marksEach;
-export const patternMax = (pat: Pick<MidPaperPattern, "parts">) => pat.parts.reduce((n, p) => n + partMax(p), 0);
+/** The Mid paper's max marks (a CEA part - its own paper, lib/cea/paper.ts - is not counted). */
+export const patternMax = (pat: Pick<MidPaperPattern, "parts">) => pat.parts.reduce((n, p) => n + (p.cea ? 0 : partMax(p)), 0);
 
 /** What a part counts for in marks entry: a per-unit part its fixed max (the raw total scales to it), else its max. */
 export const countedMax = (p: PaperPartDef) => (p.perUnit && !p.flexible ? p.maxMarks ?? 0 : partMax(p));
@@ -324,6 +325,8 @@ export function remapQuestions(
     const np = newPat.parts.find((p) => p.id === q.partId);
     const op = oldPat.parts.find((p) => p.id === q.partId);
     if (!np || q.set > newPat.setsPerFaculty || !!np.flexible !== !!op?.flexible) { dropped.push(q.id); continue; }
+    // A CEA paper now for another unit (the Subject Department changed its plan): questions written for the old unit have no place.
+    if (np.cea && op?.cea && np.cea.unit !== op.cea.unit) { dropped.push(q.id); continue; }
     if (np.flexible) { moves.push({ from: q.id, to: q.id }); continue; }
     if (np.perUnit) {
       const unit = q.unit ?? (op ? unitOfQuestion(op, units, q.no) : undefined);
