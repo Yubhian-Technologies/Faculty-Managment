@@ -65,4 +65,25 @@ describe("salary sheet import", () => {
     expect(planPayImport(headers, [row(2, "SVECW0679", { "E.B": "1.5" })], employees, settings, current).rows[0].error).toMatch(/whole rupee/);
     expect(planPayImport(headers, [row(2, "SVECW0679", { "E.B": "1", PF: "maybe" })], employees, settings, current).rows[0].error).toMatch(/Y or N/);
   });
+
+  it("reads the monthly salary sheet as it is: worked-out columns skipped, amounts = applies, part-month rows refused", () => {
+    // The October sheet's own header row.
+    const sheet = ["S.No", "Emp Code", "EmpName", "Pay Days", "DEPT", "Gross_Actual", "E.B", "AGP", "DA", "HRA", "OA", "SA", "G. SAL", "PF", "PT", "ESI", "IT", "SWF", "Salary Adv.", "Total Ded", "Net Salary"];
+    const c = importColumns(sheet, settings);
+    expect(c.unknown).toEqual([]);
+    expect(c.sheet).toEqual({ payDays: "Pay Days", grossActual: "Gross_Actual" });
+    const r = (n: number, code: string, v: Record<string, string>) => ({ row: n, code, values: { "Emp Code": code, ...v } });
+    const plan = planPayImport(sheet, [
+      // Full month, no PF, PT 200, ESI 0 (over the limit): PF off; PT / ESI stay on their rules.
+      r(5, "SVECW0601", { "Pay Days": "31", Gross_Actual: "281000", "E.B": "164800", AGP: "10000", DA: "69920", HRA: "17480", OA: "15800", SA: "3000", PF: "0", PT: "200", ESI: "0", SWF: "30", IT: "45000" }),
+      // 20.5 days: the parts are the earned ones.
+      r(6, "SVECW0679", { "Pay Days": "20.5", Gross_Actual: "76000", "E.B": "13069", AGP: "3968", DA: "18740", HRA: "1703", OA: "12777", PF: "1500" }),
+      r(7, "X9", {}),
+      r(8, "", { EmpName: "Teaching Total" }),
+    ], employees.concat({ employeeKey: "STAFF_x9", employeeCode: "X9", name: "X9" }), settings, new Map());
+    expect(plan.skipped).toBe(1);
+    expect(plan.rows[0]).toMatchObject({ status: "NEW", grossActual: 281000, exempt: ["PF"] });
+    expect(plan.rows[1].error).toMatch(/Paid for part of the month \(Pay Days 20.5\)/);
+    expect(plan.rows[2].error).toMatch(/Not paid this month/);
+  });
 });

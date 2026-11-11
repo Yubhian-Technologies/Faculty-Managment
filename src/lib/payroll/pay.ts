@@ -65,33 +65,45 @@ export interface ImportPlanRow {
 
 const norm = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, "");
 
+// Columns of the monthly salary sheet that are worked out each month (or read elsewhere) - skipped when the sheet itself is uploaded.
+const SHEET_ONLY = new Set(["PAYDAYS", "GSAL", "GROSSSALARY", "TOTALDED", "TOTALDEDUCTIONS", "NETSALARY", "NETPAY", "NET", "IT", "TDS", "INCOMETAX", "SALARYADV", "SALARYADVANCE", "ADVANCE"]);
+
 /** Maps the file's headers to earning ids and exemptable deduction ids. Unknown headers are refused. */
 export function importColumns(headers: string[], settings: Pick<PayrollSettings, "earnings" | "deductions">) {
   const earnings = new Map<string, string>();
   const deductions = new Map<string, string>();
   const ignored = new Set(["EMPCODE", "EMPLOYEECODE", "EMPLOYEEID", "NAME", "EMPNAME", "EMPLOYEENAME", "SNO", "SLNO", "DEPT", "DEPARTMENT", "DESIGNATION", "GROSSACTUAL", "GROSS"]);
   const unknown: string[] = [];
+  let payDays: string | null = null;
+  let grossActualCol: string | null = null;
   for (const h of headers) {
     const n = norm(h);
+    if (n === "PAYDAYS") payDays = h;
+    if (n === "GROSSACTUAL") grossActualCol = h;
     if (!n || ignored.has(n)) continue;
     const e = settings.earnings.find((x) => norm(x.label) === n || x.id === n);
     if (e) { earnings.set(h, e.id); continue; }
     const d = exemptableDeductions(settings).find((x) => norm(x.label) === n || x.id === n);
     if (d) { deductions.set(h, d.id); continue; }
+    if (SHEET_ONLY.has(n)) continue;
     unknown.push(h);
   }
-  return { earnings, deductions, unknown };
+  // A "Pay Days" column = the monthly salary sheet itself: deduction columns hold amounts, not Y / N.
+  return { earnings, deductions, unknown, sheet: payDays ? { payDays, grossActual: grossActualCol } : null };
 }
 
 /**
  * Plans an import: each row is matched to a person by Emp Code (case-insensitive, within the college).
  * A blank amount is 0; a deduction column takes Y / N (blank = Y). Any error stops the whole import.
+ * The monthly salary sheet itself (a "Pay Days" column) is read too: its worked-out columns are skipped, a
+ * deduction amount > 0 = applies (PF / SWF 0 = not for this person), rows without an Emp Code are skipped, and a
+ * row paid for part of the month (parts != Gross_Actual) is refused - its fixed pay can't be read from it.
  */
 export function planPayImport(
   headers: string[], rows: ImportRow[], employees: ImportEmployee[],
   settings: Pick<PayrollSettings, "earnings" | "deductions">,
   current: Map<string, { amounts: Record<string, number>; exempt: string[] } | null>,
-): { rows: ImportPlanRow[]; unknownColumns: string[]; errors: number } {
+): { rows: ImportPlanRow[]; unknownColumns: string[]; errors: number; skipped: number } {
   const cols = importColumns(headers, settings);
   const byCode = new Map<string, ImportEmployee[]>();
   for (const e of employees) {
@@ -99,7 +111,10 @@ export function planPayImport(
     if (c) byCode.set(c, [...(byCode.get(c) ?? []), e]);
   }
   const seen = new Map<string, number>();
-  const out = rows.map((r): ImportPlanRow => {
+  const kindOf = new Map(settings.deductions.map((d) => [d.id, d.kind]));
+  // The monthly sheet carries totals, section headings and footnotes with no Emp Code - those rows are skipped.
+  const used = cols.sheet ? rows.filter((r) => r.code.trim()) : rows;
+  const out = used.map((r): ImportPlanRow => {
     const code = r.code.trim().toUpperCase();
     const fail = (error: string): ImportPlanRow => ({ row: r.row, code: r.code, status: "ERROR", error });
     if (!code) return fail("Emp Code is blank");
@@ -118,18 +133,35 @@ export function planPayImport(
       if (v > 0 && !settings.earnings.find((e) => e.id === id)?.active) return fail(`${h} is retired - leave it blank`);
       if (v > 0) amounts[id] = v;
     }
+    if (cols.sheet) {
+      // The sheet's parts are what was EARNED this month; only a full month gives the fixed pay.
+      const days = String(r.values[cols.sheet.payDays] ?? "").trim();
+      const full = cols.sheet.grossActual ? Number(String(r.values[cols.sheet.grossActual] ?? "").replace(/,/g, "").trim()) : NaN;
+      if (Number.isFinite(full) && full > 0 && grossActual(amounts) !== full) {
+        return fail(`Paid for part of the month (Pay Days ${days || "?"}): the parts add up to ${grossActual(amounts)}, not the Gross_Actual ${full} - type this person's full-month pay`);
+      }
+      if (grossActual(amounts) <= 0) return fail(`Not paid this month (Pay Days ${days || "0"}) - type this person's full-month pay`);
+    }
     if (grossActual(amounts) <= 0) return fail("No pay amounts");
     const exempt: string[] = [];
     for (const [h, id] of cols.deductions) {
-      const raw = String(r.values[h] ?? "").trim().toUpperCase();
+      const raw = String(r.values[h] ?? "").replace(/,/g, "").trim().toUpperCase();
       if (!raw || raw === "Y" || raw === "YES") continue;
-      if (raw === "N" || raw === "NO") exempt.push(id);
-      else return fail(`${h}: write Y or N`);
+      if (raw === "N" || raw === "NO") { exempt.push(id); continue; }
+      const amt = Number(raw);
+      if (cols.sheet && Number.isFinite(amt) && amt >= 0) {
+        // An amount: PF / flat ones (SWF) apply when charged, 0 = not for this person. ESI and the PT slab are
+        // decided by their own rules each month (wage limit, slab), so a 0 there never turns them off.
+        const kind = kindOf.get(id);
+        if (amt === 0 && (kind === "PF" || kind === "FLAT")) exempt.push(id);
+        continue;
+      }
+      return fail(`${h}: write Y or N`);
     }
     exempt.sort();
     const cur = current.get(emp.employeeKey);
     const status = !cur ? "NEW" : sameRevision(cur, { amounts, exempt }) ? "SAME" : "CHANGED";
     return { row: r.row, code: r.code, employeeKey: emp.employeeKey, name: emp.name, amounts, exempt, grossActual: grossActual(amounts), status };
   });
-  return { rows: out, unknownColumns: cols.unknown, errors: out.filter((r) => r.status === "ERROR").length + (cols.unknown.length ? 1 : 0) };
+  return { rows: out, unknownColumns: cols.unknown, errors: out.filter((r) => r.status === "ERROR").length + (cols.unknown.length ? 1 : 0), skipped: rows.length - used.length };
 }
