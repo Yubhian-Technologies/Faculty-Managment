@@ -94,7 +94,7 @@ export function IncomeTax({ collegeId }: { collegeId?: string }) {
       </CardContent></Card>
 
       {rulesOpen && <RulesDialog url={`/api/college/payroll/tax/rules${qs()}`} fy={fy} onClose={() => setRulesOpen(false)} onSaved={() => { setRulesOpen(false); load(); }} />}
-      {importing && <OpeningImport url={`/api/college/payroll/tax/import${qs()}`} fy={fy} people={d.rows} onClose={() => setImporting(false)} onDone={() => { setImporting(false); load(); }} />}
+      {importing && <OpeningImport url={`/api/college/payroll/tax/import${qs()}`} parseUrl={`/api/college/payroll/parse-excel${collegeQs(collegeId)}`} fy={fy} people={d.rows} onClose={() => setImporting(false)} onDone={() => { setImporting(false); load(); }} />}
       {editing && <ProfileDialog url={`/api/college/payroll/tax/profiles/${encodeURIComponent(editing.employeeKey)}${qs()}`} row={editing} fy={fy} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />}
       {statementOf && <StatementDialog url={`/api/college/payroll/tax/statement/${encodeURIComponent(statementOf.employeeKey)}${qs()}`} onClose={() => setStatementOf(null)} />}
     </div>
@@ -308,7 +308,7 @@ function StatementDialog({ url, onClose }: { url: string; onClose: () => void })
 
 type Plan = { rows: TaxImportPlanRow[]; unknownColumns: string[]; errors: number; applied: number };
 
-function OpeningImport({ url, fy, people, onClose, onDone }: { url: string; fy: string; people: Row[]; onClose: () => void; onDone: () => void }) {
+function OpeningImport({ url, parseUrl, fy, people, onClose, onDone }: { url: string; parseUrl: string; fy: string; people: Row[]; onClose: () => void; onDone: () => void }) {
   const [file, setFile] = useState<{ headers: string[]; rows: { row: number; code: string; values: Record<string, string> }[] } | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [busy, setBusy] = useState(false);
@@ -335,7 +335,7 @@ function OpeningImport({ url, fy, people, onClose, onDone }: { url: string; fy: 
     try {
       const lower = f.name.toLowerCase();
       if (lower.endsWith(".xls")) throw new Error("Save the file as .xlsx or .csv first");
-      const parsed = lower.endsWith(".csv") ? parseCSVWithRowNumbers(await readFileAsText(f)) : await parseExcelFileWithRowNumbers(f);
+      const parsed = lower.endsWith(".csv") ? parseCSVWithRowNumbers(await readFileAsText(f)) : await parseExcelFileWithRowNumbers(f, parseUrl);
       const headers = (parsed.rows[0] ?? []).map((h) => String(h ?? "").trim());
       const codeAt = headers.findIndex((h) => ["EMPCODE", "EMPLOYEECODE", "EMPLOYEEID"].includes(h.toUpperCase().replace(/[^A-Z]/g, "")));
       if (codeAt < 0) throw new Error('The file needs an "Emp Code" column');

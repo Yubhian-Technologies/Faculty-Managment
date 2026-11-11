@@ -19,10 +19,11 @@ export async function parseExcelFile(file: File): Promise<string[][]> {
 
 // parseExcelFile plus each row's real sheet row number (blank rows are
 // dropped, so position alone drifts from what Excel shows).
-export async function parseExcelFileWithRowNumbers(file: File): Promise<{ rows: string[][]; rowNumbers: number[] }> {
+// `endpoint`: a module whose users can't use the college-staff route (payroll: location Accounts) passes its own.
+export async function parseExcelFileWithRowNumbers(file: File, endpoint = "/api/college/parse-excel"): Promise<{ rows: string[][]; rowNumbers: number[] }> {
   const formData = new FormData();
   formData.append("file", file);
-  const res = await fetch("/api/college/parse-excel", { method: "POST", body: formData });
+  const res = await fetch(endpoint, { method: "POST", body: formData });
   const json = await res.json() as { rows?: string[][]; rowNumbers?: number[]; error?: string };
   if (!res.ok) throw new Error(json.error ?? "Failed to parse Excel file");
   const rows = json.rows ?? [];

@@ -63,7 +63,7 @@ export function PayImportDialog({ collegeId, settings, rows: people, onClose, on
     try {
       const lower = f.name.toLowerCase();
       if (lower.endsWith(".xls")) throw new Error("Save the file as .xlsx or .csv first");
-      const parsed = lower.endsWith(".csv") ? parseCSVWithRowNumbers(await readFileAsText(f)) : await parseExcelFileWithRowNumbers(f);
+      const parsed = lower.endsWith(".csv") ? parseCSVWithRowNumbers(await readFileAsText(f)) : await parseExcelFileWithRowNumbers(f, `/api/college/payroll/parse-excel${collegeQs(collegeId)}`);
       const headers = (parsed.rows[0] ?? []).map((h) => String(h ?? "").trim());
       const codeAt = headers.findIndex((h) => CODE_HEADERS.has(norm(h)));
       if (codeAt < 0) throw new Error('The file needs an "Emp Code" column');
