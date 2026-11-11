@@ -148,7 +148,7 @@ describe("updating a started paper to a newer pattern", () => {
     const newPat = { ...expandPattern({ parts: [{ ...B, perUnit: 2 }] }, [1, 2, 3], [3]), setsPerFaculty: 1 };
     expect((newPat.parts[0] as { unitLayout?: number[] }).unitLayout).toEqual([1, 1, 2, 2, 3]);
     const qs = [{ id: "1_B_1", set: 1, partId: "B", no: 1, unit: 1 }, { id: "1_B_2", set: 1, partId: "B", no: 2, unit: 2 }, { id: "1_B_3", set: 1, partId: "B", no: 3, unit: 3 }];
-    expect(remapQuestions(oldPat, newPat, qs, [1, 2, 3])).toEqual({ moves: [{ from: "1_B_1", to: "1_B_1" }, { from: "1_B_2", to: "1_B_3" }, { from: "1_B_3", to: "1_B_5" }], dropped: [] });
+    expect(remapQuestions(oldPat, newPat, qs, [1, 2, 3])).toEqual({ moves: [{ from: "1_B_1", to: "1_B_1" }, { from: "1_B_2", to: "1_B_3" }, { from: "1_B_3", to: "1_B_5" }], dropped: [], reasons: {} });
     // Back to 1 per unit: the second question of unit 1 has no place - refused, never lost.
     const two = [{ id: "1_B_1", set: 1, partId: "B", no: 1, unit: 1 }, { id: "1_B_2", set: 1, partId: "B", no: 2, unit: 1 }];
     expect(remapQuestions(newPat, oldPat, two, [1, 2, 3]).dropped).toEqual(["1_B_2"]);
