@@ -7,7 +7,7 @@ import { ALL_OUTCOMES_ON } from "./outcomeSwitches";
 // says who resolves it, so a faculty member is never left with a bare error.
 
 export interface SetupIssue {
-  code: "NO_RULES" | "NO_MID_IN_RULES" | "NO_OUTCOMES" | "UNITS_MISSING" | "MAPPING_MISSING" | "NO_PATTERN" | "NO_SYLLABUS";
+  code: "NO_RULES" | "NO_MID_IN_RULES" | "NO_OUTCOMES" | "UNITS_MISSING" | "MAPPING_MISSING" | "NO_PATTERN" | "NO_SYLLABUS" | "NO_CEA_PLAN";
   message: string;
   /** Who fixes it. Anything but FACULTY blocks starting (the faculty can't fix it themselves). */
   who: "EXAM_CELL" | "FACULTY" | "SYLLABUS";

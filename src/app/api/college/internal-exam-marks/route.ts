@@ -3,13 +3,15 @@ export const dynamic = "force-dynamic";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { questionSheetsFor } from "@/lib/exams/questionMarksServer";
+import { sectionRoster } from "@/lib/exams/sectionRoster";
+import { ceaValuesForBatch } from "@/lib/cea/marksServer";
 import { AggregateField } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { countEntered, examConfigId, resolveExamTypeForSubject, loadExamConfig } from "@/lib/exams/internalExamMarks";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { getHodDepartmentScope, editableDepartmentNames } from "@/lib/departments/scope";
-import type { ExamConfiguration, ExamType, InternalExamMarkEntry, InternalExamMarksBatch, Section, StudentRecord, TeachingAssignment } from "@/types";
+import type { ExamConfiguration, ExamType, InternalExamMarkEntry, InternalExamMarksBatch, Section, TeachingAssignment } from "@/types";
 
 // HOD/Principal/VP/Super Admin oversight — view-only for everyone here (write
 // access, for Principal/VP/Super Admin only, is on PATCH /[id] below). HOD is
@@ -224,45 +226,16 @@ export async function POST(request: Request) {
 
     const existingSnap = await ref.get();
 
-    // Current roster, ordered for a stable S.No. column. Section-scoped
-    // assignments resolve to a real section (department+section+year); the
-    // semester-scoped shape has no course "year" to filter by, so it matches
-    // on department+section name alone (best-effort until this college's data
-    // has been migrated to real sections). A shared-first-year student in
-    // this section stays filed under their common department (preserved
-    // until promotion) with secondaryDepartment naming this section's real
-    // branch instead - matched separately and merged, or the roster (and
-    // therefore marks entry for the whole class) would come up empty. Also
-    // scoped by `courseId` - guaranteed non-null here (the check above
-    // already rejected a missing one) - a department can run a same-named
-    // section under more than one course (StudentRecord.courseId's
-    // doc-comment), and without this, marks entry could pull the wrong
-    // course's roster entirely.
-    let primaryQuery = collegeRef.collection("students")
-      .where("department", "==", assignment.department)
-      .where("section", "==", sectionName)
-      .where("courseId", "==", assignment.courseId);
-    let secondaryQuery = collegeRef.collection("students")
-      .where("secondaryDepartment", "==", assignment.department)
-      .where("section", "==", sectionName)
-      .where("courseId", "==", assignment.courseId);
-    if (year != null) {
-      primaryQuery = primaryQuery.where("year", "==", year);
-      secondaryQuery = secondaryQuery.where("year", "==", year);
-    }
+    // Current roster, ordered for a stable S.No. column (lib/exams/sectionRoster.ts - shared with CEA marks).
+    const students = await sectionRoster(collegeRef, { department: assignment.department, sectionName, courseId: assignment.courseId, year });
 
-    const [primarySnap, secondarySnap] = await Promise.all([primaryQuery.get(), secondaryQuery.get()]);
-    const seenStudentIds = new Set<string>();
-    const students: StudentRecord[] = [];
-    for (const d of [...primarySnap.docs, ...secondarySnap.docs]) {
-      if (seenStudentIds.has(d.id)) continue;
-      seenStudentIds.add(d.id);
-      students.push({ id: d.id, ...d.data() } as StudentRecord);
-    }
-    students.sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true }));
+    // R26 CEA: the component linked to CEA comes from the submitted CEA units (worked out, never typed).
+    const cea = await ceaValuesForBatch(db, session.collegeId, { assignmentId, subjectId: assignment.subjectId }, config);
+    const withCea = (e: InternalExamMarkEntry): InternalExamMarkEntry =>
+      cea ? { ...e, componentMarks: { ...e.componentMarks, [cea.componentId]: cea.values.get(e.studentId) ?? null } } : e;
 
     if (!existingSnap.exists) {
-      const entries: InternalExamMarkEntry[] = students.map((s) => ({
+      const entries: InternalExamMarkEntry[] = students.map((s) => withCea({
         studentId: s.id,
         rollNumber: s.rollNumber,
         name: s.name,
@@ -286,7 +259,7 @@ export async function POST(request: Request) {
         status: "DRAFT" as const,
         entries,
         totalStudents: entries.length,
-        enteredCount: 0,
+        enteredCount: countEntered(entries, config),
         submittedAt: null,
         createdAt: now,
         updatedAt: now,
@@ -303,7 +276,7 @@ export async function POST(request: Request) {
     // batch is a locked record and is returned exactly as-is.
     if (existing.status === "DRAFT") {
       const existingByStudent = new Map(existing.entries.map((e) => [e.studentId, e]));
-      const entries: InternalExamMarkEntry[] = students.map((s) => ({
+      const entries: InternalExamMarkEntry[] = students.map((s) => withCea({
         studentId: s.id,
         rollNumber: s.rollNumber,
         name: s.name,

@@ -1,7 +1,7 @@
 import { fetchCollegeLogoUrl } from "@/lib/pdf/logo";
 import { renderHtmlToPdf, renderMultiHtmlToPdf } from "@/lib/pdf/htmlToPdf";
 import { pdfFormulaRenderer } from "@/lib/midBank/mathSvg";
-import { getMidPaperSetHTML, type PaperSetPdfData } from "@/lib/pdf/midPaperSetTemplate";
+import { getMidPaperSetHTML, paperSetHtmls, type PaperSetPdfData } from "@/lib/pdf/midPaperSetTemplate";
 import type { MidPaperFinal, MidPaperQuestion } from "@/types";
 
 const safeName = (n: string) => `${n.replace(/[^a-zA-Z0-9-_]+/g, "-")}.pdf`;
@@ -18,8 +18,9 @@ export async function paperLetterhead() {
 // Builds one question paper (or its answer key) as a PDF in the browser; only the letterhead is fetched.
 export async function downloadMidPaperSetPdf(data: Omit<PaperSetPdfData, "college" | "formula">, fileName: string): Promise<void> {
   const { info, college, formula } = await paperLetterhead();
-  const html = getMidPaperSetHTML({ ...data, exam: { academicYear: info.academicYear, ...data.exam }, college, formula });
-  await renderHtmlToPdf(html, safeName(fileName));
+  const htmls = paperSetHtmls({ ...data, exam: { academicYear: info.academicYear, ...data.exam }, college, formula });
+  if (htmls.length > 1) await renderMultiHtmlToPdf(htmls, safeName(fileName));
+  else await renderHtmlToPdf(htmls[0], safeName(fileName));
 }
 
 /**
@@ -53,7 +54,10 @@ export async function downloadMidPaperFinalPdf(final: MidPaperFinal, opts: { ans
     outcomes: final.outcomes, cos: final.cos, mapping: final.mapping,
   };
   if (!final.layout.separateParts || final.pattern.parts.length < 2) {
-    await renderHtmlToPdf(getMidPaperSetHTML(base), safeName(opts.fileName));
+    // A CEA paper always prints as its own paper after the Mid paper.
+    const htmls = paperSetHtmls(base);
+    if (htmls.length > 1) await renderMultiHtmlToPdf(htmls, safeName(opts.fileName));
+    else await renderHtmlToPdf(htmls[0], safeName(opts.fileName));
     return;
   }
   // One document per part: each starts on a new page with the full header (Regd. No boxes, letterhead, exam line).

@@ -18,6 +18,7 @@ import { MidPaperTemplateCard } from "@/components/exams/MidPaperTemplateCard";
 import { MidPaperPatternCard } from "@/components/exams/MidPaperPatternCard";
 import { MidSubjectSplitsCard } from "@/components/exams/MidSubjectSplitsCard";
 import { BloomLevelsCard } from "@/components/exams/BloomLevelsCard";
+import { CeaSettingsCard } from "@/components/cea/CeaSettingsCard";
 import { cn } from "@/lib/utils";
 import type { ExamMidSettings, MidAssignment, MidOutcomeSwitches, MidPreparation } from "@/types";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -37,17 +38,17 @@ export default function MidConfigurationPage() {
 
 function MidConfigurationTabs() {
   const sp = useSearchParams();
-  const tab = sp.get("tab") === "marks" ? "marks" : sp.get("tab") === "paper" ? "paper" : "mid";
+  const tab = sp.get("tab") === "marks" ? "marks" : sp.get("tab") === "paper" ? "paper" : sp.get("tab") === "cea" ? "cea" : "mid";
   return (
-    <div className={cn("space-y-6", tab === "mid" && "max-w-2xl", tab === "paper" && "max-w-4xl")}>
+    <div className={cn("space-y-6", tab === "mid" && "max-w-2xl", (tab === "paper" || tab === "cea") && "max-w-4xl")}>
       <PageHeader title="Mid Configuration" description="How many Mid exams the college runs, the question bank rules, the question paper template, and the Internal / External marks." />
       <nav className="inline-flex flex-wrap rounded-xl border bg-muted/40 p-1 text-sm" aria-label="Mid Configuration sections">
-        {([["mid", "Mid exams & question bank"], ["paper", "Question paper"], ["marks", "Marks (Internal / External)"]] as const).map(([k, label]) => (
+        {([["mid", "Mid exams & question bank"], ["paper", "Question paper"], ["marks", "Marks (Internal / External)"], ["cea", "CEA"]] as const).map(([k, label]) => (
           <Link key={k} href={k === "mid" ? "/exam-cell/mid-configuration" : `/exam-cell/mid-configuration?tab=${k}`} aria-current={tab === k ? "page" : undefined}
             className={cn("rounded-lg px-3.5 py-1.5 font-medium", tab === k ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}>{label}</Link>
         ))}
       </nav>
-      {tab === "marks" ? <div className="space-y-6"><ExamConfigurationPanel embedded /><ExamMarksCategoriesCard /></div> : tab === "paper" ? <PaperTab /> : <MidSettings />}
+      {tab === "marks" ? <div className="space-y-6"><ExamConfigurationPanel embedded /><ExamMarksCategoriesCard /></div> : tab === "paper" ? <PaperTab /> : tab === "cea" ? <CeaSettingsCard /> : <MidSettings />}
     </div>
   );
 }

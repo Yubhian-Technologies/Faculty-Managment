@@ -5,7 +5,7 @@ import { Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { getMidPaperSetHTML, type PaperSetPdfData } from "@/lib/pdf/midPaperSetTemplate";
+import { joinPaperHtmls, paperSetHtmls, type PaperSetPdfData } from "@/lib/pdf/midPaperSetTemplate";
 import { paperLetterhead } from "@/lib/pdf/downloadMidPaperSet";
 import { setNumbers } from "@/lib/midPapers/pattern";
 import type { MidBankDetail } from "@/lib/midBank/clientTypes";
@@ -41,7 +41,7 @@ export function PaperPreviewButton({ detail, initialSet = 1, size = "sm" }: { de
     paperLetterhead()
       .then(({ info, college, formula }) => {
         const data = paperSetData(detail, set);
-        if (!off) { setHtml(getMidPaperSetHTML({ ...data, exam: { academicYear: info.academicYear, ...data.exam }, college, formula })); setError(""); }
+        if (!off) { setHtml(joinPaperHtmls(paperSetHtmls({ ...data, exam: { academicYear: info.academicYear, ...data.exam }, college, formula }))); setError(""); }
       })
       .catch(() => { if (!off) setError("Couldn't build the preview"); });
     return () => { off = true; };

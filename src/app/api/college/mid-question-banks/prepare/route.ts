@@ -11,6 +11,8 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { isDeadlineLocked } from "@/lib/midBank/deadline";
 import { paperSetupIssues, setupIssues, withSyllabus } from "@/lib/midBank/setup";
+import { ceaPartForMid } from "@/lib/cea/server";
+import { withCeaPart } from "@/lib/cea/paper";
 import { bankIdFor, claimIdFor, sectionsOf } from "@/lib/midBank/sections";
 import { assignmentIdFor, sectionsForScope } from "@/lib/midBank/assignments";
 import { assignmentsCol } from "@/lib/midBank/assignmentsServer";
@@ -77,7 +79,10 @@ export async function GET(request: Request) {
     const baseSetup = settings.midPreparation === "PAPERS"
       ? paperSetupIssues(subject, pattern, outcomes, settings.outcomes, { midNumber: d.midNumber, rules, exception, midCount: settings.midCount })
       : setupIssues(subject, d.midNumber, rules, outcomes, exception, settings.outcomes);
-    const setup = onSyllabus ? { ...baseSetup, issues: withSyllabus(baseSetup.issues, { status: syllabus?.status ?? null, subjectDepartments }) } : baseSetup;
+    const setup0 = onSyllabus ? { ...baseSetup, issues: withSyllabus(baseSetup.issues, { status: syllabus?.status ?? null, subjectDepartments }) } : baseSetup;
+    // R26 Continuous Evaluation: which unit's CEA paper goes with this Mid (or the missing plan).
+    const cea = settings.midPreparation === "PAPERS" ? await ceaPartForMid(db, session.collegeId, subject, d.midNumber) : { part: null };
+    const setup = cea.issue ? { ...setup0, issues: [...setup0.issues, { code: "NO_CEA_PLAN" as const, who: "SYLLABUS" as const, message: cea.issue }] } : setup0;
 
     return NextResponse.json({
       deadline: { ...d, locked: isDeadlineLocked(d.deadline) },
@@ -86,7 +91,7 @@ export async function GET(request: Request) {
       setup,
       // Where the units / COs come from (shown above the read-only Course Outcomes step).
       syllabus: onSyllabus ? { status: syllabus?.status ?? null, frozenAt: syllabus?.frozenAt ?? null, frozenByName: syllabus?.frozenByName ?? null, subjectDepartments } : null,
-      outcomeSwitches: settings.outcomes, midPreparation: settings.midPreparation, pattern,
+      outcomeSwitches: settings.outcomes, midPreparation: settings.midPreparation, pattern: pattern && cea.part ? withCeaPart(pattern, cea.part) : pattern,
       myBankId: myBank.exists ? myBankId : null,
       assignment: assignment ? {
         scope: assignment.scope, assignedByName: assignment.assignedByName, facultyNames: assignment.facultyNames, branches: assignment.branches,

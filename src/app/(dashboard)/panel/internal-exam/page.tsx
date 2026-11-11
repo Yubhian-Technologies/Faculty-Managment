@@ -197,6 +197,8 @@ export default function InternalExamPage() {
 
   /** A component's marks for a student: typed, or worked out from the paper's questions (scaled to its max). */
   function componentValue(studentId: string, componentId: string, max: number): number | null {
+    // R26 CEA: worked out by the server from the submitted CEA units (Faculty > CEA Marks) - read only here.
+    if (activeComponents.find((c) => c.id === componentId)?.cea) return batch?.entries.find((e) => e.studentId === studentId)?.componentMarks[componentId] ?? null;
     const sheet = sheets[componentId];
     if (!sheet) { const raw = marksDraft[studentId]?.[componentId]; return raw?.trim() ? Number(raw) : null; }
     const total = paperTotal(sheet, numbers(questionDraft[studentId]?.[componentId]));
@@ -218,7 +220,7 @@ export default function InternalExamPage() {
   const entriesToSend = () => (batch?.entries ?? []).map((e) => ({
     studentId: e.studentId,
     componentMarks: Object.fromEntries(
-      activeComponents.filter((c) => !sheets[c.id]).map((c) => {
+      activeComponents.filter((c) => !sheets[c.id] && !c.cea).map((c) => {
         const raw = marksDraft[e.studentId]?.[c.id];
         return [c.id, raw?.trim() ? Number(raw) : null];
       })
@@ -414,7 +416,7 @@ export default function InternalExamPage() {
                               </div>
                             </th>
                           ) : (
-                            <th key={c.id} className="px-4 py-3">{c.name} (Max {c.maxMarks})</th>
+                            <th key={c.id} className="px-4 py-3">{c.name} (Max {c.maxMarks}){c.cea && <span className="block font-normal normal-case">from CEA Marks</span>}</th>
                           ))}
                           <th className="px-4 py-3">Total (Out of {configuration.internalMaxMarks})</th>
                         </tr>
@@ -437,6 +439,8 @@ export default function InternalExamPage() {
                                   <span className="w-14 text-center font-semibold">{componentValue(entry.studentId, c.id, c.maxMarks) ?? "-"}</span>
                                 </div>
                               </td>
+                            ) : c.cea ? (
+                              <td key={c.id} className="px-4 py-2.5 font-medium" title="Worked out from the submitted CEA units">{componentValue(entry.studentId, c.id, c.maxMarks) ?? "-"}</td>
                             ) : (
                               <td key={c.id} className="px-4 py-2.5">
                                 <Input

@@ -7,7 +7,9 @@ export const PART_MAX_DURATION = 300;
 
 /** The default per-part header: the paper's time, and the part's own max marks. */
 export function defaultPartHeaders(parts: PaperPartDef[], durationMinutes: number): NonNullable<PaperPrintLayout["parts"]> {
-  return parts.map((p) => ({ partId: p.id, durationMinutes, maxMarks: partMax(p) }));
+  // A CEA paper (lib/cea/paper.ts) has its own minutes, taken out of the sitting's time.
+  const ceaMinutes = parts.find((p) => p.cea)?.cea?.minutes ?? 0;
+  return parts.map((p) => ({ partId: p.id, durationMinutes: p.cea ? p.cea.minutes : Math.max(1, durationMinutes - ceaMinutes), maxMarks: partMax(p) }));
 }
 
 /** Cleans a layout from a request: separate parts need a whole time (1-300 min) and max marks (>= 1) for each part. */

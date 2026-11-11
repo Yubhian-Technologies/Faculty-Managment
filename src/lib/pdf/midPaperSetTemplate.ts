@@ -3,6 +3,7 @@ import { renderMathHtml } from "@/lib/midBank/renderMath";
 import { derivePoPso } from "@/lib/midBank/outcomes";
 import { outcomeSwitches } from "@/lib/midBank/outcomeSwitches";
 import { choiceText, partMax, patternMax, unitOfQuestion } from "@/lib/midPapers/pattern";
+import { ceaPartOf, midMinutes, withoutCea } from "@/lib/cea/paper";
 import { PAPER_STYLE, ROMAN } from "@/lib/pdf/midQuestionPaperTemplate";
 import type { MidOutcomeSwitches, MidPaperPattern, MidPaperQuestion } from "@/types";
 
@@ -37,6 +38,28 @@ export interface PaperSetPdfData {
   partHeader?: { durationMinutes: number; maxMarks: number };
 }
 
+/**
+ * The pages a paper set prints as: the Mid paper, and - when it carries a CEA paper (R26 Continuous Evaluation,
+ * lib/cea/paper.ts) - that CEA paper as its OWN paper (own header, its minutes, the unit's marks, numbered from 1).
+ * Printing one part alone stays one page.
+ */
+export function paperSetHtmls(d: PaperSetPdfData): string[] {
+  const cea = ceaPartOf(d.pattern.parts);
+  if (!cea || d.onlyPartId) return [getMidPaperSetHTML(d)];
+  return [
+    getMidPaperSetHTML({ ...d, pattern: { ...withoutCea(d.pattern), durationMinutes: midMinutes(d.pattern) } }),
+    getMidPaperSetHTML({ ...d, onlyPartId: cea.id, partHeader: { durationMinutes: cea.cea!.minutes, maxMarks: partMax(cea) } }),
+  ];
+}
+
+/** Several printed pages in one document for an on-screen preview (a dashed line between them). */
+export function joinPaperHtmls(htmls: string[]): string {
+  if (htmls.length <= 1) return htmls[0] ?? "";
+  const bodyOf = (h: string) => h.slice(h.indexOf("<body>") + 6, h.lastIndexOf("</body>"));
+  const first = htmls[0];
+  return first.slice(0, first.lastIndexOf("</body>")) + htmls.slice(1).map((h) => `<div style="border-top:2px dashed #999;margin:28px 0"></div>${bodyOf(h)}`).join("") + "</body></html>";
+}
+
 export function getMidPaperSetHTML(d: PaperSetPdfData): string {
   const sw = outcomeSwitches(d.outcomes);
   const extra = [sw.cos && "CO", sw.bloom && "BL", sw.poMapping && "PO"].filter(Boolean) as string[];
@@ -57,8 +80,9 @@ export function getMidPaperSetHTML(d: PaperSetPdfData): string {
   const only = d.onlyPartId ? d.pattern.parts.find((p) => p.id === d.onlyPartId) : undefined;
   const parts = d.pattern.parts.map((part) => {
     const count = part.flexible ? d.questions.filter((q) => q.set === d.set && q.partId === part.id).length : part.questions;
-    // Another part when printing one part alone: only its numbers are counted, so this part's numbers stay the same.
-    if (only && part.id !== only.id) { no += count; return ""; }
+    // Another part when printing one part alone: only its numbers are counted, so this part's numbers stay the same
+    // (a CEA paper is its own paper - numbered from 1).
+    if (only && part.id !== only.id) { if (!only.cea) no += count; return ""; }
     let rows = `<tr class="unit"><td colspan="2">${esc(part.label.toUpperCase())} - ${esc(part.title)}<br /><span style="font-weight:normal">${esc(choiceText(part, part.flexible ? count : undefined))}</span></td><td class="num colhead">${partMax(part)} M</td>${extra.map((x) => `<td class="${x === "PO" ? "po" : "num"} colhead">${x}</td>`).join("")}</tr>`;
     for (let i = 1; i <= count; i++) {
       no++;
@@ -93,7 +117,7 @@ export function getMidPaperSetHTML(d: PaperSetPdfData): string {
   const used = [...new Set(d.questions.filter((q) => q.set === d.set && (!only || q.partId === only.id)).flatMap((q) => q.cos))].sort((a, b) => Number(a.slice(2)) - Number(b.slice(2)));
   const coList = sw.cos && !d.answerKey ? (d.cos ?? []).filter((c) => used.includes(c.id)).map((c) => `<p><b>${esc(c.id.replace(/^CO/, ""))}.</b> ${esc(c.statement)}</p>`).join("") : "";
   const maxMarks = only ? (d.partHeader?.maxMarks ?? partMax(only)) : patternMax(d.pattern);
-  const duration = only ? (d.partHeader?.durationMinutes ?? d.pattern.durationMinutes) : d.pattern.durationMinutes;
+  const duration = only ? (d.partHeader?.durationMinutes ?? (only.cea ? only.cea.minutes : midMinutes(d.pattern))) : d.pattern.durationMinutes;
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8" /><style>${PAPER_STYLE}
     .opts { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 16px; margin-top: 4px; }
@@ -104,7 +128,7 @@ export function getMidPaperSetHTML(d: PaperSetPdfData): string {
       <img src="${logoSrc(d.college.logoUrl)}" alt="College logo" />
       <div class="center">
         <p class="uni">${esc(d.college.name)}</p>
-        <p class="line">${ROMAN[d.exam.year] ?? d.exam.year} ${esc(course)} ${sem} MID-${d.exam.midNumber} EXAMINATION${d.answerKey ? " - ANSWER KEY" : ""}</p>
+        <p class="line">${ROMAN[d.exam.year] ?? d.exam.year} ${esc(course)} ${sem} ${only?.cea ? `CONTINUOUS EVALUATION (WITH MID-${d.exam.midNumber})` : `MID-${d.exam.midNumber} EXAMINATION`}${d.answerKey ? " - ANSWER KEY" : ""}</p>
         ${d.exam.academicYear ? `<p class="line">Academic Year: ${esc(d.exam.academicYear)}</p>` : ""}
         <p class="subject">${esc(d.subject.name)}</p>
         ${only ? `<p class="line"><b>${esc(only.label.toUpperCase())}</b></p>` : ""}

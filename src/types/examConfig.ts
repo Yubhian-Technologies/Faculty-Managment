@@ -29,6 +29,11 @@ export interface ExamConfigComponent {
    * question for descriptive parts (one total per objective part), then scaled to `maxMarks`. Absent = typed as one number.
    */
   midNumber?: number;
+  /**
+   * R26 Continuous Evaluation: this component's marks are the student's CEA unit marks added up and scaled to
+   * `maxMarks` (lib/cea/marks.ts) - worked out by the server, never typed.
+   */
+  cea?: boolean;
 }
 
 export type ExamConfigurationStatus = "ACTIVE" | "INACTIVE";
