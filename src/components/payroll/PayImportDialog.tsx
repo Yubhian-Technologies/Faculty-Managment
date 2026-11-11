@@ -20,7 +20,7 @@ import { collegeQs, monthLabel, payrollFetch, rupees, thisMonth } from "./payrol
 const CODE_HEADERS = new Set(["EMPCODE", "EMPLOYEECODE", "EMPLOYEEID"]);
 const norm = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, "");
 
-type Plan = { rows: ImportPlanRow[]; unknownColumns: string[]; errors: number; skipped?: number; blocked: string | null; applied: number };
+type Plan = { rows: ImportPlanRow[]; unknownColumns: string[]; errors: number; skipped?: number; monthlyColumns?: string[]; blocked: string | null; applied: number };
 
 export function PayImportDialog({ collegeId, settings, rows: people, onClose, onDone }: {
   collegeId?: string; settings: PayrollSettings; rows: PayRow[]; onClose: () => void; onDone: () => void;
@@ -120,6 +120,7 @@ export function PayImportDialog({ collegeId, settings, rows: people, onClose, on
               {count("ERROR") > 0 && <span className="rounded-full bg-red-100 px-3 py-1 text-red-900 dark:bg-red-950/50 dark:text-red-200">{count("ERROR")} with problems</span>}
             </div>
             {plan.blocked && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-900 dark:bg-red-950/40 dark:text-red-200">{plan.blocked}</p>}
+            {(plan.monthlyColumns?.length ?? 0) > 0 && <p className="text-xs text-muted-foreground">{plan.monthlyColumns!.join(", ")} change each month - not part of fixed pay, so skipped here. They go into the month&apos;s salaries.</p>}
             {(plan.skipped ?? 0) > 0 && <p className="text-xs text-muted-foreground">{plan.skipped} row(s) without an Emp Code skipped (totals, headings, notes).</p>}
             {plan.unknownColumns.length > 0 && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-900 dark:bg-red-950/40 dark:text-red-200">Columns this import doesn&apos;t know: {plan.unknownColumns.join(", ")}. Rename them to a pay part or deduction, or remove them.</p>}
             {shown.length > 0 && (

@@ -1,4 +1,4 @@
-import type { PayDeduction, PayEarning, PayRevision, PayrollSettings, PtSlab } from "@/types/payroll";
+import type { PayDeduction, PayEarning, PayRevision, PayrollSettings, PfRuleChange, PtSlab } from "@/types/payroll";
 
 // Payroll components and rules: the defaults (matching the VWU October 2026 sheet), the checks run on
 // every save, rounding, and which version of a person's pay applies to a month. Pure - no Firestore.
@@ -22,7 +22,7 @@ export const DEFAULT_EARNINGS: PayEarning[] = [
 ];
 
 export const DEFAULT_DEDUCTIONS: PayDeduction[] = [
-  { kind: "PF", id: "PF", label: "PF", active: true, percent: 12, cap: 3000 },
+  { kind: "PF", id: "PF", label: "PF", active: true, percent: 12, cap: 3000, wageCeiling: 25000, epsCeiling: 15000 },
   { kind: "SLAB", id: "PT", label: "PT", active: true, slabs: [{ upTo: 15000, amount: 0 }, { upTo: 20000, amount: 150 }, { upTo: null, amount: 200 }] },
   { kind: "ESI", id: "ESI", label: "ESI", active: true, percent: 0.75, wageLimit: 21000, roundUp: true },
   { kind: "INCOME_TAX", id: "IT", label: "IT", active: true },
@@ -64,6 +64,24 @@ export function revisionFor(revisions: PayRevision[], month: string): PayRevisio
 /** Fixed monthly total of a revision (the sheet's Gross_Actual). */
 export const grossActual = (amounts: Record<string, number>) => Object.values(amounts).reduce((a, v) => a + (v || 0), 0);
 
+// ─── PF rule by month ───────────────────────────────────────────────────────────
+
+/** The most PF in a month: the percent of the wage ceiling (12% of 25,000 = 3,000). */
+export const pfCap = (r: { percent: number; wageCeiling: number }) => Math.round((r.wageCeiling * r.percent) / 100);
+
+/** The PF rule a month uses: the latest change starting on or before it, else the rule before the first change. */
+export function pfRuleFor(d: Extract<PayDeduction, { kind: "PF" }>, month: string): { percent: number; wageCeiling: number; epsCeiling: number; cap: number } {
+  const change = [...(d.changes ?? [])].filter((c) => c.from <= month).sort((a, b) => b.from.localeCompare(a.from))[0];
+  const base = { percent: d.percent, wageCeiling: d.wageCeiling ?? (d.percent > 0 ? Math.round((d.cap * 100) / d.percent) : 0), epsCeiling: d.epsCeiling ?? 15000 };
+  const r = change ?? base;
+  return { percent: r.percent, wageCeiling: r.wageCeiling, epsCeiling: r.epsCeiling, cap: change ? pfCap(change) : d.cap };
+}
+
+/** Settings as one month uses them: each PF deduction carries that month's percent / ceilings / cap (changes kept). */
+export function settingsForMonth<S extends Pick<PayrollSettings, "deductions">>(settings: S, month: string): S {
+  return { ...settings, deductions: settings.deductions.map((d) => (d.kind === "PF" ? { ...d, ...pfRuleFor(d, month) } : d)) };
+}
+
 // ─── Checks on save ─────────────────────────────────────────────────────────────
 
 const ID_RE = /^[A-Z][A-Z0-9_]{0,15}$/;
@@ -100,8 +118,26 @@ export function cleanPayrollSettings(input: unknown, previous: PayrollSettings |
     const base = { id: claim(d?.id, label), label, active: d?.active !== false };
     switch (d?.kind) {
       case "PF": {
-        if (!money(d.percent) || d.percent > 100 || !money(d.cap)) throw new PayrollRuleError(`${label}: give a percent (0-100) and a cap`);
-        return { kind: "PF", ...base, percent: d.percent, cap: d.cap };
+        const rule = (r: { percent?: unknown; wageCeiling?: unknown; epsCeiling?: unknown; cap?: unknown }, what: string) => {
+          const percent = r.percent;
+          if (!money(percent) || (percent as number) > 100) throw new PayrollRuleError(`${label}${what}: give a percent (0-100)`);
+          // Settings saved before the ceiling existed carry only the cap (3,000 at 12% = a 25,000 ceiling).
+          const ceiling = money(r.wageCeiling) ? (r.wageCeiling as number) : money(r.cap) && (percent as number) > 0 ? Math.round(((r.cap as number) * 100) / (percent as number)) : NaN;
+          if (!money(ceiling) || ceiling <= 0) throw new PayrollRuleError(`${label}${what}: give the PF wage ceiling`);
+          const eps = money(r.epsCeiling) && (r.epsCeiling as number) > 0 ? (r.epsCeiling as number) : 15000;
+          return { percent: percent as number, wageCeiling: ceiling, epsCeiling: eps };
+        };
+        const now = rule(d as Record<string, unknown>, "");
+        const rawChanges = (d as { changes?: unknown }).changes;
+        const raw = (Array.isArray(rawChanges) ? rawChanges : []) as Record<string, unknown>[];
+        const changes: PfRuleChange[] = [];
+        for (const c of raw) {
+          if (!isMonthKey(c?.from)) throw new PayrollRuleError(`${label}: a rule change needs the month it starts`);
+          if (changes.some((x) => x.from === c.from)) throw new PayrollRuleError(`${label}: two rule changes start in ${c.from}`);
+          changes.push({ from: c.from, ...rule(c, ` (from ${c.from})`) });
+        }
+        changes.sort((a, b) => a.from.localeCompare(b.from));
+        return { kind: "PF", ...base, ...now, cap: pfCap(now), ...(changes.length ? { changes } : {}) };
       }
       case "ESI": {
         if (!money(d.percent) || d.percent > 100 || !money(d.wageLimit)) throw new PayrollRuleError(`${label}: give a percent (0-100) and a wage limit`);

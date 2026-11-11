@@ -86,4 +86,19 @@ describe("salary sheet import", () => {
     expect(plan.rows[1].error).toMatch(/Paid for part of the month \(Pay Days 20.5\)/);
     expect(plan.rows[2].error).toMatch(/Not paid this month/);
   });
+
+  it("a sheet without Pay Days (Total Ded / Net Salary present) is read the same way", () => {
+    const sheet = ["Emp Code", "EmpName", "E.B", "AGP", "DA", "HRA", "OA", "SA", "PF", "PT", "ESI", "SWF", "Salary Adv.", "Total Ded", "Net Salary"];
+    const c = importColumns(sheet, settings);
+    expect(c.unknown).toEqual([]);
+    expect(c.sheet).toEqual({ payDays: null, grossActual: null });
+    const plan = planPayImport(sheet, [
+      { row: 20, code: "SVECW0601", values: { "Emp Code": "SVECW0601", "E.B": "50000", AGP: "0", DA: "0", PF: "0", PT: "200", ESI: "0", SWF: "30", "Net Salary": "49770" } },
+    ], employees, settings, new Map());
+    expect(plan.rows[0]).toMatchObject({ status: "NEW", grossActual: 50000, exempt: ["PF"] });
+    // MediClaim: unknown until Accounts add it as a monthly deduction, then skipped (it changes every month).
+    expect(importColumns([...sheet, "MediClaim"], settings).unknown).toEqual(["MediClaim"]);
+    const withMc = { ...settings, deductions: [...settings.deductions, { kind: "MANUAL" as const, id: "MEDICLAIM", label: "MediClaim", active: true }] };
+    expect(importColumns([...sheet, "MediClaim"], withMc)).toMatchObject({ unknown: [], monthly: ["MediClaim"] });
+  });
 });

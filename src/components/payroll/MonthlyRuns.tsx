@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, ArrowLeft, Banknote, CheckCircle2, Download, RefreshCw, Search, Send, Trash2, Undo2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Banknote, CheckCircle2, Download, RefreshCw, Search, Send, Trash2, Undo2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import { toast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
 import type { PayrollLine, PayrollRun, PayrollRunStatus, PayrollTotals } from "@/types/payroll";
 import { PayrollLineDialog } from "./PayrollLineDialog";
+import { MonthlyDeductionsDialog } from "./MonthlyDeductionsDialog";
 import { downloadAnnualRegister, downloadBankFile, downloadRegister, downloadStatutory } from "./payrollExports";
 import { collegeQs, monthLabel, payrollFetch, rupees, selectClass, thisMonth } from "./payrollClient";
 
@@ -116,6 +117,7 @@ function RunView({ collegeId, month, onBack }: { collegeId?: string; month: stri
   const [filter, setFilter] = useState<"" | "TEACHING" | "NON_TEACHING" | "ISSUES" | "CHANGED">("");
   const [line, setLine] = useState<PayrollLine | null>(null);
   const [dialog, setDialog] = useState<"RETURN" | "RELEASE" | null>(null);
+  const [deductionsOpen, setDeductionsOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const url = `/api/college/payroll/runs/${month}${collegeQs(collegeId)}`;
   const load = useCallback(() => {
@@ -191,6 +193,7 @@ function RunView({ collegeId, month, onBack }: { collegeId?: string; month: stri
 
       <div className="flex flex-wrap gap-2">
         {editable && <Button variant="outline" onClick={recalc} disabled={busy}><RefreshCw className="mr-1.5 h-4 w-4" />Recalculate</Button>}
+        {editable && <Button variant="outline" onClick={() => setDeductionsOpen(true)} disabled={busy}><Upload className="mr-1.5 h-4 w-4" />Monthly deductions</Button>}
         {office && (run.status === "DRAFT" || run.status === "RETURNED") && <Button onClick={() => act("SUBMIT")} disabled={busy || run.totals.shortfalls > 0}><Send className="mr-1.5 h-4 w-4" />Submit to Accounts</Button>}
         {office && run.status === "DRAFT" && <Button variant="ghost" className="text-destructive" onClick={remove}><Trash2 className="mr-1.5 h-4 w-4" />Remove draft</Button>}
         {accounts && run.status === "SUBMITTED" && <Button onClick={() => act("APPROVE")} disabled={busy || run.totals.shortfalls > 0}><CheckCircle2 className="mr-1.5 h-4 w-4" />Approve</Button>}
@@ -283,6 +286,7 @@ function RunView({ collegeId, month, onBack }: { collegeId?: string; month: stri
         ))}</ul>
       </details>
 
+      {deductionsOpen && <MonthlyDeductionsDialog collegeId={collegeId} run={run} lines={d.lines} onClose={() => setDeductionsOpen(false)} onDone={() => { setDeductionsOpen(false); load(); }} />}
       {line && <PayrollLineDialog collegeId={collegeId} run={run} line={line} actor={actor} editable={editable} onClose={() => setLine(null)} onSaved={() => { setLine(null); load(); }} />}
       {dialog && <MoveDialog kind={dialog} month={month} busy={busy} onClose={() => setDialog(null)} onConfirm={(extra) => act(dialog, extra)} />}
     </div>

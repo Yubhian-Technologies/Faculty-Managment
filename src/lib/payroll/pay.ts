@@ -74,11 +74,14 @@ export function importColumns(headers: string[], settings: Pick<PayrollSettings,
   const deductions = new Map<string, string>();
   const ignored = new Set(["EMPCODE", "EMPLOYEECODE", "EMPLOYEEID", "NAME", "EMPNAME", "EMPLOYEENAME", "SNO", "SLNO", "DEPT", "DEPARTMENT", "DESIGNATION", "GROSSACTUAL", "GROSS"]);
   const unknown: string[] = [];
+  const monthly: string[] = [];
   let payDays: string | null = null;
   let grossActualCol: string | null = null;
+  let sheetCols = false;
   for (const h of headers) {
     const n = norm(h);
     if (n === "PAYDAYS") payDays = h;
+    if (SHEET_ONLY.has(n)) sheetCols = true;
     if (n === "GROSSACTUAL") grossActualCol = h;
     if (!n || ignored.has(n)) continue;
     const e = settings.earnings.find((x) => norm(x.label) === n || x.id === n);
@@ -86,16 +89,19 @@ export function importColumns(headers: string[], settings: Pick<PayrollSettings,
     const d = exemptableDeductions(settings).find((x) => norm(x.label) === n || x.id === n);
     if (d) { deductions.set(h, d.id); continue; }
     if (SHEET_ONLY.has(n)) continue;
+    // A deduction entered each month (MediClaim ...) isn't fixed pay - it goes into the month's run, not here.
+    if (settings.deductions.some((x) => x.kind === "MANUAL" && (norm(x.label) === n || x.id === n))) { monthly.push(h); continue; }
     unknown.push(h);
   }
-  // A "Pay Days" column = the monthly salary sheet itself: deduction columns hold amounts, not Y / N.
-  return { earnings, deductions, unknown, sheet: payDays ? { payDays, grossActual: grossActualCol } : null };
+  // A worked-out column (Pay Days, Total Ded, Net Salary ...) = the monthly salary sheet itself: deduction columns
+  // hold amounts, not Y / N. Without Pay Days every row is taken as a full month.
+  return { earnings, deductions, unknown, monthly, sheet: payDays || sheetCols ? { payDays, grossActual: grossActualCol } : null };
 }
 
 /**
  * Plans an import: each row is matched to a person by Emp Code (case-insensitive, within the college).
  * A blank amount is 0; a deduction column takes Y / N (blank = Y). Any error stops the whole import.
- * The monthly salary sheet itself (a "Pay Days" column) is read too: its worked-out columns are skipped, a
+ * The monthly salary sheet itself (a Pay Days / Total Ded / Net Salary column) is read too: its worked-out columns are skipped, a
  * deduction amount > 0 = applies (PF / SWF 0 = not for this person), rows without an Emp Code are skipped, and a
  * row paid for part of the month (parts != Gross_Actual) is refused - its fixed pay can't be read from it.
  */
@@ -103,7 +109,7 @@ export function planPayImport(
   headers: string[], rows: ImportRow[], employees: ImportEmployee[],
   settings: Pick<PayrollSettings, "earnings" | "deductions">,
   current: Map<string, { amounts: Record<string, number>; exempt: string[] } | null>,
-): { rows: ImportPlanRow[]; unknownColumns: string[]; errors: number; skipped: number } {
+): { rows: ImportPlanRow[]; unknownColumns: string[]; errors: number; skipped: number; monthlyColumns: string[] } {
   const cols = importColumns(headers, settings);
   const byCode = new Map<string, ImportEmployee[]>();
   for (const e of employees) {
@@ -135,7 +141,7 @@ export function planPayImport(
     }
     if (cols.sheet) {
       // The sheet's parts are what was EARNED this month; only a full month gives the fixed pay.
-      const days = String(r.values[cols.sheet.payDays] ?? "").trim();
+      const days = cols.sheet.payDays ? String(r.values[cols.sheet.payDays] ?? "").trim() : "";
       const full = cols.sheet.grossActual ? Number(String(r.values[cols.sheet.grossActual] ?? "").replace(/,/g, "").trim()) : NaN;
       if (Number.isFinite(full) && full > 0 && grossActual(amounts) !== full) {
         return fail(`Paid for part of the month (Pay Days ${days || "?"}): the parts add up to ${grossActual(amounts)}, not the Gross_Actual ${full} - type this person's full-month pay`);
@@ -163,5 +169,5 @@ export function planPayImport(
     const status = !cur ? "NEW" : sameRevision(cur, { amounts, exempt }) ? "SAME" : "CHANGED";
     return { row: r.row, code: r.code, employeeKey: emp.employeeKey, name: emp.name, amounts, exempt, grossActual: grossActual(amounts), status };
   });
-  return { rows: out, unknownColumns: cols.unknown, errors: out.filter((r) => r.status === "ERROR").length + (cols.unknown.length ? 1 : 0), skipped: rows.length - used.length };
+  return { rows: out, unknownColumns: cols.unknown, errors: out.filter((r) => r.status === "ERROR").length + (cols.unknown.length ? 1 : 0), skipped: rows.length - used.length, monthlyColumns: cols.monthly };
 }

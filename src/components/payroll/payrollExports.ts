@@ -85,14 +85,15 @@ export function downloadBankFile(run: PayrollRun, lines: PayrollLine[]): string[
 const ofKind = (run: PayrollRun, l: PayrollLine, kind: string) =>
   run.settings.deductions.filter((d) => d.kind === kind).reduce((s, d) => s + (l.result.deductions[d.id] ?? 0), 0);
 
-/** EPF figures of a line for the ECR: wages capped as the deduction was (a capped 3,000 = 25,000 wages). */
+/** EPF figures of a line for the ECR: wages capped at the month's PF wage ceiling (a capped 3,000 = 25,000 wages). */
 export function epfRow(run: PayrollRun, l: PayrollLine) {
   const pf = ofKind(run, l, "PF");
   const rule = run.settings.deductions.find((d) => d.kind === "PF");
   const pct = rule && rule.kind === "PF" ? rule.percent : 12;
   const capped = rule && rule.kind === "PF" && pf === rule.cap && Math.round((l.result.pfWage * pct) / 100) > rule.cap;
-  const epfWages = capped ? Math.round((pf * 100) / pct) : l.result.pfWage;
-  const epsWages = Math.min(epfWages, 15000);
+  const epfWages = capped ? (rule.wageCeiling ?? Math.round((pf * 100) / pct)) : l.result.pfWage;
+  // The run keeps its month's PF rule, so the pension (EPS) ceiling is that month's.
+  const epsWages = Math.min(epfWages, rule && rule.kind === "PF" ? rule.epsCeiling ?? 15000 : 15000);
   const eps = Math.round(epsWages * 0.0833);
   return { pf, epfWages, epsWages, edliWages: epsWages, eps, diff: Math.max(0, pf - eps), ncp: Math.ceil(Math.max(0, l.auto.monthDays - l.payDays)) };
 }

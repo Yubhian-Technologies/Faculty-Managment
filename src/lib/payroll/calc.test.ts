@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { computeLine } from "./calc";
-import { PayrollRuleError, cleanPayrollSettings, defaultPayrollSettings, monthDays, revisionFor, roundTo, slabAmount } from "./rules";
+import { PayrollRuleError, cleanPayrollSettings, defaultPayrollSettings, monthDays, pfRuleFor, revisionFor, roundTo, settingsForMonth, slabAmount } from "./rules";
 import sheet from "./__fixtures__/vwu-oct-2026.json";
 
 // The golden test is the College Office's October 2026 VWU pay sheet (362 rows, names and Emp Codes
@@ -114,5 +114,33 @@ describe("settings checks", () => {
   it("retiring keeps the id", () => {
     const next = cleanPayrollSettings({ ...ok, earnings: ok.earnings.map((e) => (e.id === "SA" ? { ...e, active: false } : e)) }, ok);
     expect(next.earnings.find((e) => e.id === "SA")?.active).toBe(false);
+  });
+});
+
+describe("PF rule by month (wage ceiling 15,000 -> 25,000 from Oct 2026)", () => {
+  const withChange = () => {
+    const s = defaultPayrollSettings();
+    const pf = s.deductions.find((d) => d.kind === "PF")!;
+    return cleanPayrollSettings({ ...s, deductions: s.deductions.map((d) => (d === pf ? { ...pf, percent: 12, wageCeiling: 15000, epsCeiling: 15000, changes: [{ from: "2026-10", percent: 12, wageCeiling: 25000, epsCeiling: 15000 }] } : d)) }, null);
+  };
+  it("each month uses the rule in force: Sep 1,800, Oct and later 3,000", () => {
+    const s = { ...withChange(), version: 1 } as never as ReturnType<typeof defaultPayrollSettings>;
+    const amounts = { EB: 37400, AGP: 9000, DA: 27840, HRA: 4640, OA: 1120 };   // PF wage 74,240 (sheet row VWU0690)
+    const pfIn = (month: string) => computeLine({ settings: settingsForMonth(s, month), amounts, exempt: [], monthDays: 30, payDays: 30 }).deductions.PF;
+    expect(pfIn("2026-09")).toBe(1800);
+    expect(pfIn("2026-10")).toBe(3000);
+    expect(pfIn("2027-03")).toBe(3000);
+    // Under the ceiling the rule doesn't matter: 12% of 24,192 = 2,903.
+    expect(computeLine({ settings: settingsForMonth(s, "2026-11"), amounts: { EB: 15600, AGP: 6000, DA: 2592 }, exempt: [], monthDays: 30, payDays: 30 }).deductions.PF).toBe(2903);
+  });
+  it("saved settings with only a cap read as a ceiling; changes are checked", () => {
+    const s = defaultPayrollSettings();
+    const legacy = s.deductions.map((d) => (d.kind === "PF" ? { kind: "PF", id: d.id, label: d.label, active: true, percent: 12, cap: 3000 } : d));
+    const pf = cleanPayrollSettings({ ...s, deductions: legacy }, null).deductions.find((d) => d.kind === "PF")!;
+    expect(pf).toMatchObject({ percent: 12, wageCeiling: 25000, epsCeiling: 15000, cap: 3000 });
+    const bad = (changes: unknown[]) => () => cleanPayrollSettings({ ...s, deductions: s.deductions.map((d) => (d.kind === "PF" ? { ...d, changes } : d)) }, null);
+    expect(bad([{ percent: 12, wageCeiling: 25000 }])).toThrow(/month it starts/);
+    expect(bad([{ from: "2026-10", percent: 12, wageCeiling: 25000 }, { from: "2026-10", percent: 10, wageCeiling: 25000 }])).toThrow(/two rule changes/);
+    expect(pfRuleFor(withChange().deductions.find((d) => d.kind === "PF") as never, "2026-09")).toEqual({ percent: 12, wageCeiling: 15000, epsCeiling: 15000, cap: 1800 });
   });
 });
