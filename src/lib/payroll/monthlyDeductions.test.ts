@@ -9,7 +9,7 @@ import type { PayDeduction } from "@/types/payroll";
 
 const MEDICLAIM: PayDeduction = { kind: "MANUAL", id: "MEDICLAIM", label: "MediClaim", active: true };
 const settings = { ...defaultPayrollSettings(), deductions: [...defaultPayrollSettings().deductions, MEDICLAIM] };
-const lines = [
+const lines: { employeeKey: string; employeeCode: string; name: string; manual: Record<string, number> }[] = [
   { employeeKey: "FACULTY_a", employeeCode: "VWU0806", name: "A", manual: {} },
   { employeeKey: "FACULTY_b", employeeCode: "VWU0810", name: "B", manual: { MEDICLAIM: 500 } },
   { employeeKey: "FACULTY_c", employeeCode: "VWU0690", name: "C", manual: { MEDICLAIM: 900 } },
