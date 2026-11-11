@@ -318,28 +318,52 @@ export const patternShape = (pat: Pick<MidPaperPattern, "parts" | "setsPerFacult
 export function remapQuestions(
   oldPat: Pick<MidPaperPattern, "parts" | "setsPerFaculty">, newPat: Pick<MidPaperPattern, "parts" | "setsPerFaculty">,
   questions: Pick<MidPaperQuestion, "id" | "set" | "partId" | "no" | "unit">[], units: number[],
-): { moves: { from: string; to: string }[]; dropped: string[] } {
+): { moves: { from: string; to: string }[]; dropped: string[]; reasons: Record<string, string> } {
   const moves: { from: string; to: string }[] = [];
   const dropped: string[] = [];
-  for (const q of questions) {
-    const np = newPat.parts.find((p) => p.id === q.partId);
+  const reasons: Record<string, string> = {};
+  const drop = (id: string, why: string) => { dropped.push(id); reasons[id] = why; };
+  // An "own questions" part the Exam Cell took away hands its questions to an "own questions" part that is new in the
+  // pattern (in order) - e.g. a written CEA part they had set up by hand, now the planned CEA paper.
+  const newIds = new Set(newPat.parts.map((p) => p.id));
+  const oldIds = new Set(oldPat.parts.map((p) => p.id));
+  const goneFlex = oldPat.parts.filter((p) => p.flexible && !newIds.has(p.id));
+  const addedFlex = newPat.parts.filter((p) => p.flexible && !oldIds.has(p.id));
+  const heir = new Map(goneFlex.map((p, i) => [p.id, addedFlex[i]] as const).filter(([, t]) => !!t));
+  const nextNo = new Map<string, number>();
+  const sorted = [...questions].sort((a, b) => a.set - b.set || a.partId.localeCompare(b.partId) || a.no - b.no);
+  for (const q of sorted) {
     const op = oldPat.parts.find((p) => p.id === q.partId);
-    if (!np || q.set > newPat.setsPerFaculty || !!np.flexible !== !!op?.flexible) { dropped.push(q.id); continue; }
+    const np = newPat.parts.find((p) => p.id === q.partId);
+    const label = op?.label ?? q.partId;
+    if (q.set > newPat.setsPerFaculty) { drop(q.id, `Paper ${q.set} is no longer in the pattern`); continue; }
+    if (!np) {
+      const to = heir.get(q.partId);
+      if (!to) { drop(q.id, `${label} is no longer in the paper`); continue; }
+      if (to.cea && q.unit != null && q.unit !== to.cea.unit) { drop(q.id, `${label} is now the CEA paper on Unit ${to.cea.unit} - this question is on Unit ${q.unit}`); continue; }
+      const key = `${q.set}_${to.id}`;
+      const no = (nextNo.get(key) ?? 0) + 1;
+      nextNo.set(key, no);
+      moves.push({ from: q.id, to: questionId(q.set, to.id, no) });
+      continue;
+    }
+    if (!!np.flexible !== !!op?.flexible) { drop(q.id, np.flexible ? `${label} is now your own questions` : `${label} now has a fixed number of questions`); continue; }
     // A CEA paper now for another unit (the Subject Department changed its plan): questions written for the old unit have no place.
-    if (np.cea && op?.cea && np.cea.unit !== op.cea.unit) { dropped.push(q.id); continue; }
+    if (np.cea && op?.cea && np.cea.unit !== op.cea.unit) { drop(q.id, `The CEA paper moved from Unit ${op.cea.unit} to Unit ${np.cea.unit}`); continue; }
     if (np.flexible) { moves.push({ from: q.id, to: q.id }); continue; }
     if (np.perUnit) {
       const unit = q.unit ?? (op ? unitOfQuestion(op, units, q.no) : undefined);
+      if (unit == null) { drop(q.id, `${label} now goes unit by unit - pick this question's unit`); continue; }
       // Its place among the old part's questions of the same unit.
       const oldNos = questions.filter((x) => x.set === q.set && x.partId === q.partId && (x.unit ?? (op ? unitOfQuestion(op, units, x.no) : undefined)) === unit).map((x) => x.no).sort((a, b) => a - b);
       const k = oldNos.indexOf(q.no);
       const slots = (np.unitLayout ?? []).map((u, i) => (u === unit ? i + 1 : 0)).filter(Boolean);
-      if (unit == null || k < 0 || k >= slots.length) { dropped.push(q.id); continue; }
+      if (k < 0 || k >= slots.length) { drop(q.id, slots.length ? `${label} now has ${slots.length} question${slots.length === 1 ? "" : "s"} on Unit ${unit} - this is one too many` : `${label} has no Unit ${unit} question now`); continue; }
       moves.push({ from: q.id, to: questionId(q.set, q.partId, slots[k]) });
       continue;
     }
-    if (q.no > np.questions) { dropped.push(q.id); continue; }
+    if (q.no > np.questions) { drop(q.id, `${label} now has ${np.questions} question${np.questions === 1 ? "" : "s"}`); continue; }
     moves.push({ from: q.id, to: q.id });
   }
-  return { moves, dropped };
+  return { moves, dropped, reasons };
 }

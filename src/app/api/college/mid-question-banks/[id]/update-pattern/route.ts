@@ -10,7 +10,7 @@ import type { MidPaperQuestion, MidQuestionBank } from "@/types";
 
 // A started question paper keeps the pattern it started with. When the Exam Cell changes the pattern (or the units
 // per Mid) afterwards, the owner can move the paper onto the current one:
-//   GET   what would change (and whether any written question would have no place - then it is refused)
+//   GET   what would change (and which written questions would have no place, each with why - then it is refused)
 //   POST  do it: every question moves to its place (a per-unit question stays in its unit), in one transaction.
 // Nothing written is ever dropped; before the deadline, and not while it is with the HOD.
 
@@ -35,7 +35,7 @@ export async function GET(_request: Request, { params }: Params) {
     const { id } = await params;
     const p = await plan(getAdminDb(), session, id);
     if ("error" in p) return NextResponse.json({ error: p.error }, { status: p.status });
-    return NextResponse.json({ changed: p.live.changed, dropped: p.remap.dropped, parts: p.live.pattern.parts.map((x) => ({ label: x.label, questions: x.questions, unitLayout: x.unitLayout ?? null })) });
+    return NextResponse.json({ changed: p.live.changed, dropped: p.remap.dropped, reasons: p.remap.reasons, parts: p.live.pattern.parts.map((x) => ({ label: x.label, questions: x.questions, unitLayout: x.unitLayout ?? null })) });
   } catch (err) {
     return guardError(err, "[college/mid-question-banks/[id]/update-pattern GET]");
   }
@@ -64,10 +64,13 @@ export async function POST(_request: Request, { params }: Params) {
       // Every question written once at its new place; old places nothing moves into are deleted.
       for (const m of p.remap.moves) {
         const q = byId.get(m.from)!;
-        const no = Number(m.to.split("_")[2]);
+        // id = set_partId_no; a question may move to another part (a removed "own questions" part -> the CEA paper).
+        const bits = m.to.split("_");
+        const no = Number(bits[bits.length - 1]);
+        const partId = bits.slice(1, -1).join("_");
         const { id: _old, ...data } = q; void _old;
-        if (m.from !== m.to) tx.set(refs.questions(id).doc(m.to), { ...data, no });
-        moved.push({ ...q, id: m.to, no });
+        if (m.from !== m.to) tx.set(refs.questions(id).doc(m.to), { ...data, partId, no });
+        moved.push({ ...q, id: m.to, partId, no });
       }
       for (const m of p.remap.moves) if (m.from !== m.to && !targets.has(m.from)) tx.delete(refs.questions(id).doc(m.from));
       // A setter writing only some papers (shared by the HOD) keeps that share.

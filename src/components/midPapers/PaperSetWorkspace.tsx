@@ -73,13 +73,22 @@ export function PaperSetWorkspace({ detail }: { detail: MidBankDetail }) {
   const live = useMemo(() => paperQuestionErrors(q, setPart, sw), [q, setPart, sw]);
 
   // The Exam Cell changed the pattern / units per Mid after this paper started: offer to move onto the current one.
-  const [newer, setNewer] = useState<{ dropped: string[]; parts: { label: string; questions: number; unitLayout: number[] | null }[] } | null>(null);
+  const [newer, setNewer] = useState<{ dropped: string[]; reasons: Record<string, string>; parts: { label: string; questions: number; unitLayout: number[] | null }[] } | null>(null);
   const [updating, setUpdating] = useState(false);
+  // Checked on open, and again after each save while the notice shows (a question fixed / cleared drops off its list).
+  const patternNotice = useRef(true);
   useEffect(() => {
-    fetch(`/api/college/mid-question-banks/${encodeURIComponent(bank.id)}/update-pattern`).then((r) => (r.ok ? r.json() : null))
-      .then((d: { changed?: boolean; dropped?: string[]; parts?: { label: string; questions: number; unitLayout: number[] | null }[] } | null) => { if (d?.changed) setNewer({ dropped: d.dropped ?? [], parts: d.parts ?? [] }); })
-      .catch(() => undefined);
-  }, [bank.id]);
+    if (!patternNotice.current) return;
+    const t = setTimeout(() => {
+      fetch(`/api/college/mid-question-banks/${encodeURIComponent(bank.id)}/update-pattern`).then((r) => (r.ok ? r.json() : null))
+        .then((d: { changed?: boolean; dropped?: string[]; reasons?: Record<string, string>; parts?: { label: string; questions: number; unitLayout: number[] | null }[] } | null) => {
+          patternNotice.current = !!d?.changed;
+          setNewer(d?.changed ? { dropped: d.dropped ?? [], reasons: d.reasons ?? {}, parts: d.parts ?? [] } : null);
+        })
+        .catch(() => undefined);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [bank.id, questions]);
   async function updatePattern() {
     if (dirty && !(await save(isComplete ? "complete" : "draft"))) return;
     setUpdating(true);
@@ -214,7 +223,22 @@ export function PaperSetWorkspace({ detail }: { detail: MidBankDetail }) {
           <div className="min-w-0 flex-1">
             <p className="font-medium">The Exam Cell changed the question paper pattern after you started.</p>
             <p className="text-xs">Now: {newer.parts.map((x) => `${x.label} - ${x.unitLayout ? `${x.questions} questions (units ${x.unitLayout.join(", ")})` : x.questions ? `${x.questions} questions` : "your own questions"}`).join(" · ")}.
-              {newer.dropped.length ? ` ${newer.dropped.length} written question(s) would have no place - clear them first.` : " Your written questions keep their units."}</p>
+              {newer.dropped.length ? ` ${newer.dropped.length} written question(s) have no place yet - fix or clear each one below, then update.` : " Your written questions keep their units."}</p>
+            {newer.dropped.length > 0 && (
+              <ul className="mt-2 space-y-0.5 text-xs">
+                {newer.dropped.map((id) => {
+                  const bits = id.split("_");
+                  const qSet = Number(bits[0]); const qPart = bits.slice(1, -1).join("_"); const qNo = Number(bits[bits.length - 1]);
+                  const partLabel = pattern.parts.find((x) => x.id === qPart)?.label ?? qPart;
+                  return (
+                    <li key={id}>
+                      <button type="button" className="font-medium underline underline-offset-2" onClick={() => void go(qSet, qPart, qNo)}>Paper {qSet} · {partLabel} · Q{qNo}</button>
+                      {newer.reasons[id] ? ` - ${newer.reasons[id]}` : ""}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </div>
           <Button size="sm" onClick={() => void updatePattern()} loading={updating} disabled={newer.dropped.length > 0}>Update my papers</Button>
         </div>
