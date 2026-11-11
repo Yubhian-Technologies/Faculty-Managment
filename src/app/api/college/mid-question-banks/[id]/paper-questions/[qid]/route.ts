@@ -37,7 +37,8 @@ export async function PATCH(request: Request, { params }: Params) {
     if (!access.canWrite) return NextResponse.json({ error: writeRefusal(access).replace("question bank", "question papers") }, { status: 403 });
 
     const pattern = access.bank.pattern;
-    const m = /^(\d)_([A-F])_(\d{1,2})$/.exec(qid);
+    // Part ids: A-F from the Exam Cell's pattern, CEA for the with-Mid CEA paper.
+    const m = /^(\d)_([A-F]|CEA)_(\d{1,2})$/.exec(qid);
     const set = m ? Number(m[1]) : 0, partId = m?.[2] ?? "", no = m ? Number(m[3]) : 0;
     const part = pattern.parts.find((p) => p.id === partId);
     // A fixed part has its set number of questions; a faculty-decides part as many as the faculty write (checked below).
