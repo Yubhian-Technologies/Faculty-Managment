@@ -1,19 +1,21 @@
 import type { CeaSettings, MidPaperPattern, PaperPartDef } from "@/types";
 
-// The with-Mid CEA paper as a part of the setter's paper set - pure. It is written, reviewed, approved, chosen
+// The with-Mid CEA paper as a part of the setter's paper set - pure. The setter builds it (questions and marks
+// each) to the unit's marks. It is written, reviewed, approved, chosen
 // and finalized with the Mid paper, but printed as its OWN paper (own header, its minutes, the unit's marks)
 // and never counted in the Mid's marks. The Mid's time = the pattern's minus the CEA minutes.
 
 export const CEA_PART_ID = "CEA";
 
-export function ceaPart(settings: Pick<CeaSettings, "paper" | "paperMinutes">, unit: number): PaperPartDef {
-  const p = settings.paper;
+/**
+ * The CEA paper part: the Exam Cell fixes only its max marks (the unit's marks); the setter writes as many
+ * questions as they like, each with its own whole marks, adding up to that max (a faculty-decides part). Every
+ * question is on the planned unit.
+ */
+export function ceaPart(settings: Pick<CeaSettings, "unitMarks" | "paperMinutes">, unit: number): PaperPartDef {
   return {
     id: CEA_PART_ID, label: `CEA - Unit ${unit}`, title: `Continuous Evaluation - Unit ${unit}`,
-    kind: p.kind, questions: p.questions, marksEach: p.marksEach,
-    choice: p.answer ? { kind: "ANY", answer: p.answer } : { kind: "ALL" },
-    ...(p.kind === "MCQ" ? { options: 4 } : {}), ...(p.kind === "DESCRIPTIVE" ? { maxSubParts: 2 } : {}),
-    unitLayout: Array.from({ length: p.questions }, () => unit),
+    flexible: true, maxMarks: settings.unitMarks, kind: "DESCRIPTIVE", questions: 0, marksEach: 0, choice: { kind: "ALL" },
     cea: { unit, minutes: settings.paperMinutes },
   };
 }

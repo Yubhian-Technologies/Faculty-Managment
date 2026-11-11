@@ -3,7 +3,6 @@ import { FakeFirestore, asFirestore } from "@/test-support/fakeFirestore";
 import { applyCeaEntries, ceaComponentValues, reconcileRoster } from "./marks";
 import { sheetFromPattern } from "@/lib/exams/questionMarks";
 import { ceaPart } from "./paper";
-import { DEFAULT_CEA_PAPER } from "./rules";
 
 // CEA end to end through the REAL routes on an in-memory Firestore: Exam Cell settings -> HOD plan (needs a frozen
 // syllabus) -> faculty CEA marks per unit -> the internal-marks component linked to CEA is worked out (never typed)
@@ -57,10 +56,14 @@ describe("CEA marks rules", () => {
     const e = applyCeaEntries(roster, [{ studentId: "a", marks: 7.5 }, { studentId: "b", absent: true }, { studentId: "x", marks: 1 }], 10, null);
     expect(e.map((x) => [x.marks, !!x.absent])).toEqual([[7.5, false], [0, true]]);
     expect(() => applyCeaEntries(roster, [{ studentId: "a", marks: 11 }], 10, null)).toThrow(/0-10/);
-    const qs = sheetFromPattern({ parts: [ceaPart({ paper: DEFAULT_CEA_PAPER, paperMinutes: 20 }, 2)] }, "CHOSEN")!;
+    // The setter wrote 2 questions (6 + 4 marks) for the CEA paper; marks per question add up.
+    const qs = sheetFromPattern({ parts: [ceaPart({ unitMarks: 10, paperMinutes: 20 }, 2)] }, "CHOSEN", { set: 1, questions: [
+      { set: 1, partId: "CEA", no: 1, kind: "SHORT", marks: 6 }, { set: 1, partId: "CEA", no: 2, kind: "SHORT", marks: 4 }] })!;
     const keys = qs.columns.map((c) => c.key);
-    const byQ = applyCeaEntries(roster, [{ studentId: "a", questionMarks: Object.fromEntries(keys.map((k, i) => [k, i < 4 ? 2 : 1])) }], 10, qs);
+    expect(qs.paperMax).toBe(10);
+    const byQ = applyCeaEntries(roster, [{ studentId: "a", questionMarks: Object.fromEntries(keys.map((k, i) => [k, i === 0 ? 5 : 4])) }], 10, qs);
     expect(byQ[0].marks).toBe(9);
+    expect(() => applyCeaEntries(roster, [{ studentId: "a", questionMarks: { [keys[1]]: 5 } }], 10, qs)).toThrow();
     expect(reconcileRoster(e, [{ id: "b", rollNumber: "2", name: "B" }, { id: "c", rollNumber: "3", name: "C" }]).map((x) => [x.studentId, x.marks])).toEqual([["b", 0], ["c", null]]);
     // 3 planned units, 2 submitted (8 + 9 = 17 of 30) into a 30-mark component = 17.
     const v = ceaComponentValues(3, 10, [
@@ -74,9 +77,9 @@ describe("CEA marks rules", () => {
 
 describe("CEA end to end", () => {
   it("settings -> plan -> marks -> internal marks", async () => {
-    // Exam Cell: CEA on for B.Tech R26 (the paper must add up to the unit's marks).
-    expect((await call(settingsApi(), "PUT", { settings: { courseKey: "btech", courseName: "B.Tech", regulation: "R26", unitMarks: 10, paperMinutes: 20, paper: { kind: "SHORT", questions: 5, marksEach: 3, answer: null }, types: [] }, version: 0 })).status).toBe(400);
-    expect((await call(settingsApi(), "PUT", { settings: { courseKey: "btech", courseName: "B.Tech", regulation: "R26", unitMarks: 10, paperMinutes: 20, paper: DEFAULT_CEA_PAPER, types: [{ label: "Assignment" }] }, version: 0 })).status).toBe(200);
+    // Exam Cell: CEA on for B.Tech R26 - only the marks per unit (= a CEA paper's max) and its time are fixed.
+    expect((await call(settingsApi(), "PUT", { settings: { courseKey: "btech", courseName: "B.Tech", regulation: "R23x", unitMarks: 10, paperMinutes: 20, types: [] }, version: 0 })).status).toBe(400);
+    expect((await call(settingsApi(), "PUT", { settings: { courseKey: "btech", courseName: "B.Tech", regulation: "R26", unitMarks: 10, paperMinutes: 20, types: [{ label: "Assignment" }] }, version: 0 })).status).toBe(200);
     const subs = await call(subjectsApi(), "GET");
     expect(subs.json.subjects.map((s: Json) => s.code)).toEqual(["MA101"]); // R23 subject not included
 

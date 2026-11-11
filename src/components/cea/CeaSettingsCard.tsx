@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/useToast";
-import { DEFAULT_CEA_PAPER, DEFAULT_CEA_TYPES, WRITTEN, ceaPaperMax } from "@/lib/cea/rules";
+import { DEFAULT_CEA_TYPES, WRITTEN } from "@/lib/cea/rules";
 import type { CeaSettings } from "@/types";
 
 // Exam Cell > Mid Configuration > CEA: Continuous Evaluation per course + regulation (e.g. B.Tech R26).
@@ -37,7 +37,7 @@ export function CeaSettingsCard() {
   }
 
   if (!d) return <div className="h-32 animate-pulse rounded-lg bg-muted" />;
-  const startNew = () => setEdit({ id: "", courseKey: "", courseName: "", regulation: "", enabled: true, unitMarks: 10, types: DEFAULT_CEA_TYPES.map((t) => ({ ...t })), paperMinutes: 20, paper: { ...DEFAULT_CEA_PAPER }, version: 0 });
+  const startNew = () => setEdit({ id: "", courseKey: "", courseName: "", regulation: "", enabled: true, unitMarks: 10, types: DEFAULT_CEA_TYPES.map((t) => ({ ...t })), paperMinutes: 20, version: 0 });
   const course = d.courses.find((c) => c.courseKey === edit?.courseKey);
 
   return (
@@ -52,9 +52,9 @@ export function CeaSettingsCard() {
             <li key={s.id} className="flex flex-wrap items-center gap-3 px-3 py-2">
               <span className="font-medium">{s.courseName} · {s.regulation}</span>
               <span className={s.enabled ? "text-emerald-700 dark:text-emerald-300" : "text-muted-foreground"}>{s.enabled ? "On" : "Off"}</span>
-              <span className="text-muted-foreground">{s.unitMarks} per unit · paper {s.paperMinutes} min{s.paper ? ` (${s.paper.questions} x ${s.paper.marksEach})` : ""} · {s.types.length} types</span>
+              <span className="text-muted-foreground">{s.unitMarks} per unit · paper {s.paperMinutes} min · {s.types.length} types</span>
               <span className="flex-1" />
-              {d.canEdit && <Button size="sm" variant="ghost" onClick={() => setEdit({ ...structuredClone(s), paper: s.paper ?? { ...DEFAULT_CEA_PAPER } })}>Edit</Button>}
+              {d.canEdit && <Button size="sm" variant="ghost" onClick={() => setEdit(structuredClone(s))}>Edit</Button>}
             </li>
           ))}</ul>
         )}
@@ -82,21 +82,7 @@ export function CeaSettingsCard() {
               ))}
               <label className="flex items-center gap-2 pb-1.5 text-sm"><Checkbox checked={edit.enabled} onCheckedChange={(c) => setEdit({ ...edit, enabled: !!c })} />On</label>
             </div>
-            <div className="space-y-1.5 rounded-md bg-muted/40 p-3">
-              <p className="text-sm font-medium">With-Mid CEA paper</p>
-              <div className="flex flex-wrap items-end gap-3">
-                <div className="space-y-1"><Label className="text-xs">Questions</Label>
-                  <select className={selectClass} value={edit.paper.kind} onChange={(e) => setEdit({ ...edit, paper: { ...edit.paper, kind: e.target.value as CeaSettings["paper"]["kind"] } })}>
-                    <option value="SHORT">Short answer</option><option value="MCQ">Choose the correct answer</option><option value="FILL_BLANK">Fill in the blanks</option><option value="DESCRIPTIVE">Descriptive</option>
-                  </select>
-                </div>
-                {([["How many", "questions"], ["Marks each", "marksEach"]] as const).map(([l, k]) => (
-                  <div key={k} className="space-y-1"><Label className="text-xs">{l}</Label><Input className="h-8 w-20" inputMode="numeric" value={edit.paper[k]} onChange={(e) => setEdit({ ...edit, paper: { ...edit.paper, [k]: Number(e.target.value.replace(/[^\d]/g, "")) || 0 } })} /></div>
-                ))}
-                <div className="space-y-1"><Label className="text-xs">Answer any (blank = all)</Label><Input className="h-8 w-20" inputMode="numeric" value={edit.paper.answer ?? ""} onChange={(e) => setEdit({ ...edit, paper: { ...edit.paper, answer: Number(e.target.value.replace(/[^\d]/g, "")) || null } })} /></div>
-                <p className={`pb-1.5 text-xs ${ceaPaperMax(edit.paper) === edit.unitMarks ? "text-muted-foreground" : "text-destructive"}`}>= {ceaPaperMax(edit.paper)} marks (must be {edit.unitMarks})</p>
-              </div>
-            </div>
+            <p className="text-xs text-muted-foreground">A with-Mid CEA paper carries the unit&apos;s marks ({edit.unitMarks}); the Mid paper setter decides its questions and the marks of each.</p>
             <p className="text-xs text-muted-foreground">The units add up and scale to the internal-marks component you link to CEA (Marks tab: &quot;From CEA&quot;) - e.g. 5 units x 10 = 50 into a 30-mark component: 42 becomes 25.2. A with-Mid paper&apos;s time comes out of that Mid&apos;s sitting (90 min = 20 CEA + 70 Mid).</p>
             <div className="space-y-1.5">
               <p className="text-sm font-medium">Assessment types</p>
