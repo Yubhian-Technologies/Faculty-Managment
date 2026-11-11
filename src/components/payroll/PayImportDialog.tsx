@@ -20,7 +20,7 @@ import { collegeQs, monthLabel, payrollFetch, rupees, thisMonth } from "./payrol
 const CODE_HEADERS = new Set(["EMPCODE", "EMPLOYEECODE", "EMPLOYEEID"]);
 const norm = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, "");
 
-type Plan = { rows: ImportPlanRow[]; unknownColumns: string[]; errors: number; blocked: string | null; applied: number };
+type Plan = { rows: ImportPlanRow[]; unknownColumns: string[]; errors: number; skipped?: number; blocked: string | null; applied: number };
 
 export function PayImportDialog({ collegeId, settings, rows: people, onClose, onDone }: {
   collegeId?: string; settings: PayrollSettings; rows: PayRow[]; onClose: () => void; onDone: () => void;
@@ -64,11 +64,13 @@ export function PayImportDialog({ collegeId, settings, rows: people, onClose, on
       const lower = f.name.toLowerCase();
       if (lower.endsWith(".xls")) throw new Error("Save the file as .xlsx or .csv first");
       const parsed = lower.endsWith(".csv") ? parseCSVWithRowNumbers(await readFileAsText(f)) : await parseExcelFileWithRowNumbers(f, `/api/college/payroll/parse-excel${collegeQs(collegeId)}`);
-      const headers = (parsed.rows[0] ?? []).map((h) => String(h ?? "").trim());
+      // The header row: the first one with an Emp Code column (the monthly sheet has title lines above it).
+      const headAt = parsed.rows.slice(0, 15).findIndex((r) => r.some((c) => CODE_HEADERS.has(norm(String(c ?? "")))));
+      if (headAt < 0) throw new Error('The file needs an "Emp Code" column');
+      const headers = parsed.rows[headAt].map((h) => String(h ?? "").trim());
       const codeAt = headers.findIndex((h) => CODE_HEADERS.has(norm(h)));
-      if (codeAt < 0) throw new Error('The file needs an "Emp Code" column');
-      const rows = parsed.rows.slice(1).map((r, i) => ({
-        row: parsed.rowNumbers[i + 1] ?? i + 2, code: String(r[codeAt] ?? "").trim(),
+      const rows = parsed.rows.slice(headAt + 1).map((r, i) => ({
+        row: parsed.rowNumbers[headAt + 1 + i] ?? headAt + i + 2, code: String(r[codeAt] ?? "").trim(),
         values: Object.fromEntries(headers.map((h, j) => [h, String(r[j] ?? "").trim()])),
       })).filter((r) => Object.values(r.values).some(Boolean));
       if (rows.length === 0) throw new Error("No rows under the header");
@@ -100,7 +102,7 @@ export function PayImportDialog({ collegeId, settings, rows: people, onClose, on
       <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Import salary sheet</DialogTitle>
-          <DialogDescription>Fixed monthly pay per person, matched by Emp Code. Download the template (it has everyone&apos;s current pay), change it, and upload it.</DialogDescription>
+          <DialogDescription>Fixed monthly pay per person, matched by Emp Code. Download the template (it has everyone&apos;s current pay), change it, and upload it - or upload your monthly salary sheet as it is (Pay Days and the worked-out columns are skipped; a PF / SWF amount means it applies).</DialogDescription>
         </DialogHeader>
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1.5"><Label htmlFor="pi-from">Pay starts from</Label><Input id="pi-from" type="month" className="w-44" value={from} onChange={(e) => { if (e.target.value) { setFrom(e.target.value); setPlan(null); } }} /></div>
@@ -118,6 +120,7 @@ export function PayImportDialog({ collegeId, settings, rows: people, onClose, on
               {count("ERROR") > 0 && <span className="rounded-full bg-red-100 px-3 py-1 text-red-900 dark:bg-red-950/50 dark:text-red-200">{count("ERROR")} with problems</span>}
             </div>
             {plan.blocked && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-900 dark:bg-red-950/40 dark:text-red-200">{plan.blocked}</p>}
+            {(plan.skipped ?? 0) > 0 && <p className="text-xs text-muted-foreground">{plan.skipped} row(s) without an Emp Code skipped (totals, headings, notes).</p>}
             {plan.unknownColumns.length > 0 && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-900 dark:bg-red-950/40 dark:text-red-200">Columns this import doesn&apos;t know: {plan.unknownColumns.join(", ")}. Rename them to a pay part or deduction, or remove them.</p>}
             {shown.length > 0 && (
               <div className="max-h-80 overflow-auto rounded-md border"><table className="w-full text-xs">
