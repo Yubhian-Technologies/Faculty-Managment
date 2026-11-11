@@ -323,47 +323,58 @@ export function remapQuestions(
   const dropped: string[] = [];
   const reasons: Record<string, string> = {};
   const drop = (id: string, why: string) => { dropped.push(id); reasons[id] = why; };
-  // An "own questions" part the Exam Cell took away hands its questions to an "own questions" part that is new in the
-  // pattern (in order) - e.g. a written CEA part they had set up by hand, now the planned CEA paper.
-  const newIds = new Set(newPat.parts.map((p) => p.id));
-  const oldIds = new Set(oldPat.parts.map((p) => p.id));
-  const goneFlex = oldPat.parts.filter((p) => p.flexible && !newIds.has(p.id));
-  const addedFlex = newPat.parts.filter((p) => p.flexible && !oldIds.has(p.id));
-  const heir = new Map(goneFlex.map((p, i) => [p.id, addedFlex[i]] as const).filter(([, t]) => !!t));
+  // Which new part each old part's questions go to: the same part when it is still the same kind (own questions /
+  // fixed questions); otherwise, in order, a part of the same kind nothing else took. So when the Exam Cell turns
+  // their hand-made written part into the planned CEA paper and reshapes the Mid part, own questions go to the
+  // CEA paper and fixed questions to the Mid part.
+  const sameKind = (a: PaperPartDef, b: PaperPartDef) => !!a.flexible === !!b.flexible;
+  const target = new Map<string, PaperPartDef>();
+  const taken = new Set<string>();
+  for (const op of oldPat.parts) {
+    const np = newPat.parts.find((p) => p.id === op.id);
+    if (np && sameKind(op, np)) { target.set(op.id, np); taken.add(np.id); }
+  }
+  for (const op of oldPat.parts) {
+    if (target.has(op.id)) continue;
+    const np = newPat.parts.find((p) => !taken.has(p.id) && sameKind(op, p));
+    if (np) { target.set(op.id, np); taken.add(np.id); }
+  }
   const nextNo = new Map<string, number>();
   const sorted = [...questions].sort((a, b) => a.set - b.set || a.partId.localeCompare(b.partId) || a.no - b.no);
   for (const q of sorted) {
     const op = oldPat.parts.find((p) => p.id === q.partId);
-    const np = newPat.parts.find((p) => p.id === q.partId);
+    const np = target.get(q.partId);
     const label = op?.label ?? q.partId;
     if (q.set > newPat.setsPerFaculty) { drop(q.id, `Paper ${q.set} is no longer in the pattern`); continue; }
     if (!np) {
-      const to = heir.get(q.partId);
-      if (!to) { drop(q.id, `${label} is no longer in the paper`); continue; }
-      if (to.cea && q.unit != null && q.unit !== to.cea.unit) { drop(q.id, `${label} is now the CEA paper on Unit ${to.cea.unit} - this question is on Unit ${q.unit}`); continue; }
-      const key = `${q.set}_${to.id}`;
-      const no = (nextNo.get(key) ?? 0) + 1;
-      nextNo.set(key, no);
-      moves.push({ from: q.id, to: questionId(q.set, to.id, no) });
+      const same = newPat.parts.find((p) => p.id === q.partId);
+      drop(q.id, same ? (same.flexible ? `${label} is now your own questions` : `${label} now has a fixed number of questions`) : `${label} is no longer in the paper`);
       continue;
     }
-    if (!!np.flexible !== !!op?.flexible) { drop(q.id, np.flexible ? `${label} is now your own questions` : `${label} now has a fixed number of questions`); continue; }
     // A CEA paper now for another unit (the Subject Department changed its plan): questions written for the old unit have no place.
     if (np.cea && op?.cea && np.cea.unit !== op.cea.unit) { drop(q.id, `The CEA paper moved from Unit ${op.cea.unit} to Unit ${np.cea.unit}`); continue; }
-    if (np.flexible) { moves.push({ from: q.id, to: q.id }); continue; }
+    if (np.cea && !op?.cea && q.unit != null && q.unit !== np.cea.unit) { drop(q.id, `${label} now goes to the CEA paper on Unit ${np.cea.unit} - this question is on Unit ${q.unit}`); continue; }
+    if (np.flexible) {
+      if (np.id === q.partId) { moves.push({ from: q.id, to: q.id }); continue; }
+      const key = `${q.set}_${np.id}`;
+      const no = (nextNo.get(key) ?? 0) + 1;
+      nextNo.set(key, no);
+      moves.push({ from: q.id, to: questionId(q.set, np.id, no) });
+      continue;
+    }
     if (np.perUnit) {
       const unit = q.unit ?? (op ? unitOfQuestion(op, units, q.no) : undefined);
-      if (unit == null) { drop(q.id, `${label} now goes unit by unit - pick this question's unit`); continue; }
+      if (unit == null) { drop(q.id, `${np.label} now goes unit by unit - pick this question's unit`); continue; }
       // Its place among the old part's questions of the same unit.
       const oldNos = questions.filter((x) => x.set === q.set && x.partId === q.partId && (x.unit ?? (op ? unitOfQuestion(op, units, x.no) : undefined)) === unit).map((x) => x.no).sort((a, b) => a - b);
       const k = oldNos.indexOf(q.no);
       const slots = (np.unitLayout ?? []).map((u, i) => (u === unit ? i + 1 : 0)).filter(Boolean);
-      if (k < 0 || k >= slots.length) { drop(q.id, slots.length ? `${label} now has ${slots.length} question${slots.length === 1 ? "" : "s"} on Unit ${unit} - this is one too many` : `${label} has no Unit ${unit} question now`); continue; }
-      moves.push({ from: q.id, to: questionId(q.set, q.partId, slots[k]) });
+      if (k < 0 || k >= slots.length) { drop(q.id, slots.length ? `${np.label} has ${slots.length} question${slots.length === 1 ? "" : "s"} on Unit ${unit} - this one is extra` : `${np.label} has no Unit ${unit} question now`); continue; }
+      moves.push({ from: q.id, to: questionId(q.set, np.id, slots[k]) });
       continue;
     }
-    if (q.no > np.questions) { drop(q.id, `${label} now has ${np.questions} question${np.questions === 1 ? "" : "s"}`); continue; }
-    moves.push({ from: q.id, to: q.id });
+    if (q.no > np.questions) { drop(q.id, `${np.label} now has ${np.questions} question${np.questions === 1 ? "" : "s"}`); continue; }
+    moves.push({ from: q.id, to: questionId(q.set, np.id, q.no) });
   }
   return { moves, dropped, reasons };
 }
