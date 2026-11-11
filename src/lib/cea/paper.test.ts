@@ -75,7 +75,25 @@ describe("plan changes after writing", () => {
     const r = remapQuestions(old, now, qs, [1, 2, 3]);
     expect(r.moves).toEqual([{ from: "1_M_1", to: "1_M_1" }, { from: "1_X_1", to: "1_CEA_1" }, { from: "1_X_2", to: "1_CEA_2" }]);
     expect(r.dropped.sort()).toEqual(["1_M_2", "1_X_3"]);
-    expect(r.reasons["1_X_3"]).toBe("Written is now the CEA paper on Unit 2 - this question is on Unit 1");
+    expect(r.reasons["1_X_3"]).toBe("Written now goes to the CEA paper on Unit 2 - this question is on Unit 1");
     expect(r.reasons["1_M_2"]).toBe("Mid now goes unit by unit - pick this question's unit");
+  });
+  it("the Exam Cell reshaped the parts (their written part 1 became the Mid part, part 2 removed): own questions -> CEA, fixed -> the Mid part", async () => {
+    const { remapQuestions } = await import("@/lib/midPapers/pattern");
+    const P1old: PaperPartDef = { id: "p1", label: "Continuous Internal Evalution", title: "", kind: "DESCRIPTIVE", questions: 0, marksEach: 0, choice: { kind: "ALL" }, flexible: true, maxMarks: 10 };
+    const P2old: PaperPartDef = { id: "p2", label: "MID EXAMINATION", title: "", kind: "DESCRIPTIVE", questions: 5, marksEach: 5, choice: { kind: "ALL" } };
+    const P1new: PaperPartDef = { id: "p1", label: "MID EXAMINATION", title: "", kind: "DESCRIPTIVE", questions: 0, marksEach: 5, choice: { kind: "ALL" }, perUnit: 2, maxMarks: 25, unitLayout: [1, 1, 2, 2, 3] };
+    const old = { parts: [P1old, P2old], setsPerFaculty: 3 };
+    const now = { parts: withCeaPart({ parts: [P1new] }, ceaPart(P, 2)).parts, setsPerFaculty: 3 };
+    const qs = [
+      ...[1, 2, 3, 4].map((no) => ({ id: `3_p1_${no}`, set: 3, partId: "p1", no, unit: 2 })),
+      ...[1, 1, 2, 2, 3].map((unit, i) => ({ id: `3_p2_${i + 1}`, set: 3, partId: "p2", no: i + 1, unit })),
+    ];
+    const r = remapQuestions(old, now, qs, [1, 2, 3]);
+    expect(r.dropped).toEqual([]);
+    expect(r.moves).toEqual([
+      { from: "3_p1_1", to: "3_CEA_1" }, { from: "3_p1_2", to: "3_CEA_2" }, { from: "3_p1_3", to: "3_CEA_3" }, { from: "3_p1_4", to: "3_CEA_4" },
+      { from: "3_p2_1", to: "3_p1_1" }, { from: "3_p2_2", to: "3_p1_2" }, { from: "3_p2_3", to: "3_p1_3" }, { from: "3_p2_4", to: "3_p1_4" }, { from: "3_p2_5", to: "3_p1_5" },
+    ]);
   });
 });
