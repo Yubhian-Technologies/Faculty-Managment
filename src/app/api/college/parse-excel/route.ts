@@ -2,28 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
-import ExcelJS from "exceljs";
-import type { CellValue } from "exceljs";
-
-const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10MB - matches the 500-row cap the import pages enforce
-
-// Excel cells come back as strings, numbers, Dates, or rich objects (formula
-// results, hyperlinks, rich text runs) depending on how the sheet was authored -
-// normalize all of them to the plain strings the import pipeline expects, same
-// convention as CSV text (dates as YYYY-MM-DD).
-function cellToString(value: CellValue): string {
-  if (value === null || value === undefined) return "";
-  if (value instanceof Date) return value.toISOString().slice(0, 10);
-  if (typeof value === "object") {
-    if ("richText" in value && Array.isArray(value.richText)) {
-      return value.richText.map((t) => t.text).join("");
-    }
-    if ("result" in value) return cellToString(value.result as CellValue);
-    if ("text" in value) return String(value.text ?? "");
-    return "";
-  }
-  return String(value).trim();
-}
+import { MAX_EXCEL_BYTES, loadWorkbook, readSheet } from "@/lib/excel/readWorkbook";
 
 // Parses an uploaded .xlsx workbook's first sheet into rows of plain strings -
 // run server-side (real Node exceljs) rather than in the browser, since
@@ -45,32 +24,11 @@ export async function POST(request: Request) {
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
     }
-    if (file.size > MAX_FILE_BYTES) {
+    if (file.size > MAX_EXCEL_BYTES) {
       return NextResponse.json({ error: "File too large (max 10MB)" }, { status: 400 });
     }
 
-    const buffer = await file.arrayBuffer();
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(buffer);
-
-    const readSheet = (sheet: ExcelJS.Worksheet) => {
-      const rows: string[][] = [];
-      // Each kept row's real sheet row number (1-based), parallel to `rows` -
-      // blank rows are skipped above, so an importer that reports "Row N"
-      // needs this to point at the row the user actually sees in Excel.
-      const rowNumbers: number[] = [];
-      sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-        const cells: string[] = [];
-        for (let i = 1; i <= row.cellCount; i++) {
-          cells.push(cellToString(row.getCell(i).value));
-        }
-        if (cells.some((c) => c.trim())) {
-          rows.push(cells);
-          rowNumbers.push(rowNumber);
-        }
-      });
-      return { rows, rowNumbers };
-    };
+    const workbook = await loadWorkbook(await file.arrayBuffer());
 
     // allSheets=1: every non-empty sheet, by name (one section per sheet, e.g. an attendance register).
     // The default stays the first sheet only, exactly as before.
