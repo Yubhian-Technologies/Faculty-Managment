@@ -47,7 +47,7 @@ describe("the CEA paper inside a Mid paper set", () => {
     // Heading: "I B.Tech. SEMESTER-1" (no "Continuous Evaluation" line); the Mid paper keeps its own.
     expect(pages[1]).toContain("I B.Tech. SEMESTER-1</p>");
     expect(pages[1]).not.toContain("CONTINUOUS EVALUATION (WITH");
-    expect(pages[0]).toContain("MID-1 EXAMINATION");
+    expect(pages[0]).toContain("I B.Tech. SEMESTER-1 MID EXAMINATION-1</p>");
     // PO / PSO column only when the Exam Cell prints POs (Mid Configuration).
     const withPo = (printPo: boolean) => paperSetHtmls({
       college: { name: "VWU", printPo }, exam: { courseName: "B.Tech", year: 1, semester: 1, midNumber: 1 }, subject: { name: "Maths", code: "MA101", regulation: "R26" },
