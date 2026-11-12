@@ -67,7 +67,7 @@ export function PaperSetReview({ detail, writeHref, onChanged }: { detail: MidBa
           onClose={() => setDownloading(false)}
           onDownload={(which, parts) => { setDownloading(false); void pdf(which, parts); }} />
       )}
-      <ApprovalPanel bank={bank} isOwner={detail.access.isOwner} isHod={!!detail.access.isHod} onChanged={onChanged} />
+      <ApprovalPanel bank={bank} isOwner={detail.access.isOwner} isHod={!!detail.access.isHod} onChanged={onChanged} editHref={writeHref && detail.access.canWrite ? writeHref : undefined} />
       <SuggestionsPanel bankId={bank.id} questions={questions.map((q) => ({ id: q.id, label: `Paper ${q.set} · ${pattern.parts.find((p) => p.id === q.partId)?.label ?? q.partId} Q${q.no}` }))} />
       <Card><CardContent className="flex flex-wrap items-center gap-2 p-4">
         <div className="min-w-0 flex-1">
