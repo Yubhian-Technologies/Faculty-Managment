@@ -112,9 +112,10 @@ export function getMidPaperSetHTML(d: PaperSetPdfData): string {
         continue;
       }
       if (q?.subParts?.length) {
-        if (q.text.trim()) block += `<tr><td class="no">${label}</td><td class="q">${text(q.text, q.imageUrl, q.imageCaption)}</td><td class="num"></td>${tags(q)}</tr>`;
+        // Parts are numbered with the question: 1a, 1b ... (an opening line prints above them, unnumbered).
+        if (q.text.trim()) block += `<tr><td class="no"></td><td class="q">${text(q.text, q.imageUrl, q.imageCaption)}</td><td class="num"></td>${tags(q)}</tr>`;
         q.subParts.forEach((sp, j) => {
-          block += `<tr><td class="no">${!q.text.trim() && j === 0 ? `${label}.` : ""}(${LETTERS[j]})</td><td class="q">${text(sp.text, sp.imageUrl, sp.imageCaption)}</td><td class="num">${sp.marks}</td>${j === 0 && !q.text.trim() ? tags(q) : extra.map(() => `<td class="num"></td>`).join("")}</tr>`;
+          block += `<tr><td class="no">${part.cea ? `${label}(${LETTERS[j]})` : `${label}${LETTERS[j]}`}</td><td class="q">${text(sp.text, sp.imageUrl, sp.imageCaption)}</td><td class="num">${sp.marks}</td>${j === 0 && !q.text.trim() ? tags(q) : extra.map(() => `<td class="num"></td>`).join("")}</tr>`;
         });
       } else {
         const opts = kind === "MCQ" && q?.options
