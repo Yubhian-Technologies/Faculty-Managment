@@ -295,9 +295,11 @@ export const questionTexts = (q: Pick<MidPaperQuestion, "text" | "subParts" | "o
  * are wording only - they follow the Exam Cell on every paper not yet printed, with nothing for the setter to do.
  */
 export function withCurrentNames<P extends Pick<MidPaperPattern, "parts">>(own: P, current: Pick<MidPaperPattern, "parts"> | null | undefined): P {
-  if (!current) return own;
+  if (!current && !own.parts.some((p) => p.cea)) return own;
   return { ...own, parts: own.parts.map((p) => {
-    const c = current.parts.find((x) => x.id === p.id);
+    // The with-Mid CIE paper (once "CEA"): always today's name, whatever a started paper set kept.
+    if (p.cea) return { ...p, label: `CIE - Unit ${p.cea.unit}`, title: `Continuous Internal Evaluation - Unit ${p.cea.unit}` };
+    const c = current?.parts.find((x) => x.id === p.id);
     return c ? { ...p, label: c.label, title: c.title } : p;
   }) };
 }
@@ -352,8 +354,8 @@ export function remapQuestions(
       continue;
     }
     // A CEA paper now for another unit (the Subject Department changed its plan): questions written for the old unit have no place.
-    if (np.cea && op?.cea && np.cea.unit !== op.cea.unit) { drop(q.id, `The CEA paper moved from Unit ${op.cea.unit} to Unit ${np.cea.unit}`); continue; }
-    if (np.cea && !op?.cea && q.unit != null && q.unit !== np.cea.unit) { drop(q.id, `${label} now goes to the CEA paper on Unit ${np.cea.unit} - this question is on Unit ${q.unit}`); continue; }
+    if (np.cea && op?.cea && np.cea.unit !== op.cea.unit) { drop(q.id, `The CIE paper moved from Unit ${op.cea.unit} to Unit ${np.cea.unit}`); continue; }
+    if (np.cea && !op?.cea && q.unit != null && q.unit !== np.cea.unit) { drop(q.id, `${label} now goes to the CIE paper on Unit ${np.cea.unit} - this question is on Unit ${q.unit}`); continue; }
     if (np.flexible) {
       if (np.id === q.partId) { moves.push({ from: q.id, to: q.id }); continue; }
       const key = `${q.set}_${np.id}`;

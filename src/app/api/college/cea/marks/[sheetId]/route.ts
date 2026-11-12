@@ -46,7 +46,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ sh
     const first = (await ref.get()).data() as CeaMarksSheet | undefined;
     if (!first) throw new CeaError("Not found", 404);
     if (first.facultyId !== (await resolveFacultyMemberId(db, session.collegeId, session.uid))) throw new CeaError("This isn't your section", 403);
-    if (await internalSubmitted(db, session.collegeId, first.assignmentId)) throw new CeaError("The section's internal marks are already submitted - CEA marks can't change", 409);
+    if (await internalSubmitted(db, session.collegeId, first.assignmentId)) throw new CeaError("The section's internal marks are already submitted - CIE marks can't change", 409);
     const mid = midOf(first.when);
     const qSheet = mid && body.entries ? await ceaQuestionSheet(db, session.collegeId, { subjectId: first.subjectId, department: first.department, year: first.year, midNumber: mid }) : null;
     const at = new Date().toISOString();

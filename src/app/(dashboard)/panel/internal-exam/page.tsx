@@ -416,7 +416,7 @@ export default function InternalExamPage() {
                               </div>
                             </th>
                           ) : (
-                            <th key={c.id} className="px-4 py-3">{c.name} (Max {c.maxMarks}){c.cea && <span className="block font-normal normal-case">from CEA Marks</span>}</th>
+                            <th key={c.id} className="px-4 py-3">{c.name} (Max {c.maxMarks}){c.cea && <span className="block font-normal normal-case">from CIE Marks</span>}</th>
                           ))}
                           <th className="px-4 py-3">Total (Out of {configuration.internalMaxMarks})</th>
                         </tr>
@@ -440,7 +440,7 @@ export default function InternalExamPage() {
                                 </div>
                               </td>
                             ) : c.cea ? (
-                              <td key={c.id} className="px-4 py-2.5 font-medium" title="Worked out from the submitted CEA units">{componentValue(entry.studentId, c.id, c.maxMarks) ?? "-"}</td>
+                              <td key={c.id} className="px-4 py-2.5 font-medium" title="Worked out from the submitted CIE units">{componentValue(entry.studentId, c.id, c.maxMarks) ?? "-"}</td>
                             ) : (
                               <td key={c.id} className="px-4 py-2.5">
                                 <Input

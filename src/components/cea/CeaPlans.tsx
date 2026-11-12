@@ -39,7 +39,7 @@ export function CeaPlans({ title, description, tabs }: { title: string; descript
       <PageHeader title={title} description={description} className={tabs ? "mb-0" : undefined} />
       {tabs}
       {error ? <p className="text-sm text-destructive">{error}</p> : !d ? <div className="h-40 animate-pulse rounded-2xl bg-muted/40" /> : d.subjects.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No subjects need a CEA plan. CEA is switched on per course and regulation in Exam Cell &gt; Mid Configuration &gt; CEA{d.role === "HOD" ? ", and only subjects your department looks after (Subject Department) are listed here" : ""}.</p>
+        <p className="text-sm text-muted-foreground">No subjects need a CIE plan. CIE is switched on per course and regulation in Exam Cell &gt; Mid Configuration &gt; CIE{d.role === "HOD" ? ", and only subjects your department looks after (Subject Department) are listed here" : ""}.</p>
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-3">
@@ -93,7 +93,7 @@ export function CeaPlanDialog({ subjectId, onClose, onSaved }: { subjectId: stri
       const res = await fetch(`/api/college/cea/plans/${encodeURIComponent(subjectId)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ version: d?.plan?.version ?? 0, units }) });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error ?? "Couldn't save");
-      toast({ variant: "success", title: "CEA plan saved" }); onSaved();
+      toast({ variant: "success", title: "CIE plan saved" }); onSaved();
     } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't save" }); }
     finally { setBusy(false); }
   }
@@ -104,10 +104,10 @@ export function CeaPlanDialog({ subjectId, onClose, onSaved }: { subjectId: stri
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>CEA plan{d ? ` - ${d.subject.name}` : ""}</DialogTitle>
+          <DialogTitle>CIE plan{d ? ` - ${d.subject.name}` : ""}</DialogTitle>
           <DialogDescription>{d ? `${d.subject.code} · ${d.subject.courseName} ${d.subject.regulation} · every branch${d.settings ? ` · ${d.settings.unitMarks} marks a unit` : ""}` : "Loading..."}</DialogDescription>
         </DialogHeader>
-        {d && !d.settings && <p className="text-sm text-muted-foreground">CEA isn&apos;t switched on for this course and regulation.</p>}
+        {d && !d.settings && <p className="text-sm text-muted-foreground">CIE isn&apos;t switched on for this course and regulation.</p>}
         {d && d.settings && d.syllabusStatus !== "FROZEN" && <p className="text-sm text-amber-700 dark:text-amber-300">The syllabus isn&apos;t frozen yet - its units are what you plan. Academics freeze it after the HOD submits it.</p>}
         {d && d.settings && d.units.length > 0 && (
           <div className="space-y-2">

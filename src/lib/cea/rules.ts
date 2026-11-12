@@ -25,11 +25,11 @@ export function cleanCeaSettings(raw: unknown): Pick<CeaSettings, "courseKey" | 
   const courseName = String(b.courseName ?? "").trim();
   const regulation = String(b.regulation ?? "").trim().toUpperCase();
   if (!courseKey || !courseName) throw new CeaRuleError("Pick a course");
-  if (!regulation || regulation === "ALL") throw new CeaRuleError("Pick the regulation CEA applies to (e.g. R26)");
+  if (!regulation || regulation === "ALL") throw new CeaRuleError("Pick the regulation CIE applies to (e.g. R26)");
   const unitMarks = int(b.unitMarks);
   if (!(unitMarks >= 1 && unitMarks <= 100)) throw new CeaRuleError("Marks per unit must be 1 to 100");
   const paperMinutes = int(b.paperMinutes);
-  if (!(paperMinutes >= 5 && paperMinutes <= 120)) throw new CeaRuleError("A CEA paper's time must be 5 to 120 minutes");
+  if (!(paperMinutes >= 5 && paperMinutes <= 120)) throw new CeaRuleError("A CIE paper's time must be 5 to 120 minutes");
   const seen = new Set<string>();
   const types = (Array.isArray(b.types) ? b.types : []).map((t) => {
     const label = String(t?.label ?? "").replace(/\s+/g, " ").trim().slice(0, 40);

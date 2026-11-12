@@ -241,7 +241,7 @@ function ExamCellConfigureForm({ embedded }: { embedded: boolean }) {
     });
     const json = (await res.json().catch(() => ({}))) as { error?: string };
     if (!res.ok) toast({ variant: "destructive", title: json.error ?? "Couldn't save" });
-    else toast({ variant: "success", title: cea ? "Marks now come from CEA (the units added up and scaled)" : midNumber ? `Marks now come from the Mid ${midNumber} question paper` : "Marks are typed as one number" });
+    else toast({ variant: "success", title: cea ? "Marks now come from CIE (the units added up and scaled)" : midNumber ? `Marks now come from the Mid ${midNumber} question paper` : "Marks are typed as one number" });
   }
 
   function updateComponent(id: string, patch: Partial<ComponentForm>) {
@@ -459,7 +459,7 @@ function ExamCellConfigureForm({ embedded }: { embedded: boolean }) {
                             value={c.cea ? "CEA" : c.midNumber ?? ""} onChange={(e) => void (e.target.value === "CEA" ? linkMid(c.id, null, true) : linkMid(c.id, e.target.value ? Number(e.target.value) : null))}>
                             <option value="">Typed as one number</option>
                             {Array.from({ length: paperMids }, (_, i) => i + 1).map((n) => <option key={n} value={n}>From Mid {n} paper (per question)</option>)}
-                            <option value="CEA">From CEA (R26 units, added up)</option>
+                            <option value="CEA">From CIE (R26 units, added up)</option>
                           </select>
                         )}
                         <label className="flex items-center gap-1.5 text-xs text-muted-foreground">

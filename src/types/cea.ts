@@ -13,7 +13,7 @@ export interface CeaSettings {
   enabled: boolean;
   unitMarks: number;                       // marks of each unit's assessment (10)
   types: { id: string; label: string }[];  // WRITTEN is always there (a with-Mid unit is a written test)
-  paperMinutes: number;                    // time of a with-Mid CEA paper (taken out of the Mid sitting)
+  paperMinutes: number;                    // time of a with-Mid CIE paper (taken out of the Mid sitting)
   version: number;
   updatedAt?: string;
   updatedByName?: string;

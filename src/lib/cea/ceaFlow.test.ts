@@ -50,8 +50,8 @@ const internalIdApi = () => import("@/app/api/college/internal-exam-marks/[id]/r
 const studentApi = () => import("@/app/api/college/student/me/cea/route");
 const sectionsApi = () => import("@/app/api/college/cea/sections/route");
 
-describe("CEA marks rules", () => {
-  it("number or absent; per question from the printed CEA paper; half marks; roster changes keep marks", () => {
+describe("CIE marks rules", () => {
+  it("number or absent; per question from the printed CIE paper; half marks; roster changes keep marks", () => {
     const roster = [{ studentId: "a", rollNumber: "1", name: "A", marks: null }, { studentId: "b", rollNumber: "2", name: "B", marks: null }];
     const e = applyCeaEntries(roster, [{ studentId: "a", marks: 7.5 }, { studentId: "b", absent: true }, { studentId: "x", marks: 1 }], 10, null);
     expect(e.map((x) => [x.marks, !!x.absent])).toEqual([[7.5, false], [0, true]]);
@@ -75,7 +75,7 @@ describe("CEA marks rules", () => {
   });
 });
 
-describe("CEA end to end", () => {
+describe("CIE end to end", () => {
   it("settings -> plan -> marks -> internal marks", async () => {
     // Exam Cell: CEA on for B.Tech R26 - only the marks per unit (= a CEA paper's max) and its time are fixed.
     expect((await call(settingsApi(), "PUT", { settings: { courseKey: "btech", courseName: "B.Tech", regulation: "R23x", unitMarks: 10, paperMinutes: 20, types: [] }, version: 0 })).status).toBe(400);
