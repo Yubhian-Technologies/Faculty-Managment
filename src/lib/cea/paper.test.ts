@@ -44,7 +44,10 @@ describe("the CEA paper inside a Mid paper set", () => {
     expect(pages[1]).not.toContain("ALPHA");
     expect(pages[1]).toContain("Time: <b>20 Mins.</b>");
     expect(pages[1]).toContain("Max. Marks: <b>10</b>");
-    expect(pages[1]).toContain("CONTINUOUS EVALUATION (WITH MID-1)");
+    // Heading: "I B.Tech. SEMESTER-1" (no "Continuous Evaluation" line); the Mid paper keeps its own.
+    expect(pages[1]).toContain("I B.Tech. SEMESTER-1</p>");
+    expect(pages[1]).not.toContain("CONTINUOUS EVALUATION (WITH");
+    expect(pages[0]).toContain("MID-1 EXAMINATION");
     expect(pages[1]).toMatch(/<td class="no">1<\/td><td class="q">CEAQ1/);
   });
 });

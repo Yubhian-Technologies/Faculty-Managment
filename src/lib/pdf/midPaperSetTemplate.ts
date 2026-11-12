@@ -17,6 +17,15 @@ const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&
 const dmy = (d: string) => `${d.slice(8, 10)}-${d.slice(5, 7)}-${d.slice(0, 4)}`;
 const LETTERS = "abcdef";
 
+
+// The CEA paper's heading uses the course's short form ("I B.Tech. SEMESTER-1"); a course not listed prints as named.
+const SHORT_COURSE: Record<string, string> = {
+  BACHELOROFTECHNOLOGY: "B.Tech.", MASTEROFTECHNOLOGY: "M.Tech.", BACHELOROFPHARMACY: "B.Pharm.", MASTEROFPHARMACY: "M.Pharm.",
+  MASTEROFBUSINESSADMINISTRATION: "MBA", MASTEROFCOMPUTERAPPLICATIONS: "MCA", BACHELOROFBUSINESSADMINISTRATION: "BBA",
+  BACHELOROFCOMPUTERAPPLICATIONS: "BCA", BACHELOROFSCIENCE: "B.Sc.", MASTEROFSCIENCE: "M.Sc.", BACHELOROFCOMMERCE: "B.Com.",
+  BACHELOROFARCHITECTURE: "B.Arch.", DOCTOROFPHARMACY: "Pharm.D", BTECH: "B.Tech.", MTECH: "M.Tech.",
+};
+export const shortCourse = (name: string) => SHORT_COURSE[name.toUpperCase().replace(/[^A-Z]/g, "")] ?? name.trim().replace(/\.$/, "");
 export interface PaperSetPdfData {
   college: { name: string; logoUrl?: string };
   exam: { courseName: string; year: number; semester: number; semesterInYear?: number | null; midNumber: number; academicYear?: string; date?: string };
@@ -128,7 +137,9 @@ export function getMidPaperSetHTML(d: PaperSetPdfData): string {
       <img src="${logoSrc(d.college.logoUrl)}" alt="College logo" />
       <div class="center">
         <p class="uni">${esc(d.college.name)}</p>
-        <p class="line">${ROMAN[d.exam.year] ?? d.exam.year} ${esc(course)} ${sem} ${only?.cea ? `CONTINUOUS EVALUATION (WITH MID-${d.exam.midNumber})` : `MID-${d.exam.midNumber} EXAMINATION`}${d.answerKey ? " - ANSWER KEY" : ""}</p>
+        <p class="line">${only?.cea
+          ? `${ROMAN[d.exam.year] ?? d.exam.year} ${esc(shortCourse(d.exam.courseName))} SEMESTER-${d.exam.semesterInYear ?? d.exam.semester}`
+          : `${ROMAN[d.exam.year] ?? d.exam.year} ${esc(course)} ${sem} MID-${d.exam.midNumber} EXAMINATION`}${d.answerKey ? " - ANSWER KEY" : ""}</p>
         ${d.exam.academicYear ? `<p class="line">Academic Year: ${esc(d.exam.academicYear)}</p>` : ""}
         <p class="subject">${esc(d.subject.name)}</p>
         ${only ? `<p class="line"><b>${esc(only.label.toUpperCase())}</b></p>` : ""}
