@@ -6,13 +6,19 @@ import type { MidPaperFinal, MidPaperQuestion } from "@/types";
 
 const safeName = (n: string) => `${n.replace(/[^a-zA-Z0-9-_]+/g, "-")}.pdf`;
 
+/** Whether the Exam Cell prints the PO / PSO column on question papers (Mid Configuration; off unless turned on). */
+export async function paperPrintsPo(): Promise<boolean> {
+  return fetch("/api/college/exam-mid-settings").then((r) => (r.ok ? r.json() : {})).then((d: { settings?: { printPo?: boolean } }) => d.settings?.printPo === true).catch(() => false);
+}
+
 export async function paperLetterhead() {
-  const [info, logoUrl, formula] = await Promise.all([
+  const [info, logoUrl, formula, printPo] = await Promise.all([
     fetch("/api/college/info").then((r) => (r.ok ? r.json() : {})).catch(() => ({})) as Promise<{ name?: string; academicYear?: string }>,
     fetchCollegeLogoUrl(),
     pdfFormulaRenderer(),
+    paperPrintsPo(),
   ]);
-  return { info, college: { name: info.name || "College", logoUrl }, formula };
+  return { info, college: { name: info.name || "College", logoUrl, printPo }, formula };
 }
 
 // Builds one question paper (or its answer key) as a PDF in the browser; only the letterhead is fetched.

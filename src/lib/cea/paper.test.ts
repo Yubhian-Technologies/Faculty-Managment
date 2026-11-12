@@ -48,6 +48,14 @@ describe("the CEA paper inside a Mid paper set", () => {
     expect(pages[1]).toContain("I B.Tech. SEMESTER-1</p>");
     expect(pages[1]).not.toContain("CONTINUOUS EVALUATION (WITH");
     expect(pages[0]).toContain("MID-1 EXAMINATION");
+    // PO / PSO column only when the Exam Cell prints POs (Mid Configuration).
+    const withPo = (printPo: boolean) => paperSetHtmls({
+      college: { name: "VWU", printPo }, exam: { courseName: "B.Tech", year: 1, semester: 1, midNumber: 1 }, subject: { name: "Maths", code: "MA101", regulation: "R26" },
+      branch: "CSE", sections: [], pattern, set: 1, outcomes: { cos: true, poMapping: true, bloom: true },
+      questions: [q("A", 1, "ALPHA"), q("B", 1, "GAMMA"), q("CEA", 1, "CEAQ1", 6), q("CEA", 2, "CEAQ2", 4)],
+    });
+    expect(withPo(false).every((h) => !h.includes("colhead\">PO</td>"))).toBe(true);
+    expect(withPo(true).every((h) => h.includes("colhead\">PO</td>"))).toBe(true);
     expect(pages[1]).toMatch(/<td class="no">1<\/td><td class="q">CEAQ1/);
   });
 });

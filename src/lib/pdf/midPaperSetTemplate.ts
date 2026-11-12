@@ -27,7 +27,7 @@ const SHORT_COURSE: Record<string, string> = {
 };
 export const shortCourse = (name: string) => SHORT_COURSE[name.toUpperCase().replace(/[^A-Z]/g, "")] ?? name.trim().replace(/\.$/, "");
 export interface PaperSetPdfData {
-  college: { name: string; logoUrl?: string };
+  college: { name: string; logoUrl?: string; printPo?: boolean };
   exam: { courseName: string; year: number; semester: number; semesterInYear?: number | null; midNumber: number; academicYear?: string; date?: string };
   subject: { name: string; code: string; regulation: string };
   branch: string;
@@ -71,7 +71,7 @@ export function joinPaperHtmls(htmls: string[]): string {
 
 export function getMidPaperSetHTML(d: PaperSetPdfData): string {
   const sw = outcomeSwitches(d.outcomes);
-  const extra = [sw.cos && "CO", sw.bloom && "BL", sw.poMapping && "PO"].filter(Boolean) as string[];
+  const extra = [sw.cos && "CO", sw.bloom && "BL", sw.poMapping && d.college.printPo === true && "PO"].filter(Boolean) as string[];
   const cols = 3 + extra.length;
   const byId = new Map(d.questions.map((q) => [q.id, q]));
   const regCode = d.subject.regulation.match(/\d+/)?.[0] ?? d.subject.regulation;

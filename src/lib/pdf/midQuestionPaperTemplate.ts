@@ -76,12 +76,13 @@ export function paperFileName(h: GeneratedPapers["header"], p: GeneratedPaper): 
 }
 
 export function getMidQuestionPaperHTML(d: {
-  college: { name: string; logoUrl?: string }; header: GeneratedPapers["header"]; paper: GeneratedPaper;
+  college: { name: string; logoUrl?: string; printPo?: boolean }; header: GeneratedPapers["header"]; paper: GeneratedPaper;
   formula?: (latex: string, display: boolean) => string;
 }): string {
   const { header: h, paper: p } = d;
   // Columns the college uses: Marks always; CO, BL, PO only when on.
-  const sw = outcomeSwitches(p.outcomes);
+  // PO / PSO prints only when the Exam Cell turns "Print POs on question papers" on (Mid Configuration).
+  const sw = { ...outcomeSwitches(p.outcomes), ...(d.college.printPo === true ? {} : { poMapping: false }) };
   const extra = [sw.cos && "CO", sw.bloom && "BL", sw.poMapping && "PO"].filter(Boolean) as string[];
   const qs = p.picked.map((id) => p.questions[id]);
   const regCode = p.regulation.match(/\d+/)?.[0] ?? p.regulation;

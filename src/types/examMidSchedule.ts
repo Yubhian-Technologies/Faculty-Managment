@@ -13,6 +13,8 @@ export interface ExamMidSettings {
   outcomes?: Partial<MidOutcomeSwitches>;
   /** The Bloom's levels this college uses, their names and per-unit minimums (missing = L2-L4, 3 each; `lib/midBank/bloom.ts`). */
   bloomLevels?: { id: string; name: string; min: number }[];
+  /** Print the PO / PSO column on question papers (Mid and CEA). Missing = not printed; the mapping itself stays. */
+  printPo?: boolean;
   updatedAt?: Timestamp;
   updatedByName?: string;
 }
