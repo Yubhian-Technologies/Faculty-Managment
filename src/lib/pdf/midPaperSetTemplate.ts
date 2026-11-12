@@ -111,10 +111,11 @@ export function getMidPaperSetHTML(d: PaperSetPdfData): string {
         continue;
       }
       if (q?.subParts?.length) {
-        // Parts are numbered with the question: 1a, 1b ... (an opening line prints above them, unnumbered).
-        if (q.text.trim()) block += `<tr><td class="no"></td><td class="q">${text(q.text, q.imageUrl, q.imageCaption)}</td><td class="num"></td>${tags(q)}</tr>`;
+        // Parts are numbered with the question: 1a, 1b ... - each on its own row with the question's CO / BL. An opening
+        // line (the question's own text) prints at the top of 1a, so there is no unnumbered row.
+        const stem = q.text.trim() ? `<div>${text(q.text, q.imageUrl, q.imageCaption)}</div>` : "";
         q.subParts.forEach((sp, j) => {
-          block += `<tr><td class="no">${label}${LETTERS[j]}</td><td class="q">${text(sp.text, sp.imageUrl, sp.imageCaption)}</td><td class="num">${sp.marks}</td>${j === 0 && !q.text.trim() ? tags(q) : extra.map(() => `<td class="num"></td>`).join("")}</tr>`;
+          block += `<tr><td class="no">${label}${LETTERS[j]}</td><td class="q">${j === 0 ? stem : ""}${text(sp.text, sp.imageUrl, sp.imageCaption)}</td><td class="num">${sp.marks}</td>${tags(q)}</tr>`;
         });
       } else {
         const opts = kind === "MCQ" && q?.options
