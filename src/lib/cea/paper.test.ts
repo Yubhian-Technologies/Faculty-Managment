@@ -28,7 +28,7 @@ describe("the CEA paper inside a Mid paper set", () => {
       { partId: "A", durationMinutes: 70, maxMarks: 2 }, { partId: "B", durationMinutes: 70, maxMarks: 10 }, { partId: "CEA", durationMinutes: 20, maxMarks: 10 },
     ]);
   });
-  it("prints as two papers: the Mid (70 min) and the CEA paper (20 min, 10 marks, numbered 1a, 1b ...)", () => {
+  it("prints as two papers: the Mid (70 min) and the CEA paper (20 min, 10 marks, numbered from 1)", () => {
     const q = (partId: string, no: number, text: string, marks?: number) => ({ id: `1_${partId}_${no}`, set: 1, partId, no, text, cos: [], bloom: "", state: "COMPLETE", options: ["1", "2", "3", "4"], ...(marks ? { kind: "SHORT", marks } : {}) }) as unknown as MidPaperQuestion;
     const pages = paperSetHtmls({
       college: { name: "VWU" }, exam: { courseName: "B.Tech", year: 1, semester: 1, midNumber: 1 }, subject: { name: "Maths", code: "MA101", regulation: "R26" },
@@ -62,10 +62,19 @@ describe("the CEA paper inside a Mid paper set", () => {
     })[0];
     expect(parted).toMatch(/<td class="no">3a<\/td><td class="q">PARTA/);
     expect(parted).toMatch(/<td class="no">3b<\/td><td class="q">PARTB/);
+    // CO / BL on every part's row; an opening line sits inside 1a's cell (no unnumbered row).
+    const stemmed = paperSetHtmls({
+      college: { name: "VWU" }, exam: { courseName: "B.Tech", year: 1, semester: 1, midNumber: 1 }, subject: { name: "Maths", code: "MA101", regulation: "R26" },
+      branch: "CSE", sections: [], pattern, set: 1, outcomes: { cos: true, poMapping: false, bloom: true },
+      questions: [q("A", 1, "ALPHA"), { ...q("B", 1, "STEM"), cos: ["CO1"], bloom: "L3", subParts: [{ text: "PARTA", marks: 6 }, { text: "PARTB", marks: 4 }] } as MidPaperQuestion],
+    })[0];
+    expect(stemmed).not.toContain('<td class="no"></td>');
+    expect(stemmed).toMatch(/<td class="no">3a<\/td><td class="q"><div>STEM<\/div>PARTA<\/td><td class="num">6<\/td><td class="num">1<\/td><td class="num">3<\/td>/);
+    expect(stemmed).toMatch(/<td class="no">3b<\/td><td class="q">PARTB<\/td><td class="num">4<\/td><td class="num">1<\/td><td class="num">3<\/td>/);
     expect(withPo(false).every((h) => !h.includes("colhead\">PO</td>"))).toBe(true);
     expect(withPo(true).every((h) => h.includes("colhead\">PO</td>"))).toBe(true);
-    expect(pages[1]).toMatch(/<td class="no">1a<\/td><td class="q">CEAQ1/);
-    expect(pages[1]).toMatch(/<td class="no">1b<\/td><td class="q">CEAQ2/);
+    expect(pages[1]).toMatch(/<td class="no">1<\/td><td class="q">CEAQ1/);
+    expect(pages[1]).toMatch(/<td class="no">2<\/td><td class="q">CEAQ2/);
   });
 });
 

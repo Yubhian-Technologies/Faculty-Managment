@@ -96,8 +96,7 @@ export function getMidPaperSetHTML(d: PaperSetPdfData): string {
     let rows = `<tr class="unit"><td colspan="2">${esc(part.label.toUpperCase())} - ${esc(part.title)}<br /><span style="font-weight:normal">${esc(choiceText(part, part.flexible ? count : undefined))}</span></td><td class="num colhead">${partMax(part)} M</td>${extra.map((x) => `<td class="${x === "PO" ? "po" : "num"} colhead">${x}</td>`).join("")}</tr>`;
     for (let i = 1; i <= count; i++) {
       no++;
-      // The CEA paper is one question with parts: 1a, 1b, 1c ...
-      const label = part.cea ? `1${String.fromCharCode(96 + i)}` : String(no);
+      const label = String(no);
       const q = byId.get(`${d.set}_${part.id}_${i}`);
       // A faculty-decides part: each question's own kind and marks.
       const kind = q?.kind ?? part.kind;
@@ -112,10 +111,11 @@ export function getMidPaperSetHTML(d: PaperSetPdfData): string {
         continue;
       }
       if (q?.subParts?.length) {
-        // Parts are numbered with the question: 1a, 1b ... (an opening line prints above them, unnumbered).
-        if (q.text.trim()) block += `<tr><td class="no"></td><td class="q">${text(q.text, q.imageUrl, q.imageCaption)}</td><td class="num"></td>${tags(q)}</tr>`;
+        // Parts are numbered with the question: 1a, 1b ... - each on its own row with the question's CO / BL. An opening
+        // line (the question's own text) prints at the top of 1a, so there is no unnumbered row.
+        const stem = q.text.trim() ? `<div>${text(q.text, q.imageUrl, q.imageCaption)}</div>` : "";
         q.subParts.forEach((sp, j) => {
-          block += `<tr><td class="no">${part.cea ? `${label}(${LETTERS[j]})` : `${label}${LETTERS[j]}`}</td><td class="q">${text(sp.text, sp.imageUrl, sp.imageCaption)}</td><td class="num">${sp.marks}</td>${j === 0 && !q.text.trim() ? tags(q) : extra.map(() => `<td class="num"></td>`).join("")}</tr>`;
+          block += `<tr><td class="no">${label}${LETTERS[j]}</td><td class="q">${j === 0 ? stem : ""}${text(sp.text, sp.imageUrl, sp.imageCaption)}</td><td class="num">${sp.marks}</td>${tags(q)}</tr>`;
         });
       } else {
         const opts = kind === "MCQ" && q?.options
