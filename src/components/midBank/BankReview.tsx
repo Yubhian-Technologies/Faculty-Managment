@@ -120,7 +120,7 @@ export function BankReview({ id, editHref, writeHref, autoDownload }: { id: stri
         {detail.access.canWrite && writeHref && <Button asChild size="sm" variant="outline" className="ml-auto"><Link href={writeHref}>Continue writing</Link></Button>}
       </p>
 
-      <ApprovalPanel bank={bank} isOwner={detail.access.isOwner} isHod={Boolean(detail.access.isHod)} onChanged={() => setReloadKey((k) => k + 1)} />
+      <ApprovalPanel bank={bank} isOwner={detail.access.isOwner} isHod={Boolean(detail.access.isHod)} onChanged={() => setReloadKey((k) => k + 1)} editHref={writeHref && detail.access.canWrite ? writeHref : undefined} />
       <SuggestionsPanel bankId={bank.id} questions={detail.questions.map((q) => ({ id: q.id, label: `Unit ${q.id.split("_")[0]} · Q${q.id.split("_")[1] ?? ""}` }))} />
 
       <div className="grid gap-3 sm:grid-cols-4">

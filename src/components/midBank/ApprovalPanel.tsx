@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, RotateCcw, Send, Undo2 } from "lucide-react";
+import Link from "next/link";
+import { CheckCircle2, Pencil, RotateCcw, Send, Undo2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,7 +19,8 @@ import type { MidQuestionBank } from "@/types";
 const fmt = (iso: string) => new Date(iso).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" });
 const ACTION_TEXT: Record<string, string> = { SUBMITTED: "submitted", APPROVED: "approved", RETURNED: "returned", WITHDRAWN: "withdrew the submission", REOPENED: "(Exam Cell) sent it back for changes after approval" };
 
-export function ApprovalPanel({ bank, isOwner, isHod, onChanged }: { bank: MidQuestionBank; isOwner: boolean; isHod: boolean; onChanged: () => void }) {
+/** `editHref`: where the owner edits it - shown as "Edit paper" whenever they may (pass it only when the server says they can write). */
+export function ApprovalPanel({ bank, isOwner, isHod, onChanged, editHref }: { bank: MidQuestionBank; isOwner: boolean; isHod: boolean; onChanged: () => void; editHref?: string }) {
   const stage = bankStage(bank);
   const [confirm, setConfirm] = useState<ApprovalAction | null>(null);
   const [remarks, setRemarks] = useState("");
@@ -60,6 +62,7 @@ export function ApprovalPanel({ bank, isOwner, isHod, onChanged }: { bank: MidQu
     : stage === "SUBMITTED" ? (isHod ? (papers ? "Review the papers below, then approve them or return them with remarks." : "Review the questions below, then approve it or return it with remarks.") : "With the HOD for approval - it can't be changed meanwhile.")
     : stage === "RETURNED" && bank.reopened ? (isOwner ? "The Exam Cell asked for changes after approval - make them (even after the deadline), then submit it to your HOD again." : "Reopened by the Exam Cell for changes - the HOD approves it again after the faculty resubmits.")
     : stage === "RETURNED" ? (isOwner ? "Make the changes asked for, then submit it again." : "Returned to the faculty for changes.")
+    : isOwner ? `Approved by the HOD - locked. To change ${papers ? "the papers" : "it"}, the Exam Cell sends ${papers ? "them" : "it"} back to you ("Needs changes"); you then edit and submit to the HOD again.`
     : papers ? "Approved by the HOD - the Exam Cell picks the paper for the exam from these." : "Approved by the HOD - the Exam Cell uses it for the question papers.";
 
   return (
@@ -69,6 +72,7 @@ export function ApprovalPanel({ bank, isOwner, isHod, onChanged }: { bank: MidQu
           <span className={`rounded-full px-3 py-1 text-xs font-semibold ${STAGE_CLASS[stage]}`}>{stageLabel(bank)}</span>
           <p className="flex-1 text-sm text-muted-foreground">{hint}</p>
           <div className="flex flex-wrap gap-2">
+            {isOwner && editHref && <Button asChild size="sm" variant="outline"><Link href={editHref}><Pencil className="mr-1.5 h-4 w-4" />Edit {papers ? "paper" : "bank"}</Link></Button>}
             {canSubmit && <Button size="sm" onClick={() => setConfirm("submit")}><Send className="mr-1.5 h-4 w-4" />Submit to HOD</Button>}
             {isOwner && stage === "SUBMITTED" && <Button size="sm" variant="outline" onClick={() => setConfirm("withdraw")}><Undo2 className="mr-1.5 h-4 w-4" />Withdraw</Button>}
             {isHod && stage === "SUBMITTED" && (
