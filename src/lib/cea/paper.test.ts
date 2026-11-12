@@ -54,6 +54,14 @@ describe("the CEA paper inside a Mid paper set", () => {
       branch: "CSE", sections: [], pattern, set: 1, outcomes: { cos: true, poMapping: true, bloom: true },
       questions: [q("A", 1, "ALPHA"), q("B", 1, "GAMMA"), q("CEA", 1, "CEAQ1", 6), q("CEA", 2, "CEAQ2", 4)],
     });
+    // A question with parts: 1a, 1b in the number column (no "1" row above (a) / (b)).
+    const parted = paperSetHtmls({
+      college: { name: "VWU" }, exam: { courseName: "B.Tech", year: 1, semester: 1, midNumber: 1 }, subject: { name: "Maths", code: "MA101", regulation: "R26" },
+      branch: "CSE", sections: [], pattern, set: 1, outcomes: { cos: false, poMapping: false, bloom: false },
+      questions: [q("A", 1, "ALPHA"), { ...q("B", 1, ""), subParts: [{ text: "PARTA", marks: 6 }, { text: "PARTB", marks: 4 }] } as MidPaperQuestion],
+    })[0];
+    expect(parted).toMatch(/<td class="no">3a<\/td><td class="q">PARTA/);
+    expect(parted).toMatch(/<td class="no">3b<\/td><td class="q">PARTB/);
     expect(withPo(false).every((h) => !h.includes("colhead\">PO</td>"))).toBe(true);
     expect(withPo(true).every((h) => h.includes("colhead\">PO</td>"))).toBe(true);
     expect(pages[1]).toMatch(/<td class="no">1a<\/td><td class="q">CEAQ1/);
