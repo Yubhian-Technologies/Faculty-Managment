@@ -14,7 +14,7 @@ export interface MidBankListItem {
   subject: { id: string; name: string; code: string };
   branch: string;
   sections: { sectionId: string; sectionName: string; facultyNames: string[]; mine: boolean; heldBy: string | null; bankId: string | null }[];
-  myBank: { id: string; status: MidQuestionBank["status"]; approval?: MidQuestionBank["approval"] | null; completeCount: number; totalCount: number; sections: string[]; updatedAt: string | null } | null;
+  myBank: { id: string; status: MidQuestionBank["status"]; approval?: MidQuestionBank["approval"] | null; reopened?: boolean; completeCount: number; totalCount: number; sections: string[]; updatedAt: string | null } | null;
   sharedBanks: { id: string; ownerName: string; sections: string[]; completeCount: number; totalCount: number }[];
   uncovered: string[];
   /** "The HOD assigns": who assigned it / who prepares it. */

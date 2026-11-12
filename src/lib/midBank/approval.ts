@@ -32,6 +32,9 @@ export const STAGE_CLASS: Record<BankStage, string> = {
   APPROVED: "bg-emerald-100 text-emerald-800",
 };
 
+/** The stage's label, naming an Exam Cell reopening ("Returned" alone would point at the HOD). */
+export const stageLabel = (b: B & { reopened?: unknown }) => (bankStage(b) === "RETURNED" && b.reopened ? "Reopened by the Exam Cell" : STAGE_LABEL[bankStage(b)]);
+
 export type ApprovalAction = "submit" | "withdraw" | "approve" | "return";
 
 /** The next approval value for an action, or why it isn't allowed. */

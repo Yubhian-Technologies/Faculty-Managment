@@ -128,7 +128,7 @@ export type MidQuestionBankStatus = "IN_PROGRESS" | "COMPLETE";
  * with remarks (the faculty can edit and submit again). Absent = not submitted.
  */
 export type MidBankApproval = "SUBMITTED" | "APPROVED" | "RETURNED";
-export interface MidBankApprovalEntry { at: string; byUid: string; byName: string; action: MidBankApproval | "WITHDRAWN" | "PAPERS_CHANGED"; remarks?: string; /** The department whose HOD it went to / decided it (the subject's department, else the branch). */ department?: string }
+export interface MidBankApprovalEntry { at: string; byUid: string; byName: string; action: MidBankApproval | "WITHDRAWN" | "PAPERS_CHANGED" | "REOPENED"; remarks?: string; /** The department whose HOD it went to / decided it (the subject's department, else the branch). */ department?: string }
 
 /**
  * Exam Cell: the question bank deadline for one Course + Year + Semester + Mid.
@@ -196,6 +196,8 @@ export interface MidBankSuggestion {
   questionId?: string;
   questionLabel?: string;
   text: string;
+  /** The Exam Cell sent the approved bank / paper back for changes with this suggestion. */
+  reopen?: boolean;
   byUid: string;
   byName: string;
   at: string;
@@ -246,6 +248,9 @@ export interface MidQuestionBank {
   setProgress?: import("./midPaperSet").PaperSetProgress;
   approval?: MidBankApproval;
   approvalHistory?: MidBankApprovalEntry[];
+  /** The Exam Cell sent an APPROVED bank / paper set back for changes (a suggestion marked "needs changes"): approval is
+   *  RETURNED and the owner may edit even after the deadline until it is approved again (cleared on approve). */
+  reopened?: { at: string; byUid: string; byName: string; suggestionId: string; text: string };
   /** The college's Bloom's levels when this bank / paper set started (absent = the default L2-L4, min 3 each). */
   bloomLevels?: import("@/lib/midBank/bloom").BloomLevelDef[];
   /** The HOD removed this setter after they started: kept with every question, read-only, out of the Exam Cell's
