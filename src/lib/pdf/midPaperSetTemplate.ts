@@ -18,7 +18,7 @@ const dmy = (d: string) => `${d.slice(8, 10)}-${d.slice(5, 7)}-${d.slice(0, 4)}`
 const LETTERS = "abcdef";
 
 
-// The CEA paper's heading uses the course's short form ("I B.Tech. SEMESTER-1"); a course not listed prints as named.
+// Paper headings use the course's short form ("I B.Tech. SEMESTER-1 MID EXAMINATION-1"); a course not listed prints as named.
 const SHORT_COURSE: Record<string, string> = {
   BACHELOROFTECHNOLOGY: "B.Tech.", MASTEROFTECHNOLOGY: "M.Tech.", BACHELOROFPHARMACY: "B.Pharm.", MASTEROFPHARMACY: "M.Pharm.",
   MASTEROFBUSINESSADMINISTRATION: "MBA", MASTEROFCOMPUTERAPPLICATIONS: "MCA", BACHELOROFBUSINESSADMINISTRATION: "BBA",
@@ -75,8 +75,6 @@ export function getMidPaperSetHTML(d: PaperSetPdfData): string {
   const cols = 3 + extra.length;
   const byId = new Map(d.questions.map((q) => [q.id, q]));
   const regCode = d.subject.regulation.match(/\d+/)?.[0] ?? d.subject.regulation;
-  const sem = d.exam.semesterInYear ? `${ROMAN[d.exam.semesterInYear]} SEMESTER` : `SEMESTER ${d.exam.semester}`;
-  const course = `${d.exam.courseName.toUpperCase().replace(/\.$/, "")}.`;
   const text = (t: string, img?: string, cap?: string) => `${renderMathHtml(t, d.formula)}${img ? `<img class="qimg" src="${esc(img)}" alt="" />${cap ? `<div class="cap">${esc(cap)}</div>` : ""}` : ""}`;
   const tags = (q?: MidPaperQuestion) => extra.map((x) => {
     if (!q) return `<td class="num"></td>`;
@@ -141,7 +139,7 @@ export function getMidPaperSetHTML(d: PaperSetPdfData): string {
         <p class="uni">${esc(d.college.name)}</p>
         <p class="line">${only?.cea
           ? `${ROMAN[d.exam.year] ?? d.exam.year} ${esc(shortCourse(d.exam.courseName))} SEMESTER-${d.exam.semesterInYear ?? d.exam.semester}`
-          : `${ROMAN[d.exam.year] ?? d.exam.year} ${esc(course)} ${sem} MID-${d.exam.midNumber} EXAMINATION`}${d.answerKey ? " - ANSWER KEY" : ""}</p>
+          : `${ROMAN[d.exam.year] ?? d.exam.year} ${esc(shortCourse(d.exam.courseName))} SEMESTER-${d.exam.semesterInYear ?? d.exam.semester} MID EXAMINATION-${d.exam.midNumber}`}${d.answerKey ? " - ANSWER KEY" : ""}</p>
         ${d.exam.academicYear ? `<p class="line">Academic Year: ${esc(d.exam.academicYear)}</p>` : ""}
         <p class="subject">${esc(d.subject.name)}</p>
         ${only ? `<p class="line"><b>${esc(only.label.toUpperCase())}</b></p>` : ""}
