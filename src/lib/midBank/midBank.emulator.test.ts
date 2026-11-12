@@ -82,7 +82,7 @@ describe.skipIf(!EMULATOR)("Mid Question Bank (real Firestore)", () => {
 
   beforeEach(async () => {
     for (const n of ["midBankDeadlines", "midQuestionBanks", "midBankSectionClaims", "subjectOutcomes", "subjectSyllabus", "departments", "auditLogs", "midBankRules", "subjects", "facultyMembers",
-      "users", "courses", "sections", "subjectSemesterAssignments", "teachingAssignments", "examMidSchedules", "notifications", "examSettings"]) {
+      "users", "courses", "sections", "subjectSemesterAssignments", "teachingAssignments", "examMidSchedules", "notifications", "examSettings", "midPaperChoices"]) {
       for (const d of (await col(n).get()).docs) {
         for (const sub of await d.ref.listCollections()) for (const x of (await sub.get()).docs) await x.ref.delete();
         await d.ref.delete();
@@ -179,6 +179,32 @@ describe.skipIf(!EMULATOR)("Mid Question Bank (real Firestore)", () => {
       expect((await moveDeadline(FUTURE)).status).toBe(200);
       asFaculty("u-fac");
       expect((await save("1_1", "draft", [part("Define a set", "")])).status).toBe(200);
+    });
+
+    it("the Exam Cell sends an approved bank back for changes: editable past the deadline, the HOD approves again; never once printed", async () => {
+      await col("midBankDeadlines").doc(D).update({ deadline: "2020-01-01" });
+      await col("midQuestionBanks").doc(BANK).update({ approval: "APPROVED", approvalHistory: [{ at: "2026-11-10T00:00:00.000Z", byUid: "u-hod", byName: "HOD", action: "APPROVED" }] });
+      expect((await save("1_1", "draft", [part("Define a set", "")])).status).toBe(403);
+      const suggest = async (body: unknown) => {
+        const { POST } = await import("@/app/api/college/mid-question-banks/[id]/suggestions/route");
+        return res(await POST(new Request("http://x", { method: "POST", body: JSON.stringify(body) }), { params: Promise.resolve({ id: BANK }) }));
+      };
+      // A colleague can only comment.
+      who.uid = "u-other"; who.role = "EXAM_CELL";
+      await col("midPaperChoices").doc("ch1").set({ bankId: BANK, final: { setNo: 1 } });
+      expect((await suggest({ text: "Q3 repeats Mid 1", reopen: true })).status).toBe(409);   // printed - the printed copy is the record
+      await col("midPaperChoices").doc("ch1").delete();
+      who.role = "HOD";
+      expect((await suggest({ text: "x", reopen: true })).status).toBe(403);
+      who.role = "EXAM_CELL";
+      const sent = await suggest({ text: "Q3 repeats Mid 1", reopen: true });
+      expect(sent.status).toBe(201);
+      const bank = (await col("midQuestionBanks").doc(BANK).get()).data()!;
+      expect(bank).toMatchObject({ approval: "RETURNED", reopened: { text: "Q3 repeats Mid 1" } });
+      expect(bank.approvalHistory.at(-1)).toMatchObject({ action: "REOPENED", remarks: "Q3 repeats Mid 1" });
+      expect((await suggest({ text: "again", reopen: true })).status).toBe(409);   // not approved any more
+      asFaculty("u-fac");
+      expect((await save("1_1", "draft", [part("Define a set", "")])).status).toBe(200);   // past the deadline, reopened
     });
 
     it("a later unit stays locked; a complete question needs a CO and a level, and can't repeat another", async () => {

@@ -50,6 +50,8 @@ export async function POST(request: Request, { params }: Params) {
       tx.update(ref, {
         approval: next.approval ?? FieldValue.delete(),
         approvalHistory: [...(bank.approvalHistory ?? []), entry],
+        // Approved again after the Exam Cell reopened it: back to the normal deadline rules.
+        ...(action === "approve" && bank.reopened ? { reopened: FieldValue.delete() } : {}),
         updatedAt: new Date(),
       });
       return { status: 200, body: { approval: next.approval, bank } };

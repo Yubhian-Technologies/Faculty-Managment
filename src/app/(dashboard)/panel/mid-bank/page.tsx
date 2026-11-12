@@ -10,7 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/hooks/useToast";
 import { deadlineLabel } from "@/lib/midBank/deadline";
 import { ordinalYearLabel } from "@/lib/college/courseYears";
-import { bankStage, STAGE_CLASS, STAGE_LABEL } from "@/lib/midBank/approval";
+import { bankStage, STAGE_CLASS, stageLabel } from "@/lib/midBank/approval";
 import type { MidBankListItem } from "@/lib/midBank/clientTypes";
 
 // Faculty > Question Bank: once the Exam Cell sets a Mid's question bank
@@ -128,13 +128,13 @@ export default function FacultyQuestionBankPage() {
                         ))}
 
                         <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
-                          {i.myBank && i.myBank.status === "COMPLETE" && (() => { const st = bankStage({ status: i.myBank.status, approval: i.myBank.approval ?? undefined }); return (
-                            <span className={`mr-auto flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${STAGE_CLASS[st]}`}>{st === "APPROVED" && <CheckCircle2 className="h-3.5 w-3.5" />}{st === "READY" ? "Complete - submit to HOD" : STAGE_LABEL[st]}</span>); })()}
+                          {i.myBank && i.myBank.status === "COMPLETE" && (() => { const st = bankStage({ status: i.myBank.status, approval: i.myBank.approval ?? undefined }); const label = stageLabel({ status: i.myBank.status, approval: i.myBank.approval ?? undefined, reopened: i.myBank.reopened }); return (
+                            <span className={`mr-auto flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${STAGE_CLASS[st]}`}>{st === "APPROVED" && <CheckCircle2 className="h-3.5 w-3.5" />}{st === "READY" ? "Complete - submit to HOD" : label}</span>); })()}
                           {i.myBank ? (
                             <>
                               {!d.locked && <Button asChild size="sm" variant="ghost"><Link href={`${prepareHref(i)}&step=2`}>Edit units &amp; COs</Link></Button>}
                               <Button asChild size="sm" variant="outline"><Link href={`/panel/mid-bank/${encodeURIComponent(i.myBank.id)}/review`}>Review</Link></Button>
-                              {!d.locked && (i.myBank.status !== "COMPLETE" || i.myBank.approval === "RETURNED") && <Button asChild size="sm"><Link href={`/panel/mid-bank/${encodeURIComponent(i.myBank.id)}`}>Continue</Link></Button>}
+                              {(!d.locked || i.myBank.reopened) && (i.myBank.status !== "COMPLETE" || i.myBank.approval === "RETURNED") && <Button asChild size="sm"><Link href={`/panel/mid-bank/${encodeURIComponent(i.myBank.id)}`}>Continue</Link></Button>}
                             </>
                           ) : i.uncovered.length > 0 ? (
                             d.locked

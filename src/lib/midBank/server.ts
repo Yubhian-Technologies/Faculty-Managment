@@ -126,7 +126,7 @@ export interface BankAccess {
   hodDepartment: string;
   /** Submitted to / approved by the HOD - nobody edits it until it is returned. */
   frozen: boolean;
-  /** Owner, the deadline not passed, and not submitted / approved. */
+  /** Owner, the deadline not passed (or reopened by the Exam Cell), and not submitted / approved. */
   canWrite: boolean;
 }
 
@@ -167,7 +167,8 @@ export async function bankAccess(db: Db, session: Session, bankId: string): Prom
   return {
     bank, deadline, locked, isOwner, isIncluded, isHod, reviewDepartments, hodDepartment, frozen,
     canRead: isOwner || isIncluded || isHod || MID_BANK_OVERSEERS.includes(session.role),
-    canWrite: isOwner && !locked && !frozen,
+    // Reopened by the Exam Cell after approval: the owner edits past the deadline until it is approved again.
+    canWrite: isOwner && (!locked || !!bank.reopened) && !frozen,
   };
 }
 

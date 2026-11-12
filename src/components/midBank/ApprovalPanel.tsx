@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
-import { bankStage, STAGE_CLASS, STAGE_LABEL, type ApprovalAction } from "@/lib/midBank/approval";
+import { bankStage, STAGE_CLASS, stageLabel, type ApprovalAction } from "@/lib/midBank/approval";
 import type { MidQuestionBank } from "@/types";
 
 // The HOD-approval strip on a question bank: its stage and history for
@@ -16,7 +16,7 @@ import type { MidQuestionBank } from "@/types";
 // branch's HOD. The server decides - these buttons only offer what it allows.
 
 const fmt = (iso: string) => new Date(iso).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" });
-const ACTION_TEXT: Record<string, string> = { SUBMITTED: "submitted", APPROVED: "approved", RETURNED: "returned", WITHDRAWN: "withdrew the submission" };
+const ACTION_TEXT: Record<string, string> = { SUBMITTED: "submitted", APPROVED: "approved", RETURNED: "returned", WITHDRAWN: "withdrew the submission", REOPENED: "(Exam Cell) sent it back for changes after approval" };
 
 export function ApprovalPanel({ bank, isOwner, isHod, onChanged }: { bank: MidQuestionBank; isOwner: boolean; isHod: boolean; onChanged: () => void }) {
   const stage = bankStage(bank);
@@ -58,6 +58,7 @@ export function ApprovalPanel({ bank, isOwner, isHod, onChanged }: { bank: MidQu
     stage === "IN_PROGRESS" ? (isOwner ? (papers ? "Complete every paper, then submit them to your HOD for approval." : "Complete every unit, then submit it to your HOD for approval.") : "Being prepared.")
     : stage === "READY" ? (isOwner ? (papers ? "Every paper is complete - submit them to your HOD for approval." : "Every unit is complete - submit it to your HOD for approval.") : "Complete, not yet submitted to the HOD.")
     : stage === "SUBMITTED" ? (isHod ? (papers ? "Review the papers below, then approve them or return them with remarks." : "Review the questions below, then approve it or return it with remarks.") : "With the HOD for approval - it can't be changed meanwhile.")
+    : stage === "RETURNED" && bank.reopened ? (isOwner ? "The Exam Cell asked for changes after approval - make them (even after the deadline), then submit it to your HOD again." : "Reopened by the Exam Cell for changes - the HOD approves it again after the faculty resubmits.")
     : stage === "RETURNED" ? (isOwner ? "Make the changes asked for, then submit it again." : "Returned to the faculty for changes.")
     : papers ? "Approved by the HOD - the Exam Cell picks the paper for the exam from these." : "Approved by the HOD - the Exam Cell uses it for the question papers.";
 
@@ -65,7 +66,7 @@ export function ApprovalPanel({ bank, isOwner, isHod, onChanged }: { bank: MidQu
     <Card>
       <CardContent className="space-y-3 p-4">
         <div className="flex flex-wrap items-center gap-3">
-          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${STAGE_CLASS[stage]}`}>{STAGE_LABEL[stage]}</span>
+          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${STAGE_CLASS[stage]}`}>{stageLabel(bank)}</span>
           <p className="flex-1 text-sm text-muted-foreground">{hint}</p>
           <div className="flex flex-wrap gap-2">
             {canSubmit && <Button size="sm" onClick={() => setConfirm("submit")}><Send className="mr-1.5 h-4 w-4" />Submit to HOD</Button>}
@@ -78,6 +79,9 @@ export function ApprovalPanel({ bank, isOwner, isHod, onChanged }: { bank: MidQu
             )}
           </div>
         </div>
+        {bank.reopened && stage === "RETURNED" && (
+          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200"><b>Exam Cell ({bank.reopened.byName}) asked for changes:</b> {bank.reopened.text}</p>
+        )}
         {last?.action === "RETURNED" && last.remarks && (
           <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200"><b>HOD&rsquo;s remarks:</b> {last.remarks}</p>
         )}
