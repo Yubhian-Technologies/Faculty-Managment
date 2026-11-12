@@ -41,7 +41,7 @@ export function CeaSections() {
         </select>
         <span className="text-sm text-muted-foreground">{units.filter((u) => u.status === "SUBMITTED").length} of {units.length} unit sheets submitted</span>
       </div>
-      {rows.length === 0 ? <p className="text-sm text-muted-foreground">No sections with a CEA plan.</p> : (
+      {rows.length === 0 ? <p className="text-sm text-muted-foreground">No sections with a CIE plan.</p> : (
         <Card className="rounded-2xl"><CardContent className="overflow-x-auto p-0">
           <table className="w-full min-w-[46rem] text-sm">
             <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -78,7 +78,7 @@ function SheetDialog({ sheetId, onClose }: { sheetId: string; onClose: () => voi
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{s ? `${s.subjectName} - Unit ${s.unit}` : "CEA marks"}</DialogTitle>
+          <DialogTitle>{s ? `${s.subjectName} - Unit ${s.unit}` : "CIE marks"}</DialogTitle>
           <DialogDescription>{s ? `${s.typeLabel} · ${whenLabel(s.when)} · ${s.department} Section ${s.sectionName} · ${s.facultyName} · ${s.status === "SUBMITTED" ? "submitted" : "draft"}${s.heldOn ? ` · held ${s.heldOn}` : ""}` : error || "Loading..."}</DialogDescription>
         </DialogHeader>
         {s && (

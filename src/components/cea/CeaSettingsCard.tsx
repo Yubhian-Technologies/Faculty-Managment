@@ -30,7 +30,7 @@ export function CeaSettingsCard() {
       const res = await fetch("/api/college/cea/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ settings: edit, version: edit.version }) });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error ?? "Couldn't save");
-      toast({ variant: "success", title: `CEA saved for ${edit.courseName} ${edit.regulation}` });
+      toast({ variant: "success", title: `CIE saved for ${edit.courseName} ${edit.regulation}` });
       setEdit(null); load();
     } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't save" }); }
     finally { setBusy(false); }
@@ -43,11 +43,11 @@ export function CeaSettingsCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Continuous Evaluation (CEA)</CardTitle>
-        <CardDescription>Per course and regulation: every unit has one assessment worth the marks below. The Subject Department plans each unit&apos;s type and when it is held - in class, or as a separate written paper in a Mid&apos;s sitting (set by the Mid paper setter). The units add up and scale to the internal-marks component linked to CEA.</CardDescription>
+        <CardTitle className="text-base">Continuous Internal Evaluation (CIE)</CardTitle>
+        <CardDescription>Per course and regulation: every unit has one assessment worth the marks below. The Subject Department plans each unit&apos;s type and when it is held - in class, or as a separate written paper in a Mid&apos;s sitting (set by the Mid paper setter). The units add up and scale to the internal-marks component linked to CIE.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {d.settings.length === 0 ? <p className="text-sm text-muted-foreground">No course has CEA yet.</p> : (
+        {d.settings.length === 0 ? <p className="text-sm text-muted-foreground">No course has CIE yet.</p> : (
           <ul className="divide-y rounded-md border text-sm">{d.settings.map((s) => (
             <li key={s.id} className="flex flex-wrap items-center gap-3 px-3 py-2">
               <span className="font-medium">{s.courseName} · {s.regulation}</span>
@@ -82,8 +82,8 @@ export function CeaSettingsCard() {
               ))}
               <label className="flex items-center gap-2 pb-1.5 text-sm"><Checkbox checked={edit.enabled} onCheckedChange={(c) => setEdit({ ...edit, enabled: !!c })} />On</label>
             </div>
-            <p className="text-xs text-muted-foreground">A with-Mid CEA paper carries the unit&apos;s marks ({edit.unitMarks}); the Mid paper setter decides its questions and the marks of each.</p>
-            <p className="text-xs text-muted-foreground">The units add up and scale to the internal-marks component you link to CEA (Marks tab: &quot;From CEA&quot;) - e.g. 5 units x 10 = 50 into a 30-mark component: 42 becomes 25.2. A with-Mid paper&apos;s time comes out of that Mid&apos;s sitting (90 min = 20 CEA + 70 Mid).</p>
+            <p className="text-xs text-muted-foreground">A with-Mid CIE paper carries the unit&apos;s marks ({edit.unitMarks}); the Mid paper setter decides its questions and the marks of each.</p>
+            <p className="text-xs text-muted-foreground">The units add up and scale to the internal-marks component you link to CIE (Marks tab: &quot;From CIE&quot;) - e.g. 5 units x 10 = 50 into a 30-mark component: 42 becomes 25.2. A with-Mid paper&apos;s time comes out of that Mid&apos;s sitting (90 min = 20 CIE + 70 Mid).</p>
             <div className="space-y-1.5">
               <p className="text-sm font-medium">Assessment types</p>
               {edit.types.map((t, i) => (

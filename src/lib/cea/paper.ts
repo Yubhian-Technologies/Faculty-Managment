@@ -14,7 +14,7 @@ export const CEA_PART_ID = "CEA";
  */
 export function ceaPart(settings: Pick<CeaSettings, "unitMarks" | "paperMinutes">, unit: number): PaperPartDef {
   return {
-    id: CEA_PART_ID, label: `CEA - Unit ${unit}`, title: `Continuous Evaluation - Unit ${unit}`,
+    id: CEA_PART_ID, label: `CIE - Unit ${unit}`, title: `Continuous Internal Evaluation - Unit ${unit}`,
     flexible: true, maxMarks: settings.unitMarks, kind: "DESCRIPTIVE", questions: 0, marksEach: 0, choice: { kind: "ALL" },
     cea: { unit, minutes: settings.paperMinutes },
   };

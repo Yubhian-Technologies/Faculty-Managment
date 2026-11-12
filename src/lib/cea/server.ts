@@ -96,7 +96,7 @@ export async function ceaPartForMid(db: Db, collegeId: string, subject: Subject,
   const settings = settingsFor(all, courseKey, subject.regulation);
   if (!settings || !isMidBankSubject(subject)) return { part: null };
   const plan = (await ceaRefs(db, collegeId).plans.doc(subject.id).get()).data() as CeaPlan | undefined;
-  if (!plan) return { part: null, issue: `The Subject Department hasn't made the CEA plan for ${subject.code} yet (HOD > CEA) - it says which unit's CEA paper goes with this Mid.` };
+  if (!plan) return { part: null, issue: `The Subject Department hasn't made the CIE plan for ${subject.code} yet (HOD > CIE) - it says which unit's CIE paper goes with this Mid.` };
   const unit = plan.units.find((u) => midOf(u.when) === midNumber);
   return { part: unit ? ceaPart({ unitMarks: settings.unitMarks, paperMinutes: settings.paperMinutes }, unit.unit) : null };
 }

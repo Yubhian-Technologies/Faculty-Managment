@@ -11,16 +11,16 @@ const P = { unitMarks: 10, paperMinutes: 20 };
 const cea = ceaPart(P, 3);
 const pattern = withCeaPart({ parts: [partA, partB], durationMinutes: 90, instruction: "", regdBoxes: 10 }, cea);
 
-describe("the CEA paper inside a Mid paper set", () => {
+describe("the CIE paper inside a Mid paper set", () => {
   it("is one unit's part, last, with its own minutes; replaced, never doubled", () => {
     // Only the max marks are fixed - the setter decides the questions and their marks.
-    expect(cea).toMatchObject({ id: CEA_PART_ID, label: "CEA - Unit 3", flexible: true, maxMarks: 10, choice: { kind: "ALL" }, cea: { unit: 3, minutes: 20 } });
+    expect(cea).toMatchObject({ id: CEA_PART_ID, label: "CIE - Unit 3", flexible: true, maxMarks: 10, choice: { kind: "ALL" }, cea: { unit: 3, minutes: 20 } });
     expect([1, 7].map((n) => unitOfQuestion(cea, [1, 2], n))).toEqual([3, 3]);
     expect(pattern.parts.map((p) => p.id)).toEqual(["A", "B", "CEA"]);
-    expect(withCeaPart(pattern, ceaPart(P, 4)).parts.map((p) => p.label)).toEqual(["Part A", "Part B", "CEA - Unit 4"]);
+    expect(withCeaPart(pattern, ceaPart(P, 4)).parts.map((p) => p.label)).toEqual(["Part A", "Part B", "CIE - Unit 4"]);
     expect(withCeaPart(pattern, null).parts.map((p) => p.id)).toEqual(["A", "B"]);
   });
-  it("the Mid's marks and time leave the CEA paper out (90 = 70 Mid + 20 CEA)", () => {
+  it("the Mid's marks and time leave the CIE paper out (90 = 70 Mid + 20 CIE)", () => {
     expect(patternMax(pattern)).toBe(2 + 10);
     expect(midMinutes(pattern)).toBe(70);
     expect(withoutCea(pattern).parts).toHaveLength(2);
@@ -28,7 +28,7 @@ describe("the CEA paper inside a Mid paper set", () => {
       { partId: "A", durationMinutes: 70, maxMarks: 2 }, { partId: "B", durationMinutes: 70, maxMarks: 10 }, { partId: "CEA", durationMinutes: 20, maxMarks: 10 },
     ]);
   });
-  it("prints as two papers: the Mid (70 min) and the CEA paper (20 min, 10 marks, numbered from 1)", () => {
+  it("prints as two papers: the Mid (70 min) and the CIE paper (20 min, 10 marks, numbered from 1)", () => {
     const q = (partId: string, no: number, text: string, marks?: number) => ({ id: `1_${partId}_${no}`, set: 1, partId, no, text, cos: [], bloom: "", state: "COMPLETE", options: ["1", "2", "3", "4"], ...(marks ? { kind: "SHORT", marks } : {}) }) as unknown as MidPaperQuestion;
     const pages = paperSetHtmls({
       college: { name: "VWU" }, exam: { courseName: "B.Tech", year: 1, semester: 1, midNumber: 1 }, subject: { name: "Maths", code: "MA101", regulation: "R26" },
@@ -79,8 +79,16 @@ describe("the CEA paper inside a Mid paper set", () => {
   });
 });
 
+describe("renamed to CIE", () => {
+  it("a paper set started as 'CEA - Unit 2' shows today's CIE name", async () => {
+    const { withCurrentNames } = await import("@/lib/midPapers/pattern");
+    const old = { parts: [partA, { ...ceaPart(P, 2), label: "CEA - Unit 2", title: "Continuous Evaluation - Unit 2" }] };
+    expect(withCurrentNames(old, null).parts[1]).toMatchObject({ id: "CEA", label: "CIE - Unit 2", title: "Continuous Internal Evaluation - Unit 2" });
+  });
+});
+
 describe("plan changes after writing", () => {
-  it("moving to a CEA paper for another unit drops (refuses) the old unit's questions; same unit keeps them", async () => {
+  it("moving to a CIE paper for another unit drops (refuses) the old unit's questions; same unit keeps them", async () => {
     const { remapQuestions } = await import("@/lib/midPapers/pattern");
     const qs = [{ id: "1_CEA_1", set: 1, partId: "CEA", no: 1, unit: 3 }, { id: "1_A_1", set: 1, partId: "A", no: 1 }];
     const old = { ...pattern, setsPerFaculty: 1 };
@@ -90,7 +98,7 @@ describe("plan changes after writing", () => {
     expect(moved.dropped).toEqual(["1_CEA_1"]);
     expect(remapQuestions(old, { ...withCeaPart(pattern, null), setsPerFaculty: 1 }, qs, [1, 2]).dropped).toEqual(["1_CEA_1"]);
   });
-  it("a hand-made 'own questions' part the Exam Cell removed moves into the CEA paper (its unit only); every refusal says why", async () => {
+  it("a hand-made 'own questions' part the Exam Cell removed moves into the CIE paper (its unit only); every refusal says why", async () => {
     const { remapQuestions } = await import("@/lib/midPapers/pattern");
     // Before: X = the Exam Cell's own 10-mark written part, M = 5 fixed questions. After: M per unit + the planned CEA (Unit 2).
     const X: PaperPartDef = { id: "X", label: "Written", title: "", kind: "DESCRIPTIVE", questions: 0, marksEach: 0, choice: { kind: "ALL" }, flexible: true, maxMarks: 10 };
@@ -105,10 +113,10 @@ describe("plan changes after writing", () => {
     const r = remapQuestions(old, now, qs, [1, 2, 3]);
     expect(r.moves).toEqual([{ from: "1_M_1", to: "1_M_1" }, { from: "1_X_1", to: "1_CEA_1" }, { from: "1_X_2", to: "1_CEA_2" }]);
     expect(r.dropped.sort()).toEqual(["1_M_2", "1_X_3"]);
-    expect(r.reasons["1_X_3"]).toBe("Written now goes to the CEA paper on Unit 2 - this question is on Unit 1");
+    expect(r.reasons["1_X_3"]).toBe("Written now goes to the CIE paper on Unit 2 - this question is on Unit 1");
     expect(r.reasons["1_M_2"]).toBe("Mid now goes unit by unit - pick this question's unit");
   });
-  it("the Exam Cell reshaped the parts (their written part 1 became the Mid part, part 2 removed): own questions -> CEA, fixed -> the Mid part", async () => {
+  it("the Exam Cell reshaped the parts (their written part 1 became the Mid part, part 2 removed): own questions -> CIE, fixed -> the Mid part", async () => {
     const { remapQuestions } = await import("@/lib/midPapers/pattern");
     const P1old: PaperPartDef = { id: "p1", label: "Continuous Internal Evalution", title: "", kind: "DESCRIPTIVE", questions: 0, marksEach: 0, choice: { kind: "ALL" }, flexible: true, maxMarks: 10 };
     const P2old: PaperPartDef = { id: "p2", label: "MID EXAMINATION", title: "", kind: "DESCRIPTIVE", questions: 5, marksEach: 5, choice: { kind: "ALL" } };

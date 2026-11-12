@@ -6,7 +6,7 @@ const units = [1, 2, 3, 4, 5].map((n) => ({ unit: n, title: `Unit ${n}` }));
 const plan = (over: Record<number, { typeId?: string; when?: string }> = {}) =>
   units.map((u) => ({ unit: u.unit, typeId: "ASSIGNMENT", when: "CLASS", ...over[u.unit] }));
 
-describe("CEA settings", () => {
+describe("CIE settings", () => {
   it("needs a real regulation (not ALL) and keeps the written type", () => {
     expect(() => cleanCeaSettings({ ...settings, regulation: "ALL" })).toThrow(/regulation/);
     const s = cleanCeaSettings({ ...settings, types: [{ label: "Quiz" }, { label: "Quiz " }].slice(0, 1) });
@@ -16,7 +16,7 @@ describe("CEA settings", () => {
   });
 });
 
-describe("CEA plan", () => {
+describe("CIE plan", () => {
   it("every unit once; a with-Mid unit is a written test; one unit per Mid; only Mids the college runs", () => {
     const ok = cleanCeaPlan(plan({ 2: { when: "MID1", typeId: "QUIZ" }, 4: { when: "MID2" } }), units, settings, 2);
     expect(ok.map((u) => [u.unit, u.typeId, u.when])).toEqual([[1, "ASSIGNMENT", "CLASS"], [2, WRITTEN, "MID1"], [3, "ASSIGNMENT", "CLASS"], [4, WRITTEN, "MID2"], [5, "ASSIGNMENT", "CLASS"]]);

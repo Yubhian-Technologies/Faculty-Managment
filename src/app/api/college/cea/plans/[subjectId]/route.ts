@@ -40,8 +40,8 @@ export async function PUT(request: Request, { params }: Ctx) {
     const db = getAdminDb();
     const body = (await readJsonBody(request)) as { version?: unknown; units?: unknown };
     const [c, mid] = await Promise.all([ceaContext(db, session, subjectId), loadMidSettings(db, session.collegeId)]);
-    if (!c.canEdit) throw new CeaError("Only the HOD of the subject's Subject Department (or the Exam Cell) plans its CEA", 403);
-    if (!c.settings) throw new CeaError("CEA isn't switched on for this subject's course and regulation", 409);
+    if (!c.canEdit) throw new CeaError("Only the HOD of the subject's Subject Department (or the Exam Cell) plans its CIE", 403);
+    if (!c.settings) throw new CeaError("CIE isn't switched on for this subject's course and regulation", 409);
     if (c.syllabusStatus !== "FROZEN") throw new CeaError("The subject's syllabus must be frozen by Academics first - its units are what you plan", 409);
     const units = cleanCeaPlan(body.units, c.units, c.settings, Math.max(mid.midCount, 1));
     // A Mid whose paper is already printed keeps its CEA unit (the students wrote that paper).
@@ -49,7 +49,7 @@ export async function PUT(request: Request, { params }: Ctx) {
     for (const n of printed) {
       const was = c.plan?.units.find((u) => midOf(u.when) === n)?.unit ?? null;
       const now = units.find((u) => midOf(u.when) === n)?.unit ?? null;
-      if (was !== now) throw new CeaError(`Mid ${n}'s paper is already printed${was ? ` with Unit ${was}'s CEA paper` : " without a CEA paper"} - that can't change now`, 409);
+      if (was !== now) throw new CeaError(`Mid ${n}'s paper is already printed${was ? ` with Unit ${was}'s CIE paper` : " without a CIE paper"} - that can't change now`, 409);
     }
     const typeLabel = (id: string) => c.settings!.types.find((t) => t.id === id)?.label ?? id;
     const ref = ceaRefs(db, session.collegeId).plans.doc(subjectId);

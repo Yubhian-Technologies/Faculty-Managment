@@ -386,7 +386,7 @@ export function PaperSetWorkspace({ detail }: { detail: MidBankDetail }) {
 
           {((units.length > 0 && !setPart.perUnit && !setPart.cea) || sw.cos || sw.bloom) && (
             <div className="grid gap-4 md:grid-cols-3">
-              {/* A CEA paper's questions are all on its planned unit (lib/cea/paper.ts). */}
+              {/* A CIE paper's questions are all on its planned unit (lib/cea/paper.ts). */}
               {units.length > 0 && !setPart.perUnit && !setPart.cea && (
                 <div className="space-y-1.5"><Label htmlFor="pq-unit">Unit (optional)</Label>
                   <select id="pq-unit" className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm" value={q.unit ?? ""} onChange={(e) => edit({ unit: e.target.value ? Number(e.target.value) : undefined })}>

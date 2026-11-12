@@ -43,7 +43,7 @@ function MidConfigurationTabs() {
     <div className={cn("space-y-6", tab === "mid" && "max-w-2xl", (tab === "paper" || tab === "cea") && "max-w-4xl")}>
       <PageHeader title="Mid Configuration" description="How many Mid exams the college runs, the question bank rules, the question paper template, and the Internal / External marks." />
       <nav className="inline-flex flex-wrap rounded-xl border bg-muted/40 p-1 text-sm" aria-label="Mid Configuration sections">
-        {([["mid", "Mid exams & question bank"], ["paper", "Question paper"], ["marks", "Marks (Internal / External)"], ["cea", "CEA"]] as const).map(([k, label]) => (
+        {([["mid", "Mid exams & question bank"], ["paper", "Question paper"], ["marks", "Marks (Internal / External)"], ["cea", "CIE"]] as const).map(([k, label]) => (
           <Link key={k} href={k === "mid" ? "/exam-cell/mid-configuration" : `/exam-cell/mid-configuration?tab=${k}`} aria-current={tab === k ? "page" : undefined}
             className={cn("rounded-lg px-3.5 py-1.5 font-medium", tab === k ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}>{label}</Link>
         ))}
@@ -209,7 +209,7 @@ function MidSettings() {
             <p className="text-xs text-muted-foreground">A bank or paper already started keeps what it started with.</p>
             <label className="flex items-start gap-3 pt-2 text-sm">
               <Checkbox className="mt-0.5" checked={printPo && outcomes.poMapping} disabled={!outcomes.poMapping} onCheckedChange={(c) => setPrintPo(c === true)} />
-              <span><span className="block font-medium">Print POs on question papers</span><span className="block text-xs text-muted-foreground">Adds the PO / PSO column to Mid and CEA papers. Off: papers show Marks, CO and BL only - the mapping stays in the syllabus. Applies to every paper printed from now on.</span></span>
+              <span><span className="block font-medium">Print POs on question papers</span><span className="block text-xs text-muted-foreground">Adds the PO / PSO column to Mid and CIE papers. Off: papers show Marks, CO and BL only - the mapping stays in the syllabus. Applies to every paper printed from now on.</span></span>
             </label>
           </div>
         </CardContent>

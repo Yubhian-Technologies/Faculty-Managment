@@ -17,9 +17,9 @@ export function StudentCea() {
   }, []);
   return (
     <div className="max-w-4xl space-y-6">
-      <PageHeader title="CEA Marks" description="Continuous Evaluation: one assessment per unit. Marks appear once your teacher submits the unit; they add up into your internal marks." />
+      <PageHeader title="CIE Marks" description="Continuous Internal Evaluation: one assessment per unit. Marks appear once your teacher submits the unit; they add up into your internal marks." />
       {error ? <p className="text-sm text-destructive">{error}</p> : !d ? <div className="h-40 animate-pulse rounded-2xl bg-muted/40" /> : d.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No CEA marks yet.</p>
+        <p className="text-sm text-muted-foreground">No CIE marks yet.</p>
       ) : d.map((s) => (
         <Card key={s.subjectId} className="rounded-2xl"><CardContent className="space-y-3 p-5">
           <div className="flex flex-wrap items-baseline justify-between gap-2">

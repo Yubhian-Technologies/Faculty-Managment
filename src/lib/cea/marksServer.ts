@@ -78,7 +78,7 @@ export async function openCeaSheet(db: Db, collegeId: string, uid: string, byNam
   if (a.facultyId !== (await resolveFacultyMemberId(db, collegeId, uid)) || a.isPast) throw new CeaError("You are not assigned to teach this subject", 403);
   const ps = await planAndSettings(db, collegeId, a.subjectId);
   const pu = ps?.plan.units.find((u) => u.unit === unit);
-  if (!ps || !pu) throw new CeaError("This unit has no CEA in the subject's plan", 404);
+  if (!ps || !pu) throw new CeaError("This unit has no CIE in the subject's plan", 404);
   if (!a.courseId) throw new CeaError("This subject's section isn't linked to a course - ask the HOD", 409);
   let sectionName = a.section?.trim() || "Section", year: number | undefined;
   if (a.sectionId) {
