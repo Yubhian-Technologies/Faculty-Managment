@@ -52,7 +52,7 @@ export function sheetFromPattern(pattern: Pick<MidPaperPattern, "parts">, source
       const objNos = new Set(p.objectiveTotal?.nos ?? []);
       return [
         ...(p.objectiveTotal ? [{ key: `${p.id}obj`, label: `${p.id} objective`, max: p.objectiveTotal.max, partId: p.id }] : []),
-        ...p.questionMax.map((max, i) => ({ key: `${p.id}${i + 1}`, label: `${p.id}${i + 1}`, max, partId: p.id })).filter((_, i) => !objNos.has(i + 1)),
+        ...p.questionMax.map((max, i) => ({ key: `${p.id}${i + 1}`, label: p.id === "CEA" ? `1${String.fromCharCode(97 + i)}` : `${p.id}${i + 1}`, max, partId: p.id })).filter((_, i) => !objNos.has(i + 1)),
       ];
     }
     return p.perQuestion

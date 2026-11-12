@@ -24,7 +24,7 @@ export async function GET() {
     const settings: ExamMidSettings = snap.exists ? (snap.data() as ExamMidSettings) : { midCount: 0 };
     // midPreparation / outcomes as every Mid route reads them (missing = question bank, all tags on).
     const resolved = readMidSettings(settings);
-    return NextResponse.json({ settings: { ...settings, midPreparation: resolved.midPreparation, midAssignment: resolved.midAssignment, outcomes: resolved.outcomes, bloomLevels: resolved.bloomLevels } });
+    return NextResponse.json({ settings: { ...settings, midPreparation: resolved.midPreparation, midAssignment: resolved.midAssignment, outcomes: resolved.outcomes, bloomLevels: resolved.bloomLevels, printPo: resolved.printPo } });
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
@@ -39,7 +39,7 @@ export async function GET() {
 export async function PUT(request: Request) {
   try {
     const session = await requireCollegeMember("EXAM_CELL", "SUPER_ADMIN");
-    const body = (await readJsonBody(request)) as { midCount?: number; midPreparation?: unknown; midAssignment?: unknown; outcomes?: unknown; bloomLevels?: unknown };
+    const body = (await readJsonBody(request)) as { midCount?: number; midPreparation?: unknown; midAssignment?: unknown; outcomes?: unknown; bloomLevels?: unknown; printPo?: unknown };
     const db = getAdminDb();
     const current = await loadMidSettings(db, session.collegeId);
     // Any field left out keeps its saved value (the Mid count card and the preparation card save separately).
@@ -51,6 +51,8 @@ export async function PUT(request: Request) {
     const midAssignment = body.midAssignment === undefined ? current.midAssignment : body.midAssignment === "HOD" ? "HOD" : "SELF";
     const outcomes = body.outcomes === undefined ? current.outcomes : outcomeSwitches(body.outcomes as Partial<MidOutcomeSwitches>);
     // The college's Bloom's levels (names + per-unit minimums). Banks / papers already started keep their own copy.
+    // The PO / PSO column on printed papers - a print choice only, so it applies to every paper printed from now on.
+    const printPo = body.printPo === undefined ? current.printPo : body.printPo === true;
     let bloomLevels = current.bloomLevels;
     if (body.bloomLevels !== undefined) {
       const clean = cleanBloomLevels(body.bloomLevels);
@@ -77,7 +79,7 @@ export async function PUT(request: Request) {
     const actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Exam Cell";
 
     const settings: ExamMidSettings = {
-      midCount, midPreparation, midAssignment, outcomes, bloomLevels,
+      midCount, midPreparation, midAssignment, outcomes, bloomLevels, printPo,
       updatedAt: new Date() as unknown as ExamMidSettings["updatedAt"],
       updatedByName: actorName,
     };

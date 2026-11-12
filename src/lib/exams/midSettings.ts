@@ -9,7 +9,7 @@ import { bloomLevelsOf, type BloomLevelDef } from "@/lib/midBank/bloom";
 export const midSettingsRef = (db: Firestore, collegeId: string) =>
   db.collection("colleges").doc(collegeId).collection("examSettings").doc("mid");
 
-export interface MidSettings { midCount: number; midPreparation: MidPreparation; midAssignment: MidAssignment; outcomes: MidOutcomeSwitches; bloomLevels: BloomLevelDef[] }
+export interface MidSettings { midCount: number; midPreparation: MidPreparation; midAssignment: MidAssignment; outcomes: MidOutcomeSwitches; bloomLevels: BloomLevelDef[]; printPo: boolean }
 
 export function readMidSettings(data: Partial<ExamMidSettings> | undefined): MidSettings {
   return {
@@ -18,6 +18,7 @@ export function readMidSettings(data: Partial<ExamMidSettings> | undefined): Mid
     midAssignment: data?.midAssignment === "HOD" ? "HOD" : "SELF",
     outcomes: outcomeSwitches(data?.outcomes),
     bloomLevels: bloomLevelsOf(data?.bloomLevels),
+    printPo: data?.printPo === true,
   };
 }
 

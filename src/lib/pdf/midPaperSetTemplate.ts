@@ -17,8 +17,17 @@ const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&
 const dmy = (d: string) => `${d.slice(8, 10)}-${d.slice(5, 7)}-${d.slice(0, 4)}`;
 const LETTERS = "abcdef";
 
+
+// The CEA paper's heading uses the course's short form ("I B.Tech. SEMESTER-1"); a course not listed prints as named.
+const SHORT_COURSE: Record<string, string> = {
+  BACHELOROFTECHNOLOGY: "B.Tech.", MASTEROFTECHNOLOGY: "M.Tech.", BACHELOROFPHARMACY: "B.Pharm.", MASTEROFPHARMACY: "M.Pharm.",
+  MASTEROFBUSINESSADMINISTRATION: "MBA", MASTEROFCOMPUTERAPPLICATIONS: "MCA", BACHELOROFBUSINESSADMINISTRATION: "BBA",
+  BACHELOROFCOMPUTERAPPLICATIONS: "BCA", BACHELOROFSCIENCE: "B.Sc.", MASTEROFSCIENCE: "M.Sc.", BACHELOROFCOMMERCE: "B.Com.",
+  BACHELOROFARCHITECTURE: "B.Arch.", DOCTOROFPHARMACY: "Pharm.D", BTECH: "B.Tech.", MTECH: "M.Tech.",
+};
+export const shortCourse = (name: string) => SHORT_COURSE[name.toUpperCase().replace(/[^A-Z]/g, "")] ?? name.trim().replace(/\.$/, "");
 export interface PaperSetPdfData {
-  college: { name: string; logoUrl?: string };
+  college: { name: string; logoUrl?: string; printPo?: boolean };
   exam: { courseName: string; year: number; semester: number; semesterInYear?: number | null; midNumber: number; academicYear?: string; date?: string };
   subject: { name: string; code: string; regulation: string };
   branch: string;
@@ -62,7 +71,7 @@ export function joinPaperHtmls(htmls: string[]): string {
 
 export function getMidPaperSetHTML(d: PaperSetPdfData): string {
   const sw = outcomeSwitches(d.outcomes);
-  const extra = [sw.cos && "CO", sw.bloom && "BL", sw.poMapping && "PO"].filter(Boolean) as string[];
+  const extra = [sw.cos && "CO", sw.bloom && "BL", sw.poMapping && d.college.printPo === true && "PO"].filter(Boolean) as string[];
   const cols = 3 + extra.length;
   const byId = new Map(d.questions.map((q) => [q.id, q]));
   const regCode = d.subject.regulation.match(/\d+/)?.[0] ?? d.subject.regulation;
@@ -86,6 +95,8 @@ export function getMidPaperSetHTML(d: PaperSetPdfData): string {
     let rows = `<tr class="unit"><td colspan="2">${esc(part.label.toUpperCase())} - ${esc(part.title)}<br /><span style="font-weight:normal">${esc(choiceText(part, part.flexible ? count : undefined))}</span></td><td class="num colhead">${partMax(part)} M</td>${extra.map((x) => `<td class="${x === "PO" ? "po" : "num"} colhead">${x}</td>`).join("")}</tr>`;
     for (let i = 1; i <= count; i++) {
       no++;
+      // The CEA paper is one question with parts: 1a, 1b, 1c ...
+      const label = part.cea ? `1${String.fromCharCode(96 + i)}` : String(no);
       const q = byId.get(`${d.set}_${part.id}_${i}`);
       // A faculty-decides part: each question's own kind and marks.
       const kind = q?.kind ?? part.kind;
@@ -96,18 +107,18 @@ export function getMidPaperSetHTML(d: PaperSetPdfData): string {
       if (u && u !== (i > 1 ? unitOfQuestion(part, d.units ?? [], i - 1) : undefined)) block = `<tr class="unit"><td colspan="${cols}">UNIT-${ROMAN[u] ?? u}</td></tr>` + block;
       if (d.answerKey) {
         const ans = !q ? "" : kind === "MCQ" ? `(${LETTERS[Number(q.answer)] ?? "?"}) ${esc(q.options?.[Number(q.answer)] ?? "")}` : kind === "FILL_BLANK" ? esc(q.answer ?? "") : "<i>Descriptive</i>";
-        rows += `<tr><td class="no">${no}</td><td class="q">${ans}</td><td class="num">${marks}</td>${tags(q)}</tr>`;
+        rows += `<tr><td class="no">${label}</td><td class="q">${ans}</td><td class="num">${marks}</td>${tags(q)}</tr>`;
         continue;
       }
       if (q?.subParts?.length) {
-        if (q.text.trim()) block += `<tr><td class="no">${no}</td><td class="q">${text(q.text, q.imageUrl, q.imageCaption)}</td><td class="num"></td>${tags(q)}</tr>`;
+        if (q.text.trim()) block += `<tr><td class="no">${label}</td><td class="q">${text(q.text, q.imageUrl, q.imageCaption)}</td><td class="num"></td>${tags(q)}</tr>`;
         q.subParts.forEach((sp, j) => {
-          block += `<tr><td class="no">${!q.text.trim() && j === 0 ? `${no}.` : ""}(${LETTERS[j]})</td><td class="q">${text(sp.text, sp.imageUrl, sp.imageCaption)}</td><td class="num">${sp.marks}</td>${j === 0 && !q.text.trim() ? tags(q) : extra.map(() => `<td class="num"></td>`).join("")}</tr>`;
+          block += `<tr><td class="no">${!q.text.trim() && j === 0 ? `${label}.` : ""}(${LETTERS[j]})</td><td class="q">${text(sp.text, sp.imageUrl, sp.imageCaption)}</td><td class="num">${sp.marks}</td>${j === 0 && !q.text.trim() ? tags(q) : extra.map(() => `<td class="num"></td>`).join("")}</tr>`;
         });
       } else {
         const opts = kind === "MCQ" && q?.options
           ? `<div class="opts">${q.options.map((o, j) => `<span>(${LETTERS[j]}) ${renderMathHtml(o, d.formula)}</span>`).join("")}</div>` : "";
-        block += `<tr><td class="no">${no}</td><td class="q">${q ? text(q.text, q.imageUrl, q.imageCaption) : "<i>(not written)</i>"}${opts}</td><td class="num">${marks}</td>${tags(q)}</tr>`;
+        block += `<tr><td class="no">${label}</td><td class="q">${q ? text(q.text, q.imageUrl, q.imageCaption) : "<i>(not written)</i>"}${opts}</td><td class="num">${marks}</td>${tags(q)}</tr>`;
       }
       rows += `<tbody class="section">${block}</tbody>`;
     }
@@ -128,7 +139,9 @@ export function getMidPaperSetHTML(d: PaperSetPdfData): string {
       <img src="${logoSrc(d.college.logoUrl)}" alt="College logo" />
       <div class="center">
         <p class="uni">${esc(d.college.name)}</p>
-        <p class="line">${ROMAN[d.exam.year] ?? d.exam.year} ${esc(course)} ${sem} ${only?.cea ? `CONTINUOUS EVALUATION (WITH MID-${d.exam.midNumber})` : `MID-${d.exam.midNumber} EXAMINATION`}${d.answerKey ? " - ANSWER KEY" : ""}</p>
+        <p class="line">${only?.cea
+          ? `${ROMAN[d.exam.year] ?? d.exam.year} ${esc(shortCourse(d.exam.courseName))} SEMESTER-${d.exam.semesterInYear ?? d.exam.semester}`
+          : `${ROMAN[d.exam.year] ?? d.exam.year} ${esc(course)} ${sem} MID-${d.exam.midNumber} EXAMINATION`}${d.answerKey ? " - ANSWER KEY" : ""}</p>
         ${d.exam.academicYear ? `<p class="line">Academic Year: ${esc(d.exam.academicYear)}</p>` : ""}
         <p class="subject">${esc(d.subject.name)}</p>
         ${only ? `<p class="line"><b>${esc(only.label.toUpperCase())}</b></p>` : ""}

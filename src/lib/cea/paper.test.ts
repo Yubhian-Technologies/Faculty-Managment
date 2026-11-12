@@ -28,7 +28,7 @@ describe("the CEA paper inside a Mid paper set", () => {
       { partId: "A", durationMinutes: 70, maxMarks: 2 }, { partId: "B", durationMinutes: 70, maxMarks: 10 }, { partId: "CEA", durationMinutes: 20, maxMarks: 10 },
     ]);
   });
-  it("prints as two papers: the Mid (70 min) and the CEA paper (20 min, 10 marks, numbered from 1)", () => {
+  it("prints as two papers: the Mid (70 min) and the CEA paper (20 min, 10 marks, numbered 1a, 1b ...)", () => {
     const q = (partId: string, no: number, text: string, marks?: number) => ({ id: `1_${partId}_${no}`, set: 1, partId, no, text, cos: [], bloom: "", state: "COMPLETE", options: ["1", "2", "3", "4"], ...(marks ? { kind: "SHORT", marks } : {}) }) as unknown as MidPaperQuestion;
     const pages = paperSetHtmls({
       college: { name: "VWU" }, exam: { courseName: "B.Tech", year: 1, semester: 1, midNumber: 1 }, subject: { name: "Maths", code: "MA101", regulation: "R26" },
@@ -44,8 +44,20 @@ describe("the CEA paper inside a Mid paper set", () => {
     expect(pages[1]).not.toContain("ALPHA");
     expect(pages[1]).toContain("Time: <b>20 Mins.</b>");
     expect(pages[1]).toContain("Max. Marks: <b>10</b>");
-    expect(pages[1]).toContain("CONTINUOUS EVALUATION (WITH MID-1)");
-    expect(pages[1]).toMatch(/<td class="no">1<\/td><td class="q">CEAQ1/);
+    // Heading: "I B.Tech. SEMESTER-1" (no "Continuous Evaluation" line); the Mid paper keeps its own.
+    expect(pages[1]).toContain("I B.Tech. SEMESTER-1</p>");
+    expect(pages[1]).not.toContain("CONTINUOUS EVALUATION (WITH");
+    expect(pages[0]).toContain("MID-1 EXAMINATION");
+    // PO / PSO column only when the Exam Cell prints POs (Mid Configuration).
+    const withPo = (printPo: boolean) => paperSetHtmls({
+      college: { name: "VWU", printPo }, exam: { courseName: "B.Tech", year: 1, semester: 1, midNumber: 1 }, subject: { name: "Maths", code: "MA101", regulation: "R26" },
+      branch: "CSE", sections: [], pattern, set: 1, outcomes: { cos: true, poMapping: true, bloom: true },
+      questions: [q("A", 1, "ALPHA"), q("B", 1, "GAMMA"), q("CEA", 1, "CEAQ1", 6), q("CEA", 2, "CEAQ2", 4)],
+    });
+    expect(withPo(false).every((h) => !h.includes("colhead\">PO</td>"))).toBe(true);
+    expect(withPo(true).every((h) => h.includes("colhead\">PO</td>"))).toBe(true);
+    expect(pages[1]).toMatch(/<td class="no">1a<\/td><td class="q">CEAQ1/);
+    expect(pages[1]).toMatch(/<td class="no">1b<\/td><td class="q">CEAQ2/);
   });
 });
 

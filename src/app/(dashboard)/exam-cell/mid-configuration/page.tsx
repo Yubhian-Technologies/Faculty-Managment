@@ -70,6 +70,7 @@ function MidSettings() {
   const [preparation, setPreparation] = useState<MidPreparation>("BANK");
   const [assignment, setAssignment] = useState<MidAssignment>("SELF");
   const [outcomes, setOutcomes] = useState<MidOutcomeSwitches>(ALL_OUTCOMES_ON);
+  const [printPo, setPrintPo] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -84,6 +85,7 @@ function MidSettings() {
           setPreparation(data.settings.midPreparation === "PAPERS" ? "PAPERS" : "BANK");
           setAssignment(data.settings.midAssignment === "HOD" ? "HOD" : "SELF");
           setOutcomes(outcomeSwitches(data.settings.outcomes));
+          setPrintPo(data.settings.printPo === true);
         }
       } catch {
         toast({ variant: "destructive", title: "Failed to load settings" });
@@ -104,7 +106,7 @@ function MidSettings() {
       const res = await fetch("/api/college/exam-mid-settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ midCount: count, midPreparation: preparation, midAssignment: assignment, outcomes }),
+        body: JSON.stringify({ midCount: count, midPreparation: preparation, midAssignment: assignment, outcomes, printPo }),
       });
       const data = (await res.json()) as { settings?: ExamMidSettings; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed to save");
@@ -205,6 +207,10 @@ function MidSettings() {
               </label>
             ))}
             <p className="text-xs text-muted-foreground">A bank or paper already started keeps what it started with.</p>
+            <label className="flex items-start gap-3 pt-2 text-sm">
+              <Checkbox className="mt-0.5" checked={printPo && outcomes.poMapping} disabled={!outcomes.poMapping} onCheckedChange={(c) => setPrintPo(c === true)} />
+              <span><span className="block font-medium">Print POs on question papers</span><span className="block text-xs text-muted-foreground">Adds the PO / PSO column to Mid and CEA papers. Off: papers show Marks, CO and BL only - the mapping stays in the syllabus. Applies to every paper printed from now on.</span></span>
+            </label>
           </div>
         </CardContent>
       </Card>

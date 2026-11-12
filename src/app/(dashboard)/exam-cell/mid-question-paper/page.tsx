@@ -14,6 +14,7 @@ import { BLOOM_LEVELS } from "@/lib/midBank/constants";
 import { partMarks } from "@/lib/midBank/validateQuestion";
 import { dayLabel } from "@/lib/midTimetable/rules";
 import { fetchCollegeLogoUrl } from "@/lib/pdf/logo";
+import { paperPrintsPo } from "@/lib/pdf/downloadMidPaperSet";
 import { renderHtmlToPdf, renderMultiHtmlToPdf } from "@/lib/pdf/htmlToPdf";
 import { getMidQuestionPaperHTML, paperFileName, ROMAN } from "@/lib/pdf/midQuestionPaperTemplate";
 import { pdfFormulaRenderer } from "@/lib/midBank/mathSvg";
@@ -113,12 +114,13 @@ function BankPaperGenerator({ levels }: { levels: BloomLevel[] }) {
   const setPicked = (key: string, picked: string[]) => setResult((r) => r && ({ ...r, papers: r.papers.map((p) => (p.key === key ? { ...p, picked } : p)) }));
 
   async function htmlOf(papers: GeneratedPaper[]) {
-    const [info, logoUrl, formula] = await Promise.all([
+    const [info, logoUrl, formula, printPo] = await Promise.all([
       fetch("/api/college/info").then((r) => (r.ok ? r.json() : {})).catch(() => ({})) as Promise<{ name?: string }>,
       fetchCollegeLogoUrl(),
       pdfFormulaRenderer(),
+      paperPrintsPo(),
     ]);
-    return papers.map((paper) => getMidQuestionPaperHTML({ college: { name: info.name || "College", logoUrl }, header: result!.header, paper, formula }));
+    return papers.map((paper) => getMidQuestionPaperHTML({ college: { name: info.name || "College", logoUrl, printPo }, header: result!.header, paper, formula }));
   }
   async function download(papers: GeneratedPaper[], key: string) {
     if (!result) return;
