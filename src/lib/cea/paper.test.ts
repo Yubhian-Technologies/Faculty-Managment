@@ -62,14 +62,15 @@ describe("the CEA paper inside a Mid paper set", () => {
     })[0];
     expect(parted).toMatch(/<td class="no">3a<\/td><td class="q">PARTA/);
     expect(parted).toMatch(/<td class="no">3b<\/td><td class="q">PARTB/);
-    // CO / BL on every part's row; an opening line sits inside 1a's cell (no unnumbered row).
+    // CO / BL on every part's row; text on the question itself doesn't print - only its parts (no unnumbered row).
     const stemmed = paperSetHtmls({
       college: { name: "VWU" }, exam: { courseName: "B.Tech", year: 1, semester: 1, midNumber: 1 }, subject: { name: "Maths", code: "MA101", regulation: "R26" },
       branch: "CSE", sections: [], pattern, set: 1, outcomes: { cos: true, poMapping: false, bloom: true },
       questions: [q("A", 1, "ALPHA"), { ...q("B", 1, "STEM"), cos: ["CO1"], bloom: "L3", subParts: [{ text: "PARTA", marks: 6 }, { text: "PARTB", marks: 4 }] } as MidPaperQuestion],
     })[0];
     expect(stemmed).not.toContain('<td class="no"></td>');
-    expect(stemmed).toMatch(/<td class="no">3a<\/td><td class="q"><div>STEM<\/div>PARTA<\/td><td class="num">6<\/td><td class="num">1<\/td><td class="num">3<\/td>/);
+    expect(stemmed).not.toContain("STEM");
+    expect(stemmed).toMatch(/<td class="no">3a<\/td><td class="q">PARTA<\/td><td class="num">6<\/td><td class="num">1<\/td><td class="num">3<\/td>/);
     expect(stemmed).toMatch(/<td class="no">3b<\/td><td class="q">PARTB<\/td><td class="num">4<\/td><td class="num">1<\/td><td class="num">3<\/td>/);
     expect(withPo(false).every((h) => !h.includes("colhead\">PO</td>"))).toBe(true);
     expect(withPo(true).every((h) => h.includes("colhead\">PO</td>"))).toBe(true);
