@@ -111,11 +111,10 @@ export function getMidPaperSetHTML(d: PaperSetPdfData): string {
         continue;
       }
       if (q?.subParts?.length) {
-        // Parts are numbered with the question: 1a, 1b ... - each on its own row with the question's CO / BL. An opening
-        // line (the question's own text) prints at the top of 1a, so there is no unnumbered row.
-        const stem = q.text.trim() ? `<div>${text(q.text, q.imageUrl, q.imageCaption)}</div>` : "";
+        // Parts are numbered with the question: 1a, 1b ... - each on its own row with the question's CO / BL. Only the
+        // parts print (as in the editor's preview); text left on the question itself from before it was split doesn't.
         q.subParts.forEach((sp, j) => {
-          block += `<tr><td class="no">${label}${LETTERS[j]}</td><td class="q">${j === 0 ? stem : ""}${text(sp.text, sp.imageUrl, sp.imageCaption)}</td><td class="num">${sp.marks}</td>${tags(q)}</tr>`;
+          block += `<tr><td class="no">${label}${LETTERS[j]}</td><td class="q">${text(sp.text, sp.imageUrl, sp.imageCaption)}</td><td class="num">${sp.marks}</td>${tags(q)}</tr>`;
         });
       } else {
         const opts = kind === "MCQ" && q?.options
