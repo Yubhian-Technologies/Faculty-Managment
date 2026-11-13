@@ -131,7 +131,7 @@ export default function RAndDConsultancyProjectsPage() {
       render: (row) => <span className="text-sm text-muted-foreground">{CONSULTANCY_CATEGORY_LABELS[row.consultancyCategory]}</span>,
     },
     {
-      key: "consultancyAmount", header: "Amount (Rs.)", hideOnMobile: true,
+      key: "consultancyAmount", header: "Amount (₹)", hideOnMobile: true,
       render: (row) => <span className="text-sm text-muted-foreground">{row.consultancyAmount ?? "-"}</span>,
     },
   ];

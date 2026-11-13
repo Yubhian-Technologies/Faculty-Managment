@@ -112,7 +112,7 @@ function MigrationBranchPicker({ open, onOpenChange, subDepartment, branches, on
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Move subjects &amp; students to core departments</DialogTitle>
+          <DialogTitle>Move Subjects and Students to Core Departments</DialogTitle>
           <DialogDescription>
             Moves &quot;{subDepartment.name}&quot;&apos;s sections, students, subjects, and timetable rows into each
             selected core department directly. Review before anything is written.

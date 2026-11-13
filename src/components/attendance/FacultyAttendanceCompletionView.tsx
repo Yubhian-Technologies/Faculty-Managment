@@ -290,13 +290,13 @@ export function FacultyAttendanceCompletionView({ title, description, hodScoped 
       ) : !hodScoped && !selectedDepartmentId ? (
         <EmptyState title="Select a department to get started" />
       ) : !hodScoped && !selectedCourseId ? (
-        <EmptyState title="Select a course to see its faculty" />
+        <EmptyState title="Select a course to view its faculty." />
       ) : isLoadingFaculty ? (
         <TableSkeleton rows={3} cols={3} />
       ) : faculty.length === 0 ? (
         <EmptyState title={hodScoped ? "No faculty found in your department" : "No faculty found for this course"} />
       ) : !selectedFacultyId ? (
-        <EmptyState title="Select a faculty member to view their periods for this date" />
+        <EmptyState title="Select a faculty member to view their periods for this date." />
       ) : isLoadingPeriods ? (
         <TableSkeleton rows={5} cols={5} />
       ) : periods.length === 0 ? (

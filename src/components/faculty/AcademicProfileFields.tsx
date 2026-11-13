@@ -66,7 +66,7 @@ export function AcademicProfileFields({ value: rawValue, onChange, includeTeachi
   return (
     <div className="space-y-5">
       {/* Module 1 */}
-      <SectionTitle>Module 1 - General &amp; Academic Profile</SectionTitle>
+      <SectionTitle>Module 1: General and Academic Profile</SectionTitle>
       {isSchool ? (
         <>
           <TextInput label="Highest Qualification" value={value.highestQualification} onChange={(v) => set("highestQualification", v)} placeholder="B.Ed, M.A." />
@@ -415,7 +415,7 @@ export function AcademicProfileFields({ value: rawValue, onChange, includeTeachi
       {/* Module 6 */}
       {!hideFinancialModule && (
         <>
-          <SectionTitle>Module 6 - Financial Standing &amp; Budgetary Impact</SectionTitle>
+          <SectionTitle>Module 6: Financial Standing and Budgetary Impact</SectionTitle>
           <div className="space-y-3 rounded-lg border p-3">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Current Financial Standing</p>
             <NumInput label="Monthly Salary (₹)" value={value.monthlySalary} onChange={(v) => set("monthlySalary", v)} />

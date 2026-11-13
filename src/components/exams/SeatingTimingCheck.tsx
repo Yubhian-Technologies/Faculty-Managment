@@ -34,7 +34,7 @@ export function SeatingTimingCheck({ planId, reloadKey }: { planId: string; relo
         {ok && <p className="text-muted-foreground">No room is used by another seating plan at the same time.</p>}
         {check.clashes.length > 0 && (
           <div>
-            <p className="font-medium text-destructive">Rooms also in use by another plan at the same time - change the rooms or the timetable before publishing:</p>
+            <p className="font-medium text-destructive">Rooms also used by another plan at the same time. Change the rooms or the timetable before publishing:</p>
             <ul className="mt-1 list-disc space-y-0.5 pl-5">
               {check.clashes.map((c, i) => (
                 <li key={i}>Room <b>{c.room}</b>, {dayLabel(c.date)}: {c.mine.group} ({c.mine.subjects.join(" / ")}, {span(c.mine.from, c.mine.to)}) and {c.theirs.group} ({c.theirs.subjects.join(" / ")}, {span(c.theirs.from, c.theirs.to)}) of &ldquo;{c.otherPlan}&rdquo;</li>
@@ -44,13 +44,13 @@ export function SeatingTimingCheck({ planId, reloadKey }: { planId: string; relo
         )}
         {check.moved.length > 0 && (
           <div>
-            <p className="font-medium text-destructive">These branches now write at another time in the timetable - build this plan again:</p>
+            <p className="font-medium text-destructive">These branches now write at a different time in the timetable. Build this plan again:</p>
             <ul className="mt-1 list-disc pl-5">{check.moved.map((m) => <li key={m.group}>{m.group}: now {span(...(m.now.split("-") as [string, string]))}</li>)}</ul>
           </div>
         )}
         {check.offSession.length > 0 && (
           <div className="rounded-lg bg-muted/40 p-2.5">
-            <p className="flex items-center gap-1.5 font-medium"><Clock className="h-4 w-4" />Exams at another time - these students sit in the same seats then:</p>
+            <p className="flex items-center gap-1.5 font-medium"><Clock className="h-4 w-4" />Examinations at another time; these students use the same seats then:</p>
             <ul className="mt-1 list-disc pl-5 text-xs">{check.offSession.map((u, i) => <li key={i}>{u.group}: {dayLabel(u.date)}, {span(u.from, u.to)} - {u.subjects.join(" / ")}</li>)}</ul>
           </div>
         )}

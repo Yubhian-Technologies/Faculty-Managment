@@ -240,7 +240,7 @@ return (
                 />
                 <div className="space-y-1">
                   <Label htmlFor="dept-parent-runs-own-sections" className="font-normal">
-                    This department also has its own sections/students, separate from its sub-departments
+                    This department also has its own sections and students, separate from its sub-departments.
                   </Label>
                   <p className="text-xs text-muted-foreground">Turn off only if every student belongs to a sub-department.</p>
                 </div>

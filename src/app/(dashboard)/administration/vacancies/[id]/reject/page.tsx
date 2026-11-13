@@ -61,7 +61,7 @@ export default function RejectVacancyPage() {
       toast({
         variant: "success",
         title: "Vacancy Rejected",
-        description: "HR Admin and Dept Head have been notified.",
+        description: "HR Admin and the Department Head have been notified.",
       });
       router.push("/administration/vacancies");
     } catch {

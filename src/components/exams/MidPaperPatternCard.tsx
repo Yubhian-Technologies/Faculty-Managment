@@ -182,8 +182,8 @@ export function MidPaperPatternCard() {
                   <div className="flex gap-2">
                     <select className={selectClass} value={p.choice.kind} onChange={(e) => setPart(i, { choice: e.target.value === "ANY" ? { kind: "ANY", answer: 2 } : { kind: e.target.value as "ALL" | "OR_PAIRS" } })}>
                       <option value="ALL">All questions (they add up to the max)</option>
-                      <option value="ANY">Any of them (every question the same marks)</option>
-                      <option value="OR_PAIRS">One of each pair (OR) - pairs of equal marks</option>
+                      <option value="ANY">Any of them (all questions carry equal marks)</option>
+                      <option value="OR_PAIRS">One of each pair (OR); pairs carry equal marks</option>
                     </select>
                     {p.choice.kind === "ANY" && <Input className="w-20" type="number" min={1} aria-label="How many to answer" value={p.choice.answer} onChange={(e) => setPart(i, { choice: { kind: "ANY", answer: Number(e.target.value) } })} />}
                   </div>

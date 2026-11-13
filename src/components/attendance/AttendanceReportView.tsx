@@ -631,9 +631,9 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
           </div>
 
           {!selectedDepartment ? (
-            <EmptyState title="Select a department to view its attendance report" />
+            <EmptyState title="Select a department to view its attendance report." />
           ) : !selectedCourse ? (
-            <EmptyState title="Select a course to view its faculty" />
+            <EmptyState title="Select a course to view its faculty." />
           ) : (
             <div className="space-y-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

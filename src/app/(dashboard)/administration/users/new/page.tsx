@@ -20,7 +20,7 @@ const CREATABLE_ROLES = [
   { value: "HR_ADMIN", label: "HR Admin" },
   { value: "ADMIN_OFFICE", label: "Admin Office" },
   { value: "ACCOUNTS", label: "Accounts" },
-  { value: "LOCATION_DEPT_HEAD", label: "Dept Head" },
+  { value: "LOCATION_DEPT_HEAD", label: "Department Head" },
 ] as const;
 
 const SINGLETON_ROLES = ["LOCATION_STAFF_ADMIN", "HR_ADMIN", "ADMIN_OFFICE", "ACCOUNTS"];

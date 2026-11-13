@@ -234,7 +234,7 @@ function Remarks({ api, sheet }: { api: string; sheet: MentoringSemesterSheet })
 
   return (
     <Card>
-      <CardHeader className="pb-1"><CardTitle className="text-base">Remarks of the mentor on attendance and performance</CardTitle></CardHeader>
+      <CardHeader className="pb-1"><CardTitle className="text-base">Mentor&apos;s remarks on attendance and performance</CardTitle></CardHeader>
       <CardContent className="space-y-2">
         <Textarea value={text} rows={4} maxLength={SEMESTER_REMARKS_MAX_LENGTH} placeholder="Attendance, performance, and what the student should work on this semester…" onChange={(e) => setText(e.target.value)} className="print:hidden" />
         <p className="hidden print:block text-sm whitespace-pre-wrap min-h-24">{text}</p>

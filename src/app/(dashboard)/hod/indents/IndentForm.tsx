@@ -137,7 +137,7 @@ export function IndentForm({ editingRequest, onCancel, onSaved }: IndentFormProp
                   <SelectValue placeholder="Select type" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="GOODS">{INDENT_REQUEST_TYPE_LABELS.GOODS} - sourced via Purchase Dept</SelectItem>
+                  <SelectItem value="GOODS">{INDENT_REQUEST_TYPE_LABELS.GOODS} - sourced via Purchase Department</SelectItem>
                   <SelectItem value="NON_GOODS">{INDENT_REQUEST_TYPE_LABELS.NON_GOODS} - goes directly to Finance</SelectItem>
                 </SelectContent>
               </Select>

@@ -175,7 +175,7 @@ export function FacultyTimetableLookup({ ownOnly = false, embedded = false }: { 
         embedded && !isLoadingSchedule ? null : <EmptyState
           icon={<CalendarSearch className="h-8 w-8" />}
           title={isLoadingSchedule ? "Loading…" : ownOnly ? "No timetable found" : "Pick a department and a faculty member"}
-          description="Their real week shows here - every period they are already booked for, across every course and section."
+          description="Their full week is shown here: every period already booked, across every course and section."
         />
       ) : !readyForGrid ? (
         // No periods to draw means no course-year timings AND no bookings -

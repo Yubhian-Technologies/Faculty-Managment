@@ -280,7 +280,7 @@ export function FacultyNotPostedView({
       {!departmentId ? (
         <EmptyState title="Select a department to get started" />
       ) : allDepartments ? null : !courseId ? (
-        <EmptyState title="Select a course, then pick a query above" />
+        <EmptyState title="Select a course, then choose a query above." />
       ) : null}
 
       {data != null && (() => {

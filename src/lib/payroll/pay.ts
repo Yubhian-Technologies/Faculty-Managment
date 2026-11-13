@@ -46,7 +46,7 @@ export const sameRevision = (a: Pick<PayRevision, "amounts" | "exempt">, b: Pick
   JSON.stringify(Object.entries(a.amounts).sort()) === JSON.stringify(Object.entries(b.amounts).sort()) &&
   JSON.stringify([...a.exempt].sort()) === JSON.stringify([...b.exempt].sort());
 
-// ─── Import (Accounts' salary sheet: Emp Code + one column per part + Y/N per deduction) ─────────
+// ─── Import (Accounts' salary sheet: Employee ID + one column per part + Y/N per deduction) ─────────
 
 export interface ImportRow { row: number; code: string; values: Record<string, string> }  // values keyed by header as typed
 export interface ImportEmployee { employeeKey: string; employeeCode: string; name: string }
@@ -99,10 +99,10 @@ export function importColumns(headers: string[], settings: Pick<PayrollSettings,
 }
 
 /**
- * Plans an import: each row is matched to a person by Emp Code (case-insensitive, within the college).
+ * Plans an import: each row is matched to a person by Employee ID (case-insensitive, within the college).
  * A blank amount is 0; a deduction column takes Y / N (blank = Y). Any error stops the whole import.
  * The monthly salary sheet itself (a Pay Days / Total Ded / Net Salary column) is read too: its worked-out columns are skipped, a
- * deduction amount > 0 = applies (PF / SWF 0 = not for this person), rows without an Emp Code are skipped, and a
+ * deduction amount > 0 = applies (PF / SWF 0 = not for this person), rows without an Employee ID are skipped, and a
  * row paid for part of the month (parts != Gross_Actual) is refused - its fixed pay can't be read from it.
  */
 export function planPayImport(
@@ -118,17 +118,17 @@ export function planPayImport(
   }
   const seen = new Map<string, number>();
   const kindOf = new Map(settings.deductions.map((d) => [d.id, d.kind]));
-  // The monthly sheet carries totals, section headings and footnotes with no Emp Code - those rows are skipped.
+  // The monthly sheet carries totals, section headings and footnotes with no Employee ID - those rows are skipped.
   const used = cols.sheet ? rows.filter((r) => r.code.trim()) : rows;
   const out = used.map((r): ImportPlanRow => {
     const code = r.code.trim().toUpperCase();
     const fail = (error: string): ImportPlanRow => ({ row: r.row, code: r.code, status: "ERROR", error });
-    if (!code) return fail("Emp Code is blank");
-    if (seen.has(code)) return fail(`Emp Code repeated (row ${seen.get(code)})`);
+    if (!code) return fail("Employee ID is required.");
+    if (seen.has(code)) return fail(`Employee ID repeated (also in row ${seen.get(code)}).`);
     seen.set(code, r.row);
     const matches = byCode.get(code) ?? [];
-    if (matches.length === 0) return fail("No faculty or staff member has this Emp Code");
-    if (matches.length > 1) return fail("Two people share this Emp Code - fix their records first");
+    if (matches.length === 0) return fail("No faculty or staff member has this Employee ID.");
+    if (matches.length > 1) return fail("Two people have this Employee ID. Correct their records first.");
     const emp = matches[0];
     const amounts: Record<string, number> = {};
     for (const [h, id] of cols.earnings) {
@@ -148,7 +148,7 @@ export function planPayImport(
       }
       if (grossActual(amounts) <= 0) return fail(`Not paid this month (Pay Days ${days || "0"}) - type this person's full-month pay`);
     }
-    if (grossActual(amounts) <= 0) return fail("No pay amounts");
+    if (grossActual(amounts) <= 0) return fail("No pay amounts entered.");
     const exempt: string[] = [];
     for (const [h, id] of cols.deductions) {
       const raw = String(r.values[h] ?? "").replace(/,/g, "").trim().toUpperCase();

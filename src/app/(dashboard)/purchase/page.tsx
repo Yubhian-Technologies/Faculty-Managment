@@ -96,19 +96,19 @@ export default function PurchaseDashboard() {
           <CardContent className="space-y-2 text-sm text-muted-foreground">
             <p className="flex items-center gap-2">
               <span className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">1</span>
-              HOD raises an indent against their department budget
+              The HOD raises an indent against the department budget.
             </p>
             <p className="flex items-center gap-2">
               <span className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">2</span>
-              Source at least 3 vendor quotations and recommend one
+              Obtain at least 3 vendor quotations and recommend one.
             </p>
             <p className="flex items-center gap-2">
               <span className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">3</span>
-              Finance reviews, disburses, and sends the green flag back
+              Finance reviews the request, releases the funds and gives approval.
             </p>
             <p className="flex items-center gap-2">
               <span className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">4</span>
-              Buy the goods and upload the receipt to close out the indent
+              Buy the goods and upload the receipt to close the indent.
             </p>
           </CardContent>
         </Card>

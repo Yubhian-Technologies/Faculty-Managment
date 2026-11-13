@@ -258,7 +258,7 @@ export function ResultsAnalysisView({ title = "Results Analysis", description }:
           </select>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="ra-ys">Year - Sem</Label>
+          <Label htmlFor="ra-ys">Year and Semester</Label>
           <select id="ra-ys" className={selectClass} value={ys} onChange={(e) => { setYearSem(e.target.value); classChanged(); }} disabled={yearSemOptions.length === 0}>
             {yearSemOptions.map((k) => <option key={k} value={k}>{yearSemLabel(k)}</option>)}
           </select>

@@ -6,7 +6,7 @@ export default function CollegeOfficeStaffAttendancePage() {
   return (
     <AttendanceReportView
       title="Staff Attendance"
-      description="Daily self-attendance (face + location verified) for College Office staff"
+      description="Daily attendance of College Office staff, verified by face and location."
       allowManualMark
       monthlyViewBasePath="/college-office/staff-attendance"
       importHref="/college-office/attendance-import"

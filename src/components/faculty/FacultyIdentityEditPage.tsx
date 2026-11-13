@@ -106,7 +106,7 @@ export function FacultyIdentityEditPage({
   // submission; each tab here already saves independently on its own.
   type EditTabKey = "core" | ProfileModuleKey;
   const tabs: (ChromeStep & { key: EditTabKey })[] = [
-    { key: "core", label: "Identity & Employment", icon: User, description: "Official ID, department, designation and employment status" },
+    { key: "core", label: "Identity & Employment", icon: User, description: "Official ID, department, designation and employment status." },
     ...getFacultyProfileModules().map((m) => ({ key: m.key, label: m.label, icon: m.icon, description: m.description })),
   ];
   const [activeTab, setActiveTab] = useState<EditTabKey>("core");
@@ -588,7 +588,7 @@ export function FacultyIdentityEditPage({
                 <Label>Personal Email</Label>
                 <Input type="email" value={form.email} onChange={(e) => set({ email: e.target.value })} placeholder="faculty@example.com" />
                 {!!form.email.trim() && !EMAIL_REGEX.test(form.email.trim()) && (
-                  <p className="text-xs text-destructive">Doesn&rsquo;t look like a valid email address</p>
+                  <p className="text-xs text-destructive">Enter a valid email address.</p>
                 )}
               </div>
               <div className="space-y-2">
@@ -611,7 +611,7 @@ export function FacultyIdentityEditPage({
                   placeholder="9876543210"
                 />
                 {!!form.mobileNo && !PHONE_REGEX.test(form.mobileNo) && (
-                  <p className="text-xs text-destructive">Must be exactly 10 digits, starting with 6, 7, 8 or 9</p>
+                  <p className="text-xs text-destructive">Must be 10 digits, starting with 6, 7, 8 or 9.</p>
                 )}
               </div>
             </div>

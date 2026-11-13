@@ -257,7 +257,7 @@ export default function StudentAttendanceImportPage() {
       <Card>
         <CardContent className="space-y-3 pt-5">
           <div className="space-y-1.5">
-            <Label htmlFor="attendance-file">Attendance file (.xlsx with one sheet per section, or .csv for one section)</Label>
+            <Label htmlFor="attendance-file">Attendance file (XLSX with one sheet per section, or CSV for one section)</Label>
             <input
               id="attendance-file"
               type="file"

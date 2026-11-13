@@ -171,7 +171,7 @@ export default function HODPurchaseClearanceDetailPage() {
 
       {item.status === "RETURNED_TO_HOD" && latestRemarks && (
         <div className="rounded-md border border-orange-300/60 bg-orange-50 p-3 text-sm">
-          <p className="font-medium text-orange-800">Returned by Purchase Dept for correction</p>
+          <p className="font-medium text-orange-800">Returned by Purchase Department for correction</p>
           <p className="mt-1 text-orange-700">{latestRemarks}</p>
         </div>
       )}

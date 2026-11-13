@@ -587,7 +587,7 @@ export default function ManagementAttendancePage() {
           </div>
 
           {selectedDepartmentId && !selectedCourse ? (
-            <EmptyState title="Select a course to view its HOD and faculty" />
+            <EmptyState title="Select a course to view its HOD and faculty." />
           ) : selectedCourse ? (
             isLoadingDeptRoster ? (
               <div className="h-48 rounded-lg border bg-muted/30 animate-pulse" />

@@ -86,7 +86,7 @@ export function BatchStart({ onStarted }: { onStarted: () => void }) {
             <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm space-y-2 dark:border-amber-900 dark:bg-amber-950/40">
               <p>Your <b>{data.oldNoDues.name}</b> is the earlier version (students apply). The new one is started here by the College Office, with every department line - dues, approval, Exam Cell Pass / Fail - and the clearance table.</p>
               {data.oldNoDues.inUse ? (
-                <p className="text-muted-foreground">Requests already use it, so it can&apos;t be replaced - in Setup, edit it and set &quot;Who starts it&quot; to the College Office and the departments as needed.</p>
+                <p className="text-muted-foreground">Requests already use it, so it cannot be replaced. In Setup, edit it and set Who Starts It to the College Office and the departments as needed.</p>
               ) : canSetup ? (
                 <Button size="sm" loading={busy} onClick={upgrade}>Switch to the new No Dues</Button>
               ) : (

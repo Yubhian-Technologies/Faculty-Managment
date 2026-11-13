@@ -129,7 +129,7 @@ function MidSettings() {
       {!settings?.midCount && (
         <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" role="status">
           <Info className="mt-0.5 h-4 w-4 shrink-0" />
-          The number of Mid exams isn&rsquo;t saved yet - press Save Settings. Until then Mid Timings &amp; Dates can&rsquo;t publish timings.
+          The number of Mid examinations is not saved yet. Choose Save Settings; until then, Mid Timings and Dates cannot publish timings.
         </div>
       )}
 
@@ -206,7 +206,7 @@ function MidSettings() {
             <p className="text-xs text-muted-foreground">A bank or paper already started keeps its original settings.</p>
             <label className="flex items-start gap-3 pt-2 text-sm">
               <Checkbox className="mt-0.5" checked={printPo && outcomes.poMapping} disabled={!outcomes.poMapping} onCheckedChange={(c) => setPrintPo(c === true)} />
-              <span><span className="block font-medium">Print POs on question papers</span><span className="block text-xs text-muted-foreground">Adds the PO / PSO column to Mid and CIE papers. Off: papers show Marks, CO and BL only - the mapping stays in the syllabus. Applies to every paper printed from now on.</span></span>
+              <span><span className="block font-medium">Print POs on question papers</span><span className="block text-xs text-muted-foreground">Adds the PO / PSO column to Mid and CIE papers. When off, papers show Marks, CO and BL only; the mapping remains in the syllabus. Applies to every paper printed from now on.</span></span>
             </label>
           </div>
         </CardContent>

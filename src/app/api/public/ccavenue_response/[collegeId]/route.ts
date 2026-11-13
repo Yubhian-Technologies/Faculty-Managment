@@ -45,7 +45,7 @@ export async function POST(request: Request, { params }: Params) {
       });
       if (settled.newlyPaid) {
         await notify(db, collegeId, p.studentUid, "PAYMENT_RECEIVED", "Payment received",
-          `Rs. ${p.amount} paid for ${p.purpose.label} (CCAvenue ref ${p.trackingId}).`, `/student/payments/${encodeURIComponent(p.id)}`);
+          `₹${p.amount} paid for ${p.purpose.label} (CCAvenue ref ${p.trackingId}).`, `/student/payments/${encodeURIComponent(p.id)}`);
       }
       // Paid twice: the payment carries `needsRefund` - Accounts sees it flagged on their Payments page.
     }

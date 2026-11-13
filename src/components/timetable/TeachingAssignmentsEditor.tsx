@@ -588,7 +588,7 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
                       setResetTarget({ sectionId: assignForm.sectionId, sectionName: sec?.name ?? "" });
                     }}
                   >
-                    <Trash2 className="h-3.5 w-3.5 mr-1" />Clear assignments &amp; requests for this section
+                    <Trash2 className="h-3.5 w-3.5 mr-1" />Clear Assignments and Requests for This Section
                   </Button>
                 )}
               </div>

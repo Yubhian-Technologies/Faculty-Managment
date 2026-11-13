@@ -262,7 +262,7 @@ export default function PrincipalSettingsPage() {
           </div>
 
           <div className="space-y-2 pt-2 border-t">
-            <Label htmlFor="subj-search">Custom continuous slots for a specific subject</Label>
+            <Label htmlFor="subj-search">Custom consecutive periods for a specific subject</Label>
             <div className="grid grid-cols-2 gap-2">
               <select
                 aria-label="Filter by department"
@@ -398,7 +398,7 @@ export default function PrincipalSettingsPage() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="dmf">Min. Faculty / Dept</Label>
+            <Label htmlFor="dmf">Minimum Faculty per Department</Label>
             <Input
               id="dmf"
               type="number"

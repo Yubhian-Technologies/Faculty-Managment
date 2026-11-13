@@ -51,14 +51,14 @@ export function SalaryAdvances({ collegeId }: { collegeId?: string }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-3">
-        <div className="relative min-w-[14rem] flex-1"><Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input aria-label="Search" className="pl-8" placeholder="Emp Code or name" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+        <div className="relative min-w-[14rem] flex-1"><Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input aria-label="Search" className="pl-8" placeholder="Employee ID or name" value={q} onChange={(e) => setQ(e.target.value)} /></div>
         <select aria-label="Show" className={selectClass} value={show} onChange={(e) => setShow(e.target.value as typeof show)}><option value="OPEN">Running</option><option value="ALL">All, with closed</option></select>
         {d.canEdit && <Button variant="outline" onClick={() => setImporting(true)}><Upload className="mr-1.5 h-4 w-4" />Import running advances</Button>}
         {d.canEdit && <Button onClick={() => setEditing("NEW")}><Plus className="mr-1.5 h-4 w-4" />New advance</Button>}
       </div>
       <div className="flex flex-wrap gap-2 text-sm">
-        <span className="rounded-full bg-muted px-3 py-1">{open.length} running · balance Rs. {rupees(open.reduce((s, a) => s + a.balance, 0))}</span>
-        <span className="rounded-full bg-muted px-3 py-1">Next month&apos;s recovery up to Rs. {rupees(open.filter((a) => a.status === "ACTIVE").reduce((s, a) => s + Math.min(a.instalment, a.balance), 0))}</span>
+        <span className="rounded-full bg-muted px-3 py-1">{open.length} running · balance ₹{rupees(open.reduce((s, a) => s + a.balance, 0))}</span>
+        <span className="rounded-full bg-muted px-3 py-1">Next month&apos;s recovery up to ₹{rupees(open.filter((a) => a.status === "ACTIVE").reduce((s, a) => s + Math.min(a.instalment, a.balance), 0))}</span>
       </div>
       <Card className="rounded-2xl"><CardContent className="overflow-x-auto p-0">
         <table className="w-full min-w-[52rem] text-sm">
@@ -123,13 +123,13 @@ function AdvanceDialog({ collegeId, advance, employees, canEdit, onClose, onSave
       <DialogContent className="max-h-[90vh] max-w-xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{advance ? `${advance.name} - advance` : "New salary advance"}</DialogTitle>
-          <DialogDescription>{advance ? `${advance.employeeCode} · given Rs. ${rupees(advance.amount)}${advance.givenOn ? ` on ${advance.givenOn}` : ""} · balance Rs. ${rupees(advance.balance)}` : "Recovered from salary each month; the last month takes only what is left."}</DialogDescription>
+          <DialogDescription>{advance ? `${advance.employeeCode} · given ₹${rupees(advance.amount)}${advance.givenOn ? ` on ${advance.givenOn}` : ""} · balance ₹${rupees(advance.balance)}` : "Recovered from salary each month; the last month takes only what is left."}</DialogDescription>
         </DialogHeader>
         {!advance && (
           <div className="space-y-1.5"><Label htmlFor="ad-who">Person</Label>
             {picked ? <div className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"><span>{picked.name} <span className="font-mono text-xs text-muted-foreground">{picked.employeeCode}</span> · {picked.department}</span><Button size="sm" variant="ghost" onClick={() => setPicked(null)}>Change</Button></div> : (
               <>
-                <Input id="ad-who" placeholder="Type Emp Code or name" value={who} onChange={(e) => setWho(e.target.value)} />
+                <Input id="ad-who" placeholder="Type Employee ID or name" value={who} onChange={(e) => setWho(e.target.value)} />
                 {matches.length > 0 && <ul className="rounded-md border text-sm">{matches.map((e) => <li key={e.employeeKey}><button type="button" className="w-full px-3 py-1.5 text-left hover:bg-muted" onClick={() => { setPicked(e); setWho(""); }}>{e.name} <span className="font-mono text-xs text-muted-foreground">{e.employeeCode}</span> · {e.department}</button></li>)}</ul>}
               </>
             )}
@@ -138,8 +138,8 @@ function AdvanceDialog({ collegeId, advance, employees, canEdit, onClose, onSave
         {live && (
           <div className="space-y-3">
             <div className="grid gap-3 sm:grid-cols-3">
-              <div className="space-y-1"><Label htmlFor="ad-amt">Advance (Rs.)</Label><Input id="ad-amt" inputMode="numeric" disabled={started} value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value.replace(/[^\d]/g, "") })} /></div>
-              <div className="space-y-1"><Label htmlFor="ad-rb">Recovered before (Rs.)</Label><Input id="ad-rb" inputMode="numeric" disabled={started} value={f.recoveredBefore} onChange={(e) => setF({ ...f, recoveredBefore: e.target.value.replace(/[^\d]/g, "") })} /></div>
+              <div className="space-y-1"><Label htmlFor="ad-amt">Advance (₹)</Label><Input id="ad-amt" inputMode="numeric" disabled={started} value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value.replace(/[^\d]/g, "") })} /></div>
+              <div className="space-y-1"><Label htmlFor="ad-rb">Recovered before (₹)</Label><Input id="ad-rb" inputMode="numeric" disabled={started} value={f.recoveredBefore} onChange={(e) => setF({ ...f, recoveredBefore: e.target.value.replace(/[^\d]/g, "") })} /></div>
               <div className="space-y-1"><Label htmlFor="ad-from">Recover from</Label><Input id="ad-from" type="month" disabled={started} value={f.startMonth} onChange={(e) => e.target.value && setF({ ...f, startMonth: e.target.value })} /></div>
             </div>
             <p className="text-xs text-muted-foreground">&quot;Recovered before&quot; is only for an advance already running before payroll moved into the app.{started ? " The amount and first month can't change once a month has recovered from it." : ""}</p>
@@ -148,9 +148,9 @@ function AdvanceDialog({ collegeId, advance, employees, canEdit, onClose, onSave
                 <select id="ad-mode" className={selectClass} value={f.mode} onChange={(e) => setF({ ...f, mode: e.target.value as typeof f.mode })}><option value="AMOUNT">An amount</option><option value="PERCENT">A % of the advance</option></select>
               </div>
               {f.mode === "AMOUNT"
-                ? <div className="space-y-1"><Label htmlFor="ad-inst">Rs. a month</Label><Input id="ad-inst" inputMode="numeric" className="w-32" value={f.instalment} onChange={(e) => setF({ ...f, instalment: e.target.value.replace(/[^\d]/g, "") })} /></div>
+                ? <div className="space-y-1"><Label htmlFor="ad-inst">₹ a month</Label><Input id="ad-inst" inputMode="numeric" className="w-32" value={f.instalment} onChange={(e) => setF({ ...f, instalment: e.target.value.replace(/[^\d]/g, "") })} /></div>
                 : <div className="space-y-1"><Label htmlFor="ad-pct">% a month</Label><Input id="ad-pct" inputMode="decimal" className="w-28" value={f.percent} onChange={(e) => setF({ ...f, percent: e.target.value.replace(/[^\d.]/g, "") })} /></div>}
-              {amount > 0 && inst > 0 && <p className="pb-2 text-sm text-muted-foreground">Rs. {rupees(inst)} a month ({Math.round((inst / amount) * 100000) / 1000}%) · about {Math.ceil(Math.max(balance, 0) / inst)} month(s)</p>}
+              {amount > 0 && inst > 0 && <p className="pb-2 text-sm text-muted-foreground">₹{rupees(inst)} a month ({Math.round((inst / amount) * 100000) / 1000}%) · about {Math.ceil(Math.max(balance, 0) / inst)} month(s)</p>}
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1"><Label htmlFor="ad-on">Given on (optional)</Label><Input id="ad-on" type="date" value={f.givenOn} onChange={(e) => setF({ ...f, givenOn: e.target.value })} /></div>
@@ -162,9 +162,9 @@ function AdvanceDialog({ collegeId, advance, employees, canEdit, onClose, onSave
         {advance && (
           <div className="space-y-2 border-t pt-3 text-sm">
             <p className="font-medium">Recoveries</p>
-            {advance.recoveredBefore > 0 && <p className="text-xs">Before the app: Rs. {rupees(advance.recoveredBefore)}</p>}
+            {advance.recoveredBefore > 0 && <p className="text-xs">Before the app: ₹{rupees(advance.recoveredBefore)}</p>}
             {Object.keys(advance.recoveries ?? {}).length === 0 ? <p className="text-xs text-muted-foreground">None released yet.</p> : (
-              <ul className="text-xs">{Object.entries(advance.recoveries).sort().map(([m, v]) => <li key={m}>{monthLabel(m)}: Rs. {rupees(v)}</li>)}</ul>
+              <ul className="text-xs">{Object.entries(advance.recoveries).sort().map(([m, v]) => <li key={m}>{monthLabel(m)}: ₹{rupees(v)}</li>)}</ul>
             )}
             <details><summary className="cursor-pointer text-xs font-medium">History</summary>
               <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">{[...(advance.history ?? [])].reverse().map((h, i) => <li key={i}>{new Date(h.at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })} · {h.byName}: {h.change}</li>)}</ul>
@@ -189,7 +189,7 @@ function AdvanceDialog({ collegeId, advance, employees, canEdit, onClose, onSave
 }
 
 type ImportPlan = { rows: AdvanceImportPlanRow[]; unknownColumns: string[]; errors: number; applied: number };
-const HEADERS = ["Emp Code", "Name", "Advance amount", "Recovered so far", "Monthly recovery", "Monthly %", "First month", "Note"];
+const HEADERS = ["Employee ID", "Name", "Advance amount", "Recovered so far", "Monthly recovery", "Monthly %", "First month", "Note"];
 
 function AdvanceImport({ collegeId, onClose, onDone }: { collegeId?: string; onClose: () => void; onDone: () => void }) {
   const [file, setFile] = useState<{ headers: string[]; rows: { row: number; code: string; values: Record<string, string> }[] } | null>(null);
@@ -204,7 +204,7 @@ function AdvanceImport({ collegeId, onClose, onDone }: { collegeId?: string; onC
     ws.addRow(HEADERS).font = { bold: true };
     ws.columns = HEADERS.map((h) => ({ width: Math.max(h.length + 4, 14), style: { numFmt: "@" } }));
     const help = wb.addWorksheet("Instructions");
-    [["Column", "What to enter"], ["Emp Code", "Required - finds the person."], ["Advance amount", "The full advance given."],
+    [["Column", "What to enter"], ["Employee ID", "Required. Identifies the person."], ["Advance amount", "The full advance given."],
       ["Recovered so far", "What was already recovered before payroll moved into the app (blank = 0)."],
       ["Monthly recovery", "Rupees a month. Or leave it blank and give Monthly % instead."], ["Monthly %", "% of the advance a month (decimals allowed)."],
       ["First month", "First month to recover in the app, e.g. Nov 2026."], ["Note", "Optional."], [],
@@ -225,7 +225,7 @@ function AdvanceImport({ collegeId, onClose, onDone }: { collegeId?: string; onC
       const parsed = lower.endsWith(".csv") ? parseCSVWithRowNumbers(await readFileAsText(f)) : await parseExcelFileWithRowNumbers(f, `/api/college/payroll/parse-excel${collegeQs(collegeId)}`);
       const headers = (parsed.rows[0] ?? []).map((h) => String(h ?? "").trim());
       const codeAt = headers.findIndex((h) => ["EMPCODE", "EMPLOYEECODE", "EMPLOYEEID"].includes(h.toUpperCase().replace(/[^A-Z]/g, "")));
-      if (codeAt < 0) throw new Error('The file needs an "Emp Code" column');
+      if (codeAt < 0) throw new Error('The file needs an "Employee ID" column');
       const rows = parsed.rows.slice(1).map((r, i) => ({ row: parsed.rowNumbers[i + 1] ?? i + 2, code: String(r[codeAt] ?? "").trim(), values: Object.fromEntries(headers.map((h, j) => [h, String(r[j] ?? "").trim()])) }))
         .filter((r) => Object.values(r.values).some(Boolean));
       if (rows.length === 0) throw new Error("No rows under the header");
@@ -263,7 +263,7 @@ function AdvanceImport({ collegeId, onClose, onDone }: { collegeId?: string; onC
             <p>{plan.rows.length - bad.length} ready · {bad.length} with problems</p>
             {plan.unknownColumns.length > 0 && <p className="text-destructive">Columns this import doesn&apos;t know: {plan.unknownColumns.join(", ")}</p>}
             <div className="max-h-72 overflow-auto rounded-md border"><table className="w-full text-xs">
-              <thead className="sticky top-0 bg-muted text-left"><tr><th className="px-2 py-1">Row</th><th className="px-2 py-1">Emp Code</th><th className="px-2 py-1">Person / problem</th><th className="px-2 py-1 text-right">Advance</th><th className="px-2 py-1 text-right">Balance</th><th className="px-2 py-1 text-right">Monthly</th><th className="px-2 py-1">From</th></tr></thead>
+              <thead className="sticky top-0 bg-muted text-left"><tr><th className="px-2 py-1">Row</th><th className="px-2 py-1">Employee ID</th><th className="px-2 py-1">Person / problem</th><th className="px-2 py-1 text-right">Advance</th><th className="px-2 py-1 text-right">Balance</th><th className="px-2 py-1 text-right">Monthly</th><th className="px-2 py-1">From</th></tr></thead>
               <tbody>{[...bad, ...plan.rows.filter((r) => r.status === "OK")].map((r) => (
                 <tr key={r.row} className="border-t">
                   <td className="px-2 py-1">{r.row}</td><td className="px-2 py-1 font-mono">{r.code}</td>

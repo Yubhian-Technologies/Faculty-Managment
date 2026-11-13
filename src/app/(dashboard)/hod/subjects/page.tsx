@@ -559,7 +559,7 @@ export default function HODSubjectsPage() {
               <CardContent className="p-4 space-y-4">
                 <h2 className="font-semibold text-sm flex items-center gap-2">
                   <BookOpen className="h-4 w-4" />
-                  {selectedCourse?.name ?? ""} · {selectedDeptName} · {ordinalYear(Number(selectedYear))} · Sem {yearSemesterLabelIn(Number(selectedYear), semesterOptions, Number(effectiveSemester))}
+                  {selectedCourse?.name ?? ""} · {selectedDeptName} · {ordinalYear(Number(selectedYear))} · Semester {yearSemesterLabelIn(Number(selectedYear), semesterOptions, Number(effectiveSemester))}
                 </h2>
 
                 {isLoadingAssignments ? (

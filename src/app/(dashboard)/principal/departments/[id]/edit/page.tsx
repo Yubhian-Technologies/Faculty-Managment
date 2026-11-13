@@ -299,7 +299,7 @@ export default function EditDepartmentPage() {
                   />
                   <div className="space-y-1">
                     <Label htmlFor="dept-parent-runs-own-sections" className="font-normal">
-                      This department also has its own sections/students, separate from its sub-departments
+                      This department also has its own sections and students, separate from its sub-departments.
                     </Label>
                     <p className="text-xs text-muted-foreground">Turn off only if every student belongs to a sub-department.</p>
                   </div>
@@ -325,7 +325,7 @@ export default function EditDepartmentPage() {
           setExistingSectionsWarning(null);
           setParentRunsOwnSections(true);
         }}
-        title="This department already has its own sections"
+        title="This department already has its own sections."
         description={existingSectionsWarning?.message}
         confirmLabel="Turn off anyway"
         cancelLabel="Keep it on"

@@ -75,7 +75,7 @@ export function RequestList({ request, onCancelled }: { request: CertificateRequ
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title="Cancel this request?"
-        description="This will withdraw your certificate request. Any clearances already given will be discarded - you'll need to submit a fresh request if you need the certificate later."
+        description="Your certificate request will be withdrawn and any clearances already given will be discarded. Submit a new request if you need the certificate later."
         confirmLabel="Cancel Request"
         cancelLabel="Keep Request"
         variant="destructive"

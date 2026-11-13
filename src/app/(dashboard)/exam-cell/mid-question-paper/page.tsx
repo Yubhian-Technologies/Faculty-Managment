@@ -149,7 +149,7 @@ function BankPaperGenerator({ levels }: { levels: BloomLevel[] }) {
               <Label htmlFor="qp-plan">Mid timetable</Label>
               <select id="qp-plan" className={selectClass} value={planId} onChange={(e) => { setPlanId(e.target.value); setDetail(null); setDate(""); setResult(null); }}>
                 <option value="">{plans === null ? "Loading..." : plans.length ? "Select a Mid timetable" : "No Mid timetable yet"}</option>
-                {(plans ?? []).map((p) => <option key={p.id} value={p.id}>{p.courseName} · {ordinalYearLabel(p.year)} · Sem {p.semester} · Mid {p.midNumber}</option>)}
+                {(plans ?? []).map((p) => <option key={p.id} value={p.id}>{p.courseName} · {ordinalYearLabel(p.year)} · Semester {p.semester} · Mid {p.midNumber}</option>)}
               </select>
             </div>
             <div className="space-y-1.5">

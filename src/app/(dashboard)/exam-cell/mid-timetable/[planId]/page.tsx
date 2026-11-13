@@ -405,7 +405,7 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
               </div>
             )}
           </div>
-          {setupDirty && <p className="text-xs text-amber-700">Save the days and time first - the sheet below uses the saved ones.</p>}
+          {setupDirty && <p className="text-xs text-amber-700">Save the days and time first; the sheet below uses the saved values.</p>}
         </CardContent>
       </Card>
 
@@ -541,7 +541,7 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
               </>
             )}
             <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="mv-reason">Reason (optional, shown to students and faculty)</Label>
+              <Label htmlFor="mv-reason">Reason (optional; shown to students and faculty)</Label>
               <Input id="mv-reason" value={move.reason} maxLength={200} placeholder="Holiday declared on 3 Oct" onChange={(e) => setMove((m) => ({ ...m, reason: e.target.value }))} />
             </div>
           </div>

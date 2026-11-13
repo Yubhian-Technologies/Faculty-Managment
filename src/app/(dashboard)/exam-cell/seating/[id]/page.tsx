@@ -230,7 +230,7 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
               {plan.streams.map((st) => (
                 <span key={st.seat}><span className="font-semibold">Seat {SEAT_LETTERS[st.seat - 1]}:</span> {st.groups.map((g) => `${g.label} (${g.count})`).join(" → ")}</span>
               ))}
-              <span className="w-full text-xs text-muted-foreground">Seats are set by the build - to change them, delete this draft and build again.</span>
+              <span className="w-full text-xs text-muted-foreground">Seats are fixed when the plan is built. To change them, delete this draft and build it again.</span>
             </CardContent>
           </Card>
         )}

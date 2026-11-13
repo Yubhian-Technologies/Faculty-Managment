@@ -88,7 +88,7 @@ export default function ExamCellCircularsPage() {
                       <p className="text-sm font-semibold truncate">{c.title}</p>
                       {isNotice ? (
                         <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                          <Badge variant="outline" className="text-[10px]">{c.courseName} · Sem {c.semester}/{c.totalSemesters}</Badge>
+                          <Badge variant="outline" className="text-[10px]">{c.courseName} · Semester {c.semester}/{c.totalSemesters}</Badge>
                           <span className="inline-flex items-center gap-1"><CalendarClock className="h-3 w-3" />{c.noticeDate ? formatDMY(c.noticeDate) : "-"}</span>
                           <span>· {c.createdByName} · shared {formatDate(c.createdAt)}</span>
                         </p>

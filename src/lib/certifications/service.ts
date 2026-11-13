@@ -202,7 +202,7 @@ export async function duesPending(db: Firestore, user: ActingUser, id: string, b
   const label = step?.type === "PARALLEL" ? step.branches.find((b) => b.key === branchKey)?.label ?? "" : "";
   await notifications.notifyStudent(
     db, user.collegeId, updated.requesterUid, "CERTIFICATE_DUES_PENDING", `${updated.certificateTypeLabel} - dues pending`,
-    `${label}: Rs. ${amount} pending (${reason}). Pay it and the department will clear you.`,
+    `${label}: ₹${amount} pending (${reason}). Pay it and the department will clear you.`,
   );
   return updated;
 }

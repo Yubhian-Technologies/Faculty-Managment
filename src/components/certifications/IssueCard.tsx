@@ -111,12 +111,12 @@ export function IssueCard({ request, onDone }: { request: CertificateRequest; on
         )}
         {fee > 0 && request.feePaid && (
           <p className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
-            Fee Rs. {request.feePaid.amount} paid online · CCAvenue ref {request.feePaid.trackingId}{request.feePaid.bankRefNo ? ` · bank ref ${request.feePaid.bankRefNo}` : ""}
+            Fee ₹{request.feePaid.amount} paid online · CCAvenue ref {request.feePaid.trackingId}{request.feePaid.bankRefNo ? ` · bank ref ${request.feePaid.bankRefNo}` : ""}
           </p>
         )}
         {fee > 0 && !request.feePaid && (
           <div className="space-y-1.5 max-w-sm">
-            <Label htmlFor={`${request.id}-receipt`}>Fee receipt number (Rs. {fee}) *</Label>
+            <Label htmlFor={`${request.id}-receipt`}>Fee receipt number (₹{fee}) *</Label>
             <Input id={`${request.id}-receipt`} value={receipt} onChange={(e) => setReceipt(e.target.value)} placeholder="Receipt no. of the fee paid" />
           </div>
         )}

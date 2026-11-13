@@ -273,7 +273,7 @@ export function StudentStrengthDashboard() {
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
             <span>
-              Counts are always the live, current picture - past sessions aren&apos;t stored as snapshots, so there is nothing to fall out of date.
+              Counts always reflect the current position. Past sessions are not stored separately, so the figures are always up to date.
             </span>
             {(filtered || f.status !== "ENROLLED") && (
               <Button variant="ghost" size="sm" className="h-7" onClick={() => setFilters({ status: "ENROLLED" })}>Reset filters</Button>
@@ -540,7 +540,7 @@ function SectionTable({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-base font-semibold">Section-wise breakdown - Department → Year → Section</h2>
+        <h2 className="text-base font-semibold">Section-wise breakdown by department, year and section</h2>
         <div className="relative w-full sm:w-64">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input value={search} onChange={(e) => onSearch(e.target.value)} placeholder="Search department, year, section" className="h-9 pl-9" />

@@ -582,7 +582,7 @@ export function RequestForm({
               {uploading ? "Uploading…" : "Upload File"}
             </Button>
             <span className="text-xs text-muted-foreground">
-              PDF, PNG or JPEG (up to 4 MB each, at most 5 files)
+              PDF, PNG or JPEG (up to 4 MB each, at most 5 files).
             </span>
           </div>
           {proof.map((p, i) => (

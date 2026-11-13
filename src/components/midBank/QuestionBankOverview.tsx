@@ -77,7 +77,7 @@ export function QuestionBankOverview({ base, examCell }: { base: string; examCel
           <CardContent className="flex flex-col items-center gap-3 p-10 text-center">
             <span className="grid h-12 w-12 place-items-center rounded-full bg-primary/10 text-primary"><BookOpenCheck className="h-6 w-6" /></span>
             <p className="font-semibold">No {papers ? "question paper" : "question bank"} deadlines yet</p>
-            <p className="max-w-md text-sm text-muted-foreground">{examCell ? <>Set the question rules for each course in Mid Configuration, then publish a deadline on Mid Timings &amp; Dates - the faculty teaching that semester are notified.</> : `The Exam Cell hasn't published a ${papers ? "question paper" : "question bank"} deadline yet.`}</p>
+            <p className="max-w-md text-sm text-muted-foreground">{examCell ? <>Set the question rules for each course in Mid Configuration, then publish a deadline in Mid Timings and Dates. Faculty teaching that semester are notified.</> : `The Exam Cell hasn't published a ${papers ? "question paper" : "question bank"} deadline yet.`}</p>
             {examCell && <Button asChild size="sm"><Link href="/exam-cell/mid-timings">Publish a deadline</Link></Button>}
           </CardContent>
         </Card>

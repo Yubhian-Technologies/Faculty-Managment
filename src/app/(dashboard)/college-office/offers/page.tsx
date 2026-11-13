@@ -354,14 +354,14 @@ ${institution}`;
                         }
                         if (!appointmentLetterCandidateIds.has(letter.candidateId)) {
                           return (
-                            <Badge variant="secondary" title="The Principal needs to generate the appointment letter first">
+                            <Badge variant="secondary" title="The Principal must generate the appointment letter first.">
                               Awaiting Appointment Letter
                             </Badge>
                           );
                         }
                         if (!letter.candidateConfirmedJoiningDate) {
                           return (
-                            <Badge variant="secondary" title="The candidate hasn't confirmed a date of joining yet">
+                            <Badge variant="secondary" title="The candidate has not confirmed a date of joining yet.">
                               Awaiting Candidate Confirmation
                             </Badge>
                           );
@@ -372,7 +372,7 @@ ${institution}`;
                             variant="outline"
                             className="border-blue-300 text-blue-700 hover:bg-blue-50"
                             onClick={() => setRequestDialogOffer(letter)}
-                            title="Ask the Webmaster to create the candidate's login"
+                            title="Request the Webmaster to create the candidate's login."
                           >
                             <KeyRound className="h-3.5 w-3.5 mr-1" />
                             Request Faculty Account

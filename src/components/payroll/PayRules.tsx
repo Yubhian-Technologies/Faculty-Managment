@@ -105,12 +105,12 @@ export function PayRules({ collegeId }: { collegeId?: string }) {
             {d.kind === "ESI" && (
               <div className="mt-2 flex flex-wrap items-end gap-3">
                 <div className="space-y-1"><Label className="text-xs">Percent of ESI wage</Label><Input disabled={ro} inputMode="decimal" value={d.percent} onChange={(ev) => setD(i, { percent: num(ev.target.value) })} className="h-8 w-24" /></div>
-                <div className="space-y-1"><Label className="text-xs">Applies up to a full monthly wage of (Rs.)</Label><Input disabled={ro} inputMode="numeric" value={d.wageLimit} onChange={(ev) => setD(i, { wageLimit: num(ev.target.value) })} className="h-8 w-28" /></div>
+                <div className="space-y-1"><Label className="text-xs">Applies up to a full monthly wage of (₹)</Label><Input disabled={ro} inputMode="numeric" value={d.wageLimit} onChange={(ev) => setD(i, { wageLimit: num(ev.target.value) })} className="h-8 w-28" /></div>
                 <label className="flex items-center gap-2 pb-1.5 text-sm"><Checkbox disabled={ro} checked={d.roundUp} onCheckedChange={(c) => setD(i, { roundUp: !!c })} />Round up</label>
               </div>
             )}
             {d.kind === "FLAT" && (
-              <div className="mt-2 space-y-1"><Label className="text-xs">Amount (Rs.)</Label><Input disabled={ro} inputMode="numeric" value={d.amount} onChange={(ev) => setD(i, { amount: num(ev.target.value) })} className="h-8 w-28" /></div>
+              <div className="mt-2 space-y-1"><Label className="text-xs">Amount (₹)</Label><Input disabled={ro} inputMode="numeric" value={d.amount} onChange={(ev) => setD(i, { amount: num(ev.target.value) })} className="h-8 w-28" /></div>
             )}
             {d.kind === "SLAB" && (
               <div className="mt-2 space-y-1.5">
@@ -119,7 +119,7 @@ export function PayRules({ collegeId }: { collegeId?: string }) {
                   <div key={k} className="flex flex-wrap items-center gap-2 text-sm">
                     <span className="w-20 text-xs text-muted-foreground">{k === 0 ? "Up to" : sl.upTo === null ? "Above" : "Then up to"}</span>
                     {sl.upTo !== null ? <Input disabled={ro} inputMode="numeric" value={sl.upTo} onChange={(ev) => setD(i, { slabs: d.slabs.map((x, j) => (j === k ? { ...x, upTo: num(ev.target.value) } : x)) })} className="h-8 w-28" /> : <span className="w-28 text-xs">{rupeesOr(d.slabs[k - 1]?.upTo)}</span>}
-                    <span className="text-xs">-&gt; Rs.</span>
+                    <span className="text-xs">-&gt; ₹</span>
                     <Input disabled={ro} inputMode="numeric" value={sl.amount} onChange={(ev) => setD(i, { slabs: d.slabs.map((x, j) => (j === k ? { ...x, amount: num(ev.target.value) } : x)) })} className="h-8 w-24" />
                     {!ro && sl.upTo !== null && <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setD(i, { slabs: d.slabs.filter((_, j) => j !== k) })}>Remove</Button>}
                   </div>
@@ -139,7 +139,7 @@ export function PayRules({ collegeId }: { collegeId?: string }) {
         </div>
         <div className="space-y-1.5"><Label htmlFor="pr-tds">Monthly TDS rounded to</Label>
           <select id="pr-tds" disabled={ro} className={`${selectClass} w-full`} value={s.tdsRoundTo} onChange={(e) => setS({ ...s, tdsRoundTo: Number(e.target.value) })}>
-            <option value={100}>Rs. 100</option><option value={10}>Rs. 10</option><option value={1}>Rs. 1</option>
+            <option value={100}>₹100</option><option value={10}>₹10</option><option value={1}>₹1</option>
           </select>
         </div>
         <div className="space-y-1.5"><Label htmlFor="pr-sig">Signatures under the register</Label>
@@ -159,7 +159,7 @@ export function PayRules({ collegeId }: { collegeId?: string }) {
   );
 }
 
-const rupeesOr = (v: number | null | undefined) => (typeof v === "number" ? `Rs. ${v.toLocaleString("en-IN")}` : "");
+const rupeesOr = (v: number | null | undefined) => (typeof v === "number" ? `₹${v.toLocaleString("en-IN")}` : "");
 
 // PF: percent of the PF wage, counted up to the wage ceiling (the most PF a month = percent x ceiling), plus the
 // pension (EPS) ceiling for the EPFO return. A government change is added as a rule from a month on - months
@@ -181,9 +181,9 @@ function PfRuleFields({ d, ro, onChange }: { d: PfDeduction; ro: boolean; onChan
     <div className="mt-2 space-y-3">
       <div className="flex flex-wrap items-end gap-3">
         <div className="space-y-1"><Label className="text-xs">{changes.length ? "Before the first change: percent" : "Percent of PF wage"}</Label><Input disabled={ro} inputMode="decimal" value={d.percent} onChange={(ev) => setBase({ percent: num(ev.target.value) })} className="h-8 w-24" /></div>
-        <div className="space-y-1"><Label className="text-xs">PF wage ceiling (Rs.)</Label><Input disabled={ro} inputMode="numeric" value={ceiling} onChange={(ev) => setBase({ wageCeiling: num(ev.target.value) })} className="h-8 w-28" /></div>
-        <div className="space-y-1"><Label className="text-xs">Pension (EPS) wage ceiling (Rs.)</Label><Input disabled={ro} inputMode="numeric" value={eps} onChange={(ev) => setBase({ epsCeiling: num(ev.target.value) })} className="h-8 w-28" /></div>
-        <p className="pb-1.5 text-xs text-muted-foreground">Most PF a month: Rs. {max({ percent: d.percent, wageCeiling: ceiling }).toLocaleString("en-IN")}</p>
+        <div className="space-y-1"><Label className="text-xs">PF wage ceiling (₹)</Label><Input disabled={ro} inputMode="numeric" value={ceiling} onChange={(ev) => setBase({ wageCeiling: num(ev.target.value) })} className="h-8 w-28" /></div>
+        <div className="space-y-1"><Label className="text-xs">Pension (EPS) wage ceiling (₹)</Label><Input disabled={ro} inputMode="numeric" value={eps} onChange={(ev) => setBase({ epsCeiling: num(ev.target.value) })} className="h-8 w-28" /></div>
+        <p className="pb-1.5 text-xs text-muted-foreground">Most PF a month: ₹{max({ percent: d.percent, wageCeiling: ceiling }).toLocaleString("en-IN")}</p>
       </div>
       {changes.map((c, k) => (
         <div key={k} className="flex flex-wrap items-end gap-3 rounded-md bg-muted/40 p-2">
@@ -191,7 +191,7 @@ function PfRuleFields({ d, ro, onChange }: { d: PfDeduction; ro: boolean; onChan
           <div className="space-y-1"><Label className="text-xs">Percent</Label><Input disabled={ro} inputMode="decimal" value={c.percent} onChange={(ev) => setChange(k, { percent: num(ev.target.value) })} className="h-8 w-20" /></div>
           <div className="space-y-1"><Label className="text-xs">PF wage ceiling</Label><Input disabled={ro} inputMode="numeric" value={c.wageCeiling} onChange={(ev) => setChange(k, { wageCeiling: num(ev.target.value) })} className="h-8 w-28" /></div>
           <div className="space-y-1"><Label className="text-xs">EPS ceiling</Label><Input disabled={ro} inputMode="numeric" value={c.epsCeiling} onChange={(ev) => setChange(k, { epsCeiling: num(ev.target.value) })} className="h-8 w-28" /></div>
-          <p className="pb-1.5 text-xs text-muted-foreground">Most PF: Rs. {max(c).toLocaleString("en-IN")}</p>
+          <p className="pb-1.5 text-xs text-muted-foreground">Most PF: ₹{max(c).toLocaleString("en-IN")}</p>
           {!ro && <Button type="button" variant="ghost" size="sm" className="text-red-600" onClick={() => onChange({ changes: changes.filter((_, j) => j !== k) })}>Remove</Button>}
         </div>
       ))}

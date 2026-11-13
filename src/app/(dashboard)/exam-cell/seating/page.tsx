@@ -118,7 +118,7 @@ export default function ExamSeatingPage() {
         <CardHeader><CardTitle className="text-base">Quick auto-fill plan</CardTitle></CardHeader>
         <CardContent className="space-y-5">
           <div className="space-y-2">
-            <Label>Sections taking this exam (seated in the order you tick them)</Label>
+            <Label>Sections taking this examination (seated in the order selected)</Label>
             {sections.length === 0 ? (
               <p className="text-sm text-muted-foreground">No sections found.</p>
             ) : (
@@ -139,7 +139,7 @@ export default function ExamSeatingPage() {
           </div>
 
           <div className="space-y-2">
-            <Label>Rooms (filled in block → floor → room order)</Label>
+            <Label>Rooms (filled in order of block, floor and room)</Label>
             {rooms.length === 0 ? (
               <p className="text-sm text-muted-foreground">No rooms yet. The College Office adds them under Exam Rooms.</p>
             ) : (

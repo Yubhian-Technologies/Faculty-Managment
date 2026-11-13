@@ -76,7 +76,7 @@ export function downloadBankFile(run: PayrollRun, lines: PayrollLine[]): string[
   const rows = payable.filter((l) => l.bank.account && l.bank.ifsc)
     .map((l, i) => [String(i + 1), l.employeeCode, l.name, l.bank.account, l.bank.ifsc, l.bank.bankName, String(l.result.net)]);
   const total = rows.reduce((a, r) => a + Number(r[6]), 0);
-  downloadCSV(toCSV([["S.No", "Emp Code", "Name", "Account No", "IFSC", "Bank", "Amount"], ...rows, ["", "", "TOTAL", "", "", "", String(total)]]), `Bank_${run.month}.csv`);
+  downloadCSV(toCSV([["S.No", "Employee ID", "Name", "Account No", "IFSC", "Bank", "Amount"], ...rows, ["", "", "TOTAL", "", "", "", String(total)]]), `Bank_${run.month}.csv`);
   return missing.map((l) => `${l.employeeCode} ${l.name}`);
 }
 
@@ -117,7 +117,7 @@ export async function downloadStatutory(run: PayrollRun, lines: PayrollLine[], c
   // PF
   const pfLines = paid.filter((l) => ofKind(run, l, "PF") > 0);
   const pfRows = pfLines.map((l, i) => { const e = epfRow(run, l); return [i + 1, l.employeeCode, l.name, l.uan ?? "", l.result.gross, e.epfWages, e.epsWages, e.edliWages, e.pf, e.eps, e.diff, e.ncp]; });
-  sheet("PF", "Provident Fund", ["S.No", "Emp Code", "Name", "UAN", "Gross", "EPF wages", "EPS wages", "EDLI wages", "EE share (12%)", "ER EPS (8.33%)", "ER EPF (diff)", "NCP days"], pfRows,
+  sheet("PF", "Provident Fund", ["S.No", "Employee ID", "Name", "UAN", "Gross", "EPF wages", "EPS wages", "EDLI wages", "EE share (12%)", "ER EPS (8.33%)", "ER EPF (diff)", "NCP days"], pfRows,
     ["", "", "TOTAL", "", sum(pfRows, 4), sum(pfRows, 5), sum(pfRows, 6), sum(pfRows, 7), sum(pfRows, 8), sum(pfRows, 9), sum(pfRows, 10), ""]);
   const noUan = pfLines.filter((l) => !l.uan);
   if (noUan.length) problems.push(`${noUan.length} with PF but no UAN (left out of the ECR): ${noUan.slice(0, 5).map((l) => l.name).join(", ")}`);
@@ -125,7 +125,7 @@ export async function downloadStatutory(run: PayrollRun, lines: PayrollLine[], c
   // ESI
   const esiLines = paid.filter((l) => ofKind(run, l, "ESI") > 0);
   const esiRows = esiLines.map((l, i) => [i + 1, l.employeeCode, l.name, "", l.payDays, l.result.esiWage, ofKind(run, l, "ESI"), Math.ceil(l.result.esiWage * 0.0325)]);
-  sheet("ESI", "ESI", ["S.No", "Emp Code", "Name", "IP number", "Days paid", "ESI wages", "Employee (0.75%)", "Employer (3.25%)"], esiRows,
+  sheet("ESI", "ESI", ["S.No", "Employee ID", "Name", "IP number", "Days paid", "ESI wages", "Employee (0.75%)", "Employer (3.25%)"], esiRows,
     ["", "", "TOTAL", "", "", sum(esiRows, 5), sum(esiRows, 6), sum(esiRows, 7)]);
 
   // PT - by slab amount
@@ -137,7 +137,7 @@ export async function downloadStatutory(run: PayrollRun, lines: PayrollLine[], c
   // TDS
   const tdsLines = paid.filter((l) => ofKind(run, l, "INCOME_TAX") > 0);
   const tdsRows = tdsLines.map((l, i) => [i + 1, l.employeeCode, l.name, l.pan ?? "", l.taxCalc?.regime ?? "", l.result.gross, ofKind(run, l, "INCOME_TAX")]);
-  sheet("TDS", "TDS on salary (24Q)", ["S.No", "Emp Code", "Name", "PAN", "Regime", "Gross", "TDS"], tdsRows, ["", "", "TOTAL", "", "", sum(tdsRows, 5), sum(tdsRows, 6)]);
+  sheet("TDS", "TDS on salary (24Q)", ["S.No", "Employee ID", "Name", "PAN", "Regime", "Gross", "TDS"], tdsRows, ["", "", "TOTAL", "", "", sum(tdsRows, 5), sum(tdsRows, 6)]);
   const noPan = tdsLines.filter((l) => !l.pan);
   if (noPan.length) problems.push(`${noPan.length} with TDS but no PAN: ${noPan.slice(0, 5).map((l) => l.name).join(", ")}`);
 
@@ -165,7 +165,7 @@ export async function downloadAnnualRegister(fy: string, rows: { employeeCode: s
   const ws = wb.addWorksheet(`FY ${fy}`);
   const months = [...new Set(rows.map((r) => r.month))].sort();
   ws.addRow([`${collegeName} - salaries paid in FY ${fy} (released months)`]).font = { bold: true };
-  const headers = ["Emp Code", "Name", "Dept", "PAN", ...months.map((m) => `Net ${monthLabel(m)}`), "Gross", "PF", "PT", "TDS", "Advance", "Other ded.", "Net"];
+  const headers = ["Employee ID", "Name", "Dept", "PAN", ...months.map((m) => `Net ${monthLabel(m)}`), "Gross", "PF", "PT", "TDS", "Advance", "Other ded.", "Net"];
   ws.addRow(headers).font = { bold: true };
   const byPerson = new Map<string, typeof rows>();
   for (const r of rows) byPerson.set(r.employeeCode + "|" + r.name, [...(byPerson.get(r.employeeCode + "|" + r.name) ?? []), r]);

@@ -293,7 +293,7 @@ export async function issueConfigured(db: Firestore, user: ActingUser, id: strin
   // A fee paid online (CCAvenue) is its own receipt; otherwise the issuer types the office receipt number.
   const typedReceipt = typeof body.feeReceiptNo === "string" ? body.feeReceiptNo.trim().slice(0, 60) : "";
   const feeReceiptNo = typedReceipt || (req.feePaid ? `Online - CCAvenue ${req.feePaid.trackingId}`.slice(0, 60) : "");
-  if ((req.feeAmount ?? 0) > 0 && !feeReceiptNo) throw new CertificationError("INVALID", `Enter the receipt number of the Rs. ${req.feeAmount} fee`, 400);
+  if ((req.feeAmount ?? 0) > 0 && !feeReceiptNo) throw new CertificationError("INVALID", `Enter the receipt number of the ₹${req.feeAmount} fee`, 400);
 
   const type = await loadType(db, user.collegeId, req.certificateTypeId!);
   const template = await loadTemplate(db, user.collegeId, req.templateId ?? "");

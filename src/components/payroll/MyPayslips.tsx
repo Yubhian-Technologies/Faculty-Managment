@@ -133,8 +133,8 @@ function MyTaxStatement({ onClose }: { onClose: () => void }) {
         )}
         {s && (s.released.length > 0 || s.profile.opening) && (
           <ul className="space-y-0.5 border-t pt-3 text-xs">
-            {s.profile.opening && <li>Apr - {monthLabel(s.profile.opening.upToMonth)}: gross Rs. {rupees(s.profile.opening.gross)}, TDS Rs. {rupees(s.profile.opening.tds)}</li>}
-            {s.released.filter((m) => !m.beforeOpening).map((m) => <li key={m.month}>{monthLabel(m.month)}: gross Rs. {rupees(m.gross)}, TDS Rs. {rupees(m.tds)}</li>)}
+            {s.profile.opening && <li>Apr - {monthLabel(s.profile.opening.upToMonth)}: gross ₹{rupees(s.profile.opening.gross)}, TDS ₹{rupees(s.profile.opening.tds)}</li>}
+            {s.released.filter((m) => !m.beforeOpening).map((m) => <li key={m.month}>{monthLabel(m.month)}: gross ₹{rupees(m.gross)}, TDS ₹{rupees(m.tds)}</li>)}
           </ul>
         )}
         <DialogFooter><Button variant="outline" onClick={onClose}>Close</Button></DialogFooter>

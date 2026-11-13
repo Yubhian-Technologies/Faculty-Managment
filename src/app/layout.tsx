@@ -11,7 +11,7 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter", preload: fal
 
 export const metadata: Metadata = {
   title: "Vishnu People",
-  description: "End-to-end college automation platform for Vishnu institutions",
+  description: "Integrated college management platform for Vishnu institutions.",
   icons: { icon: "/favicon.ico" },
 };
 

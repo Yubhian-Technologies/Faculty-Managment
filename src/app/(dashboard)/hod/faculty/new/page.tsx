@@ -255,7 +255,7 @@ export default function NewFacultyPage() {
         label: "Identity & Employment",
         shortLabel: "Identity",
         icon: User,
-        description: "Official ID, department, login credentials, and employment status",
+        description: "Official ID, department, login credentials and employment status.",
       },
       {
         key: "personal",
@@ -311,14 +311,14 @@ export default function NewFacultyPage() {
         label: PROFILE_MODULES.others.label,
         shortLabel: "Additional Info",
         icon: Sparkles,
-        description: "Anything not covered in the other sections",
+        description: "Information not covered in the other sections.",
       },
       {
         key: "review",
         label: "Review & Submit",
         shortLabel: "Review",
         icon: CheckCircle2,
-        description: "Verify all inputs before committing to the institutional register",
+        description: "Verify all details before adding them to the institutional register.",
       },
     ],
     []
@@ -966,7 +966,7 @@ export default function NewFacultyPage() {
                       <div>
                         <p className="text-xs font-bold text-foreground">Total Experience Preview</p>
                         <p className="text-[11px] text-muted-foreground">
-                          Computed live from Joining Date + Professional Experience & Employment entries
+                          Calculated from the Date of Joining and the Professional Experience and Employment entries.
                         </p>
                       </div>
                     </div>

@@ -171,7 +171,7 @@ export function MidBankDeadlinesCard({ midCount }: { midCount: number }) {
                 {rows.map((r) => (
                   <tr key={r.id} className="border-t">
                     <td className="p-2 font-medium">{r.courseName}</td>
-                    <td className="p-2">{ordinalYearLabel(r.year)} · Sem {r.semester}</td>
+                    <td className="p-2">{ordinalYearLabel(r.year)} · Semester {r.semester}</td>
                     <td className="p-2">Mid {r.midNumber}</td>
                     <td className="p-2">
                       <Badge variant={r.locked ? "secondary" : "outline"}>{r.locked && <Lock className="mr-1 h-3 w-3" />}{deadlineLabel(r.deadline)}</Badge>

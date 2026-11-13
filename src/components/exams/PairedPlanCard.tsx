@@ -189,7 +189,7 @@ export function PairedPlanCard({ rooms }: { rooms: ExamRoom[] }) {
         )}
 
         <div className="space-y-2">
-          <p className="text-sm font-medium">Rooms - tick them in the order they should fill</p>
+          <p className="text-sm font-medium">Rooms: select them in the order they should be filled</p>
           <div className="grid max-h-56 gap-1.5 overflow-y-auto rounded-lg border p-3 sm:grid-cols-2 lg:grid-cols-3">
             {rooms.map((r) => {
               const at = roomIds.indexOf(r.id);

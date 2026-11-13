@@ -14,7 +14,7 @@ export default function ManagementBudgetCollegesPage() {
 
       <CollegesListView
         title="Budget"
-        description="Select a college to view its budget"
+        description="Select a college to view its budget."
         basePath="/management/budget"
       />
     </div>

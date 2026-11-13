@@ -346,7 +346,7 @@ export default function AcademicsHolidaysPage() {
       });
       const data = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Unable to save sem break");
-      toast({ variant: "success", title: "Sem break saved" });
+      toast({ variant: "success", title: "Semester break saved." });
       setSemBreakOpen(false);
       loadSemBreaks();
     } catch (err) {
@@ -362,7 +362,7 @@ export default function AcademicsHolidaysPage() {
     try {
       const res = await fetch(`/api/college/sem-breaks/${semBreakDeleteTarget.id}`, { method: "DELETE" });
       if (!res.ok) throw new Error();
-      toast({ variant: "success", title: "Sem break removed" });
+      toast({ variant: "success", title: "Semester break removed." });
       setSemBreakDeleteTarget(null);
       loadSemBreaks();
     } catch {
@@ -871,7 +871,7 @@ export default function AcademicsHolidaysPage() {
       <Dialog open={semBreakOpen} onOpenChange={setSemBreakOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Set Sem Break</DialogTitle>
+            <DialogTitle>Set Semester Break</DialogTitle>
             <DialogDescription>For students only. One winter and one summer break per academic year; setting it again replaces the existing break.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">

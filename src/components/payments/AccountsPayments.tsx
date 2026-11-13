@@ -181,7 +181,7 @@ function PaymentsList({ collegeId, proxyConfigured }: { collegeId: string; proxy
         <div className="space-y-1"><Label htmlFor="pf-f">From</Label><Input id="pf-f" type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
         <div className="space-y-1"><Label htmlFor="pf-t">To</Label><Input id="pf-t" type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
         <Button variant="outline" size="sm" onClick={exportCsv} disabled={!shown.length}><Download className="mr-1.5 h-4 w-4" />Export</Button>
-        <p className="ml-auto self-center text-sm">Collected: <b>Rs. {total.toFixed(2)}</b> <span className="text-xs text-muted-foreground">({paid.length} paid)</span></p>
+        <p className="ml-auto self-center text-sm">Collected: <b>₹{total.toFixed(2)}</b> <span className="text-xs text-muted-foreground">({paid.length} paid)</span></p>
       </div>
       {flagged.length > 0 && (
         <p className="flex items-center gap-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
@@ -255,18 +255,18 @@ function RefundDialog({ collegeId, payment, proxyConfigured, onClose, onDone }: 
           <DialogTitle>Refund</DialogTitle>
           <DialogDescription>
             {via === "CCAVENUE"
-              ? `Order ${payment.id} is refunded now through CCAvenue. Up to Rs. ${left}.`
-              : `First refund order ${payment.id} in the CCAvenue dashboard (Orders > Refund), then record it here with CCAvenue's refund reference. Up to Rs. ${left}.`}
+              ? `Order ${payment.id} is refunded now through CCAvenue. Up to ₹${left}.`
+              : `First refund order ${payment.id} in the CCAvenue dashboard (Orders > Refund), then record it here with CCAvenue's refund reference. Up to ₹${left}.`}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           {proxyConfigured && (
             <div className="flex flex-col gap-1.5 text-sm">
               <label className="flex items-center gap-2"><input type="radio" name="rf-via" checked={via === "CCAVENUE"} onChange={() => setVia("CCAVENUE")} />Refund through CCAvenue now</label>
-              <label className="flex items-center gap-2"><input type="radio" name="rf-via" checked={via === "RECORDED"} onChange={() => setVia("RECORDED")} />Already refunded in the CCAvenue dashboard - record it</label>
+              <label className="flex items-center gap-2"><input type="radio" name="rf-via" checked={via === "RECORDED"} onChange={() => setVia("RECORDED")} />Already refunded in the CCAvenue dashboard. Record it here.</label>
             </div>
           )}
-          <div className="space-y-1.5"><Label htmlFor="rf-a">Amount refunded (Rs.)</Label><Input id="rf-a" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} /></div>
+          <div className="space-y-1.5"><Label htmlFor="rf-a">Amount refunded (₹)</Label><Input id="rf-a" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} /></div>
           {via === "RECORDED" && <div className="space-y-1.5"><Label htmlFor="rf-r">CCAvenue refund reference</Label><Input id="rf-r" value={reference} onChange={(e) => setReference(e.target.value)} /></div>}
           <div className="space-y-1.5"><Label htmlFor="rf-why">Reason</Label><Input id="rf-why" value={reason} onChange={(e) => setReason(e.target.value)} /></div>
         </div>

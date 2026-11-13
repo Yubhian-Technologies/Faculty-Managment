@@ -28,7 +28,7 @@ export async function GET(request: Request) {
 
     const db = getAdminDb();
 
-    // Determine allowed departments for Dept Heads
+    // Determine allowed departments for Department Heads
     let allowedDeptIds: string[] | null = null;
     if (session.role === "LOCATION_DEPT_HEAD") {
       const userDoc = await db

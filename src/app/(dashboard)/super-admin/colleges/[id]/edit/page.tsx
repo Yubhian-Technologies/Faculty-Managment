@@ -237,7 +237,7 @@ export default function EditCollegePage() {
                   <SelectContent>
                     <SelectItem value="none">None (no geofence check)</SelectItem>
                     <SelectItem value="circle">Circle (center point + radius)</SelectItem>
-                    <SelectItem value="polygon">Polygon (draw the real boundary on a map)</SelectItem>
+                    <SelectItem value="polygon">Polygon (draw the boundary on a map)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

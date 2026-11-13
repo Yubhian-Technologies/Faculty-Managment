@@ -65,7 +65,7 @@ export default function AdministrationVacanciesPage() {
       toast({
         variant: "success",
         title: "Vacancy Approved",
-        description: "HR Admin and Dept Head have been notified.",
+        description: "HR Admin and the Department Head have been notified.",
       });
       setApproveOpen(false);
       setSelected(null);

@@ -164,7 +164,7 @@ export default function SemesterResultBatchPage({ params }: { params: Promise<{ 
           <ul className="space-y-1.5 text-sm">
             <li>
               {!hasUniversitySgpa
-                ? <span className="text-muted-foreground">University SGPA: not in the file - add a &ldquo;University SGPA&rdquo; column to compare.</span>
+                ? <span className="text-muted-foreground">University SGPA is not in the file. Add a University SGPA column to compare.</span>
                 : sgpaMismatches.length === 0
                   ? <span className="text-emerald-700 dark:text-emerald-400">✓ Every SGPA matches the university&rsquo;s.</span>
                   : <span className="text-destructive">✗ {sgpaMismatches.length} student{sgpaMismatches.length > 1 ? "s'" : "'s"} SGPA differs from the university&rsquo;s: {sgpaMismatches.slice(0, 15).map((r) => `${r.rollNumber} (ours ${fmt(standings[r.id]?.sgpa)}, university ${r.universitySgpa ?? "–"})`).join(", ")}{sgpaMismatches.length > 15 ? " …" : ""} - usually a grade against the wrong subject, or a subject&rsquo;s credits.</span>}

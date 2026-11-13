@@ -77,7 +77,7 @@ const RECOMMENDATION_OPTIONS: { value: Recommendation; label: string; color: str
 const ROLE_LABELS: Record<string, string> = {
   ADMINISTRATION: "Administration",
   HR_ADMIN: "HR Admin",
-  LOCATION_DEPT_HEAD: "Dept Head",
+  LOCATION_DEPT_HEAD: "Department Head",
 };
 
 export default function HRInterviewDetailPage() {

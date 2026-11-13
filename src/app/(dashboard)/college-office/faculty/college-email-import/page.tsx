@@ -167,7 +167,7 @@ export default function BulkCollegeEmailImportPage() {
           <ul className="list-disc space-y-1 pl-5">
             <li>An email that anyone already uses (another faculty member, staff, or any login) is <strong>not accepted</strong> for that row.</li>
             <li>If the new email is the same as their current one, the row says <strong>already same</strong> and nothing is changed.</li>
-            <li>An email that is currently someone else&apos;s can&apos;t be given to another row in the same upload - change the other person first.</li>
+            <li>An email address that currently belongs to someone else cannot be given to another row in the same upload. Change the other person first.</li>
             <li>Each updated faculty member is <strong>signed out on all devices</strong> and signs in again with their Employee ID and existing password, or the new email. They get an in-app notification (no email is sent).</li>
             <li>Their data, password and history are untouched. A row that can&apos;t be updated changes nothing, and never affects the other rows. An account whose login email and record email already differ is skipped for manual review.</li>
           </ul>

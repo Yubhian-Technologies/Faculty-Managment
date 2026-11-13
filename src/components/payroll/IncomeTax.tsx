@@ -61,10 +61,10 @@ export function IncomeTax({ collegeId }: { collegeId?: string }) {
         </div>
         <Button variant="outline" onClick={() => setRulesOpen(true)}>{d.rulesConfirmed ? "Tax rules" : "Confirm tax rules"}</Button>
         <Button variant="outline" onClick={() => setImporting(true)}><Upload className="mr-1.5 h-4 w-4" />Import paid so far</Button>
-        <div className="relative min-w-[14rem] flex-1"><Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input aria-label="Search" className="pl-8" placeholder="Emp Code, name, department" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+        <div className="relative min-w-[14rem] flex-1"><Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input aria-label="Search" className="pl-8" placeholder="Employee ID, name, department" value={q} onChange={(e) => setQ(e.target.value)} /></div>
       </div>
       {!d.rulesConfirmed && <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">The FY {fy} tax rules aren&apos;t confirmed yet, so no income tax is worked out in the monthly salaries. Check the slabs and save them.</p>}
-      <p className="text-xs text-muted-foreground">Estimate as of {monthLabel(d.month)} (taken as a full month at current pay). Total for the list: tax Rs. {rupees(total.tax)} · deducted Rs. {rupees(total.done)} · {monthLabel(d.month)} TDS Rs. {rupees(total.now)}.</p>
+      <p className="text-xs text-muted-foreground">Estimate as of {monthLabel(d.month)} (taken as a full month at current pay). Total for the list: tax ₹{rupees(total.tax)} · deducted ₹{rupees(total.done)} · {monthLabel(d.month)} TDS ₹{rupees(total.now)}.</p>
 
       <Card className="rounded-2xl"><CardContent className="overflow-x-auto p-0">
         <table className="w-full min-w-[60rem] text-sm">
@@ -112,7 +112,7 @@ function RegimeEditor({ label, r, set }: { label: string; r: RegimeRules; set: (
       <div className="space-y-1">{r.slabs.map((s, i) => (
         <div key={i} className="flex flex-wrap items-center gap-2 text-sm">
           <span className="w-24 text-xs text-muted-foreground">{i === 0 ? "Up to" : s.upTo === null ? "Above" : "Then up to"}</span>
-          {s.upTo !== null ? <Input className="h-8 w-32" inputMode="numeric" value={s.upTo} onChange={(e) => set({ ...r, slabs: r.slabs.map((x, j) => (j === i ? { ...x, upTo: num(e.target.value) } : x)) })} /> : <span className="w-32 text-xs">Rs. {rupees(r.slabs[i - 1]?.upTo ?? 0)}</span>}
+          {s.upTo !== null ? <Input className="h-8 w-32" inputMode="numeric" value={s.upTo} onChange={(e) => set({ ...r, slabs: r.slabs.map((x, j) => (j === i ? { ...x, upTo: num(e.target.value) } : x)) })} /> : <span className="w-32 text-xs">₹{rupees(r.slabs[i - 1]?.upTo ?? 0)}</span>}
           <Input className="h-8 w-20" inputMode="decimal" value={s.rate} onChange={(e) => set({ ...r, slabs: r.slabs.map((x, j) => (j === i ? { ...x, rate: num(e.target.value) } : x)) })} /><span className="text-xs">%</span>
           {s.upTo !== null && r.slabs.length > 2 && <Button size="sm" variant="ghost" className="text-destructive" onClick={() => set({ ...r, slabs: r.slabs.filter((_, j) => j !== i) })}>Remove</Button>}
         </div>
@@ -125,7 +125,7 @@ function RegimeEditor({ label, r, set }: { label: string; r: RegimeRules; set: (
         ))}
         <label className="flex items-center gap-2 self-end pb-1.5 text-sm"><Checkbox checked={r.rebateMarginalRelief} onCheckedChange={(c) => set({ ...r, rebateMarginalRelief: !!c })} />Marginal relief above the 87A limit</label>
       </div>
-      <p className="text-xs text-muted-foreground">Surcharge: {r.surcharge.map((s) => `${s.rate}% above Rs. ${rupees(s.above)}`).join(" · ")} (with marginal relief)</p>
+      <p className="text-xs text-muted-foreground">Surcharge: {r.surcharge.map((s) => `${s.rate}% above ₹${rupees(s.above)}`).join(" · ")} (with marginal relief)</p>
     </div>
   );
 }
@@ -263,7 +263,7 @@ function StatementDialog({ url, onClose }: { url: string; onClose: () => void })
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
         <DialogHeader><DialogTitle>Tax statement{s ? ` - FY ${s.fy}` : ""}</DialogTitle><DialogDescription>{s ? `${s.person.name} · ${s.person.employeeCode} · ${s.profile.regime === "NEW" ? "New" : "Old"} regime · as of ${monthLabel(s.month)}` : "Loading..."}</DialogDescription></DialogHeader>
-        {s && !s.rulesConfirmed && <p className="text-sm text-amber-700">The year&apos;s tax rules aren&apos;t confirmed - no tax worked out.</p>}
+        {s && !s.rulesConfirmed && <p className="text-sm text-amber-700">The tax rules for the year are not confirmed, so no tax is calculated.</p>}
         {s && b && (
           <div className="grid gap-4 text-sm sm:grid-cols-2">
             <div className="space-y-1">
@@ -284,7 +284,7 @@ function StatementDialog({ url, onClose }: { url: string; onClose: () => void })
               <L k="Tax for the year" v={b.tax.total} strong />
               <L k="Deducted so far" v={s.estimate!.calc.deductedBefore} />
               <L k={`${monthLabel(s.month)} TDS (${s.estimate!.calc.monthsLeft} months left)`} v={s.estimate!.tdsNow} strong />
-              {s.estimate!.otherRegimeTax !== null && <p className="pt-1 text-xs text-muted-foreground">In the {s.profile.regime === "NEW" ? "old" : "new"} regime the year&apos;s tax would be Rs. {rupees(s.estimate!.otherRegimeTax)}.</p>}
+              {s.estimate!.otherRegimeTax !== null && <p className="pt-1 text-xs text-muted-foreground">In the {s.profile.regime === "NEW" ? "old" : "new"} regime the year&apos;s tax would be ₹{rupees(s.estimate!.otherRegimeTax)}.</p>}
             </div>
           </div>
         )}
@@ -292,8 +292,8 @@ function StatementDialog({ url, onClose }: { url: string; onClose: () => void })
           <div className="space-y-1 border-t pt-3 text-sm">
             <p className="font-medium">Month by month</p>
             <ul className="space-y-0.5 text-xs">
-              {s.profile.opening && <li>Apr - {monthLabel(s.profile.opening.upToMonth)} (before the app): gross Rs. {rupees(s.profile.opening.gross)}, TDS Rs. {rupees(s.profile.opening.tds)}</li>}
-              {s.released.filter((m) => !m.beforeOpening).map((m) => <li key={m.month}>{monthLabel(m.month)}: gross Rs. {rupees(m.gross)}, TDS Rs. {rupees(m.tds)}</li>)}
+              {s.profile.opening && <li>Apr - {monthLabel(s.profile.opening.upToMonth)} (before the app): gross ₹{rupees(s.profile.opening.gross)}, TDS ₹{rupees(s.profile.opening.tds)}</li>}
+              {s.released.filter((m) => !m.beforeOpening).map((m) => <li key={m.month}>{monthLabel(m.month)}: gross ₹{rupees(m.gross)}, TDS ₹{rupees(m.tds)}</li>)}
               {s.projectedMonths.length > 0 && <li className="text-muted-foreground">Projected at current pay: {s.projectedMonths.map(monthLabel).join(", ")}</li>}
             </ul>
           </div>
@@ -338,7 +338,7 @@ function OpeningImport({ url, parseUrl, fy, people, onClose, onDone }: { url: st
       const parsed = lower.endsWith(".csv") ? parseCSVWithRowNumbers(await readFileAsText(f)) : await parseExcelFileWithRowNumbers(f, parseUrl);
       const headers = (parsed.rows[0] ?? []).map((h) => String(h ?? "").trim());
       const codeAt = headers.findIndex((h) => ["EMPCODE", "EMPLOYEECODE", "EMPLOYEEID"].includes(h.toUpperCase().replace(/[^A-Z]/g, "")));
-      if (codeAt < 0) throw new Error('The file needs an "Emp Code" column');
+      if (codeAt < 0) throw new Error('The file needs an "Employee ID" column');
       const paidAt = headers.findIndex((h) => h.toUpperCase().replace(/[^A-Z]/g, "") === "PAIDUPTO");
       const rows = parsed.rows.slice(1).map((r, i) => ({ row: parsed.rowNumbers[i + 1] ?? i + 2, code: String(r[codeAt] ?? "").trim(), values: Object.fromEntries(headers.map((h, j) => [h, String(r[j] ?? "").trim()])) }))
         .filter((r) => r.code && (paidAt < 0 || r.values[headers[paidAt]]));
@@ -375,7 +375,7 @@ function OpeningImport({ url, parseUrl, fy, people, onClose, onDone }: { url: st
             <p>{plan.rows.length - bad.length} ready · {bad.length} with problems</p>
             {plan.unknownColumns.length > 0 && <p className="text-destructive">Columns this import doesn&apos;t know: {plan.unknownColumns.join(", ")}</p>}
             <div className="max-h-72 overflow-auto rounded-md border"><table className="w-full text-xs">
-              <thead className="sticky top-0 bg-muted text-left"><tr><th className="px-2 py-1">Row</th><th className="px-2 py-1">Emp Code</th><th className="px-2 py-1">Person / problem</th><th className="px-2 py-1">Regime</th><th className="px-2 py-1">Up to</th><th className="px-2 py-1 text-right">Gross</th><th className="px-2 py-1 text-right">TDS</th></tr></thead>
+              <thead className="sticky top-0 bg-muted text-left"><tr><th className="px-2 py-1">Row</th><th className="px-2 py-1">Employee ID</th><th className="px-2 py-1">Person / problem</th><th className="px-2 py-1">Regime</th><th className="px-2 py-1">Up to</th><th className="px-2 py-1 text-right">Gross</th><th className="px-2 py-1 text-right">TDS</th></tr></thead>
               <tbody>{[...bad, ...plan.rows.filter((r) => r.status === "OK")].map((r) => (
                 <tr key={r.row} className="border-t">
                   <td className="px-2 py-1">{r.row}</td><td className="px-2 py-1 font-mono">{r.code}</td>

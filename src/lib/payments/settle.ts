@@ -28,7 +28,7 @@ export function decideSettlement(p: Pick<Payment, "id" | "status" | "amount" | "
   // The order amount is mer_amount (what the college receives); `amount` can add CCAvenue's convenience fee + tax
   // paid by the student. Older answers without mer_amount are checked on `amount`.
   const orderAmount = Number.isFinite(r.merAmount) ? r.merAmount : r.amount;
-  if (!sameAmount(orderAmount, p.amount)) return { kind: "SET", status: "FAILED", note: `Amount mismatch: asked Rs. ${p.amount}, CCAvenue reported Rs. ${Number.isFinite(r.merAmount) ? r.fields.mer_amount : r.fields.amount ?? "?"}` };
+  if (!sameAmount(orderAmount, p.amount)) return { kind: "SET", status: "FAILED", note: `Amount mismatch: asked ₹${p.amount}, CCAvenue reported ₹${Number.isFinite(r.merAmount) ? r.fields.mer_amount : r.fields.amount ?? "?"}` };
   if (r.currency && r.currency !== "INR") return { kind: "SET", status: "FAILED", note: `Currency mismatch: ${r.currency}` };
   return { kind: "SET", status: "SUCCESS" };
 }

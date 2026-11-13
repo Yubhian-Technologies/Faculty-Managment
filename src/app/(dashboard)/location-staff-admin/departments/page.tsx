@@ -529,7 +529,7 @@ export default function LocationDepartmentsPage() {
 
                         <Button asChild size="sm" variant="outline" className="h-8 text-xs font-semibold text-primary border-primary/30 hover:bg-primary/10 rounded-full px-3.5 gap-1.5">
                           <Link href={`/location-staff-admin/departments/${staff.departmentId}?tab=staff`}>
-                            <span>Dept Hub</span>
+                            <span>Department Hub</span>
                             <ArrowRight className="h-3.5 w-3.5" />
                           </Link>
                         </Button>

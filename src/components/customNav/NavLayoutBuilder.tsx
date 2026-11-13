@@ -183,7 +183,7 @@ export function NavLayoutBuilder() {
                     {row.module && <Badge variant="outline" className="hidden sm:inline-flex max-w-32 truncate">{row.module}</Badge>}
                     {row.kind === "custom" && <Badge>Custom</Badge>}
                     {row.kind === "custom" && row.enabled === false && <Badge variant="secondary">Page off</Badge>}
-                    {moveModuleHidden(moduleHidden, row) && <Badge variant="secondary" title="Hidden by a whole-module switch in Settings → Navigation Visibility">Module hidden</Badge>}
+                    {moveModuleHidden(moduleHidden, row) && <Badge variant="secondary" title="Hidden by a module setting in Settings > Navigation Visibility.">Module hidden</Badge>}
                     <div className="flex items-center">
                       <Button variant="ghost" size="icon" className="h-7 w-7" disabled={i === 0} aria-label="Move up" onClick={() => moveTo(i, i - 1)}><ArrowUp className="h-4 w-4" /></Button>
                       <Button variant="ghost" size="icon" className="h-7 w-7" disabled={i === rows.length - 1} aria-label="Move down" onClick={() => moveTo(i, i + 1)}><ArrowDown className="h-4 w-4" /></Button>

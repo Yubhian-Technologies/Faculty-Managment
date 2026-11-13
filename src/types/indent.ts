@@ -8,7 +8,7 @@ import { NON_RECURRING_CATEGORIES, RECURRING_CATEGORIES } from "./budget";
 // and disburses (auto-creating a FinancePayment) - the "green flag".
 
 // The category an indent is raised against - reuses the same budget category
-// list HODs pick from when submitting a budget request, so Purchase Dept can
+// list HODs pick from when submitting a budget request, so Purchase Department can
 // view indents grouped the same way Finance groups budget line items.
 export const INDENT_CATEGORIES = Array.from(
   new Set<string>([...NON_RECURRING_CATEGORIES, ...RECURRING_CATEGORIES])
@@ -22,9 +22,9 @@ export function defaultIndentRequestType(category: string): "GOODS" | "NON_GOODS
   return NON_RECURRING_SET.has(category) ? "GOODS" : "NON_GOODS";
 }
 
-// GOODS indents go through Purchase Dept for vendor-quotation sourcing before
+// GOODS indents go through Purchase Department for vendor-quotation sourcing before
 // Finance disburses. NON_GOODS indents (services, honoraria, staff-facing
-// spend with no physical procurement) skip Purchase Dept entirely and go
+// spend with no physical procurement) skip Purchase Department entirely and go
 // straight to Finance for direct approval - the "regular flow".
 export type IndentRequestType = "GOODS" | "NON_GOODS";
 
@@ -34,21 +34,21 @@ export const INDENT_REQUEST_TYPE_LABELS: Record<IndentRequestType, string> = {
 };
 
 export type IndentStatus =
-  | "PENDING_PURCHASE_REVIEW" // GOODS only: HOD submitted; awaiting Purchase Dept
+  | "PENDING_PURCHASE_REVIEW" // GOODS only: HOD submitted; awaiting Purchase Department
   | "REJECTED_BY_PURCHASE"    // terminal (GOODS only)
-  | "RETURNED_TO_HOD"         // Purchase Dept (GOODS) or Finance (NON_GOODS) sent back; HOD edits + resubmits
-  | "PENDING_FINANCE_REVIEW"  // GOODS: Purchase Dept forwarded with >=3 quotations + 1 selected. NON_GOODS: HOD submitted directly.
-  | "RETURNED_TO_PURCHASE"    // GOODS only: Finance sent back; Purchase Dept revises quotations + resubmits
+  | "RETURNED_TO_HOD"         // Purchase Department (GOODS) or Finance (NON_GOODS) sent back; HOD edits + resubmits
+  | "PENDING_FINANCE_REVIEW"  // GOODS: Purchase Department forwarded with >=3 quotations + 1 selected. NON_GOODS: HOD submitted directly.
+  | "RETURNED_TO_PURCHASE"    // GOODS only: Finance sent back; Purchase Department revises quotations + resubmits
   | "REJECTED"                // terminal (Finance)
-  | "APPROVED"                // GOODS only: FinancePayment auto-created ("green flag"); Purchase Dept can now buy the goods
-  | "COMPLETED";              // terminal; GOODS: Purchase Dept bought the goods and uploaded the receipt. NON_GOODS: Finance approved & disbursed directly.
+  | "APPROVED"                // GOODS only: FinancePayment auto-created ("green flag"); Purchase Department can now buy the goods
+  | "COMPLETED";              // terminal; GOODS: Purchase Department bought the goods and uploaded the receipt. NON_GOODS: Finance approved & disbursed directly.
 
 export const INDENT_STATUS_LABELS: Record<IndentStatus, string> = {
   PENDING_PURCHASE_REVIEW: "Pending Purchase Review",
-  REJECTED_BY_PURCHASE: "Rejected by Purchase Dept",
+  REJECTED_BY_PURCHASE: "Rejected by Purchase Department",
   RETURNED_TO_HOD: "Returned to HOD",
   PENDING_FINANCE_REVIEW: "Pending Finance Review",
-  RETURNED_TO_PURCHASE: "Returned to Purchase Dept",
+  RETURNED_TO_PURCHASE: "Returned to Purchase Department",
   REJECTED: "Rejected by Finance",
   APPROVED: "Approved - Ready to Purchase",
   COMPLETED: "Completed",
@@ -105,11 +105,11 @@ export interface IndentRequest {
   requestType: IndentRequestType;
   items: IndentItem[];
   status: IndentStatus;
-  quotations: IndentQuotation[]; // Purchase Dept fills in, min 3 before forwarding to Finance
-  selectedQuotationId?: string;  // Purchase Dept's recommended vendor
+  quotations: IndentQuotation[]; // Purchase Department fills in, min 3 before forwarding to Finance
+  selectedQuotationId?: string;  // Purchase Department's recommended vendor
   history: IndentApprovalAction[];
   financePaymentId?: string;     // set once Finance approves
-  receiptUrl?: string;           // set once Purchase Dept buys the goods and uploads a bill
+  receiptUrl?: string;           // set once Purchase Department buys the goods and uploads a bill
   receiptFileName?: string;
   receiptAmount?: number;        // actual amount paid, may differ slightly from the quoted price
   receiptUploadedBy?: string;

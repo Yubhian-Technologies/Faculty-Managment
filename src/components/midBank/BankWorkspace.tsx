@@ -250,7 +250,7 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
     setQFormat(f);
     setParts(blank.map((b, i) => (src.parts[i] ? { ...src.parts[i], cos: [...src.parts[i].cos], marks: f === "SINGLE" ? bank.marks : src.parts[i].marks ?? b.marks } : b)));
     setDirty(true);
-    toast({ title: `Copied Unit ${src.unit} Q${src.slot}`, description: "Edit it - an identical question can't be saved as complete." });
+    toast({ title: `Copied Unit ${src.unit} Q${src.slot}`, description: "Edit it; an identical question cannot be saved as complete." });
   }
 
   const liveErrors = useMemo(() => {
@@ -651,7 +651,7 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
           <div className={cn("rounded-2xl border p-4 shadow-sm", Object.keys(liveErrors).length === 0 ? "border-emerald-300/70 bg-emerald-50/60" : "bg-card")}>
             <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><ListChecks className="h-3.5 w-3.5" />To save as complete</p>
             {Object.keys(liveErrors).length === 0
-              ? <p className="flex items-center gap-2 text-sm font-medium text-emerald-700"><CheckCircle2 className="h-4 w-4" />Ready - the server also checks for duplicates</p>
+              ? <p className="flex items-center gap-2 text-sm font-medium text-emerald-700"><CheckCircle2 className="h-4 w-4" />Ready. Duplicates are also checked when saving.</p>
               : <ul className="space-y-2 text-xs">{Object.entries(liveErrors).map(([k, v]) => <li key={k} className="flex gap-2"><span className="mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full bg-destructive/10 text-destructive"><X className="h-2.5 w-2.5" /></span>{v}</li>)}</ul>}
           </div>
         </aside>

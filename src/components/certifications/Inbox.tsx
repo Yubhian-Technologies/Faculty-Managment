@@ -73,7 +73,7 @@ function LineRow({ request, line, busy, run }: {
         {check === "RESULT" && <ResultLine requestId={request.id} />}
         {clearance?.duesPending && (
           <span className="rounded bg-orange-100 px-1.5 py-0.5 text-xs text-orange-800 dark:bg-orange-950 dark:text-orange-200">
-            Dues pending: Rs. {clearance.duesPending.amount} - {clearance.duesPending.reason}
+            Dues pending: ₹{clearance.duesPending.amount} - {clearance.duesPending.reason}
           </span>
         )}
       </div>
@@ -97,7 +97,7 @@ function LineRow({ request, line, busy, run }: {
       </div>
       {dues && (
         <div className="flex flex-wrap items-end gap-2">
-          <div className="space-y-1"><Label className="text-xs">Amount (Rs.)</Label><Input className="w-28" type="number" min={0} value={dues.amount} onChange={(e) => setDues({ ...dues, amount: e.target.value })} /></div>
+          <div className="space-y-1"><Label className="text-xs">Amount (₹)</Label><Input className="w-28" type="number" min={0} value={dues.amount} onChange={(e) => setDues({ ...dues, amount: e.target.value })} /></div>
           <div className="space-y-1 flex-1 min-w-48"><Label className="text-xs">For what</Label><Input value={dues.reason} placeholder="Lost book, Data Structures" onChange={(e) => setDues({ ...dues, reason: e.target.value })} /></div>
           <Button size="sm" disabled={busy || !dues.amount || !dues.reason.trim()}
             onClick={() => run({ action: "DUES_PENDING", branchKey: line.key, amount: Number(dues.amount), remarks: dues.reason.trim() }, "Dues recorded - the student is told").then(() => setDues(null))}>Save dues</Button>

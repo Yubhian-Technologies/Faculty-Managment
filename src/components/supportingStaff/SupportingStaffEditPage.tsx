@@ -105,7 +105,7 @@ export function SupportingStaffEditPage({
   const [activeTab, setActiveTab] = useState<EditTabKey>("core");
 
   const tabs: (ChromeStep & { key: EditTabKey })[] = useMemo(() => [
-    { key: "core", label: "Identity & Employment", icon: User, description: "Official ID, login email, designation and employment details" },
+    { key: "core", label: "Identity & Employment", icon: User, description: "Official ID, login email, designation and employment details." },
     ...getSupportingStaffProfileModules().map((m) => ({ key: m.key as EditTabKey, label: m.label, icon: m.icon })),
   ], []);
 

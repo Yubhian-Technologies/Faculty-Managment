@@ -6,7 +6,7 @@ export default function ExamCellStaffAttendancePage() {
   return (
     <AttendanceReportView
       title="Staff Attendance"
-      description="Daily self-attendance (face + location verified) for Exam Cell staff"
+      description="Daily attendance of Exam Cell staff, verified by face and location."
       allowManualMark
       monthlyViewBasePath="/exam-cell/staff-attendance"
       importHref="/exam-cell/attendance-import"

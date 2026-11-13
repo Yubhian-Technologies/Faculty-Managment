@@ -187,7 +187,7 @@ function RegulationBatchesEditor({
       {hasOverlap && (
         <p className="flex items-start gap-1 text-[11px] text-red-700">
           <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
-          More than one regulation claims the same intake year - saving will be rejected until the overlap is fixed.
+          More than one regulation covers the same intake year. Correct the overlap before saving.
         </p>
       )}
 
@@ -234,7 +234,7 @@ function RegulationBatchesEditor({
       )}
       {showHint && !fieldError && (
         <p className="text-[11px] text-muted-foreground">
-          E.g. Starting Year 2023, 3 batches - the 2023, 2024 and 2025 intakes all follow this regulation.
+          For example, Starting Year 2023 with 3 batches: the 2023, 2024 and 2025 intakes follow this regulation.
         </p>
       )}
 

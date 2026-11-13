@@ -271,7 +271,7 @@ function RecordFormFields({
                 renderRow={(item, update) => (
                   <>
                     <TextInput label="Name of the Faculty" value={item.name} onChange={(v) => update({ name: v })} required />
-                    <TextInput label="Dept. of Faculty" value={item.department} onChange={(v) => update({ department: v })} required />
+                    <TextInput label="Department of Faculty" value={item.department} onChange={(v) => update({ department: v })} required />
                     <TextInput label="Contribution" value={item.contribution} onChange={(v) => update({ contribution: v })} required />
                   </>
                 )}

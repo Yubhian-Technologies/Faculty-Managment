@@ -97,7 +97,7 @@ export async function POST(request: Request) {
     }
 
     const now = new Date();
-    // GOODS indents go to Purchase Dept for quotation sourcing; NON_GOODS skip
+    // GOODS indents go to Purchase Department for quotation sourcing; NON_GOODS skip
     // straight to Finance for direct approval (see IndentStatus in src/types/indent.ts).
     const isGoods = requestType === "GOODS";
     const initialStatus = isGoods ? "PENDING_PURCHASE_REVIEW" : "PENDING_FINANCE_REVIEW";

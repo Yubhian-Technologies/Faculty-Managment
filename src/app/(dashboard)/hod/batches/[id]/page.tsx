@@ -907,7 +907,7 @@ ${institution}`;
                     ) : (
                       <span
                         className="text-xs text-muted-foreground flex items-center gap-1"
-                        title="The candidate's bio data form hasn't been submitted yet — review it in Candidate Bio Data above before marking them arrived"
+                        title="The candidate has not submitted the bio-data form yet. Review it in Candidate Bio Data above before marking them as arrived."
                       >
                         <Clock className="h-3 w-3" />Awaiting bio data form
                       </span>

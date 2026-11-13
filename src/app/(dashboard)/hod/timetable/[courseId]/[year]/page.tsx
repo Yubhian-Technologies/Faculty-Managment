@@ -370,7 +370,7 @@ export default function HODTimetableSectionsPage() {
                 <span className="font-medium">{inchargeState.incharge.facultyName}</span>
               </p>
             ) : inchargeState.kind === "MIXED" ? (
-              <p className="text-sm text-amber-700">Different people cover different branches here - assign one to unify.</p>
+              <p className="text-sm text-amber-700">Different people cover different branches here. Assign one person to cover all.</p>
             ) : (
               <p className="text-sm text-muted-foreground">No Timetable Incharge has been assigned for this year.</p>
             )}

@@ -248,7 +248,7 @@ export function CollegeBrandingDashboardCard() {
                     : "Active Default Vishnu Logo"}
                 </p>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Appears on all section timetables, faculty load tables & official PDFs
+                  Appears on all section timetables, faculty load tables and official PDFs.
                 </p>
               </div>
             </div>

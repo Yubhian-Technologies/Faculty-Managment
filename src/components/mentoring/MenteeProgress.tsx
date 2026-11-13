@@ -339,7 +339,7 @@ function NotesTab({ api }: { api: string }) {
           placeholder="Write what was discussed, concerns, follow-ups…"
         />
         <div className="flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">Visible to this student&apos;s mentor and HOD only - never to the student.</span>
+          <span className="text-xs text-muted-foreground">Visible only to this student&apos;s mentor and HOD, never to the student.</span>
           <Button size="sm" onClick={add} disabled={saving || !text.trim()}>{saving ? "Saving…" : "Add note"}</Button>
         </div>
       </div>

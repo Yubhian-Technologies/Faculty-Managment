@@ -138,7 +138,7 @@ export default function ExamResultRulesPage() {
 
       {!isLoading && !saved && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
-          These are starter rules - nothing is saved for your college yet. Check the grades and points against your regulation and press Save.
+          These are default rules; nothing is saved for your college yet. Check the grades and points against your regulation and choose Save.
         </div>
       )}
 

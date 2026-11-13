@@ -39,7 +39,7 @@ function PublicationRow({
   const isCoAuthorHere = !!viewerUid && (pub.internalAuthorUids ?? []).includes(viewerUid);
   const canEdit = isOwnProfile && (isSubmitter || isCoAuthorHere);
   const extras: { label: string; value: string | number | undefined }[] = [
-    { label: "Dept.", value: pub.department },
+    { label: "Department", value: pub.department },
     { label: "Author Position", value: pub.authorPosition },
     { label: "Indexed", value: pub.indexing },
     { label: "Journal / Conference / Book Chapter", value: pub.venueType },

@@ -208,7 +208,7 @@ export function OfficeAttendanceEditor({ facultyId, date, subjectName, sectionLa
                         {periodNumbers.map((n) => (
                           <td key={n} className="px-3 py-2.5 text-center border-l whitespace-nowrap">
                             {draft[s.studentId]?.[n] === "ON_DUTY" ? (
-                              <span title="Approved permission - locked" className="inline-flex rounded-full border px-2 py-0.5 text-xs font-medium">On Duty</span>
+                              <span title="Approved permission (locked)" className="inline-flex rounded-full border px-2 py-0.5 text-xs font-medium">On Duty</span>
                             ) : (
                               <Switch
                                 checked={draft[s.studentId]?.[n] === meaning}

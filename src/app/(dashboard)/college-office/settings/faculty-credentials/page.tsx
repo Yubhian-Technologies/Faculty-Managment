@@ -428,7 +428,7 @@ function EmailFieldInput({
         </Button>
       </div>
       {status === "taken" && <p className="text-xs text-red-600">Already in use — pick a different email</p>}
-      {status === "available" && <p className="text-xs text-green-600">Available — you can now request the account</p>}
+      {status === "available" && <p className="text-xs text-green-600">Available. You can now request the account.</p>}
     </div>
   );
 }

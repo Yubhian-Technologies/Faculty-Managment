@@ -115,19 +115,19 @@ export default function FinanceDashboard() {
           <CardContent className="space-y-2 text-sm text-muted-foreground">
             <p className="flex items-center gap-2">
               <span className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">1</span>
-              Allocate a budget, then log budget/expense/purchase requests as they come in
+              Allocate a budget, then record budget, expense and purchase requests as they arrive.
             </p>
             <p className="flex items-center gap-2">
               <span className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">2</span>
-              Approve, reject, or return requests for correction
+              Approve, reject or return requests for correction.
             </p>
             <p className="flex items-center gap-2">
               <span className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">3</span>
-              Allocate funds, process payments, and record receipts
+              Allocate funds, process payments and record receipts.
             </p>
             <p className="flex items-center gap-2">
               <span className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">4</span>
-              Track everything in Financial Reports and Audit &amp; Compliance
+              Track all activity in Financial Reports and Audit and Compliance.
             </p>
           </CardContent>
         </Card>

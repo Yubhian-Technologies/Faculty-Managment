@@ -20,7 +20,7 @@ function MyPayments() {
       <PageHeader title="My payments" description="Fees you have paid online through CCAvenue." />
       {params.get("result") === "unknown" && (
         <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-          We couldn&apos;t read the payment result. If money was taken from your account, it is checked and recorded by the Accounts office - you don&apos;t need to pay again. Contact the College Office with the time of payment.
+          The payment result could not be read. If money was debited from your account, the Accounts office will verify and record it; you do not need to pay again. Contact the College Office with the time of payment.
         </p>
       )}
       {!payments ? <div className="h-32 animate-pulse rounded-lg bg-muted" /> : payments.length === 0 ? (
@@ -31,7 +31,7 @@ function MyPayments() {
             <Link key={p.id} href={`/student/payments/${encodeURIComponent(p.id)}`}>
               <Card className="transition-colors hover:border-primary/50"><CardContent className="flex flex-wrap items-center justify-between gap-2 p-4">
                 <div><p className="font-medium">{p.purpose.label}</p><p className="text-xs text-muted-foreground">{new Date(p.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })} · order {p.id}</p></div>
-                <div className="flex items-center gap-2"><span className="font-semibold">Rs. {p.amount}</span><span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${PAYMENT_STATUS_CLASS[p.status]}`}>{PAYMENT_STATUS_LABEL[p.status]}</span></div>
+                <div className="flex items-center gap-2"><span className="font-semibold">₹{p.amount}</span><span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${PAYMENT_STATUS_CLASS[p.status]}`}>{PAYMENT_STATUS_LABEL[p.status]}</span></div>
               </CardContent></Card>
             </Link>
           ))}

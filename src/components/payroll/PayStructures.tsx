@@ -65,7 +65,7 @@ export function PayStructures({ collegeId }: { collegeId?: string }) {
         <div className="space-y-1.5"><Label htmlFor="ps-month">Pay in force for</Label><Input id="ps-month" type="month" className="w-40" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} /></div>
         <div className="relative min-w-[14rem] flex-1 space-y-1.5"><Label htmlFor="ps-q">Search</Label>
           <Search className="pointer-events-none absolute left-2.5 top-[2.1rem] h-4 w-4 text-muted-foreground" />
-          <Input id="ps-q" className="pl-8" placeholder="Emp Code, name, department" value={q} onChange={(e) => setQ(e.target.value)} />
+          <Input id="ps-q" className="pl-8" placeholder="Employee ID, name, department" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
         <div className="space-y-1.5"><Label htmlFor="ps-sec">Section</Label>
           <select id="ps-sec" className={selectClass} value={section} onChange={(e) => setSection(e.target.value)}>
@@ -83,14 +83,14 @@ export function PayStructures({ collegeId }: { collegeId?: string }) {
       <div className="flex flex-wrap gap-3 text-sm">
         <span className="rounded-full bg-muted px-3 py-1">{active.length - missing} of {active.length} working people have pay set</span>
         {missing > 0 && <button type="button" onClick={() => setOnly("MISSING")} className="rounded-full bg-amber-100 px-3 py-1 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200">{missing} without pay</button>}
-        <span className="rounded-full bg-muted px-3 py-1">Gross_Actual of the list: Rs. {rupees(total)}</span>
+        <span className="rounded-full bg-muted px-3 py-1">Gross_Actual of the list: ₹{rupees(total)}</span>
       </div>
 
       <Card className="rounded-2xl"><CardContent className="overflow-x-auto p-0">
         <table className="w-full min-w-[56rem] text-sm">
           <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
             <tr>
-              <th className="px-3 py-2">Emp Code</th><th className="px-3 py-2">Name</th><th className="px-3 py-2">Dept</th><th className="px-3 py-2">From</th>
+              <th className="px-3 py-2">Employee ID</th><th className="px-3 py-2">Name</th><th className="px-3 py-2">Dept</th><th className="px-3 py-2">From</th>
               {earnings.map((e) => <th key={e.id} className="px-3 py-2 text-right">{e.label}</th>)}
               <th className="px-3 py-2 text-right">Gross_Actual</th><th className="px-3 py-2">Not applied</th><th className="px-3 py-2" />
             </tr>
@@ -155,7 +155,7 @@ function PayEditDialog({ collegeId, row, settings, canEdit, onClose, onSaved }: 
       <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{row.name}</DialogTitle>
-          <DialogDescription>{row.employeeCode || "No Emp Code"} · {row.designation}{row.department ? ` · ${row.department}` : ""}</DialogDescription>
+          <DialogDescription>{row.employeeCode || "No Employee ID"} · {row.designation}{row.department ? ` · ${row.department}` : ""}</DialogDescription>
         </DialogHeader>
         {canEdit && (
           <div className="space-y-4">
@@ -170,7 +170,7 @@ function PayEditDialog({ collegeId, row, settings, canEdit, onClose, onSaved }: 
                 </div>
               ))}
             </div>
-            <p className="text-sm">Gross_Actual: <span className="font-semibold tabular-nums">Rs. {rupees(total)}</span></p>
+            <p className="text-sm">Gross_Actual: <span className="font-semibold tabular-nums">₹{rupees(total)}</span></p>
             <div className="space-y-2"><p className="text-sm font-medium">Deductions that apply</p>
               <div className="flex flex-wrap gap-4">
                 {exemptableDeductions(settings).filter((d) => d.active).map((d) => (

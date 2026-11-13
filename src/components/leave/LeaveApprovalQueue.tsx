@@ -415,7 +415,7 @@ export function LeaveApprovalQueue() {
           toast({
             variant: "success",
             title: "Adjustment request sent",
-            description: "Forward to the Principal once they accept - track it under Leave Approvals.",
+            description: "Forward to the Principal once they accept, and track it under Leave Approvals.",
           });
           setActingId(null);
           void load();
@@ -507,7 +507,7 @@ export function LeaveApprovalQueue() {
                         <Badge variant="outline">Half Day &middot; {r.halfDaySession === "AN" ? "Afternoon" : "Forenoon"}</Badge>
                       )}
                       {r.extendsRequestId && (
-                        <Badge variant="outline" title="This extends a leave that was already approved">
+                        <Badge variant="outline" title="This extends a leave that is already approved.">
                           Extension
                         </Badge>
                       )}
@@ -633,7 +633,7 @@ export function LeaveApprovalQueue() {
                                 </Select>
                                 {replacementCandidates.length === 0 && (
                                   <p className="text-xs text-destructive">
-                                    No single faculty is free for every affected period - switch to Adjustment to cover periods individually.
+                                    No single faculty member is free for every affected period. Switch to Adjustment to cover periods individually.
                                   </p>
                                 )}
                               </div>
@@ -711,7 +711,7 @@ export function LeaveApprovalQueue() {
                               ))}
                           </SelectContent>
                         </Select>
-                        <p className="text-[11px] text-muted-foreground">Only visible in your own Staff Leave History - never shown to the requester, their HOD, or anyone else.</p>
+                        <p className="text-[11px] text-muted-foreground">Visible only in your Staff Leave History; never shown to the requester, their HOD or anyone else.</p>
                         </div>
                         {/* The selected category's own rule (duration limits,
                             certificate/service conditions), so the sanctioning

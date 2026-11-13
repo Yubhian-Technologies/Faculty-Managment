@@ -1218,7 +1218,7 @@ function HodStudentsContent() {
           <Button variant="ghost" size="sm" onClick={() => openAssign(r)} title={r.section ? "Move to a different section" : "Assign to a section"}>
             <ArrowRightLeft className="h-3.5 w-3.5" />
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => openEdit(r)} title="Set Regd. No / status / lab batch">
+          <Button variant="ghost" size="sm" onClick={() => openEdit(r)} title="Set Regd. No, status and lab batch">
             <Pencil className="h-3.5 w-3.5" />
           </Button>
         </div>
@@ -1681,7 +1681,7 @@ function HodStudentsContent() {
                   </p>
                 ) : bulkTargetSections.length === 0 ? (
                   <p className="text-xs text-amber-600">
-                    No section can take all of the selected students - they may belong to different branches, or no section exists yet for them. Select students of one branch, or create the section first.
+                    No section can take all the selected students; they may belong to different branches, or no section exists for them yet. Select students of one branch, or create the section first.
                   </p>
                 ) : null}
               </div>

@@ -243,7 +243,7 @@ export function SectionLabBatchModes({ sectionId }: { sectionId: string }) {
                                   {lab.batchWise === true && (
                                     batches.length === 0 ? (
                                       <p className="text-xs text-amber-700">
-                                        No batch has students yet. Create a batch above, move students into it and press Update - it will then appear here to assign.
+                                        No batch has students yet. Create a batch above, move students into it and choose Update; it then appears here for assignment.
                                       </p>
                                     ) : (
                                       <div className="flex flex-wrap items-center gap-x-5 gap-y-2">

@@ -1693,7 +1693,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
               has shared the faculty's busy periods and pressed "Notify department & close". */}
           {heldBackList.length > 0 && (
             <div className="space-y-1 rounded-md border border-amber-200 bg-amber-50 p-3">
-              <p className="text-xs font-medium text-amber-900">Not available yet - waiting for the lending department</p>
+              <p className="text-xs font-medium text-amber-900">Not available yet; awaiting the lending department.</p>
               {heldBackList.map((a) => (
                 <p key={a.id} className="text-xs text-amber-900">
                   {a.subjectName} - {a.facultyName}

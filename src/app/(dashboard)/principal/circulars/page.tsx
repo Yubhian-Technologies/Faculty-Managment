@@ -74,7 +74,7 @@ export default function PrincipalCircularsPage() {
           <CardHeader><CardTitle className="text-base">RBAC — Who can send circulars</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             <div><Label>Allowed UIDs (comma separated HOD/faculty uids)</Label><Input value={allowedUids} onChange={(e) => setAllowedUids(e.target.value)} placeholder="uid1, uid2" /></div>
-            <div><Label>Allowed Roles (comma separated, e.g. HOD,PANEL_MEMBER)</Label><Input value={allowedRoles} onChange={(e) => setAllowedRoles(e.target.value)} placeholder="HOD" /></div>
+            <div><Label>Allowed Roles (comma separated, for example HOD,PANEL_MEMBER)</Label><Input value={allowedRoles} onChange={(e) => setAllowedRoles(e.target.value)} placeholder="HOD" /></div>
             <p className="text-xs text-muted-foreground">{who === "Principal" ? "Principal/Vice Principal" : "College Admin and the Principal/Vice Principal"} always allowed. Add HOD or specific faculty UIDs to delegate.</p>
             <Button onClick={() => void savePerms()}>Save Permissions</Button>
           </CardContent>

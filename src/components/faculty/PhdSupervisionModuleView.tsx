@@ -406,7 +406,7 @@ function RecordFormFields({
                 </Select>
               </div>
               <TextInput label="Name of Fellowship" value={form.fellowshipName} onChange={(v) => set("fellowshipName", v)} />
-              <NumField label="Amount Received (Rs.)" value={form.fellowshipAmount} onChange={(v) => set("fellowshipAmount", v)} />
+              <NumField label="Amount Received (₹)" value={form.fellowshipAmount} onChange={(v) => set("fellowshipAmount", v)} />
             </div>
           )}
         </div>

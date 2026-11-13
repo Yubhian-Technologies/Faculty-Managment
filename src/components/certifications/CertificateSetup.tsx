@@ -129,7 +129,7 @@ function TypeEditor({ initial, id, templates, signatures, staff, college, onClos
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="STUDENT">The student applies</SelectItem>
-                  <SelectItem value="OFFICE">The College Office starts it for classes (e.g. No Dues)</SelectItem>
+                  <SelectItem value="OFFICE">The College Office starts it for classes (for example, No Dues)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -194,7 +194,7 @@ function TypeEditor({ initial, id, templates, signatures, staff, college, onClos
                 <Input id="ct-number" value={t.numberFormat ?? ""} onChange={(e) => set("numberFormat", e.target.value)} />
                 <p className="text-xs text-muted-foreground">{"{CODE} {YYYY} {AY} {SEQ}"} - e.g. {sampleNo}</p>
               </div>
-              <div className="space-y-1.5"><Label htmlFor="ct-fee">Fee (Rs., 0 = free)</Label>
+              <div className="space-y-1.5"><Label htmlFor="ct-fee">Fee (₹; 0 = free)</Label>
                 <Input id="ct-fee" type="number" min={0} value={t.feeAmount ?? 0} onChange={(e) => set("feeAmount", Number(e.target.value))} />
               </div>
               <div className="space-y-1.5"><Label>Delivery</Label>
@@ -309,7 +309,7 @@ function TemplateEditor({ initial, id, signature, college, onClose, onSaved }: {
               <div className="space-y-1.5"><Label htmlFor="tp-footer">Note below (optional)</Label><Textarea id="tp-footer" rows={2} value={t.footer ?? ""} onChange={(e) => set("footer", e.target.value)} /></div>
             )}
             {kind !== "UPLOAD" && (
-              <label className="flex items-center gap-2 text-sm"><Checkbox checked={t.showClearances === true} onCheckedChange={(c) => set("showClearances", c === true)} /> Print every department&apos;s clearance as a table (No Dues)</label>
+              <label className="flex items-center gap-2 text-sm"><Checkbox checked={t.showClearances === true} onCheckedChange={(c) => set("showClearances", c === true)} /> Print each department&apos;s clearance as a table (No Dues)</label>
             )}
             <label className="flex items-center gap-2 text-sm"><Checkbox checked={t.showQr !== false} onCheckedChange={(c) => set("showQr", c === true)} /> Print the QR verification code</label>
           </div>
@@ -470,12 +470,12 @@ export function CertificateSetup({ canEdit }: { canEdit: boolean }) {
                         {" → issued by "}{recipientLabel(t.issuer)} · {templateName.get(t.templateId) ?? "no template"}{t.startedBy === "OFFICE" ? " · started by the College Office" : ""}
                       </p>
                     </div>
-                    {t.feeAmount > 0 && <Badge variant="secondary">Rs. {t.feeAmount}</Badge>}
+                    {t.feeAmount > 0 && <Badge variant="secondary">₹{t.feeAmount}</Badge>}
                     {t.onceOnly && <Badge variant="outline">Once</Badge>}
                     {canEdit && (
                       <div className="flex gap-1">
                         <Button size="sm" variant="ghost" onClick={() => setEditingType({ initial: t, id: t.id })}><Pencil className="h-4 w-4 mr-1" /> Edit</Button>
-                        {!t.inUse && t.catalogKey && <Button size="sm" variant="ghost" loading={busy === `reset:${t.id}`} onClick={() => reset(t)} title="Put this certificate and its template back to the starter version">Reset</Button>}
+                        {!t.inUse && t.catalogKey && <Button size="sm" variant="ghost" loading={busy === `reset:${t.id}`} onClick={() => reset(t)} title="Restore this certificate and its template to the default version.">Reset</Button>}
                         {!t.inUse && <Button size="icon" variant="ghost" onClick={() => setDeleting({ kind: "type", id: t.id, name: t.name })} aria-label="Delete"><Trash2 className="h-4 w-4" /></Button>}
                       </div>
                     )}

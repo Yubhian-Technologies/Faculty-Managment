@@ -793,7 +793,7 @@ function HODSectionsContent() {
               <SelectContent>
                 <SelectItem value="all">All Departments</SelectItem>
                 {scopeDepartments.map((d) => (
-                  <SelectItem key={d} value={d}>{d}{freshmanDeptNames.has(d) ? " · Freshman's Dept" : ""}</SelectItem>
+                  <SelectItem key={d} value={d}>{d}{freshmanDeptNames.has(d) ? " · Freshman's Department" : ""}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

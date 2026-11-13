@@ -257,7 +257,7 @@ export async function recordAdvanceRecoveries(db: Firestore, collegeId: string, 
     tx.update(ref, {
       recoveries, rev: a.rev + 1,
       ...(done ? { status: "CLOSED", closedNote: `Recovered in full (${label})` } : {}),
-      history: [...(a.history ?? []), { at, byName, change: `${label} salary recovered Rs. ${amount}${done ? " - recovered in full" : ""}` }].slice(-100),
+      history: [...(a.history ?? []), { at, byName, change: `${label} salary recovered ₹${amount}${done ? " - recovered in full" : ""}` }].slice(-100),
     });
   })));
 }

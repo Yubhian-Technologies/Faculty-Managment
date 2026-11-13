@@ -168,7 +168,7 @@ export default function NewSubDepartmentPage() {
           <CardContent className="py-16">
             <EmptyState
               title="Not available for a sub-department"
-              description="Sub-departments are one level deep only - your department can't be split further."
+              description="Sub-departments have only one level; your department cannot be divided further."
               icon={<Network className="h-8 w-8" />}
               action={
                 <Button asChild variant="outline">

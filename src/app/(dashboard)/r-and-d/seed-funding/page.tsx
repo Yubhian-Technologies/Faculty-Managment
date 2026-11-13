@@ -124,7 +124,7 @@ export default function RAndDSeedFundingPage() {
       render: (row) => <span className="text-sm text-muted-foreground">{row.projectStatus === "SANCTIONED" ? "Sanctioned" : "Completed"}</span>,
     },
     {
-      key: "totalAmountSanctioned", header: "Amount Sanctioned (Rs.)", hideOnMobile: true,
+      key: "totalAmountSanctioned", header: "Amount Sanctioned (₹)", hideOnMobile: true,
       render: (row) => <span className="text-sm text-muted-foreground">{row.totalAmountSanctioned ?? "-"}</span>,
     },
   ];

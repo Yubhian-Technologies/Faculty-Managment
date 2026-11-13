@@ -210,7 +210,7 @@ function IdentityEditForm({ staff }: { staff: Partial<SupportingStaffMember> }) 
                 <Label>Personal Email</Label>
                 <Input type="email" value={form.email} onChange={(e) => set({ email: e.target.value })} placeholder="staff@example.com" />
                 {!!form.email.trim() && !EMAIL_REGEX.test(form.email.trim()) && (
-                  <p className="text-xs text-destructive">Doesn&rsquo;t look like a valid email address</p>
+                  <p className="text-xs text-destructive">Enter a valid email address.</p>
                 )}
               </div>
               <div className="space-y-2">
@@ -233,7 +233,7 @@ function IdentityEditForm({ staff }: { staff: Partial<SupportingStaffMember> }) 
                   placeholder="9876543210"
                 />
                 {!!form.mobileNo.trim() && form.mobileNo.trim() !== storedMobile.trim() && !PHONE_REGEX.test(form.mobileNo.trim()) && (
-                  <p className="text-xs text-destructive">Must be exactly 10 digits, starting with 6, 7, 8 or 9</p>
+                  <p className="text-xs text-destructive">Must be 10 digits, starting with 6, 7, 8 or 9.</p>
                 )}
               </div>
             </div>

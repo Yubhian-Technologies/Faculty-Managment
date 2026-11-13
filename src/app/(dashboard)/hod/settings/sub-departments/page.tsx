@@ -158,7 +158,7 @@ export default function SubDepartmentsSettingsPage() {
           <CardContent className="py-16">
             <EmptyState
               title="Not available for a sub-department"
-              description="Sub-departments are one level deep only - your department can't be split further."
+              description="Sub-departments have only one level; your department cannot be divided further."
               icon={<Network className="h-8 w-8" />}
             />
           </CardContent>
@@ -241,7 +241,7 @@ export default function SubDepartmentsSettingsPage() {
                     <Link
                       href={`/hod/settings/sub-departments/${dept.id}/edit`}
                       className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground"
-                      title="Edit sub-department (name, code, Sub-HOD, grouped departments)"
+                      title="Edit sub-department (name, code, Sub-HOD and grouped departments)"
                       aria-label={`Edit ${dept.name}`}
                     >
                       <Pencil className="h-3.5 w-3.5" />

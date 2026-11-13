@@ -609,7 +609,7 @@ export default function EditDepartmentPage() {
           <DialogHeader>
             <DialogTitle className="text-base font-bold flex items-center gap-2 text-primary">
               <KeyRound className="h-5 w-5" />
-              Department Head Credentials Created!
+              Department Head Credentials Created
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
               Login account has been created for <strong>{createdCredentials?.headName}</strong> for the <strong>{createdCredentials?.deptName}</strong> department.

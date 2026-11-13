@@ -114,7 +114,7 @@ export async function POST(request: Request) {
       .collection("locationUsers")
       .doc(session.uid)
       .get();
-    const deptHeadName = (userSnap.data() as { name?: string } | undefined)?.name ?? "Dept Head";
+    const deptHeadName = (userSnap.data() as { name?: string } | undefined)?.name ?? "Department Head";
     const deptHeadDept = (userSnap.data() as { department?: string } | undefined)?.department ?? department;
 
     const now = new Date();

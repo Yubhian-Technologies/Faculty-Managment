@@ -520,7 +520,7 @@ function ImportSemesterResults() {
                 <CheckCircle2 className="mr-1.5 h-4 w-4" />{appendTo ? "Add to draft" : "Save as draft"}
               </Button>
               {progress && <span className="text-xs text-muted-foreground">{progress}</span>}
-              {!summary && <span className="text-xs text-muted-foreground">Check the file first - nothing is saved until you press Save as draft.</span>}
+              {!summary && <span className="text-xs text-muted-foreground">Check the file first. Nothing is saved until you choose Save Draft.</span>}
             </div>
           )}
 

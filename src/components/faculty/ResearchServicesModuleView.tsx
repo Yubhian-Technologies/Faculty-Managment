@@ -424,9 +424,9 @@ function RecordFormFields({
               <div className="space-y-4">
                 <SubLabel>Finances</SubLabel>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                  <NumField label="Amount Sanctioned (Rs.)" value={form.amountSanctioned} onChange={(v) => set("amountSanctioned", v)} />
-                  <NumField label="Amount Received (Rs.)" value={form.amountReceived} onChange={(v) => set("amountReceived", v)} />
-                  <NumField label="Expenditure Made (Rs.)" value={form.expenditureMade} onChange={(v) => set("expenditureMade", v)} />
+                  <NumField label="Amount Sanctioned (₹)" value={form.amountSanctioned} onChange={(v) => set("amountSanctioned", v)} />
+                  <NumField label="Amount Received (₹)" value={form.amountReceived} onChange={(v) => set("amountReceived", v)} />
+                  <NumField label="Expenditure Made (₹)" value={form.expenditureMade} onChange={(v) => set("expenditureMade", v)} />
                 </div>
                 <DocumentUploadField
                   label="Sanctioned Letter"
@@ -464,7 +464,7 @@ function RecordFormFields({
                 renderRow={(item, update) => (
                   <>
                     <TextInput label="Name of the Faculty" value={item.name} onChange={(v) => update({ name: v })} />
-                    <TextInput label="Dept. of Faculty" value={item.department} onChange={(v) => update({ department: v })} />
+                    <TextInput label="Department of Faculty" value={item.department} onChange={(v) => update({ department: v })} />
                     <TextInput label="Type" value={item.type} onChange={(v) => update({ type: v })} placeholder="Convener / Co-Convener / Coordinator / Co-Coordinator" />
                   </>
                 )}
@@ -480,7 +480,7 @@ function RecordFormFields({
                 renderRow={(item, update) => (
                   <>
                     <TextInput label="Name of the Faculty" value={item.name} onChange={(v) => update({ name: v })} />
-                    <TextInput label="Dept. of the Faculty" value={item.department} onChange={(v) => update({ department: v })} />
+                    <TextInput label="Department of the Faculty" value={item.department} onChange={(v) => update({ department: v })} />
                   </>
                 )}
               />

@@ -223,7 +223,7 @@ function PrincipalDepartmentFacultyContent() {
       });
       await queryClient.invalidateQueries({ queryKey: ["principal-dept-faculty"] });
     } catch {
-      toast({ variant: "destructive", title: "Unable to delete faculty record", description: "Network error - try again." });
+      toast({ variant: "destructive", title: "Unable to delete faculty record", description: "Network error. Try again." });
     } finally {
       setIsDeleting(false);
     }

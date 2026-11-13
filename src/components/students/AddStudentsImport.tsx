@@ -539,7 +539,7 @@ export function AddStudentsImport() {
 
       {!isLocked && (
         <Card>
-          <CardHeader><CardTitle className="text-base flex items-center gap-2"><span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">1</span>Select Course, Department &amp; Current year of Study</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base flex items-center gap-2"><span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">1</span>Select Course, Department and Current Year of Study</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
               Course, Department and Current year of Study are required for the whole file — set them once here instead of typing them per row. Every student in this import will belong to these values.

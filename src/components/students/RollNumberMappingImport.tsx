@@ -288,7 +288,7 @@ export function RollNumberMappingImport() {
             <label className="flex items-start gap-2 text-sm">
               <Checkbox checked={replaceExisting} onCheckedChange={(v) => { setReplaceExisting(v === true); reset(); }} />
               <span>
-                Replace a Regd. No a student already has
+                Replace a student&apos;s existing Regd. No
                 <span className="block text-xs text-muted-foreground">
                   Off by default. With this off, a student who already holds a different roll is skipped.
                 </span>

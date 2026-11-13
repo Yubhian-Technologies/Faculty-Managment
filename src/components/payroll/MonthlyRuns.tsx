@@ -227,7 +227,7 @@ function RunView({ collegeId, month, onBack }: { collegeId?: string; month: stri
       )}
 
       <div className="flex flex-wrap items-end gap-3">
-        <div className="relative min-w-[14rem] flex-1"><Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input aria-label="Search" className="pl-8" placeholder="Emp Code, name, department" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+        <div className="relative min-w-[14rem] flex-1"><Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input aria-label="Search" className="pl-8" placeholder="Employee ID, name, department" value={q} onChange={(e) => setQ(e.target.value)} /></div>
         <select aria-label="Show" className={selectClass} value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)}>
           <option value="">Everyone</option><option value="TEACHING">Teaching</option><option value="NON_TEACHING">Non-teaching</option>
           <option value="ISSUES">Needs a look ({issues})</option><option value="CHANGED">Adjusted by hand</option>
@@ -238,7 +238,7 @@ function RunView({ collegeId, month, onBack }: { collegeId?: string; month: stri
         <table className="w-full min-w-[70rem] text-xs">
           <thead className="bg-muted/50 text-left uppercase tracking-wide text-muted-foreground">
             <tr>
-              <th className="px-2 py-2">Emp Code</th><th className="px-2 py-2">Name</th><th className="px-2 py-2 text-right">Pay Days</th><th className="px-2 py-2 text-right">Gross_Actual</th>
+              <th className="px-2 py-2">Employee ID</th><th className="px-2 py-2">Name</th><th className="px-2 py-2 text-right">Pay Days</th><th className="px-2 py-2 text-right">Gross_Actual</th>
               {earnings.map((e) => <th key={e.id} className="px-2 py-2 text-right">{e.label}</th>)}
               <th className="px-2 py-2 text-right">Other</th><th className="px-2 py-2 text-right">G. SAL</th>
               {deductions.map((x) => <th key={x.id} className="px-2 py-2 text-right">{x.label}</th>)}

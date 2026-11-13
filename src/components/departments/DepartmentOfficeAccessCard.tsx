@@ -90,10 +90,10 @@ export function DepartmentOfficeAccessCard() {
             checked={data.editStudentAttendance === true}
             disabled={savingAttendance}
             onCheckedChange={(next) => void setAttendanceAccess(next)}
-            aria-label="Allow the office head to edit student attendance"
+            aria-label="Allow the Department Office Head to edit student attendance"
           />
           <span>
-            <span className="font-medium">Allow the office head to edit student attendance</span>
+            <span className="font-medium">Allow the Department Office Head to edit student attendance</span>
             <span className="block text-xs text-muted-foreground">
               For your department only, and only for a past day (or today once the college day has ended). Every change is recorded
               with the reason given. {data.editStudentAttendance === true ? "" : "Currently off."}

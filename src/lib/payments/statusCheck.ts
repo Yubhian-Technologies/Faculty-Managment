@@ -41,7 +41,7 @@ export async function checkPaymentStatus(db: Firestore, collegeId: string, payme
     });
     if (settled.newlyPaid) {
       await notify(db, collegeId, p.studentUid, "PAYMENT_RECEIVED", "Payment received",
-        `Rs. ${p.amount} paid for ${p.purpose.label} (CCAvenue ref ${p.trackingId}).`, `/student/payments/${encodeURIComponent(p.id)}`);
+        `₹${p.amount} paid for ${p.purpose.label} (CCAvenue ref ${p.trackingId}).`, `/student/payments/${encodeURIComponent(p.id)}`);
     }
   }
   return { payment: { ...p, lastCheckedAt: now }, changed: settled.changed };

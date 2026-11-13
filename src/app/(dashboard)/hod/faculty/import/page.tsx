@@ -324,7 +324,7 @@ export default function FacultyImportPage() {
       {importableDepartments.length > 0 && (
         <Card>
           <CardContent className="pt-6 space-y-2">
-            <Label>Dept Code column - departments you can import into</Label>
+            <Label>Department Code column: departments you can import into</Label>
             <div className="flex flex-wrap gap-2">
               {importableDepartments.map((d) => (
                 <Badge key={d.id} variant="secondary" className="font-mono">{d.code}</Badge>

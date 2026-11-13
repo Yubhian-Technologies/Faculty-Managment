@@ -86,7 +86,7 @@ export function PayrollLineDialog({ collegeId, run, line, actor, editable, onClo
       <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{line.name}</DialogTitle>
-          <DialogDescription>{line.employeeCode || "No Emp Code"} · {line.designation} · {line.department} · {monthLabel(run.month)} · pay from {monthLabel(line.revisionFrom)}</DialogDescription>
+          <DialogDescription>{line.employeeCode || "No Employee ID"} · {line.designation} · {line.department} · {monthLabel(run.month)} · pay from {monthLabel(line.revisionFrom)}</DialogDescription>
         </DialogHeader>
 
         {line.issues.length > 0 && <ul className="space-y-1 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">{line.issues.map((i) => <li key={i}>{i}</li>)}</ul>}
@@ -157,14 +157,14 @@ export function PayrollLineDialog({ collegeId, run, line, actor, editable, onClo
           <div className="space-y-2 border-t pt-3 text-sm">
             <p className="font-medium">Income tax</p>
             {line.taxCalc.rulesConfirmed ? (
-              <p className="text-xs text-muted-foreground">{line.taxCalc.regime === "NEW" ? "New" : "Old"} regime · salary for the year Rs. {rupees(line.taxCalc.annualSalary)} · taxable Rs. {rupees(line.taxCalc.taxableIncome)} · tax Rs. {rupees(line.taxCalc.annualTax)} · deducted so far Rs. {rupees(line.taxCalc.deductedBefore)} · spread over {line.taxCalc.monthsLeft} month(s) = Rs. {rupees(line.tdsAuto ?? 0)}{line.tdsOverride ? ` · changed to Rs. ${rupees(line.tdsOverride.amount)} by ${line.tdsOverride.byName}: ${line.tdsOverride.reason}` : ""}</p>
-            ) : <p className="text-xs text-amber-700 dark:text-amber-300">FY {line.taxCalc.fy} tax rules aren&apos;t confirmed by Accounts - no tax worked out.{line.tdsOverride ? ` Set by hand: Rs. ${rupees(line.tdsOverride.amount)}.` : ""}</p>}
+              <p className="text-xs text-muted-foreground">{line.taxCalc.regime === "NEW" ? "New" : "Old"} regime · salary for the year ₹{rupees(line.taxCalc.annualSalary)} · taxable ₹{rupees(line.taxCalc.taxableIncome)} · tax ₹{rupees(line.taxCalc.annualTax)} · deducted so far ₹{rupees(line.taxCalc.deductedBefore)} · spread over {line.taxCalc.monthsLeft} month(s) = ₹{rupees(line.tdsAuto ?? 0)}{line.tdsOverride ? ` · changed to ₹${rupees(line.tdsOverride.amount)} by ${line.tdsOverride.byName}: ${line.tdsOverride.reason}` : ""}</p>
+            ) : <p className="text-xs text-amber-700 dark:text-amber-300">FY {line.taxCalc.fy} tax rules aren&apos;t confirmed by Accounts - no tax worked out.{line.tdsOverride ? ` Set by hand: ₹${rupees(line.tdsOverride.amount)}.` : ""}</p>}
             {editable && isAccounts && (
               <>
                 <label className="flex items-center gap-2"><Checkbox checked={itOn} onCheckedChange={(c) => setItOn(!!c)} />Deduct a different IT this month</label>
                 {itOn && (
                   <div className="flex flex-wrap gap-3 pl-6">
-                    <div className="space-y-1"><Label className="text-xs">IT (Rs.)</Label><Input className="h-8 w-28" inputMode="numeric" value={itAmount} onChange={(e) => setItAmount(e.target.value.replace(/[^\d]/g, ""))} /></div>
+                    <div className="space-y-1"><Label className="text-xs">IT (₹)</Label><Input className="h-8 w-28" inputMode="numeric" value={itAmount} onChange={(e) => setItAmount(e.target.value.replace(/[^\d]/g, ""))} /></div>
                     <div className="min-w-[14rem] flex-1 space-y-1"><Label className="text-xs">Reason</Label><Input className="h-8" value={itReason} onChange={(e) => setItReason(e.target.value)} placeholder="employee asked for more" /></div>
                   </div>
                 )}
@@ -176,7 +176,7 @@ export function PayrollLineDialog({ collegeId, run, line, actor, editable, onClo
         {(line.advanceBalance ?? 0) > 0 && (
           <div className="space-y-2 border-t pt-3 text-sm">
             <p className="font-medium">Salary advance</p>
-            <p className="text-xs text-muted-foreground">Balance before this month Rs. {rupees(line.advanceBalance ?? 0)} · schedule this month Rs. {rupees(line.advanceAuto ?? 0)}{line.advanceOverride ? ` · changed to Rs. ${rupees(line.advanceOverride.amount)} by ${line.advanceOverride.byName}: ${line.advanceOverride.reason}` : ""}. Recorded against the advance when the month is released.</p>
+            <p className="text-xs text-muted-foreground">Balance before this month ₹{rupees(line.advanceBalance ?? 0)} · schedule this month ₹{rupees(line.advanceAuto ?? 0)}{line.advanceOverride ? ` · changed to ₹${rupees(line.advanceOverride.amount)} by ${line.advanceOverride.byName}: ${line.advanceOverride.reason}` : ""}. Recorded against the advance when the month is released.</p>
             {editable && isAccounts && (
               <>
                 <label className="flex items-center gap-2"><Checkbox checked={advOn} onCheckedChange={(c) => setAdvOn(!!c)} />Recover a different amount this month</label>

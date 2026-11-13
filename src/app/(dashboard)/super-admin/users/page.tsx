@@ -581,7 +581,7 @@ export default function UsersPage() {
             )}
           </div>
           {!hasUsersLoaded && (
-            <span className="text-xs text-muted-foreground sm:ml-auto">Select a department (or ALL) and click Load</span>
+            <span className="text-xs text-muted-foreground sm:ml-auto">Select a department (or All) and choose Load.</span>
           )}
           {hasUsersLoaded && selectedDeptName && (
             <span className="text-xs text-muted-foreground sm:ml-auto">

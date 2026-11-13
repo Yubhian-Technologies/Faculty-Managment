@@ -357,7 +357,7 @@ export function AssignByCodeStep({ catalogId, regulation, courseName, initialDep
             <Button onClick={() => void runAssign()} loading={assigning} disabled={!canAssign}>
               {fresh && check!.result.counts.toAssign > 0 ? `Assign ${check!.result.counts.toAssign} subject${check!.result.counts.toAssign !== 1 ? "s" : ""}` : "Assign"}
             </Button>
-            {check && !fresh && <span className="text-xs text-muted-foreground">The codes or scope changed - check again.</span>}
+            {check && !fresh && <span className="text-xs text-muted-foreground">The codes or scope have changed. Check again.</span>}
           </div>
 
           {check && (

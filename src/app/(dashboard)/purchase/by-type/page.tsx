@@ -56,7 +56,7 @@ export default function PurchaseByTypePage() {
         title="Indents by Goods / Non-Goods"
         description={
           collegeId || locationId
-            ? "Indent requests grouped by whether they route through Purchase Dept (Goods) or straight to Finance (Non-Goods)"
+            ? "Indent requests grouped by whether they route through Purchase Department (Goods) or straight to Finance (Non-Goods)"
             : "Org-wide - indent requests across every location and college, grouped by Goods / Non-Goods"
         }
       />

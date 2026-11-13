@@ -28,7 +28,7 @@ export function MyAccountProfileView({ basePath, fetchEndpoint, photoEndpoint }:
   const [phone, setPhone] = useState<string | undefined>(undefined);
   // Only present for LOCATION-scoped roles - /api/location/users/me resolves
   // and returns both; /api/admin/users/me (GLOBAL roles) has neither, since a
-  // Super Admin/Management/Finance/Purchase Dept user isn't tied to one
+  // Super Admin/Management/Finance/Purchase Department user isn't tied to one
   // location, so both stay unset and their fields below stay hidden.
   const [department, setDepartment] = useState<string | undefined>(undefined);
   const [locationName, setLocationName] = useState<string | undefined>(undefined);

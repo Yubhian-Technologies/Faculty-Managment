@@ -121,7 +121,7 @@ export function MidBankRulesCard({ midCount, papers = false }: { midCount: numbe
         <CardTitle className="text-base">{papers ? "Units per Mid" : "Mid Question Bank rules"}</CardTitle>
         <CardDescription>
           {papers
-            ? <>For each course, which units each Mid covers - a question paper part set &ldquo;per unit&rdquo; gets its questions for these units. A paper keeps the units it started with.</>
+            ? <>For each course, the units each Mid covers. A question paper part set per unit takes its questions from these units. A paper keeps the units it started with.</>
             : <>For each course, which units each Mid covers and how questions are set. Faculty write 10 questions per unit,
               with Bloom&rsquo;s levels L2, L3 and L4 each used at least 3 times. A bank keeps the rules it started with.</>}
         </CardDescription>
@@ -192,7 +192,7 @@ export function MidBankRulesCard({ midCount, papers = false }: { midCount: numbe
             </div>
           ))}
           <fieldset className="space-y-2 sm:col-span-2">
-            <legend className="text-sm font-medium">Mid units by the subject&rsquo;s number of units</legend>
+            <legend className="text-sm font-medium">Mid Units by the Subject&apos;s Number of Units</legend>
             <p className="text-xs text-muted-foreground">A subject uses the row for its number of units (entered in Course Outcomes); a blank row uses the default above. For example, 5 units: Mid 1 = 1, 2, 3 and Mid 2 = 3, 4, 5. 6 units: Mid 1 = 1, 2, 3 and Mid 2 = 4, 5, 6.</p>
             <div className="overflow-x-auto rounded-md border">
               <table className="w-full text-sm">

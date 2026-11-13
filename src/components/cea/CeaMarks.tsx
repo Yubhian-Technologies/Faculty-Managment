@@ -108,7 +108,7 @@ function SheetView({ assignmentId, unit, onBack }: { assignmentId: string; unit:
     <div className="max-w-5xl space-y-4">
       <Button variant="ghost" onClick={onBack}><ArrowLeft className="mr-1.5 h-4 w-4" />All units</Button>
       <PageHeader title={`${sheet.subjectName} - Unit ${sheet.unit}`} description={`${sheet.typeLabel} · ${whenLabel(sheet.when)} · ${sheet.department} Section ${sheet.sectionName} · out of ${sheet.unitMarks}`} />
-      {!inClass && !qs && !ro && <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">The CIE paper for this unit isn&apos;t printed yet - you can type each student&apos;s total, or wait for the Exam Cell to print it and enter question by question.</p>}
+      {!inClass && !qs && !ro && <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">The CIE paper for this unit is not printed yet. Enter each student&apos;s total, or wait for the Exam Cell to print it and enter marks question by question.</p>}
       <div className="flex flex-wrap items-end gap-3">
         {inClass && <div className="space-y-1"><label htmlFor="cea-held" className="text-xs text-muted-foreground">Held on</label><Input id="cea-held" type="date" className="w-44" disabled={ro} value={heldOn} onChange={(e) => setHeldOn(e.target.value)} /></div>}
         <p className="pb-2 text-sm text-muted-foreground">{entered} of {sheet.entries.length} entered</p>

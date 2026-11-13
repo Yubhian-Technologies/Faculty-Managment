@@ -115,7 +115,7 @@ export default function DepartmentOfficePage() {
       toast({
         variant: "success",
         title: `${picked?.name ?? "They"} is now Department Office`,
-        description: "They sign in as they always have - the department's modules are simply there now.",
+        description: "They sign in as before; the department's modules now appear on their dashboard.",
       });
       setShowCreate(false);
       setPickedUid("");

@@ -72,7 +72,7 @@ export function DashboardPanel({ overview, onOpenSlot }: { overview: Overview; o
 
   return (
     <div className="space-y-4">
-      {seatingPlans.length === 0 && <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">No Exam Seating plan is built from these Mid timetables yet - room invigilators appear once one is.</p>}
+      {seatingPlans.length === 0 && <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">No Exam Seating plan has been built from these Mid timetables yet. Room invigilators appear once one is built.</p>}
       <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <Stat label="Exams scheduled" value={exams} />
         <Stat label="Sessions" value={sessions.length} />

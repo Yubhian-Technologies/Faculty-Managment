@@ -318,7 +318,7 @@ export function PersonMonthlyAttendanceView({ facultyId, backHref }: PersonMonth
         open={!!markDate}
         onOpenChange={(open) => { if (!open) setMarkDate(null); }}
         title={`Mark attendance for ${markDate ?? "this day"}?`}
-        description="Use this when they can't complete self check-in/out themselves (e.g. they left campus for official work). This is recorded as a manual entry, distinct from a real face+location check-in."
+        description="Use this when they cannot check in or out themselves (for example, when away from campus on official work). It is recorded as a manual entry, separate from a face and location check-in."
         confirmLabel="Save"
         loading={isMarking}
         confirmDisabled={!manualReason.trim() || (!manualCheckIn && !manualCheckOut) || checkOutNotAfterCheckIn}

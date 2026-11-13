@@ -364,7 +364,7 @@ function HODFacultyContent() {
       });
       void load();
     } catch {
-      toast({ variant: "destructive", title: "Unable to delete faculty record", description: "Network error - try again." });
+      toast({ variant: "destructive", title: "Unable to delete faculty record", description: "Network error. Try again." });
     } finally {
       setIsDeleting(false);
     }

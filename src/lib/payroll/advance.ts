@@ -88,7 +88,7 @@ export function cleanAdvance(input: unknown): AdvanceInput {
     if (!Number.isFinite(recoveryPercent) || recoveryPercent <= 0 || recoveryPercent > 100) throw new PayrollRuleError("Give the monthly recovery as an amount or a % (more than 0, up to 100)");
     instalment = roundRupee((amount * recoveryPercent) / 100);
   }
-  if (instalment <= 0) throw new PayrollRuleError("The monthly recovery must be at least Rs. 1");
+  if (instalment <= 0) throw new PayrollRuleError("The monthly recovery must be at least ₹1");
   if (instalment > amount) throw new PayrollRuleError("The monthly recovery can't be more than the advance");
   if (!isMonthKey(b.startMonth)) throw new PayrollRuleError("Pick the first month to recover");
   const givenOn = typeof b.givenOn === "string" && /^\d{4}-\d{2}-\d{2}$/.test(b.givenOn) ? b.givenOn : undefined;
@@ -148,10 +148,10 @@ export function planAdvanceImport(headers: string[], rows: AdvanceImportRow[], e
   const out = rows.map((r): AdvanceImportPlanRow => {
     const fail = (error: string): AdvanceImportPlanRow => ({ row: r.row, code: r.code, status: "ERROR", error });
     const code = r.code.trim().toUpperCase();
-    if (!code) return fail("Emp Code is blank");
+    if (!code) return fail("Employee ID is required.");
     const matches = byCode.get(code) ?? [];
-    if (matches.length === 0) return fail("No faculty or staff member has this Emp Code");
-    if (matches.length > 1) return fail("Two people share this Emp Code - fix their records first");
+    if (matches.length === 0) return fail("No faculty or staff member has this Employee ID.");
+    if (matches.length > 1) return fail("Two people have this Employee ID. Correct their records first.");
     const raw: Record<string, string> = {};
     for (const [h, k] of map) if (k !== "code" && k !== "ignore") raw[k] = String(r.values[h] ?? "").trim().replace(/%$/, "");
     if (raw.startMonth) {

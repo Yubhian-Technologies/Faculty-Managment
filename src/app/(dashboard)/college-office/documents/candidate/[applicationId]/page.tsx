@@ -577,8 +577,8 @@ ${institution}`;
                       )}
                     </div>
                   ) : !offer.candidateConfirmedJoiningDate ? (
-                    <p className="text-xs text-muted-foreground" title="The candidate hasn't confirmed a date of joining via the offer acceptance form yet">
-                      Awaiting candidate&apos;s confirmed date of joining before the faculty account can be requested
+                    <p className="text-xs text-muted-foreground" title="The candidate has not yet confirmed a date of joining in the offer acceptance form.">
+                      Awaiting the candidate&apos;s date of joining before the faculty account can be requested.
                     </p>
                   ) : (
                     <Button size="sm" variant="outline" className="border-blue-300 text-blue-700 hover:bg-blue-50" asChild>

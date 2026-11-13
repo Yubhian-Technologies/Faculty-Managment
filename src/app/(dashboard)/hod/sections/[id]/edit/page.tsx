@@ -316,7 +316,7 @@ export default function EditSectionPage() {
                     />
                     <label className="flex items-center gap-2 pt-1 text-sm">
                       <Checkbox checked={isSingle} onCheckedChange={(c) => toggleSingle(c === true)} />
-                      Only one section (no letter like A, B)
+                      Only one section (no section letter such as A or B)
                     </label>
                     <p className="text-xs text-muted-foreground">
                       {isSingle ? "Saving renames the section and keeps all its students and data." : isBranchMode ? "e.g. CSE-A" : "e.g. A, B, C or CS-A"}

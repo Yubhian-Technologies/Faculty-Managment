@@ -72,7 +72,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   HR_ADMIN: "HR Admin",
   ADMIN_OFFICE: "Admin Office",
   LOCATION_STAFF_ADMIN: "Location Staff Admin",
-  LOCATION_DEPT_HEAD: "Dept Head",
+  LOCATION_DEPT_HEAD: "Department Head",
   PRINCIPAL: "Principal",
   VICE_PRINCIPAL: "Vice Principal",
   COLLEGE_ADMIN: "College Admin",

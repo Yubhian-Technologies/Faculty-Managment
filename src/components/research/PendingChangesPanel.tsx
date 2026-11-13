@@ -80,7 +80,7 @@ export function PendingChangesPanel({ record }: { record: unknown }) {
     <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/20 p-4 space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <History className="h-4 w-4 text-amber-700" />
-        <p className="text-sm font-semibold">Edited after verification - changes to check</p>
+        <p className="text-sm font-semibold">Edited after verification: changes to review</p>
         <Badge variant="pending" className="text-xs">
           {trail.changes.length} field{trail.changes.length === 1 ? "" : "s"} changed
         </Badge>

@@ -155,7 +155,7 @@ export async function PATCH(
       return NextResponse.json({ error: "action must be RESUBMIT or UPLOAD_GRN" }, { status: 400 });
     }
 
-    // ── Purchase Dept: reject / return to owner, forward to Finance, or mark goods purchased ──
+    // ── Purchase Department: reject / return to owner, forward to Finance, or mark goods purchased ──
 
     if (session.role === "PURCHASE_DEPT") {
       const { name: purchaseName } = await getUserProfile(db, session.collegeId, session.uid);
@@ -189,7 +189,7 @@ export async function PATCH(
           db, session.collegeId, existing.hodUid,
           nextStatus === "REJECTED_BY_PURCHASE" ? "PURCHASE_CLEARANCE_REJECTED_BY_PURCHASE" : "PURCHASE_CLEARANCE_RETURNED_TO_HOD",
           nextStatus === "REJECTED_BY_PURCHASE" ? "Purchase Clearance Rejected" : "Purchase Clearance Returned",
-          `Purchase Dept ${nextStatus === "REJECTED_BY_PURCHASE" ? "rejected" : "returned"} your purchase clearance request "${existing.items}". Remarks: ${body.remarks}`,
+          `Purchase Department ${nextStatus === "REJECTED_BY_PURCHASE" ? "rejected" : "returned"} your purchase clearance request "${existing.items}". Remarks: ${body.remarks}`,
           ownerLink
         );
 

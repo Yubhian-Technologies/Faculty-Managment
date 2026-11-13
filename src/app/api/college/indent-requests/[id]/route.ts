@@ -170,7 +170,7 @@ export async function PATCH(
       return NextResponse.json({ ok: true });
     }
 
-    // ── Purchase Dept: reject / return to HOD, or forward to Finance ───────
+    // ── Purchase Department: reject / return to HOD, or forward to Finance ───────
 
     if (session.role === "PURCHASE_DEPT") {
       const purchaseName = await getUserName(db, session.collegeId, session.uid);
@@ -204,7 +204,7 @@ export async function PATCH(
           db, session.collegeId, req.hodUid,
           nextStatus === "REJECTED_BY_PURCHASE" ? "INDENT_REJECTED" : "INDENT_RETURNED",
           nextStatus === "REJECTED_BY_PURCHASE" ? "Indent Rejected" : "Indent Returned",
-          `Purchase Dept ${nextStatus === "REJECTED_BY_PURCHASE" ? "rejected" : "returned"} your indent "${req.title}". Remarks: ${body.remarks}`,
+          `Purchase Department ${nextStatus === "REJECTED_BY_PURCHASE" ? "rejected" : "returned"} your indent "${req.title}". Remarks: ${body.remarks}`,
           "/hod/indents"
         );
 
@@ -334,10 +334,10 @@ export async function PATCH(
         return NextResponse.json({ error: "Enter remarks." }, { status: 400 });
       }
 
-      // GOODS indents were sourced by Purchase Dept and return there / carry a
+      // GOODS indents were sourced by Purchase Department and return there / carry a
       // vendor quotation. NON_GOODS indents came straight from the HOD (no
-      // Purchase Dept involvement), so approval completes the indent outright
-      // and returns go straight back to the HOD, not Purchase Dept.
+      // Purchase Department involvement), so approval completes the indent outright
+      // and returns go straight back to the HOD, not Purchase Department.
       const isGoods = req.requestType !== "NON_GOODS";
       const isApproving = body.action === "APPROVE";
 

@@ -387,7 +387,7 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
             className="uppercase"
           />
           {!!value.panNo && !PAN_REGEX.test(value.panNo) && (
-            <p className="text-xs text-destructive">PAN must be 5 letters, 4 digits, then 1 letter (e.g. ABCDE1234F)</p>
+            <p className="text-xs text-destructive">PAN must be 5 letters, 4 digits and 1 letter (for example, ABCDE1234F).</p>
           )}
         </div>
         <div className="space-y-2">
@@ -464,7 +464,7 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
           />
           <p className="text-xs text-muted-foreground">Feet.inches, for example 5.7 = 5 ft 7 in, 5.11 = 5 ft 11 in.</p>
           {!!value.height && !HEIGHT_REGEX.test(value.height) && (
-            <p className="text-xs text-destructive">Enter as feet.inches, e.g. 5.7 (inches 0-11)</p>
+            <p className="text-xs text-destructive">Enter as feet.inches, for example 5.7 (inches 0 to 11).</p>
           )}
         </div>
         <div className="space-y-2">
@@ -563,7 +563,7 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
             className="uppercase"
           />
           {!!value.ifscCode && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(value.ifscCode) && (
-            <p className="text-xs text-destructive">Doesn&rsquo;t look like a valid IFSC code</p>
+            <p className="text-xs text-destructive">Enter a valid IFSC code.</p>
           )}
         </div>
         <div className="space-y-2">
@@ -617,7 +617,7 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
             maxLength={10}
           />
           {!!value.emergencyContactMobileNo && !PHONE_REGEX.test(value.emergencyContactMobileNo) && (
-            <p className="text-xs text-destructive">Doesn&rsquo;t look like a valid phone number</p>
+            <p className="text-xs text-destructive">Enter a valid phone number.</p>
           )}
         </div>
       </div>

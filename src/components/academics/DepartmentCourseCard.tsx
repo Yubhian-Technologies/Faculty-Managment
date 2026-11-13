@@ -213,7 +213,7 @@ export function DepartmentCourseCard({
             <strong className="text-foreground">{totalCourseSubjects}</strong> subjects assigned
           </span>
           <span className="text-xs text-muted-foreground/80">
-            Click any semester to view assigned subjects
+            Select a semester to view its assigned subjects.
           </span>
         </div>
       </CardContent>

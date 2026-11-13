@@ -256,7 +256,7 @@ function OutgoingChoice({ value, onChange }: { value: OutgoingHolderAction; onCh
         <div className="flex items-start gap-2">
           <RadioGroupItem value="DEACTIVATE" id="out-deactivate" />
           <Label htmlFor="out-deactivate" className="font-normal">
-            It was only the role&apos;s login - retire it (history stays)
+            It was only the role&apos;s login. Retire it (the history is kept).
           </Label>
         </div>
         {PRIMARY_ROLE_CHOICES.map((r) => (

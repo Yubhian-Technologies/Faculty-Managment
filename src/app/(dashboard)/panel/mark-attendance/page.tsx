@@ -630,7 +630,7 @@ export default function MarkAttendancePage() {
     setIsSubmitting(false);
 
     if (isOffline) {
-      toast({ variant: "success", title: "Saved on this device", description: "No connection - queued to submit automatically when online." });
+      toast({ variant: "success", title: "Saved on this device", description: "No connection. It will be submitted automatically when you are back online." });
     } else if (failedPeriods.length === 0) {
       toast({ variant: "success", title: `Attendance submitted for ${expandedGroup.periodNumbers.length} period${expandedGroup.periodNumbers.length > 1 ? "s" : ""}` });
     } else {
@@ -829,7 +829,7 @@ export default function MarkAttendancePage() {
             </div>
             {isQueuedPending ? (
               <span className="flex items-center gap-1.5 font-medium text-amber-700">
-                <CloudOff className="h-4 w-4" /> Saved on this device — pending sync (read-only)
+                <CloudOff className="h-4 w-4" /> Saved on this device; waiting to sync (read only)
               </span>
             ) : isReadOnly ? (
               <span className="flex items-center gap-1.5 font-medium text-emerald-700">

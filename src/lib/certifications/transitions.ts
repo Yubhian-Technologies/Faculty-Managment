@@ -462,7 +462,7 @@ export async function markDuesPending(
     const duesPending = { amount: Math.round(amount * 100) / 100, reason: reason.trim().slice(0, 200), byName: actor.name, at: now };
     const branches = current.branches.map((b) => (b.branchKey === branchKey ? { ...b, duesPending } : b));
     const steps = [...req.steps.slice(0, req.currentStepIndex), { type: "PARALLEL" as const, branches }];
-    const history = [...req.history, { action: "DUES_PENDING", byUid: actor.uid, byName: actor.name, byRole: actor.role, at: now, detail: branchDef.label, remarks: `Rs. ${duesPending.amount} - ${duesPending.reason}` }];
+    const history = [...req.history, { action: "DUES_PENDING", byUid: actor.uid, byName: actor.name, byRole: actor.role, at: now, detail: branchDef.label, remarks: `₹${duesPending.amount} - ${duesPending.reason}` }];
     tx.update(ref, { steps, history, updatedAt: now });
     tx.set(auditRef(db, collegeId), {
       collegeId, action: "CERTIFICATE_DUES_PENDING", performedBy: actor.uid, performedByName: actor.name, targetId: id,

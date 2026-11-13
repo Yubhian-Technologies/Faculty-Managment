@@ -160,7 +160,7 @@ export function LabAttendanceAllocation({ loadAssignments }: { loadAssignments: 
   if (rows.length === 0) {
     return (
       <EmptyState
-        title="No labs with an assigned faculty yet"
+        title="No labs with an assigned faculty member yet."
         description="Assign a faculty to a lab (PRACTICAL) subject in Teaching Assignments first, then allocate attendance here."
       />
     );

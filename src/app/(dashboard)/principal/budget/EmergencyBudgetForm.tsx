@@ -136,7 +136,7 @@ export function EmergencyBudgetForm({ editingRequest, onCancel, onSaved }: Emerg
               <RadioGroupItem value="NON_GOODS" id="type-non-goods" className="mt-0.5" />
               <span>
                 <span className="block text-sm font-medium">Non-Goods</span>
-                <span className="block text-xs text-muted-foreground">Services / staffing / other (Recurring categories)</span>
+                <span className="block text-xs text-muted-foreground">Services, staffing and other (recurring categories)</span>
               </span>
             </label>
           </RadioGroup>

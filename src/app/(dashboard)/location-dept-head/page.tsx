@@ -71,7 +71,7 @@ export default function LocationDeptHeadDashboard() {
             </Badge>
           </div>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
-            Welcome, {user?.name ?? "Dept Head"}
+            Welcome, {user?.name ?? "Department Head"}
           </h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 flex items-center gap-1.5">
             <Building2 className="h-3.5 w-3.5 text-primary" />

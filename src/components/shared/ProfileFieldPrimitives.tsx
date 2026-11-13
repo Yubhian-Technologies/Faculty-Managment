@@ -539,7 +539,7 @@ export function DegreeFields({
               {!isRealYear(v.yearOfAward) && (
                 <p role="status" className="flex items-start gap-1.5 text-xs font-medium text-amber-800">
                   <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                  Status is Awarded, but the Year of Award is empty - enter it.
+                  Status is Awarded, but the Year of Award is empty. Enter it.
                 </p>
               )}
             </div>

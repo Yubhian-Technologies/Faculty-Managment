@@ -94,9 +94,9 @@ export default function NewNonTechnicalStaffPage() {
   }, [isLibrary, setValue]);
 
   const steps: WizardStep[] = useMemo(() => [
-    { key: "core", label: "Identity & Employment", icon: User, description: "Official ID, login credentials, designation and employment details" },
+    { key: "core", label: "Identity & Employment", icon: User, description: "Official ID, login credentials, designation and employment details." },
     ...getSupportingStaffProfileModules().map((m) => ({ key: m.key as WizardStepKey, label: m.label, icon: m.icon })),
-    { key: "review", label: "Review & Submit", icon: CheckCircle2, description: "Verify all inputs before committing to the institutional register" },
+    { key: "review", label: "Review & Submit", icon: CheckCircle2, description: "Verify all details before adding them to the institutional register." },
   ], []);
 
   const step = steps[stepIndex];

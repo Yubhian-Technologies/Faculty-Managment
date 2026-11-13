@@ -113,7 +113,7 @@ export function AssignPanel({ overview, onChanged, initialSlot }: { overview: Ov
   }
 
   if (!sessions.length) {
-    return <Card><CardContent className="p-6 text-sm text-muted-foreground">No exam sessions yet - the Mid timetables of this schedule have no exams placed.</CardContent></Card>;
+    return <Card><CardContent className="p-6 text-sm text-muted-foreground">No examination sessions yet; the Mid timetables of this schedule have no examinations placed.</CardContent></Card>;
   }
 
   return (

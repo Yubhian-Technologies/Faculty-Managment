@@ -82,12 +82,12 @@ function SeedFundingRow({
         <div className={`grid gap-2 ${FACT_GRID_COLS_4}`}>
           <Field label="Title" value={project.title} />
           <Field label="PI" value={project.piName} />
-          <Field label="Dept. of PI" value={project.piDepartment} />
+          <Field label="Department of PI" value={project.piDepartment} />
           <Field label="Status" value={project.projectStatus === "SANCTIONED" ? "Sanctioned" : "Completed"} />
           <Field label="Duration (Months)" value={project.durationMonths} />
-          <Field label="Total Amount Sanctioned (Rs.)" value={project.totalAmountSanctioned} />
-          <Field label="Recurring (Rs.)" value={project.recurringAmount} />
-          <Field label="Non-Recurring (Rs.)" value={project.nonRecurringAmount} />
+          <Field label="Total Amount Sanctioned (₹)" value={project.totalAmountSanctioned} />
+          <Field label="Recurring (₹)" value={project.recurringAmount} />
+          <Field label="Non-Recurring (₹)" value={project.nonRecurringAmount} />
         </div>
       </div>
       {project.objectives && (
@@ -314,7 +314,7 @@ function ProjectFormFields({
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <TextInput label="Name of the PI" value={form.piName} onChange={(v) => set("piName", v)} required />
-            <TextInput label="Dept. of PI" value={form.piDepartment} onChange={(v) => set("piDepartment", v)} />
+            <TextInput label="Department of PI" value={form.piDepartment} onChange={(v) => set("piDepartment", v)} />
           </div>
         </div>
 
@@ -338,9 +338,9 @@ function ProjectFormFields({
             </div>
           )}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <NumField label="Total Amount Sanctioned (Rs.)" value={form.totalAmountSanctioned} onChange={(v) => set("totalAmountSanctioned", v)} />
-            <NumField label="Recurring (Rs.)" value={form.recurringAmount} onChange={(v) => set("recurringAmount", v)} />
-            <NumField label="Non-Recurring (Rs.)" value={form.nonRecurringAmount} onChange={(v) => set("nonRecurringAmount", v)} />
+            <NumField label="Total Amount Sanctioned (₹)" value={form.totalAmountSanctioned} onChange={(v) => set("totalAmountSanctioned", v)} />
+            <NumField label="Recurring (₹)" value={form.recurringAmount} onChange={(v) => set("recurringAmount", v)} />
+            <NumField label="Non-Recurring (₹)" value={form.nonRecurringAmount} onChange={(v) => set("nonRecurringAmount", v)} />
           </div>
         </div>
 

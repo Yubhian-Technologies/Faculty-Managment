@@ -720,7 +720,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                 className={!isHalfDayEligible ? "cursor-not-allowed opacity-50" : undefined}
               />
               {!isHalfDayEligible && leaveTypeCode && (
-                <span className="text-xs text-muted-foreground">Half day not available for this leave type</span>
+                <span className="text-xs text-muted-foreground">Half day is not available for this leave type.</span>
               )}
             </div>
             {/* Full day's own sub-choice: a single date, or a From/To span.

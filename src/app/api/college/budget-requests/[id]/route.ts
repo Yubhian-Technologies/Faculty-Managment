@@ -430,12 +430,12 @@ export async function PATCH(
 
           // Auto-create a linked Purchase Finance Clearance request - but only
           // for an emergency GOODS request, which has no HOD Indent Request to
-          // fall back on and needs to reach Purchase Dept immediately. Normal
+          // fall back on and needs to reach Purchase Department immediately. Normal
           // (non-emergency) budget requests do NOT get one here: approving a
           // budget request only creates the FinanceBudget "line" the HOD can
           // spend against; actual procurement goes through a separately-raised
           // Indent Request (src/types/indent.ts), which is the only path that
-          // should reach Purchase Dept for the regular flow.
+          // should reach Purchase Department for the regular flow.
           //
           // Emergency NON_GOODS requests are also skipped: those have no
           // further downstream step by design - Finance attaches a report

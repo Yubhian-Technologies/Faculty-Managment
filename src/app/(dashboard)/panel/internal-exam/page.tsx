@@ -440,7 +440,7 @@ export default function InternalExamPage() {
                                 </div>
                               </td>
                             ) : c.cea ? (
-                              <td key={c.id} className="px-4 py-2.5 font-medium" title="Worked out from the submitted CIE units">{componentValue(entry.studentId, c.id, c.maxMarks) ?? "-"}</td>
+                              <td key={c.id} className="px-4 py-2.5 font-medium" title="Calculated from the submitted CIE units.">{componentValue(entry.studentId, c.id, c.maxMarks) ?? "-"}</td>
                             ) : (
                               <td key={c.id} className="px-4 py-2.5">
                                 <Input

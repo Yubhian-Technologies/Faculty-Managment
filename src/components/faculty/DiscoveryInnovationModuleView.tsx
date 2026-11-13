@@ -689,8 +689,8 @@ function RecordFormFields({
                 </Select>
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <NumField label="Commercialization Value (Rs.)" value={form.commercializationValue} onChange={(v) => set("commercializationValue", v)} />
-                <NumField label="Revenue Generated (Rs.)" value={form.revenueGenerated} onChange={(v) => set("revenueGenerated", v)} />
+                <NumField label="Commercialization Value (₹)" value={form.commercializationValue} onChange={(v) => set("commercializationValue", v)} />
+                <NumField label="Revenue Generated (₹)" value={form.revenueGenerated} onChange={(v) => set("revenueGenerated", v)} />
               </div>
               <DocumentUploadField
                 label="Commercialized Proof"

@@ -6,7 +6,7 @@ export default function LibraryStaffAttendancePage() {
   return (
     <AttendanceReportView
       title="Staff Attendance"
-      description="Daily self-attendance (face + location verified) for Library staff"
+      description="Daily attendance of library staff, verified by face and location."
       allowManualMark
       monthlyViewBasePath="/library/staff-attendance"
       importHref="/library/attendance-import"

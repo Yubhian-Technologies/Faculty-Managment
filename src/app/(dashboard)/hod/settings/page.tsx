@@ -10,7 +10,7 @@ import { useAuthStore } from "@/store/authStore";
 export default function HodSettingsPage() {
   const realRole = useAuthStore((s) => s.user?.realRole);
   const items = [
-    { href: "/hod/settings/class-representatives", label: "Class Representatives", description: "How many Class Representatives each section of the department has", icon: UserCheck },
+    { href: "/hod/settings/class-representatives", label: "Class Representatives", description: "The number of Class Representatives for each section of the department.", icon: UserCheck },
     { href: "/hod/settings/sub-departments", label: "Sub-Departments", description: "Branches grouped under your department", icon: Settings2 },
     { href: "/hod/settings/designations", label: "Designations", description: "Designations used in the department", icon: Tags },
     // Appointing the Department Office head stays with the actual HOD (as in the sidebar).

@@ -437,7 +437,7 @@ export default function NewSectionPage() {
   const singleCheckbox = (
     <label className="flex items-center gap-2 pt-1 text-sm">
       <Checkbox checked={singleSection} onCheckedChange={(c) => { setSingleSection(c === true); if (c === true) setLetter(""); }} />
-      Only one section (no letter like A, B)
+      Only one section (no section letter such as A or B)
     </label>
   );
 

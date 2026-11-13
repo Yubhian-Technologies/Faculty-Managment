@@ -474,7 +474,7 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
                 Tick the POs and PSOs each CO contributes to, as per the syllabus. Every CO needs at least one. When you pick a CO for a question, its POs / PSOs are shown automatically.
               </StepHeading>
               <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>Hover a PO for its title · PSOs have a dashed border</span>
+                <span>Hover over a PO to see its title. PSOs have a dashed border.</span>
                 <span className={cn("rounded-full px-2.5 py-0.5 font-semibold", mappedCount === draft.cos.length ? "bg-emerald-100 text-emerald-800" : "bg-primary/10 text-primary")}>
                   {mappedCount} of {draft.cos.length} COs mapped
                 </span>

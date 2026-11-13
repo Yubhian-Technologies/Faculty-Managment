@@ -17,8 +17,8 @@ import {
   type IndentRequest,
 } from "@/types";
 
-// Contacting Purchase Dept happens two ways: a freeform clearance request, or
-// a GOODS-type indent (NON_GOODS indents skip Purchase Dept entirely - see
+// Contacting Purchase Department happens two ways: a freeform clearance request, or
+// a GOODS-type indent (NON_GOODS indents skip Purchase Department entirely - see
 // IndentRequestType in src/types/indent.ts) - both are shown here together.
 type Row = Record<string, unknown> &
   (

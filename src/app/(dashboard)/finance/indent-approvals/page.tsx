@@ -109,7 +109,7 @@ export default function FinanceIndentApprovalsPage() {
           action === "APPROVE" ? "Indent approved & payment created"
           : action === "REJECT" ? "Indent rejected"
           : request.requestType === "NON_GOODS" ? "Indent returned to HOD"
-          : "Indent returned to Purchase Dept",
+          : "Indent returned to Purchase Department",
       });
       setExpandedId(null);
       resetAction();
@@ -146,7 +146,7 @@ export default function FinanceIndentApprovalsPage() {
         title="Indent Approvals"
         description={
           actionable
-            ? "Review quotations sourced by Purchase Dept and disburse approved indents"
+            ? "Review quotations sourced by Purchase Department and disburse approved indents"
             : "Read-only view across the selected scope - switch to a specific college to act on an indent"
         }
       />
@@ -161,7 +161,7 @@ export default function FinanceIndentApprovalsPage() {
           {refreshButton}
           <EmptyState
             title="No indents awaiting Finance"
-            description="Indents forwarded by Purchase Dept with vendor quotations will appear here."
+            description="Indents forwarded by the Purchase Department with vendor quotations appear here."
             icon={<Building2 className="h-8 w-8" />}
           />
         </div>
@@ -207,7 +207,7 @@ export default function FinanceIndentApprovalsPage() {
                     <p className="text-xs text-muted-foreground">
                       {item.requestType === "NON_GOODS"
                         ? `Raised directly by ${item.hodName} on ${formatDate(item.createdAt)}`
-                        : `Raised by ${item.hodName}, forwarded by Purchase Dept on ${formatDate(item.updatedAt)}`}
+                        : `Raised by ${item.hodName}, forwarded by Purchase Department on ${formatDate(item.updatedAt)}`}
                     </p>
                     <IndentItemsTable items={item.items} readOnly />
                     {item.requestType !== "NON_GOODS" && (

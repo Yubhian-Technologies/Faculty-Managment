@@ -651,7 +651,7 @@ export default function LocationStaffBulkImportPage() {
                                 <Badge
                                   variant="outline"
                                   className="text-[9px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 px-1 py-0 gap-0.5"
-                                  title="New department - will be created automatically on campus"
+                                  title="New department; it will be created on the campus."
                                 >
                                   <Sparkles className="h-2.5 w-2.5 inline" />
                                   New

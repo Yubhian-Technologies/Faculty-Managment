@@ -87,9 +87,9 @@ export default function NewHodSupportingStaffPage() {
   }, []);
 
   const steps: WizardStep[] = useMemo(() => [
-    { key: "core", label: "Identity & Employment", icon: User, description: "Official ID, login credentials, designation and employment details" },
+    { key: "core", label: "Identity & Employment", icon: User, description: "Official ID, login credentials, designation and employment details." },
     ...getSupportingStaffProfileModules().map((m) => ({ key: m.key as WizardStepKey, label: m.label, icon: m.icon })),
-    { key: "review", label: "Review & Submit", icon: CheckCircle2, description: "Verify all inputs before committing to the institutional register" },
+    { key: "review", label: "Review & Submit", icon: CheckCircle2, description: "Verify all details before adding them to the institutional register." },
   ], []);
 
   const step = steps[stepIndex];
@@ -213,7 +213,7 @@ export default function NewHodSupportingStaffPage() {
       <WizardHero
         icon={UserPlus}
         title="Add Supporting Staff"
-        description="Add a Technical staff member for your department"
+        description="Add a technical staff member to your department."
         badge={`Step ${stepIndex + 1} of ${steps.length}`}
       />
       <WizardStepper steps={steps} currentKey={step.key} onSelect={setStepIndex} errored={erroredSteps} completedBefore={stepIndex} />

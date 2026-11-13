@@ -486,7 +486,7 @@ export function LocationStaffForm({
           <div className="space-y-1">
             <Label className="text-xs font-medium">Leave Balance</Label>
             <Input type="number" placeholder="12" value={leaveBalance} onChange={(e) => setLeaveBalance(parseInt(e.target.value) || 0)} className="h-9 text-xs" />
-            <p className="text-[10px] text-muted-foreground">Total leaves configured for this staff member</p>
+            <p className="text-[10px] text-muted-foreground">Total leave configured for this staff member.</p>
           </div>
         </div>
       </div>

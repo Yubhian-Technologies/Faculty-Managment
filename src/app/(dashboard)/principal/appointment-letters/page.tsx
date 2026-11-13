@@ -194,7 +194,7 @@ export default function PrincipalAppointmentLettersPage() {
         const institution = collegeInfo.name || "the institution";
         const payLine =
           ctcAnnual != null && ctcAnnual > 0
-            ? `\nYour consolidated CTC is Rs. ${ctcAnnual.toLocaleString("en-IN")}/- per annum, with the date of joining on or before ${formatDate(new Date(form.joiningDate))}.\n`
+            ? `\nYour consolidated CTC is ₹${ctcAnnual.toLocaleString("en-IN")}/- per annum, with the date of joining on or before ${formatDate(new Date(form.joiningDate))}.\n`
             : "";
         const subject = `Appointment Order – ${form.designation} | ${institution}`;
         const body = `Dear ${candidate.name},

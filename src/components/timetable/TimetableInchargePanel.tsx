@@ -247,7 +247,7 @@ export function TimetableInchargePanel({
                 <p className="text-sm">
                   {!holder ? <span className="text-muted-foreground">Loading…</span>
                     : holder.kind === "ONE" ? holder.incharge.facultyName
-                    : holder.kind === "MIXED" ? <span className="text-amber-600">Different people per branch - assign one to unify</span>
+                    : holder.kind === "MIXED" ? <span className="text-amber-600">Different people for each branch. Assign one person to cover all.</span>
                     : <span className="text-amber-600">Not assigned</span>}
                 </p>
               </div>
@@ -330,7 +330,7 @@ export function TimetableInchargePanel({
         open={!!revokeUnit}
         onOpenChange={(o) => { if (!o) setRevokeUnit(null); }}
         title="Revoke Timetable Incharge?"
-        description="They will lose access to this year’s Timetable and Teaching Assignments pages. Anything they already did stays as-is - this only removes their access going forward."
+        description="They will lose access to this year's Timetable and Teaching Assignments pages. Work already done is kept; only their future access is removed."
         confirmLabel="Revoke"
         variant="destructive"
         loading={revoking}
