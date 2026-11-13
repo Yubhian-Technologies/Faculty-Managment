@@ -70,7 +70,7 @@ export function HolidayReminder() {
           <DialogTitle className="flex items-center gap-2">
             <CalendarDays className="h-5 w-5" />Holiday reminder
           </DialogTitle>
-          <DialogDescription>Here is what changes tomorrow.</DialogDescription>
+          <DialogDescription>The following changes take effect tomorrow.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           {notices.map((n) => (

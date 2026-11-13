@@ -152,7 +152,7 @@ export function StudentPromotionsPanel({ showHeader = true }: { showHeader?: boo
         setCourses(courses);
         setDepartments(departments);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load sections" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load sections" }))
       .finally(() => setIsLoadingContext(false));
   }, []);
 
@@ -212,7 +212,7 @@ export function StudentPromotionsPanel({ showHeader = true }: { showHeader?: boo
         setAllotmentSummary(null);
         setAllotmentError("");
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load roster" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load roster" }))
       .finally(() => setIsLoadingRoster(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceSectionId]);
@@ -226,7 +226,7 @@ export function StudentPromotionsPanel({ showHeader = true }: { showHeader?: boo
     fetch(`/api/college/sections?year=${nextYear}`)
       .then((r) => r.json() as Promise<{ sections: Section[] }>)
       .then((d) => setTargetSections(d.sections ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load target sections" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load target sections" }));
     setDefaultTarget("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceSectionId, isFinalYear]);
@@ -284,7 +284,7 @@ export function StudentPromotionsPanel({ showHeader = true }: { showHeader?: boo
     const name = file.name.toLowerCase();
     const isExcel = name.endsWith(".xlsx");
     if (name.endsWith(".xls")) {
-      setAllotmentError("Legacy .xls files aren't supported - please re-save as .xlsx or .csv and try again.");
+      setAllotmentError("Legacy .xls files aren't supported - re-save as .xlsx or .csv and try again.");
       e.target.value = "";
       return;
     }
@@ -356,7 +356,7 @@ export function StudentPromotionsPanel({ showHeader = true }: { showHeader?: boo
         toast({ variant: "success", title: `${matchedCount} student target${matchedCount !== 1 ? "s" : ""} filled in from the allotment file` });
       }
     } catch {
-      setAllotmentError(isExcel ? "Failed to parse the Excel file. Ensure it is a valid, uncorrupted .xlsx file." : "Failed to parse the file. Ensure it is a valid CSV.");
+      setAllotmentError(isExcel ? "Unable to parse the Excel file. Ensure it is a valid, uncorrupted .xlsx file." : "Unable to parse the file. Ensure it is a valid CSV.");
     } finally {
       e.target.value = "";
     }
@@ -421,7 +421,7 @@ export function StudentPromotionsPanel({ showHeader = true }: { showHeader?: boo
         (s) => s.department === sourceSection!.department || s.secondaryDepartment === sourceSection!.department
       ));
     } catch {
-      toast({ variant: "destructive", title: "Network error, please try again" });
+      toast({ variant: "destructive", title: "Network error try again" });
     } finally {
       setIsSubmitting(false);
     }
@@ -432,7 +432,7 @@ export function StudentPromotionsPanel({ showHeader = true }: { showHeader?: boo
       {showHeader && (
         <PageHeader
           title="Student Promotion"
-          description="Move a cohort to the next year - bulk by section, with per-student override for students splitting into different departments"
+          description="Promote a cohort to the next year by section, with individual changes for students moving to a different department."
         />
       )}
 
@@ -492,12 +492,7 @@ export function StudentPromotionsPanel({ showHeader = true }: { showHeader?: boo
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                   <div>
                     <p className="text-sm font-medium">Or upload an allotment file</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      A file with Regd. No, Department, and Section columns (e.g. a counseling/branch-allotment
-                      export) fills in the per-student targets below automatically - for cohorts splitting into
-                      several departments at once, like 1st year students under a Freshman&apos;s Department (e.g.
-                      Basic Sciences) moving into their allotted branch.
-                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">A file with Regd. No, Department and Section columns (for example, a counselling or branch allotment export) fills in each student&apos;s target below. Use it for cohorts moving into several departments at once, such as first-year students under a common department (for example, Basic Sciences) moving to their allotted branch.</p>
                   </div>
                   <input ref={allotmentFileRef} type="file" accept=".csv,.xlsx" className="hidden" onChange={(e) => void handleAllotmentFile(e)} />
                   <Button variant="outline" size="sm" onClick={() => allotmentFileRef.current?.click()} className="shrink-0">

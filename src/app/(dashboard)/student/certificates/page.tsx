@@ -6,7 +6,7 @@ import { StudentCertificates } from "@/components/certifications/StudentCertific
 export default function StudentCertificatesPage() {
   return (
     <div className="space-y-6">
-      <PageHeader title="Certificates" description="Apply for certificates, follow every approval, and download what is issued" />
+      <PageHeader title="Certificates" description="Apply for certificates, track each approval and download issued certificates." />
       <StudentCertificates />
     </div>
   );

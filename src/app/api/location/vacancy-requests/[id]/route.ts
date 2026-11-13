@@ -11,15 +11,15 @@ export async function PATCH(
 ) {
   try {
     const session = await verifySession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!session) return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
 
     const isHRAdmin = session.role === "HR_ADMIN";
     const isAdmin = session.role === "ADMINISTRATION";
 
     if (!isHRAdmin && !isAdmin) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 403 });
     }
-    if (!session.locationId) return NextResponse.json({ error: "No location context" }, { status: 400 });
+    if (!session.locationId) return NextResponse.json({ error: "Your account is not linked to a location. Contact the administrator." }, { status: 400 });
 
     const { id } = await params;
     const body = (await readJsonBody(request)) as { action?: string; status?: string; reason?: string };
@@ -32,7 +32,7 @@ export async function PATCH(
       .doc(id);
 
     const snap = await docRef.get();
-    if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!snap.exists) return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
 
     const req = snap.data() as {
       deptHeadUid: string;
@@ -220,11 +220,11 @@ export async function PATCH(
       return NextResponse.json({ ok: true });
     }
 
-    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 403 });
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     console.error("[location/vacancy-requests/[id] PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

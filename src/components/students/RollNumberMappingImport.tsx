@@ -125,7 +125,7 @@ export function RollNumberMappingImport() {
       if (parsed.length === 0) { setParseError("Every row in that file is empty."); setRows([]); return; }
       setRows(parsed);
     } catch (err) {
-      setParseError(err instanceof Error ? err.message : "Could not read that file.");
+      setParseError(err instanceof Error ? err.message : "Unable to read that file.");
       setRows([]);
     }
   }
@@ -140,10 +140,10 @@ export function RollNumberMappingImport() {
         body: JSON.stringify({ rows, replaceExisting }),
       });
       const json = (await res.json()) as PreviewResponse;
-      if (!res.ok) throw new Error(json.error ?? "Could not check the file");
+      if (!res.ok) throw new Error(json.error ?? "Unable to check the file");
       setResults(json.results ?? []);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Could not check the file" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to check the file" });
     } finally {
       setIsPreviewing(false);
     }
@@ -159,7 +159,7 @@ export function RollNumberMappingImport() {
         body: JSON.stringify({ rows, replaceExisting }),
       });
       const json = (await res.json()) as ApplyResponse;
-      if (!res.ok) throw new Error(json.error ?? "Could not apply the Regd. Nos");
+      if (!res.ok) throw new Error(json.error ?? "Unable to apply the Regd. Nos");
       setApplyResult(json);
       await preview(); // so the table shows what is now true and a second apply is a no-op
       toast({
@@ -168,7 +168,7 @@ export function RollNumberMappingImport() {
         ...((json.failedCount ?? 0) > 0 ? { description: `${json.failedCount} row(s) failed - download the results.` } : {}),
       });
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Could not apply the Regd. Nos" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to apply the Regd. Nos" });
     } finally {
       setIsApplying(false);
     }
@@ -206,7 +206,7 @@ export function RollNumberMappingImport() {
         body: JSON.stringify({ studentIds: loginCandidates, password }),
       });
       const json = (await res.json()) as { created?: number; failed?: unknown[]; error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Could not create logins");
+      if (!res.ok) throw new Error(json.error ?? "Unable to create logins");
       const failed = Array.isArray(json.failed) ? json.failed.length : 0;
       toast({
         variant: failed > 0 ? "destructive" : "success",
@@ -215,7 +215,7 @@ export function RollNumberMappingImport() {
       });
       setPassword("");
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Could not create logins" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to create logins" });
     } finally {
       setIsCreatingLogins(false);
     }
@@ -229,7 +229,7 @@ export function RollNumberMappingImport() {
     <div className="max-w-5xl space-y-6">
       <PageHeader
         title="Map Regd. Nos"
-        description="Set Regd. No on students already on the roster, matched by their Student Mobile No - nothing is written until you apply"
+        description="Set the Regd. No of students already on the roll, matched by Student Mobile No. Nothing is saved until you apply."
         actions={
           <Button variant="outline" asChild>
             <Link href={backHref}><ArrowLeft className="h-4 w-4 mr-1" />Back to Dashboard</Link>
@@ -240,9 +240,7 @@ export function RollNumberMappingImport() {
       <Card>
         <CardHeader><CardTitle className="text-base flex items-center gap-2">{step(1)}Download Template</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Download the template, fill in each student&rsquo;s mobile number and Regd. No, and upload it below.
-          </p>
+          <p className="text-sm text-muted-foreground">Download the template, enter each student&apos;s mobile number and Regd. No, and upload it below.</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-muted-foreground bg-muted/40 rounded-lg p-3">
             {HINTS.map((h) => (
               <p key={h} className="flex items-start gap-1"><span className="text-primary mt-0.5">•</span>{h}</p>
@@ -266,7 +264,7 @@ export function RollNumberMappingImport() {
             <FileSpreadsheet className="h-10 w-10 text-muted-foreground" />
             <div className="text-center">
               <p className="font-medium text-sm">Click to select a CSV or Excel file</p>
-              <p className="text-xs text-muted-foreground mt-1">.csv or .xlsx supported - needs a Student Mobile No and a Regd. No column</p>
+              <p className="text-xs text-muted-foreground mt-1">CSV and XLSX files are supported. The file needs a Student Mobile No and a Regd. No column.</p>
             </div>
           </button>
           {parseError && (
@@ -277,7 +275,7 @@ export function RollNumberMappingImport() {
           )}
           {rows.length > 0 && (
             <p className="text-sm text-green-700 flex items-center gap-1">
-              <CheckCircle2 className="h-4 w-4" />{fileName} - {rows.length} row{rows.length !== 1 ? "s" : ""} parsed successfully
+              <CheckCircle2 className="h-4 w-4" />{fileName} - {rows.length} row{rows.length !== 1 ? "s" : ""} parsed
             </p>
           )}
         </CardContent>
@@ -290,7 +288,7 @@ export function RollNumberMappingImport() {
             <label className="flex items-start gap-2 text-sm">
               <Checkbox checked={replaceExisting} onCheckedChange={(v) => { setReplaceExisting(v === true); reset(); }} />
               <span>
-                Replace a Regd. No a student already has
+                Replace a student&apos;s existing Regd. No
                 <span className="block text-xs text-muted-foreground">
                   Off by default. With this off, a student who already holds a different roll is skipped.
                 </span>

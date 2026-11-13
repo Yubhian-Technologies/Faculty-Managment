@@ -60,9 +60,9 @@ export function SyllabusEditor({ subjectId, backHref, backLabel }: { subjectId: 
   useEffect(() => {
     let off = false;
     fetch(`/api/college/subjects/${encodeURIComponent(subjectId)}/syllabus-outcomes`)
-      .then(async (r) => { const d = (await r.json()) as Loaded & { error?: string }; if (!r.ok) throw new Error(d.error ?? "Failed to load"); return d; })
+      .then(async (r) => { const d = (await r.json()) as Loaded & { error?: string }; if (!r.ok) throw new Error(d.error ?? "Unable to load"); return d; })
       .then((d) => { if (!off) { setData(d); setDraft(toDraft(d.syllabus)); setError(""); } })
-      .catch((e: unknown) => { if (!off) setError(e instanceof Error ? e.message : "Failed to load"); });
+      .catch((e: unknown) => { if (!off) setError(e instanceof Error ? e.message : "Unable to load"); });
     return () => { off = true; };
   }, [subjectId, reloadKey]);
 
@@ -88,7 +88,7 @@ export function SyllabusEditor({ subjectId, backHref, backLabel }: { subjectId: 
       method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body()),
     });
     const json = (await res.json()) as { syllabus?: SubjectSyllabus; error?: string; errors?: string[] };
-    if (!res.ok || !json.syllabus) { setErrors(json.errors ?? [json.error ?? "Failed to save"]); return null; }
+    if (!res.ok || !json.syllabus) { setErrors(json.errors ?? [json.error ?? "Unable to save"]); return null; }
     return json.syllabus;
   }
 
@@ -142,7 +142,7 @@ export function SyllabusEditor({ subjectId, backHref, backLabel }: { subjectId: 
     try {
       const res = await fetch(`/api/college/subjects/${encodeURIComponent(subjectId)}/syllabus`, { method: "DELETE" });
       const json = (await res.json()) as { error?: string };
-      if (!res.ok) toast({ variant: "destructive", title: json.error ?? "Could not remove it" });
+      if (!res.ok) toast({ variant: "destructive", title: json.error ?? "Unable to remove it" });
       else { toast({ variant: "success", title: "Syllabus PDF removed" }); reload(); }
     } finally {
       setBusy(false);

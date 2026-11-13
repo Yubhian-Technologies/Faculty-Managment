@@ -110,12 +110,12 @@ function IdentityEditForm({ staff }: { staff: Partial<SupportingStaffMember> }) 
       });
       if (!res.ok) {
         const data = (await res.json()) as { error?: string };
-        throw new Error(data.error ?? "Failed to save changes");
+        throw new Error(data.error ?? "Unable to save changes");
       }
       toast({ variant: "success", title: "Profile updated" });
       router.push("/college-staff/profile");
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save changes" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save changes" });
     } finally {
       setSaving(false);
     }
@@ -135,9 +135,7 @@ function IdentityEditForm({ staff }: { staff: Partial<SupportingStaffMember> }) 
         <Card className="mt-6">
           <CardHeader><CardTitle className="text-base">Identity & Employment</CardTitle></CardHeader>
           <CardContent className="space-y-5">
-            <p className="text-xs text-muted-foreground -mt-2">
-              Employee ID, College Email, Department, Designation, Staff Category and Date of Joining are set by your HOD / College Office and can&apos;t be changed here.
-            </p>
+            <p className="text-xs text-muted-foreground -mt-2">Employee ID, College Email, Department, Designation, Staff Category and Date of Joining are set by your HOD or the College Office and cannot be changed here.</p>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
@@ -190,7 +188,7 @@ function IdentityEditForm({ staff }: { staff: Partial<SupportingStaffMember> }) 
               </div>
               <div className="space-y-2">
                 <Label>Highest Qualification *</Label>
-                <Input value={form.highestQualification} onChange={(e) => set({ highestQualification: e.target.value })} placeholder="e.g. Diploma, B.Com, ITI" />
+                <Input value={form.highestQualification} onChange={(e) => set({ highestQualification: e.target.value })} placeholder="Diploma, B.Com, ITI" />
               </div>
             </div>
 
@@ -212,7 +210,7 @@ function IdentityEditForm({ staff }: { staff: Partial<SupportingStaffMember> }) 
                 <Label>Personal Email</Label>
                 <Input type="email" value={form.email} onChange={(e) => set({ email: e.target.value })} placeholder="staff@example.com" />
                 {!!form.email.trim() && !EMAIL_REGEX.test(form.email.trim()) && (
-                  <p className="text-xs text-destructive">Doesn&rsquo;t look like a valid email address</p>
+                  <p className="text-xs text-destructive">Enter a valid email address.</p>
                 )}
               </div>
               <div className="space-y-2">
@@ -235,7 +233,7 @@ function IdentityEditForm({ staff }: { staff: Partial<SupportingStaffMember> }) 
                   placeholder="9876543210"
                 />
                 {!!form.mobileNo.trim() && form.mobileNo.trim() !== storedMobile.trim() && !PHONE_REGEX.test(form.mobileNo.trim()) && (
-                  <p className="text-xs text-destructive">Must be exactly 10 digits, starting with 6, 7, 8 or 9</p>
+                  <p className="text-xs text-destructive">Must be 10 digits, starting with 6, 7, 8 or 9.</p>
                 )}
               </div>
             </div>
@@ -249,7 +247,7 @@ function IdentityEditForm({ staff }: { staff: Partial<SupportingStaffMember> }) 
                         label="Label (optional)"
                         value={item.label}
                         onChange={(v) => setExtraPhones((prev) => prev.map((p, idx) => (idx === i ? { ...p, label: v } : p)))}
-                        placeholder="e.g. Personal, WhatsApp, or a name"
+                        placeholder="Personal, WhatsApp, or a name"
                       />
                       <TextInput
                         label="Mobile Number"

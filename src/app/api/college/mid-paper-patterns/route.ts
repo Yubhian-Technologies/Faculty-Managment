@@ -40,7 +40,7 @@ export async function PUT(request: Request) {
     const courseKey = String(body.courseKey ?? "").trim();
     const courseName = String(body.courseName ?? "").trim();
     const regulation = String(body.regulation ?? "").trim().toUpperCase() || "ALL";
-    if (!courseKey || !courseName) return NextResponse.json({ error: "Pick a course" }, { status: 400 });
+    if (!courseKey || !courseName) return NextResponse.json({ error: "Select a course." }, { status: 400 });
     const { value, errors } = cleanPattern(body);
     if (errors.length) return NextResponse.json({ error: errors[0], errors }, { status: 400 });
     const db = getAdminDb();
@@ -64,7 +64,7 @@ export async function DELETE(request: Request) {
   try {
     const session = await requireCollegeMember(...ROLES);
     const id = new URL(request.url).searchParams.get("id") ?? "";
-    if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
+    if (!id) return NextResponse.json({ error: "The record to update is missing. Reload the page and try again." }, { status: 400 });
     await patternsCol(getAdminDb(), session.collegeId).doc(id).delete();
     return NextResponse.json({ ok: true });
   } catch (err) {

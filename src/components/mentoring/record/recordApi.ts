@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 export async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   const data = (await res.json().catch(() => ({}))) as T & { error?: string };
-  if (!res.ok) throw new Error(data.error || "Could not load this");
+  if (!res.ok) throw new Error(data.error || "Unable to load this");
   return data;
 }
 
@@ -18,7 +18,7 @@ export async function sendJson<T>(url: string, method: "POST" | "PATCH" | "DELET
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const data = (await res.json().catch(() => ({}))) as T & { error?: string };
-  if (!res.ok) throw new Error(data.error || "Could not save");
+  if (!res.ok) throw new Error(data.error || "Unable to save");
   return data;
 }
 

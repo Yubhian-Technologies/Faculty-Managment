@@ -58,7 +58,7 @@ export async function GET(request: Request) {
       // its semester subjects are shown to them read-only (HOD > Subjects). No other branch.
       if (departmentId && !canHodEditDepartmentId(hodScope, departmentId)
         && !(await subjectDepartmentBranches(db, session.collegeId, session.uid, hodScope)).branches.some((b) => b.departmentId === departmentId)) {
-        return NextResponse.json({ error: "That department is not yours or one of your sub-departments" }, { status: 403 });
+        return NextResponse.json({ error: "This department is not yours or one of your sub-departments." }, { status: 403 });
       }
     }
 
@@ -71,10 +71,10 @@ export async function GET(request: Request) {
     // (a course-year with no semesters configured keeps every row, as before).
     if (forSectionId) {
       const sectionSnap = await collegeRef.collection("sections").doc(forSectionId).get();
-      if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found" }, { status: 404 });
+      if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found. It may have been deleted." }, { status: 404 });
       const section = sectionSnap.data() as { department: string; courseId?: string; year: number };
       if (hodScope && !canHodEditDepartment(hodScope, section.department)) {
-        return NextResponse.json({ error: "This section isn't in your department" }, { status: 403 });
+        return NextResponse.json({ error: "This section is not in your department." }, { status: 403 });
       }
       const [courseDocs, deptDocs] = await Promise.all([
         cachedCollectionDocs(db, session.collegeId, "courses"),
@@ -195,7 +195,7 @@ export async function PATCH(request: Request) {
       // core departments) down to specific core department NAMES; `null` clears it.
       secondaryDepartmentNames?: string[] | null;
     };
-    if (!body.id) return NextResponse.json({ error: "id is required" }, { status: 400 });
+    if (!body.id) return NextResponse.json({ error: "The record to update is missing. Reload the page and try again." }, { status: 400 });
 
     const nums: [string, number | undefined, number][] = [
       ["lectureHours", body.lectureHours, SUBJECT_LIMITS.weeklyHours],
@@ -213,7 +213,7 @@ export async function PATCH(request: Request) {
     const collegeRef = db.collection("colleges").doc(session.collegeId);
     const ref = collegeRef.collection("subjectSemesterAssignments").doc(body.id);
     const snap = await ref.get();
-    if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!snap.exists) return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     const cur = snap.data() as SubjectSemesterAssignment;
 
     if (body.secondaryDepartmentNames) {

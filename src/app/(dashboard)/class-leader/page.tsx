@@ -86,7 +86,7 @@ export default function ClassLeaderDashboardPage() {
         setDepartments(d.departments ?? []);
         setResolvedSemester(d.resolvedSemester ?? null);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load section data" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load section data" }))
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -234,9 +234,7 @@ export default function ClassLeaderDashboardPage() {
         <Card className="border-dashed">
           <CardContent className="py-12 text-center space-y-3">
             <h3 className="font-semibold text-base">No Section Linked</h3>
-            <p className="text-sm text-muted-foreground max-w-md mx-auto">
-              Your login is not currently bound to an academic section. Please ask your College Office or Department HOD to link your class section.
-            </p>
+            <p className="text-sm text-muted-foreground max-w-md mx-auto">Your login is not linked to a class section. Ask the College Office or your HOD to link your section.</p>
           </CardContent>
         </Card>
       ) : (
@@ -288,9 +286,7 @@ export default function ClassLeaderDashboardPage() {
                 <div className="py-10 text-center space-y-2 rounded-lg border border-dashed bg-muted/10">
                   <Calendar className="h-8 w-8 mx-auto text-muted-foreground/50" />
                   <p className="text-sm font-medium text-foreground">No classes scheduled for {DAY_LABELS[activeDay]}</p>
-                  <p className="text-xs text-muted-foreground max-w-xs mx-auto">
-                    Enjoy your day off or review earlier course material!
-                  </p>
+                  <p className="text-xs text-muted-foreground max-w-xs mx-auto">No classes are scheduled for you today.</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">

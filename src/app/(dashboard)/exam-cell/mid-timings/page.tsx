@@ -48,11 +48,11 @@ export default function ExamCellMidTimingsPage() {
       ]);
       const schedData = (await schedRes.json()) as { schedules?: ExamMidSchedule[]; error?: string };
       const settingsData = (await settingsRes.json()) as { settings?: ExamMidSettings };
-      if (!schedRes.ok) throw new Error(schedData.error ?? "Failed to load");
+      if (!schedRes.ok) throw new Error(schedData.error ?? "Unable to load");
       setSchedules(schedData.schedules ?? []);
       setMidCount(settingsData.settings?.midCount ?? 0);
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to load mid timings" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to load mid timings" });
     } finally {
       setIsLoading(false);
     }
@@ -65,7 +65,7 @@ export default function ExamCellMidTimingsPage() {
     const res = await fetch(`/api/college/exam-mid-schedules/${deleteTarget.id}`, { method: "DELETE" });
     const data = (await res.json()) as { error?: string };
     if (!res.ok) {
-      toast({ variant: "destructive", title: data.error ?? "Failed to delete" });
+      toast({ variant: "destructive", title: data.error ?? "Unable to delete" });
       return;
     }
     toast({ variant: "success", title: "Schedule removed" });
@@ -77,7 +77,7 @@ export default function ExamCellMidTimingsPage() {
     <div className="max-w-4xl space-y-6">
       <PageHeader
         title="Mid Timings & Dates"
-        description="Publish the date and time window for each Mid, per course and semester. Once published, entries can still be edited or removed."
+        description="Publish the date and time window of each Mid for each course and semester. Published entries can still be edited or removed."
         actions={
           <Button onClick={() => setFormOpen(true)} disabled={midCount === 0}>
             <Plus className="h-4 w-4 mr-2" />Publish Timings
@@ -105,7 +105,7 @@ export default function ExamCellMidTimingsPage() {
       ) : schedules.length === 0 ? (
         <Card>
           <CardContent className="py-10 text-center space-y-1">
-            <p className="text-sm text-muted-foreground">No mid timings published yet.</p>
+            <p className="text-sm text-muted-foreground">No Mid timings published yet.</p>
           </CardContent>
         </Card>
       ) : (
@@ -201,7 +201,7 @@ function MidScheduleFormDialog({
         const data = (await res.json()) as { courses?: Course[] };
         setCourses(data.courses ?? []);
       } catch {
-        toast({ variant: "destructive", title: "Failed to load courses" });
+        toast({ variant: "destructive", title: "Unable to load courses" });
       }
     })();
   }, []);
@@ -254,13 +254,13 @@ function MidScheduleFormDialog({
         body: JSON.stringify(payload),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to save");
+      if (!res.ok) throw new Error(data.error ?? "Unable to save");
       toast({ variant: "success", title: schedule ? "Timing updated" : "Timing published" });
       if (!schedule) reset();
       onClose();
       await onDone();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save" });
     } finally {
       setBusy(false);
     }
@@ -271,10 +271,7 @@ function MidScheduleFormDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{schedule ? "Edit Mid Timing" : "Publish Mid Timing"}</DialogTitle>
-          <DialogDescription>
-            There&apos;s no student login in this app yet, so publishing saves this here for now - it will
-            show automatically for the matching course and semester once student access exists.
-          </DialogDescription>
+          <DialogDescription>Students cannot sign in to view this yet, so publishing saves it here. It will be shown for the matching course and semester once student access is available.</DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-2">

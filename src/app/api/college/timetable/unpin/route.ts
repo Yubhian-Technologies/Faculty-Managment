@@ -23,12 +23,12 @@ export async function POST(request: Request) {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_STAFF");
     const body = (await readJsonBody(request)) as { sectionId?: string; semester?: number };
     const sectionId = body.sectionId?.trim();
-    if (!sectionId) return NextResponse.json({ error: "sectionId is required" }, { status: 400 });
+    if (!sectionId) return NextResponse.json({ error: "Select a section." }, { status: 400 });
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
     const sectionSnap = await collegeRef.collection("sections").doc(sectionId).get();
-    if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found" }, { status: 404 });
+    if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found. It may have been deleted." }, { status: 404 });
     const section = sectionSnap.data() as { courseId: string; year: number; department?: string };
     const semesterResult = await resolveRequestedSemester(db, session.collegeId, section.courseId, section.year, body.semester ?? null);
     if (!semesterResult.ok) return NextResponse.json({ error: semesterResult.error }, { status: 400 });
@@ -37,15 +37,15 @@ export async function POST(request: Request) {
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       if (!section.department || !canHodEditDepartment(scope, section.department)) {
-        return NextResponse.json({ error: "This section isn't in your department" }, { status: 403 });
+        return NextResponse.json({ error: "This section is not in your department." }, { status: 403 });
       }
     } else if (session.role === "PANEL_MEMBER" || session.role === "COLLEGE_STAFF") {
       const ok = await isTimetableIncharge(db, session.collegeId, session.uid, section.courseId, section.year);
-      if (!ok) return NextResponse.json({ error: "You are not the Timetable Incharge for this course & year" }, { status: 403 });
+      if (!ok) return NextResponse.json({ error: "You are not the Timetable Incharge for this course and year." }, { status: 403 });
     }
 
     const ctx = await loadTimetableContext(db, session.collegeId, sectionId, semesterResult.semester);
-    if (!ctx) return NextResponse.json({ error: "Section not found" }, { status: 404 });
+    if (!ctx) return NextResponse.json({ error: "Section not found. It may have been deleted." }, { status: 404 });
     const dRef = draftRef(db, session.collegeId, sectionId, ctx.currentSemester);
     const guards = [sectionGuard(db, session.collegeId, sectionId)];
     const slotsCol = collegeRef.collection("timetableSlots");
@@ -98,9 +98,9 @@ export async function POST(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/timetable/unpin POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

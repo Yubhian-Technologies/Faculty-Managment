@@ -22,7 +22,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const body = (await readJsonBody(request)) as { sessions?: string[]; action?: string };
     const db = getAdminDb();
     const schedule = await loadSchedule(db, session.collegeId, id);
-    if (!schedule) return NextResponse.json({ error: "Schedule not found" }, { status: 404 });
+    if (!schedule) return NextResponse.json({ error: "Schedule not found. It may have been deleted." }, { status: 404 });
     const sessions = [...new Set((body.sessions ?? []).map(String))].filter(Boolean);
     if (!sessions.length) return NextResponse.json({ error: "Pick an exam session" }, { status: 400 });
     const actor = { uid: session.uid, name: await actorName(db, session.collegeId, session.uid, session.email || "Exam Cell") };
@@ -37,7 +37,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       }
       return NextResponse.json({ completed: done });
     }
-    if (body.action !== "publish") return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+    if (body.action !== "publish") return NextResponse.json({ error: "This action is not recognised. Reload the page and try again." }, { status: 400 });
 
     const drafts = duties.filter((d) => d.status === "DRAFT");
     const at = new Date().toISOString();

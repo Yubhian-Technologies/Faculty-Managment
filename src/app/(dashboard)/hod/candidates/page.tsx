@@ -43,7 +43,7 @@ export default function HODCandidatesPage() {
         )
       );
     } catch {
-      toast({ variant: "destructive", title: "Failed to load candidates" });
+      toast({ variant: "destructive", title: "Unable to load candidates" });
     } finally {
       setIsLoading(false);
     }
@@ -64,7 +64,7 @@ export default function HODCandidatesPage() {
       setCandidates((prev) => prev.filter((c) => c.id !== deleteTarget.id));
       setDeleteTarget(null);
     } catch (e) {
-      toast({ variant: "destructive", title: "Failed to remove candidate", description: e instanceof Error ? e.message : undefined });
+      toast({ variant: "destructive", title: "Unable to remove candidate", description: e instanceof Error ? e.message : undefined });
     } finally {
       setIsDeleting(false);
     }
@@ -170,7 +170,7 @@ export default function HODCandidatesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Candidates"
-        description="Manage candidate profiles and associate applicants with their respective recruitment requests."
+        description="Manage candidate profiles and link applicants to their recruitment requests."
         actions={
           <Button asChild>
             <Link href="/hod/candidates/new">

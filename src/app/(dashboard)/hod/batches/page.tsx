@@ -21,7 +21,7 @@ export default function HODBatchesPage() {
     fetch("/api/college/hiring-batches")
       .then((r) => r.json() as Promise<{ batches: BatchRow[] }>)
       .then((d) => setBatches(d.batches ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load batches" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load batches" }))
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -92,7 +92,7 @@ export default function HODBatchesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Hiring Batches"
-        description="Interview panel proposals and progress"
+        description="Interview panel proposals and their progress."
         actions={
           <Button asChild>
             <Link href="/hod/batches/new">

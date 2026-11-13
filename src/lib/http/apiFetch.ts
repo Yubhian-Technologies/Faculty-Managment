@@ -3,7 +3,7 @@
 //  - A 401 means the session ended: send the person to /login once (with a way back),
 //    instead of every page showing an empty table or a vague "failed" toast.
 //  - fetchJson throws ApiError with the server's message on any non-2xx, so pages can show an
-//    error state ("Couldn't load students - Retry") rather than rendering an empty list.
+//    error state ("Unable to load students - Retry") rather than rendering an empty list.
 //
 // Client-side only (uses window); pages that already handle responses themselves can keep
 // calling fetch - adopt this where a page is touched.
@@ -41,12 +41,12 @@ export async function fetchJson<T>(input: string, init?: RequestInit): Promise<T
   }
   if (!res.ok) {
     const msg = (body as { error?: string } | null)?.error;
-    throw new ApiError(res.status, msg || (res.status === 401 ? "Your session has ended - please sign in again" : `Request failed (${res.status})`));
+    throw new ApiError(res.status, msg || (res.status === 401 ? "Your session has ended - sign in again" : `Request failed (${res.status})`));
   }
   return body as T;
 }
 
-export function errorMessage(err: unknown, fallback = "Something went wrong"): string {
+export function errorMessage(err: unknown, fallback = "Unable to complete the request. Try again."): string {
   return err instanceof Error && err.message ? err.message : fallback;
 }
 

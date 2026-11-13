@@ -19,7 +19,7 @@ import {
   type IndentRequest,
 } from "@/types";
 
-// Statuses that mean "sitting in Purchase Dept's own queue, waiting on them" -
+// Statuses that mean "sitting in Purchase Department's own queue, waiting on them" -
 // same rule for both request types since financePurchaseClearance's PATCH route
 // mirrors indentRequests' state machine through this stage.
 const ACTIONABLE = new Set(["PENDING_PURCHASE_REVIEW", "RETURNED_TO_PURCHASE"]);
@@ -60,7 +60,7 @@ export default function PurchasePendingPage() {
           }));
         setRows([...indentRows, ...clearanceRows].sort((a, b) => toMillis(b.updatedAt) - toMillis(a.updatedAt)));
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load pending requests" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load pending requests" }))
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -68,7 +68,7 @@ export default function PurchasePendingPage() {
     <div className="space-y-6">
       <PageHeader
         title="Pending Requests"
-        description="Indents and purchase clearance requests currently waiting on Purchase Dept"
+        description="Indent and purchase clearance requests awaiting the Purchase Department."
       />
 
       {isLoading ? (
@@ -78,7 +78,7 @@ export default function PurchasePendingPage() {
       ) : rows.length === 0 ? (
         <EmptyState
           title="Nothing pending"
-          description="You're caught up - no indent or purchase clearance requests are waiting on you right now."
+          description="No indent or purchase clearance requests are awaiting your action."
           icon={<Clock className="h-8 w-8" />}
         />
       ) : (

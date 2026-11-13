@@ -44,7 +44,7 @@ export default function RejectVacancyPage() {
         }
         setVacancy(v);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load vacancy" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load vacancy" }))
       .finally(() => setLoading(false));
   }, [vacancyId, router]);
 
@@ -61,7 +61,7 @@ export default function RejectVacancyPage() {
       toast({
         variant: "success",
         title: "Vacancy Rejected",
-        description: "HR Admin and Dept Head have been notified.",
+        description: "HR Admin and the Department Head have been notified.",
       });
       router.push("/administration/vacancies");
     } catch {

@@ -36,7 +36,7 @@ export default function NewLocationDeptHeadCandidatePage() {
       });
       const json = await res.json() as { id?: string; error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to add candidate", description: json.error });
+        toast({ variant: "destructive", title: "Unable to add candidate", description: json.error });
         return;
       }
       toast({ variant: "success", title: "Candidate added", description: "HR Admin will review and shortlist." });
@@ -52,7 +52,7 @@ export default function NewLocationDeptHeadCandidatePage() {
     <div className="max-w-xl">
       <PageHeader
         title="Add Faculty Candidate"
-        description="Add a new candidate for your department"
+        description="Add a new candidate for your department."
       />
 
       <Card>

@@ -86,7 +86,7 @@ export default function EditSalaryStructurePage() {
         });
       })
       .catch(() => {
-        toast({ variant: "destructive", title: "Failed to load salary structure" });
+        toast({ variant: "destructive", title: "Unable to load salary structure" });
         router.push("/accounts/salary-structures");
       })
       .finally(() => setLoading(false));
@@ -110,7 +110,7 @@ export default function EditSalaryStructurePage() {
       toast({ variant: "success", title: "Salary structure updated" });
       router.push("/accounts/salary-structures");
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save" });
     } finally {
       setIsSubmitting(false);
     }
@@ -128,7 +128,7 @@ export default function EditSalaryStructurePage() {
     <div className="max-w-xl">
       <PageHeader
         title="Edit Salary Structure"
-        description="Update the pay template for this designation & employment type"
+        description="Update the pay template for this designation and employment type."
       />
 
       <Card>
@@ -139,7 +139,7 @@ export default function EditSalaryStructurePage() {
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="ss-name">Name *</Label>
-              <Input id="ss-name" {...register("name")} placeholder="e.g. Assistant Professor – Permanent 2026" />
+              <Input id="ss-name" {...register("name")} placeholder="Assistant Professor – Permanent 2026" />
               {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
             </div>
 

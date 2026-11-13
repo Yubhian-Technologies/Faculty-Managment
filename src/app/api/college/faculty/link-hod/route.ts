@@ -60,7 +60,7 @@ export async function POST(request: Request) {
     } = body;
 
     if (!linkUid || !department || !employeeId || !designation || !highestQualification || !joiningDate) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+      return NextResponse.json({ error: "Fill in all required fields." }, { status: 400 });
     }
     // Status is selectable on the Add Faculty wizard's link-mode flow too
     // (defaults to ACTIVE when not sent) - see POST /api/college/faculty for
@@ -86,7 +86,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing required personal details - Mobile No, Full Name (as per SSC), Gender, Date of Birth, Aadhar No, PAN No, and Ratification Status are all required" }, { status: 400 });
     }
     if (profilePhotoUrl !== undefined && !profilePhotoUrl.startsWith("https://firebasestorage.googleapis.com/")) {
-      return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
+      return NextResponse.json({ error: "The photo link is not valid. Upload the photo again." }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -96,7 +96,7 @@ export async function POST(request: Request) {
       const scope = await getHodDepartmentScope(db, collegeId, session.uid);
       if (!canHodManageFacultyDepartment(scope, department)) {
         return NextResponse.json(
-          { error: "That department is not yours or one of your sub-departments" },
+          { error: "This department is not yours or one of your sub-departments." },
           { status: 403 },
         );
       }
@@ -200,9 +200,9 @@ export async function POST(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/faculty/link-hod POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

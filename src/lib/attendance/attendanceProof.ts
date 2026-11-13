@@ -56,18 +56,18 @@ export async function verifyAttendanceProof(
   now: number = Date.now()
 ): Promise<AttendanceProofResult> {
   if (!isValidDescriptor(body.faceDescriptor)) {
-    return { ok: false, status: 400, error: "Face verification data is missing - please refresh the page and try again" };
+    return { ok: false, status: 400, error: "Face verification data is missing - refresh the page and try again" };
   }
   const capturedAt = typeof body.capturedAt === "number" && Number.isFinite(body.capturedAt) ? body.capturedAt : null;
   if (capturedAt === null) {
-    return { ok: false, status: 400, error: "Face verification data is missing - please refresh the page and try again" };
+    return { ok: false, status: 400, error: "Face verification data is missing - refresh the page and try again" };
   }
   if (now - capturedAt > MAX_PROOF_AGE_MS || capturedAt - now > MAX_PROOF_FUTURE_MS) {
-    return { ok: false, status: 400, error: "That face capture has expired - please capture again" };
+    return { ok: false, status: 400, error: "That face capture has expired - capture again" };
   }
   const accuracy = typeof body.accuracy === "number" && Number.isFinite(body.accuracy) && body.accuracy >= 0 ? body.accuracy : null;
   if (accuracy === null) {
-    return { ok: false, status: 400, error: "Your location accuracy could not be read - please try again" };
+    return { ok: false, status: 400, error: "Your location accuracy could not be read - try again" };
   }
   if (accuracy > MAX_LOCATION_ACCURACY_M) {
     return {

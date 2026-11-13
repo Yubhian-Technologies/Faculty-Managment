@@ -27,7 +27,7 @@ function isAuthorized(request: Request): boolean {
 // and its log-based alerts can fire. A heartbeat is kept at
 // systemJobs/attendance-not-posted for a staleness check.
 export async function POST(request: Request) {
-  if (!isAuthorized(request)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!isAuthorized(request)) return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
   // Notifications are PAUSED for cost optimization.
   return NextResponse.json({
     status: "paused",

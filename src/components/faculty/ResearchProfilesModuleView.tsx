@@ -72,13 +72,13 @@ function RequestFormFields({
       });
       if (!res.ok) {
         const json = await res.json().catch(() => ({})) as { error?: string };
-        toast({ variant: "destructive", title: "Failed to submit", description: json.error });
+        toast({ variant: "destructive", title: "Unable to submit", description: json.error });
         return;
       }
       toast({ variant: "success", title: "Submitted for verification" });
       onSaved();
     } catch {
-      toast({ variant: "destructive", title: "Network error. Please try again." });
+      toast({ variant: "destructive", title: "Network error. Try again." });
     } finally {
       setSaving(false);
     }
@@ -88,10 +88,10 @@ function RequestFormFields({
     <>
       <DialogHeader>
         <DialogTitle>Research Profiles</DialogTitle>
-        <DialogDescription>This goes to R&amp;D for verification before it shows on your profile.</DialogDescription>
+        <DialogDescription>This is sent to R&amp;D for verification before it appears on your profile.</DialogDescription>
       </DialogHeader>
       <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-4">
-        <p className="text-xs text-muted-foreground">Fill in at least one ID.</p>
+        <p className="text-xs text-muted-foreground">Enter at least one ID.</p>
         <div className="space-y-2">
           <Label>ORCID iD</Label>
           <Input value={form.orcidId} onChange={(e) => set("orcidId", e.target.value)} placeholder="0000-0000-0000-0000" />

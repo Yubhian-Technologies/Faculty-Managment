@@ -49,11 +49,11 @@ export function AddTabDialog({ open, onOpenChange, collegeId, role, roles, posit
         body: JSON.stringify({ collegeId, title, iconName, section, roles: Array.from(selected), enabled: true }),
       });
       const json = (await res.json()) as { page?: CustomPage; error?: string };
-      if (!res.ok || !json.page) throw new Error(json.error ?? "Failed to create the tab");
+      if (!res.ok || !json.page) throw new Error(json.error ?? "Unable to create the tab");
       onCreated(json.page);
       setTitle(""); setSection("");
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to create the tab" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to create the tab" });
     } finally {
       setSaving(false);
     }
@@ -64,13 +64,13 @@ export function AddTabDialog({ open, onOpenChange, collegeId, role, roles, posit
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Add a tab at position {position}</DialogTitle>
-          <DialogDescription>Name the tab and choose who sees it. You&apos;ll build its page next.</DialogDescription>
+          <DialogDescription>Name the tab and choose who can see it. You will build its page next.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="tab-title">Tab name</Label>
-            <Input id="tab-title" value={title} maxLength={60} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Notices" />
+            <Input id="tab-title" value={title} maxLength={60} onChange={(e) => setTitle(e.target.value)} placeholder="Notices" />
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">

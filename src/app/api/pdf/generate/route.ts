@@ -34,7 +34,7 @@ async function verifyToken(request: Request): Promise<string | null> {
 // browser via html2canvas + jsPDF before downloading it.
 export async function POST(request: Request) {
   const uid = await verifyToken(request);
-  if (!uid) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!uid) return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
   const limited = rateLimit(`pdf-generate:${uid}`, 60, 60 * 1000);
   if (!limited.ok) {
     return NextResponse.json({ error: "Too many requests - try again shortly" }, { status: 429, headers: { "Retry-After": String(limited.retryAfterSeconds) } });

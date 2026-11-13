@@ -44,7 +44,7 @@ export default function NonTechnicalStaffModulePage() {
         }
         setStaff(d.staff);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load staff record" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load staff record" }))
       .finally(() => setIsLoading(false));
   }, [staffId, moduleDef, router, listPath]);
 

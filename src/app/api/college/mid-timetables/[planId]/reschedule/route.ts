@@ -34,7 +34,7 @@ export async function POST(request: Request, { params }: Params) {
     const db = getAdminDb();
     const refs = midTimetableRefs(db, session.collegeId);
     const plan = await loadPlan(db, session.collegeId, planId);
-    if (!plan) return NextResponse.json({ error: "Timetable not found" }, { status: 404 });
+    if (!plan) return NextResponse.json({ error: "Timetable not found. It may have been deleted." }, { status: 404 });
     const fromSessionId = String(body.fromSessionId || plan.sessions[0]?.id || "");
     const toSessionId = String(body.toSessionId || fromSessionId);
     if (!plan.sessions.some((s) => s.id === fromSessionId) || !plan.sessions.some((s) => s.id === toSessionId)) return NextResponse.json({ error: "Pick a session" }, { status: 400 });

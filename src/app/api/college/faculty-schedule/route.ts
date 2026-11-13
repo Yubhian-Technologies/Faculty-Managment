@@ -50,7 +50,7 @@ export async function GET(request: Request) {
 
     if (departmentId) {
       const deptSnap = await collegeRef.collection("departments").doc(departmentId).get();
-      if (!deptSnap.exists) return NextResponse.json({ error: "Department not found" }, { status: 404 });
+      if (!deptSnap.exists) return NextResponse.json({ error: "Department not found. It may have been deleted." }, { status: 404 });
       const departmentName = (deptSnap.data() as { name?: string }).name ?? "";
 
       const facultySnap = await collegeRef.collection("facultyMembers")
@@ -66,7 +66,7 @@ export async function GET(request: Request) {
 
     if (facultyId) {
       const facultySnap = await collegeRef.collection("facultyMembers").doc(facultyId).get();
-      if (!facultySnap.exists) return NextResponse.json({ error: "Faculty not found" }, { status: 404 });
+      if (!facultySnap.exists) return NextResponse.json({ error: "Faculty record not found. It may have been deleted." }, { status: 404 });
       const facultyName = facultyDisplayName(facultySnap.data() as { legalName?: string });
 
       const [slotsSnap, draftsSnap, requestsSnap] = await Promise.all([
@@ -206,9 +206,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "departmentId or facultyId is required" }, { status: 400 });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/faculty-schedule GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

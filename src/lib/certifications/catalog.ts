@@ -144,7 +144,7 @@ const ENTRIES: Entry[] = [
     description: "States that you completed the course.", statuses: PASSED_OUT, purposes: GENERAL_PURPOSES, allowOtherPurpose: true,
     flow: [HOD_STEP, EXAM_STEP, PRINCIPAL_STEP],
     issuerFields: [f("completionMonth", "Month and year of completion (e.g. May 2026)")],
-    template: { kind: "LETTER", title: "COURSE COMPLETION CERTIFICATE", body: `${STUDENT_LINE} has successfully completed {{course}} ({{branch}}), batch {{batch}}, under regulation {{regulation}}, in {{completionMonth}}, with a CGPA of {{cgpa}}.\n\n${REQUEST_LINE}` },
+    template: { kind: "LETTER", title: "COURSE COMPLETION CERTIFICATE", body: `${STUDENT_LINE} has completed {{course}} ({{branch}}), batch {{batch}}, under regulation {{regulation}}, in {{completionMonth}}, with a CGPA of {{cgpa}}.\n\n${REQUEST_LINE}` },
   },
   {
     key: "PROVISIONAL", code: "PC", name: "Provisional Certificate", category: "EXAMINATION",
@@ -292,8 +292,8 @@ const ENTRIES: Entry[] = [
     description: "States the fee you paid for an academic year (income tax, reimbursement).", purposes: ["Income tax", "Reimbursement", "Education loan"], allowOtherPurpose: true,
     fields: [f("feeYear", "Academic year (e.g. 2025-26)")],
     flow: [ACCOUNTS_STEP],
-    issuerFields: [f("amountPaid", "Amount paid (Rs.)", "number"), f("paymentDetails", "Receipt numbers and dates", "textarea", false)],
-    template: { kind: "LETTER", title: "FEE PAYMENT CERTIFICATE", body: `${STUDENT_LINE} studying {{course}} ({{branch}}), has paid a fee of Rs. {{amountPaid}} for the academic year {{feeYear}}.\n\n{{paymentDetails}}\n\n${REQUEST_LINE}` },
+    issuerFields: [f("amountPaid", "Amount paid (₹)", "number"), f("paymentDetails", "Receipt numbers and dates", "textarea", false)],
+    template: { kind: "LETTER", title: "FEE PAYMENT CERTIFICATE", body: `${STUDENT_LINE} studying {{course}} ({{branch}}), has paid a fee of ₹{{amountPaid}} for the academic year {{feeYear}}.\n\n{{paymentDetails}}\n\n${REQUEST_LINE}` },
   },
   {
     key: "FEE_CONCESSION", code: "FCN", name: "Scholarship / Fee Concession Certificate", category: "FEE_FINANCE",

@@ -10,16 +10,16 @@ import { createFirebaseUser } from "@/lib/firebase/authRest";
 export async function GET(request: Request) {
   try {
     const session = await verifySession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!session) return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
 
     const { searchParams } = new URL(request.url);
     const locationId = searchParams.get("locationId") ?? session.locationId;
     if (!locationId) {
-      return NextResponse.json({ error: "locationId required" }, { status: 400 });
+      return NextResponse.json({ error: "Select a location." }, { status: 400 });
     }
 
     if (session.role !== "SUPER_ADMIN" && session.locationId !== locationId) {
-      return NextResponse.json({ error: "Unauthorized for this location" }, { status: 403 });
+      return NextResponse.json({ error: "You do not have access to this location." }, { status: 403 });
     }
 
     const db = getAdminDb();
@@ -73,7 +73,7 @@ export async function GET(request: Request) {
     const authErr = firebaseAuthErrorResponse(err);
     if (authErr) return authErr;
     console.error("[location/departments GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -81,7 +81,7 @@ export async function POST(request: Request) {
   try {
     const session = await verifySession();
     if (!session || !["SUPER_ADMIN", "ADMINISTRATION", "LOCATION_STAFF_ADMIN"].includes(session.role)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
 
     const body = (await readJsonBody(request)) as {
@@ -104,7 +104,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "name and locationId required" }, { status: 400 });
     }
     if (session.role !== "SUPER_ADMIN" && session.locationId !== locationId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
 
     const db = getAdminDb();
@@ -233,9 +233,9 @@ export async function POST(request: Request) {
       err && typeof err === "object" && "code" in err &&
       (err as { code: string }).code === "auth/weak-password"
     ) {
-      return NextResponse.json({ error: "Password must be at least 6 characters" }, { status: 400 });
+      return NextResponse.json({ error: "The password must be at least 6 characters." }, { status: 400 });
     }
     console.error("[location/departments POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

@@ -46,7 +46,7 @@ export default function RejectOfferPage() {
         }
         setOffer(o);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load offer" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load offer" }))
       .finally(() => setLoading(false));
   }, [offerId, router]);
 

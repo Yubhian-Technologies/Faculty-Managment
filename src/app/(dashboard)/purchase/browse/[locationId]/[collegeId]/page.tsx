@@ -78,7 +78,7 @@ export default function PurchaseBrowseDepartmentsPage() {
             .sort((a, b) => a.label.localeCompare(b.label))
         );
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load departments" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load departments" }))
       .finally(() => setIsLoading(false));
   }, [params.collegeId, params.locationId, setSelectedCollegeId]);
 
@@ -88,7 +88,7 @@ export default function PurchaseBrowseDepartmentsPage() {
         <Button variant="ghost" size="icon" asChild>
           <Link aria-label="Back" href={`/purchase/browse/${params.locationId}`}><ArrowLeft className="h-4 w-4" /></Link>
         </Button>
-        <PageHeader title={college?.name ?? "Departments"} description="Select a department to see its requests" />
+        <PageHeader title={college?.name ?? "Departments"} description="Select a department to view its requests." />
       </div>
 
       {isLoading ? (

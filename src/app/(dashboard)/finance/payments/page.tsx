@@ -36,7 +36,7 @@ export default function FinancePaymentsPage() {
     collegeFetch("/api/college/finance-payments")
       .then((r) => r.json() as Promise<{ payments: Row[] }>)
       .then((d) => setPayments(d.payments ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load payments" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load payments" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -68,7 +68,7 @@ export default function FinancePaymentsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Payments"
-        description="Process vendor payments, staff reimbursements, and student refunds"
+        description="Process vendor payments, staff reimbursements and student refunds."
         actions={
           <Button onClick={() => router.push("/finance/payments/new")}>
             <Plus className="h-4 w-4 mr-1" />

@@ -24,7 +24,7 @@ export default function CollegeAuditLogsPage() {
     fetch("/api/college/audit-logs")
       .then((r) => r.json() as Promise<{ logs: LogRow[] }>)
       .then((data) => setLogs(data.logs ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load audit logs" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load audit logs" }))
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -94,7 +94,7 @@ export default function CollegeAuditLogsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Audit Logs"
-        description="This college's action trail - last 100 events"
+        description="Recent activity in this college (last 100 events)."
       />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-4 rounded-lg border bg-card p-4">

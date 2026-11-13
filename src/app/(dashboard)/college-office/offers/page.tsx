@@ -64,7 +64,7 @@ export default function CollegeOfficeOffersPage() {
       setAppointmentLetterCandidateIds(new Set(appointmentLetters.map((l) => l.candidateId)));
       setAccountRequestsByOfferId(Object.fromEntries(accountRequests.map((r) => [r.offerId, r])));
     } catch {
-      toast({ variant: "destructive", title: "Failed to load" });
+      toast({ variant: "destructive", title: "Unable to load" });
     } finally {
       setIsLoading(false);
     }
@@ -149,7 +149,7 @@ export default function CollegeOfficeOffersPage() {
         letter.candidateName ?? letter.id
       );
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to generate PDF", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to generate PDF", description: err instanceof Error ? err.message : undefined });
     } finally {
       setDownloadingId(null);
     }
@@ -203,7 +203,7 @@ Greetings from ${institution}.
 
 We are pleased to offer you the position of ${letter.designation} in the ${letter.department} department, effective from ${formatDate(letter.joiningDate as Parameters<typeof formatDate>[0])}.
 
-The offer letter PDF has just been downloaded to your computer - please attach it to this email before sending.
+The offer letter PDF has just been downloaded to your computer - attach it to this email before sending.
 ${coordinatorBlock}
 Please review the Terms & Conditions and confirm your acceptance and date of joining here:
 ${acceptanceUrl}
@@ -218,7 +218,7 @@ ${institution}`;
       else window.open(gmailUrl, "_blank");
     } catch (err) {
       mailWindow?.close();
-      toast({ variant: "destructive", title: "Failed to prepare email", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to prepare email", description: err instanceof Error ? err.message : undefined });
     } finally {
       setDownloadingId(null);
     }
@@ -240,7 +240,7 @@ ${institution}`;
     <div className="space-y-6">
       <PageHeader
         title="Offer Letters"
-        description="Send offer letters and request candidate login credentials once the appointment letter is released"
+        description="Send offer letters, and request login credentials for candidates once their appointment letter is issued."
         actions={
           <Button onClick={() => router.push("/college-office/offers/new")}>
             <Plus className="h-4 w-4 mr-1" />
@@ -271,9 +271,7 @@ ${institution}`;
           <CardContent className="p-12 text-center">
             <FileText className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
             <p className="font-medium">No offer letters yet</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Send offer letters for candidates in the final decision stage.
-            </p>
+            <p className="text-sm text-muted-foreground mt-1">Send offer letters to candidates in the final decision stage.</p>
           </CardContent>
         </Card>
       ) : (
@@ -356,14 +354,14 @@ ${institution}`;
                         }
                         if (!appointmentLetterCandidateIds.has(letter.candidateId)) {
                           return (
-                            <Badge variant="secondary" title="The Principal needs to generate the appointment letter first">
+                            <Badge variant="secondary" title="The Principal must generate the appointment letter first.">
                               Awaiting Appointment Letter
                             </Badge>
                           );
                         }
                         if (!letter.candidateConfirmedJoiningDate) {
                           return (
-                            <Badge variant="secondary" title="The candidate hasn't confirmed a date of joining yet">
+                            <Badge variant="secondary" title="The candidate has not confirmed a date of joining yet.">
                               Awaiting Candidate Confirmation
                             </Badge>
                           );
@@ -374,7 +372,7 @@ ${institution}`;
                             variant="outline"
                             className="border-blue-300 text-blue-700 hover:bg-blue-50"
                             onClick={() => setRequestDialogOffer(letter)}
-                            title="Ask the Webmaster to create the candidate's login"
+                            title="Request the Webmaster to create the candidate's login."
                           >
                             <KeyRound className="h-3.5 w-3.5 mr-1" />
                             Request Faculty Account

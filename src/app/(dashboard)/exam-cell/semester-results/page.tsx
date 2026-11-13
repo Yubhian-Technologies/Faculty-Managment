@@ -30,7 +30,7 @@ export default function SemesterResultsPage() {
     fetch("/api/college/exam-results/batches")
       .then((r) => r.json() as Promise<{ batches?: ExamResultBatch[] }>)
       .then((d) => setBatches(d.batches ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load results" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load results" }))
       .finally(() => setIsLoading(false));
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -79,7 +79,7 @@ export default function SemesterResultsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Semester Results"
-        description="Results sheets imported by the Exam Cell. Drafts are visible only here; published results are locked."
+        description="Result sheets imported by the Exam Cell. Drafts are visible only here; published results are locked."
         actions={
           <>
             <Button variant="outline" asChild><Link href="/exam-cell/result-rules"><Settings2 className="mr-1.5 h-4 w-4" />Result Rules</Link></Button>

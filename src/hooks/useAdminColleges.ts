@@ -27,14 +27,14 @@ type LocationsResponse = { locations: Location[] };
 
 async function fetchColleges(): Promise<College[]> {
   const res = await fetch("/api/admin/colleges");
-  if (!res.ok) throw new Error("Failed to load colleges");
+  if (!res.ok) throw new Error("Unable to load colleges");
   const data = (await res.json()) as CollegesResponse;
   return data.colleges ?? [];
 }
 
 async function fetchLocations(): Promise<Location[]> {
   const res = await fetch("/api/admin/locations");
-  if (!res.ok) throw new Error("Failed to load locations");
+  if (!res.ok) throw new Error("Unable to load locations");
   const data = (await res.json()) as LocationsResponse;
   return data.locations ?? [];
 }

@@ -44,7 +44,7 @@ export async function submitRequest(
   }
 
   const student = await loadStudentByUid(db, user.collegeId, user.uid);
-  if (!student) throw new CertificationError("INVALID", "Your login isn't linked to a student record yet. Please contact your College Office.", 400);
+  if (!student) throw new CertificationError("INVALID", "Your login isn't linked to a student record yet. Contact your College Office.", 400);
 
   const col = CERTIFICATE_REQUESTS_COL(db, user.collegeId);
   const existingSnap = await col.where("studentId", "==", student.id).where("certificateTypeKey", "==", "NO_DUE").get();
@@ -202,7 +202,7 @@ export async function duesPending(db: Firestore, user: ActingUser, id: string, b
   const label = step?.type === "PARALLEL" ? step.branches.find((b) => b.key === branchKey)?.label ?? "" : "";
   await notifications.notifyStudent(
     db, user.collegeId, updated.requesterUid, "CERTIFICATE_DUES_PENDING", `${updated.certificateTypeLabel} - dues pending`,
-    `${label}: Rs. ${amount} pending (${reason}). Pay it and the department will clear you.`,
+    `${label}: ₹${amount} pending (${reason}). Pay it and the department will clear you.`,
   );
   return updated;
 }

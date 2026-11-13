@@ -10,7 +10,7 @@ export default function PanelLeavePage() {
   const readOnly = useAuthStore((s) => s.user?.readOnlyAccess === true);
   return (
     <div className="space-y-6">
-      <PageHeader title="My Leave" description="Your leave balances and request history" />
+      <PageHeader title="My Leave" description="Your leave balances and leave request history." />
       <LeaveProfileView applyHref={readOnly ? undefined : "/panel/leave/apply"} historyBaseHref="/panel/leave/history" />
     </div>
   );

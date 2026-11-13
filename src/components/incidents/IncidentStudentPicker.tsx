@@ -101,13 +101,13 @@ export function IncidentStudentPicker({ departments, courses, years, selected, o
       const json = await res.json() as { students?: StudentListItem[]; total?: number; error?: string };
       if (seq !== loadSeq.current) return;
       if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to load students" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to load students" });
         return;
       }
       setResults(json.students ?? []);
       setTotal(json.total ?? 0);
     } catch {
-      if (seq === loadSeq.current) toast({ variant: "destructive", title: "Failed to load students" });
+      if (seq === loadSeq.current) toast({ variant: "destructive", title: "Unable to load students" });
     } finally {
       if (seq === loadSeq.current) setIsFetching(false);
     }
@@ -172,9 +172,7 @@ export function IncidentStudentPicker({ departments, courses, years, selected, o
       </div>
 
       {results === null ? (
-        <p className="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
-          Set your filters and press Load to list students.
-        </p>
+        <p className="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">Set the filters and choose Load to list students.</p>
       ) : shown.length === 0 ? (
         <p className="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">No students match.</p>
       ) : (

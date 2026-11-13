@@ -31,7 +31,7 @@ export default function AdminOfficeVacanciesPage() {
     fetch("/api/location/vacancy-requests")
       .then((r) => r.json() as Promise<{ vacancyRequests: DeptVacancyRequest[] }>)
       .then((d) => setVacancies(d.vacancyRequests ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load" }))
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -39,7 +39,7 @@ export default function AdminOfficeVacanciesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Hiring Requests"
-        description="Faculty vacancy requests for location departments"
+        description="Faculty vacancy requests for location departments."
         actions={
           <Button asChild>
             <Link href="/admin-office/vacancies/new">+ New Request</Link>

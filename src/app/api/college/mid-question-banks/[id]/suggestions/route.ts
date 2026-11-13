@@ -32,7 +32,7 @@ export async function GET(_request: Request, { params }: Params) {
     const { id } = await params;
     const db = getAdminDb();
     const access = await bankAccess(db, session, id);
-    if (!access?.canRead) return NextResponse.json({ error: "Question bank not found" }, { status: 404 });
+    if (!access?.canRead) return NextResponse.json({ error: "Question bank not found. It may have been deleted." }, { status: 404 });
     const snap = await col(db, session.collegeId, id).get();
     const suggestions = snap.docs.map((d) => ({ ...(d.data() as Omit<MidBankSuggestion, "id">), id: d.id })).sort((a, b) => b.at.localeCompare(a.at));
     const canReopen = REOPENERS.includes(session.role) && access.bank.approval === "APPROVED" && !access.bank.withdrawn && !(await printedChoice(db, session.collegeId, id));
@@ -52,7 +52,7 @@ export async function POST(request: Request, { params }: Params) {
     if (!text) return NextResponse.json({ error: "Write the suggestion" }, { status: 400 });
     const db = getAdminDb();
     const access = await bankAccess(db, session, id);
-    if (!access?.canRead) return NextResponse.json({ error: "Question bank not found" }, { status: 404 });
+    if (!access?.canRead) return NextResponse.json({ error: "Question bank not found. It may have been deleted." }, { status: 404 });
     if (access.isOwner) return NextResponse.json({ error: "This is your own - edit it instead" }, { status: 409 });
     const byName = (await actorName(db, session.collegeId, session.uid)) || session.email;
     const s: Omit<MidBankSuggestion, "id"> = {

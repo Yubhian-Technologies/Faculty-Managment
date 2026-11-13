@@ -48,7 +48,7 @@ export function IssueCard({ request, onDone }: { request: CertificateRequest; on
   async function showPreview() {
     setBusy(true);
     try { setPreview(await previewCertificate(request.id, values)); }
-    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't build the preview" }); }
+    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to build the preview" }); }
     finally { setBusy(false); }
   }
 
@@ -69,12 +69,12 @@ export function IssueCard({ request, onDone }: { request: CertificateRequest; on
       if (done.issuedCertificateId) await downloadIssued(done.issuedCertificateId).catch(() => undefined);
       onDone();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't issue the certificate" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to issue the certificate" });
     } finally { setBusy(false); }
   }
 
   async function reject() {
-    if (!remarks.trim()) { toast({ variant: "destructive", title: "Please add a reason for rejecting" }); return; }
+    if (!remarks.trim()) { toast({ variant: "destructive", title: "Add a reason for rejecting" }); return; }
     setBusy(true);
     try { await rejectAtIssuance(request.id, remarks.trim()); toast({ variant: "success", title: "Rejected" }); onDone(); }
     catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "That didn't work" }); }
@@ -111,12 +111,12 @@ export function IssueCard({ request, onDone }: { request: CertificateRequest; on
         )}
         {fee > 0 && request.feePaid && (
           <p className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
-            Fee Rs. {request.feePaid.amount} paid online · CCAvenue ref {request.feePaid.trackingId}{request.feePaid.bankRefNo ? ` · bank ref ${request.feePaid.bankRefNo}` : ""}
+            Fee ₹{request.feePaid.amount} paid online · CCAvenue ref {request.feePaid.trackingId}{request.feePaid.bankRefNo ? ` · bank ref ${request.feePaid.bankRefNo}` : ""}
           </p>
         )}
         {fee > 0 && !request.feePaid && (
           <div className="space-y-1.5 max-w-sm">
-            <Label htmlFor={`${request.id}-receipt`}>Fee receipt number (Rs. {fee}) *</Label>
+            <Label htmlFor={`${request.id}-receipt`}>Fee receipt number (₹{fee}) *</Label>
             <Input id={`${request.id}-receipt`} value={receipt} onChange={(e) => setReceipt(e.target.value)} placeholder="Receipt no. of the fee paid" />
           </div>
         )}
@@ -137,7 +137,7 @@ export function IssueCard({ request, onDone }: { request: CertificateRequest; on
           <DialogHeader><DialogTitle>{request.certificateTypeLabel} - {request.studentName}</DialogTitle></DialogHeader>
           {preview?.uploadOnly ? (
             <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">This certificate is issued as a PDF you upload (e.g. the university&apos;s certificate). A number and QR record are still kept in the register.</p>
+              <p className="text-sm text-muted-foreground">This certificate is issued as a PDF you upload (for example, the university&apos;s certificate). A number and QR record are still kept in the register.</p>
               <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm">
                 <Upload className="h-4 w-4" /> {uploadedUrl ? "Replace PDF" : "Upload PDF"}
                 <input type="file" accept="application/pdf" className="hidden" onChange={(e) => onUpload(e.target.files?.[0])} />

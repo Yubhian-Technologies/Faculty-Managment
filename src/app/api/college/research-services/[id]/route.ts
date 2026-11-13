@@ -28,7 +28,7 @@ export async function GET(
     const db = getAdminDb();
     const snap = await db.collection("colleges").doc(session.collegeId).collection("researchServices").doc(id).get();
     if (!snap.exists) {
-      return NextResponse.json({ error: "Record not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
 
     return NextResponse.json({ record: { id: snap.id, ...snap.data() } });
@@ -36,10 +36,10 @@ export async function GET(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/research-services/[id] GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -135,13 +135,13 @@ export async function PATCH(
     const ref = db.collection("colleges").doc(session.collegeId).collection("researchServices").doc(id);
     const snap = await ref.get();
     if (!snap.exists) {
-      return NextResponse.json({ error: "Record not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
     const record = snap.data() as { uid: string; title?: string; serviceType: ResearchServiceType; status?: PublicationStatus };
     const isRnD = holdsRole(session, "R_AND_D");
     const isOwner = record.uid === session.uid;
     if (!isRnD && !isOwner) {
-      return NextResponse.json({ error: "Not authorized to edit this record" }, { status: 403 });
+      return NextResponse.json({ error: "You do not have access to edit this record." }, { status: 403 });
     }
     const label = record.title || record.serviceType.toLowerCase();
 
@@ -237,10 +237,10 @@ export async function PATCH(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/research-services/[id] PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -256,7 +256,7 @@ export async function DELETE(
     const ref = db.collection("colleges").doc(session.collegeId).collection("researchServices").doc(id);
     const snap = await ref.get();
     if (!snap.exists) {
-      return NextResponse.json({ error: "Record not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
     const record = snap.data() as { title?: string; serviceType?: string; uid?: string };
 
@@ -272,9 +272,9 @@ export async function DELETE(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/research-services/[id] DELETE]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

@@ -381,10 +381,10 @@ export async function GET(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/students GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -469,7 +469,7 @@ export async function POST(request: Request) {
         .limit(1)
         .get();
       if (sectionsSnap.empty) {
-        return NextResponse.json({ error: "Section not found" }, { status: 400 });
+        return NextResponse.json({ error: "Section not found. It may have been deleted." }, { status: 400 });
       }
       const sectionDoc = sectionsSnap.docs[0].data() as Section;
       dept = sectionDoc.department;
@@ -481,11 +481,11 @@ export async function POST(request: Request) {
       allDepts = allDeptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentWithId[];
       if (body.departmentId) {
         const found = allDepts.find((d) => d.id === body.departmentId);
-        if (!found) return NextResponse.json({ error: "Department not found" }, { status: 400 });
+        if (!found) return NextResponse.json({ error: "Department not found. It may have been deleted." }, { status: 400 });
         dept = found.name;
       } else if (body.department?.trim()) {
         const resolvedName = resolveDepartmentByNameOrCode(allDepts, body.department);
-        if (!resolvedName) return NextResponse.json({ error: "Department not found" }, { status: 400 });
+        if (!resolvedName) return NextResponse.json({ error: "Department not found. It may have been deleted." }, { status: 400 });
         dept = resolvedName;
       } else {
         return NextResponse.json({ error: "Provide a section, or a department for an unassigned student" }, { status: 400 });
@@ -532,7 +532,7 @@ export async function POST(request: Request) {
       // asterisk for. Checked unconditionally (not just once the department
       // doc is re-looked-up below) so it's never skippable.
       if (!(typeof body.course === "string" && body.course.trim())) {
-        return NextResponse.json({ error: "Course is required" }, { status: 400 });
+        return NextResponse.json({ error: "Course is required." }, { status: 400 });
       }
 
       // 1st-year students at a college that runs a shared/common first year
@@ -843,9 +843,9 @@ export async function POST(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/students POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

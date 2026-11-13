@@ -94,7 +94,7 @@ export function RequestForm({
       .then(setOptions)
       .catch((e) =>
         setOptionsError(
-          e instanceof Error ? e.message : "Couldn't load the form",
+          e instanceof Error ? e.message : "Unable to load the form",
         ),
       );
   }, []);
@@ -229,7 +229,7 @@ export function RequestForm({
     } catch (e) {
       toast({
         variant: "destructive",
-        title: e instanceof Error ? e.message : "Couldn't send the request",
+        title: e instanceof Error ? e.message : "Unable to send the request",
       });
     } finally {
       setSubmitting(false);
@@ -240,7 +240,7 @@ export function RequestForm({
     return (
       <EmptyState
         icon={Inbox}
-        headline="Couldn't load the request form."
+        headline="Unable to load the request form."
         hint={optionsError}
       />
     );
@@ -262,10 +262,7 @@ export function RequestForm({
             ? "Request Permission"
             : "Request Permission for Students"}
         </CardTitle>
-        <CardDescription>
-          Once approved, the selected periods show as Permission in the students’ attendance
-          (they are left out of the attendance percentage).
-        </CardDescription>
+        <CardDescription>Once approved, the selected periods are shown as Permission in the students&apos; attendance and are excluded from the attendance percentage.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 p-4 pt-2 sm:space-y-5 sm:p-6 sm:pt-3">
         {mode === "student" && options.studentInfo && (
@@ -344,7 +341,7 @@ export function RequestForm({
                 title && !title.trim() ? "pm-title-error" : undefined
               }
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Smart India Hackathon"
+              placeholder="Smart India Hackathon"
             />
             {title && !title.trim() && (
               <p
@@ -370,7 +367,7 @@ export function RequestForm({
               maxLength={120}
               required
               onChange={(e) => setOtherCategory(e.target.value)}
-              placeholder="e.g. Blood Donation Camp, NSS Event, Paper Presentation"
+              placeholder="Blood Donation Camp, NSS Event, Paper Presentation"
             />
           </div>
         )}
@@ -441,7 +438,7 @@ export function RequestForm({
             <Input
               id="pm-venue"
               value={venue}
-              placeholder="e.g. XYZ College, Hyderabad"
+              placeholder="XYZ College, Hyderabad"
               maxLength={200}
               onChange={(e) => setVenue(e.target.value)}
             />
@@ -585,7 +582,7 @@ export function RequestForm({
               {uploading ? "Uploading…" : "Upload File"}
             </Button>
             <span className="text-xs text-muted-foreground">
-              PDF, PNG or JPEG (up to 4 MB each, at most 5 files)
+              PDF, PNG or JPEG (up to 4 MB each, at most 5 files).
             </span>
           </div>
           {proof.map((p, i) => (

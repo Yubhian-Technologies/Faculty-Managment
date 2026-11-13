@@ -30,10 +30,10 @@ export async function GET(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/course-academic-years GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -59,7 +59,7 @@ export async function POST(request: Request) {
     const { departmentId, courseId, year, label, correction } = body;
 
     if (!departmentId || !courseId || !year || !label?.trim()) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+      return NextResponse.json({ error: "Fill in all required fields." }, { status: 400 });
     }
     const labelStart = parseAcademicYearStart(label);
     if (labelStart == null) {
@@ -185,9 +185,9 @@ export async function POST(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/course-academic-years POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

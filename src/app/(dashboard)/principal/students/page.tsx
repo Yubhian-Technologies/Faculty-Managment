@@ -128,7 +128,7 @@ function PrincipalStudentsContent() {
       const configured = (yearsRes.academicYears ?? []).map((y) => y.yearNumber).filter(Boolean);
       setYears(selectableYears(configured, loadedCourses));
     } catch {
-      toast({ variant: "destructive", title: "Failed to load filter options" });
+      toast({ variant: "destructive", title: "Unable to load filter options" });
     } finally {
       setIsMetadataLoading(false);
     }
@@ -158,7 +158,7 @@ function PrincipalStudentsContent() {
       const res = await fetch(`/api/college/students?${params.toString()}`);
       const json = await res.json() as { students?: StudentListItem[]; total?: number; error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to load students" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to load students" });
         return;
       }
       const data = json.students ?? [];
@@ -171,7 +171,7 @@ function PrincipalStudentsContent() {
       setStudents(data);
       setTotal(grandTotal);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load students" });
+      toast({ variant: "destructive", title: "Unable to load students" });
     } finally {
       setIsFetching(false);
     }
@@ -388,9 +388,7 @@ function PrincipalStudentsContent() {
             <div className="flex flex-col items-center justify-center py-20 text-center border rounded-lg bg-card">
               <Users className="h-10 w-10 text-muted-foreground mb-3" />
               <p className="font-medium text-base">Click Load to view students</p>
-              <p className="text-sm text-muted-foreground mt-1 max-w-sm">
-                Select your filters above (or leave as all) and click Load to fetch the student roster with pagination.
-              </p>
+              <p className="text-sm text-muted-foreground mt-1 max-w-sm">Select filters above (or leave them as All) and choose Load to view the student list.</p>
             </div>
           ) : isFetching && students.length === 0 ? (
             <div className="space-y-2">

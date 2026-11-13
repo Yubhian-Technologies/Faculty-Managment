@@ -81,7 +81,7 @@ export default function SuperAdminUserModuleEditPage() {
             .catch(() => {});
         }
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load user" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load user" }))
       .finally(() => setLoading(false));
   }, [uid, router]);
 
@@ -121,7 +121,7 @@ export default function SuperAdminUserModuleEditPage() {
       toast({ variant: "success", title: "Saved" });
       router.push(`/super-admin/users/${uid}/${moduleKey}`);
     } catch {
-      toast({ variant: "destructive", title: "Failed to save" });
+      toast({ variant: "destructive", title: "Unable to save" });
     } finally {
       setSaving(false);
     }

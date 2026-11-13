@@ -323,13 +323,13 @@ function RecordFormFields({
           });
       if (!res.ok) {
         const json = await res.json().catch(() => ({})) as { error?: string };
-        toast({ variant: "destructive", title: "Failed to save record", description: json.error });
+        toast({ variant: "destructive", title: "Unable to save record", description: json.error });
         return;
       }
       toast({ variant: "success", title: editingId ? "Resubmitted for verification" : "Submitted for verification" });
       onSaved();
     } catch {
-      toast({ variant: "destructive", title: "Network error. Please try again." });
+      toast({ variant: "destructive", title: "Network error. Try again." });
     } finally {
       setSaving(false);
     }
@@ -413,7 +413,7 @@ function RecordFormFields({
                 <TextInput label={isConference ? "Title of the Conference" : "Title of Research Workshop"} value={form.title} onChange={(v) => set("title", v)} />
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <NumField label="No. of Days" value={form.noOfDays} onChange={(v) => set("noOfDays", v)} />
-                  <TextInput label="A.Y." value={form.academicYear} onChange={(v) => set("academicYear", v)} placeholder="e.g. 2024-25" />
+                  <TextInput label="A.Y." value={form.academicYear} onChange={(v) => set("academicYear", v)} placeholder="2024-25" />
                 </div>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <DateInput label="Start Date" value={form.startDate} onChange={(v) => set("startDate", v)} />
@@ -424,9 +424,9 @@ function RecordFormFields({
               <div className="space-y-4">
                 <SubLabel>Finances</SubLabel>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                  <NumField label="Amount Sanctioned (Rs.)" value={form.amountSanctioned} onChange={(v) => set("amountSanctioned", v)} />
-                  <NumField label="Amount Received (Rs.)" value={form.amountReceived} onChange={(v) => set("amountReceived", v)} />
-                  <NumField label="Expenditure Made (Rs.)" value={form.expenditureMade} onChange={(v) => set("expenditureMade", v)} />
+                  <NumField label="Amount Sanctioned (₹)" value={form.amountSanctioned} onChange={(v) => set("amountSanctioned", v)} />
+                  <NumField label="Amount Received (₹)" value={form.amountReceived} onChange={(v) => set("amountReceived", v)} />
+                  <NumField label="Expenditure Made (₹)" value={form.expenditureMade} onChange={(v) => set("expenditureMade", v)} />
                 </div>
                 <DocumentUploadField
                   label="Sanctioned Letter"
@@ -464,7 +464,7 @@ function RecordFormFields({
                 renderRow={(item, update) => (
                   <>
                     <TextInput label="Name of the Faculty" value={item.name} onChange={(v) => update({ name: v })} />
-                    <TextInput label="Dept. of Faculty" value={item.department} onChange={(v) => update({ department: v })} />
+                    <TextInput label="Department of Faculty" value={item.department} onChange={(v) => update({ department: v })} />
                     <TextInput label="Type" value={item.type} onChange={(v) => update({ type: v })} placeholder="Convener / Co-Convener / Coordinator / Co-Coordinator" />
                   </>
                 )}
@@ -480,7 +480,7 @@ function RecordFormFields({
                 renderRow={(item, update) => (
                   <>
                     <TextInput label="Name of the Faculty" value={item.name} onChange={(v) => update({ name: v })} />
-                    <TextInput label="Dept. of the Faculty" value={item.department} onChange={(v) => update({ department: v })} />
+                    <TextInput label="Department of the Faculty" value={item.department} onChange={(v) => update({ department: v })} />
                   </>
                 )}
               />
@@ -537,7 +537,7 @@ function RecordFormFields({
                 />
                 {isConference && (
                   <div className="space-y-3 rounded-lg border p-3">
-                    <p className="text-xs font-medium text-muted-foreground">Conference Proceedings/DOI Link</p>
+                    <p className="text-xs font-medium text-muted-foreground">Conference Proceedings / DOI Link</p>
                     <DocumentUploadField
                       label="Conference Proceedings (PDF)"
                       value={form.conferenceProceedingsUrl}

@@ -21,7 +21,7 @@ const COLLEGE_WIDE = new Set(["PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE"]);
 async function authorize(db: Firestore, session: { collegeId: string; uid: string; role: string }, id: string) {
   if (COLLEGE_WIDE.has(session.role)) {
     const snap = await db.collection("colleges").doc(session.collegeId).collection("students").doc(id).get();
-    if (!snap.exists) return { ok: false as const, status: 404, error: "Student not found" };
+    if (!snap.exists) return { ok: false as const, status: 404, error: "Student not found. The record may have been deleted." };
     return { ok: true as const, student: { ...(snap.data() as StudentRecord), id: snap.id } };
   }
   const access = await authorizeMentoringStudent(db, session, id);

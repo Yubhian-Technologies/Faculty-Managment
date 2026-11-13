@@ -63,7 +63,7 @@ export default function ExamRoomsPage() {
     fetch("/api/college/exam-rooms", { cache: "no-store" })
       .then((r) => r.json() as Promise<{ rooms?: ExamRoom[] }>)
       .then((d) => setRooms(d.rooms ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load rooms" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load rooms" }))
       .finally(() => setIsLoading(false));
   }
   useEffect(load, []);
@@ -81,13 +81,13 @@ export default function ExamRoomsPage() {
             body: JSON.stringify({ rooms: [form] }),
           });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to save room");
+      if (!res.ok) throw new Error(data.error ?? "Unable to save room");
       toast({ variant: "success", title: editingId ? "Room updated" : "Room added" });
       setForm(EMPTY);
       setEditingId(null);
       load();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save room" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save room" });
     } finally {
       setSaving(false);
     }
@@ -102,7 +102,7 @@ export default function ExamRoomsPage() {
         fd.append("file", file);
         const res = await fetch("/api/college/parse-excel", { method: "POST", body: fd });
         const data = (await res.json()) as { rows?: string[][]; error?: string };
-        if (!res.ok) throw new Error(data.error ?? "Failed to read the workbook");
+        if (!res.ok) throw new Error(data.error ?? "Unable to read the workbook");
         rows = data.rows ?? [];
       } else {
         rows = parseCsv(await file.text());
@@ -144,7 +144,7 @@ export default function ExamRoomsPage() {
       toast({ variant: "success", title: `Room ${deleteTarget.name} removed` });
       setDeleteTarget(null);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to delete room" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to delete room" });
     } finally {
       setDeleting(false);
     }
@@ -161,7 +161,7 @@ export default function ExamRoomsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Exam Rooms"
-        description="Classrooms used for exams - block, floor, benches and students per bench. Exam Cell seats students into these."
+        description="Classrooms used for examinations, with block, floor, benches and students per bench. The Exam Cell seats students in these rooms."
         actions={
           <>
             <input

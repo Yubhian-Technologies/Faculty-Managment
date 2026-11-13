@@ -58,7 +58,7 @@ export function OfficeAttendanceEditor({ facultyId, date, subjectName, sectionLa
             body: JSON.stringify({ facultyId, assignmentId: p.assignmentId, date, periodNumber: p.periodNumber }),
           });
           const json = (await res.json()) as { session?: StudentAttendanceSession; error?: string };
-          if (!res.ok || !json.session) throw new Error(json.error ?? `Failed to open period ${p.periodNumber}`);
+          if (!res.ok || !json.session) throw new Error(json.error ?? `Unable to open period ${p.periodNumber}`);
           return [p.periodNumber, json.session] as const;
         }));
         if (cancelled) return;
@@ -77,7 +77,7 @@ export function OfficeAttendanceEditor({ facultyId, date, subjectName, sectionLa
         setDraft(nextDraft);
         setClassNotes(first.classNotes ?? "");
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to open attendance");
+        if (!cancelled) setError(err instanceof Error ? err.message : "Unable to open attendance");
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -135,7 +135,7 @@ export function OfficeAttendanceEditor({ facultyId, date, subjectName, sectionLa
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ entries, classNotes: classNotes.trim(), reason: reason.trim(), submit: true }),
         });
-        if (!res.ok) failed.push(`Period ${n}: ${((await res.json().catch(() => ({}))) as { error?: string }).error ?? "Failed to save"}`);
+        if (!res.ok) failed.push(`Period ${n}: ${((await res.json().catch(() => ({}))) as { error?: string }).error ?? "Unable to save"}`);
       } catch {
         failed.push(`Period ${n}: Network error`);
       }
@@ -208,7 +208,7 @@ export function OfficeAttendanceEditor({ facultyId, date, subjectName, sectionLa
                         {periodNumbers.map((n) => (
                           <td key={n} className="px-3 py-2.5 text-center border-l whitespace-nowrap">
                             {draft[s.studentId]?.[n] === "ON_DUTY" ? (
-                              <span title="Approved permission - locked" className="inline-flex rounded-full border px-2 py-0.5 text-xs font-medium">On Duty</span>
+                              <span title="Approved permission (locked)" className="inline-flex rounded-full border px-2 py-0.5 text-xs font-medium">On Duty</span>
                             ) : (
                               <Switch
                                 checked={draft[s.studentId]?.[n] === meaning}
@@ -250,7 +250,7 @@ export function OfficeAttendanceEditor({ facultyId, date, subjectName, sectionLa
               </div>
               <div className="space-y-2">
                 <Label htmlFor="office-edit-reason" className="text-sm font-medium">Reason for this change *</Label>
-                <Textarea id="office-edit-reason" rows={2} value={reason} onChange={(e) => setReason(e.target.value)} disabled={isSaving} placeholder="Recorded with the change, e.g. marked late / correction requested by the faculty" />
+                <Textarea id="office-edit-reason" rows={2} value={reason} onChange={(e) => setReason(e.target.value)} disabled={isSaving} placeholder="Reason recorded with the change, for example: correction requested by the faculty member." />
               </div>
             </div>
             <CardContent className="flex items-center justify-end border-t py-4">

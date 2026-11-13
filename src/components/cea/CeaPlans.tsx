@@ -25,7 +25,7 @@ export function CeaPlans({ title, description, tabs }: { title: string; descript
   const [show, setShow] = useState<"" | "TODO" | "DONE">("");
   const [open, setOpen] = useState<string | null>(null);
   const load = useCallback(() => {
-    fetch("/api/college/cea/subjects").then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? "Couldn't load"); setD(j); setError(""); }).catch((e: Error) => setError(e.message));
+    fetch("/api/college/cea/subjects").then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? "Unable to load"); setD(j); setError(""); }).catch((e: Error) => setError(e.message));
   }, []);
   useEffect(load, [load]);
   const rows = useMemo(() => {
@@ -92,9 +92,9 @@ export function CeaPlanDialog({ subjectId, onClose, onSaved }: { subjectId: stri
     try {
       const res = await fetch(`/api/college/cea/plans/${encodeURIComponent(subjectId)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ version: d?.plan?.version ?? 0, units }) });
       const j = await res.json();
-      if (!res.ok) throw new Error(j.error ?? "Couldn't save");
+      if (!res.ok) throw new Error(j.error ?? "Unable to save");
       toast({ variant: "success", title: "CIE plan saved" }); onSaved();
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't save" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" }); }
     finally { setBusy(false); }
   }
   const types = d?.settings?.types ?? [];
@@ -107,8 +107,8 @@ export function CeaPlanDialog({ subjectId, onClose, onSaved }: { subjectId: stri
           <DialogTitle>CIE plan{d ? ` - ${d.subject.name}` : ""}</DialogTitle>
           <DialogDescription>{d ? `${d.subject.code} · ${d.subject.courseName} ${d.subject.regulation} · every branch${d.settings ? ` · ${d.settings.unitMarks} marks a unit` : ""}` : "Loading..."}</DialogDescription>
         </DialogHeader>
-        {d && !d.settings && <p className="text-sm text-muted-foreground">CIE isn&apos;t switched on for this course and regulation.</p>}
-        {d && d.settings && d.syllabusStatus !== "FROZEN" && <p className="text-sm text-amber-700 dark:text-amber-300">The syllabus isn&apos;t frozen yet - its units are what you plan. Academics freeze it after the HOD submits it.</p>}
+        {d && !d.settings && <p className="text-sm text-muted-foreground">CIE is not enabled for this course and regulation.</p>}
+        {d && d.settings && d.syllabusStatus !== "FROZEN" && <p className="text-sm text-amber-700 dark:text-amber-300">The syllabus is not frozen yet; plan using its current units. Academics freezes it after the HOD submits it.</p>}
         {d && d.settings && d.units.length > 0 && (
           <div className="space-y-2">
             <table className="w-full text-sm">

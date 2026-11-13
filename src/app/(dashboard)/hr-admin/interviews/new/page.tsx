@@ -34,7 +34,7 @@ interface LocationVacancy {
 const ROLE_LABELS: Record<string, string> = {
   ADMINISTRATION: "Administration",
   HR_ADMIN: "HR Admin",
-  LOCATION_DEPT_HEAD: "Dept Head",
+  LOCATION_DEPT_HEAD: "Department Head",
 };
 
 export default function NewInterviewPlanPage() {
@@ -142,7 +142,7 @@ export default function NewInterviewPlanPage() {
       });
       const json = await res.json() as { id?: string; error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to create", description: json.error });
+        toast({ variant: "destructive", title: "Unable to create", description: json.error });
         return;
       }
       toast({ variant: "success", title: "Interview plan submitted", description: "Administration will review and approve." });
@@ -158,7 +158,7 @@ export default function NewInterviewPlanPage() {
 
   return (
     <div className="max-w-2xl space-y-5">
-      <PageHeader title="New Interview Plan" description="Create an interview plan for shortlisted candidates" />
+      <PageHeader title="New Interview Plan" description="Create an interview plan for the shortlisted candidates." />
       <form onSubmit={handleSubmit} className="space-y-5">
 
         {/* Vacancy selector */}
@@ -206,7 +206,7 @@ export default function NewInterviewPlanPage() {
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label>Interview Title <span className="text-destructive">*</span></Label>
-              <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Faculty Interview - Electrical Dept 2026" />
+              <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Faculty Interview, Electrical Dept 2026" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
@@ -239,7 +239,7 @@ export default function NewInterviewPlanPage() {
           </CardHeader>
           <CardContent className="space-y-2">
             {!selectedVacancyId && (
-              <p className="text-sm text-muted-foreground py-2">Select a vacancy above to see candidates for that department.</p>
+              <p className="text-sm text-muted-foreground py-2">Select a vacancy above to see the candidates for that department.</p>
             )}
             {selectedVacancyId && filteredCandidates.length === 0 && (
               <p className="text-sm text-muted-foreground py-2">

@@ -49,7 +49,7 @@ export default function LibraryStaffPage() {
       const data = (await res.json()) as { staff?: StaffRow[] };
       setStaff(data.staff ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load staff" });
+      toast({ variant: "destructive", title: "Unable to load staff" });
     } finally {
       setIsLoading(false);
     }
@@ -69,7 +69,7 @@ export default function LibraryStaffPage() {
       setDeleteTarget(null);
       void load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to delete staff record" });
+      toast({ variant: "destructive", title: "Unable to delete staff record" });
     } finally {
       setIsDeleting(false);
     }
@@ -136,7 +136,7 @@ export default function LibraryStaffPage() {
     <div className="space-y-6">
       <PageHeader
         title="Library Staff"
-        description="Staff records for your Library unit"
+        description="Staff records of the library."
         actions={
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => exportSupportingStaffCsv(staff, "library_staff")} disabled={staff.length === 0}>

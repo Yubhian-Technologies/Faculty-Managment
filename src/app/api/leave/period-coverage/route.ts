@@ -41,7 +41,7 @@ export async function GET(request: Request) {
 
     if (requestId) {
       const snap = await REQUESTS_COL(session.collegeId, db).doc(requestId).get();
-      if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+      if (!snap.exists) return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
       const req = { id: snap.id, ...snap.data() } as LeaveRequest;
       // Either the department's own HOD (adjusting/replacing periods on an
       // "Other" request), or the requester themselves (re-picking a
@@ -49,11 +49,11 @@ export async function GET(request: Request) {
       // applications/[id]/route.ts).
       if (req.uid !== session.uid) {
         if (session.role !== "HOD") {
-          return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+          return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
         }
         const hodDepts = await resolveHodDepartments(db, session.collegeId, session.uid);
         if (!req.department || !hodDepts.includes(req.department)) {
-          return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+          return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
         }
       }
       targetUid = req.uid;
@@ -90,9 +90,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ periods });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[leave/period-coverage GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

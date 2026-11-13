@@ -94,13 +94,13 @@ export function EmergencyBudgetForm({ editingRequest, onCancel, onSaved }: Emerg
 
       if (!res.ok) {
         const err = (await res.json()) as { error?: string };
-        throw new Error(err.error ?? "Failed to submit emergency budget request");
+        throw new Error(err.error ?? "Unable to submit emergency budget request");
       }
 
       toast({ variant: "success", title: editingRequest ? "Emergency request resubmitted" : "Emergency request submitted to Management" });
       onSaved();
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to submit", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to submit", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsSaving(false);
     }
@@ -136,7 +136,7 @@ export function EmergencyBudgetForm({ editingRequest, onCancel, onSaved }: Emerg
               <RadioGroupItem value="NON_GOODS" id="type-non-goods" className="mt-0.5" />
               <span>
                 <span className="block text-sm font-medium">Non-Goods</span>
-                <span className="block text-xs text-muted-foreground">Services / staffing / other (Recurring categories)</span>
+                <span className="block text-xs text-muted-foreground">Services, staffing and other (recurring categories)</span>
               </span>
             </label>
           </RadioGroup>
@@ -150,7 +150,7 @@ export function EmergencyBudgetForm({ editingRequest, onCancel, onSaved }: Emerg
         <CardContent className="space-y-5">
           <div className="space-y-2">
             <Label>Budget Title <span className="text-destructive">*</span></Label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Urgent lab equipment replacement" />
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Urgent lab equipment replacement" />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -160,7 +160,7 @@ export function EmergencyBudgetForm({ editingRequest, onCancel, onSaved }: Emerg
             </div>
             <div className="space-y-2">
               <Label>Academic Year <span className="text-destructive">*</span></Label>
-              <Input value={academicYear} onChange={(e) => setAcademicYear(e.target.value)} placeholder="e.g. 2026-27" />
+              <Input value={academicYear} onChange={(e) => setAcademicYear(e.target.value)} placeholder="2026-27" />
             </div>
           </div>
 

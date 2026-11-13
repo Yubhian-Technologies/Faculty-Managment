@@ -113,7 +113,7 @@ export function StudentFinder({ byDepartment, byMentor }: { byDepartment: Mentor
       setRows((prev) => [...prev, ...d.students]);
       setNextCursor(d.nextCursor);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load more");
+      setError(e instanceof Error ? e.message : "Unable to load more");
     }
     setState("done");
   }
@@ -123,9 +123,7 @@ export function StudentFinder({ byDepartment, byMentor }: { byDepartment: Mentor
       <CardContent className="pt-5 space-y-3">
         <div>
           <h2 className="text-base font-semibold">Look up a student</h2>
-          <p className="text-xs text-muted-foreground">
-            Pick a department or a mentor to see their students (narrow by year, section, mentor or name), or type a Regd. No. Read-only; referrals, the health record and the mentor&apos;s private notes are not shown.
-          </p>
+          <p className="text-xs text-muted-foreground">Select a department or a mentor to see their students (refine by year, section, mentor or name), or type a Regd. No. Read only; referrals, the health record and the mentor&apos;s private notes are not shown.</p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
           <FilterSelect label="Department" value={department} onChange={(v) => { setDepartment(v); setYear(ANY); setSection(ANY); setMentor(ANY); }}

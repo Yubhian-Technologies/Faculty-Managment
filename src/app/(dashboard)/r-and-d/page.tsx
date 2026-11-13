@@ -105,9 +105,7 @@ export default function RAndDDashboard() {
             <div className="py-8 text-center">
               <CheckCircle2 className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
               <p className="text-sm font-medium">Nothing awaiting verification</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                New submissions from faculty and staff will show up here.
-              </p>
+              <p className="text-xs text-muted-foreground mt-1">New submissions from faculty and staff appear here.</p>
             </div>
           ) : (
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 mt-4">
@@ -121,7 +119,7 @@ export default function RAndDDashboard() {
                     <div className="min-w-0">
                       <p className="text-sm font-medium truncate">{m.label}</p>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        {m.failed ? "Couldn't load" : `${m.pending} awaiting verification`}
+                        {m.failed ? "Unable to load" : `${m.pending} awaiting verification`}
                       </p>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">

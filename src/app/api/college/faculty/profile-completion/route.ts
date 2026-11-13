@@ -35,7 +35,7 @@ export async function GET(request: Request) {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid, { activeOnly: !deptFilter });
       if (deptFilter) {
         if (!canHodManageFacultyDepartment(scope, deptFilter)) {
-          return NextResponse.json({ error: "That department is not yours or one of your sub-departments" }, { status: 403 });
+          return NextResponse.json({ error: "This department is not yours or one of your sub-departments." }, { status: 403 });
         }
         const treeNames = (await getDepartmentTreeNames(db, session.collegeId, deptFilter))
           .filter((n) => canHodManageFacultyDepartment(scope, n));
@@ -73,10 +73,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ sections: sectionMeta(), faculty });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/faculty/profile-completion GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 

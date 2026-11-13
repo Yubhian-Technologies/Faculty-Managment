@@ -100,7 +100,7 @@ export default function SubDepartmentsSettingsPage() {
         setChildren([]);
       }
     } catch {
-      toast({ variant: "destructive", title: "Failed to load sub-departments" });
+      toast({ variant: "destructive", title: "Unable to load sub-departments" });
     } finally {
       setIsLoading(false);
     }
@@ -120,13 +120,13 @@ export default function SubDepartmentsSettingsPage() {
     try {
       const res = await fetch(`/api/college/departments?deptId=${deleteTarget.id}`, { method: "DELETE" });
       const json = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to delete");
+      if (!res.ok) throw new Error(json.error ?? "Unable to delete");
 
       toast({ variant: "success", title: `${deleteTarget.name} removed` });
       setDeleteTarget(null);
       void load();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to delete" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to delete" });
     } finally {
       setIsDeleting(false);
     }
@@ -152,13 +152,13 @@ export default function SubDepartmentsSettingsPage() {
       <div className="space-y-6">
         <PageHeader
           title="Sub-Departments"
-          description="Split your department into sub-branches, each with its own HOD"
+          description="Divide your department into sub-departments, each with its own HOD."
         />
         <Card>
           <CardContent className="py-16">
             <EmptyState
               title="Not available for a sub-department"
-              description="Sub-departments are one level deep only - your department can't be split further."
+              description="Sub-departments have only one level; your department cannot be divided further."
               icon={<Network className="h-8 w-8" />}
             />
           </CardContent>
@@ -187,7 +187,7 @@ export default function SubDepartmentsSettingsPage() {
         {deptPicker}
         <PageHeader
           title="Sub-Departments"
-          description="Split your department into sub-branches, each with its own HOD"
+          description="Divide your department into sub-departments, each with its own HOD."
         />
         <Card>
           <CardContent className="py-16">
@@ -241,7 +241,7 @@ export default function SubDepartmentsSettingsPage() {
                     <Link
                       href={`/hod/settings/sub-departments/${dept.id}/edit`}
                       className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground"
-                      title="Edit sub-department (name, code, Sub-HOD, grouped departments)"
+                      title="Edit sub-department (name, code, Sub-HOD and grouped departments)"
                       aria-label={`Edit ${dept.name}`}
                     >
                       <Pencil className="h-3.5 w-3.5" />

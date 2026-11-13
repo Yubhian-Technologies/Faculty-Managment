@@ -113,7 +113,7 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
     void (async () => {
       try {
         const res = await fetch("/api/college/sections");
-        if (!res.ok) throw new Error("Failed to load sections");
+        if (!res.ok) throw new Error("Unable to load sections");
         const json = (await res.json()) as { sections?: SectionListItem[] };
         setSections((json.sections ?? []).filter((s) => !!s.id));
         // Course length (years) decides how far up the semester list goes. Best
@@ -127,7 +127,7 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
           setDepartmentDocs(d.departments ?? []);
         } catch { /* falls back to the sections' own years */ }
       } catch {
-        toast({ variant: "destructive", title: "Failed to load sections" });
+        toast({ variant: "destructive", title: "Unable to load sections" });
       } finally {
         setIsLoadingSections(false);
       }
@@ -307,7 +307,7 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
       if (hosteller) params.set("hosteller", hosteller);
       const res = await fetch(`/api/college/section-attendance-report?${params.toString()}`);
       const json = (await res.json()) as { subjects?: SubjectCol[]; students?: ReportStudent[]; error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to load report");
+      if (!res.ok) throw new Error(json.error ?? "Unable to load report");
       return { section, subjects: json.subjects ?? [], students: json.students ?? [] };
     }));
   }
@@ -321,7 +321,7 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
       setApplied({ filters: NO_FILTERS, range: TILL_NOW, hosteller: null });
     } catch (e) {
       setReports(null);
-      const message = e instanceof Error ? e.message : "Failed to load report";
+      const message = e instanceof Error ? e.message : "Unable to load report";
       setLoadError(message);
       toast({ variant: "destructive", title: message });
     } finally {
@@ -379,7 +379,7 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
       const count = fresh.reduce((n, r) => n + applyStudentFilters(r.students, filters).length, 0);
       toast({ title: `Filter applied - ${count} student${count === 1 ? "" : "s"}` });
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Failed to apply filter";
+      const message = e instanceof Error ? e.message : "Unable to apply filter";
       setLoadError(message);
       toast({ variant: "destructive", title: message });
     } finally {
@@ -497,7 +497,7 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
     <div className="space-y-5">
       <div>
         <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
-        <p className="text-sm text-muted-foreground">Pick a course, semester and section, load the report, then narrow it down with filters.</p>
+        <p className="text-sm text-muted-foreground">Select a course, semester and section, load the report, then refine it with filters.</p>
       </div>
 
       <Card>
@@ -549,7 +549,7 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
           <div className="flex flex-wrap items-center gap-3">
             <Button onClick={() => void load()} disabled={!ready || loading}>{loading && !reports ? "Loading…" : "Load Report"}</Button>
             {!ready && !isLoadingSections && sections.length > 0 && (
-              <p className="text-xs text-muted-foreground">Choose a course, department, semester and section to load the report.</p>
+              <p className="text-xs text-muted-foreground">Select a course, department, semester and section to load the report.</p>
             )}
           </div>
         </CardContent>
@@ -559,7 +559,7 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Filters</CardTitle>
-            <p className="text-xs text-muted-foreground">Tick the ones you want, fill them in, then press Apply filter.</p>
+            <p className="text-xs text-muted-foreground">Select the filters you need, enter their values, then choose Apply Filter.</p>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -628,12 +628,12 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
 
       {loadError && (
         <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          Could not load the report: {loadError}
+          Unable to load the report: {loadError}
         </div>
       )}
       {loading && !reports && <div className="h-24 animate-pulse rounded-md border bg-muted/30" />}
       {reports && reports.length === 0 && (
-        <p className="text-sm text-muted-foreground">There are no sections for this selection.</p>
+        <p className="text-sm text-muted-foreground">No sections for this selection.</p>
       )}
 
       {reports && reports.length > 0 && (

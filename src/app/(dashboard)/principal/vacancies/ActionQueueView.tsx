@@ -36,7 +36,7 @@ export function ActionQueueView({ scope }: { scope: "active" | "past" }) {
     fetch("/api/college/hiring-batches")
       .then((r) => r.json() as Promise<{ batches: BatchRow[] }>)
       .then((d) => setBatches(d.batches ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load hiring batches" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load hiring batches" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -149,9 +149,7 @@ export function ActionQueueView({ scope }: { scope: "active" | "past" }) {
             <CardContent className="flex flex-col items-center justify-center py-16 gap-3 text-center">
               <CheckCircle2 className="h-10 w-10 text-muted-foreground/30" />
               <p className="font-medium text-muted-foreground">No batches awaiting decision</p>
-              <p className="text-sm text-muted-foreground">
-                Once the HOD submits interview evaluations, batches will appear here.
-              </p>
+              <p className="text-sm text-muted-foreground">Batches appear here once the HOD submits interview evaluations.</p>
             </CardContent>
           </Card>
         ) : (

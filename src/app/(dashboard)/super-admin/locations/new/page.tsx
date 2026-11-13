@@ -31,7 +31,7 @@ export default function NewLocationPage() {
       toast({ variant: "success", title: "Location created" });
       router.push("/super-admin/locations");
     } catch {
-      toast({ variant: "destructive", title: "Failed to create location" });
+      toast({ variant: "destructive", title: "Unable to create location" });
     } finally {
       setSaving(false);
     }
@@ -39,19 +39,19 @@ export default function NewLocationPage() {
 
   return (
     <div className="max-w-lg space-y-5">
-      <PageHeader title="Add Location" description="Create a new institution location" />
+      <PageHeader title="Add Location" description="Create a new institution location." />
       <form onSubmit={handleSubmit} className="space-y-5">
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-base">Location Details</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label>Location Name <span className="text-destructive">*</span></Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Bhimavaram Campus" />
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Bhimavaram Campus" />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>City <span className="text-destructive">*</span></Label>
-                <Input value={city} onChange={(e) => setCity(e.target.value)} placeholder="e.g. Bhimavaram" />
+                <Input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Bhimavaram" />
               </div>
               <div className="space-y-2">
                 <Label>State</Label>

@@ -30,7 +30,7 @@ export async function GET(
       .get();
 
     if (!snap.exists) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
 
     const req = normalizeBudgetRequest({ id: snap.id, ...snap.data() } as BudgetRequest);
@@ -38,7 +38,7 @@ export async function GET(
     // membership - an HOD can only ever view a request they authored, so this
     // already fully prevents cross-department access without a separate check.
     if (session.role === "HOD" && req.hodUid !== session.uid) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
     }
 
     return NextResponse.json({ request: req });
@@ -46,10 +46,10 @@ export async function GET(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/budget-requests/[id] GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -79,7 +79,7 @@ export async function PATCH(
     const ref = db.collection("colleges").doc(session.collegeId).collection("budgetRequests").doc(id);
     const snap = await ref.get();
     if (!snap.exists) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
 
     const req = normalizeBudgetRequest({ id: snap.id, ...snap.data() } as BudgetRequest);
@@ -91,10 +91,10 @@ export async function PATCH(
       // Ownership check (same rationale as GET above): strictly narrower than
       // department membership, so no separate department check is needed.
       if (req.hodUid !== session.uid) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
       }
       if (req.status !== "RETURNED_TO_HOD" && req.status !== "PENDING_SUBMISSION") {
-        return NextResponse.json({ error: "Action not permitted in current state." }, { status: 409 });
+        return NextResponse.json({ error: "This action is not available at the current stage." }, { status: 409 });
       }
       const submittedNonRecurring = Array.isArray(body.nonRecurring) ? body.nonRecurring : [];
       const submittedRecurring = Array.isArray(body.recurring) ? body.recurring : [];
@@ -133,7 +133,7 @@ export async function PATCH(
 
       // Clears whichever actionable "your turn" popup the HOD had pending -
       // either "department budget due" (from Budget Cycle approval) or
-      // "returned to you, please fix" (from a Principal/Finance return).
+      // "returned to you fix" (from a Principal/Finance return).
       await resolveWorkflowNotifications({ db, collegeId: session.collegeId, entityType: "budgetRequest", entityId: id });
 
       const principalsSnap = await findUsersSnapshot(db, session.collegeId, ["PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN"]);
@@ -217,7 +217,7 @@ export async function PATCH(
         updatedAt: now,
       });
 
-      // Clears the "returned to you, please fix" popup this Principal/VP had
+      // Clears the "returned to you fix" popup this Principal/VP had
       // pending. Management itself works pull-style (see comment in the POST
       // handler) so there's no next actionable notification to emit here.
       await resolveWorkflowNotifications({ db, collegeId: session.collegeId, entityType: "budgetRequest", entityId: id });
@@ -233,10 +233,10 @@ export async function PATCH(
 
     if ((session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") && !isCollegeAdmin(session)) {
       if (req.status !== "PENDING_PRINCIPAL_VERIFICATION") {
-        return NextResponse.json({ error: "Action not permitted in current state." }, { status: 409 });
+        return NextResponse.json({ error: "This action is not available at the current stage." }, { status: 409 });
       }
       if ((body.action === "REJECT" || body.action === "RETURN") && !body.remarks) {
-        return NextResponse.json({ error: "remarks required" }, { status: 400 });
+        return NextResponse.json({ error: "Enter remarks." }, { status: 400 });
       }
 
       const principalName = await resolveUserName(db, session.collegeId, session.uid);
@@ -321,7 +321,7 @@ export async function PATCH(
 
     if (session.role === "FINANCE" && body.action === undefined && (body.reportFileUrl || body.reportFileName)) {
       if (!req.isEmergency || req.emergencyType !== "NON_GOODS" || req.status !== "FINANCE_APPROVED") {
-        return NextResponse.json({ error: "Action not permitted in current state." }, { status: 409 });
+        return NextResponse.json({ error: "This action is not available at the current stage." }, { status: 409 });
       }
       if (!body.reportFileUrl || !body.reportFileName) {
         return NextResponse.json({ error: "reportFileUrl and reportFileName are required" }, { status: 400 });
@@ -353,13 +353,13 @@ export async function PATCH(
 
     if (session.role === "FINANCE") {
       if (req.status !== "L1_FROZEN") {
-        return NextResponse.json({ error: "Action not permitted in current state." }, { status: 409 });
+        return NextResponse.json({ error: "This action is not available at the current stage." }, { status: 409 });
       }
       if (body.action === "APPROVE" && !body.fiscalYear) {
         return NextResponse.json({ error: "fiscalYear required" }, { status: 400 });
       }
       if ((body.action === "REJECT" || body.action === "RETURN") && !body.remarks) {
-        return NextResponse.json({ error: "remarks required" }, { status: 400 });
+        return NextResponse.json({ error: "Enter remarks." }, { status: 400 });
       }
 
       const financeName = await resolveUserName(db, session.collegeId, session.uid);
@@ -370,7 +370,7 @@ export async function PATCH(
         : null;
 
       if (!nextStatus) {
-        return NextResponse.json({ error: "action must be APPROVE, REJECT, or RETURN" }, { status: 400 });
+        return NextResponse.json({ error: "Choose Approve, Reject or Return." }, { status: 400 });
       }
 
       const historyEntry = {
@@ -430,12 +430,12 @@ export async function PATCH(
 
           // Auto-create a linked Purchase Finance Clearance request - but only
           // for an emergency GOODS request, which has no HOD Indent Request to
-          // fall back on and needs to reach Purchase Dept immediately. Normal
+          // fall back on and needs to reach Purchase Department immediately. Normal
           // (non-emergency) budget requests do NOT get one here: approving a
           // budget request only creates the FinanceBudget "line" the HOD can
           // spend against; actual procurement goes through a separately-raised
           // Indent Request (src/types/indent.ts), which is the only path that
-          // should reach Purchase Dept for the regular flow.
+          // should reach Purchase Department for the regular flow.
           //
           // Emergency NON_GOODS requests are also skipped: those have no
           // further downstream step by design - Finance attaches a report
@@ -541,17 +541,17 @@ export async function PATCH(
       return NextResponse.json({ ok: true, financeBudgetId, purchaseClearanceId });
     }
 
-    return NextResponse.json({ error: "Action not permitted in current state." }, { status: 409 });
+    return NextResponse.json({ error: "This action is not available at the current stage." }, { status: 409 });
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     if (err instanceof Error && err.message === "STALE_STATUS") {
-      return NextResponse.json({ error: "Action not permitted in current state." }, { status: 409 });
+      return NextResponse.json({ error: "This action is not available at the current stage." }, { status: 409 });
     }
     console.error("[college/budget-requests/[id] PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

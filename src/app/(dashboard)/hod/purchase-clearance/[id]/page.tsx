@@ -52,7 +52,7 @@ export default function HODPurchaseClearanceDetailPage() {
         const found = (d.requests ?? []).find((r) => r.id === params.id) ?? null;
         setItem(found);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load request" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load request" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -80,13 +80,13 @@ export default function HODPurchaseClearanceDetailPage() {
       });
       if (!res.ok) {
         const err = (await res.json()) as { error?: string };
-        throw new Error(err.error ?? "Failed to resubmit");
+        throw new Error(err.error ?? "Unable to resubmit");
       }
       toast({ variant: "success", title: "Request resubmitted" });
       setResubmitForm(emptyResubmitForm());
       load();
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to resubmit", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to resubmit", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsResubmitting(false);
     }
@@ -120,7 +120,7 @@ export default function HODPurchaseClearanceDetailPage() {
       });
       if (!res.ok) {
         const err = (await res.json()) as { error?: string };
-        throw new Error(err.error ?? "Failed to save GRN");
+        throw new Error(err.error ?? "Unable to save GRN");
       }
 
       toast({ variant: "success", title: "GRN uploaded - goods receipt confirmed" });
@@ -128,7 +128,7 @@ export default function HODPurchaseClearanceDetailPage() {
       setGrnFile(null);
       load();
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to upload GRN", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to upload GRN", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsUploading(false);
     }
@@ -171,7 +171,7 @@ export default function HODPurchaseClearanceDetailPage() {
 
       {item.status === "RETURNED_TO_HOD" && latestRemarks && (
         <div className="rounded-md border border-orange-300/60 bg-orange-50 p-3 text-sm">
-          <p className="font-medium text-orange-800">Returned by Purchase Dept for correction</p>
+          <p className="font-medium text-orange-800">Returned by Purchase Department for correction</p>
           <p className="mt-1 text-orange-700">{latestRemarks}</p>
         </div>
       )}
@@ -192,7 +192,7 @@ export default function HODPurchaseClearanceDetailPage() {
             <CardTitle className="text-base">Edit & Resubmit</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">Edit and resubmit this request for Purchase Dept review.</p>
+            <p className="text-sm text-muted-foreground">Edit and resubmit this request for review by the Purchase Department.</p>
             <div className="space-y-2">
               <Label>Items / Purpose *</Label>
               <Textarea
@@ -231,19 +231,17 @@ export default function HODPurchaseClearanceDetailPage() {
             <CardTitle className="text-base">Confirm Goods Received</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Purchase Dept has bought these goods. Upload the GRN to confirm they were received and close out this request.
-            </p>
+            <p className="text-sm text-muted-foreground">The Purchase Department has bought these goods. Upload the GRN to confirm receipt and close this request.</p>
             <div className="space-y-2">
               <Label>GRN Number *</Label>
-              <Input value={grnForm.grnNumber} onChange={(e) => setGrnForm((f) => ({ ...f, grnNumber: e.target.value }))} placeholder="e.g. GRN-2026-0142" />
+              <Input value={grnForm.grnNumber} onChange={(e) => setGrnForm((f) => ({ ...f, grnNumber: e.target.value }))} placeholder="GRN-2026-0142" />
             </div>
             <div className="space-y-2">
               <Label>Confirmation Message *</Label>
               <Textarea
                 value={grnForm.grnMessage}
                 onChange={(e) => setGrnForm((f) => ({ ...f, grnMessage: e.target.value }))}
-                placeholder="e.g. All items received in good condition on 14 Jul 2026."
+                placeholder="All items received in good condition on 14 Jul 2026."
                 rows={2}
               />
             </div>

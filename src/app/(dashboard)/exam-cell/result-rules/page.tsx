@@ -74,7 +74,7 @@ export default function ExamResultRulesPage() {
         setDecimals(String(json.rules.decimals));
         setSaved(json.saved === true);
       } catch {
-        if (!cancelled) toast({ variant: "destructive", title: "Failed to load result rules" });
+        if (!cancelled) toast({ variant: "destructive", title: "Unable to load result rules" });
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -116,7 +116,7 @@ export default function ExamResultRulesPage() {
       });
       const json = (await res.json()) as { rules?: ExamResultRules; error?: string };
       if (!res.ok || !json.rules) {
-        toast({ variant: "destructive", title: json.error ?? "Could not save the rules" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to save the rules" });
         return;
       }
       setTables(toTables(json.rules));
@@ -133,12 +133,12 @@ export default function ExamResultRulesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Result Rules"
-        description="Grade points and when SGPA / CGPA are shown. SGPA = Σ(credits × grade points) ÷ Σ credits of the semester; CGPA = Σ(semester credits × SGPA) ÷ Σ semester credits."
+        description="Grade points, and when SGPA and CGPA are shown. SGPA = Σ(credits × grade points) ÷ Σ credits of the semester. CGPA = Σ(semester credits × SGPA) ÷ Σ semester credits."
       />
 
       {!isLoading && !saved && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
-          These are starter rules - nothing is saved for your college yet. Check the grades and points against your regulation and press Save.
+          These are default rules; nothing is saved for your college yet. Check the grades and points against your regulation and choose Save.
         </div>
       )}
 
@@ -186,8 +186,8 @@ export default function ExamResultRulesPage() {
                 </div>
                 {t.rows.map((r, i) => (
                   <div key={i} className="grid grid-cols-[1fr_1fr_auto_auto] items-center gap-2">
-                    <Input value={r.grade} onChange={(e) => updateRow(t.key, i, { grade: e.target.value.toUpperCase() })} placeholder="e.g. S" aria-label="Grade" />
-                    <Input type="number" min={0} step="0.5" value={r.points} onChange={(e) => updateRow(t.key, i, { points: e.target.value })} placeholder="e.g. 10" aria-label="Grade points" />
+                    <Input value={r.grade} onChange={(e) => updateRow(t.key, i, { grade: e.target.value.toUpperCase() })} placeholder="S" aria-label="Grade" />
+                    <Input type="number" min={0} step="0.5" value={r.points} onChange={(e) => updateRow(t.key, i, { points: e.target.value })} placeholder="10" aria-label="Grade points" />
                     <div className="flex items-center gap-2 px-2">
                       <Checkbox checked={r.isPass} onCheckedChange={(v) => updateRow(t.key, i, { isPass: v === true })} aria-label="Counts as a pass" />
                       <Badge variant={r.isPass ? "secondary" : "destructive"} className="w-12 justify-center">{r.isPass ? "Pass" : "Fail"}</Badge>
@@ -207,12 +207,12 @@ export default function ExamResultRulesPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">A different grade table for a regulation</CardTitle>
-              <CardDescription>Only if a regulation grades differently from the default. It starts as a copy of the default.</CardDescription>
+              <CardDescription>Only for a regulation graded differently from the default. It starts as a copy of the default.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-wrap items-end gap-2">
               <div className="space-y-1.5">
                 <Label htmlFor="rr-regulation">Regulation</Label>
-                <Input id="rr-regulation" value={newRegulation} onChange={(e) => setNewRegulation(e.target.value)} placeholder="e.g. R23" className="w-40" />
+                <Input id="rr-regulation" value={newRegulation} onChange={(e) => setNewRegulation(e.target.value)} placeholder="R23" className="w-40" />
               </div>
               <Button variant="outline" onClick={addRegulation} disabled={!newRegulation.trim()}>
                 <Plus className="mr-1.5 h-4 w-4" />Add table

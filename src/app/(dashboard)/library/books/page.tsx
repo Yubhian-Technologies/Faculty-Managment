@@ -54,7 +54,7 @@ export default function LibraryBooksPage() {
       const json = (await res.json()) as { books?: Book[] };
       setBooks((json.books ?? []) as BookRow[]);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load books" });
+      toast({ variant: "destructive", title: "Unable to load books" });
     } finally {
       setIsLoading(false);
     }
@@ -119,14 +119,14 @@ export default function LibraryBooksPage() {
       });
       const json = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || !json.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to save book" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to save book" });
         return;
       }
       toast({ variant: "success", title: editing ? "Book updated" : "Book added" });
       setDialogOpen(false);
       void loadBooks();
     } catch {
-      toast({ variant: "destructive", title: "Network error - please try again" });
+      toast({ variant: "destructive", title: "Network error - try again" });
     } finally {
       setIsSaving(false);
     }
@@ -138,14 +138,14 @@ export default function LibraryBooksPage() {
       const res = await fetch(`/api/college/library/books/${deleteTarget.id}`, { method: "DELETE" });
       const json = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || !json.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to delete book" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to delete book" });
         return;
       }
       toast({ variant: "success", title: "Book removed" });
       setDeleteTarget(null);
       void loadBooks();
     } catch {
-      toast({ variant: "destructive", title: "Network error - please try again" });
+      toast({ variant: "destructive", title: "Network error - try again" });
     }
   }
 
@@ -184,7 +184,7 @@ export default function LibraryBooksPage() {
     <div className="space-y-6">
       <PageHeader
         title="Book Catalog"
-        description="Manage the library's books and copy counts"
+        description="Manage the library's books and number of copies."
         actions={
           <div className="flex gap-2">
             <Button variant="outline" asChild>
@@ -222,7 +222,7 @@ export default function LibraryBooksPage() {
           <div className="space-y-3">
             <div className="space-y-1.5">
               <Label htmlFor="isbn">ISBN</Label>
-              <Input id="isbn" value={form.isbn} onChange={(e) => setForm({ ...form, isbn: e.target.value })} onBlur={handleIsbnBlur} placeholder="Optional - autofills title/author" />
+              <Input id="isbn" value={form.isbn} onChange={(e) => setForm({ ...form, isbn: e.target.value })} onBlur={handleIsbnBlur} placeholder="Optional, autofills title/author" />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="title">Title</Label>

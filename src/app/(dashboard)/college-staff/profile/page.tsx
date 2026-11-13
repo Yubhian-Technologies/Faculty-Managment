@@ -58,7 +58,7 @@ export default function CollegeStaffProfilePage() {
       <div className="space-y-6">
         <PageHeader
           title="My Profile"
-          description="Manage your profile photo and account details"
+          description="Manage your profile photo and account details."
           actions={<div className="flex gap-2"><MyResumeDownloadButton /><ChangePasswordDialog /></div>}
         />
         {message && <p className="text-sm text-muted-foreground rounded-md border bg-muted/20 p-3">{message}</p>}
@@ -80,7 +80,7 @@ export default function CollegeStaffProfilePage() {
     <div className="space-y-6">
       <PageHeader
         title="My Profile"
-        description="Manage your profile photo and account details"
+        description="Manage your profile photo and account details."
         actions={<div className="flex gap-2"><MyResumeDownloadButton /><ChangePasswordDialog /></div>}
       />
       <Card>

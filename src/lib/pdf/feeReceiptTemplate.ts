@@ -109,7 +109,7 @@ export function getFeeReceiptHTML(d: FeeReceiptData): string {
         <tr class="total"><td>Total</td><td class="amt">${money(p.amount)}</td></tr>
       </table>
       <p style="margin-top:4mm">Narration : ${esc([yearBranch.join(" "), p.academicYear, p.purpose.label].filter(Boolean).join(" · "))}</p>
-      ${p.refundedAmount ? `<span class="stamp">REFUNDED Rs. ${money(p.refundedAmount)}</span>` : ""}
+      ${p.refundedAmount ? `<span class="stamp">REFUNDED ₹${money(p.refundedAmount)}</span>` : ""}
     </div>
     <div class="sign">
       <p>For &nbsp; <b>${esc(d.college.name)}</b></p>

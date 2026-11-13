@@ -43,7 +43,7 @@ export async function POST(request: Request) {
       }
       const targetSnap = await collegeRef.collection("users").doc(uid).get();
       if (!targetSnap.exists) {
-        return NextResponse.json({ error: "Staff member not found" }, { status: 404 });
+        return NextResponse.json({ error: "Staff member not found. The record may have been deleted." }, { status: 404 });
       }
       const target = targetSnap.data() as { role?: string; department?: string };
       if (target.role !== "COLLEGE_STAFF" || target.department !== unitLabelForHeadRole(session.role)) {
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
 
       const targetSnap = await collegeRef.collection("users").doc(uid).get();
       if (!targetSnap.exists) {
-        return NextResponse.json({ error: "Staff member not found" }, { status: 404 });
+        return NextResponse.json({ error: "Staff member not found. The record may have been deleted." }, { status: 404 });
       }
       const target = targetSnap.data() as { role?: string };
       // Principal, Vice Principal, College Admin, and Director (equal authority -
@@ -99,7 +99,7 @@ export async function POST(request: Request) {
 
     const targetSnap = await collegeRef.collection("facultyMembers").doc(facultyId).get();
     if (!targetSnap.exists) {
-      return NextResponse.json({ error: "Faculty not found" }, { status: 404 });
+      return NextResponse.json({ error: "Faculty record not found. It may have been deleted." }, { status: 404 });
     }
     const target = targetSnap.data() as { department?: string; userUid?: string };
 
@@ -124,9 +124,9 @@ export async function POST(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/attendance/face-registration/reset POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

@@ -42,10 +42,10 @@ export function EditStudentDialog({
               id="edit-roll"
               value={editRoll}
               onChange={(e) => setEditRoll(e.target.value)}
-              placeholder="e.g. 21A91A0501"
+              placeholder="21A91A0501"
               autoComplete="off"
             />
-            <p className="text-xs text-muted-foreground">The student&apos;s unique Regd. No - it can be corrected, but must not be used by any other student.</p>
+            <p className="text-xs text-muted-foreground">The student&apos;s unique Regd. No. It can be corrected, but must not be used by any other student.</p>
           </div>
           <div className="space-y-2">
             <Label>Status</Label>
@@ -64,16 +64,13 @@ export function EditStudentDialog({
               list="edit-lab-batch-suggestions"
               value={editLabBatch}
               onChange={(e) => setEditLabBatch(e.target.value)}
-              placeholder="e.g. Batch 1"
+              placeholder="Batch 1"
               autoComplete="off"
             />
             <datalist id="edit-lab-batch-suggestions">
               {editLabBatchSuggestions.map((label) => <option key={label} value={label} />)}
             </datalist>
-            <p className="text-xs text-muted-foreground">
-              Which split-lab sub-group this student sits in for a PRACTICAL subject - must match the batch
-              label on the Timetable exactly. Leave blank if this section&rsquo;s labs aren&rsquo;t split.
-            </p>
+            <p className="text-xs text-muted-foreground">The lab batch this student attends for practical subjects. It must match the batch label in the timetable exactly. Leave blank if the section&apos;s labs are not divided.</p>
           </div>
         </div>
         <DialogFooter>

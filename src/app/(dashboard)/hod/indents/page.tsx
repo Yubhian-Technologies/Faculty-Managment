@@ -29,7 +29,7 @@ export default function HODIndentsPage() {
         .then((r) => r.json() as Promise<{ requests: IndentRequest[] }>);
       setRequests(d.requests ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load indent requests" });
+      toast({ variant: "destructive", title: "Unable to load indent requests" });
     } finally {
       setIsLoading(false);
     }
@@ -76,7 +76,7 @@ export default function HODIndentsPage() {
       <div ref={dashboardRef}>
         <PageHeader
           title="Indent Requests"
-          description="Raise and track indents against your department's budget"
+          description="Raise and track indents against your department's budget."
           actions={
             <Button variant="outline" size="sm" onClick={load} loading={isLoading}>
               <RefreshCw className="h-4 w-4 mr-1" />

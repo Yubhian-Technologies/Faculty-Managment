@@ -37,7 +37,7 @@ export default function EditLocationPage() {
         setState(loc.state ?? "");
         setAddress(loc.address ?? "");
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load location" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load location" }))
       .finally(() => setLoading(false));
   }, [locationId, router]);
 
@@ -57,7 +57,7 @@ export default function EditLocationPage() {
       toast({ variant: "success", title: "Location updated" });
       router.push("/super-admin/locations");
     } catch {
-      toast({ variant: "destructive", title: "Failed to update location" });
+      toast({ variant: "destructive", title: "Unable to update location" });
     } finally {
       setSaving(false);
     }
@@ -73,19 +73,19 @@ export default function EditLocationPage() {
 
   return (
     <div className="max-w-lg space-y-5">
-      <PageHeader title="Edit Location" description="Update institution location details" />
+      <PageHeader title="Edit Location" description="Update the location details." />
       <form onSubmit={handleSubmit} className="space-y-5">
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-base">Location Details</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label>Location Name <span className="text-destructive">*</span></Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Bhimavaram Campus" />
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Bhimavaram Campus" />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>City <span className="text-destructive">*</span></Label>
-                <Input value={city} onChange={(e) => setCity(e.target.value)} placeholder="e.g. Bhimavaram" />
+                <Input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Bhimavaram" />
               </div>
               <div className="space-y-2">
                 <Label>State</Label>

@@ -18,7 +18,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const q = new URL(request.url).searchParams;
     const db = getAdminDb();
     const schedule = await loadSchedule(db, session.collegeId, id);
-    if (!schedule) return NextResponse.json({ error: "Schedule not found" }, { status: 404 });
+    if (!schedule) return NextResponse.json({ error: "Schedule not found. It may have been deleted." }, { status: 404 });
     const ctx = await slotContext(db, session.collegeId, schedule, { slotKey: q.get("slot") ?? undefined, session: q.get("session") ?? undefined });
     if (!ctx) return NextResponse.json({ error: "That duty is no longer in the schedule - reload" }, { status: 404 });
     return NextResponse.json({

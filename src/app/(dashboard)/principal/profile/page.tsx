@@ -23,7 +23,7 @@ function PrincipalProfilePageContent() {
     <div className="space-y-6">
       <PageHeader
         title="My Profile"
-        description="Manage your profile photo and account details"
+        description="Manage your profile photo and account details."
         actions={
           <div className="flex gap-2">
             <MyResumeDownloadButton />

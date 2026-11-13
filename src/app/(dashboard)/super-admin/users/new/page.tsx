@@ -108,7 +108,7 @@ export default function NewUserPage() {
 
   return (
     <div className="w-full">
-      <PageHeader title="Add User" description="Create a staff account by level and assign scope" />
+      <PageHeader title="Add User" description="Create a staff account by level and assign its scope." />
       <Card>
         <CardHeader><CardTitle className="text-base">User Details</CardTitle></CardHeader>
         <CardContent>
@@ -242,7 +242,7 @@ export default function NewUserPage() {
             <Textarea
               value={academicProfile.otherInformation ?? ""}
               onChange={(e) => setAcademicProfile({ ...academicProfile, otherInformation: e.target.value })}
-              placeholder="Anything not covered above - add it here"
+              placeholder="Anything not covered above, add it here"
               rows={4}
             />
           </div>

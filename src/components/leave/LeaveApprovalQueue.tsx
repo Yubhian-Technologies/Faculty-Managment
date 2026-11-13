@@ -101,10 +101,10 @@ export function LeaveApprovalQueue() {
     try {
       const res = await fetch("/api/leave/applications?scope=approvals");
       const data = (await res.json()) as { requests?: LeaveRequest[]; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to load approvals");
+      if (!res.ok) throw new Error(data.error ?? "Unable to load approvals");
       setRequests(data.requests ?? []);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to load approvals" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to load approvals" });
     } finally {
       setIsLoading(false);
     }
@@ -117,7 +117,7 @@ export function LeaveApprovalQueue() {
     try {
       const res = await fetch("/api/leave/applications?scope=od-proofs");
       const data = (await res.json()) as { requests?: LeaveRequest[]; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to load proof submissions");
+      if (!res.ok) throw new Error(data.error ?? "Unable to load proof submissions");
       setOdProofs(data.requests ?? []);
     } catch {
       // Deliberately quiet: the pending-approvals queue above is the primary
@@ -130,7 +130,7 @@ export function LeaveApprovalQueue() {
     try {
       const res = await fetch("/api/leave/applications?scope=od-missing-proof");
       const data = (await res.json()) as { requests?: LeaveRequest[]; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to load missing-proof list");
+      if (!res.ok) throw new Error(data.error ?? "Unable to load missing-proof list");
       setOdMissingProofs(data.requests ?? []);
     } catch {
       // Deliberately quiet - same reasoning as loadOdProofs above.
@@ -142,7 +142,7 @@ export function LeaveApprovalQueue() {
     try {
       const res = await fetch("/api/leave/applications?scope=leave-certificates");
       const data = (await res.json()) as { requests?: LeaveRequest[]; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to load certificate submissions");
+      if (!res.ok) throw new Error(data.error ?? "Unable to load certificate submissions");
       setCertificates(data.requests ?? []);
     } catch {
       // Deliberately quiet - same reasoning as loadOdProofs above.
@@ -154,7 +154,7 @@ export function LeaveApprovalQueue() {
     try {
       const res = await fetch("/api/leave/applications?scope=scl-missing-certificate");
       const data = (await res.json()) as { requests?: LeaveRequest[]; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to load missing-certificate list");
+      if (!res.ok) throw new Error(data.error ?? "Unable to load missing-certificate list");
       setMissingCertificates(data.requests ?? []);
     } catch {
       // Deliberately quiet - same reasoning as loadOdProofs above.
@@ -171,11 +171,11 @@ export function LeaveApprovalQueue() {
         body: JSON.stringify({ action: "REQUEST_CERTIFICATE" }),
       });
       const json = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to send the request");
+      if (!res.ok) throw new Error(json.error ?? "Unable to send the request");
       toast({ variant: "success", title: `${request.employeeName} has been notified` });
       setCertificateRequestedIds((prev) => new Set(prev).add(request.id));
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to send the request" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to send the request" });
     } finally {
       setCertificateRequestingId(null);
     }
@@ -198,7 +198,7 @@ export function LeaveApprovalQueue() {
         }),
       });
       const json = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to record the decision");
+      if (!res.ok) throw new Error(json.error ?? "Unable to record the decision");
       toast({
         variant: "success",
         title: verify ? "Certificate verified" : "Certificate rejected",
@@ -208,7 +208,7 @@ export function LeaveApprovalQueue() {
       });
       setCertificates((prev) => prev.filter((r) => r.id !== request.id));
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to record the decision" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to record the decision" });
     } finally {
       setCertificateActingId(null);
     }
@@ -223,11 +223,11 @@ export function LeaveApprovalQueue() {
         body: JSON.stringify({ action: "REQUEST_OD_PROOF" }),
       });
       const json = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to send the request");
+      if (!res.ok) throw new Error(json.error ?? "Unable to send the request");
       toast({ variant: "success", title: `${request.employeeName} has been notified` });
       setOdRequestedIds((prev) => new Set(prev).add(request.id));
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to send the request" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to send the request" });
     } finally {
       setOdRequestingId(null);
     }
@@ -250,7 +250,7 @@ export function LeaveApprovalQueue() {
         }),
       });
       const json = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to record the decision");
+      if (!res.ok) throw new Error(json.error ?? "Unable to record the decision");
       toast({
         variant: "success",
         title: verify ? "Proof verified" : "Proof rejected",
@@ -260,7 +260,7 @@ export function LeaveApprovalQueue() {
       });
       setOdProofs((prev) => prev.filter((r) => r.id !== request.id));
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to record the decision" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to record the decision" });
     } finally {
       setOdProofActingId(null);
     }
@@ -406,7 +406,7 @@ export function LeaveApprovalQueue() {
           }),
         });
         const proposeData = (await proposeRes.json()) as { error?: string; changed?: boolean };
-        if (!proposeRes.ok) throw new Error(proposeData.error ?? "Failed to update coverage");
+        if (!proposeRes.ok) throw new Error(proposeData.error ?? "Unable to update coverage");
         // Naming someone new is its own step: they have to accept before this
         // can go to the Principal. Stop here rather than attempting the
         // forward, which the server would reject anyway ("still awaiting
@@ -415,7 +415,7 @@ export function LeaveApprovalQueue() {
           toast({
             variant: "success",
             title: "Adjustment request sent",
-            description: "Forward to the Principal once they accept - track it under Leave Approvals.",
+            description: "Forward to the Principal once they accept, and track it under Leave Approvals.",
           });
           setActingId(null);
           void load();
@@ -507,7 +507,7 @@ export function LeaveApprovalQueue() {
                         <Badge variant="outline">Half Day &middot; {r.halfDaySession === "AN" ? "Afternoon" : "Forenoon"}</Badge>
                       )}
                       {r.extendsRequestId && (
-                        <Badge variant="outline" title="This extends a leave that was already approved">
+                        <Badge variant="outline" title="This extends a leave that is already approved.">
                           Extension
                         </Badge>
                       )}
@@ -604,7 +604,7 @@ export function LeaveApprovalQueue() {
                         {loadingPeriodsId === r.id ? (
                           <div className="h-12 bg-muted animate-pulse rounded-lg" />
                         ) : (periodsById[r.id]?.length ?? 0) === 0 ? (
-                          <p className="text-xs text-muted-foreground italic">No teaching periods fall within this leave range.</p>
+                          <p className="text-xs text-muted-foreground italic">No teaching periods fall within this leave period.</p>
                         ) : (coverageModeById[r.id] ?? "ADJUSTMENT") === "REPLACEMENT" ? (
                           (() => {
                             const replacementCandidates = intersectCandidates(periodsById[r.id]!);
@@ -633,7 +633,7 @@ export function LeaveApprovalQueue() {
                                 </Select>
                                 {replacementCandidates.length === 0 && (
                                   <p className="text-xs text-destructive">
-                                    No single faculty is free for every affected period - switch to Adjustment to cover periods individually.
+                                    No single faculty member is free for every affected period. Switch to Adjustment to cover periods individually.
                                   </p>
                                 )}
                               </div>
@@ -711,7 +711,7 @@ export function LeaveApprovalQueue() {
                               ))}
                           </SelectContent>
                         </Select>
-                        <p className="text-[11px] text-muted-foreground">Only visible in your own Staff Leave History - never shown to the requester, their HOD, or anyone else.</p>
+                        <p className="text-[11px] text-muted-foreground">Visible only in your Staff Leave History; never shown to the requester, their HOD or anyone else.</p>
                         </div>
                         {/* The selected category's own rule (duration limits,
                             certificate/service conditions), so the sanctioning
@@ -774,10 +774,7 @@ export function LeaveApprovalQueue() {
             <FileCheck className="h-4 w-4 text-muted-foreground" />
             <h3 className="text-sm font-semibold">On Duty Proof Verification ({odProofs.length})</h3>
           </div>
-          <p className="text-xs text-muted-foreground">
-            On Duty leave is only paid once the duty is evidenced. Verify the document, or reject it with a reason so
-            they can re-upload.
-          </p>
+          <p className="text-xs text-muted-foreground">On Duty leave is paid only once the duty is evidenced. Verify the document, or reject it with a reason so it can be uploaded again.</p>
           {odProofs.map((r) => (
             <Card key={r.id}>
               <CardContent className="p-4 space-y-3">
@@ -825,7 +822,7 @@ export function LeaveApprovalQueue() {
                   <Textarea
                     className="mt-1 text-xs"
                     rows={2}
-                    placeholder="e.g. the certificate doesn't cover these dates"
+                    placeholder="the certificate doesn't cover these dates"
                     value={odProofReasonById[r.id] ?? ""}
                     onChange={(e) => setOdProofReasonById((prev) => ({ ...prev, [r.id]: e.target.value }))}
                   />
@@ -862,10 +859,7 @@ export function LeaveApprovalQueue() {
             <BellRing className="h-4 w-4 text-muted-foreground" />
             <h3 className="text-sm font-semibold">On Duty Proof Not Uploaded ({odMissingProofs.length})</h3>
           </div>
-          <p className="text-xs text-muted-foreground">
-            These On Duty leaves have ended with no proof of duty on file yet. They&rsquo;ve already had (or will get) an
-            automatic reminder - send one yourself if it&rsquo;s still overdue.
-          </p>
+          <p className="text-xs text-muted-foreground">These On Duty leaves have ended with no proof of duty on file. An automatic reminder has been or will be sent; send one yourself if it is still overdue.</p>
           <div className="divide-y rounded-lg border">
             {odMissingProofs.map((r) => (
               <div key={r.id} className="flex items-center justify-between gap-3 p-3 flex-wrap">
@@ -902,10 +896,7 @@ export function LeaveApprovalQueue() {
             <FileCheck className="h-4 w-4 text-muted-foreground" />
             <h3 className="text-sm font-semibold">Certificate Verification ({certificates.length})</h3>
           </div>
-          <p className="text-xs text-muted-foreground">
-            These never affect whether the leave is paid - verify the document, or reject it with a reason so they can
-            re-upload.
-          </p>
+          <p className="text-xs text-muted-foreground">These do not affect whether the leave is paid. Verify the document, or reject it with a reason so it can be uploaded again.</p>
           {certificates.map((r) => (
             <Card key={r.id}>
               <CardContent className="p-4 space-y-3">
@@ -955,7 +946,7 @@ export function LeaveApprovalQueue() {
                   <Textarea
                     className="mt-1 text-xs"
                     rows={2}
-                    placeholder="e.g. the certificate doesn't cover these dates"
+                    placeholder="the certificate doesn't cover these dates"
                     value={certificateReasonById[r.id] ?? ""}
                     onChange={(e) => setCertificateReasonById((prev) => ({ ...prev, [r.id]: e.target.value }))}
                   />
@@ -990,10 +981,7 @@ export function LeaveApprovalQueue() {
             <BellRing className="h-4 w-4 text-muted-foreground" />
             <h3 className="text-sm font-semibold">Certificate Not Uploaded ({missingCertificates.length})</h3>
           </div>
-          <p className="text-xs text-muted-foreground">
-            These Special Casual Leaves have ended with no certificate on file yet. This never affects whether the
-            leave is paid - send a reminder if you&rsquo;d like one on record.
-          </p>
+          <p className="text-xs text-muted-foreground">These Special Casual Leaves have ended with no certificate on file. This does not affect whether the leave is paid; send a reminder if you want one on record.</p>
           <div className="divide-y rounded-lg border">
             {missingCertificates.map((r) => (
               <div key={r.id} className="flex items-center justify-between gap-3 p-3 flex-wrap">

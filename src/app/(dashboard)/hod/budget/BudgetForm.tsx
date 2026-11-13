@@ -98,14 +98,14 @@ export function BudgetForm({ editingRequest, onCancel, onSaved }: BudgetFormProp
 
       if (!res.ok) {
         const err = (await res.json()) as { error?: string };
-        throw new Error(err.error ?? "Failed to submit budget request");
+        throw new Error(err.error ?? "Unable to submit budget request");
       }
 
       toast({ variant: "success", title: editingRequest ? "Budget request resubmitted" : "Budget request submitted" });
       resetForm();
       onSaved();
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to submit", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to submit", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsSaving(false);
     }
@@ -131,7 +131,7 @@ export function BudgetForm({ editingRequest, onCancel, onSaved }: BudgetFormProp
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Department budget proposal"
+              placeholder="Department budget proposal"
             />
           </div>
 
@@ -141,7 +141,7 @@ export function BudgetForm({ editingRequest, onCancel, onSaved }: BudgetFormProp
               <Input
                 value={academicYear}
                 onChange={(e) => setAcademicYear(e.target.value)}
-                placeholder="e.g. 2026-27"
+                placeholder="2026-27"
               />
             </div>
             <div className="space-y-2">

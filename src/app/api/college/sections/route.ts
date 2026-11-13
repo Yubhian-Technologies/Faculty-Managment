@@ -356,10 +356,10 @@ export async function GET(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[sections GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -390,7 +390,7 @@ export async function POST(request: Request) {
     const db = getAdminDb();
     const courseSnap = await db.collection("colleges").doc(session.collegeId).collection("courses").doc(body.courseId).get();
     if (!courseSnap.exists) {
-      return NextResponse.json({ error: "Course not found" }, { status: 404 });
+      return NextResponse.json({ error: "Course not found. It may have been deleted." }, { status: 404 });
     }
     const course = courseSnap.data() as { name: string; durationYears: number; departmentId?: string; catalogId?: string };
     if (Number(body.year) < 1 || Number(body.year) > course.durationYears) {
@@ -504,7 +504,7 @@ export async function POST(request: Request) {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       if (body.departmentId && !canHodEditDepartmentId(scope, body.departmentId)) {
         return NextResponse.json(
-          { error: "That department is not yours or one of your sub-departments" },
+          { error: "This department is not yours or one of your sub-departments." },
           { status: 403 },
         );
       }
@@ -526,7 +526,7 @@ export async function POST(request: Request) {
     } else if (body.departmentId) {
       const deptSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").doc(body.departmentId).get();
       if (!deptSnap.exists) {
-        return NextResponse.json({ error: "Department not found" }, { status: 404 });
+        return NextResponse.json({ error: "Department not found. It may have been deleted." }, { status: 404 });
       }
       const deptData = deptSnap.data() as { name?: string; parentDepartmentId?: string };
       if (course.departmentId !== body.departmentId && course.departmentId !== deptData.parentDepartmentId) {
@@ -769,9 +769,9 @@ export async function POST(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[sections POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

@@ -25,7 +25,7 @@ async function getFirebasePublicKeys(): Promise<Record<string, string>> {
     { cache: "no-store" }
   );
 
-  if (!res.ok) throw new Error(`Failed to fetch Firebase public keys: ${res.status}`);
+  if (!res.ok) throw new Error(`Unable to fetch Firebase public keys: ${res.status}`);
 
   const cc = res.headers.get("cache-control") ?? "";
   const maxAgeMatch = cc.match(/max-age=(\d+)/);

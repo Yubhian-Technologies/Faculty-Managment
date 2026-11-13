@@ -72,7 +72,7 @@ export function AssignByCodeStep({ catalogId, regulation, courseName, initialDep
         setCourses((c.courses ?? []).filter((x) => x.isActive !== false));
         setDepartments(d.departments ?? []);
       } catch {
-        setLoadError("Couldn't load courses or departments.");
+        setLoadError("Unable to load courses or departments.");
       }
     })();
   }, []);
@@ -154,13 +154,13 @@ export function AssignByCodeStep({ catalogId, regulation, courseName, initialDep
     try {
       const res = await fetch(`/api/college/subject-semester-assignments?courseId=${encodeURIComponent(planCourse.id)}&departmentId=${encodeURIComponent(activeDeptId)}&year=${yearValue}&semester=${semesterValue}`);
       const body = (await res.json()) as { assignments?: (SlotRow & { regulation?: string; isActive?: boolean })[]; error?: string };
-      if (!res.ok) throw new Error(body.error ?? "Failed to load");
+      if (!res.ok) throw new Error(body.error ?? "Unable to load");
       setSelected(new Set());
       setSlot((body.assignments ?? [])
         .filter((a) => a.isActive !== false && a.departmentId === activeDeptId && (!a.regulation || a.regulation === regulation))
         .sort((a, b) => (a.serialNumber ?? Infinity) - (b.serialNumber ?? Infinity) || a.subjectCode.localeCompare(b.subjectCode)));
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to load this semester's subjects" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to load this semester's subjects" });
     } finally {
       setSlotLoading(false);
     }
@@ -189,7 +189,7 @@ export function AssignByCodeStep({ catalogId, regulation, courseName, initialDep
     try {
       const { res, json } = await post("validate");
       if (json.plan) setCheck({ result: json as AssignByCodeResult, forKey: checkKey });
-      else { setCheck(null); setError(json.error ?? "Couldn't check the codes."); }
+      else { setCheck(null); setError(json.error ?? "Unable to check the codes."); }
       if (!res.ok && !json.plan) return;
     } catch {
       setError("Network error while checking the codes.");
@@ -214,7 +214,7 @@ export function AssignByCodeStep({ catalogId, regulation, courseName, initialDep
         setCheck({ result: json as AssignByCodeResult, forKey: checkKey });
         setError("Nothing was assigned. Fix the codes marked below and check again.");
       } else {
-        setError(json.error ?? "Couldn't assign the subjects. Nothing was saved.");
+        setError(json.error ?? "Unable to assign the subjects. Nothing was saved.");
       }
     } catch {
       setError("Network error. Nothing was saved.");
@@ -229,7 +229,7 @@ export function AssignByCodeStep({ catalogId, regulation, courseName, initialDep
     try {
       const res = await fetch(`/api/college/subject-semester-assignments?subjectId=${encodeURIComponent(row.subjectId)}&departmentId=${encodeURIComponent(row.departmentId)}&semester=${row.semester}`, { method: "DELETE" });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Couldn't unassign" }); return; }
+      if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Unable to unassign" }); return; }
       toast({ variant: "success", title: `${row.subjectCode} removed from this semester` });
       await loadSlot();
     } finally {
@@ -240,7 +240,7 @@ export function AssignByCodeStep({ catalogId, regulation, courseName, initialDep
   async function patchRow(body: Record<string, unknown>) {
     const res = await fetch("/api/college/subject-semester-assignments", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const json = (await res.json().catch(() => ({}))) as { error?: string };
-    if (!res.ok) throw new Error(json.error ?? "Failed to update");
+    if (!res.ok) throw new Error(json.error ?? "Unable to update");
   }
 
   async function saveEdit() {
@@ -253,7 +253,7 @@ export function AssignByCodeStep({ catalogId, regulation, courseName, initialDep
       setEditing(null);
       await loadSlot();
     } catch (err) {
-      setEditError(err instanceof Error ? err.message : "Failed to save");
+      setEditError(err instanceof Error ? err.message : "Unable to save");
     } finally {
       setSavingEdit(false);
     }
@@ -285,7 +285,7 @@ export function AssignByCodeStep({ catalogId, regulation, courseName, initialDep
       await patchRow({ id: row.id, secondaryDepartmentNames: next.length > 0 ? next : null });
       await loadSlot();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to remove" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to remove" });
     }
   }
 
@@ -357,7 +357,7 @@ export function AssignByCodeStep({ catalogId, regulation, courseName, initialDep
             <Button onClick={() => void runAssign()} loading={assigning} disabled={!canAssign}>
               {fresh && check!.result.counts.toAssign > 0 ? `Assign ${check!.result.counts.toAssign} subject${check!.result.counts.toAssign !== 1 ? "s" : ""}` : "Assign"}
             </Button>
-            {check && !fresh && <span className="text-xs text-muted-foreground">The codes or scope changed - check again.</span>}
+            {check && !fresh && <span className="text-xs text-muted-foreground">The codes or scope have changed. Check again.</span>}
           </div>
 
           {check && (

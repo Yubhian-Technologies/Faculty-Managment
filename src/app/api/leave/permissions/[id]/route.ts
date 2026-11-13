@@ -28,7 +28,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const db = getAdminDb();
     const ref = db.collection("colleges").doc(session.collegeId).collection(COL).doc(id);
     const snap = await ref.get();
-    if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!snap.exists) return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     const req = { id, ...snap.data() } as PermissionRequest & { id: string };
 
     // Terminal guard - a decided request is never re-decided, the same rule
@@ -111,9 +111,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[leave/permissions PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

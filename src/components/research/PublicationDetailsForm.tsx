@@ -576,7 +576,7 @@ export function PublicationDetailsForm({
               Fetch
             </Button>
           </div>
-          {doiFetchState === "not-found" && <p className="text-xs text-destructive">Could not fetch details for that DOI</p>}
+          {doiFetchState === "not-found" && <p className="text-xs text-destructive">Unable to fetch details for that DOI</p>}
         </div>
       )}
     <div className="grid grid-cols-1 gap-x-8 gap-y-5 lg:grid-cols-2">

@@ -77,7 +77,7 @@ const RECOMMENDATION_OPTIONS: { value: Recommendation; label: string; color: str
 const ROLE_LABELS: Record<string, string> = {
   ADMINISTRATION: "Administration",
   HR_ADMIN: "HR Admin",
-  LOCATION_DEPT_HEAD: "Dept Head",
+  LOCATION_DEPT_HEAD: "Department Head",
 };
 
 export default function HRInterviewDetailPage() {
@@ -133,7 +133,7 @@ export default function HRInterviewDetailPage() {
           setCandidateStatuses(statusMap);
         }
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -176,7 +176,7 @@ export default function HRInterviewDetailPage() {
       toast({ variant: "success", title: "Score submitted", description: `Feedback saved for ${candidateName}` });
       load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to submit score" });
+      toast({ variant: "destructive", title: "Unable to submit score" });
     } finally {
       setSubmittingFor(null);
     }
@@ -194,7 +194,7 @@ export default function HRInterviewDetailPage() {
       toast({ variant: "success", title: "Call letters sent" });
       load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to send" });
+      toast({ variant: "destructive", title: "Unable to send" });
     } finally {
       setSending(false);
     }
@@ -235,7 +235,7 @@ export default function HRInterviewDetailPage() {
         description: status === "SELECTED" ? "You can now create an offer letter for this candidate." : undefined,
       });
     } catch {
-      toast({ variant: "destructive", title: "Failed to update candidate" });
+      toast({ variant: "destructive", title: "Unable to update candidate" });
     } finally {
       setFinalizingFor(null);
     }
@@ -328,9 +328,7 @@ export default function HRInterviewDetailPage() {
                 </span>
               )}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Panel Evaluation (70%) - 5 criteria, rated 1–5 · Student Feedback (30%) - 5 criteria, rated 1–5
-            </p>
+            <p className="text-xs text-muted-foreground">Panel evaluation (70%): 5 criteria rated 1 to 5. Student feedback (30%): 5 criteria rated 1 to 5.</p>
           </CardHeader>
           <CardContent className="space-y-6">
             {(interview.candidatesInfo ?? []).map((c) => {
@@ -466,9 +464,7 @@ export default function HRInterviewDetailPage() {
               <ArrowRight className="h-4 w-4 text-primary" />
               Finalize Candidate Decisions
             </CardTitle>
-            <p className="text-xs text-muted-foreground">
-              Apply panel recommendations to candidate statuses. Selected candidates can then receive offer letters.
-            </p>
+            <p className="text-xs text-muted-foreground">Apply the panel&apos;s recommendations to candidate statuses. Selected candidates can then receive offer letters.</p>
           </CardHeader>
           <CardContent className="space-y-3">
             {(interview.candidatesInfo ?? []).map((c) => {

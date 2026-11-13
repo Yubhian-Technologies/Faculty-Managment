@@ -118,7 +118,7 @@ export function LocationStaffForm({
 
     if (reportAtLocationId === "__none__") newErrors.reportAtLocationId = "Select the gate this staff member must report to";
 
-    if (!payeeType || payeeType === "__none__") newErrors.payeeType = "Please select Payee Type";
+    if (!payeeType || payeeType === "__none__") newErrors.payeeType = "Select Payee Type";
 
     if (payeeType === "Account Payee") {
       if (!accountNumber.trim()) newErrors.accountNumber = "Account Number is required for Account Payee";
@@ -128,8 +128,8 @@ export function LocationStaffForm({
       else if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifscCode.trim())) newErrors.ifscCode = "Invalid IFSC code format";
     }
 
-    if (!role) newErrors.role = "Please select a role / designation";
-    else if (role === "OTHER" && !customRole.trim()) newErrors.role = "Please specify the custom role title";
+    if (!role) newErrors.role = "Select a role / designation";
+    else if (role === "OTHER" && !customRole.trim()) newErrors.role = "Specify the custom role title";
 
     if (spouseGuardianPhone.trim() && !/^[6-9]\d{9}$/.test(spouseGuardianPhone.trim())) {
       newErrors.spouseGuardianPhone = "Spouse/guardian phone must be a valid 10-digit number";
@@ -151,7 +151,7 @@ export function LocationStaffForm({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Photo upload failed");
       setPhotoUrl(data.url);
-      toast({ title: "Photo saved successfully" });
+      toast({ title: "Photo saved" });
     } catch (err: unknown) {
       toast({
         variant: "destructive",
@@ -178,7 +178,7 @@ export function LocationStaffForm({
       accountNumber: true, branchName: true, ifscCode: true, reportAtLocationId: true,
     });
     if (!validate()) {
-      toast({ variant: "destructive", title: "Validation Error", description: "Please fix the highlighted errors before submitting." });
+      toast({ variant: "destructive", title: "Validation Error", description: "Fix the highlighted errors before submitting." });
       return;
     }
 
@@ -219,8 +219,8 @@ export function LocationStaffForm({
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to add staff member");
-      toast({ title: "Staff Member Registered", description: `Successfully added ${name}.` });
+      if (!res.ok) throw new Error(data.error || "Unable to add staff member");
+      toast({ title: "Staff Member Registered", description: `Added ${name}.` });
       onSuccess(data as LocationStaffMember);
     } catch (err: unknown) {
       toast({ variant: "destructive", title: "Registration failed", description: err instanceof Error ? err.message : "Registration failed" });
@@ -289,7 +289,7 @@ export function LocationStaffForm({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1">
             <Label className="text-xs font-medium">Full Name <span className="text-destructive">*</span></Label>
-            <Input placeholder="e.g. Ramesh Kumar" value={name}
+            <Input placeholder="Ramesh Kumar" value={name}
               onChange={(e) => { setName(e.target.value); if (errors.name) setErrors((p) => ({ ...p, name: "" })); }}
               onBlur={() => setTouched((p) => ({ ...p, name: true }))}
               className={`h-9 text-xs ${errors.name && touched.name ? "border-destructive focus-visible:ring-destructive" : ""}`} />
@@ -300,11 +300,11 @@ export function LocationStaffForm({
               <Label className="text-xs font-medium text-foreground">Father&rsquo;s Name</Label>
               <span className="text-[10px] text-muted-foreground">Optional</span>
             </div>
-            <Input placeholder="e.g. Suresh Kumar" value={fatherName} onChange={(e) => setFatherName(e.target.value)} className="h-9 text-xs" />
+            <Input placeholder="Suresh Kumar" value={fatherName} onChange={(e) => setFatherName(e.target.value)} className="h-9 text-xs" />
           </div>
           <div className="space-y-1">
             <Label className="text-xs font-medium">Contact Phone Number <span className="text-destructive">*</span></Label>
-            <Input type="tel" placeholder="10-digit mobile (e.g. 9876543210)" value={contactNumber}
+            <Input type="tel" placeholder="10-digit mobile (for example 9876543210)" value={contactNumber}
               onChange={(e) => { setContactNumber(e.target.value.replace(/\D/g, "").slice(0, 10)); if (errors.contactNumber) setErrors((p) => ({ ...p, contactNumber: "" })); }}
               onBlur={() => setTouched((p) => ({ ...p, contactNumber: true }))}
               className={`h-9 text-xs ${errors.contactNumber && touched.contactNumber ? "border-destructive focus-visible:ring-destructive" : ""}`} />
@@ -372,7 +372,7 @@ export function LocationStaffForm({
               <Label className="text-xs font-medium text-foreground">Voucher / Contract Reference</Label>
               <span className="text-[10px] text-muted-foreground">Optional</span>
             </div>
-            <Input placeholder="e.g. VCH-004, Contract-2026-A" value={payeeReference} onChange={(e) => setPayeeReference(e.target.value)} className="h-9 text-xs" />
+            <Input placeholder="VCH-004, Contract-2026-A" value={payeeReference} onChange={(e) => setPayeeReference(e.target.value)} className="h-9 text-xs" />
           </div>
         </div>
 
@@ -389,13 +389,13 @@ export function LocationStaffForm({
               </div>
               <div className="space-y-1">
                 <Label className="text-xs font-medium">Branch Name <span className="text-destructive">*</span></Label>
-                <Input placeholder="e.g. Main Branch" value={branchName} onChange={(e) => { setBranchName(e.target.value); if (errors.branchName) setErrors((p) => ({ ...p, branchName: "" })); }}
+                <Input placeholder="Main Branch" value={branchName} onChange={(e) => { setBranchName(e.target.value); if (errors.branchName) setErrors((p) => ({ ...p, branchName: "" })); }}
                   className={`h-9 text-xs ${errors.branchName && touched.branchName ? "border-destructive focus-visible:ring-destructive" : ""}`} />
                 {errors.branchName && touched.branchName && <p className="text-[11px] text-destructive font-medium">{errors.branchName}</p>}
               </div>
               <div className="space-y-1">
                 <Label className="text-xs font-medium">IFSC Code <span className="text-destructive">*</span></Label>
-                <Input placeholder="e.g. SBIN0001234" value={ifscCode} onChange={(e) => { setIfscCode(e.target.value.toUpperCase()); if (errors.ifscCode) setErrors((p) => ({ ...p, ifscCode: "" })); }}
+                <Input placeholder="SBIN0001234" value={ifscCode} onChange={(e) => { setIfscCode(e.target.value.toUpperCase()); if (errors.ifscCode) setErrors((p) => ({ ...p, ifscCode: "" })); }}
                   className={`h-9 text-xs font-mono ${errors.ifscCode && touched.ifscCode ? "border-destructive focus-visible:ring-destructive" : ""}`} />
                 {errors.ifscCode && touched.ifscCode && <p className="text-[11px] text-destructive font-medium">{errors.ifscCode}</p>}
               </div>
@@ -485,8 +485,8 @@ export function LocationStaffForm({
           </div>
           <div className="space-y-1">
             <Label className="text-xs font-medium">Leave Balance</Label>
-            <Input type="number" placeholder="e.g. 12" value={leaveBalance} onChange={(e) => setLeaveBalance(parseInt(e.target.value) || 0)} className="h-9 text-xs" />
-            <p className="text-[10px] text-muted-foreground">Total leaves configured for this staff member</p>
+            <Input type="number" placeholder="12" value={leaveBalance} onChange={(e) => setLeaveBalance(parseInt(e.target.value) || 0)} className="h-9 text-xs" />
+            <p className="text-[10px] text-muted-foreground">Total leave configured for this staff member.</p>
           </div>
         </div>
       </div>

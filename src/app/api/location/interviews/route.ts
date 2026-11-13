@@ -10,9 +10,9 @@ export async function GET(request: Request) {
     const session = await verifySession();
     const allowed = ["SUPER_ADMIN", "ADMINISTRATION", "HR_ADMIN", "LOCATION_DEPT_HEAD"];
     if (!session || !allowed.includes(session.role)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
-    if (!session.locationId) return NextResponse.json({ error: "No location context" }, { status: 400 });
+    if (!session.locationId) return NextResponse.json({ error: "Your account is not linked to a location. Contact the administrator." }, { status: 400 });
 
     const { searchParams } = new URL(request.url);
     const collegeIdFilter = searchParams.get("collegeId");
@@ -54,7 +54,7 @@ export async function GET(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     console.error("[location/interviews GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
     if (!session || session.role !== "HR_ADMIN") {
       return NextResponse.json({ error: "Only HR Admin can create interview plans" }, { status: 403 });
     }
-    if (!session.locationId) return NextResponse.json({ error: "No location context" }, { status: 400 });
+    if (!session.locationId) return NextResponse.json({ error: "Your account is not linked to a location. Contact the administrator." }, { status: 400 });
 
     const body = (await readJsonBody(request)) as {
       vacancyId: string;
@@ -160,7 +160,7 @@ export async function POST(request: Request) {
         locationId: session.locationId,
         type: "INTERVIEW_PLAN_PENDING",
         title: "Interview Plan Awaiting Approval",
-        message: `HR Admin has created an interview plan: "${title}". Please review and approve.`,
+        message: `HR Admin has created an interview plan: "${title}". Review and approve.`,
         link: `/administration/interviews/${ref.id}`,
         read: false,
         createdAt: now,
@@ -173,6 +173,6 @@ export async function POST(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     console.error("[location/interviews POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

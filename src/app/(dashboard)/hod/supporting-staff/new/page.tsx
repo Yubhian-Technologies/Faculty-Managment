@@ -87,9 +87,9 @@ export default function NewHodSupportingStaffPage() {
   }, []);
 
   const steps: WizardStep[] = useMemo(() => [
-    { key: "core", label: "Identity & Employment", icon: User, description: "Official ID, login credentials, designation and employment details" },
+    { key: "core", label: "Identity & Employment", icon: User, description: "Official ID, login credentials, designation and employment details." },
     ...getSupportingStaffProfileModules().map((m) => ({ key: m.key as WizardStepKey, label: m.label, icon: m.icon })),
-    { key: "review", label: "Review & Submit", icon: CheckCircle2, description: "Verify all inputs before committing to the institutional register" },
+    { key: "review", label: "Review & Submit", icon: CheckCircle2, description: "Verify all details before adding them to the institutional register." },
   ], []);
 
   const step = steps[stepIndex];
@@ -161,14 +161,14 @@ export default function NewHodSupportingStaffPage() {
         return;
       }
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to add staff member", description: json.error });
+        toast({ variant: "destructive", title: "Unable to add staff member", description: json.error });
         return;
       }
 
       toast({ variant: "success", title: "Supporting Staff added", description: `${record.legalName || "The staff member"} has been added.` });
       router.push("/hod/supporting-staff");
     } catch {
-      toast({ variant: "destructive", title: "Network error", description: "Please try again." });
+      toast({ variant: "destructive", title: "Network error", description: "Try again." });
     } finally {
       setSubmitting(false);
     }
@@ -177,7 +177,7 @@ export default function NewHodSupportingStaffPage() {
   if (!collegeTypeLoading && !hasSupportingStaffSplit(collegeType)) {
     return (
       <div className="max-w-2xl">
-        <PageHeader title="Add Supporting Staff" description="Centrally managed by Principal for your college" />
+        <PageHeader title="Add Supporting Staff" description="Managed centrally by the Principal for your college." />
         <Card>
           <CardContent className="py-16">
             <EmptyState
@@ -194,7 +194,7 @@ export default function NewHodSupportingStaffPage() {
   if (!collegeTypeLoading && designationOptions.length === 0) {
     return (
       <div className="max-w-2xl">
-        <PageHeader title="Add Supporting Staff" description="No designations added yet" />
+        <PageHeader title="Add Supporting Staff" description="No designations have been added yet." />
         <Card>
           <CardContent className="py-16">
             <EmptyState
@@ -213,7 +213,7 @@ export default function NewHodSupportingStaffPage() {
       <WizardHero
         icon={UserPlus}
         title="Add Supporting Staff"
-        description="Add a Technical staff member for your department"
+        description="Add a technical staff member to your department."
         badge={`Step ${stepIndex + 1} of ${steps.length}`}
       />
       <WizardStepper steps={steps} currentKey={step.key} onSelect={setStepIndex} errored={erroredSteps} completedBefore={stepIndex} />
@@ -272,7 +272,7 @@ export default function NewHodSupportingStaffPage() {
                   <Label htmlFor="password">Login Password *</Label>
                   <Input id="password" type="password" {...register("password")} placeholder="Min 8 characters" />
                   {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
-                  <p className="text-xs text-muted-foreground">Share this with the staff member so they can log in with their college email.</p>
+                  <p className="text-xs text-muted-foreground">Share this with the staff member so they can sign in with their college email.</p>
                 </div>
 
                 <div className="pt-2 pb-1 border-t">
@@ -292,7 +292,7 @@ export default function NewHodSupportingStaffPage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="highestQualification">Highest Qualification *</Label>
-                    <Input id="highestQualification" {...register("highestQualification")} placeholder="e.g. Diploma, B.Com, ITI" />
+                    <Input id="highestQualification" {...register("highestQualification")} placeholder="Diploma, B.Com, ITI" />
                     {errors.highestQualification && <p className="text-sm text-destructive">{errors.highestQualification.message}</p>}
                   </div>
                 </div>
@@ -306,9 +306,7 @@ export default function NewHodSupportingStaffPage() {
                     <Label htmlFor="joiningDate">Date of Joining *</Label>
                     <Input id="joiningDate" type="date" {...register("joiningDate")} />
                     {errors.joiningDate && <p className="text-sm text-destructive">{errors.joiningDate.message}</p>}
-                    <p className="text-xs text-muted-foreground">
-                      Total Years of Experience is calculated automatically from this date.
-                    </p>
+                    <p className="text-xs text-muted-foreground">Total years of experience is calculated from this date.</p>
                   </div>
                 </div>
 
@@ -357,7 +355,7 @@ export default function NewHodSupportingStaffPage() {
                             label="Label (optional)"
                             value={item.label}
                             onChange={(v) => setExtraPhones((prev) => prev.map((p, idx) => (idx === i ? { ...p, label: v } : p)))}
-                            placeholder="e.g. Personal, WhatsApp, or a name"
+                            placeholder="Personal, WhatsApp, or a name"
                           />
                           <TextInput
                             label="Mobile Number"

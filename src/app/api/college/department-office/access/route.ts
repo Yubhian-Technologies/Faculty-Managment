@@ -32,7 +32,7 @@ async function context() {
 
 const authError = (err: unknown) =>
   err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")
-    ? NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    ? NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 })
     : null;
 
 export async function GET() {
@@ -55,7 +55,7 @@ export async function GET() {
     const unauth = authError(err);
     if (unauth) return unauth;
     console.error("[college/department-office/access GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -106,6 +106,6 @@ export async function PUT(request: Request) {
     const unauth = authError(err);
     if (unauth) return unauth;
     console.error("[college/department-office/access PUT]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

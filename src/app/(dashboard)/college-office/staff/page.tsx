@@ -99,7 +99,7 @@ export default function CollegeOfficePayPromotionsPage() {
           }));
         setRows([...leaders, ...faculty]);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load staff" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load staff" }))
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -171,7 +171,7 @@ export default function CollegeOfficePayPromotionsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Pay & Promotions"
-        description="Update promotion history and salary details for faculty, HOD, Vice Principal and Principal, and change a faculty member's college email"
+        description="Update promotion history and salary details of faculty, HODs, the Vice Principal and the Principal, and change a faculty member's college email."
         actions={
           <Button variant="outline" asChild>
             <Link href="/college-office/faculty/college-email-import"><Upload className="mr-2 h-4 w-4" />Bulk Update College Emails</Link>

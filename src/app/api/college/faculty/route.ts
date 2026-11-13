@@ -303,12 +303,12 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: employeeIdTakenMessage({ taken: true, heldBy: err.heldBy }) }, { status: 409 });
     }
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     const authErr = firebaseAuthErrorResponse(err);
     if (authErr) return authErr;
     console.error("[college/faculty GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -355,7 +355,7 @@ export async function POST(request: Request) {
     } = body;
 
     if (!employeeId || !collegeEmail || !password || !designation || !highestQualification || !joiningDate) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+      return NextResponse.json({ error: "Fill in all required fields." }, { status: 400 });
     }
     // Only the EMPLOYEE_CATEGORY_VALUES keys are accepted anywhere Employee
     // Category is set - enforced here, not just in the Add Faculty dropdown.
@@ -406,7 +406,7 @@ export async function POST(request: Request) {
     // Uploaded before the record exists (under a temp id), so we can only check
     // it came from our own upload endpoint, not that it names this specific id.
     if (profilePhotoUrl !== undefined && !profilePhotoUrl.startsWith("https://firebasestorage.googleapis.com/")) {
-      return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
+      return NextResponse.json({ error: "The photo link is not valid. Upload the photo again." }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -452,7 +452,7 @@ export async function POST(request: Request) {
       const requested = body.department?.trim();
       if (requested && !canHodManageFacultyDepartment(scope, requested)) {
         return NextResponse.json(
-          { error: "That department is not yours or one of your sub-departments" },
+          { error: "This department is not yours or one of your sub-departments." },
           { status: 403 },
         );
       }
@@ -607,7 +607,7 @@ export async function POST(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     if (
       err &&
@@ -615,11 +615,11 @@ export async function POST(request: Request) {
       "code" in err &&
       err.code === "auth/email-already-exists"
     ) {
-      return NextResponse.json({ error: "An account with this email already exists" }, { status: 409 });
+      return NextResponse.json({ error: "An account with this email address already exists." }, { status: 409 });
     }
     const authErr = firebaseAuthErrorResponse(err);
     if (authErr) return authErr;
     console.error("[college/faculty POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

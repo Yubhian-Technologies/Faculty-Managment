@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
 import type { College, Location } from "@/types";
 
-// Shared Location → College drill-down shell used by both Purchase Dept
+// Shared Location → College drill-down shell used by both Purchase Department
 // (/purchase/browse) and Finance (/finance/browse) - both are GLOBAL roles
 // serving every college across every location, so both need the same
 // "pick a location, then a college" entry point before landing on a
@@ -34,7 +34,7 @@ export function LocationBrowserList({ basePath, description = "Select a location
     fetch("/api/admin/locations")
       .then((r) => r.json() as Promise<{ locations: Location[] }>)
       .then((d) => setLocations(d.locations ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load locations" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load locations" }))
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -98,7 +98,7 @@ export function CollegeBrowserList({ basePath, description = "Select a college t
         setLocation(locations.find((l) => l.id === params.locationId) ?? null);
         setColleges(colleges);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load colleges" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load colleges" }))
       .finally(() => setIsLoading(false));
   }, [params.locationId]);
 

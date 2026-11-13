@@ -173,7 +173,7 @@ export default function NewCandidatePage() {
 
   const onSubmit = async (data: FormData) => {
     if (!resumeFile && !resumeUrl) {
-      toast({ variant: "destructive", title: "Resume required", description: "Please upload the candidate's resume (PDF)" });
+      toast({ variant: "destructive", title: "Resume required", description: "Upload the candidate's resume (PDF)" });
       return;
     }
 
@@ -182,7 +182,7 @@ export default function NewCandidatePage() {
       try {
         finalResumeUrl = await uploadResume();
       } catch {
-        toast({ variant: "destructive", title: "Resume upload failed", description: "Please try again" });
+        toast({ variant: "destructive", title: "Resume upload failed", description: "Try again" });
         return;
       }
     }
@@ -198,7 +198,7 @@ export default function NewCandidatePage() {
       });
       const json = await res.json() as { id?: string; error?: string };
       if (!res.ok || !json.id) {
-        toast({ variant: "destructive", title: "Failed to add candidate", description: json.error });
+        toast({ variant: "destructive", title: "Unable to add candidate", description: json.error });
         return;
       }
 
@@ -247,13 +247,11 @@ export default function NewCandidatePage() {
   if (!isLoadingVacancies && vacancies.length === 0) {
     return (
       <div className="max-w-3xl">
-        <PageHeader title="Add Candidate" description="Add a candidate to the pool — attach them to a hiring request now or later" />
+        <PageHeader title="Add Candidate" description="Add a candidate to the pool. Link them to a hiring request now or later." />
         <Card>
           <CardContent className="py-10 text-center space-y-3">
             <p className="font-medium">No active hiring request</p>
-            <p className="text-sm text-muted-foreground">
-              Candidates can only be added while your department has an approved hiring request with open posts. Raise or wait for one to be approved first.
-            </p>
+            <p className="text-sm text-muted-foreground">Candidates can be added only while your department has an approved hiring request with open posts.</p>
             <Button variant="outline" onClick={() => router.back()}>Back</Button>
           </CardContent>
         </Card>
@@ -263,7 +261,7 @@ export default function NewCandidatePage() {
 
   return (
     <div className="max-w-3xl">
-      <PageHeader title="Add Candidate" description="Add a candidate to the pool — attach them to a hiring request now or later" />
+      <PageHeader title="Add Candidate" description="Add a candidate to the pool. Link them to a hiring request now or later." />
 
       <Card>
         <CardHeader>
@@ -371,7 +369,7 @@ export default function NewCandidatePage() {
                       <Input
                         id="referralDesignation"
                         {...register("referralDesignation")}
-                        placeholder="e.g. Assistant Professor"
+                        placeholder="Assistant Professor"
                       />
                     </div>
                   </div>
@@ -404,7 +402,7 @@ export default function NewCandidatePage() {
                     {referralInfluenceType === "OTHER" && (
                       <Input
                         {...register("referralInfluenceOther")}
-                        placeholder="Specify who referred (e.g. MLC, Corporator, ...)"
+                        placeholder="Specify who referred (for example MLC, Corporator, ...)"
                       />
                     )}
                   </div>

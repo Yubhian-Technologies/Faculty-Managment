@@ -72,7 +72,7 @@ export async function PATCH(
       const reqRef = db.collection("colleges").doc(session.collegeId).collection("facultyAccountRequests").doc(id);
       const revealed = await db.runTransaction(async (tx) => {
         const snap = await tx.get(reqRef);
-        if (!snap.exists) return { error: "Not found" as const, code: 404 };
+        if (!snap.exists) return { error: "Record not found. It may have been deleted." as const, code: 404 };
         const data = snap.data() as { assignedEmail?: string; credentialResult?: { password?: string; revealed?: boolean } };
         if (!data.credentialResult || data.credentialResult.revealed || !data.credentialResult.password) {
           return { error: "These credentials have already been revealed" as const, code: 410 };
@@ -95,7 +95,7 @@ export async function PATCH(
     const reqRef = collegeRef.collection("facultyAccountRequests").doc(id);
     const reqSnap = await reqRef.get();
     if (!reqSnap.exists) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
 
     const reqData = reqSnap.data() as {
@@ -165,7 +165,7 @@ export async function PATCH(
         return NextResponse.json({ error: "Offer letter or candidate not found" }, { status: 404 });
       }
       if (result.status === "no_email") {
-        return NextResponse.json({ error: "Could not create the account — no email was provided" }, { status: 400 });
+        return NextResponse.json({ error: "Unable to create the account — no email was provided" }, { status: 400 });
       }
       if (result.status === "email_taken") {
         return NextResponse.json(
@@ -279,9 +279,9 @@ export async function PATCH(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[faculty-account-requests/[id] PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

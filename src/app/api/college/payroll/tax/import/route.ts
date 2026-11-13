@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     await writeAuditLogSafe(db, session.collegeId, { action: "PAYROLL_TAX_OPENING_IMPORTED", performedBy: session.uid, performedByName: session.email, targetId: fy, details: { fy, count: plan.rows.length } });
     return NextResponse.json({ ...plan, applied: plan.rows.length });
   } catch (err) {
-    if (err instanceof Error && err.message === "BAD_FY") return NextResponse.json({ error: "Financial year must look like 2026-27" }, { status: 400 });
+    if (err instanceof Error && err.message === "BAD_FY") return NextResponse.json({ error: "Enter the financial year as YYYY-YY, for example 2026-27." }, { status: 400 });
     return payrollErrorResponse(err, "[college/payroll/tax/import POST]");
   }
 }

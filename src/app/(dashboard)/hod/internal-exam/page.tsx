@@ -37,11 +37,11 @@ export default function HodInternalExamPage() {
       setIsLoading(true);
       try {
         const res = await fetch("/api/college/internal-exam-marks?meta=1");
-        if (!res.ok) throw new Error("Failed to load submitted marks");
+        if (!res.ok) throw new Error("Unable to load submitted marks");
         const json = (await res.json()) as { batches?: (InternalExamMarksBatch & { id: string })[] };
         setBatches(json.batches ?? []);
       } catch {
-        toast({ variant: "destructive", title: "Failed to load submitted internal exam marks" });
+        toast({ variant: "destructive", title: "Unable to load submitted internal exam marks" });
       } finally {
         setIsLoading(false);
       }
@@ -153,7 +153,7 @@ export default function HodInternalExamPage() {
       setSelectedBatch(json.batch);
       setSelectedConfig(json.configuration);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to load marks breakdown" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to load marks breakdown" });
       setSelectedBatch(null);
     } finally {
       setIsLoadingDetail(false);
@@ -174,7 +174,7 @@ export default function HodInternalExamPage() {
       <div className="space-y-6">
         <PageHeader
           title={`${selectedBatch.subjectName} — ${selectedBatch.sectionName}`}
-          description="Submitted internal exam marks (view-only)"
+          description="Submitted internal examination marks (read only)."
           actions={
             <Button variant="outline" onClick={() => { setSelectedBatch(null); setSelectedConfig(null); }}>
               Back to list
@@ -244,7 +244,7 @@ export default function HodInternalExamPage() {
     <div className="space-y-6">
       <PageHeader
         title="Internal Marks"
-        description="Submitted internal exam marks for your department (view-only)"
+        description="Submitted internal examination marks of your department (read only)."
       />
 
       {isLoading ? (

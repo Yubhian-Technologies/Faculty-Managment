@@ -147,10 +147,10 @@ export async function GET(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/faculty-assignment-requests GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -185,9 +185,9 @@ export async function POST(request: Request) {
       collegeRef.collection("subjects").doc(subjectId).get(),
       db.getAll(...targetDepartmentIds.map((id) => collegeRef.collection("departments").doc(id))),
     ]);
-    if (!courseSnap.exists) return NextResponse.json({ error: "Course not found" }, { status: 404 });
-    if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found" }, { status: 404 });
-    if (!subjectSnap.exists) return NextResponse.json({ error: "Subject not found" }, { status: 404 });
+    if (!courseSnap.exists) return NextResponse.json({ error: "Course not found. It may have been deleted." }, { status: 404 });
+    if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found. It may have been deleted." }, { status: 404 });
+    if (!subjectSnap.exists) return NextResponse.json({ error: "Subject not found. It may have been deleted." }, { status: 404 });
     if (targetDeptSnaps.some((d) => !d.exists)) return NextResponse.json({ error: "Target department not found" }, { status: 404 });
 
     const course = courseSnap.data() as { name: string };
@@ -202,7 +202,7 @@ export async function POST(request: Request) {
     } else {
       const ok = await isTimetableIncharge(db, session.collegeId, session.uid, courseId, section.year);
       if (!ok) {
-        return NextResponse.json({ error: "You are not the Timetable Incharge for this course & year" }, { status: 403 });
+        return NextResponse.json({ error: "You are not the Timetable Incharge for this course and year." }, { status: 403 });
       }
     }
     // A subject that already has faculty can still be asked of other departments (to add more),
@@ -290,10 +290,10 @@ export async function POST(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/faculty-assignment-requests POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -306,13 +306,13 @@ export async function DELETE(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PANEL_MEMBER", "COLLEGE_STAFF");
     const id = new URL(request.url).searchParams.get("id");
-    if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
+    if (!id) return NextResponse.json({ error: "The record to update is missing. Reload the page and try again." }, { status: 400 });
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
     const ref = collegeRef.collection("facultyAssignmentRequests").doc(id);
     const snap = await ref.get();
-    if (!snap.exists) return NextResponse.json({ error: "Request not found" }, { status: 404 });
+    if (!snap.exists) return NextResponse.json({ error: "Request not found. It may have been withdrawn or deleted." }, { status: 404 });
     const req = snap.data() as { status?: string; courseId?: string; year?: number; sectionId?: string; requestingDepartment?: string; requestedBy?: string };
     if (req.status === "ALLOCATED") {
       return NextResponse.json({ error: "This request is already allocated - remove the teaching assignment instead" }, { status: 409 });
@@ -327,7 +327,7 @@ export async function DELETE(request: Request) {
       const ok = req.courseId && req.year != null
         && await isTimetableIncharge(db, session.collegeId, session.uid, req.courseId, req.year);
       if (!ok) {
-        return NextResponse.json({ error: "You are not the Timetable Incharge for this course & year" }, { status: 403 });
+        return NextResponse.json({ error: "You are not the Timetable Incharge for this course and year." }, { status: 403 });
       }
     }
 
@@ -337,9 +337,9 @@ export async function DELETE(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/faculty-assignment-requests DELETE]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

@@ -22,7 +22,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       const req = await issueConfigured(db, user, id, await readJson(request), new URL(request.url).origin);
       return NextResponse.json({ request: req });
     }
-    if (!NO_DUE_ISSUER_ROLES.includes(session.role)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!NO_DUE_ISSUER_ROLES.includes(session.role)) return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     const body = (await readJson(request)) as { certificateUrl?: string; certificateNumber?: string };
     if (!body.certificateUrl || !body.certificateNumber) {
       throw new CertificationError("INVALID", "certificateUrl and certificateNumber are required", 400);
@@ -41,7 +41,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const db = getAdminDb();
     const user = await actingUser(db, session);
     const current = await getRequest(db, user, id);
-    if (!current.certificateTypeId && !NO_DUE_ISSUER_ROLES.includes(session.role)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!current.certificateTypeId && !NO_DUE_ISSUER_ROLES.includes(session.role)) return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     const body = (await readJson(request)) as { action?: string; remarks?: string };
     if (body.action !== "REJECT" || !body.remarks) {
       throw new CertificationError("INVALID", "action must be REJECT with remarks", 400);

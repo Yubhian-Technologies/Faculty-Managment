@@ -36,7 +36,7 @@ export default function NewPublicationPage() {
           .filter((u) => PUBLICATION_ELIGIBLE_ROLES.includes(u.role))
           .sort((a, b) => a.name.localeCompare(b.name))
       ))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load staff list" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load staff list" }));
   }, []);
 
   // Grouped by role (Faculty first, then each office role) rather than one
@@ -60,13 +60,13 @@ export default function NewPublicationPage() {
       });
       if (!res.ok) {
         const json = await res.json().catch(() => ({})) as { error?: string };
-        toast({ variant: "destructive", title: "Failed to add publication", description: json.error });
+        toast({ variant: "destructive", title: "Unable to add publication", description: json.error });
         return;
       }
       toast({ variant: "success", title: "Publication added" });
       router.push("/r-and-d/publications");
     } catch {
-      toast({ variant: "destructive", title: "Network error. Please try again." });
+      toast({ variant: "destructive", title: "Network error. Try again." });
     } finally {
       setSaving(false);
     }
@@ -74,7 +74,7 @@ export default function NewPublicationPage() {
 
   return (
     <div className="max-w-2xl">
-      <PageHeader title="Add Publication" description="Record an official publication for a staff member" />
+      <PageHeader title="Add Publication" description="Record an official publication for a staff member." />
       <Card>
         <CardHeader><CardTitle className="text-base">Publication Details</CardTitle></CardHeader>
         <CardContent>

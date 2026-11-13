@@ -297,7 +297,7 @@ export default function MarkAttendancePage() {
     try {
       const query = viewDateRef.current ? `?date=${encodeURIComponent(viewDateRef.current)}` : "";
       const res = await fetch(`/api/college/student-attendance/today-periods${query}`);
-      if (!res.ok) throw new Error("Failed to load periods");
+      if (!res.ok) throw new Error("Unable to load periods");
       const json = (await res.json()) as TodayPeriodsResponse & { noClassReason?: string };
       setNoClassReason(json.noClassReason ?? null);
       const fetched = json.periods ?? [];
@@ -412,7 +412,7 @@ export default function MarkAttendancePage() {
       );
 
       if (Object.keys(fetchedSessions).length === 0) {
-        setLoadError("Failed to load attendance sessions");
+        setLoadError("Unable to load attendance sessions");
         return;
       }
 
@@ -450,7 +450,7 @@ export default function MarkAttendancePage() {
 
       setDraft(initialDraft);
     } catch {
-      setLoadError("Failed to load students");
+      setLoadError("Unable to load students");
     } finally {
       setIsLoadingStudents(false);
     }
@@ -604,7 +604,7 @@ export default function MarkAttendancePage() {
           });
           if (!res.ok) {
             const json = (await res.json().catch(() => ({}))) as { error?: string };
-            failedPeriods.push(`Period ${p.periodNumber}: ${json.error ?? "Failed to submit"}`);
+            failedPeriods.push(`Period ${p.periodNumber}: ${json.error ?? "Unable to submit"}`);
           }
         } catch (err) {
           if (err instanceof TypeError) {
@@ -630,7 +630,7 @@ export default function MarkAttendancePage() {
     setIsSubmitting(false);
 
     if (isOffline) {
-      toast({ variant: "success", title: "Saved on this device", description: "No connection - queued to submit automatically when online." });
+      toast({ variant: "success", title: "Saved on this device", description: "No connection. It will be submitted automatically when you are back online." });
     } else if (failedPeriods.length === 0) {
       toast({ variant: "success", title: `Attendance submitted for ${expandedGroup.periodNumbers.length} period${expandedGroup.periodNumbers.length > 1 ? "s" : ""}` });
     } else {
@@ -644,7 +644,7 @@ export default function MarkAttendancePage() {
     <div className="space-y-6">
       <PageHeader
         title="Mark Attendance"
-        description="All classes assigned to you today from the published timetable. Continuous lab periods are grouped into single slots with per-period attendance."
+        description="Classes assigned to you today in the published timetable. Consecutive lab periods are grouped into one slot, with attendance for each period."
       />
 
       <div className="flex items-center gap-2">
@@ -829,7 +829,7 @@ export default function MarkAttendancePage() {
             </div>
             {isQueuedPending ? (
               <span className="flex items-center gap-1.5 font-medium text-amber-700">
-                <CloudOff className="h-4 w-4" /> Saved on this device — pending sync (read-only)
+                <CloudOff className="h-4 w-4" /> Saved on this device; waiting to sync (read only)
               </span>
             ) : isReadOnly ? (
               <span className="flex items-center gap-1.5 font-medium text-emerald-700">
@@ -861,7 +861,7 @@ export default function MarkAttendancePage() {
             )}
 
             {!isReadOnly && isExpandedOpen && !mode && (
-              <p className="border-b bg-muted/30 px-4 py-2 text-xs text-muted-foreground">Pick one option above — the roster controls unlock once you do.</p>
+              <p className="border-b bg-muted/30 px-4 py-2 text-xs text-muted-foreground">Select an option above to enable the roster controls.</p>
             )}
 
             {!isReadOnly && isExpandedOpen && mode && (

@@ -21,7 +21,7 @@ export default function HODSetupPage() {
     fetch("/api/college/hiring-batches?status=APPROVED")
       .then((r) => r.json() as Promise<{ batches: BatchRow[] }>)
       .then((d) => setBatches(d.batches ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load" }))
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -84,7 +84,7 @@ export default function HODSetupPage() {
     <div className="space-y-6">
       <PageHeader
         title="Interview Setup"
-        description="Track College Office setup progress and add demo classroom details"
+        description="Track the College Office setup and add demo classroom details."
       />
 
       <DataTable

@@ -42,7 +42,7 @@ export default function AdminInterviewsPage() {
     fetch(url)
       .then((r) => r.json() as Promise<{ interviews: LocationInterview[] }>)
       .then((d) => setInterviews(d.interviews ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -52,7 +52,7 @@ export default function AdminInterviewsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Interview Plans"
-        description="Review, approve and score interview plans submitted by HR Admin"
+        description="Review, approve and score the interview plans submitted by HR Admin."
       />
 
       {collegeId && (

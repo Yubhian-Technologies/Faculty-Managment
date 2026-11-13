@@ -134,7 +134,7 @@ export class SubjectInstanceService {
       const coursesById = new Map(courseSnaps.filter((c) => c.exists).map((c) => [c.id, c.data() as Course]));
       const instanceYear = instanceSnap.exists ? (instanceSnap.data() as { year?: number }).year : undefined;
       if (live.some((a) => teachingAssignmentUsesInstance(a, { departmentId, semester, year: instanceYear }, departments, coursesById))) {
-        throw new Error("This subject has active faculty teaching assignments in this semester. Please remove or reassign faculty before unassigning.");
+        throw new Error("This subject has active faculty teaching assignments in this semester. Remove or reassign faculty before unassigning.");
       }
     }
 

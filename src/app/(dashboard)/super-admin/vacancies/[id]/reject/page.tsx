@@ -44,7 +44,7 @@ export default function RejectVacancyPage() {
         }
         setVacancy(v);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load vacancy" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load vacancy" }))
       .finally(() => setLoading(false));
   }, [vacancyId, router]);
 

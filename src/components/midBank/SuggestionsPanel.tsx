@@ -40,7 +40,7 @@ export function SuggestionsPanel({ bankId, questions }: { bankId: string; questi
         body: JSON.stringify({ text, ...(q ? { questionId: q.id, questionLabel: q.label } : {}), ...(reopen ? { reopen: true } : {}) }),
       });
       const j = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(j.error ?? "Could not send");
+      if (!res.ok) throw new Error(j.error ?? "Unable to send");
       setText(""); setQuestionId("");
       if (reopen) {
         toast({ variant: "success", title: "Sent back to the faculty for changes - the HOD approves it again after they resubmit" });
@@ -49,7 +49,7 @@ export function SuggestionsPanel({ bankId, questions }: { bankId: string; questi
       }
       toast({ variant: "success", title: "Suggestion sent" });
       setReloadKey((k) => k + 1);
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not send" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to send" }); }
     finally { setBusy(""); }
   }
 
@@ -59,9 +59,9 @@ export function SuggestionsPanel({ bankId, questions }: { bankId: string; questi
       const res = await fetch(`/api/college/mid-question-banks/${encodeURIComponent(bankId)}/suggestions`, {
         method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ suggestionId: s.id, resolved }),
       });
-      if (!res.ok) throw new Error(((await res.json()) as { error?: string }).error ?? "Could not update");
+      if (!res.ok) throw new Error(((await res.json()) as { error?: string }).error ?? "Unable to update");
       setReloadKey((k) => k + 1);
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not update" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to update" }); }
     finally { setBusy(""); }
   }
 
@@ -78,7 +78,7 @@ export function SuggestionsPanel({ bankId, questions }: { bankId: string; questi
               {questions.map((q) => <option key={q.id} value={q.id}>{q.label}</option>)}
             </select>
           )}
-          <Textarea rows={2} placeholder="e.g. Question 4 repeats Mid 1; Part A could use one more unit-3 question" value={text} onChange={(e) => setText(e.target.value)} />
+          <Textarea rows={2} placeholder="Question 4 repeats Mid 1; Part A could use one more unit-3 question" value={text} onChange={(e) => setText(e.target.value)} />
           {data.canReopen && (
             <label className="flex items-start gap-2 text-sm">
               <Checkbox className="mt-0.5" checked={reopen} onCheckedChange={(c) => setReopen(c === true)} />

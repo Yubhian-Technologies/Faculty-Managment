@@ -75,11 +75,11 @@ export function RulesForm({ overview, approvers, mids, departments, onSaved }: {
         body: JSON.stringify({ name, midPlanIds, status, rules: r }),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to save");
+      if (!res.ok) throw new Error(data.error ?? "Unable to save");
       toast({ variant: "success", title: "Configuration saved" });
       onSaved();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to save" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" });
     } finally {
       setSaving(false);
     }
@@ -124,7 +124,7 @@ export function RulesForm({ overview, approvers, mids, departments, onSaved }: {
 
       <Section title="Designation-wise limits" description="Blank = no limit. A row with no designation applies to every designation not listed. Block refuses; Warn needs an override by an approver.">
         <div className="space-y-1.5">
-          <Label>Duties that count towards workload and limits</Label>
+          <Label>Duties that count towards workload and limits.</Label>
           <div className="flex flex-wrap gap-4">
             {DUTY_CATEGORIES.map((c) => (
               <label key={c} className="flex items-center gap-2 text-sm">
@@ -176,16 +176,16 @@ export function RulesForm({ overview, approvers, mids, departments, onSaved }: {
               <option value="ALLOW">Treat as free</option>
             </select>
           </div>
-          <div className="space-y-1.5"><Label htmlFor="r-buf">Minutes between a class / duty and the next duty</Label><Input id="r-buf" type="number" min={0} value={r.bufferMinutes} onChange={(e) => set("bufferMinutes", Number(e.target.value))} /></div>
+          <div className="space-y-1.5"><Label htmlFor="r-buf">Minutes between a class or duty and the next duty.</Label><Input id="r-buf" type="number" min={0} value={r.bufferMinutes} onChange={(e) => set("bufferMinutes", Number(e.target.value))} /></div>
         </div>
         <p className="text-xs text-muted-foreground">Two duties at overlapping times are always refused.</p>
       </Section>
 
-      <Section title="Subject restrictions" description="From teaching assignments. Always refused when on - not overridable.">
+      <Section title="Subject restrictions" description="Based on teaching assignments. When on, such duties are always refused and cannot be overridden.">
         <Toggle id="r-sub-now" label="Faculty teaching a subject written there can't invigilate it" checked={r.excludeCurrentSubjectFaculty} onChange={(v) => set("excludeCurrentSubjectFaculty", v)} />
         <Toggle id="r-sub-past" label="Also faculty who taught it before" hint="Teaching assignments marked as past." checked={r.excludePastSubjectFaculty} onChange={(v) => set("excludePastSubjectFaculty", v)} />
         <div className="space-y-1.5">
-          <Label>Departments whose faculty are not given duties</Label>
+          <Label>Departments whose faculty are not assigned duties.</Label>
           <div className="grid max-h-48 gap-2 overflow-y-auto rounded-md border p-2 sm:grid-cols-2">
             {departments.map((d) => (
               <label key={d} className="flex items-center gap-2 text-sm">
@@ -201,7 +201,7 @@ export function RulesForm({ overview, approvers, mids, departments, onSaved }: {
           <div className="space-y-1.5"><Label htmlFor="r-same">Same room again in this schedule</Label><ModeSelect id="r-same" value={r.sameRoomRule} onChange={(v) => set("sameRoomRule", v)} /></div>
           <div className="space-y-1.5"><Label htmlFor="r-cons">Same room in consecutive sessions</Label><ModeSelect id="r-cons" value={r.consecutiveSameRoomRule} onChange={(v) => set("consecutiveSameRoomRule", v)} /></div>
         </div>
-        <p className="text-xs text-muted-foreground">Suggestions already prefer people who haven&rsquo;t had the room.</p>
+        <p className="text-xs text-muted-foreground">Suggestions already favour people who have not had the room.</p>
       </Section>
 
       <Section title="Overrides and approvals" description="Only these Exam Cell users may give a duty that breaks a Warn rule; each override needs a reason and is kept in the audit log. Block rules can't be overridden.">

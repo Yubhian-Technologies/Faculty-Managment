@@ -39,7 +39,7 @@ export default function RAndDConsultancyProjectsPage() {
       const data = await res.json() as { projects: ConsultancyProjectRow[] };
       setProjects(data.projects ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load consultancy projects" });
+      toast({ variant: "destructive", title: "Unable to load consultancy projects" });
     } finally {
       setIsLoading(false);
     }
@@ -59,7 +59,7 @@ export default function RAndDConsultancyProjectsPage() {
       setDeleteTarget(null);
       await load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to delete consultancy project" });
+      toast({ variant: "destructive", title: "Unable to delete consultancy project" });
     } finally {
       setDeleting(false);
     }
@@ -77,7 +77,7 @@ export default function RAndDConsultancyProjectsPage() {
       toast({ variant: "success", title: "Consultancy project approved" });
       await load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to approve consultancy project" });
+      toast({ variant: "destructive", title: "Unable to approve consultancy project" });
     } finally {
       setApproving(null);
     }
@@ -98,7 +98,7 @@ export default function RAndDConsultancyProjectsPage() {
       setRejectReason("");
       await load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to reject consultancy project" });
+      toast({ variant: "destructive", title: "Unable to reject consultancy project" });
     } finally {
       setRejecting(false);
     }
@@ -131,7 +131,7 @@ export default function RAndDConsultancyProjectsPage() {
       render: (row) => <span className="text-sm text-muted-foreground">{CONSULTANCY_CATEGORY_LABELS[row.consultancyCategory]}</span>,
     },
     {
-      key: "consultancyAmount", header: "Amount (Rs.)", hideOnMobile: true,
+      key: "consultancyAmount", header: "Amount (₹)", hideOnMobile: true,
       render: (row) => <span className="text-sm text-muted-foreground">{row.consultancyAmount ?? "-"}</span>,
     },
   ];
@@ -195,7 +195,7 @@ export default function RAndDConsultancyProjectsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Consultancy Projects"
-        description="Verify staff-submitted consultancy project records"
+        description="Verify consultancy project records submitted by staff."
       />
 
       <div className="flex gap-2 border-b">

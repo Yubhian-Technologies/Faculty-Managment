@@ -314,7 +314,7 @@ export function MentorshipModule({
               <div key={i} className="@container">
                 <div className={`rounded-md border bg-muted/20 shadow-sm p-2 grid gap-2 ${FACT_GRID_COLS_4}`}>
                   <OptionalField label="Type" value={TRAINING_ENTRY_TYPE_LABELS[t.type]} />
-                  {t.type === "OTHER" && <OptionalField label="Please specify type" value={t.pleaseSpecifyType} />}
+                  {t.type === "OTHER" && <OptionalField label="Specify type" value={t.pleaseSpecifyType} />}
                   {t.type === "CERTIFICATION" && <OptionalField label="Certification Type" value={t.certificationType ? CERTIFICATION_TYPE_LABELS[t.certificationType] : undefined} />}
                   {t.type !== "MOOC" && <OptionalField label="Participated or Conducted" value={t.participatedOrConducted ? TRAINING_PARTICIPATION_ROLE_LABELS[t.participatedOrConducted] : undefined} />}
                   <OptionalField label="Title of the Program" value={t.titleOfTheProgram} />

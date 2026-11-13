@@ -28,7 +28,7 @@ export default function NewFundAllocationPage() {
     collegeFetch("/api/college/finance-budgets?status=ACTIVE")
       .then((r) => r.json() as Promise<{ budgets: FinanceBudget[] }>)
       .then((d) => setBudgets(d.budgets ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load budgets" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load budgets" }));
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -51,7 +51,7 @@ export default function NewFundAllocationPage() {
       toast({ variant: "success", title: "Funds allocated" });
       router.push("/finance/fund-allocation");
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to allocate funds", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to allocate funds", description: err instanceof Error ? err.message : undefined });
     } finally {
       setSaving(false);
     }
@@ -61,7 +61,7 @@ export default function NewFundAllocationPage() {
     <div className="max-w-xl">
       <PageHeader
         title="Allocate Funds"
-        description="Allocate an approved budget to a department, project, event, or purchase"
+        description="Allocate an approved budget to a department, project, event or purchase."
       />
 
       <Card>
@@ -96,7 +96,7 @@ export default function NewFundAllocationPage() {
 
             <div className="space-y-2">
               <Label>Name *</Label>
-              <Input value={targetName} onChange={(e) => setTargetName(e.target.value)} placeholder="e.g. Annual Tech Fest" />
+              <Input value={targetName} onChange={(e) => setTargetName(e.target.value)} placeholder="Annual Tech Fest" />
             </div>
 
             <div className="space-y-2">

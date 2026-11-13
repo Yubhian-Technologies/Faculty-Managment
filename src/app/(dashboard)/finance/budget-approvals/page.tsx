@@ -32,7 +32,7 @@ export default function FinanceBudgetApprovalsPage() {
         );
         setRequests(sorted);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load budget requests" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load budget requests" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -44,7 +44,7 @@ export default function FinanceBudgetApprovalsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Budget Approvals"
-        description="Review, approve, reject, or return department budget requests"
+        description="Review, approve, reject or return department budget requests."
         actions={
           <Button onClick={() => router.push("/finance/budget-approvals/new")}>
             <Plus className="h-4 w-4 mr-1" />
@@ -62,17 +62,13 @@ export default function FinanceBudgetApprovalsPage() {
 
       <div className="space-y-3">
         <h2 className="text-base font-semibold">Incoming from Departments</h2>
-        <p className="text-sm text-muted-foreground -mt-2">
-          Requests HODs submitted and Principals verified (Level 1 freeze) - approving one creates the budget automatically.
-        </p>
+        <p className="text-sm text-muted-foreground -mt-2">Requests submitted by HODs and verified by Principals (Level 1). Approving a request creates the budget.</p>
         <IncomingBudgetRequests />
       </div>
 
       <div className="space-y-3">
         <h2 className="text-base font-semibold">Emergency Reports</h2>
-        <p className="text-sm text-muted-foreground -mt-2">
-          Approved Non-Goods emergency requests - send a report to the requesting Principal / Vice Principal to view.
-        </p>
+        <p className="text-sm text-muted-foreground -mt-2">Approved emergency requests for non-goods. Send a report to the requesting Principal or Vice Principal.</p>
         <EmergencyReportUpload />
       </div>
 

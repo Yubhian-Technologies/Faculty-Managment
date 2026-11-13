@@ -14,9 +14,9 @@ const FIREBASE_ERROR_MESSAGES: Record<string, string> = {
   "auth/wrong-password": "Current password is incorrect.",
   "auth/invalid-credential": "Current password is incorrect.",
   "auth/weak-password": "New password is too weak - use at least 8 characters.",
-  "auth/requires-recent-login": "Please log out and log back in, then try again.",
-  "auth/too-many-requests": "Too many attempts. Please try again later.",
-  "auth/network-request-failed": "Network error. Please check your connection.",
+  "auth/requires-recent-login": "Log out and log back in, then try again.",
+  "auth/too-many-requests": "Too many attempts. Try again later.",
+  "auth/network-request-failed": "Network error. Check your connection.",
 };
 
 // College Admin has no "My Profile" page (see navConfig.ts's My Profile
@@ -55,7 +55,7 @@ export function CollegeAdminAccountMenu({
       });
       if (!res.ok) {
         const json = await res.json() as { error?: string };
-        toast({ variant: "destructive", title: "Failed to save", description: json.error });
+        toast({ variant: "destructive", title: "Unable to save", description: json.error });
         return;
       }
       toast({ variant: "success", title: "Saved" });
@@ -70,7 +70,7 @@ export function CollegeAdminAccountMenu({
     if (newPassword.length < 8) { toast({ variant: "destructive", title: "New password must be at least 8 characters" }); return; }
     if (newPassword !== confirmPassword) { toast({ variant: "destructive", title: "Passwords don't match" }); return; }
     const currentUser = auth.currentUser;
-    if (!currentUser?.email) { toast({ variant: "destructive", title: "No active session", description: "Please log in again." }); return; }
+    if (!currentUser?.email) { toast({ variant: "destructive", title: "No active session", description: "Log in again." }); return; }
     setChangingPassword(true);
     try {
       const credential = EmailAuthProvider.credential(currentUser.email, currentPassword);
@@ -80,7 +80,7 @@ export function CollegeAdminAccountMenu({
       setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
     } catch (err: unknown) {
       const code = (err as { code?: string }).code ?? "";
-      toast({ variant: "destructive", title: "Failed to change password", description: FIREBASE_ERROR_MESSAGES[code] ?? "Please try again." });
+      toast({ variant: "destructive", title: "Unable to change password", description: FIREBASE_ERROR_MESSAGES[code] ?? "Try again." });
     } finally {
       setChangingPassword(false);
     }
@@ -108,9 +108,7 @@ export function CollegeAdminAccountMenu({
           </DialogHeader>
           <div className="space-y-6">
             <div className="space-y-3">
-              <p className="text-xs text-muted-foreground">
-                This is a role login, not tied to one fixed person - update these whenever it changes hands.
-              </p>
+              <p className="text-xs text-muted-foreground">This is a role login, not tied to one person. Update these details whenever it changes hands.</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label>Name</Label>

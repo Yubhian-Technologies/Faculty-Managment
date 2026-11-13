@@ -88,7 +88,7 @@ export function SupportingStaffModuleEditor({ moduleKey, record, onChange, colle
             label="Hardware Skills"
             values={nonTechnical.hardwareSkills}
             onChange={(v) => setNonTechnical("hardwareSkills", v)}
-            placeholder="e.g. PC Assembly, Networking, CCTV — type and press Add"
+            placeholder="PC Assembly, Networking, CCTV — type and press Add"
           />
           <NumInput label="Typing Speed (WPM)" value={nonTechnical.typingSpeedWpm} onChange={(v) => setNonTechnical("typingSpeedWpm", v)} />
         </div>
@@ -107,7 +107,7 @@ export function SupportingStaffModuleEditor({ moduleKey, record, onChange, colle
           <Textarea
             value={profile.otherInformation ?? ""}
             onChange={(e) => setProfile({ otherInformation: e.target.value })}
-            placeholder="Anything not covered above - add it here"
+            placeholder="Anything not covered above, add it here"
             rows={4}
           />
         </div>

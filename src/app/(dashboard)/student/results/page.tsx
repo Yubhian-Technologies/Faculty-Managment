@@ -43,10 +43,10 @@ export default function StudentResultsPage() {
         const res = await fetch("/api/college/student/me/results");
         const json = (await res.json()) as Partial<Payload> & { error?: string };
         if (cancelled) return;
-        if (!res.ok || !json.results) setError(json.error ?? "Couldn't load your results.");
+        if (!res.ok || !json.results) setError(json.error ?? "Unable to load your results.");
         else setData(json as Payload);
       } catch {
-        if (!cancelled) setError("Couldn't load your results.");
+        if (!cancelled) setError("Unable to load your results.");
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -59,7 +59,7 @@ export default function StudentResultsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Results" description="Your published semester results, SGPA and CGPA. After a revaluation the better of the two grades counts." />
+      <PageHeader title="Results" description="Your published semester results, SGPA and CGPA. After a revaluation, the better of the two grades counts." />
 
       {isLoading ? (
         <div className="h-64 rounded-lg border bg-muted/30 animate-pulse" />

@@ -227,7 +227,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
         );
       }
     } catch {
-      toast({ variant: "destructive", title: "Failed to load batch" });
+      toast({ variant: "destructive", title: "Unable to load batch" });
     } finally {
       setIsLoading(false);
     }
@@ -258,15 +258,15 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
     const isOnline = batch?.hiringMode === "ONLINE";
     const isSupportingStaff = batch?.positionCategory === "SUPPORTING_STAFF";
     if (!isOnline && !isSupportingStaff && !coordinatorFacultyId) {
-      toast({ variant: "destructive", title: "Please assign a coordinator" });
+      toast({ variant: "destructive", title: "Assign a coordinator" });
       return;
     }
     if (!isOnline && !interviewVenue.trim()) {
-      toast({ variant: "destructive", title: "Please enter the interview venue" });
+      toast({ variant: "destructive", title: "Enter the interview venue" });
       return;
     }
     if (isOnline && (!meetingPlatform || !meetingLink.trim())) {
-      toast({ variant: "destructive", title: "Please select a platform and enter a meeting link" });
+      toast({ variant: "destructive", title: "Select a platform and enter a meeting link" });
       return;
     }
     setIsSaving(true);
@@ -294,7 +294,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
       });
       void load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to save" });
+      toast({ variant: "destructive", title: "Unable to save" });
     } finally {
       setIsSaving(false);
     }
@@ -312,7 +312,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
       toast({ variant: "success", title: "Panel scoring opened", description: "Panel members have been notified to submit their assessments." });
       void load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to release" });
+      toast({ variant: "destructive", title: "Unable to release" });
     } finally {
       setIsReleasingToPanel(false);
     }
@@ -330,7 +330,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
       toast({ variant: "success", title: "Submitted for Principal review", description: "The Principal has been notified to make final hiring decisions." });
       void load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to submit for review" });
+      toast({ variant: "destructive", title: "Unable to submit for review" });
     } finally {
       setIsSubmittingForReview(false);
     }
@@ -371,7 +371,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
       setEditingCommittee(false);
       void load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to update committee" });
+      toast({ variant: "destructive", title: "Unable to update committee" });
     } finally {
       setIsSavingCommittee(false);
     }
@@ -395,7 +395,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
       toast({ variant: "success", title: "Interview session opened", description: "Panel members can now join the meeting and evaluate." });
       void load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to update" });
+      toast({ variant: "destructive", title: "Unable to update" });
     } finally {
       setIsMarkingComplete(false);
     }
@@ -413,7 +413,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
       if (!res.ok) throw new Error();
       setCandidates((prev) => prev.map((c) => c.id === applicationId ? { ...c, hasArrived: true } : c));
     } catch {
-      toast({ variant: "destructive", title: "Failed to update" });
+      toast({ variant: "destructive", title: "Unable to update" });
     } finally {
       setArrivingId(null);
     }
@@ -449,7 +449,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
       coordinator?.email ? `Email: ${coordinator.email}` : "",
     ].filter(Boolean);
     const coordinatorBlock = coordinatorLines.length > 0
-      ? `\n\nFor any queries, please contact your Interview Coordinator:\n${coordinatorLines.join("\n")}`
+      ? `\n\nFor any queries contact your Interview Coordinator:\n${coordinatorLines.join("\n")}`
       : "";
     const docs = (batch.requiredDocuments ?? []).length > 0
       ? (batch.requiredDocuments ?? []).map((d) => `• ${d}`).join("\n")
@@ -467,7 +467,7 @@ INTERVIEW DETAILS:
 • Time: ${time}
 • Mode: ${mode}${mode === "Online"
       ? `${platform ? `\n• Platform: ${platform}` : ""}${meetLink ? `\n• Meeting Link: ${meetLink}` : ""}\n• Please join a few minutes before the scheduled time`
-      : `\n• Venue: ${venue}\n• Reporting Time: Please arrive 15 minutes before the scheduled time`}${coordinatorBlock}
+      : `\n• Venue: ${venue}\n• Reporting Time: Arrive 15 minutes before the scheduled time`}${coordinatorBlock}
 
 Kindly bring the following documents for verification:
 
@@ -587,7 +587,7 @@ ${institution}`;
                   id="interviewVenue"
                   value={interviewVenue}
                   onChange={(e) => setInterviewVenue(e.target.value)}
-                  placeholder="e.g. Conference Hall, Block B, 2nd Floor"
+                  placeholder="Conference Hall, Block B, 2nd Floor"
                 />
               </div>
             )}
@@ -705,9 +705,9 @@ ${institution}`;
                       id="demoClassroom"
                       value={demoClassroom}
                       onChange={(e) => setDemoClassroom(e.target.value)}
-                      placeholder="e.g. Room 301, Block A"
+                      placeholder="Room 301, Block A"
                     />
-                    <p className="text-xs text-muted-foreground">Room where offline candidates give demo class.</p>
+                    <p className="text-xs text-muted-foreground">Room where offline candidates give the demo class.</p>
                   </div>
                 </div>
 
@@ -734,7 +734,7 @@ ${institution}`;
                       </SelectContent>
                     </Select>
                     {selectedCoordinator && !selectedCoordinator.userUid && (
-                      <p className="text-xs text-muted-foreground">No login account — notification skipped.</p>
+                      <p className="text-xs text-muted-foreground">No login account; notification not sent.</p>
                     )}
                   </div>
                 </div>
@@ -760,9 +760,7 @@ ${institution}`;
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <p className="text-xs text-muted-foreground">
-              Click to open Gmail with a pre-filled call letter. Principal, Vice Principal, College Office, and the selected panel members will be automatically added to CC.
-            </p>
+            <p className="text-xs text-muted-foreground">Opens Gmail with a call letter filled in. The Principal, Vice Principal, College Office and the selected panel members are added in CC.</p>
             <div className="space-y-2">
               {candidates.map((c) => (
                 <div key={c.id} className={`flex items-center justify-between p-3 rounded-lg border ${!c.bioDataSubmitted ? "bg-amber-50/30 border-amber-200" : "bg-white"}`}>
@@ -909,7 +907,7 @@ ${institution}`;
                     ) : (
                       <span
                         className="text-xs text-muted-foreground flex items-center gap-1"
-                        title="The candidate's bio data form hasn't been submitted yet — review it in Candidate Bio Data above before marking them arrived"
+                        title="The candidate has not submitted the bio-data form yet. Review it in Candidate Bio Data above before marking them as arrived."
                       >
                         <Clock className="h-3 w-3" />Awaiting bio data form
                       </span>
@@ -1298,9 +1296,7 @@ ${institution}`;
                 );
               })}
               {batch.currentPhase === "PANEL_INTERVIEW" && (
-                <p className="text-xs text-muted-foreground pt-1">
-                  Panel members are submitting their assessments. Submit to Principal once all assessments are in.
-                </p>
+                <p className="text-xs text-muted-foreground pt-1">Panel members are submitting their assessments. Submit to the Principal once all assessments are in.</p>
               )}
             </CardContent>
           </Card>
@@ -1313,16 +1309,14 @@ ${institution}`;
                   <CheckCircle2 className="h-5 w-5" />
                   <div>
                     <p className="font-medium text-sm">Submitted for Principal review</p>
-                    <p className="text-xs text-muted-foreground">The Principal will review all evaluations and make final hiring decisions.</p>
+                    <p className="text-xs text-muted-foreground">The Principal reviews all evaluations and makes the final hiring decisions.</p>
                   </div>
                 </div>
               ) : (
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <p className="font-medium text-sm">Submit All Evaluations to Principal</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Submit demo scores and panel assessments to the Principal for final hiring decisions.
-                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Submit demo scores and panel assessments to the Principal for the final hiring decision.</p>
                   </div>
                   <Button onClick={submitForPrincipalReview} loading={isSubmittingForReview} className="shrink-0">
                     Submit to Principal
@@ -1359,9 +1353,7 @@ ${institution}`;
               ) : (
                 <>
                   <p className="font-medium text-sm">Candidates are arriving</p>
-                  <p className="text-xs text-muted-foreground mt-1 mb-3">
-                    Open the interview session to display demo QR codes and run scoring.
-                  </p>
+                  <p className="text-xs text-muted-foreground mt-1 mb-3">Open the interview session to display demo QR codes and record scores.</p>
                   <Button asChild>
                     <Link href={`/coordinator/${id}`}>
                       Open Demo Session

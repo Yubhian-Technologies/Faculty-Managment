@@ -80,7 +80,7 @@ export async function POST(request: Request) {
 
     let target: (Section & { id: string }) | null = null;
     if (targetSectionId) {
-      if (!targetSnap?.exists) return NextResponse.json({ error: "Target section not found" }, { status: 404 });
+      if (!targetSnap?.exists) return NextResponse.json({ error: "Target section not found. It may have been deleted." }, { status: 404 });
       target = { id: targetSnap.id, ...(targetSnap.data() as object) } as Section & { id: string };
     }
 
@@ -90,7 +90,7 @@ export async function POST(request: Request) {
     const inScope = (dept: string, year: number, catalogId?: string) =>
       !scope || canHodEditDepartmentYear(scope, hodDepts, dept, year, catalogId);
     if (scope && target && !inScope(target.department, target.year, catalogByCourseId.get(target.courseId ?? ""))) {
-      return NextResponse.json({ error: "Outside your department" }, { status: 403 });
+      return NextResponse.json({ error: "This record is outside your department." }, { status: 403 });
     }
 
     const structure = structureFromDepartments(allDepts);
@@ -186,10 +186,10 @@ export async function POST(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/students/bulk-move POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 

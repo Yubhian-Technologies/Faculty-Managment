@@ -81,7 +81,7 @@ export async function GET(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL");
     if (isCollegeAdmin(session)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 403 });
     }
 
     const { searchParams } = new URL(request.url);
@@ -106,14 +106,14 @@ export async function GET(request: Request) {
     if (facultyId) {
       const facultySnap = await collegeRef.collection("facultyMembers").doc(facultyId).get();
       if (!facultySnap.exists) {
-        return NextResponse.json({ error: "Faculty not found" }, { status: 404 });
+        return NextResponse.json({ error: "Faculty record not found. It may have been deleted." }, { status: 404 });
       }
       const faculty = facultySnap.data() as FacultyMember;
 
       if (session.role === "HOD") {
         const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
         if (!canHodEditDepartment(scope, faculty.department)) {
-          return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+          return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 403 });
         }
       }
 
@@ -258,7 +258,7 @@ export async function GET(request: Request) {
       let teachingCourse: Set<string> | null = null;
       if (department && courseId) {
         if (hodScope && !canHodEditDepartment(hodScope, department)) {
-          return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+          return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 403 });
         }
         teachingCourse = new Set(await facultyIdsTeachingCourse(collegeRef, department, courseId));
       }
@@ -315,7 +315,7 @@ export async function GET(request: Request) {
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       if (!canHodEditDepartment(scope, department)) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+        return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 403 });
       }
     }
 
@@ -339,9 +339,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ faculty });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/faculty-attendance-completion GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

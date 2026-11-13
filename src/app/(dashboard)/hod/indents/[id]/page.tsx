@@ -49,7 +49,7 @@ export default function HODIndentDetailPage() {
         if (!d.request) throw new Error(d.error ?? "Not found");
         setRequest(d.request);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load indent" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load indent" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -88,7 +88,7 @@ export default function HODIndentDetailPage() {
       });
       if (!res.ok) {
         const err = (await res.json()) as { error?: string };
-        throw new Error(err.error ?? "Failed to save GRN");
+        throw new Error(err.error ?? "Unable to save GRN");
       }
 
       toast({ variant: "success", title: "GRN uploaded - goods receipt confirmed" });
@@ -96,7 +96,7 @@ export default function HODIndentDetailPage() {
       setGrnFile(null);
       load();
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to upload GRN", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to upload GRN", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsUploadingGrn(false);
     }
@@ -200,19 +200,17 @@ export default function HODIndentDetailPage() {
             <CardTitle className="text-base">Confirm Goods Received</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Purchase Dept has bought these goods. Upload the GRN to confirm they were received.
-            </p>
+            <p className="text-sm text-muted-foreground">The Purchase Department has bought these goods. Upload the GRN to confirm receipt.</p>
             <div className="space-y-2">
               <Label>GRN Number *</Label>
-              <Input value={grnForm.grnNumber} onChange={(e) => setGrnForm((f) => ({ ...f, grnNumber: e.target.value }))} placeholder="e.g. GRN-2026-0142" />
+              <Input value={grnForm.grnNumber} onChange={(e) => setGrnForm((f) => ({ ...f, grnNumber: e.target.value }))} placeholder="GRN-2026-0142" />
             </div>
             <div className="space-y-2">
               <Label>Confirmation Message *</Label>
               <Textarea
                 value={grnForm.grnMessage}
                 onChange={(e) => setGrnForm((f) => ({ ...f, grnMessage: e.target.value }))}
-                placeholder="e.g. All items received in good condition on 27 Jul 2026."
+                placeholder="All items received in good condition on 27 Jul 2026."
                 rows={2}
               />
             </div>

@@ -40,7 +40,7 @@ export default function CollegeOfficeFacultyPage() {
     fetch("/api/college/faculty?withSeats=1")
       .then((r) => r.json() as Promise<{ faculty: FacultyRow[] }>)
       .then((d) => setFaculty(d.faculty ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load faculty" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load faculty" }))
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -109,7 +109,7 @@ export default function CollegeOfficeFacultyPage() {
     <div className="space-y-6">
       <PageHeader
         title="Faculty"
-        description="Update promotion history and salary details, and change a faculty member's college email"
+        description="Update promotion history and salary details, and change a faculty member's college email."
         actions={
           <Button variant="outline" asChild>
             <Link href="/college-office/faculty/college-email-import"><Upload className="mr-2 h-4 w-4" />Bulk Update College Emails</Link>

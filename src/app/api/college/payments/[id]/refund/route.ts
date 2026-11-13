@@ -24,7 +24,7 @@ const round = (n: number) => Math.round(n * 100) / 100;
 function check(p: Payment, amount: number) {
   if (p.status !== "SUCCESS" && p.status !== "PARTIALLY_REFUNDED") throw new PaymentError("Only a successful payment can be refunded", 409);
   const left = round(p.amount - (p.refundedAmount ?? 0));
-  if (amount > left) throw new PaymentError(`At most Rs. ${left} can still be refunded`, 409);
+  if (amount > left) throw new PaymentError(`At most ₹${left} can still be refunded`, 409);
 }
 
 /** Adds the refund to the payment (and takes the fee off the request on a full refund), in one transaction. */
@@ -113,7 +113,7 @@ export async function POST(request: Request, { params }: Params) {
     });
     if (updated.studentUid) {
       await notify(db, session.collegeId, updated.studentUid, "PAYMENT_REFUNDED", "Payment refunded",
-        `Rs. ${amount} of your payment for ${updated.purpose.label} was refunded (ref ${reference}). It reaches your account in a few working days.`, `/student/payments/${encodeURIComponent(id)}`);
+        `₹${amount} of your payment for ${updated.purpose.label} was refunded (ref ${reference}). It reaches your account in a few working days.`, `/student/payments/${encodeURIComponent(id)}`);
     }
     return NextResponse.json({ payment: paymentView(updated) });
   } catch (err) {

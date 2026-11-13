@@ -50,7 +50,7 @@ export function CollegeBrandingDashboardCard() {
       toast({
         variant: "destructive",
         title: "Unsupported file type",
-        description: "Please select a PNG, JPEG, WEBP, or SVG image file.",
+        description: "Select a PNG, JPEG, WEBP, or SVG image file.",
       });
       return;
     }
@@ -91,7 +91,7 @@ export function CollegeBrandingDashboardCard() {
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || "Failed to upload logo");
+        throw new Error(data.error || "Unable to upload logo");
       }
 
       toast({
@@ -126,7 +126,7 @@ export function CollegeBrandingDashboardCard() {
 
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || "Failed to reset logo");
+        throw new Error(data.error || "Unable to reset logo");
       }
 
       toast({
@@ -227,9 +227,7 @@ export function CollegeBrandingDashboardCard() {
               <Building2 className="h-4 w-4 text-primary" />
               Manage College Logo
             </DialogTitle>
-            <DialogDescription className="text-xs">
-              Upload a custom institution logo or reset to the default Vishnu logo.
-            </DialogDescription>
+            <DialogDescription className="text-xs">Upload an institution logo or restore the default Vishnu logo.</DialogDescription>
           </DialogHeader>
 
           <div className="py-3 space-y-4">
@@ -250,7 +248,7 @@ export function CollegeBrandingDashboardCard() {
                     : "Active Default Vishnu Logo"}
                 </p>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Appears on all section timetables, faculty load tables & official PDFs
+                  Appears on all section timetables, faculty load tables and official PDFs.
                 </p>
               </div>
             </div>
@@ -335,9 +333,7 @@ export function CollegeBrandingDashboardCard() {
               <AlertCircle className="h-4 w-4" />
               Reset to Default Vishnu Logo?
             </DialogTitle>
-            <DialogDescription className="text-xs pt-1">
-              This will remove the current custom logo and revert to the default Vishnu logo on all timetables and letterheads.
-            </DialogDescription>
+            <DialogDescription className="text-xs pt-1">The current logo will be removed and the default Vishnu logo used on all timetables and letterheads.</DialogDescription>
           </DialogHeader>
 
           <DialogFooter className="gap-2 sm:gap-0 pt-2">

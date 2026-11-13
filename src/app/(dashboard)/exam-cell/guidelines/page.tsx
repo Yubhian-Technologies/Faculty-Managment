@@ -26,10 +26,10 @@ export default function ExamCellGuidelinesPage() {
     try {
       const res = await fetch("/api/college/exam-guidelines");
       const data = (await res.json()) as { guidelines?: ExamGuideline[]; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to load");
+      if (!res.ok) throw new Error(data.error ?? "Unable to load");
       setGuidelines(data.guidelines ?? []);
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to load guidelines" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to load guidelines" });
     } finally {
       setIsLoading(false);
     }
@@ -42,7 +42,7 @@ export default function ExamCellGuidelinesPage() {
     const res = await fetch(`/api/college/exam-guidelines/${deleteTarget.id}`, { method: "DELETE" });
     const data = (await res.json()) as { error?: string };
     if (!res.ok) {
-      toast({ variant: "destructive", title: data.error ?? "Failed to delete" });
+      toast({ variant: "destructive", title: data.error ?? "Unable to delete" });
       return;
     }
     toast({ variant: "success", title: "Guideline document removed" });
@@ -54,7 +54,7 @@ export default function ExamCellGuidelinesPage() {
     <div className="max-w-4xl space-y-6">
       <PageHeader
         title="Exam Cell Guidelines"
-        description="Upload a PDF or Word document and its text is automatically split into a point-wise list below - a best-effort read of whatever the file contains, so review it after uploading."
+        description="Upload a PDF or Word document; its text is split into a point-wise list below. Review the list after uploading, as the conversion depends on the file."
         actions={<Button onClick={() => setUploadOpen(true)}><Plus className="h-4 w-4 mr-2" />Upload Guidelines</Button>}
       />
 
@@ -64,7 +64,7 @@ export default function ExamCellGuidelinesPage() {
         <Card>
           <CardContent className="py-10 text-center space-y-1">
             <p className="text-sm text-muted-foreground">No guideline documents uploaded yet.</p>
-            <p className="text-xs text-muted-foreground">Upload a PDF or Word file to get started.</p>
+            <p className="text-xs text-muted-foreground">Upload a PDF or Word file to begin.</p>
           </CardContent>
         </Card>
       ) : (
@@ -164,15 +164,12 @@ function UploadDialog({ open, onClose, onDone }: { open: boolean; onClose: () =>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Upload Guidelines</DialogTitle>
-          <DialogDescription>
-            The file&apos;s text is extracted automatically and split into points below - it&apos;s a best-effort
-            reading of the document, not a guaranteed clean bullet list, so check the result after uploading.
-          </DialogDescription>
+          <DialogDescription>The file&apos;s text is extracted and split into points below. Check the result after uploading, as the conversion depends on the document.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-2">
             <Label>Title <span className="font-normal text-muted-foreground">(optional, defaults to the file name)</span></Label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Semester End Exam Guidelines" disabled={busy} />
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Semester End Exam Guidelines" disabled={busy} />
           </div>
           <div className="space-y-2">
             <Label>File (PDF or Word .docx, max 10 MB)</Label>
@@ -230,12 +227,12 @@ function EditDialog({
         body: JSON.stringify({ title: title.trim(), points }),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to save");
+      if (!res.ok) throw new Error(data.error ?? "Unable to save");
       toast({ variant: "success", title: "Guideline updated" });
       onClose();
       await onDone();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save" });
     } finally {
       setBusy(false);
     }
@@ -246,10 +243,7 @@ function EditDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Edit Guidelines</DialogTitle>
-          <DialogDescription>
-            Fix up the auto-extracted points below - one per line. This only edits the list here; it doesn&apos;t
-            change or re-parse the uploaded file (re-upload to replace that).
-          </DialogDescription>
+          <DialogDescription>Correct the extracted points below, one per line. This changes only the list here, not the uploaded file. Upload the file again to replace it.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-2">

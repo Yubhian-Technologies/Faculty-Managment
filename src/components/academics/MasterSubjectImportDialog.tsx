@@ -99,7 +99,7 @@ export function MasterSubjectImportDialog({ open, onOpenChange, courseId, course
       const json = (await res.json()) as ImportResult & { error?: string };
       if (requestId !== validateRequestRef.current) return;
       if (res.status === 422 || res.ok) setPreview(json);
-      else setPreviewError(json.error ?? "Couldn't check the file.");
+      else setPreviewError(json.error ?? "Unable to check the file.");
     } catch {
       if (requestId === validateRequestRef.current) setPreviewError("Network error while checking the file.");
     } finally {
@@ -157,7 +157,7 @@ export function MasterSubjectImportDialog({ open, onOpenChange, courseId, course
       }
       void runValidate(records, ++validateRequestRef.current);
     } catch (err) {
-      setParseError(err instanceof Error ? err.message : "Failed to read file");
+      setParseError(err instanceof Error ? err.message : "Unable to read file");
     }
   }
 

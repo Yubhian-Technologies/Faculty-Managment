@@ -18,7 +18,7 @@ export default function WebmasterHistoryPage() {
     <div className="space-y-6">
       <PageHeader
         title="Request History"
-        description="Resolved official-email requests for your college"
+        description="Completed official email requests for your college."
       />
 
       <div className="flex gap-2 border-b">

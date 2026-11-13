@@ -160,7 +160,7 @@ export function CourseYearTimingForm({ departmentId, courseId, year, courseName,
             : EMPTY_TIMING_FORM
         );
       } catch {
-        toast({ variant: "destructive", title: "Failed to load timings" });
+        toast({ variant: "destructive", title: "Unable to load timings" });
       } finally {
         setLoading(false);
       }
@@ -262,12 +262,12 @@ export function CourseYearTimingForm({ departmentId, courseId, year, courseName,
       });
       if (!res.ok) {
         const json = await res.json() as { error?: string };
-        throw new Error(json.error ?? "Failed to save timings");
+        throw new Error(json.error ?? "Unable to save timings");
       }
       toast({ variant: "success", title: `Timings saved for Year ${year}` });
       onSaved();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save timings" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save timings" });
     } finally {
       setIsSaving(false);
     }
@@ -304,9 +304,7 @@ export function CourseYearTimingForm({ departmentId, courseId, year, courseName,
                 <Clock className="h-4 w-4 text-primary" />
                 College Hours & Periods
               </CardTitle>
-              <CardDescription>
-                Define the overall college day start/end times and individual period lengths.
-              </CardDescription>
+              <CardDescription>Define the start and end of the college day and the length of each period.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -369,7 +367,7 @@ export function CourseYearTimingForm({ departmentId, courseId, year, courseName,
                 </div>
                 {exceedsAvailableTime && (
                   <p className="mt-1.5 pl-6 font-medium text-destructive">
-                    Exceeds the college day by {formatDuration(totalRequiredMinutes - (availableMinutes ?? 0))}. Please adjust periods or breaks.
+                    Exceeds the college day by {formatDuration(totalRequiredMinutes - (availableMinutes ?? 0))}. Adjust periods or breaks.
                   </p>
                 )}
                 {availableMinutes !== null && availableMinutes <= 0 && (
@@ -386,9 +384,7 @@ export function CourseYearTimingForm({ departmentId, courseId, year, courseName,
                 <Coffee className="h-4 w-4 text-primary" />
                 Lunch & Recess Breaks
               </CardTitle>
-              <CardDescription>
-                Configure midday lunch break and any scheduled short recess breaks.
-              </CardDescription>
+              <CardDescription>Configure the lunch break and any short breaks.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
               <div className="space-y-2">

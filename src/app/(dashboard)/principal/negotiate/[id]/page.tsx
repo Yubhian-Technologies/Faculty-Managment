@@ -86,7 +86,7 @@ export default function PrincipalNegotiatePage({ params }: { params: Promise<{ i
         return [c.id, Object.fromEntries(entries)];
       })));
     } catch {
-      toast({ variant: "destructive", title: "Failed to load batch" });
+      toast({ variant: "destructive", title: "Unable to load batch" });
     } finally {
       setIsLoading(false);
     }
@@ -135,7 +135,7 @@ export default function PrincipalNegotiatePage({ params }: { params: Promise<{ i
       setSavedIds((prev) => new Set(prev).add(applicationId));
       toast({ variant: "success", title: "Saved" });
     } catch {
-      toast({ variant: "destructive", title: "Failed to save" });
+      toast({ variant: "destructive", title: "Unable to save" });
     } finally {
       setSavingId(null);
     }
@@ -209,7 +209,7 @@ export default function PrincipalNegotiatePage({ params }: { params: Promise<{ i
                           min="0"
                           value={terms.expectedSalary}
                           onChange={(e) => setHireTerms((prev) => ({ ...prev, [candidate.id]: { ...emptyHireTerms, ...prev[candidate.id], expectedSalary: e.target.value } }))}
-                          placeholder="e.g. 600000"
+                          placeholder="600000"
                           className="text-sm bg-background"
                         />
                       </div>
@@ -220,7 +220,7 @@ export default function PrincipalNegotiatePage({ params }: { params: Promise<{ i
                           min="0"
                           value={terms.negotiatedSalary}
                           onChange={(e) => setHireTerms((prev) => ({ ...prev, [candidate.id]: { ...emptyHireTerms, ...prev[candidate.id], negotiatedSalary: e.target.value } }))}
-                          placeholder="e.g. 650000"
+                          placeholder="650000"
                           className="text-sm bg-background"
                         />
                       </div>
@@ -250,7 +250,7 @@ export default function PrincipalNegotiatePage({ params }: { params: Promise<{ i
                             value={newTermInputs[candidate.id] ?? ""}
                             onChange={(e) => setNewTermInputs((prev) => ({ ...prev, [candidate.id]: e.target.value }))}
                             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTerm(candidate.id); } }}
-                            placeholder="Add custom term (e.g. 1 year probation)..."
+                            placeholder="Add custom term (for example 1 year probation)..."
                             className="text-xs bg-background"
                           />
                           <Button type="button" variant="outline" size="sm" onClick={() => addTerm(candidate.id)}>

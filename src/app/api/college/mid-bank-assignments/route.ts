@@ -112,7 +112,7 @@ export async function GET(request: Request) {
       loadMidSettings(db, session.collegeId),
       session.role === "HOD" ? cachedHodScope(db, session.collegeId, session.uid) : null,
     ]);
-    if (!d) return NextResponse.json({ error: "Deadline not found" }, { status: 404 });
+    if (!d) return NextResponse.json({ error: "Deadline not found. It may have been deleted." }, { status: 404 });
     const { out } = await load(db, session.collegeId, d, scope, undefined, false, undefined, settings.midPreparation === "PAPERS");
     return NextResponse.json({ mode: settings.midAssignment, deadline: { ...d, locked: isDeadlineLocked(d.deadline) }, subjects: out });
   } catch (err) {
@@ -128,7 +128,7 @@ export async function POST(request: Request) {
     const settings = await loadMidSettings(db, session.collegeId);
     if (settings.midAssignment !== "HOD") return NextResponse.json({ error: "In this college faculty start their own - the Exam Cell can switch to \"The HOD assigns\" in Mid Configuration" }, { status: 409 });
     const d = await loadDeadline(db, session.collegeId, String(body.deadlineId ?? ""));
-    if (!d) return NextResponse.json({ error: "Deadline not found" }, { status: 404 });
+    if (!d) return NextResponse.json({ error: "Deadline not found. It may have been deleted." }, { status: 404 });
     if (isDeadlineLocked(d.deadline)) return NextResponse.json({ error: "The deadline has passed - ask the Exam Cell to extend it" }, { status: 403 });
     const scopeKind = body.scope === "SUBJECT" ? "SUBJECT" : body.scope === "GROUP" ? "GROUP" : "BRANCH";
     // A group is named by its branches (sorted) - the same label whichever order they were ticked in.

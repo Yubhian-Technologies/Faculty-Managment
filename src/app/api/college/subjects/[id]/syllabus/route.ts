@@ -25,7 +25,7 @@ async function authorize(id: string) {
   const session = await requireCollegeMember(...CURRICULUM_ROLES, "HOD");
   const db = getAdminDb();
   const snap = await db.collection("colleges").doc(session.collegeId).collection("subjects").doc(id).get();
-  if (!snap.exists) return { error: NextResponse.json({ error: "Subject not found" }, { status: 404 }) };
+  if (!snap.exists) return { error: NextResponse.json({ error: "Subject not found. It may have been deleted." }, { status: 404 }) };
   const subject = snap.data() as Subject;
   if (!subject.courseId) return { error: NextResponse.json({ error: "Only Curriculum subjects have a syllabus here" }, { status: 400 }) };
   if (session.role === "HOD") {
@@ -63,9 +63,9 @@ export async function POST(request: Request, { params }: Params) {
     if ("error" in a) return a.error;
     const form = await request.formData();
     const file = form.get("file");
-    if (!file || typeof file === "string") return NextResponse.json({ error: "No file provided" }, { status: 400 });
+    if (!file || typeof file === "string") return NextResponse.json({ error: "Select a file to upload." }, { status: 400 });
     const buffer = Buffer.from(await file.arrayBuffer());
-    if (buffer.byteLength > MAX_SIZE) return NextResponse.json({ error: "File exceeds 10 MB limit" }, { status: 400 });
+    if (buffer.byteLength > MAX_SIZE) return NextResponse.json({ error: "The file is larger than 10 MB. Upload a smaller file." }, { status: 400 });
     // A real PDF: starts with "%PDF-".
     if (buffer.subarray(0, 5).toString("latin1") !== "%PDF-") return NextResponse.json({ error: "Only PDF files are accepted" }, { status: 400 });
 

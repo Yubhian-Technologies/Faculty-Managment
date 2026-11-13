@@ -29,7 +29,7 @@ export function DisplayNameSettingsCard() {
       .then((d) => { setPlaces(d.places ?? []); setSurfaces(d.surfaces ?? {}); setFilled(typeof d.filled === "number" ? d.filled : null); })
       .catch((err) => {
         if ((err as Error)?.name === "AbortError") return;
-        toast({ variant: "destructive", title: "Failed to load display name settings" });
+        toast({ variant: "destructive", title: "Unable to load display name settings" });
       })
       .finally(() => setIsLoading(false));
     return () => ctrl.abort();
@@ -62,7 +62,7 @@ export function DisplayNameSettingsCard() {
       toast({ variant: "success", title: "Saved", description: on ? "Display names will be used there." : "The usual name will be used there." });
     } catch (err) {
       setSurfaces(before);
-      toast({ variant: "destructive", title: err instanceof Error && err.message ? err.message : "Failed to save" });
+      toast({ variant: "destructive", title: err instanceof Error && err.message ? err.message : "Unable to save" });
     } finally {
       setIsSaving(false);
     }
@@ -72,10 +72,7 @@ export function DisplayNameSettingsCard() {
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Website Display Name</CardTitle>
-        <CardDescription>
-          Tick a faculty module (it saves as soon as you tick) to show each faculty member&apos;s Display Name (surname short form + name, entered on their own profile)
-          there instead of their Full Name. Ticking any one place turns the Display Name on in every place. A faculty member who has not entered one keeps their usual name.
-        </CardDescription>
+        <CardDescription>Select a faculty module (it is saved at once) to show each faculty member&apos;s Display Name (surname initial and name, entered on their profile) there instead of their full name. Selecting any module turns on the Display Name everywhere. Faculty without a Display Name keep their usual name.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {isLoading ? (

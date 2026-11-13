@@ -14,7 +14,7 @@ export function CollegeCategoryField({
   idPrefix?: string;
 }) {
   const options: { key: CollegeCategory; title: string; hint: string }[] = [
-    { key: "MAIN", title: "Main college", hint: "A real college. Sees other Main colleges in cross-college lists (e.g. a publication author's affiliation)." },
+    { key: "MAIN", title: "Main college", hint: "An operational college. It sees other Main colleges in cross-college lists (for example, a publication author's affiliation)." },
     { key: "TEST", title: "Test college", hint: "A test or demo college. Sees only other Test colleges, and is hidden from Main colleges." },
   ];
   return (

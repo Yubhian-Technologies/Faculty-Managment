@@ -70,7 +70,7 @@ function ApplyDialog({ entry, request, onClose, onDone, onlineEnabled }: { entry
       }
       onDone();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't submit" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to submit" });
     } finally { setBusy(false); }
   }
 
@@ -123,7 +123,7 @@ function ApplyDialog({ entry, request, onClose, onDone, onlineEnabled }: { entry
           ))}
           <div className="rounded-md bg-muted/60 px-3 py-2 text-xs text-muted-foreground space-y-0.5">
             <p>Approvals: {entry.steps.join(" → ")}</p>
-            {t.feeAmount > 0 && <p>Fee: Rs. {t.feeAmount} - {onlineEnabled ? "pay online from My requests after applying, or" : ""} pay at the College Office; the receipt number is entered when it is issued.</p>}
+            {t.feeAmount > 0 && <p>Fee: ₹{t.feeAmount} - {onlineEnabled ? "pay online from My requests after applying, or" : ""} pay at the College Office; the receipt number is entered when it is issued.</p>}
             <p>{t.delivery === "PHYSICAL" ? "Collect the signed copy from the College Office." : t.delivery === "DIGITAL" ? "Download it here once issued." : "Download it here once issued; a signed copy is available at the College Office."}</p>
           </div>
         </div>
@@ -143,12 +143,12 @@ function MyRequest({ request, entry, onChanged, onCorrect, onlineEnabled }: { re
   async function pay() {
     setBusy(true);
     try { await payCertificateFeeOnline(request.id); }
-    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't start the payment" }); setBusy(false); }
+    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to start the payment" }); setBusy(false); }
   }
   async function cancel() {
     setBusy(true);
     try { await cancelRequest(request.id); toast({ variant: "success", title: "Request cancelled" }); onChanged(); }
-    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't cancel" }); }
+    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to cancel" }); }
     finally { setBusy(false); }
   }
   async function download() {
@@ -156,7 +156,7 @@ function MyRequest({ request, entry, onChanged, onCorrect, onlineEnabled }: { re
     try {
       if (request.issuedCertificateId) await downloadIssued(request.issuedCertificateId);
       else if (request.certificateUrl) window.open(request.certificateUrl, "_blank", "noopener");
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't open the certificate" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to open the certificate" }); }
     finally { setBusy(false); }
   }
   return (
@@ -172,7 +172,7 @@ function MyRequest({ request, entry, onChanged, onCorrect, onlineEnabled }: { re
         {request.status === "RETURNED" && request.returnRemarks && (
           <p className="rounded-md bg-orange-50 px-3 py-2 text-sm text-orange-800 dark:bg-orange-950 dark:text-orange-200">Correction needed: {request.returnRemarks}</p>
         )}
-        {fee > 0 && request.feePaid && <p className="text-xs text-emerald-700 dark:text-emerald-300">Fee Rs. {request.feePaid.amount} paid online · ref {request.feePaid.trackingId}</p>}
+        {fee > 0 && request.feePaid && <p className="text-xs text-emerald-700 dark:text-emerald-300">Fee ₹{request.feePaid.amount} paid online · ref {request.feePaid.trackingId}</p>}
         {fee > 0 && !request.feePaid && request.feeReceiptNo && <p className="text-xs text-muted-foreground">Fee paid · receipt {request.feeReceiptNo}</p>}
         <RequestAnswers request={request} />
         <StepTimeline request={request} />
@@ -180,7 +180,7 @@ function MyRequest({ request, entry, onChanged, onCorrect, onlineEnabled }: { re
           {request.status === "ISSUED" && (request.issuedCertificateId || request.certificateUrl) && (
             <Button size="sm" onClick={download} loading={busy}><Download className="h-4 w-4 mr-1" /> Download</Button>
           )}
-          {canPay && <Button size="sm" onClick={pay} loading={busy}><CreditCard className="h-4 w-4 mr-1" /> Pay Rs. {fee} online</Button>}
+          {canPay && <Button size="sm" onClick={pay} loading={busy}><CreditCard className="h-4 w-4 mr-1" /> Pay ₹{fee} online</Button>}
           {request.status === "RETURNED" && entry && <Button size="sm" onClick={onCorrect} disabled={busy}>Correct and send again</Button>}
           {(request.status === "IN_PROGRESS" || request.status === "RETURNED") && !request.startedByUid && <Button size="sm" variant="outline" onClick={cancel} disabled={busy}>Cancel request</Button>}
         </div>
@@ -201,7 +201,7 @@ export function StudentCertificates() {
 
   const load = useCallback(async () => {
     try { setData(await loadCatalog()); }
-    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't load certificates" }); setData({ entries: [], linked: true, requests: [] }); }
+    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to load certificates" }); setData({ entries: [], linked: true, requests: [] }); }
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -212,7 +212,7 @@ export function StudentCertificates() {
   }, [data, query]);
 
   if (!data) return <p className="text-sm text-muted-foreground">Loading…</p>;
-  if (!data.linked) return <Card><EmptyState icon={<FileText className="h-6 w-6" />} title="Your login isn't linked to a student record yet" description="Please contact your College Office." /></Card>;
+  if (!data.linked) return <Card><EmptyState icon={<FileText className="h-6 w-6" />} title="Your login is not linked to a student record yet." description="Contact your College Office." /></Card>;
   if (data.entries.length === 0 && data.requests.length === 0) {
     return <Card><EmptyState icon={<FileText className="h-6 w-6" />} title="No certificates available yet" description="Your college hasn't set up any certificates yet." /></Card>;
   }
@@ -243,7 +243,7 @@ export function StudentCertificates() {
                     <CardContent className="flex flex-1 flex-col gap-2 p-4">
                       <div className="flex items-start justify-between gap-2">
                         <p className="font-medium leading-snug">{e.type.name}</p>
-                        {e.type.feeAmount > 0 && <Badge variant="secondary">Rs. {e.type.feeAmount}</Badge>}
+                        {e.type.feeAmount > 0 && <Badge variant="secondary">₹{e.type.feeAmount}</Badge>}
                       </div>
                       {e.type.description && <p className="text-xs text-muted-foreground">{e.type.description}</p>}
                       <p className="text-xs text-muted-foreground">Approvals: {e.steps.join(" → ")}</p>

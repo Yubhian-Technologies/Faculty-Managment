@@ -25,7 +25,7 @@ export default function FinanceReceiptsPage() {
     collegeFetch("/api/college/finance-receipts")
       .then((r) => r.json() as Promise<{ receipts: Row[] }>)
       .then((d) => setReceipts(d.receipts ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load receipts" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load receipts" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -39,7 +39,7 @@ export default function FinanceReceiptsPage() {
       toast({ variant: "success", title: "Receipt verified" });
       load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to verify receipt" });
+      toast({ variant: "destructive", title: "Unable to verify receipt" });
     } finally {
       setVerifyingId(null);
     }
@@ -78,7 +78,7 @@ export default function FinanceReceiptsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Receipts"
-        description="Record and verify receipts for budgets, expenses, payments, and allocations"
+        description="Record and verify receipts for budgets, expenses, payments and allocations."
         actions={
           <Button onClick={() => router.push("/finance/receipts/new")}>
             <Plus className="h-4 w-4 mr-1" />

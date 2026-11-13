@@ -7,7 +7,7 @@ import { StaffAccountsSection } from "@/components/staff/StaffAccountsSection";
 export default function PrincipalFacultyStaffPage() {
   return (
     <div className="space-y-6">
-      <PageHeader title="Faculty" description="Staff accounts (College Office, HOD, ...) for your college" />
+      <PageHeader title="Faculty" description="Staff accounts of your college (College Office, HOD and others)." />
       <SegmentedTabs
         value="staff"
         options={[

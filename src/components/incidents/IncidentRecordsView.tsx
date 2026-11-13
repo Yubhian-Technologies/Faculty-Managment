@@ -50,13 +50,13 @@ export function IncidentRecordsView() {
         const res = await fetch("/api/college/incident-reports/inbox");
         const json = await res.json() as { reports?: IncidentReport[]; error?: string };
         if (!res.ok) {
-          toast({ variant: "destructive", title: json.error ?? "Failed to load incident records" });
+          toast({ variant: "destructive", title: json.error ?? "Unable to load incident records" });
           setReports([]);
           return;
         }
         setReports(json.reports ?? []);
       } catch {
-        toast({ variant: "destructive", title: "Failed to load incident records" });
+        toast({ variant: "destructive", title: "Unable to load incident records" });
         setReports([]);
       }
     })();
@@ -141,7 +141,7 @@ export function IncidentRecordsView() {
             <>
               <DialogHeader>
                 <DialogTitle>{openReport.title}</DialogTitle>
-                <DialogDescription>Incident record</DialogDescription>
+                <DialogDescription>Incident Record</DialogDescription>
               </DialogHeader>
               <dl className="grid gap-3 text-sm sm:grid-cols-3">
                 <div><dt className="text-xs text-muted-foreground">Incident Date</dt><dd className="font-medium">{formatIncidentDate(openReport.incidentDate)}</dd></div>

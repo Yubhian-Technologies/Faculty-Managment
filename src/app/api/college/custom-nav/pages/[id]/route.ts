@@ -17,7 +17,7 @@ import type { NavVisibilitySettings } from "@/types";
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await verifySession();
-    if (!session?.collegeId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!session?.collegeId) return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     const { id } = await params;
 
     const db = getAdminDb();
@@ -26,7 +26,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       visibilityRef(db, session.collegeId).get(),
       resolveHeldRoles(session),
     ]);
-    const notFound = () => NextResponse.json({ error: "Page not found" }, { status: 404 });
+    const notFound = () => NextResponse.json({ error: "Page not found. It may have been deleted." }, { status: 404 });
     if (!snap.exists) return notFound();
 
     const page = serializePage(snap.id, snap.data()!);
@@ -40,6 +40,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ page }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
     console.error("[college/custom-nav/pages/[id] GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

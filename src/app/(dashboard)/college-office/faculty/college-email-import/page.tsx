@@ -65,7 +65,7 @@ export default function BulkCollegeEmailImportPage() {
       a.href = url; a.download = "faculty_college_email_template.xlsx"; a.click();
       URL.revokeObjectURL(url);
     } catch {
-      toast({ variant: "destructive", title: "Couldn't build the Excel template. Please try again." });
+      toast({ variant: "destructive", title: "Unable to build the Excel template. Try again." });
     }
   }
 
@@ -76,7 +76,7 @@ export default function BulkCollegeEmailImportPage() {
     const name = file.name.toLowerCase();
     const isExcel = name.endsWith(".xlsx");
     if (name.endsWith(".xls")) {
-      setParseError("Legacy .xls files aren't supported - please re-save as .xlsx or .csv and try again.");
+      setParseError("Legacy .xls files aren't supported - re-save as .xlsx or .csv and try again.");
       e.target.value = "";
       return;
     }
@@ -106,7 +106,7 @@ export default function BulkCollegeEmailImportPage() {
       setRows(ok);
       setRejected(bad);
     } catch {
-      setParseError(isExcel ? "Failed to read the Excel file. Make sure it is a valid .xlsx file." : "Failed to read the file. Make sure it is a valid CSV.");
+      setParseError(isExcel ? "Unable to read the Excel file. Make sure it is a valid .xlsx file." : "Unable to read the file. Make sure it is a valid CSV.");
     } finally {
       e.target.value = "";
     }
@@ -156,7 +156,7 @@ export default function BulkCollegeEmailImportPage() {
     <div className="mx-auto max-w-5xl space-y-5">
       <PageHeader
         title="Bulk Update College Emails"
-        description="Change many faculty members' college email (their login) from one Excel/CSV file"
+        description="Change the college email (login) of several faculty members from one Excel or CSV file."
         actions={<Button variant="outline" asChild><Link href="/college-office/staff"><ArrowLeft className="mr-2 h-4 w-4" />Back to Pay & Promotions</Link></Button>}
       />
 
@@ -167,7 +167,7 @@ export default function BulkCollegeEmailImportPage() {
           <ul className="list-disc space-y-1 pl-5">
             <li>An email that anyone already uses (another faculty member, staff, or any login) is <strong>not accepted</strong> for that row.</li>
             <li>If the new email is the same as their current one, the row says <strong>already same</strong> and nothing is changed.</li>
-            <li>An email that is currently someone else&apos;s can&apos;t be given to another row in the same upload - change the other person first.</li>
+            <li>An email address that currently belongs to someone else cannot be given to another row in the same upload. Change the other person first.</li>
             <li>Each updated faculty member is <strong>signed out on all devices</strong> and signs in again with their Employee ID and existing password, or the new email. They get an in-app notification (no email is sent).</li>
             <li>Their data, password and history are untouched. A row that can&apos;t be updated changes nothing, and never affects the other rows. An account whose login email and record email already differ is skipped for manual review.</li>
           </ul>

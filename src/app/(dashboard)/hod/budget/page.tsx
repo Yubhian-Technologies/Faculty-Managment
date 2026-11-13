@@ -29,7 +29,7 @@ export default function HODBudgetPage() {
     fetch("/api/college/budget-requests")
       .then((r) => r.json() as Promise<{ requests: BudgetRequest[] }>)
       .then((d) => setRequests(d.requests ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load budget requests" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load budget requests" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -40,7 +40,7 @@ export default function HODBudgetPage() {
       if (!res.ok) throw new Error(d.error ?? `Request failed (${res.status})`);
       setActiveCycle(d.cycles?.[0] ?? null);
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to load budget cycle", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to load budget cycle", description: err instanceof Error ? err.message : undefined });
     }
   }
 
@@ -106,7 +106,7 @@ export default function HODBudgetPage() {
       <div ref={dashboardRef}>
         <PageHeader
           title="Budget"
-          description="View and manage department budget requests"
+          description="View and manage department budget requests."
           actions={
             <Button variant="outline" size="sm" onClick={() => { load(); loadActiveCycle(); }} loading={isLoading}>
               <RefreshCw className="h-4 w-4 mr-1" />

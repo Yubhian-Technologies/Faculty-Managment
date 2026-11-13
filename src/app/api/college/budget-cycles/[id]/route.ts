@@ -22,7 +22,7 @@ export async function GET(
     const db = getAdminDb();
     const snap = await db.collection("colleges").doc(session.collegeId).collection("budgetCycles").doc(id).get();
     if (!snap.exists) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
 
     return NextResponse.json({ cycle: { id: snap.id, ...snap.data() } as BudgetCycle });
@@ -30,10 +30,10 @@ export async function GET(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/budget-cycles/[id] GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -53,10 +53,10 @@ export async function PATCH(
     const body = (await readJsonBody(request)) as { action?: "APPROVE" | "REJECT" | "RETURN"; remarks?: string };
 
     if (!body.action || !["APPROVE", "REJECT", "RETURN"].includes(body.action)) {
-      return NextResponse.json({ error: "action must be APPROVE, REJECT, or RETURN" }, { status: 400 });
+      return NextResponse.json({ error: "Choose Approve, Reject or Return." }, { status: 400 });
     }
     if ((body.action === "REJECT" || body.action === "RETURN") && !body.remarks) {
-      return NextResponse.json({ error: "remarks required" }, { status: 400 });
+      return NextResponse.json({ error: "Enter remarks." }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -180,12 +180,12 @@ export async function PATCH(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     if (err instanceof Error && err.message === "STALE_STATUS") {
-      return NextResponse.json({ error: "Action not permitted in current state." }, { status: 409 });
+      return NextResponse.json({ error: "This action is not available at the current stage." }, { status: 409 });
     }
     console.error("[college/budget-cycles/[id] PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

@@ -27,7 +27,7 @@ export default function PrincipalBudgetPage() {
         setRequests(reqData.requests ?? []);
         setPendingCycle(cycleData.cycles?.[0] ?? null);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load budget data" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load budget data" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -42,7 +42,7 @@ export default function PrincipalBudgetPage() {
     });
     if (!res.ok) {
       const err = (await res.json()) as { error?: string };
-      toast({ variant: "destructive", title: "Failed to act on budget cycle", description: err.error });
+      toast({ variant: "destructive", title: "Unable to act on budget cycle", description: err.error });
       return;
     }
     toast({ variant: "success", title: `Budget cycle ${action === "APPROVE" ? "approved" : action === "REJECT" ? "rejected" : "returned"}` });
@@ -62,7 +62,7 @@ export default function PrincipalBudgetPage() {
     <div className="space-y-6">
       <PageHeader
         title="Budget"
-        description="Departmental budget requests, approvals, and fund tracking"
+        description="Department budget requests, approvals and fund tracking."
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={load} loading={isLoading}>

@@ -31,7 +31,7 @@ export function CertificateRegister({ canRevoke }: { canRevoke: boolean }) {
 
   const load = useCallback(async () => {
     try { setRows(await loadRegister()); }
-    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't load the register" }); setRows([]); }
+    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to load the register" }); setRows([]); }
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -51,7 +51,7 @@ export function CertificateRegister({ canRevoke }: { canRevoke: boolean }) {
   async function open(r: IssuedCertificate) {
     setBusy(r.id);
     try { await downloadIssued(r.id); }
-    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't open it" }); }
+    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to open it" }); }
     finally { setBusy(""); }
   }
 
@@ -62,7 +62,7 @@ export function CertificateRegister({ canRevoke }: { canRevoke: boolean }) {
       await revokeCertificate(revoking.id, reason.trim());
       toast({ variant: "success", title: "Certificate revoked" });
       setRevoking(null); setReason(""); load();
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't revoke" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to revoke" }); }
     finally { setBusy(""); }
   }
 

@@ -33,7 +33,7 @@ export default function AccountsDashboard() {
     <div className="space-y-6">
       <PageHeader
         title={`Hello, ${user?.name ?? "Accounts"}`}
-        description="Offer letters and salary structure management"
+        description="Manage offer letters and salary structures."
       />
 
       <div className="grid gap-4 sm:grid-cols-3">

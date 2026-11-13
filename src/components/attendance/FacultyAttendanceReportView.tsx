@@ -145,7 +145,7 @@ export function FacultyAttendanceReportView({ sections }: { sections: FacultySec
     try {
       const res = await fetch(`/api/college/class-work-records?${params.toString()}`);
       const json = (await res.json()) as Record<string, unknown> & { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to load report");
+      if (!res.ok) throw new Error(json.error ?? "Unable to load report");
       if (view === "day") {
         setDayData({
           classWork: (json.classWork as ClassWorkEntry[]) ?? [],
@@ -161,7 +161,7 @@ export function FacultyAttendanceReportView({ sections }: { sections: FacultySec
       }
       setLoaded({ view, label });
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to load report" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to load report" });
     } finally {
       setIsLoading(false);
     }
@@ -195,7 +195,7 @@ export function FacultyAttendanceReportView({ sections }: { sections: FacultySec
     <div className="space-y-6">
       <PageHeader
         title="Attendance Report"
-        description="Pick a section and a view, then press Load to see attendance and class work for your own subjects."
+        description="Select a section and a view, then choose Load to see attendance and class work for your subjects."
       />
 
       <Card>
@@ -298,7 +298,7 @@ export function FacultyAttendanceReportView({ sections }: { sections: FacultySec
                   <p className="text-sm font-semibold">{loaded.label}</p>
                 </div>
                 <div className="space-y-1.5">
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Record of the Class Work</p>
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Class Work Record</p>
                   {dayData.classWork.map((c) => (
                     <p key={c.periodNumber} className="text-sm">
                       {dayData.periods.length > 1 && <span className="font-semibold">Period {c.periodNumber} ({c.subjectName}): </span>}

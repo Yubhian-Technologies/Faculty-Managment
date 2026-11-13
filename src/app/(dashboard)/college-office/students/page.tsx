@@ -259,7 +259,7 @@ function OfficeStudentsContent() {
       // same cap the Principal's own Years Taught editor already enforces.
       setYears(selectableYears(configured, loadedCourses));
     } catch {
-      toast({ variant: "destructive", title: "Failed to load filter options" });
+      toast({ variant: "destructive", title: "Unable to load filter options" });
     }
   }, []);
 
@@ -276,7 +276,7 @@ function OfficeStudentsContent() {
       const json = await res.json() as { students?: StudentListItem[]; total?: number; error?: string };
       if (seq !== loadSeq.current) return; // a newer Load / page change superseded this one
       if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to load students" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to load students" });
         return;
       }
       const data = json.students ?? [];
@@ -292,7 +292,7 @@ function OfficeStudentsContent() {
       setStudents(data);
       setTotal(grandTotal);
     } catch {
-      if (seq === loadSeq.current) toast({ variant: "destructive", title: "Failed to load students" });
+      if (seq === loadSeq.current) toast({ variant: "destructive", title: "Unable to load students" });
     } finally {
       if (seq === loadSeq.current) {
         setIsFetching(false);
@@ -558,14 +558,14 @@ function OfficeStudentsContent() {
       params.set("idsOnly", "1");
       const res = await fetch(`/api/college/students?${params.toString()}`);
       const json = await res.json() as { ids?: string[]; error?: string };
-      if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Failed to select all matching students" }); return; }
+      if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Unable to select all matching students" }); return; }
       setSelected((prev) => {
         const next = { ...prev };
         for (const id of json.ids ?? []) next[id] = true;
         return next;
       });
     } catch {
-      toast({ variant: "destructive", title: "Network error - please try again" });
+      toast({ variant: "destructive", title: "Network error - try again" });
     } finally {
       setIsSelectingAll(false);
     }
@@ -586,7 +586,7 @@ function OfficeStudentsContent() {
       if (effectiveExportYears.length > 0) params.set("years", effectiveExportYears.join(","));
       const res = await fetch(`/api/college/students?${params.toString()}`);
       const json = await res.json() as { students?: StudentListItem[]; total?: number; truncated?: boolean; error?: string };
-      if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Failed to export students" }); return; }
+      if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Unable to export students" }); return; }
       const rows = json.students ?? [];
       if (rows.length === 0) {
         toast({ variant: "destructive", title: "No students match the selected filters" });
@@ -606,7 +606,7 @@ function OfficeStudentsContent() {
       });
       setExportOpen(false);
     } catch {
-      toast({ variant: "destructive", title: "Network error - please try again" });
+      toast({ variant: "destructive", title: "Network error - try again" });
     } finally {
       setIsExporting(false);
     }
@@ -632,7 +632,7 @@ function OfficeStudentsContent() {
     try {
       const res = await fetch(`/api/college/students/${deleteTarget.id}`, { method: "DELETE" });
       const json = await res.json() as { error?: string };
-      if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Failed to remove" }); return; }
+      if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Unable to remove" }); return; }
       toast({ variant: "success", title: `${deleteTarget.name} removed` });
       setDeleteTarget(null);
       void loadStudents();
@@ -665,7 +665,7 @@ function OfficeStudentsContent() {
         });
         const json = await res.json() as { deletedCount?: number; skipped?: string[]; failed?: string[]; error?: string };
         if (!res.ok) {
-          toast({ variant: "destructive", title: json.error ?? "Failed to remove some students" });
+          toast({ variant: "destructive", title: json.error ?? "Unable to remove some students" });
           break;
         }
         deletedTotal += json.deletedCount ?? 0;
@@ -680,13 +680,13 @@ function OfficeStudentsContent() {
         });
       }
       if (failedTotal > 0) {
-        toast({ variant: "destructive", title: `${failedTotal} student${failedTotal === 1 ? "" : "s"} could not be removed - please try again` });
+        toast({ variant: "destructive", title: `${failedTotal} student${failedTotal === 1 ? "" : "s"} could not be removed - try again` });
       }
       setBulkDeleteOpen(false);
       setSelected({});
       void loadStudents();
     } catch {
-      toast({ variant: "destructive", title: "Network error - please try again" });
+      toast({ variant: "destructive", title: "Network error - try again" });
     } finally {
       setIsBulkDeleting(false);
       setBulkProgress(null);
@@ -717,7 +717,7 @@ function OfficeStudentsContent() {
         body: JSON.stringify({ password }),
       });
       const json = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; alreadyExisted?: boolean };
-      if (!res.ok || !json.ok) return json.error ?? "Failed to update login";
+      if (!res.ok || !json.ok) return json.error ?? "Unable to update login";
       toast({
         variant: "success",
         title: isReset
@@ -727,7 +727,7 @@ function OfficeStudentsContent() {
       if (!isReset) void loadStudents();
       return null;
     } catch {
-      return "Network error - please try again";
+      return "Network error - try again";
     }
   }
 
@@ -748,7 +748,7 @@ function OfficeStudentsContent() {
         skipped?: { id: string; reason: string }[];
         error?: string;
       };
-      if (!res.ok || !json.ok) return json.error ?? "Failed to create logins";
+      if (!res.ok || !json.ok) return json.error ?? "Unable to create logins";
       const createdCount = json.created?.length ?? 0;
       const skipped = json.skipped ?? [];
       toast({
@@ -767,7 +767,7 @@ function OfficeStudentsContent() {
       void loadStudents();
       return null;
     } catch {
-      return "Network error - please try again";
+      return "Network error - try again";
     } finally {
       setIsBulkCreatingLogins(false);
     }
@@ -933,7 +933,7 @@ function OfficeStudentsContent() {
       {!appliedFilters ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <Users className="h-10 w-10 text-muted-foreground mb-3" />
-          <p className="text-sm text-muted-foreground mb-4">Set any filters (or none, for everyone), then load the student list.</p>
+          <p className="text-sm text-muted-foreground mb-4">Set filters (or none, for all students), then load the student list.</p>
           <Button onClick={handleLoad}>Load Students</Button>
         </div>
       ) : isLoading || (isFetching && students.length === 0 && total === 0) ? (
@@ -1074,12 +1074,7 @@ function OfficeStudentsContent() {
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Export Students</DialogTitle>
-            <DialogDescription>
-              Pick a Course first - Department only appears once at least one is selected, since
-              a department&apos;s options depend on it. Leave Department or Academic Year empty
-              to include all of it (Academic Year is independent - it doesn&apos;t require a
-              Course or Department to be picked). Every roster field is included in the CSV.
-            </DialogDescription>
+            <DialogDescription>Select a course first; the Department list depends on it. Leave Department or Academic Year empty to include all. Academic Year can be selected without a course or department. Every roster field is included in the CSV.</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-1">

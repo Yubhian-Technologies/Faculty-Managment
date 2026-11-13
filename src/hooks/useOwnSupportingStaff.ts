@@ -28,14 +28,14 @@ export function useOwnSupportingStaff(): OwnSupportingStaffState {
       const data = (await res.json()) as { staff?: Partial<SupportingStaffMember> | null; message?: string; error?: string };
       if (!res.ok) {
         setStaff(null);
-        setMessage(data.error ?? "Failed to load your profile");
+        setMessage(data.error ?? "Unable to load your profile");
         return;
       }
       setStaff(data.staff ?? null);
       setMessage(data.staff ? null : (data.message ?? "No staff record was found for your login."));
     } catch {
       setStaff(null);
-      setMessage("Failed to load your profile");
+      setMessage("Unable to load your profile");
     }
   }, []);
 

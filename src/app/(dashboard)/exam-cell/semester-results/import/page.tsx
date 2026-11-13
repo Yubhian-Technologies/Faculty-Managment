@@ -114,7 +114,7 @@ function ImportSemesterResults() {
         if (d.batch.status !== "DRAFT") { toast({ variant: "destructive", title: "These results are published and can no longer be added to" }); return; }
         setDraft(d.batch);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load the draft" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load the draft" }));
   }, [appendTo]);
 
   useEffect(() => {
@@ -122,7 +122,7 @@ function ImportSemesterResults() {
       fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses?: Course[] }>),
     ])
       .then(([c]) => { setCourses(c.courses ?? []); })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load courses" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load courses" }));
   }, []);
 
   const groups = useMemo(() => buildCourseGroups(courses), [courses]);
@@ -276,7 +276,7 @@ function ImportSemesterResults() {
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      toast({ variant: "destructive", title: "Couldn't build the template" });
+      toast({ variant: "destructive", title: "Unable to build the template" });
     } finally {
       setBusy(null);
     }
@@ -316,7 +316,7 @@ function ImportSemesterResults() {
       setIgnored(extra);
       setFileName(file.name);
     } catch {
-      setParseError("Couldn't read the file. Check it is a valid .xlsx or .csv.");
+      setParseError("Unable to read the file. Check it is a valid .xlsx or .csv.");
     }
   }
 
@@ -486,10 +486,7 @@ function ImportSemesterResults() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">2. Template</CardTitle>
-          <CardDescription>
-            One row per student per subject: Regd. No, Subject Code, Grade. The code must be the subject&rsquo;s college code. Your own results sheet works too if its headings are close
-            (e.g. HTNO, Sub Code, Grade Secured); other columns such as Name, Credits or marks are ignored - only grades are imported.
-          </CardDescription>
+          <CardDescription>One row per student per subject: Regd. No, Subject Code and Grade. The code must be the subject&apos;s college code. Your own results sheet can be used if its headings are similar (for example HTNO, Sub Code, Grade Secured). Other columns such as Name, Credits or marks are ignored; only grades are imported.</CardDescription>
         </CardHeader>
         <CardContent>
           <Button variant="outline" onClick={() => void downloadTemplate()} loading={busy === "template"} disabled={!group || (needsTarget && !target)}>
@@ -523,7 +520,7 @@ function ImportSemesterResults() {
                 <CheckCircle2 className="mr-1.5 h-4 w-4" />{appendTo ? "Add to draft" : "Save as draft"}
               </Button>
               {progress && <span className="text-xs text-muted-foreground">{progress}</span>}
-              {!summary && <span className="text-xs text-muted-foreground">Check the file first - nothing is saved until you press Save as draft.</span>}
+              {!summary && <span className="text-xs text-muted-foreground">Check the file first. Nothing is saved until you choose Save Draft.</span>}
             </div>
           )}
 
@@ -536,7 +533,7 @@ function ImportSemesterResults() {
               </div>
               {summary.groups.length > 0 && (
                 <div className="text-sm">
-                  <p className="text-xs text-muted-foreground">One draft sheet per branch / sub-department, from each student&rsquo;s own department:</p>
+                  <p className="text-xs text-muted-foreground">One draft sheet for each branch or sub-department, based on each student&apos;s own department:</p>
                   <div className="mt-1 flex flex-wrap gap-1.5">
                     {summary.groups.map((g) => (
                       <Badge key={`${g.department}|${g.subDepartment}`} variant="outline">{g.subDepartment || g.department} · {g.students}</Badge>

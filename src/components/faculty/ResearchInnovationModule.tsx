@@ -82,7 +82,7 @@ export function ResearchInnovationModule({ uid, academicProfile, publications, i
         <InnovationsModuleView uid={uid} isOwnProfile={isOwnProfile} />
       ) : (
         <Section number={3} title={activeLabel}>
-          <p className="text-sm text-muted-foreground">This section hasn&rsquo;t been built out yet - check back soon.</p>
+          <p className="text-sm text-muted-foreground">This section is not available yet.</p>
         </Section>
       )}
     </div>

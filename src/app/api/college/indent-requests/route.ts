@@ -48,10 +48,10 @@ export async function GET(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/indent-requests GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -97,7 +97,7 @@ export async function POST(request: Request) {
     }
 
     const now = new Date();
-    // GOODS indents go to Purchase Dept for quotation sourcing; NON_GOODS skip
+    // GOODS indents go to Purchase Department for quotation sourcing; NON_GOODS skip
     // straight to Finance for direct approval (see IndentStatus in src/types/indent.ts).
     const isGoods = requestType === "GOODS";
     const initialStatus = isGoods ? "PENDING_PURCHASE_REVIEW" : "PENDING_FINANCE_REVIEW";
@@ -153,9 +153,9 @@ export async function POST(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/indent-requests POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

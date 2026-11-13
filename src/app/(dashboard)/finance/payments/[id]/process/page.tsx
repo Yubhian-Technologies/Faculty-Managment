@@ -37,7 +37,7 @@ export default function ProcessPaymentPage() {
         }
         setPayment(found);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load payment" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load payment" }))
       .finally(() => setLoading(false));
   }, [paymentId, router]);
 
@@ -85,7 +85,7 @@ export default function ProcessPaymentPage() {
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
               <Label>Payment Reference - UTR / cheque number</Label>
-              <Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="e.g. UTR / cheque number" />
+              <Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="UTR / cheque number" />
             </div>
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">

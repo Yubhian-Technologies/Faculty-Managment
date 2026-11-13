@@ -47,7 +47,7 @@ export default function AdminOffersPage() {
     fetch(url)
       .then((r) => r.json() as Promise<{ offers: LocationOffer[] }>)
       .then((d) => setOffers(d.offers ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -82,7 +82,7 @@ export default function AdminOffersPage() {
     <div className="space-y-6">
       <PageHeader
         title="Offer Letters"
-        description="Review and approve offer letters prepared by HR Admin"
+        description="Review and approve the offer letters prepared by HR Admin."
       />
 
       {collegeId && (
@@ -120,7 +120,7 @@ export default function AdminOffersPage() {
             />
           ))}
           {!isLoading && offers.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-8">No offer letters pending approval.</p>
+            <p className="text-sm text-muted-foreground text-center py-8">No offer letters are pending approval.</p>
           )}
         </div>
       ) : (

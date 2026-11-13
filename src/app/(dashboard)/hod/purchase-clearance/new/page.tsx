@@ -32,12 +32,12 @@ export default function NewPurchaseClearancePage() {
       });
       if (!res.ok) {
         const err = (await res.json()) as { error?: string };
-        throw new Error(err.error ?? "Failed to raise request");
+        throw new Error(err.error ?? "Unable to raise request");
       }
       toast({ variant: "success", title: "Purchase clearance request raised" });
       router.push("/hod/purchase-clearance");
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to raise request", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to raise request", description: err instanceof Error ? err.message : undefined });
     } finally {
       setSaving(false);
     }
@@ -47,7 +47,7 @@ export default function NewPurchaseClearancePage() {
     <div className="max-w-xl">
       <PageHeader
         title="Raise Purchase Clearance Request"
-        description="Request clearance to purchase items against your department's budget"
+        description="Request clearance to purchase items against your department's budget."
       />
 
       <Card>

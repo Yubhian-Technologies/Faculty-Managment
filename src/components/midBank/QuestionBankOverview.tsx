@@ -36,7 +36,7 @@ export function QuestionBankOverview({ base, examCell }: { base: string; examCel
     fetch("/api/college/mid-bank-deadlines")
       .then(async (r) => {
         const d = (await r.json()) as { deadlines?: Row[]; error?: string };
-        if (!r.ok) throw new Error(d.error ?? "Failed to load");
+        if (!r.ok) throw new Error(d.error ?? "Unable to load");
         const list = d.deadlines ?? [];
         setRows(list);
         // Each deadline's progress, loaded side by side.
@@ -47,7 +47,7 @@ export function QuestionBankOverview({ base, examCell }: { base: string; examCel
             .catch(() => setSummaries((m) => ({ ...m, [row.id]: "error" })));
         }
       })
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load"));
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Unable to load"));
   }, []);
 
   const shown = useMemo(() => (rows ?? []).filter((r) => show === "all" || !r.locked), [rows, show]);
@@ -77,7 +77,7 @@ export function QuestionBankOverview({ base, examCell }: { base: string; examCel
           <CardContent className="flex flex-col items-center gap-3 p-10 text-center">
             <span className="grid h-12 w-12 place-items-center rounded-full bg-primary/10 text-primary"><BookOpenCheck className="h-6 w-6" /></span>
             <p className="font-semibold">No {papers ? "question paper" : "question bank"} deadlines yet</p>
-            <p className="max-w-md text-sm text-muted-foreground">{examCell ? <>Set the question rules for each course in Mid Configuration, then publish a deadline on Mid Timings &amp; Dates - the faculty teaching that semester are notified.</> : `The Exam Cell hasn't published a ${papers ? "question paper" : "question bank"} deadline yet.`}</p>
+            <p className="max-w-md text-sm text-muted-foreground">{examCell ? <>Set the question rules for each course in Mid Configuration, then publish a deadline in Mid Timings and Dates. Faculty teaching that semester are notified.</> : `The Exam Cell hasn't published a ${papers ? "question paper" : "question bank"} deadline yet.`}</p>
             {examCell && <Button asChild size="sm"><Link href="/exam-cell/mid-timings">Publish a deadline</Link></Button>}
           </CardContent>
         </Card>
@@ -89,7 +89,7 @@ export function QuestionBankOverview({ base, examCell }: { base: string; examCel
                 className={cn("rounded-lg px-3.5 py-1.5 font-medium", show === k ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}>{label}</button>
             ))}
           </div>
-          {shown.length === 0 && <p className="text-sm text-muted-foreground">Every deadline has passed - see All.</p>}
+          {shown.length === 0 && <p className="text-sm text-muted-foreground">Every deadline has passed. See All.</p>}
           <div className="grid gap-4 md:grid-cols-2">
             {shown.map((r) => {
               const s = summaries[r.id];

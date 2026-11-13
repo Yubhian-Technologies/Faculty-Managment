@@ -33,7 +33,7 @@ export async function PATCH(
     const { locationId, isActive, name, email, locationDeptId, locationDeptIds, allLocationDepts } = body;
 
     if (!locationId) {
-      return NextResponse.json({ error: "locationId required" }, { status: 400 });
+      return NextResponse.json({ error: "Select a location." }, { status: 400 });
     }
     if (session.role === "ADMINISTRATION" && session.locationId !== locationId) {
       return NextResponse.json({ error: "Cannot manage users for another location" }, { status: 403 });
@@ -49,7 +49,7 @@ export async function PATCH(
     const userRef = db.collection("locations").doc(locationId).collection("locationUsers").doc(uid);
     const userSnap = await userRef.get();
     if (!userSnap.exists) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return NextResponse.json({ error: "User not found. The account may have been deleted." }, { status: 404 });
     }
     const existing = userSnap.data() as { role?: string; locationDeptId?: string; name?: string };
 
@@ -110,12 +110,12 @@ export async function PATCH(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     const authErr = firebaseAuthErrorResponse(err);
     if (authErr) return authErr;
     console.error("[location/users/[uid] PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -135,7 +135,7 @@ export async function DELETE(
     const { searchParams } = new URL(request.url);
     const locationId = searchParams.get("locationId") ?? "";
     if (!locationId) {
-      return NextResponse.json({ error: "locationId required" }, { status: 400 });
+      return NextResponse.json({ error: "Select a location." }, { status: 400 });
     }
     if (session.role === "ADMINISTRATION" && session.locationId !== locationId) {
       return NextResponse.json({ error: "Cannot manage users for another location" }, { status: 403 });
@@ -170,11 +170,11 @@ export async function DELETE(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     const authErr = firebaseAuthErrorResponse(err);
     if (authErr) return authErr;
     console.error("[location/users/[uid] DELETE]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

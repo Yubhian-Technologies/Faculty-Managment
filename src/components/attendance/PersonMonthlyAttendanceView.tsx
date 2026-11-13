@@ -86,14 +86,14 @@ export function PersonMonthlyAttendanceView({ facultyId, backHref }: PersonMonth
       const res = await fetch(`/api/college/attendance?year=${loadedYear}&month=${loadedMonth}&facultyId=${facultyId}`);
       const json = await res.json() as { personName?: string | null; registered?: boolean; records?: (AttendanceRecord & { id: string })[]; error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to load attendance" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to load attendance" });
         return;
       }
       setPersonName(json.personName ?? null);
       setRegistered(json.registered ?? true);
       setRecords(json.records ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load attendance" });
+      toast({ variant: "destructive", title: "Unable to load attendance" });
     } finally {
       setIsLoading(false);
     }
@@ -127,14 +127,14 @@ export function PersonMonthlyAttendanceView({ facultyId, backHref }: PersonMonth
       });
       const json = await res.json() as { error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to mark attendance" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to mark attendance" });
         return;
       }
       toast({ title: "Attendance updated" });
       setMarkDate(null);
       await load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to mark attendance" });
+      toast({ variant: "destructive", title: "Unable to mark attendance" });
     } finally {
       setIsMarking(false);
     }
@@ -195,7 +195,7 @@ export function PersonMonthlyAttendanceView({ facultyId, backHref }: PersonMonth
     <div className="space-y-6">
       <PageHeader
         title={personName ? `${personName}'s Attendance` : "Attendance"}
-        description="Review and correct any day this month"
+        description="Review and correct any day of this month."
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={handleExport} disabled={days.length === 0}>
@@ -318,7 +318,7 @@ export function PersonMonthlyAttendanceView({ facultyId, backHref }: PersonMonth
         open={!!markDate}
         onOpenChange={(open) => { if (!open) setMarkDate(null); }}
         title={`Mark attendance for ${markDate ?? "this day"}?`}
-        description="Use this when they can't complete self check-in/out themselves (e.g. they left campus for official work). This is recorded as a manual entry, distinct from a real face+location check-in."
+        description="Use this when they cannot check in or out themselves (for example, when away from campus on official work). It is recorded as a manual entry, separate from a face and location check-in."
         confirmLabel="Save"
         loading={isMarking}
         confirmDisabled={!manualReason.trim() || (!manualCheckIn && !manualCheckOut) || checkOutNotAfterCheckIn}

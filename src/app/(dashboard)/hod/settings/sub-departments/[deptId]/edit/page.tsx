@@ -63,7 +63,7 @@ export default function EditSubDepartmentPage() {
         setHodUid(mine.hodUid ?? "");
       }
     } catch {
-      toast({ variant: "destructive", title: "Failed to load sub-department" });
+      toast({ variant: "destructive", title: "Unable to load sub-department" });
     } finally {
       setIsLoading(false);
     }
@@ -118,12 +118,12 @@ export default function EditSubDepartmentPage() {
         }),
       });
       const json = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to update sub-department");
+      if (!res.ok) throw new Error(json.error ?? "Unable to update sub-department");
 
       toast({ variant: "success", title: "Sub-department updated" });
       router.push(listHref);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to update sub-department" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to update sub-department" });
     } finally {
       setIsSubmitting(false);
     }
@@ -142,7 +142,7 @@ export default function EditSubDepartmentPage() {
   if (!subDept || !parentDept) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Edit Sub-Department" description="Change a sub-department of your department" />
+        <PageHeader title="Edit Sub-Department" description="Change a sub-department of your department." />
         <Card>
           <CardContent className="py-16">
             <EmptyState
@@ -195,7 +195,7 @@ export default function EditSubDepartmentPage() {
                 id="subdept-code"
                 value={code}
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
-                placeholder="e.g. BSM"
+                placeholder="BSM"
                 className="uppercase"
                 maxLength={10}
                 disabled={isDepartmentOfficeHead}
@@ -207,10 +207,7 @@ export default function EditSubDepartmentPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Sub-HOD</CardTitle>
-            <CardDescription>
-              Optional - a Sub-HOD is a seat a person holds on top of their own faculty login, not a separate
-              account. You can change it later.
-            </CardDescription>
+            <CardDescription>Optional. A Sub-HOD is a role held in addition to the person&apos;s own faculty login, not a separate account. You can change it later.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             {hodOptions.length > 0 ? (
@@ -228,9 +225,7 @@ export default function EditSubDepartmentPage() {
                 </SelectContent>
               </Select>
             ) : (
-              <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
-                No faculty in your department yet - add faculty first, then appoint one as Sub-HOD
-              </p>
+              <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">No faculty in your department yet. Add faculty first, then appoint a Sub-HOD.</p>
             )}
             <p className="text-xs text-muted-foreground rounded-md border p-2.5">
               This Sub-HOD gets full edit rights (overview, sections, assign faculty) over{" "}
@@ -243,20 +238,13 @@ export default function EditSubDepartmentPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Core Departments</CardTitle>
-            <CardDescription>
-              Whole branches (e.g. IT and CSBS) grouped under this sub-department - its Sub-HOD gets full control of
-              those branches&apos; students, sections, and academics for the years connected. Connecting a branch
-              here, or changing its years, is done from the Principal dashboard on the branch&apos;s own department
-              page, not here.
-            </CardDescription>
+            <CardDescription>Whole branches (for example IT and CSBS) grouped under this sub-department. Its Sub-HOD manages those branches&apos; students, sections and academics for the connected years. Branches and their years are connected from the Principal dashboard, on the branch&apos;s own department page.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             {subDept.managedDepartments && subDept.managedDepartments.length > 0 ? (
               <DepartmentChipList names={subDept.managedDepartments} />
             ) : (
-              <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
-                No branches connected yet - ask your Principal to connect one from that branch&apos;s department page.
-              </p>
+              <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">No branches connected yet. Ask the Principal to connect one from that branch&apos;s department page.</p>
             )}
           </CardContent>
         </Card>

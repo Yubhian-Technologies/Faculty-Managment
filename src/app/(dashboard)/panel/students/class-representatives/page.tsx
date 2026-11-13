@@ -28,7 +28,7 @@ export default function ClassRepresentativesPage() {
         (s.department === sec.department || s.secondaryDepartment === sec.department) && s.section === sec.name && s.year === sec.year,
       ));
     } catch {
-      toast({ variant: "destructive", title: "Failed to load students" });
+      toast({ variant: "destructive", title: "Unable to load students" });
     }
   }
 
@@ -42,7 +42,7 @@ export default function ClassRepresentativesPage() {
         setSectionId(list[0]?.id ?? "");
         await loadStudents(list[0]);
       } catch {
-        toast({ variant: "destructive", title: "Failed to load sections" });
+        toast({ variant: "destructive", title: "Unable to load sections" });
       } finally {
         setIsLoading(false);
       }
@@ -53,7 +53,7 @@ export default function ClassRepresentativesPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Class Representatives" description="Pick your section's Class Representatives from its students" />
+      <PageHeader title="Class Representatives" description="Select your section's Class Representatives from its students." />
       {!isLoading && sections.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-sm text-muted-foreground">

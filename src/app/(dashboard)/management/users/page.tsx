@@ -31,7 +31,7 @@ export default function ManagementUsersPage() {
         setLocations(l);
         if (l.length > 0) setSelectedLocationId(l[0].id);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load locations" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load locations" }));
   }, []);
 
   useEffect(() => {
@@ -40,7 +40,7 @@ export default function ManagementUsersPage() {
     fetch(`/api/location/users?locationId=${selectedLocationId}`)
       .then((r) => r.json() as Promise<{ users: UserRow[] }>)
       .then((d) => setUsers(d.users ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load administrators" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load administrators" }))
       .finally(() => setIsLoading(false));
   }, [selectedLocationId]);
 
@@ -122,7 +122,7 @@ export default function ManagementUsersPage() {
     <div className="space-y-6">
       <PageHeader
         title="Administrators"
-        description="Location-wise Administrators and Accounts contacts you've appointed"
+        description="Administrators and Accounts contacts you have appointed for each location."
         actions={
           <Button onClick={() => router.push("/management/users/new")}>
             <UserPlus className="h-4 w-4 mr-2" />

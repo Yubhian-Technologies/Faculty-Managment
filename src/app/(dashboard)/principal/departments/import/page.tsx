@@ -35,7 +35,7 @@ export default function DepartmentsImportPage() {
     fetch("/api/college/course-catalog")
       .then((r) => r.json() as Promise<{ items: CourseCatalogItem[] }>)
       .then((d) => setCatalog(d.items ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load courses" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load courses" }));
   }, []);
 
   function downloadTemplate() {
@@ -54,7 +54,7 @@ export default function DepartmentsImportPage() {
     const name = file.name.toLowerCase();
     const isExcel = name.endsWith(".xlsx");
     if (name.endsWith(".xls")) {
-      setParseError("Legacy .xls files aren't supported - please re-save as .xlsx or .csv and try again.");
+      setParseError("Legacy .xls files aren't supported - re-save as .xlsx or .csv and try again.");
       e.target.value = "";
       return;
     }
@@ -72,7 +72,7 @@ export default function DepartmentsImportPage() {
         return;
       }
       if (!Object.values(keyMap).includes("name")) {
-        setParseError("Couldn't find a \"Department Name\" column. Check your file's header row against the template.");
+        setParseError("Unable to find a \"Department Name\" column. Check your file's header row against the template.");
         return;
       }
       const unmatched = getUnmatchedHeaders(headers, keyMap);
@@ -94,7 +94,7 @@ export default function DepartmentsImportPage() {
 
       setRows(dataRows);
     } catch {
-      setParseError(isExcel ? "Failed to parse the Excel file. Ensure it is a valid, uncorrupted .xlsx file." : "Failed to parse the file. Ensure it is a valid CSV.");
+      setParseError(isExcel ? "Unable to parse the Excel file. Ensure it is a valid, uncorrupted .xlsx file." : "Unable to parse the file. Ensure it is a valid CSV.");
     } finally {
       e.target.value = "";
     }
@@ -114,7 +114,7 @@ export default function DepartmentsImportPage() {
       if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Import failed" }); return; }
       setResult(json);
       if (json.created > 0) {
-        toast({ variant: "success", title: `${json.created} department${json.created !== 1 ? "s" : ""} imported successfully` });
+        toast({ variant: "success", title: `${json.created} department${json.created !== 1 ? "s" : ""} imported` });
         setRows([]);
       }
     } catch {
@@ -133,7 +133,7 @@ export default function DepartmentsImportPage() {
     <div className="max-w-4xl space-y-6">
       <PageHeader
         title="Import Departments"
-        description="Bulk add departments - with department codes and HOD emails - from a CSV file"
+        description="Add departments in bulk, with department codes and HOD email addresses, from a CSV file."
         actions={
           <Button variant="outline" asChild>
             <Link href="/principal/courses?tab=departments"><ArrowLeft className="h-4 w-4 mr-1" />Back to Departments</Link>
@@ -145,9 +145,7 @@ export default function DepartmentsImportPage() {
       <Card>
         <CardHeader><CardTitle className="text-base flex items-center gap-2"><span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">1</span>Download Template</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Download the CSV template, fill in your department data, and upload it below.
-          </p>
+          <p className="text-sm text-muted-foreground">Download the CSV template, enter your department data and upload it below.</p>
           <div className="grid grid-cols-1 gap-3 text-xs text-muted-foreground bg-muted/40 rounded-lg p-3">
             {HINTS.map((h) => <p key={h} className="flex items-start gap-1"><span className="text-primary mt-0.5">•</span>{h}</p>)}
           </div>
@@ -170,7 +168,7 @@ export default function DepartmentsImportPage() {
             <FileSpreadsheet className="h-10 w-10 text-muted-foreground" />
             <div className="text-center">
               <p className="font-medium text-sm">Click to select a CSV or Excel file</p>
-              <p className="text-xs text-muted-foreground mt-1">.csv or .xlsx - headers matched loosely.</p>
+              <p className="text-xs text-muted-foreground mt-1">CSV or XLSX. Column headings are matched flexibly.</p>
             </div>
           </button>
           {parseError && (
@@ -181,7 +179,7 @@ export default function DepartmentsImportPage() {
           )}
           {rows.length > 0 && (
             <p className="text-sm text-green-700 flex items-center gap-1">
-              <CheckCircle2 className="h-4 w-4" />{rows.length} row{rows.length !== 1 ? "s" : ""} parsed successfully
+              <CheckCircle2 className="h-4 w-4" />{rows.length} row{rows.length !== 1 ? "s" : ""} parsed
             </p>
           )}
         </CardContent>
@@ -253,9 +251,7 @@ export default function DepartmentsImportPage() {
             )}
             <div className="space-y-2">
               <p className="text-sm font-medium">Courses these departments offer *</p>
-              <p className="text-xs text-muted-foreground">
-                Applied to every department in the file. You can add or change a department&apos;s courses later from its page.
-              </p>
+              <p className="text-xs text-muted-foreground">Applies to every department in the file. You can change a department&apos;s courses later from its page.</p>
               <DepartmentCoursePicker catalog={catalog} value={courseSelections} onChange={setCourseSelections} />
             </div>
             <div className="flex gap-3">

@@ -66,7 +66,7 @@ export default function LibraryBooksImportPage() {
       setRows(parsed);
       setFileName(file.name);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to read file" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to read file" });
     } finally {
       setIsParsing(false);
     }
@@ -91,7 +91,7 @@ export default function LibraryBooksImportPage() {
         toast({ variant: "success", title: `${json.created} book${json.created === 1 ? "" : "s"} added to the catalog` });
       }
     } catch {
-      toast({ variant: "destructive", title: "Network error - please try again" });
+      toast({ variant: "destructive", title: "Network error - try again" });
     } finally {
       setIsImporting(false);
     }
@@ -100,7 +100,7 @@ export default function LibraryBooksImportPage() {
   return (
     <div className="max-w-2xl space-y-6">
       <div className="flex items-center justify-between">
-        <PageHeader title="Import Books" description="Bulk-add books to the catalog from a spreadsheet" />
+        <PageHeader title="Import Books" description="Add books to the catalogue in bulk from a spreadsheet." />
         <Button asChild variant="outline" size="sm">
           <Link href="/library/books"><ArrowLeft className="h-4 w-4 mr-1.5" /> Back</Link>
         </Button>
@@ -110,7 +110,7 @@ export default function LibraryBooksImportPage() {
         <CardContent className="p-5 space-y-4">
           <div>
             <p className="text-sm font-medium mb-1">1. Download the template</p>
-            <p className="text-xs text-muted-foreground mb-2">Title, Author, ISBN and Total Copies are required for every row. Category and Publisher are optional.</p>
+            <p className="text-xs text-muted-foreground mb-2">Title, Author, ISBN and Total Copies are required in every row. Category and Publisher are optional.</p>
             <Button variant="outline" size="sm" onClick={downloadTemplate}>
               <Download className="h-4 w-4 mr-2" />Download Template (.csv)
             </Button>

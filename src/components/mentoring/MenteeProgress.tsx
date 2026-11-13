@@ -254,7 +254,7 @@ function InternalTab({ api }: { api: string }) {
   const years = [...new Set(data.subjects.map((x) => x.year))];
   return (
     <div className="space-y-5">
-      <p className="text-xs text-muted-foreground">Shows marks the faculty have submitted; drafts are not included.</p>
+      <p className="text-xs text-muted-foreground">Shows marks submitted by faculty; drafts are not included.</p>
       {years.map((y) => (
         <div key={String(y)} className="space-y-3">
           <h3 className="text-sm font-semibold text-muted-foreground">{y != null ? `Year ${y}` : "Other"}</h3>
@@ -308,11 +308,11 @@ function NotesTab({ api }: { api: string }) {
     try {
       const res = await fetch(`${api}/notes`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: body }) });
       const d = (await res.json().catch(() => ({}))) as { note?: NoteRow; error?: string };
-      if (!res.ok || !d.note) throw new Error(d.error || "Could not save the note");
+      if (!res.ok || !d.note) throw new Error(d.error || "Unable to save the note");
       setNotes((prev) => [d.note as NoteRow, ...(prev ?? [])]);
       setText("");
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not save the note" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save the note" });
     } finally {
       setSaving(false);
     }
@@ -321,10 +321,10 @@ function NotesTab({ api }: { api: string }) {
   async function remove(id: string) {
     try {
       const res = await fetch(`${api}/notes/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error || "Could not delete the note");
+      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error || "Unable to delete the note");
       setNotes((prev) => (prev ?? []).filter((n) => n.id !== id));
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not delete the note" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to delete the note" });
     }
   }
 
@@ -339,7 +339,7 @@ function NotesTab({ api }: { api: string }) {
           placeholder="Write what was discussed, concerns, follow-ups…"
         />
         <div className="flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">Visible to this student&apos;s mentor and HOD only - never to the student.</span>
+          <span className="text-xs text-muted-foreground">Visible only to this student&apos;s mentor and HOD, never to the student.</span>
           <Button size="sm" onClick={add} disabled={saving || !text.trim()}>{saving ? "Saving…" : "Add note"}</Button>
         </div>
       </div>

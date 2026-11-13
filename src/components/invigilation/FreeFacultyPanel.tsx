@@ -30,7 +30,7 @@ export function FreeFacultyPanel({ overview }: { overview: Overview }) {
     fetch(`/api/college/invigilation/schedules/${overview.schedule.id}/candidates?session=${encodeURIComponent(session)}`, { cache: "no-store" })
       .then((r) => r.json() as Promise<{ candidates?: CandidateRow[]; error?: string }>)
       .then((d) => { if (!cancelled) { if (d.error) throw new Error(d.error); setRows(d.candidates ?? []); } })
-      .catch((e) => { if (!cancelled) { setRows([]); toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to load" }); } });
+      .catch((e) => { if (!cancelled) { setRows([]); toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to load" }); } });
     return () => { cancelled = true; };
   }, [overview.schedule.id, session]);
 

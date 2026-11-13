@@ -19,7 +19,7 @@ export function getPayslipHTML(d: PayslipData): string {
     body += `<tr><td>${esc(e[0])}</td><td class="n">${esc(e[1])}</td><td class="n">${esc(e[2])}</td><td>${esc(x[0])}</td><td class="n">${esc(x[1])}</td></tr>`;
   }
   const info: [string, string][] = [
-    ["Name", d.person.name], ["Emp Code", d.person.employeeCode || "-"], ["Designation", d.person.designation || "-"], ["Department", d.person.department || "-"],
+    ["Name", d.person.name], ["Employee ID", d.person.employeeCode || "-"], ["Designation", d.person.designation || "-"], ["Department", d.person.department || "-"],
     ["Bank A/c", d.person.bank || "-"], ["PAN", d.person.pan ?? "-"], ["UAN", d.person.uan ?? "-"],
     ["Days in month", String(d.monthDays)], ["Pay days", String(d.payDays)], ["Loss of pay", String(d.lop)],
   ];
@@ -51,7 +51,7 @@ export function getPayslipHTML(d: PayslipData): string {
   <div class="info">${info.map(([k, v]) => `<div><span>${esc(k)}</span><span>${esc(v)}</span></div>`).join("")}</div>
   <table><thead><tr><th>Earnings</th><th class="n">Fixed</th><th class="n">Earned</th><th>Deductions</th><th class="n">Amount</th></tr></thead>
   <tbody>${body}<tr class="tot"><td>Gross salary</td><td></td><td class="n">${inr(d.gross)}</td><td>Total deductions</td><td class="n">${inr(d.totalDeductions)}</td></tr></tbody></table>
-  <div class="net"><span>Net salary</span><span>Rs. ${inr(d.net)}</span></div>
+  <div class="net"><span>Net salary</span><span>₹${inr(d.net)}</span></div>
   <div class="words">${esc(rupeesInWords(d.net))}</div>
   ${d.notCredited ? `<div class="note">Salary not credited: ${esc(d.notCredited)}</div>` : ""}
   ${d.onHold ? `<div class="note">Salary on hold: ${esc(d.onHold)}</div>` : ""}

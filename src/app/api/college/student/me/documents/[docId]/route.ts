@@ -16,7 +16,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     const collegeRef = db.collection("colleges").doc(session.collegeId);
 
     const studentSnap = await collegeRef.collection("students").where("uid", "==", session.uid).limit(1).get();
-    if (studentSnap.empty) return NextResponse.json({ error: "Student record not found" }, { status: 404 });
+    if (studentSnap.empty) return NextResponse.json({ error: "Student record not found. It may have been deleted." }, { status: 404 });
     if (passwordChangeRequired(studentSnap.docs[0].data() as Pick<StudentRecord, "mustChangePassword">)) return passwordChangeRequiredResponse();
     const studentId = studentSnap.docs[0].id;
 
@@ -33,9 +33,9 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     return NextResponse.json({ ok: true });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/student/me/documents/[docId] DELETE]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

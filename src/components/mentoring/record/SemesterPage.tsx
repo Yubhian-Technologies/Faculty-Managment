@@ -157,7 +157,7 @@ function Sheet({ api, sheet, stale, onOpenMeetings, readOnly }: { api: string; s
             <span><strong>{src.label}.</strong> <span className="text-muted-foreground">{sheet.subjectsNote}</span></span>
           </p>
           {!sheet.mids.mid1 && !sheet.mids.mid2 && sheet.subjects.length > 0 && (
-            <p className="mt-1 text-xs text-muted-foreground">Mid I and Mid II attendance appear once the Exam Cell publishes the mid exam dates for this semester.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Mid I and Mid II attendance appear once the Exam Cell publishes the Mid examination dates for this semester.</p>
           )}
         </CardContent>
       </Card>
@@ -226,7 +226,7 @@ function Remarks({ api, sheet }: { api: string; sheet: MentoringSemesterSheet })
       setText(d.remarks?.text ?? "");
       toast({ title: "Remarks saved" });
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not save" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" });
     } finally {
       setSaving(false);
     }
@@ -234,7 +234,7 @@ function Remarks({ api, sheet }: { api: string; sheet: MentoringSemesterSheet })
 
   return (
     <Card>
-      <CardHeader className="pb-1"><CardTitle className="text-base">Remarks of the mentor on attendance and performance</CardTitle></CardHeader>
+      <CardHeader className="pb-1"><CardTitle className="text-base">Mentor&apos;s remarks on attendance and performance</CardTitle></CardHeader>
       <CardContent className="space-y-2">
         <Textarea value={text} rows={4} maxLength={SEMESTER_REMARKS_MAX_LENGTH} placeholder="Attendance, performance, and what the student should work on this semester…" onChange={(e) => setText(e.target.value)} className="print:hidden" />
         <p className="hidden print:block text-sm whitespace-pre-wrap min-h-24">{text}</p>

@@ -21,8 +21,8 @@ export function getDefaultAppointmentTerms({
   const principalAddress = [collegeName, collegeAddress].filter(Boolean).join(", ");
   const payClause =
     annualSalary != null && annualSalary > 0
-      ? `You will draw a consolidated salary of Rs. ${annualSalary.toLocaleString("en-IN")}/- per annum, as approved by the Management. In addition, you are eligible for D.A., H.R.A. and other allowances as per the rules of the Institution.`
-      : "You will draw a Basic Pay of Rs. ______ in the scale of pay ______. In addition, you are eligible for D.A., H.R.A. and other allowances of Rs. ______.";
+      ? `You will draw a consolidated salary of ₹${annualSalary.toLocaleString("en-IN")}/- per annum, as approved by the Management. In addition, you are eligible for D.A., H.R.A. and other allowances as per the rules of the Institution.`
+      : "You will draw a Basic Pay of ₹ ______ in the scale of pay ______. In addition, you are eligible for D.A., H.R.A. and other allowances of Rs. ______.";
   return [
     "The appointment is subject to verification of your original certificates of qualification and experience. You have to deposit the original certificates with the Principal at the time of joining.",
     "The appointment is on regular basis and you have to face an interview of the Regular Staff Selection Committee of the affiliating University, to which the College is affiliated, for the purpose of regularization of the appointment.",

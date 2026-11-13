@@ -43,10 +43,10 @@ export default function StudentDocumentsPage() {
     try {
       const res = await fetch(`/api/college/students/${studentId}/documents`);
       const json = (await res.json()) as { documents?: StudentDocument[]; error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to load documents");
+      if (!res.ok) throw new Error(json.error ?? "Unable to load documents");
       setDocuments(json.documents ?? []);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to load documents" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to load documents" });
     } finally {
       setIsLoading(false);
     }
@@ -95,7 +95,7 @@ export default function StudentDocumentsPage() {
       });
       const createJson = (await createRes.json()) as { ok?: boolean; error?: string };
       if (!createRes.ok || !createJson.ok) {
-        toast({ variant: "destructive", title: createJson.error ?? "Failed to save document" });
+        toast({ variant: "destructive", title: createJson.error ?? "Unable to save document" });
         return;
       }
 
@@ -104,7 +104,7 @@ export default function StudentDocumentsPage() {
       resetForm();
       void loadDocuments();
     } catch {
-      toast({ variant: "destructive", title: "Network error - please try again" });
+      toast({ variant: "destructive", title: "Network error - try again" });
     } finally {
       setIsSaving(false);
     }
@@ -116,21 +116,21 @@ export default function StudentDocumentsPage() {
       const res = await fetch(`/api/college/students/${studentId}/documents/${deleteTarget.id}`, { method: "DELETE" });
       const json = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || !json.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to delete document" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to delete document" });
         return;
       }
       toast({ variant: "success", title: "Document removed" });
       setDeleteTarget(null);
       void loadDocuments();
     } catch {
-      toast({ variant: "destructive", title: "Network error - please try again" });
+      toast({ variant: "destructive", title: "Network error - try again" });
     }
   }
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <PageHeader title="Student Documents" description="Certificates and documents on file for this student" />
+        <PageHeader title="Student Documents" description="Certificates and documents on file for this student." />
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => router.push(profileHref)}>
             <ArrowLeft className="h-4 w-4 mr-1.5" /> Back to Student
@@ -157,7 +157,7 @@ export default function StudentDocumentsPage() {
                   {resolveStudentDocumentTypeLabel(d)}
                 </Badge>
                 {d.description && <p className="text-xs text-muted-foreground line-clamp-2">{d.description}</p>}
-                {d.selfUploaded && <p className="text-xs text-muted-foreground">Uploaded by the student</p>}
+                {d.selfUploaded && <p className="text-xs text-muted-foreground">Uploaded by the student.</p>}
                 <div className="flex items-center justify-between pt-2 border-t border-border/60">
                   <a href={d.fileUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary font-medium flex items-center gap-1 hover:underline">
                     <Download className="h-3.5 w-3.5" /> Download

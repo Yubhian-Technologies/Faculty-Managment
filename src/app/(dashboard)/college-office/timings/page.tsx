@@ -35,7 +35,7 @@ export default function CollegeOfficeTimingsPage() {
         const topLevel = (d.departments ?? []).filter((dept) => !dept.parentDepartmentId);
         setDepartments(topLevel.sort((a, b) => a.name.localeCompare(b.name)));
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load departments" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load departments" }))
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -65,7 +65,7 @@ export default function CollegeOfficeTimingsPage() {
       );
       setTimings(timingLists.flat());
     } catch {
-      toast({ variant: "destructive", title: "Failed to load courses" });
+      toast({ variant: "destructive", title: "Unable to load courses" });
     } finally {
       setIsLoadingCourses(false);
     }
@@ -84,7 +84,7 @@ export default function CollegeOfficeTimingsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Semester Timings"
-        description="Set the college day's start/end time, periods and breaks for each course's years"
+        description="Set the start and end of the college day, the periods and the breaks for each course and year."
       />
 
       <Card>
@@ -127,7 +127,7 @@ export default function CollegeOfficeTimingsPage() {
                 <div className="space-y-1.5 border-t pt-2">
                   <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Year Timings</p>
                   {years.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">No years assigned to this department yet.</p>
+                    <p className="text-xs text-muted-foreground">No years are assigned to this department yet.</p>
                   ) : years.map((y) => {
                     const t = getTiming(c.id, y);
                     return (

@@ -155,7 +155,7 @@ export function StudentDataUpdateImport() {
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      toast({ variant: "destructive", title: "Couldn't build the Excel template. Please try again." });
+      toast({ variant: "destructive", title: "Unable to build the Excel template. Try again." });
     } finally {
       setIsBuildingTemplate(false);
     }
@@ -173,7 +173,7 @@ export function StudentDataUpdateImport() {
     setNotes([]);
 
     const lower = file.name.toLowerCase();
-    if (lower.endsWith(".xls")) { setParseError("Legacy .xls files aren't supported - please re-save as .xlsx or .csv and try again."); return; }
+    if (lower.endsWith(".xls")) { setParseError("Legacy .xls files aren't supported - re-save as .xlsx or .csv and try again."); return; }
     try {
       const parsed = lower.endsWith(".csv")
         ? parseCSVWithRowNumbers(await readFileAsText(file))
@@ -215,7 +215,7 @@ export function StudentDataUpdateImport() {
       setFields(used.map((u) => u.key));
       setNotes(noteList);
     } catch (err) {
-      setParseError(err instanceof Error ? err.message : "Could not read that file.");
+      setParseError(err instanceof Error ? err.message : "Unable to read that file.");
     }
   }
 
@@ -229,12 +229,12 @@ export function StudentDataUpdateImport() {
         body: JSON.stringify({ rows, fields, fillOnly }),
       });
       const json = (await res.json()) as PreviewResponse;
-      if (!res.ok) throw new Error(json.error ?? "Could not check the file");
+      if (!res.ok) throw new Error(json.error ?? "Unable to check the file");
       setResults(json.results ?? []);
       setReviewed(false);
       if (!keepApplyResult) setApplyResult(null);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Could not check the file" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to check the file" });
     } finally {
       setIsPreviewing(false);
     }
@@ -321,7 +321,7 @@ export function StudentDataUpdateImport() {
     <div className="max-w-5xl space-y-6">
       <PageHeader
         title="Update Student Data"
-        description="Choose which details to update, then match each row to a student by Student Mobile No - nothing is written until you apply"
+        description="Choose the details to update, then match each row to a student by Student Mobile No. Nothing is saved until you apply."
         actions={
           <Button variant="outline" asChild>
             <Link href="/college-office"><ArrowLeft className="h-4 w-4 mr-1" />Back to Dashboard</Link>
@@ -407,7 +407,7 @@ export function StudentDataUpdateImport() {
             <FileSpreadsheet className="h-10 w-10 text-muted-foreground" />
             <div className="text-center">
               <p className="font-medium text-sm">Click to select a CSV or Excel file</p>
-              <p className="text-xs text-muted-foreground mt-1">.csv or .xlsx supported - needs a Student Mobile No column plus the columns to update</p>
+              <p className="text-xs text-muted-foreground mt-1">CSV and XLSX files are supported. The file needs a Student Mobile No column and the columns to update.</p>
             </div>
           </button>
           {parseError && (

@@ -41,7 +41,7 @@ function MidConfigurationTabs() {
   const tab = sp.get("tab") === "marks" ? "marks" : sp.get("tab") === "paper" ? "paper" : sp.get("tab") === "cea" ? "cea" : "mid";
   return (
     <div className={cn("space-y-6", tab === "mid" && "max-w-2xl", (tab === "paper" || tab === "cea") && "max-w-4xl")}>
-      <PageHeader title="Mid Configuration" description="How many Mid exams the college runs, the question bank rules, the question paper template, and the Internal / External marks." />
+      <PageHeader title="Mid Configuration" description="The number of Mid examinations, question bank rules, the question paper template and the Internal and External marks." />
       <nav className="inline-flex flex-wrap rounded-xl border bg-muted/40 p-1 text-sm" aria-label="Mid Configuration sections">
         {([["mid", "Mid exams & question bank"], ["paper", "Question paper"], ["marks", "Marks (Internal / External)"], ["cea", "CIE"]] as const).map(([k, label]) => (
           <Link key={k} href={k === "mid" ? "/exam-cell/mid-configuration" : `/exam-cell/mid-configuration?tab=${k}`} aria-current={tab === k ? "page" : undefined}
@@ -88,7 +88,7 @@ function MidSettings() {
           setPrintPo(data.settings.printPo === true);
         }
       } catch {
-        toast({ variant: "destructive", title: "Failed to load settings" });
+        toast({ variant: "destructive", title: "Unable to load settings" });
       } finally {
         setIsLoading(false);
       }
@@ -109,11 +109,11 @@ function MidSettings() {
         body: JSON.stringify({ midCount: count, midPreparation: preparation, midAssignment: assignment, outcomes, printPo }),
       });
       const data = (await res.json()) as { settings?: ExamMidSettings; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to save");
+      if (!res.ok) throw new Error(data.error ?? "Unable to save");
       setSettings(data.settings ?? null);
       toast({ variant: "success", title: "Settings saved" });
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save" });
     } finally {
       setIsSaving(false);
     }
@@ -129,7 +129,7 @@ function MidSettings() {
       {!settings?.midCount && (
         <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" role="status">
           <Info className="mt-0.5 h-4 w-4 shrink-0" />
-          The number of Mid exams isn&rsquo;t saved yet - press Save Settings. Until then Mid Timings &amp; Dates can&rsquo;t publish timings.
+          The number of Mid examinations is not saved yet. Choose Save Settings; until then, Mid Timings and Dates cannot publish timings.
         </div>
       )}
 
@@ -143,10 +143,7 @@ function MidSettings() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Mid Exams</CardTitle>
-          <CardDescription>
-            How many mid-semester exams this college runs - used by the Mid Timings &amp; Dates tab
-            to offer Mid 1..N when publishing a schedule.
-          </CardDescription>
+          <CardDescription>The number of Mid examinations this college holds. The Mid Timings and Dates tab offers Mid 1 to Mid N when publishing a schedule.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-2 max-w-xs">
@@ -167,7 +164,7 @@ function MidSettings() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">How faculty prepare a Mid</CardTitle>
-          <CardDescription>For the whole college. It can&apos;t change while faculty are preparing for an open deadline.</CardDescription>
+          <CardDescription>Applies to the whole college. It cannot be changed while faculty are preparing for an open deadline.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
@@ -206,10 +203,10 @@ function MidSettings() {
                 <span><span className="block font-medium">{label}</span><span className="block text-xs text-muted-foreground">{hint}</span></span>
               </label>
             ))}
-            <p className="text-xs text-muted-foreground">A bank or paper already started keeps what it started with.</p>
+            <p className="text-xs text-muted-foreground">A bank or paper already started keeps its original settings.</p>
             <label className="flex items-start gap-3 pt-2 text-sm">
               <Checkbox className="mt-0.5" checked={printPo && outcomes.poMapping} disabled={!outcomes.poMapping} onCheckedChange={(c) => setPrintPo(c === true)} />
-              <span><span className="block font-medium">Print POs on question papers</span><span className="block text-xs text-muted-foreground">Adds the PO / PSO column to Mid and CIE papers. Off: papers show Marks, CO and BL only - the mapping stays in the syllabus. Applies to every paper printed from now on.</span></span>
+              <span><span className="block font-medium">Print POs on question papers</span><span className="block text-xs text-muted-foreground">Adds the PO / PSO column to Mid and CIE papers. When off, papers show Marks, CO and BL only; the mapping remains in the syllabus. Applies to every paper printed from now on.</span></span>
             </label>
           </div>
         </CardContent>

@@ -32,14 +32,14 @@ export default function StudentLibraryPage() {
         setLoans(d.loans ?? []);
         setReservations(d.reservations ?? []);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load library info" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load library info" }))
       .finally(() => setIsLoading(false));
   }, []);
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-card/90 backdrop-blur-sm p-5 rounded-3xl border border-border/60 shadow-xs">
-        <PageHeader title="My Library" description="Books you've borrowed and your reservation queue" className="mb-0" />
+        <PageHeader title="My Library" description="Books you have borrowed and your reservations." className="mb-0" />
         <Button asChild variant="outline" size="sm" className="rounded-full border-border/60">
           <Link href="/student">
             <ArrowLeft className="h-4 w-4 mr-1.5" /> Back to Dashboard

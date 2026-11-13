@@ -25,8 +25,8 @@ export function priceLine(line: Omit<PayrollLine, "payDays" | "result" | "issues
     oneOffs: line.oneOffs, tds: line.tds, advance: line.advance, manual: line.manual,
   });
   const issues: string[] = [];
-  if (result.shortfall > 0) issues.push(`Deductions are Rs. ${result.shortfall.toLocaleString("en-IN")} more than the salary - reduce IT or other deductions`);
-  if (result.advanceDeferred > 0 && line.advance > 0 && result.gross > 0) issues.push(`Advance cut by Rs. ${result.advanceDeferred.toLocaleString("en-IN")} so the net stays above 0`);
+  if (result.shortfall > 0) issues.push(`Deductions are ₹${result.shortfall.toLocaleString("en-IN")} more than the salary - reduce IT or other deductions`);
+  if (result.advanceDeferred > 0 && line.advance > 0 && result.gross > 0) issues.push(`Advance cut by ₹${result.advanceDeferred.toLocaleString("en-IN")} so the net stays above 0`);
   if (!line.hold && !line.notCredited && result.net > 0 && (!line.bank.account || !line.bank.ifsc)) issues.push("No bank account / IFSC on the record - they'll be left out of the bank file");
   if (line.auto.attendanceLop > 0 && !line.lopOverride) issues.push(`Absent ${line.auto.absentDates.length} day(s) per attendance with no approved leave`);
   return { ...line, payDays, result, issues };
@@ -160,7 +160,7 @@ export function applyLineEdit(line: PayrollLine, input: unknown, settings: Setti
       next.advance = line.advanceAuto ?? 0;
     } else {
       const amount = wholeRupees((edit.advanceOverride as { amount?: unknown })?.amount, "Advance recovery");
-      if (amount > (line.advanceBalance ?? 0)) throw new PayrollRuleError(`The advance balance is only Rs. ${(line.advanceBalance ?? 0).toLocaleString("en-IN")}`);
+      if (amount > (line.advanceBalance ?? 0)) throw new PayrollRuleError(`The advance balance is only ₹${(line.advanceBalance ?? 0).toLocaleString("en-IN")}`);
       const reason = reasonOf(edit.advanceOverride, "changing the advance recovery");
       next.advanceOverride = { ...mark(reason), amount };
       next.advance = amount;

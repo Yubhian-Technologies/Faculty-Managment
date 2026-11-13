@@ -45,7 +45,7 @@ export default function FinanceBudgetCyclesPage() {
     collegeFetch("/api/college/budget-cycles")
       .then((r) => r.json() as Promise<{ cycles: CycleRow[] }>)
       .then((d) => setCycles(d.cycles ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load budget cycles" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load budget cycles" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -57,7 +57,7 @@ export default function FinanceBudgetCyclesPage() {
     collegeFetch(`/api/college/budget-requests?budgetCycleId=${cycle.id}`)
       .then((r) => r.json() as Promise<{ requests: BudgetRequest[] }>)
       .then((d) => setDeptRequests(d.requests ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load department budgets" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load department budgets" }))
       .finally(() => setIsLoadingDetail(false));
   }
 
@@ -77,7 +77,7 @@ export default function FinanceBudgetCyclesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Budget Cycles"
-        description="Institution-wide budget releases and their Principal approval status"
+        description="Institution-wide budget releases and their approval status with the Principal."
         actions={
           <>
             <Button variant="outline" size="sm" onClick={load} loading={isLoading}>

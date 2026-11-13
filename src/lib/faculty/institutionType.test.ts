@@ -90,8 +90,8 @@ describe.each(["UG", "PG", "DOCTORAL", "POST_DOCTORAL"] as const)("%s form", (le
   it("Others shows a text box holding the typed value", () => {
     const m = form(level, { ...base, institutionType: "UNIVERSITY", universityType: "OTHERS", universityTypeOther: "Central University" } as DegreeDetail);
     expect(m).toContain('value="Central University"');
-    expect(m).toContain("Please specify university type");
-    expect(form(level, { ...base, institutionType: "UNIVERSITY", universityType: "IIT" } as DegreeDetail)).not.toContain("Please specify university type");
+    expect(m).toContain("Specify university type");
+    expect(form(level, { ...base, institutionType: "UNIVERSITY", universityType: "IIT" } as DegreeDetail)).not.toContain("Specify university type");
   });
   it("Additional Information (if any) comes right after Hall Ticket Number, and is not required", () => {
     const m = form(level, base);

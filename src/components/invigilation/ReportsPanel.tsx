@@ -25,7 +25,7 @@ export function ReportsPanel({ overview }: { overview: Overview }) {
       if (kind === "x") await downloadTableXlsx(t, `${file}.xlsx`);
       else await downloadTablePdf(t, `${file}.pdf`);
     } catch {
-      toast({ variant: "destructive", title: "Could not make the file" });
+      toast({ variant: "destructive", title: "Unable to make the file" });
     } finally {
       setBusy(null);
     }

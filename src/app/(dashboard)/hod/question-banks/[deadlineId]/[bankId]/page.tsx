@@ -14,7 +14,7 @@ export default function HodBankPage({ params }: { params: Promise<{ deadlineId: 
     <div className="space-y-6">
       <PageHeader
         title="Review"
-        description="Review every question, then approve it (it goes to the Exam Cell) or return it to the faculty with remarks."
+        description="Review every question, then approve it (it is sent to the Exam Cell) or return it to the faculty member with remarks."
         actions={<Button asChild variant="ghost" size="sm"><Link href={`/hod/question-banks/${encodeURIComponent(deadlineId)}`}><ArrowLeft className="mr-1.5 h-4 w-4" />Progress</Link></Button>}
       />
       <BankReview id={bankId} />

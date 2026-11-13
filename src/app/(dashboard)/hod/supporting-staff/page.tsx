@@ -65,7 +65,7 @@ export default function HODSupportingStaffPage() {
       const data = await res.json() as { staff: StaffRow[] };
       setStaff(data.staff ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load Supporting Staff" });
+      toast({ variant: "destructive", title: "Unable to load Supporting Staff" });
     } finally {
       setIsLoading(false);
     }
@@ -83,7 +83,7 @@ export default function HODSupportingStaffPage() {
       setDeleteTarget(null);
       void load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to delete staff record" });
+      toast({ variant: "destructive", title: "Unable to delete staff record" });
     } finally {
       setIsDeleting(false);
     }
@@ -166,7 +166,7 @@ export default function HODSupportingStaffPage() {
   if (isCentrallyManaged) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Supporting Staff" description="Centrally managed by Principal for your college" />
+        <PageHeader title="Supporting Staff" description="Managed centrally by the Principal for your college." />
         <Card>
           <CardContent className="py-16">
             <EmptyState
@@ -184,7 +184,7 @@ export default function HODSupportingStaffPage() {
     <div className="space-y-6">
       <PageHeader
         title="Staff Profiles"
-        description="Manage teaching and supporting staff records for your department."
+        description="Manage the teaching and supporting staff records of your department."
         actions={
           <div className="flex gap-2">
             <Button

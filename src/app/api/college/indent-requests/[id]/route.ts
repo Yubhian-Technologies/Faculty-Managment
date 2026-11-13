@@ -30,12 +30,12 @@ export async function GET(
     const db = getAdminDb();
     const snap = await db.collection("colleges").doc(session.collegeId).collection("indentRequests").doc(id).get();
     if (!snap.exists) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
 
     const req = { id: snap.id, ...snap.data() } as IndentRequest;
     if (session.role === "HOD" && req.hodUid !== session.uid) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
     }
 
     return NextResponse.json({ request: req });
@@ -43,10 +43,10 @@ export async function GET(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/indent-requests/[id] GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -76,7 +76,7 @@ export async function PATCH(
     const ref = db.collection("colleges").doc(session.collegeId).collection("indentRequests").doc(id);
     const snap = await ref.get();
     if (!snap.exists) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
 
     const req = { id: snap.id, ...snap.data() } as IndentRequest;
@@ -87,12 +87,12 @@ export async function PATCH(
 
     if (session.role === "HOD") {
       if (req.hodUid !== session.uid) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
       }
 
       if (body.action === "UPLOAD_GRN") {
         if (req.status !== "COMPLETED" || req.requestType === "NON_GOODS") {
-          return NextResponse.json({ error: "Action not permitted in current state." }, { status: 409 });
+          return NextResponse.json({ error: "This action is not available at the current stage." }, { status: 409 });
         }
         if (req.grnUrl) {
           return NextResponse.json({ error: "GRN already uploaded" }, { status: 409 });
@@ -133,7 +133,7 @@ export async function PATCH(
       }
 
       if (req.status !== "RETURNED_TO_HOD") {
-        return NextResponse.json({ error: "Action not permitted in current state." }, { status: 409 });
+        return NextResponse.json({ error: "This action is not available at the current stage." }, { status: 409 });
       }
       const items = Array.isArray(body.items) ? body.items : [];
       if (items.length === 0 || items.some((i) => !i.description || !(i.quantity > 0) || i.estimatedUnitPrice < 0)) {
@@ -170,17 +170,17 @@ export async function PATCH(
       return NextResponse.json({ ok: true });
     }
 
-    // ── Purchase Dept: reject / return to HOD, or forward to Finance ───────
+    // ── Purchase Department: reject / return to HOD, or forward to Finance ───────
 
     if (session.role === "PURCHASE_DEPT") {
       const purchaseName = await getUserName(db, session.collegeId, session.uid);
 
       if (body.action === "REJECT" || body.action === "RETURN") {
         if (req.status !== "PENDING_PURCHASE_REVIEW") {
-          return NextResponse.json({ error: "Action not permitted in current state." }, { status: 409 });
+          return NextResponse.json({ error: "This action is not available at the current stage." }, { status: 409 });
         }
         if (!body.remarks) {
-          return NextResponse.json({ error: "remarks required" }, { status: 400 });
+          return NextResponse.json({ error: "Enter remarks." }, { status: 400 });
         }
         const nextStatus = body.action === "REJECT" ? "REJECTED_BY_PURCHASE" : "RETURNED_TO_HOD";
         const historyEntry = {
@@ -204,7 +204,7 @@ export async function PATCH(
           db, session.collegeId, req.hodUid,
           nextStatus === "REJECTED_BY_PURCHASE" ? "INDENT_REJECTED" : "INDENT_RETURNED",
           nextStatus === "REJECTED_BY_PURCHASE" ? "Indent Rejected" : "Indent Returned",
-          `Purchase Dept ${nextStatus === "REJECTED_BY_PURCHASE" ? "rejected" : "returned"} your indent "${req.title}". Remarks: ${body.remarks}`,
+          `Purchase Department ${nextStatus === "REJECTED_BY_PURCHASE" ? "rejected" : "returned"} your indent "${req.title}". Remarks: ${body.remarks}`,
           "/hod/indents"
         );
 
@@ -213,7 +213,7 @@ export async function PATCH(
 
       if (body.action === "SEND_TO_FINANCE") {
         if (req.status !== "PENDING_PURCHASE_REVIEW" && req.status !== "RETURNED_TO_PURCHASE") {
-          return NextResponse.json({ error: "Action not permitted in current state." }, { status: 409 });
+          return NextResponse.json({ error: "This action is not available at the current stage." }, { status: 409 });
         }
         const quotations = Array.isArray(body.quotations) ? body.quotations : [];
         if (quotations.length < 3) {
@@ -259,7 +259,7 @@ export async function PATCH(
 
       if (body.action === "UPLOAD_RECEIPT") {
         if (req.status !== "APPROVED") {
-          return NextResponse.json({ error: "Action not permitted in current state." }, { status: 409 });
+          return NextResponse.json({ error: "This action is not available at the current stage." }, { status: 409 });
         }
         if (!body.receiptUrl) {
           return NextResponse.json({ error: "receiptUrl required" }, { status: 400 });
@@ -328,16 +328,16 @@ export async function PATCH(
 
     if (session.role === "FINANCE") {
       if (req.status !== "PENDING_FINANCE_REVIEW") {
-        return NextResponse.json({ error: "Action not permitted in current state." }, { status: 409 });
+        return NextResponse.json({ error: "This action is not available at the current stage." }, { status: 409 });
       }
       if ((body.action === "REJECT" || body.action === "RETURN") && !body.remarks) {
-        return NextResponse.json({ error: "remarks required" }, { status: 400 });
+        return NextResponse.json({ error: "Enter remarks." }, { status: 400 });
       }
 
-      // GOODS indents were sourced by Purchase Dept and return there / carry a
+      // GOODS indents were sourced by Purchase Department and return there / carry a
       // vendor quotation. NON_GOODS indents came straight from the HOD (no
-      // Purchase Dept involvement), so approval completes the indent outright
-      // and returns go straight back to the HOD, not Purchase Dept.
+      // Purchase Department involvement), so approval completes the indent outright
+      // and returns go straight back to the HOD, not Purchase Department.
       const isGoods = req.requestType !== "NON_GOODS";
       const isApproving = body.action === "APPROVE";
 
@@ -349,7 +349,7 @@ export async function PATCH(
         : null;
 
       if (!nextStatus) {
-        return NextResponse.json({ error: "action must be APPROVE, REJECT, or RETURN" }, { status: 400 });
+        return NextResponse.json({ error: "Choose Approve, Reject or Return." }, { status: 400 });
       }
 
       if (isApproving && isGoods) {
@@ -469,17 +469,17 @@ export async function PATCH(
       return NextResponse.json({ ok: true, financePaymentId });
     }
 
-    return NextResponse.json({ error: "Action not permitted in current state." }, { status: 409 });
+    return NextResponse.json({ error: "This action is not available at the current stage." }, { status: 409 });
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     if (err instanceof Error && err.message === "STALE_STATUS") {
-      return NextResponse.json({ error: "Action not permitted in current state." }, { status: 409 });
+      return NextResponse.json({ error: "This action is not available at the current stage." }, { status: 409 });
     }
     console.error("[college/indent-requests/[id] PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

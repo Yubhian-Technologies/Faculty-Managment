@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     let form: FormData;
     try { form = await request.formData(); } catch { return NextResponse.json({ error: "Send the file as multipart form data" }, { status: 400 }); }
     const file = form.get("file");
-    if (!file || typeof file === "string") return NextResponse.json({ error: "No file provided" }, { status: 400 });
+    if (!file || typeof file === "string") return NextResponse.json({ error: "Select a file to upload." }, { status: 400 });
 
     const buffer = Buffer.from(await file.arrayBuffer());
     if (buffer.byteLength === 0) return NextResponse.json({ error: "The file is empty" }, { status: 400 });
@@ -46,9 +46,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ url, name: (file as File).name || `document.${ext}`, size: buffer.byteLength });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[upload/mentoring-doc POST]", err);
-    return NextResponse.json({ error: "Upload failed" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to upload the file. Try again." }, { status: 500 });
   }
 }

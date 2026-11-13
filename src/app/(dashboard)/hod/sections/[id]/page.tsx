@@ -159,7 +159,7 @@ export default function SectionRosterPage() {
             : Promise.resolve(),
         ]);
       } catch {
-        toast({ variant: "destructive", title: "Failed to load section" });
+        toast({ variant: "destructive", title: "Unable to load section" });
       } finally {
         setIsLoading(false);
       }

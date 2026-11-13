@@ -3,7 +3,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 export default function CircularDashboardPage() {
   return (
     <div className="space-y-6">
-      <PageHeader title="Circular" description="View, download and print" />
+      <PageHeader title="Circular" description="View, download and print documents." />
       <CircularViewer />
     </div>
   );

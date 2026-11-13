@@ -38,7 +38,7 @@ export async function GET(
       .get();
 
     if (!snap.exists) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
 
     const data = snap.data() as Record<string, unknown>;
@@ -54,10 +54,10 @@ export async function GET(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[hiring-batches/[id] GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -131,7 +131,7 @@ export async function PATCH(
       .get();
 
     if (!batchSnap.exists) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
 
     const batchData = batchSnap.data() as {
@@ -409,7 +409,7 @@ export async function PATCH(
       notifyDeptHeads({
         type: "INTERVIEW_PLAN_APPROVED",
         title: "Interview Plan Approved - Please Set Up Logistics",
-        message: `The interview plan for ${batchData.position} has been approved. Please add the venue, required documents, demo classroom, and coordinator.`,
+        message: `The interview plan for ${batchData.position} has been approved. Add the venue, required documents, demo classroom, and coordinator.`,
       });
     } else if (body.status === "REJECTED") {
       notifyDeptHeads({
@@ -421,7 +421,7 @@ export async function PATCH(
       notifyDeptHeads({
         type: "INTERVIEW_PLAN_MODIFIED",
         title: "Interview Plan Modified",
-        message: `The interview plan for ${batchData.position} was modified. Please review and resubmit.${body.principalNotes ? ` Notes: ${body.principalNotes}` : ""}`,
+        message: `The interview plan for ${batchData.position} was modified. Review and resubmit.${body.principalNotes ? ` Notes: ${body.principalNotes}` : ""}`,
       });
     }
 
@@ -450,7 +450,7 @@ export async function PATCH(
           toUid: panelUid,
           type: "GENERAL",
           title: "Panel Interview Scoring Open",
-          message: `HOD has reviewed the demo scores for ${batchData.position}. Please submit your interview assessment now.`,
+          message: `HOD has reviewed the demo scores for ${batchData.position}. Submit your interview assessment now.`,
           link: `/panel/interviews/${id}`,
           read: false,
           createdAt: now,
@@ -469,7 +469,7 @@ export async function PATCH(
           toUid: d.id,
           type: "GENERAL",
           title: "Evaluation Ready for Review",
-          message: `Interview evaluations for ${batchData.position} (${batchData.department}) are complete. Please review and make final hiring decisions.`,
+          message: `Interview evaluations for ${batchData.position} (${batchData.department}) are complete. Review and make final hiring decisions.`,
           link: `/principal/decisions/${id}`,
           read: false,
           createdAt: now,
@@ -491,7 +491,7 @@ export async function PATCH(
           toUid: panelUid,
           type: "GENERAL",
           title: "Panel Feedback Unlocked",
-          message: `Demo for ${batchData.position} is complete. Please submit your interview feedback now.`,
+          message: `Demo for ${batchData.position} is complete. Submit your interview feedback now.`,
           link: `/panel/interviews/${id}`,
           read: false,
           createdAt: now,
@@ -516,9 +516,9 @@ export async function PATCH(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[hiring-batches/[id] PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

@@ -8,11 +8,11 @@ import { getAdminDb } from "@/lib/firebase/admin";
 export async function GET(request: Request) {
   try {
     const session = await verifySession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!session) return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
 
     const allowed = ["SUPER_ADMIN", "ADMINISTRATION", "HR_ADMIN", "ADMIN_OFFICE", "LOCATION_DEPT_HEAD"];
     if (!allowed.includes(session.role)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
 
     const { searchParams } = new URL(request.url);
@@ -20,7 +20,7 @@ export async function GET(request: Request) {
     const locationId = session.role === "SUPER_ADMIN"
       ? (searchParams.get("locationId") ?? session.locationId)
       : session.locationId;
-    if (!locationId) return NextResponse.json({ error: "locationId required" }, { status: 400 });
+    if (!locationId) return NextResponse.json({ error: "Select a location." }, { status: 400 });
     const collegeIdFilter = searchParams.get("collegeId");
 
     const db = getAdminDb();
@@ -62,7 +62,7 @@ export async function GET(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     console.error("[location/vacancy-requests GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -73,7 +73,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Only Dept Head or Admin Office can submit vacancy requests" }, { status: 403 });
     }
     if (!session.locationId) {
-      return NextResponse.json({ error: "No location context" }, { status: 400 });
+      return NextResponse.json({ error: "Your account is not linked to a location. Contact the administrator." }, { status: 400 });
     }
 
     const body = (await readJsonBody(request)) as {
@@ -114,7 +114,7 @@ export async function POST(request: Request) {
       .collection("locationUsers")
       .doc(session.uid)
       .get();
-    const deptHeadName = (userSnap.data() as { name?: string } | undefined)?.name ?? "Dept Head";
+    const deptHeadName = (userSnap.data() as { name?: string } | undefined)?.name ?? "Department Head";
     const deptHeadDept = (userSnap.data() as { department?: string } | undefined)?.department ?? department;
 
     const now = new Date();
@@ -173,6 +173,6 @@ export async function POST(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     console.error("[location/vacancy-requests POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

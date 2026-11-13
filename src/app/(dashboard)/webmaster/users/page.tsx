@@ -30,7 +30,7 @@ export default function WebmasterUsersPage() {
       const users = await fetch("/api/college/users?includeAll=true").then((r) => r.json() as Promise<{ users: UserRow[] }>).then((d) => d.users ?? []);
       setUsers(users);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load accounts" });
+      toast({ variant: "destructive", title: "Unable to load accounts" });
     } finally {
       setIsLoading(false);
     }
@@ -61,7 +61,7 @@ export default function WebmasterUsersPage() {
       toast({ variant: "success", title: "Password reset", description: `Share the new password with ${resetTarget.name} securely.` });
       setResetTarget(null);
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to reset password", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to reset password", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsResetting(false);
     }
@@ -94,7 +94,7 @@ export default function WebmasterUsersPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="All Accounts" description="Every login in this college - reset a password if someone is locked out" />
+      <PageHeader title="All Accounts" description="Every login in this college. Reset a password if someone is locked out." />
 
       <DataTable
         data={users}

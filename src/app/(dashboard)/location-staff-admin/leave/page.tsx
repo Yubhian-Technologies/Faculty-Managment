@@ -31,7 +31,7 @@ export default function LeavePage() {
         setLeaveRequests(d.leaveRequests ?? []);
       }
     } catch {
-      toast({ variant: "destructive", title: "Failed to load leave requests" });
+      toast({ variant: "destructive", title: "Unable to load leave requests" });
     } finally {
       setIsLoading(false);
     }
@@ -51,7 +51,7 @@ export default function LeavePage() {
         loadLeave();
       }
     } catch {
-      toast({ variant: "destructive", title: "Failed to update" });
+      toast({ variant: "destructive", title: "Unable to update" });
     }
   }
 
@@ -114,7 +114,7 @@ export default function LeavePage() {
       ) : leaveRequests.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-border/80 p-12 text-center bg-card/40">
           <CalendarClock className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-50" />
-          <p className="text-sm text-muted-foreground">No leave requests found</p>
+          <p className="text-sm text-muted-foreground">No leave requests found.</p>
         </div>
       ) : (
         <DataTable<LocationLeaveRequest>

@@ -19,7 +19,7 @@ export async function PUT(request: Request, { params }: Params) {
     if (!Array.isArray(body.order)) return NextResponse.json({ error: "order must be a list of branches" }, { status: 400 });
     const order = [...new Set(body.order.map(String).map((x) => x.trim()).filter(Boolean))].slice(0, 100);
     const db = getAdminDb();
-    if (!(await loadPlan(db, session.collegeId, planId))) return NextResponse.json({ error: "Timetable not found" }, { status: 404 });
+    if (!(await loadPlan(db, session.collegeId, planId))) return NextResponse.json({ error: "Timetable not found. It may have been deleted." }, { status: 404 });
     await midTimetableRefs(db, session.collegeId).plans.doc(planId).update({ branchOrder: order, updatedAt: new Date() });
     return NextResponse.json({ branchOrder: order });
   } catch (err) {

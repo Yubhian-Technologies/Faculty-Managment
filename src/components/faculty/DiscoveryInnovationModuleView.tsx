@@ -514,13 +514,13 @@ function RecordFormFields({
           });
       if (!res.ok) {
         const json = await res.json().catch(() => ({})) as { error?: string };
-        toast({ variant: "destructive", title: "Failed to save IPR record", description: json.error });
+        toast({ variant: "destructive", title: "Unable to save IPR record", description: json.error });
         return;
       }
       toast({ variant: "success", title: editingId ? "Resubmitted for verification" : "Submitted for verification" });
       onSaved();
     } catch {
-      toast({ variant: "destructive", title: "Network error. Please try again." });
+      toast({ variant: "destructive", title: "Network error. Try again." });
     } finally {
       setSaving(false);
     }
@@ -689,8 +689,8 @@ function RecordFormFields({
                 </Select>
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <NumField label="Commercialization Value (Rs.)" value={form.commercializationValue} onChange={(v) => set("commercializationValue", v)} />
-                <NumField label="Revenue Generated (Rs.)" value={form.revenueGenerated} onChange={(v) => set("revenueGenerated", v)} />
+                <NumField label="Commercialization Value (₹)" value={form.commercializationValue} onChange={(v) => set("commercializationValue", v)} />
+                <NumField label="Revenue Generated (₹)" value={form.revenueGenerated} onChange={(v) => set("revenueGenerated", v)} />
               </div>
               <DocumentUploadField
                 label="Commercialized Proof"

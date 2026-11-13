@@ -40,7 +40,7 @@ export async function GET(request: Request) {
     const { verifySession } = await import("@/lib/auth/verifySession");
     const session = await verifySession();
     if (!session || !["SUPER_ADMIN", "ADMINISTRATION", "HR_ADMIN", "ADMIN_OFFICE", "LOCATION_DEPT_HEAD", "FINANCE", "PURCHASE_DEPT"].includes(session.role)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
 
     const { searchParams } = new URL(request.url);
@@ -72,10 +72,10 @@ export async function GET(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[admin/colleges GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -84,7 +84,7 @@ export async function POST(request: Request) {
     const { verifySession } = await import("@/lib/auth/verifySession");
     const session = await verifySession();
     if (!session || !["SUPER_ADMIN", "ADMINISTRATION"].includes(session.role)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
 
     const body = (await readJsonBody(request)) as Partial<Omit<College, "type" | "collegeCategory">> & { locationId?: string; type?: CollegeType | ""; collegeCategory?: CollegeCategory };
@@ -137,10 +137,10 @@ export async function POST(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[admin/colleges POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -151,7 +151,7 @@ export async function DELETE(request: Request) {
     const { searchParams } = new URL(request.url);
     const collegeId = searchParams.get("collegeId");
     if (!collegeId) {
-      return NextResponse.json({ error: "collegeId required" }, { status: 400 });
+      return NextResponse.json({ error: "Select a college." }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -171,10 +171,10 @@ export async function DELETE(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[admin/colleges DELETE]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -183,7 +183,7 @@ export async function PATCH(request: Request) {
     const { verifySession } = await import("@/lib/auth/verifySession");
     const session = await verifySession();
     if (!session || !["SUPER_ADMIN", "ADMINISTRATION"].includes(session.role)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
 
     const body = (await readJsonBody(request)) as {
@@ -215,7 +215,7 @@ export async function PATCH(request: Request) {
     }
 
     if (!collegeId) {
-      return NextResponse.json({ error: "collegeId required" }, { status: 400 });
+      return NextResponse.json({ error: "Select a college." }, { status: 400 });
     }
 
     if (name !== undefined && String(name).trim().length < 2) {
@@ -231,11 +231,11 @@ export async function PATCH(request: Request) {
     // (de)activate them - that stays a Super Admin-only power.
     if (session.role === "ADMINISTRATION") {
       if (isActive !== undefined) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
       }
       const collegeSnap = await db.collection("colleges").doc(collegeId).get();
       if (!collegeSnap.exists || collegeSnap.data()?.locationId !== session.locationId) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
       }
     }
 
@@ -256,7 +256,7 @@ export async function PATCH(request: Request) {
     let categoryChange: { from: CollegeCategory; to: CollegeCategory } | null = null;
     if (collegeCategory !== undefined) {
       const current = await db.collection("colleges").doc(collegeId).get();
-      if (!current.exists) return NextResponse.json({ error: "College not found" }, { status: 404 });
+      if (!current.exists) return NextResponse.json({ error: "College not found. It may have been deleted." }, { status: 404 });
       const from = collegeCategoryOf(current.data());
       if (from !== collegeCategory) {
         updates.collegeCategory = collegeCategory;
@@ -280,9 +280,9 @@ export async function PATCH(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[admin/colleges PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

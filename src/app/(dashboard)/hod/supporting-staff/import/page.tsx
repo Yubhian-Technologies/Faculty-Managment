@@ -101,7 +101,7 @@ export default function HodSupportingStaffImportPage() {
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      setTemplateError("Couldn't build the Excel template. Please try again.");
+      setTemplateError("Unable to build the Excel template. Try again.");
     } finally {
       setIsBuildingTemplate(false);
     }
@@ -118,7 +118,7 @@ export default function HodSupportingStaffImportPage() {
     const name = file.name.toLowerCase();
     const isExcel = name.endsWith(".xlsx");
     if (name.endsWith(".xls")) {
-      setParseError("Legacy .xls files aren't supported - please re-save as .xlsx or .csv and try again.");
+      setParseError("Legacy .xls files aren't supported - re-save as .xlsx or .csv and try again.");
       e.target.value = "";
       return;
     }
@@ -136,7 +136,7 @@ export default function HodSupportingStaffImportPage() {
         return;
       }
       if (!Object.values(keyMap).includes("employeeId") && !Object.values(keyMap).includes("name")) {
-        setParseError("Couldn't find an \"Employee ID\" or \"Name\" column. Check your file's header row against the template.");
+        setParseError("Unable to find an \"Employee ID\" or \"Name\" column. Check your file's header row against the template.");
         return;
       }
       const unmatched = getUnmatchedHeaders(headers, keyMap);
@@ -158,7 +158,7 @@ export default function HodSupportingStaffImportPage() {
 
       setRows(dataRows);
     } catch {
-      setParseError(isExcel ? "Failed to parse the Excel file. Ensure it is a valid, uncorrupted .xlsx file." : "Failed to parse the file. Ensure it is a valid CSV.");
+      setParseError(isExcel ? "Unable to parse the Excel file. Ensure it is a valid, uncorrupted .xlsx file." : "Unable to parse the file. Ensure it is a valid CSV.");
     } finally {
       e.target.value = "";
     }
@@ -187,7 +187,7 @@ export default function HodSupportingStaffImportPage() {
       // needs them, and this is the only place they still exist.
       setFailedRows(json.failed.map((f) => ({ ...f, data: rows[f.row - 2] ?? {}, status: "failed" as const })));
       if (json.created > 0 && stoppedAt === null) {
-        toast({ variant: "success", title: `${json.created} staff member${json.created !== 1 ? "s" : ""} imported successfully` });
+        toast({ variant: "success", title: `${json.created} staff member${json.created !== 1 ? "s" : ""} imported` });
         setRows([]);
       }
     } catch {
@@ -228,7 +228,7 @@ export default function HodSupportingStaffImportPage() {
         body: JSON.stringify({ records: [fixTarget.form] }),
       });
       const json = await res.json() as ImportResult & { error?: string };
-      if (!res.ok) { setFixError(json.error ?? "Failed to save"); return; }
+      if (!res.ok) { setFixError(json.error ?? "Unable to save"); return; }
       if (json.created >= 1) {
         toast({ variant: "success", title: `${fixTarget.form.name || "Staff member"} imported` });
         setFailedRows((prev) => prev.map((r) => (r.row === fixTarget.row ? { ...r, status: "fixed" as const } : r)));
@@ -237,9 +237,9 @@ export default function HodSupportingStaffImportPage() {
       }
       // Still failed (or only produced a warning, no created row) - surface
       // the specific reason and let them keep correcting in place.
-      setFixError(json.failed?.[0]?.error ?? "Failed to save - please check the fields and try again");
+      setFixError(json.failed?.[0]?.error ?? "Unable to save - check the fields and try again");
     } catch {
-      setFixError("Network error - please try again");
+      setFixError("Network error - try again");
     } finally {
       setFixSaving(false);
     }
@@ -254,7 +254,7 @@ export default function HodSupportingStaffImportPage() {
     <div className="max-w-5xl space-y-6">
       <PageHeader
         title="Import Supporting Staff"
-        description="Bulk upload Technical staff records from a CSV file"
+        description="Upload technical staff records in bulk from a CSV file."
         actions={
           <Button variant="outline" asChild>
             <Link href="/hod/supporting-staff"><ArrowLeft className="h-4 w-4 mr-1" />Back to Supporting Staff</Link>
@@ -292,7 +292,7 @@ export default function HodSupportingStaffImportPage() {
             <FileSpreadsheet className="h-10 w-10 text-muted-foreground" />
             <div className="text-center">
               <p className="font-medium text-sm">Click to select a CSV or Excel file</p>
-              <p className="text-xs text-muted-foreground mt-1">.csv or .xlsx supported - headers matched loosely (e.g. &quot;DOJ&quot; for Joining Date)</p>
+              <p className="text-xs text-muted-foreground mt-1">CSV and XLSX files are supported. Column headings are matched flexibly (for example, &quot;DOJ&quot; for Date of Joining).</p>
             </div>
           </button>
           {parseError && (
@@ -303,7 +303,7 @@ export default function HodSupportingStaffImportPage() {
           )}
           {rows.length > 0 && (
             <p className="text-sm text-green-700 flex items-center gap-1">
-              <CheckCircle2 className="h-4 w-4" />{rows.length} row{rows.length !== 1 ? "s" : ""} parsed successfully
+              <CheckCircle2 className="h-4 w-4" />{rows.length} row{rows.length !== 1 ? "s" : ""} parsed
             </p>
           )}
         </CardContent>
@@ -446,7 +446,7 @@ export default function HodSupportingStaffImportPage() {
               )}
               {result.warnings.length > 0 && (
                 <div className="space-y-1">
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Imported, but some fields were ignored</p>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Imported, but some fields were ignored.</p>
                   <div className="rounded-lg border divide-y max-h-48 overflow-y-auto">
                     {result.warnings.map((w, i) => (
                       <div key={i} className="flex items-center justify-between px-3 py-2 text-sm">
@@ -471,9 +471,7 @@ export default function HodSupportingStaffImportPage() {
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Fix Row {fixTarget?.row}</DialogTitle>
-            <DialogDescription>
-              Correct the field(s) that failed and save - this imports just this one staff member, the same as the rest of the file.
-            </DialogDescription>
+            <DialogDescription>Correct the fields that failed and save. Only this staff member is imported, using the same rules as the rest of the file.</DialogDescription>
           </DialogHeader>
 
           {fixTarget && (

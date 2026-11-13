@@ -58,7 +58,7 @@ export default function LocationStaffAdminShiftsPage() {
         setStaffList(staffData);
       })
       .catch(() => {
-        if (!isCancelled) toast({ variant: "destructive", title: "Failed to load shifts" });
+        if (!isCancelled) toast({ variant: "destructive", title: "Unable to load shifts" });
       })
       .finally(() => {
         if (!isCancelled) setIsLoading(false);
@@ -77,12 +77,12 @@ export default function LocationStaffAdminShiftsPage() {
       const res = await fetch(`/api/location/shifts/${shiftId}`, {
         method: "DELETE",
       });
-      if (!res.ok) throw new Error("Failed to delete shift");
+      if (!res.ok) throw new Error("Unable to delete shift");
 
       toast({ title: "Deleted", description: `Removed shift ${shiftName}` });
       reload();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to delete shift";
+      const msg = err instanceof Error ? err.message : "Unable to delete shift";
       toast({ variant: "destructive", title: "Error", description: msg });
     }
   };
@@ -121,9 +121,7 @@ export default function LocationStaffAdminShiftsPage() {
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
               Campus Shifts Configuration
             </h1>
-            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-              Create and manage shift duty hours, grace windows, and multi-department assignments across campus.
-            </p>
+            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">Create and manage duty hours, grace periods and department assignments for shifts across the campus.</p>
           </div>
         </div>
 
@@ -177,9 +175,7 @@ export default function LocationStaffAdminShiftsPage() {
             <Clock className="h-7 w-7 opacity-70" />
           </div>
           <h3 className="font-bold text-foreground text-base">No shifts found</h3>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-1 max-w-sm mx-auto">
-            Create shifts for campus departments to begin organizing staff schedules.
-          </p>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1 max-w-sm mx-auto">Create shifts for campus departments to start organising staff schedules.</p>
           <Button asChild size="sm" className="mt-4 text-xs font-semibold rounded-full px-5">
             <Link href="/location-staff-admin/shifts/new">
               <Plus className="h-3.5 w-3.5 mr-1.5" />

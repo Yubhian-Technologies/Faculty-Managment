@@ -17,7 +17,7 @@ export default function PrincipalBudgetReportPage() {
     fetch("/api/college/budget-requests")
       .then((r) => r.json() as Promise<{ requests: BudgetRequest[] }>)
       .then((d) => setRequests(d.requests ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load budget requests" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load budget requests" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -27,7 +27,7 @@ export default function PrincipalBudgetReportPage() {
     <div className="space-y-6">
       <PageHeader
         title="Budget Report"
-        description="Department-wise breakdown of Non Recurring and Recurring budget items"
+        description="Department-wise breakdown of recurring and non-recurring budget items."
         actions={
           <Button variant="outline" size="sm" onClick={load} loading={isLoading}>
             <RefreshCw className="h-4 w-4 mr-1" />

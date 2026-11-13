@@ -11,7 +11,7 @@ import { loadAcademicYearConfig, windowForAcademicYear } from "@/lib/studentAtte
 import type { StudentRecord, Section } from "@/types";
 
 const UNLINKED_MESSAGE =
-  "Your login is not linked to a student record yet. Please contact your College Office.";
+  "Your login is not linked to a student record yet. Contact your College Office.";
 
 // Self-service "My Dashboard" for a STUDENT login - profile + own section +
 // own cumulative attendance, all in one payload (all three panels are read
@@ -47,9 +47,9 @@ export async function GET() {
     return NextResponse.json({ student, section, attendance });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/student/me GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

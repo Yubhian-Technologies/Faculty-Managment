@@ -259,10 +259,10 @@ export default function NewVacancyPage() {
       toast({
         variant: "destructive",
         title: `${successCount} submitted, ${failCount} failed`,
-        description: "Please retry the failed position(s).",
+        description: "Retry the failed position(s).",
       });
     } else {
-      toast({ variant: "destructive", title: "Failed to submit", description: "Please try again." });
+      toast({ variant: "destructive", title: "Unable to submit", description: "Try again." });
     }
   }
 
@@ -270,7 +270,7 @@ export default function NewVacancyPage() {
     <div className="max-w-4xl space-y-5">
       <PageHeader
         title="New Hiring Request"
-        description="Submit one or more faculty vacancy requests to the Principal"
+        description="Submit one or more faculty vacancy requests to the Principal."
       />
 
       {reqLoading ? (

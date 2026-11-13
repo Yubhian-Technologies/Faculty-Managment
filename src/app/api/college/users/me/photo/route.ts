@@ -33,16 +33,16 @@ export async function PATCH(request: Request) {
     const photoUrl = body.photoUrl;
 
     if (photoUrl === undefined) {
-      return NextResponse.json({ error: "photoUrl is required" }, { status: 400 });
+      return NextResponse.json({ error: "Upload a photo." }, { status: 400 });
     }
     // Empty string clears the photo - everything else must be a real upload of ours.
     if (photoUrl !== "") {
       if (!photoUrl.startsWith("https://firebasestorage.googleapis.com/")) {
-        return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
+        return NextResponse.json({ error: "The photo link is not valid. Upload the photo again." }, { status: 400 });
       }
       // Must point at a photo this session uploaded for itself.
       if (!photoUrl.includes(encodeURIComponent(`profile-photos/${session.uid}_`))) {
-        return NextResponse.json({ error: "Photo does not belong to this user" }, { status: 403 });
+        return NextResponse.json({ error: "This photo belongs to another user." }, { status: 403 });
       }
     }
 
@@ -52,7 +52,7 @@ export async function PATCH(request: Request) {
     const userRef = db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid);
     const userSnap = await userRef.get();
     if (!userSnap.exists) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return NextResponse.json({ error: "User not found. The account may have been deleted." }, { status: 404 });
     }
 
     // A faculty/HOD login's photo belongs to their faculty record (the source of truth every faculty
@@ -70,9 +70,9 @@ export async function PATCH(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/users/me/photo PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

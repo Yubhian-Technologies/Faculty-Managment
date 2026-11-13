@@ -46,7 +46,7 @@ export function AdjustCoverageDialog({
     fetch(`/api/leave/period-coverage?requestId=${request.id}`)
       .then((r) => r.json() as Promise<{ periods?: PeriodCoverageEntry[] }>)
       .then((d) => setPeriods(d.periods ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load affected periods" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load affected periods" }))
       .finally(() => setIsLoading(false));
   }, [request]);
 
@@ -71,7 +71,7 @@ export function AdjustCoverageDialog({
         body: JSON.stringify({ action: "PROPOSE_COVERAGE", periodSubstitutions: submitted }),
       });
       const data = (await res.json()) as { error?: string; changed?: boolean };
-      if (!res.ok) throw new Error(data.error ?? "Failed to update coverage");
+      if (!res.ok) throw new Error(data.error ?? "Unable to update coverage");
       toast({
         variant: "success",
         title: data.changed ? "Sent for acceptance" : "Nothing changed",
@@ -80,7 +80,7 @@ export function AdjustCoverageDialog({
       onUpdated(request.id);
       onOpenChange(false);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to update coverage" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to update coverage" });
     } finally {
       setSaving(false);
     }
@@ -104,7 +104,7 @@ export function AdjustCoverageDialog({
         {isLoading ? (
           <div className="h-24 rounded-lg bg-muted animate-pulse" />
         ) : periods.length === 0 ? (
-          <p className="text-sm text-muted-foreground italic">No teaching periods fall within this leave range.</p>
+          <p className="text-sm text-muted-foreground italic">No teaching periods fall within this leave period.</p>
         ) : (
           <div className="max-h-80 overflow-y-auto rounded-lg border p-2.5">
             <PeriodCoverageGrid

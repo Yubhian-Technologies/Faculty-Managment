@@ -134,7 +134,7 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
           setSaveState(res.status >= 500 ? "failed" : "idle");
           if (data.errors) setFieldErrors(data.errors);
           if (action === "complete") setAttention((s) => new Set(s).add(sent.qid));
-          toast({ variant: "destructive", title: data.error ?? "Could not save" });
+          toast({ variant: "destructive", title: data.error ?? "Unable to save" });
           return false;
         }
         // Saved.
@@ -250,7 +250,7 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
     setQFormat(f);
     setParts(blank.map((b, i) => (src.parts[i] ? { ...src.parts[i], cos: [...src.parts[i].cos], marks: f === "SINGLE" ? bank.marks : src.parts[i].marks ?? b.marks } : b)));
     setDirty(true);
-    toast({ title: `Copied Unit ${src.unit} Q${src.slot}`, description: "Edit it - an identical question can't be saved as complete." });
+    toast({ title: `Copied Unit ${src.unit} Q${src.slot}`, description: "Edit it; an identical question cannot be saved as complete." });
   }
 
   const liveErrors = useMemo(() => {
@@ -454,7 +454,7 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
                     <PopoverContent align="end" className="w-96 max-w-[calc(100vw-2rem)] p-0">
                       <div className="border-b px-3 py-2.5">
                         <p className="text-sm font-semibold">Start from a copy</p>
-                        <p className="text-xs text-muted-foreground">The copy replaces what is in this question; change it before saving - an identical question can&rsquo;t be completed.</p>
+                        <p className="text-xs text-muted-foreground">The copy replaces the content of this question. Change it before saving; an identical question cannot be completed.</p>
                       </div>
                       <ul className="max-h-80 overflow-y-auto p-1.5" aria-label="Questions to copy from">
                         {others.map((q) => (
@@ -619,7 +619,7 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
 
           {sw.cos && <div className="rounded-2xl border bg-card p-4 shadow-sm">
             <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><Target className="h-3.5 w-3.5" />Outcomes</p>
-            {allCos.length === 0 ? <p className="text-xs text-muted-foreground">Pick a Course Outcome to see its POs and PSOs.</p> : (
+            {allCos.length === 0 ? <p className="text-xs text-muted-foreground">Select a Course Outcome to see its POs and PSOs.</p> : (
               <>
                 <ul className="mb-3 space-y-2">{allCos.map((c) => <li key={c} className="flex gap-2 text-xs"><span className="h-fit shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 font-bold text-primary">{c}</span><span>{outcomes.cos.find((x) => x.id === c)?.statement}</span></li>)}</ul>
                 {sw.poMapping && <div className="flex flex-wrap gap-1">
@@ -651,7 +651,7 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
           <div className={cn("rounded-2xl border p-4 shadow-sm", Object.keys(liveErrors).length === 0 ? "border-emerald-300/70 bg-emerald-50/60" : "bg-card")}>
             <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><ListChecks className="h-3.5 w-3.5" />To save as complete</p>
             {Object.keys(liveErrors).length === 0
-              ? <p className="flex items-center gap-2 text-sm font-medium text-emerald-700"><CheckCircle2 className="h-4 w-4" />Ready - the server also checks for duplicates</p>
+              ? <p className="flex items-center gap-2 text-sm font-medium text-emerald-700"><CheckCircle2 className="h-4 w-4" />Ready. Duplicates are also checked when saving.</p>
               : <ul className="space-y-2 text-xs">{Object.entries(liveErrors).map(([k, v]) => <li key={k} className="flex gap-2"><span className="mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full bg-destructive/10 text-destructive"><X className="h-2.5 w-2.5" /></span>{v}</li>)}</ul>}
           </div>
         </aside>

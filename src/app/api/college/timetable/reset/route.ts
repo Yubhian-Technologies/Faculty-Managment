@@ -26,14 +26,14 @@ export async function DELETE(request: Request) {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_STAFF");
     const { searchParams } = new URL(request.url);
     const sectionId = searchParams.get("sectionId");
-    if (!sectionId) return NextResponse.json({ error: "sectionId is required" }, { status: 400 });
+    if (!sectionId) return NextResponse.json({ error: "Select a section." }, { status: 400 });
     const semesterParam = searchParams.get("semester");
     const requestedSemester = semesterParam != null ? Number(semesterParam) : null;
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
     const sectionSnap = await collegeRef.collection("sections").doc(sectionId).get();
-    if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found" }, { status: 404 });
+    if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found. It may have been deleted." }, { status: 404 });
     const section = sectionSnap.data() as { courseId: string; year: number; department?: string; name?: string };
     const semesterResult = await resolveRequestedSemester(db, session.collegeId, section.courseId, section.year, requestedSemester);
     if (!semesterResult.ok) return NextResponse.json({ error: semesterResult.error }, { status: 400 });
@@ -77,7 +77,7 @@ export async function DELETE(request: Request) {
       }
     } else if (session.role === "PANEL_MEMBER" || session.role === "COLLEGE_STAFF") {
       const ok = await isTimetableIncharge(db, session.collegeId, session.uid, section.courseId, section.year);
-      if (!ok) return NextResponse.json({ error: "You are not the Timetable Incharge for this course & year" }, { status: 403 });
+      if (!ok) return NextResponse.json({ error: "You are not the Timetable Incharge for this course and year." }, { status: 403 });
     }
 
     // Open and allocated assignment requests for this section go first: the
@@ -130,9 +130,9 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ ok: true, removedAssignments, removedSlots, removedRequests });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/timetable/reset DELETE]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

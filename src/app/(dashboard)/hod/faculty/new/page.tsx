@@ -255,7 +255,7 @@ export default function NewFacultyPage() {
         label: "Identity & Employment",
         shortLabel: "Identity",
         icon: User,
-        description: "Official ID, department, login credentials, and employment status",
+        description: "Official ID, department, login credentials and employment status.",
       },
       {
         key: "personal",
@@ -311,14 +311,14 @@ export default function NewFacultyPage() {
         label: PROFILE_MODULES.others.label,
         shortLabel: "Additional Info",
         icon: Sparkles,
-        description: "Anything not covered in the other sections",
+        description: "Information not covered in the other sections.",
       },
       {
         key: "review",
         label: "Review & Submit",
         shortLabel: "Review",
         icon: CheckCircle2,
-        description: "Verify all inputs before committing to the institutional register",
+        description: "Verify all details before adding them to the institutional register.",
       },
     ],
     []
@@ -505,7 +505,7 @@ export default function NewFacultyPage() {
       if (!res.ok) {
         toast({
           variant: "destructive",
-          title: isLinkMode ? "Failed to complete profile" : "Failed to add faculty",
+          title: isLinkMode ? "Unable to complete profile" : "Unable to add faculty",
           description: json.error,
         });
         return;
@@ -531,7 +531,7 @@ export default function NewFacultyPage() {
       });
       router.push(listPath);
     } catch {
-      toast({ variant: "destructive", title: "Network error", description: "Please try again." });
+      toast({ variant: "destructive", title: "Network error", description: "Try again." });
     } finally {
       setSubmitting(false);
     }
@@ -665,7 +665,7 @@ export default function NewFacultyPage() {
                         <Label htmlFor="employeeId" className="text-xs font-semibold">
                           Employee ID <span className="text-destructive">*</span>
                         </Label>
-                        <Input id="employeeId" {...register("employeeId")} placeholder="e.g. EMP-1042" />
+                        <Input id="employeeId" {...register("employeeId")} placeholder="EMP-1042" />
                         {errors.employeeId && <p className="text-xs text-destructive">{errors.employeeId.message}</p>}
                       </div>
 
@@ -937,7 +937,7 @@ export default function NewFacultyPage() {
                         </SelectContent>
                       </Select>
                       {qualIsOther && (
-                        <Input {...register("highestQualification")} placeholder="e.g. B.Ed, MCA" className="mt-1.5" />
+                        <Input {...register("highestQualification")} placeholder="B.Ed, MCA" className="mt-1.5" />
                       )}
                       {errors.highestQualification && (
                         <p className="text-xs text-destructive">{errors.highestQualification.message}</p>
@@ -951,7 +951,7 @@ export default function NewFacultyPage() {
                       <Input
                         id="specialization"
                         {...register("specialization")}
-                        placeholder="e.g. VLSI, Machine Learning"
+                        placeholder="VLSI, Machine Learning"
                         className="bg-card"
                       />
                     </div>
@@ -966,7 +966,7 @@ export default function NewFacultyPage() {
                       <div>
                         <p className="text-xs font-bold text-foreground">Total Experience Preview</p>
                         <p className="text-[11px] text-muted-foreground">
-                          Computed live from Joining Date + Professional Experience & Employment entries
+                          Calculated from the Date of Joining and the Professional Experience and Employment entries.
                         </p>
                       </div>
                     </div>
@@ -1045,7 +1045,7 @@ export default function NewFacultyPage() {
                                   prev.map((p, idx) => (idx === i ? { ...p, label: v } : p))
                                 )
                               }
-                              placeholder="e.g. WhatsApp, Alternate"
+                              placeholder="WhatsApp, Alternate"
                             />
                             <TextInput
                               label="Number"

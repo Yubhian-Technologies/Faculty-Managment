@@ -84,7 +84,7 @@ export default function UsersPage() {
         setColleges(c);
         if (c.length > 0) setSelectedCollegeId(c[0].id);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load colleges" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load colleges" }));
 
     fetch("/api/admin/locations")
       .then((r) => r.json() as Promise<{ locations: Location[] }>)
@@ -136,7 +136,7 @@ export default function UsersPage() {
         })
         .catch((err) => {
           if ((err as Error)?.name === "AbortError") return;
-          toast({ variant: "destructive", title: "Failed to load users" });
+          toast({ variant: "destructive", title: "Unable to load users" });
         })
         .finally(() => setIsLoading(false));
     }
@@ -166,7 +166,7 @@ export default function UsersPage() {
       setHasDeptLoaded(true);
     } catch (err) {
       if ((err as Error)?.name === "AbortError") return;
-      toast({ variant: "destructive", title: "Failed to load users" });
+      toast({ variant: "destructive", title: "Unable to load users" });
     } finally {
       setIsLoading(false);
     }
@@ -228,13 +228,13 @@ export default function UsersPage() {
       // Surface the server's own refusal reason (e.g. "locationId required")
       // rather than a bare failure - same convention as the Locations page.
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error((data as { error?: string }).error || "Failed to delete user");
+      if (!res.ok) throw new Error((data as { error?: string }).error || "Unable to delete user");
       toast({ variant: "success", title: "User deleted" });
       setUsers((prev) => prev.filter((u) => u.uid !== user.uid));
     } catch (err) {
       toast({
         variant: "destructive",
-        title: "Failed to delete user",
+        title: "Unable to delete user",
         description: err instanceof Error ? err.message : undefined,
       });
     } finally {
@@ -259,12 +259,12 @@ export default function UsersPage() {
           ...(resetUser.locationId ? { locationId: resetUser.locationId } : {}),
         }),
       });
-      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? "Failed to reset password");
-      toast({ variant: "success", title: "Password reset successfully" });
+      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? "Unable to reset password");
+      toast({ variant: "success", title: "Password reset" });
       setResetUser(null);
       setNewPassword("");
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error && e.message ? e.message : "Failed to reset password" });
+      toast({ variant: "destructive", title: e instanceof Error && e.message ? e.message : "Unable to reset password" });
     } finally {
       setResetSaving(false);
     }
@@ -284,7 +284,7 @@ export default function UsersPage() {
       }
       await downloadResumePdf({ ...user, researchPublications, collegeName }, (user.employeeId as string) || (user.name as string));
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to generate resume" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to generate resume" });
     } finally {
       setDownloadingResumeUid(null);
     }
@@ -490,7 +490,7 @@ export default function UsersPage() {
     <div className="space-y-6">
       <PageHeader
         title="Users"
-        description="Manage staff accounts across colleges"
+        description="Manage staff accounts across colleges."
         actions={
           <Button onClick={() => router.push("/super-admin/users/new")}>
             <UserPlus className="h-4 w-4 mr-2" />
@@ -581,7 +581,7 @@ export default function UsersPage() {
             )}
           </div>
           {!hasUsersLoaded && (
-            <span className="text-xs text-muted-foreground sm:ml-auto">Select a department (or ALL) and click Load</span>
+            <span className="text-xs text-muted-foreground sm:ml-auto">Select a department (or All) and choose Load.</span>
           )}
           {hasUsersLoaded && selectedDeptName && (
             <span className="text-xs text-muted-foreground sm:ml-auto">

@@ -39,7 +39,7 @@ export async function PATCH(request: Request, { params }: Params) {
 
     const db = getAdminDb();
     const access = await bankAccess(db, session, id);
-    if (!access) return NextResponse.json({ error: "Question bank not found" }, { status: 404 });
+    if (!access) return NextResponse.json({ error: "Question bank not found. It may have been deleted." }, { status: 404 });
     if (!access.isOwner) return NextResponse.json({ error: "Only the faculty preparing this question bank can edit it" }, { status: 403 });
     if (!access.canWrite) return NextResponse.json({ error: writeRefusal(access) }, { status: 403 });
     if (access.bank.kind === "PAPERS") return NextResponse.json({ error: "This is a question paper set - save its questions as papers" }, { status: 400 });

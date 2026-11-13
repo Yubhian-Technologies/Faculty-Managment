@@ -38,7 +38,7 @@ export default function MidTimetableListPage() {
 
   const load = useCallback(() => {
     fetch("/api/college/mid-timetables").then((r) => r.json() as Promise<{ plans?: Plan[] }>).then((d) => setPlans(d.plans ?? []))
-      .catch(() => { setPlans([]); toast({ variant: "destructive", title: "Failed to load the Mid timetables" }); });
+      .catch(() => { setPlans([]); toast({ variant: "destructive", title: "Unable to load the Mid timetables" }); });
   }, []);
   useEffect(() => {
     load();
@@ -89,10 +89,10 @@ export default function MidTimetableListPage() {
       });
       const data = (await res.json()) as { error?: string; id?: string; plan?: { id: string } };
       if (res.status === 409 && data.id) { router.push(`/exam-cell/mid-timetable/${encodeURIComponent(data.id)}`); return; }
-      if (!res.ok || !data.plan) throw new Error(data.error ?? "Could not create");
+      if (!res.ok || !data.plan) throw new Error(data.error ?? "Unable to create");
       router.push(`/exam-cell/mid-timetable/${encodeURIComponent(data.plan.id)}`);
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not create" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to create" });
     } finally {
       setCreating(false);
     }
@@ -100,12 +100,12 @@ export default function MidTimetableListPage() {
 
   return (
     <div className="max-w-5xl space-y-6">
-      <PageHeader title="Mid Timetable" description="One exam timetable per branch for each Mid - built from the Mid's dates and each branch's Theory subjects." />
+      <PageHeader title="Mid Timetable" description="One examination timetable for each branch and Mid, built from the Mid's dates and each branch's theory subjects." />
 
       <Card className="rounded-2xl">
         <CardHeader>
           <CardTitle className="text-base">Make a Mid timetable</CardTitle>
-          <CardDescription>Pick the course, year, semester and Mid, and the exam dates (filled in from Mid Timings &amp; Dates when that Mid&rsquo;s dates are published). Every branch of that year then gets its own timetable; Sundays are left out.</CardDescription>
+          <CardDescription>Select the course, year, semester and Mid, and the examination dates (filled in from Mid Timings and Dates once that Mid&apos;s dates are published). Each branch of that year then gets its own timetable; Sundays are excluded.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

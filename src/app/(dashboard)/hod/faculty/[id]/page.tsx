@@ -32,7 +32,7 @@ export default function HodFacultyViewPage() {
         }
         setFaculty(d.faculty);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load faculty record" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load faculty record" }))
       .finally(() => setIsLoading(false));
   }, [facultyId, router, listHref]);
 
@@ -46,13 +46,13 @@ export default function HodFacultyViewPage() {
       });
       const json = await res.json() as { error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to reset face registration" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to reset face registration" });
         return;
       }
       toast({ title: `${facultyDisplayName(faculty) || "Faculty"} can now register their face again from My Attendance` });
       setConfirmingReRegister(false);
     } catch {
-      toast({ variant: "destructive", title: "Failed to reset face registration" });
+      toast({ variant: "destructive", title: "Unable to reset face registration" });
     } finally {
       setIsResetting(false);
     }

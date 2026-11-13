@@ -167,7 +167,7 @@ export function getAppointmentLetterHTML({
     With reference to your application and the personal interview, you are appointed as <strong>${designation}</strong> in the Department of <strong>${department}</strong>, ${collegeFull}.
   </p>
 
-  ${ctcAnnual != null && ctcAnnual > 0 ? `<p>Your consolidated CTC is <strong>Rs. ${ctcAnnual.toLocaleString("en-IN")}/- per annum</strong>, with the date of joining on or before <strong>${joiningDate}</strong>.</p>` : ""}
+  ${ctcAnnual != null && ctcAnnual > 0 ? `<p>Your consolidated CTC is <strong>₹${ctcAnnual.toLocaleString("en-IN")}/- per annum</strong>, with the date of joining on or before <strong>${joiningDate}</strong>.</p>` : ""}
 
   ${
     termsAndConditions?.trim()

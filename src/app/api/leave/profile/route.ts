@@ -24,7 +24,7 @@ export async function GET(request: Request) {
 
     const db = getAdminDb();
     if (!(await canAccessLeaveProfile(db, session.collegeId, session.role, session.uid, targetUid))) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
     }
 
     const profile = await getOrCreateProfile(db, session.collegeId, targetUid);
@@ -43,10 +43,10 @@ export async function GET(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[leave/profile GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -70,7 +70,7 @@ export async function PUT(request: Request) {
 
     const db = getAdminDb();
     if (!(await canAccessLeaveProfile(db, session.collegeId, session.role, session.uid, body.uid))) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
     }
 
     // Auto-create if somehow not already present, rather than requiring a
@@ -99,9 +99,9 @@ export async function PUT(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[leave/profile PUT]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

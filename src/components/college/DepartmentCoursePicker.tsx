@@ -77,7 +77,7 @@ export function DepartmentCoursePicker({ catalog, value, onChange }: DepartmentC
             </div>
             {selection && (
               <div className="ml-6 space-y-1">
-                <p className="text-xs text-muted-foreground">Years this department teaches</p>
+                <p className="text-xs text-muted-foreground">Years this department teaches.</p>
                 <div className="flex flex-wrap gap-x-4 gap-y-1">
                   {Array.from({ length: item.durationYears }, (_, i) => i + 1).map((year) => (
                     <div key={year} className="flex items-center gap-1.5">

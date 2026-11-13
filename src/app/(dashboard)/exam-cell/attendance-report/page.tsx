@@ -89,7 +89,7 @@ export default function ExamCellAttendanceReportPage() {
         setCourses(courseJson.courses ?? []);
         setDepartments(deptJson.departments ?? []);
       } catch {
-        toast({ variant: "destructive", title: "Failed to load courses/departments" });
+        toast({ variant: "destructive", title: "Unable to load courses/departments" });
       } finally {
         setIsLoadingData(false);
       }
@@ -141,10 +141,10 @@ export default function ExamCellAttendanceReportPage() {
         });
         const res = await fetch(`/api/college/attendance-percentage-report?${params}`);
         const data = (await res.json()) as { sections?: SectionOption[]; error?: string };
-        if (!res.ok) throw new Error(data.error ?? "Failed to load sections");
+        if (!res.ok) throw new Error(data.error ?? "Unable to load sections");
         setSectionOptions(data.sections ?? []);
       } catch (e) {
-        toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to load sections" });
+        toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to load sections" });
       } finally {
         setIsLoadingSections(false);
       }
@@ -179,7 +179,7 @@ export default function ExamCellAttendanceReportPage() {
       const data = (await res.json()) as {
         students?: ReportRow[]; totalStudents?: number; matchedCount?: number; sectionsCount?: number; error?: string;
       };
-      if (!res.ok) throw new Error(data.error ?? "Failed to generate report");
+      if (!res.ok) throw new Error(data.error ?? "Unable to generate report");
       setRows(data.students ?? []);
       setMeta({
         totalStudents: data.totalStudents ?? 0,
@@ -187,7 +187,7 @@ export default function ExamCellAttendanceReportPage() {
         sectionsCount: data.sectionsCount ?? 0,
       });
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to generate report" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to generate report" });
     } finally {
       setIsRunning(false);
     }
@@ -256,7 +256,7 @@ export default function ExamCellAttendanceReportPage() {
     <div className="max-w-4xl space-y-6">
       <PageHeader
         title="Attendance Reports"
-        description="Each student's overall attendance percentage across their currently-assigned subjects, for a Course + Department + Semester (optionally one Section) - narrow further with a percentage range, e.g. everyone below 75%."
+        description="Each student's overall attendance percentage across their current subjects for a course, department and semester, optionally one section. Narrow the list with a percentage range, for example below 75%."
       />
 
       <Card>
@@ -309,11 +309,11 @@ export default function ExamCellAttendanceReportPage() {
 
           <div className="space-y-2">
             <Label>Attendance % - From <span className="font-normal text-muted-foreground">(optional)</span></Label>
-            <Input type="number" min={0} max={100} value={minPct} onChange={(e) => setMinPct(e.target.value)} placeholder="e.g. 0" />
+            <Input type="number" min={0} max={100} value={minPct} onChange={(e) => setMinPct(e.target.value)} placeholder="0" />
           </div>
           <div className="space-y-2">
             <Label>Attendance % - To <span className="font-normal text-muted-foreground">(optional)</span></Label>
-            <Input type="number" min={0} max={100} value={maxPct} onChange={(e) => setMaxPct(e.target.value)} placeholder="e.g. 75" />
+            <Input type="number" min={0} max={100} value={maxPct} onChange={(e) => setMaxPct(e.target.value)} placeholder="75" />
           </div>
 
           <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-3">

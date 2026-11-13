@@ -41,9 +41,9 @@ export function BloomLevelsCard({ bank }: { /** Question bank college: the per-u
         body: JSON.stringify({ bloomLevels: chosen.map((r) => ({ id: r.id, name: r.name, min: bank ? Number(r.min) : 0 })) }),
       });
       const j = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(j.error ?? "Could not save");
+      if (!res.ok) throw new Error(j.error ?? "Unable to save");
       toast({ variant: "success", title: "Bloom's levels saved" });
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not save" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" }); }
     finally { setSaving(false); }
   }
 

@@ -25,7 +25,7 @@ export default function LocationsPage() {
     fetch("/api/admin/locations")
       .then((r) => r.json() as Promise<{ locations: Location[] }>)
       .then((d) => setLocations(d.locations ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load locations" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load locations" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -45,14 +45,14 @@ export default function LocationsPage() {
     try {
       const res = await fetch(`/api/admin/locations/${loc.id}`, { method: "DELETE" });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || "Failed to delete location");
+      if (!res.ok) throw new Error(data?.error || "Unable to delete location");
       toast({ variant: "success", title: "Location deleted" });
       setDeleteLocation(null);
       load();
     } catch (err) {
       toast({
         variant: "destructive",
-        title: "Failed to delete location",
+        title: "Unable to delete location",
         description: err instanceof Error ? err.message : undefined,
       });
     } finally {
@@ -64,7 +64,7 @@ export default function LocationsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Locations"
-        description="Manage institution locations (Bhimavaram, Hyderabad, Naraspur…)"
+        description="Manage institution locations (Bhimavaram, Hyderabad, Narsapur and others)."
         actions={
           <Button asChild>
             <Link href="/super-admin/locations/new">+ Add Location</Link>

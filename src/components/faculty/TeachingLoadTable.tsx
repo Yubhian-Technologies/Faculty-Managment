@@ -87,7 +87,7 @@ export function TeachingLoadTable({ groups, previous = [], facultyName, departme
   const [busy, setBusy] = useState<"" | "pdf" | "xlsx">("");
   const { collegeInfo } = useCollegeInfo();
   if (groups.current.length === 0 && groups.past.length === 0 && previous.length === 0) {
-    return <p className="text-xs text-muted-foreground">No teaching load data yet - add current teaching assignments above or previous/present records under Academic Profile.</p>;
+    return <p className="text-xs text-muted-foreground">No teaching load data yet. Add current teaching assignments above, or previous records under Academic Profile.</p>;
   }
 
   async function download(kind: "pdf" | "xlsx") {

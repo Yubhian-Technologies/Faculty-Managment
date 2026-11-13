@@ -39,7 +39,7 @@ export default function GeneralAdminVacancyPage() {
     fetch("/api/admin/general-admin-vacancies")
       .then((r) => r.json() as Promise<{ vacancyRequests: GeneralAdminVacancy[] }>)
       .then((d) => setVacancies(d.vacancyRequests ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load vacancy requests" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load vacancy requests" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -64,14 +64,14 @@ export default function GeneralAdminVacancyPage() {
       });
       if (!res.ok) {
         const err = (await res.json()) as { error?: string };
-        throw new Error(err.error ?? "Failed to submit request");
+        throw new Error(err.error ?? "Unable to submit request");
       }
       toast({ variant: "success", title: "Vacancy request submitted to Super Admin" });
       setPosition(""); setRequiredCount(""); setAvailableCount(""); setJustification("");
       setShowForm(false);
       load();
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to submit", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to submit", description: err instanceof Error ? err.message : undefined });
     } finally {
       setSaving(false);
     }
@@ -89,7 +89,7 @@ export default function GeneralAdminVacancyPage() {
     <div className="space-y-6">
       <PageHeader
         title="General Admin Vacancies"
-        description="Request non-teaching / general administration staff from Super Admin"
+        description="Request non-teaching and general administration staff from the Super Admin."
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={load} loading={isLoading}>
@@ -116,7 +116,7 @@ export default function GeneralAdminVacancyPage() {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div className="space-y-2 sm:col-span-1">
                   <Label>Position <span className="text-destructive">*</span></Label>
-                  <Input value={position} onChange={(e) => setPosition(e.target.value)} placeholder="e.g. Office Assistant" />
+                  <Input value={position} onChange={(e) => setPosition(e.target.value)} placeholder="Office Assistant" />
                 </div>
                 <div className="space-y-2">
                   <Label>Required Count <span className="text-destructive">*</span></Label>

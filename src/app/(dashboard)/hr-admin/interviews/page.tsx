@@ -34,7 +34,7 @@ export default function HRInterviewsPage() {
     fetch("/api/location/interviews")
       .then((r) => r.json() as Promise<{ interviews: LocationInterview[] }>)
       .then((d) => setInterviews(d.interviews ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load interviews" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load interviews" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -52,7 +52,7 @@ export default function HRInterviewsPage() {
       toast({ variant: "success", title: "Call letters sent", description: "Candidates and panel members have been notified." });
       load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to send call letters" });
+      toast({ variant: "destructive", title: "Unable to send call letters" });
     } finally {
       setSending(null);
     }
@@ -75,7 +75,7 @@ export default function HRInterviewsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Interview Plans"
-        description="Create and manage faculty interview plans"
+        description="Create and manage faculty interview plans."
         actions={
           <Button asChild>
             <Link href="/hr-admin/interviews/new">+ New Interview Plan</Link>

@@ -48,7 +48,7 @@ export default function SemesterResultBatchPage({ params }: { params: Promise<{ 
       setMissing(b.missing ?? []);
       setRules(b.rules ?? null);
     } catch {
-      if (!cancelled) toast({ variant: "destructive", title: "Failed to load results" });
+      if (!cancelled) toast({ variant: "destructive", title: "Unable to load results" });
     } finally {
       if (!cancelled) setIsLoading(false);
     }
@@ -101,7 +101,7 @@ export default function SemesterResultBatchPage({ params }: { params: Promise<{ 
         method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "publish" }),
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Could not publish" }); return; }
+      if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Unable to publish" }); return; }
       toast({ variant: "success", title: "Results published" });
       setConfirm(null);
       setReloadKey((k) => k + 1);
@@ -115,7 +115,7 @@ export default function SemesterResultBatchPage({ params }: { params: Promise<{ 
     try {
       const res = await fetch(`/api/college/exam-results/batches/${encodeURIComponent(id)}`, { method: "DELETE" });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Could not delete" }); return; }
+      if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Unable to delete" }); return; }
       toast({ variant: "success", title: isDraft ? "Draft deleted" : "Published results deleted" });
       router.push("/exam-cell/semester-results");
     } finally {
@@ -164,7 +164,7 @@ export default function SemesterResultBatchPage({ params }: { params: Promise<{ 
           <ul className="space-y-1.5 text-sm">
             <li>
               {!hasUniversitySgpa
-                ? <span className="text-muted-foreground">University SGPA: not in the file - add a &ldquo;University SGPA&rdquo; column to compare.</span>
+                ? <span className="text-muted-foreground">University SGPA is not in the file. Add a University SGPA column to compare.</span>
                 : sgpaMismatches.length === 0
                   ? <span className="text-emerald-700 dark:text-emerald-400">✓ Every SGPA matches the university&rsquo;s.</span>
                   : <span className="text-destructive">✗ {sgpaMismatches.length} student{sgpaMismatches.length > 1 ? "s'" : "'s"} SGPA differs from the university&rsquo;s: {sgpaMismatches.slice(0, 15).map((r) => `${r.rollNumber} (ours ${fmt(standings[r.id]?.sgpa)}, university ${r.universitySgpa ?? "–"})`).join(", ")}{sgpaMismatches.length > 15 ? " …" : ""} - usually a grade against the wrong subject, or a subject&rsquo;s credits.</span>}

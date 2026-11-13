@@ -44,7 +44,7 @@ export function SyllabusStep({ picker }: { picker: ReturnType<typeof useRegulati
               onRemoved={() => { setLocalUrl(""); void patchSyllabus(""); }}
             />
           ) : (
-            <p className="text-sm text-muted-foreground">Load a Regulation, Course and Department above to upload a syllabus.</p>
+            <p className="text-sm text-muted-foreground">Load a regulation, course and department above to upload a syllabus.</p>
           )}
         </CardContent>
       </Card>

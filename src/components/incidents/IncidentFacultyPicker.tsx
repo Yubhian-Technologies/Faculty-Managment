@@ -67,7 +67,7 @@ export function IncidentFacultyPicker({ departments, courses, selected, onChange
       const json = await res.json() as { faculty?: FacultyRow[]; error?: string };
       if (seq !== loadSeq.current) return;
       if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to load faculty" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to load faculty" });
         return;
       }
       const q = search.trim().toLowerCase();
@@ -83,7 +83,7 @@ export function IncidentFacultyPicker({ departments, courses, selected, onChange
         })
       );
     } catch {
-      if (seq === loadSeq.current) toast({ variant: "destructive", title: "Failed to load faculty" });
+      if (seq === loadSeq.current) toast({ variant: "destructive", title: "Unable to load faculty" });
     } finally {
       if (seq === loadSeq.current) setIsFetching(false);
     }
@@ -140,9 +140,7 @@ export function IncidentFacultyPicker({ departments, courses, selected, onChange
       </div>
 
       {results === null ? (
-        <p className="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
-          Set your filters and press Load to list faculty.
-        </p>
+        <p className="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">Set the filters and choose Load to list faculty.</p>
       ) : shown.length === 0 ? (
         <p className="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">No faculty match.</p>
       ) : (

@@ -46,7 +46,7 @@ export default function AdministrationVacanciesPage() {
     fetch(url)
       .then((r) => r.json() as Promise<{ vacancyRequests: LocationVacancy[] }>)
       .then((d) => setVacancies(d.vacancyRequests ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -65,7 +65,7 @@ export default function AdministrationVacanciesPage() {
       toast({
         variant: "success",
         title: "Vacancy Approved",
-        description: "HR Admin and Dept Head have been notified.",
+        description: "HR Admin and the Department Head have been notified.",
       });
       setApproveOpen(false);
       setSelected(null);
@@ -81,7 +81,7 @@ export default function AdministrationVacanciesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Hiring Requests"
-        description="Approve or reject faculty hiring requests forwarded by HR Admin"
+        description="Approve or reject the faculty hiring requests forwarded by HR Admin."
       />
 
       {collegeId && (

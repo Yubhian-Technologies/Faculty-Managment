@@ -46,7 +46,7 @@ export default function PublicationsImportPage() {
     const name = file.name.toLowerCase();
     const isExcel = name.endsWith(".xlsx");
     if (name.endsWith(".xls")) {
-      setParseError("Legacy .xls files aren't supported - please re-save as .xlsx or .csv and try again.");
+      setParseError("Legacy .xls files aren't supported - re-save as .xlsx or .csv and try again.");
       e.target.value = "";
       return;
     }
@@ -66,7 +66,7 @@ export default function PublicationsImportPage() {
         return;
       }
       if (!Object.values(keyMap).includes("ownerName")) {
-        setParseError("Couldn't find an \"SVECW-First Author\" column. Check your file's header row against the template.");
+        setParseError("Unable to find an \"SVECW-First Author\" column. Check your file's header row against the template.");
         return;
       }
       // Unlike the Faculty importer, a Scopus-style export routinely carries
@@ -89,7 +89,7 @@ export default function PublicationsImportPage() {
 
       setRows(dataRows);
     } catch {
-      setParseError(isExcel ? "Failed to parse the Excel file. Ensure it is a valid, uncorrupted .xlsx file." : "Failed to parse the file. Ensure it is a valid CSV.");
+      setParseError(isExcel ? "Unable to parse the Excel file. Ensure it is a valid, uncorrupted .xlsx file." : "Unable to parse the file. Ensure it is a valid CSV.");
     } finally {
       e.target.value = "";
     }
@@ -112,7 +112,7 @@ export default function PublicationsImportPage() {
         toast({ variant: "destructive", title: `Stopped after ${stoppedAt} of ${rows.length} rows`, description: `${json.created} imported. ${error ?? ""} Fix the problem and import again.` });
       }
       if (json.created > 0 && stoppedAt === null) {
-        toast({ variant: "success", title: `${json.created} publication${json.created !== 1 ? "s" : ""} imported successfully` });
+        toast({ variant: "success", title: `${json.created} publication${json.created !== 1 ? "s" : ""} imported` });
         setRows([]);
       }
     } catch {
@@ -132,7 +132,7 @@ export default function PublicationsImportPage() {
     <div className="max-w-5xl space-y-6">
       <PageHeader
         title="Import Research Publications"
-        description="Bulk upload publication records from a CSV or Scopus-style export"
+        description="Upload publication records in bulk from a CSV or Scopus export."
         actions={
           <Button variant="outline" asChild>
             <Link href="/r-and-d/publications"><ArrowLeft className="h-4 w-4 mr-1" />Back to Publications</Link>
@@ -144,9 +144,7 @@ export default function PublicationsImportPage() {
       <Card>
         <CardHeader><CardTitle className="text-base flex items-center gap-2"><span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">1</span>Download Template</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Download the CSV template, fill in publication data (or upload a Scopus-style export report close to as-is), and upload it below.
-          </p>
+          <p className="text-sm text-muted-foreground">Download the CSV template and enter the publication data, or upload a Scopus export with few changes, then upload it below.</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-muted-foreground bg-muted/40 rounded-lg p-3">
             {HINTS.map((h) => <p key={h} className="flex items-start gap-1"><span className="text-primary mt-0.5">•</span>{h}</p>)}
           </div>
@@ -169,7 +167,7 @@ export default function PublicationsImportPage() {
             <FileSpreadsheet className="h-10 w-10 text-muted-foreground" />
             <div className="text-center">
               <p className="font-medium text-sm">Click to select a CSV or Excel file</p>
-              <p className="text-xs text-muted-foreground mt-1">.csv or .xlsx supported - headers matched loosely, extra Scopus columns are ignored</p>
+              <p className="text-xs text-muted-foreground mt-1">CSV and XLSX files are supported. Column headings are matched flexibly and extra Scopus columns are ignored.</p>
             </div>
           </button>
           {parseError && (
@@ -180,7 +178,7 @@ export default function PublicationsImportPage() {
           )}
           {rows.length > 0 && (
             <p className="text-sm text-green-700 flex items-center gap-1">
-              <CheckCircle2 className="h-4 w-4" />{rows.length} row{rows.length !== 1 ? "s" : ""} parsed successfully
+              <CheckCircle2 className="h-4 w-4" />{rows.length} row{rows.length !== 1 ? "s" : ""} parsed
             </p>
           )}
           {ignoredHeaders.length > 0 && (

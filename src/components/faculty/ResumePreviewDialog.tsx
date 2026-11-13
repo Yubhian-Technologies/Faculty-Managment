@@ -28,7 +28,7 @@ export function ResumePreviewDialog({ personName, loadHtml, onOpenChange, onDown
         const doc = await loadHtml();
         if (!cancelled) setHtml(doc);
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load the preview");
+        if (!cancelled) setError(err instanceof Error ? err.message : "Unable to load the preview");
       }
     })();
     return () => { cancelled = true; };

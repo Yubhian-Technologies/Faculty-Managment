@@ -23,7 +23,7 @@ export default function PanelFeedbackPage() {
     fetch("/api/college/panel-feedback")
       .then((r) => r.json() as Promise<{ feedback: FeedbackRow[] }>)
       .then((d) => setFeedback(d.feedback ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load feedback" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load feedback" }))
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -75,7 +75,7 @@ export default function PanelFeedbackPage() {
     <div className="space-y-6">
       <PageHeader
         title="Feedback"
-        description="Interview feedback you have submitted"
+        description="Interview feedback you have submitted."
       />
 
       <DataTable

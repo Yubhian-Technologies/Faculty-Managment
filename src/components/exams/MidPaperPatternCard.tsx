@@ -48,7 +48,7 @@ export function MidPaperPatternCard() {
     fetch("/api/college/mid-paper-patterns")
       .then((r) => r.json() as Promise<{ patterns?: MidPaperPattern[]; regulationsByCourse?: Record<string, string[]> }>)
       .then((d) => { setPatterns(d.patterns ?? []); setRegulationsByCourse(d.regulationsByCourse ?? {}); })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load the question paper patterns" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load the question paper patterns" }));
   }
   useEffect(() => {
     load();
@@ -76,12 +76,12 @@ export function MidPaperPatternCard() {
         body: JSON.stringify({ courseKey, courseName: group.name, regulation: regulation || "ALL", setsPerFaculty: Number(sets), durationMinutes: Number(duration), instruction, regdBoxes: Number(regdBoxes), parts }),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to save");
+      if (!res.ok) throw new Error(data.error ?? "Unable to save");
       toast({ variant: "success", title: `Paper pattern saved for ${group.name}${regulation ? ` (${regulation})` : ""}` });
       reset();
       load();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to save" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" });
     } finally {
       setSaving(false);
     }
@@ -90,7 +90,7 @@ export function MidPaperPatternCard() {
   async function remove() {
     if (!deleting) return;
     const res = await fetch(`/api/college/mid-paper-patterns?id=${encodeURIComponent(deleting.id)}`, { method: "DELETE" });
-    if (!res.ok) toast({ variant: "destructive", title: "Failed to delete" });
+    if (!res.ok) toast({ variant: "destructive", title: "Unable to delete" });
     setDeleting(null);
     load();
   }
@@ -102,9 +102,7 @@ export function MidPaperPatternCard() {
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Question paper pattern</CardTitle>
-        <CardDescription>
-          This college prepares question papers: each faculty member writes the number of papers set here, to this pattern. The HOD approves them and the Exam Cell picks the one used. A paper already started keeps the pattern it started with.
-        </CardDescription>
+        <CardDescription>This college prepares question papers. Each faculty member writes the number of papers set here, to this pattern. The HOD approves them and the Exam Cell chooses the paper used. A paper already started keeps its original pattern.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         {patterns.length > 0 && (
@@ -153,7 +151,7 @@ export function MidPaperPatternCard() {
           </div>
           <div className="space-y-1.5"><Label htmlFor="mpp-sets">Question papers each faculty submits</Label><Input id="mpp-sets" type="number" min={1} max={5} value={sets} onChange={(e) => setSets(e.target.value)} /></div>
           <div className="space-y-1.5"><Label htmlFor="mpp-dur">Duration (minutes)</Label><Input id="mpp-dur" type="number" min={15} max={360} value={duration} onChange={(e) => setDuration(e.target.value)} /></div>
-          <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="mpp-instr">Instruction on the paper (optional)</Label><Input id="mpp-instr" maxLength={300} value={instruction} placeholder="e.g. Answer all questions of Part A and any one of each pair in Part B" onChange={(e) => setInstruction(e.target.value)} /></div>
+          <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="mpp-instr">Instruction on the paper (optional)</Label><Input id="mpp-instr" maxLength={300} value={instruction} placeholder="Answer all questions of Part A and any one of each pair in Part B" onChange={(e) => setInstruction(e.target.value)} /></div>
           <div className="space-y-1.5"><Label htmlFor="mpp-regd">Regd. No boxes</Label><Input id="mpp-regd" type="number" min={6} max={20} value={regdBoxes} onChange={(e) => setRegdBoxes(e.target.value)} /></div>
         </div>
 
@@ -184,8 +182,8 @@ export function MidPaperPatternCard() {
                   <div className="flex gap-2">
                     <select className={selectClass} value={p.choice.kind} onChange={(e) => setPart(i, { choice: e.target.value === "ANY" ? { kind: "ANY", answer: 2 } : { kind: e.target.value as "ALL" | "OR_PAIRS" } })}>
                       <option value="ALL">All questions (they add up to the max)</option>
-                      <option value="ANY">Any of them (every question the same marks)</option>
-                      <option value="OR_PAIRS">One of each pair (OR) - pairs of equal marks</option>
+                      <option value="ANY">Any of them (all questions carry equal marks)</option>
+                      <option value="OR_PAIRS">One of each pair (OR); pairs carry equal marks</option>
                     </select>
                     {p.choice.kind === "ANY" && <Input className="w-20" type="number" min={1} aria-label="How many to answer" value={p.choice.answer} onChange={(e) => setPart(i, { choice: { kind: "ANY", answer: Number(e.target.value) } })} />}
                   </div>

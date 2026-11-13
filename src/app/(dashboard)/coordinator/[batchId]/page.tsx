@@ -67,7 +67,7 @@ export default function CoordinatorQRPage({ params }: { params: Promise<{ batchI
         setBatch(b);
         setCandidates(cands);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load session" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load session" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -115,7 +115,7 @@ export default function CoordinatorQRPage({ params }: { params: Promise<{ batchI
       setBatch((prev) => prev ? { ...prev, demoComplete: true } : prev);
       setDemoCompleteDialog(false);
     } catch {
-      toast({ variant: "destructive", title: "Failed to mark complete" });
+      toast({ variant: "destructive", title: "Unable to mark complete" });
     } finally {
       setIsMarkingComplete(false);
     }
@@ -137,7 +137,7 @@ export default function CoordinatorQRPage({ params }: { params: Promise<{ batchI
   if (batch.demoComplete) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Demo Complete" description="Redirecting to evaluations..." />
+        <PageHeader title="Demo Complete" description="Opening evaluations..." />
         <div className="h-32 bg-muted animate-pulse rounded-lg" />
       </div>
     );
@@ -285,9 +285,7 @@ export default function CoordinatorQRPage({ params }: { params: Promise<{ batchI
                   </div>
                 </div>
 
-                <p className="text-center text-sm text-muted-foreground">
-                  Students scan this QR to rate the demo class
-                </p>
+                <p className="text-center text-sm text-muted-foreground">Students scan this QR code to rate the demo class.</p>
 
                 <div className="flex gap-2">
                   <Button variant="outline" className="flex-1" onClick={prev} disabled={selectedIndex === 0}>

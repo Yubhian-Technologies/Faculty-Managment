@@ -68,7 +68,7 @@ export default function LocationStaffAdminNewShiftPage() {
       toast({
         variant: "destructive",
         title: "Department required",
-        description: "Please select at least one department or enable 'Campus-Wide'.",
+        description: "Select at least one department or enable 'Campus-Wide'.",
       });
       return;
     }
@@ -100,7 +100,7 @@ export default function LocationStaffAdminNewShiftPage() {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create shift");
+      if (!res.ok) throw new Error(data.error || "Unable to create shift");
 
       toast({
         title: "Shift Created",
@@ -116,7 +116,7 @@ export default function LocationStaffAdminNewShiftPage() {
           : "/location-staff-admin/departments"
       );
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to create shift";
+      const msg = err instanceof Error ? err.message : "Unable to create shift";
       toast({ variant: "destructive", title: "Error", description: msg });
     } finally {
       setIsSubmitting(false);
@@ -134,9 +134,7 @@ export default function LocationStaffAdminNewShiftPage() {
         </Button>
         <div>
           <h1 className="text-lg sm:text-xl font-bold text-foreground">Create Campus Shift</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Configure shift timings with options to reuse across multiple departments or campus-wide.
-          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">Configure shift timings that can be shared by several departments or the whole campus.</p>
         </div>
       </div>
 
@@ -146,9 +144,7 @@ export default function LocationStaffAdminNewShiftPage() {
             <Clock className="h-4 w-4 text-primary" />
             <span>Shift Configuration & Scope</span>
           </CardTitle>
-          <CardDescription className="text-xs">
-            Staff assigned to this shift will use these hours for automatic on-time/late validation.
-          </CardDescription>
+          <CardDescription className="text-xs">Staff assigned to this shift are checked against these hours for on-time and late arrival.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -223,7 +219,7 @@ export default function LocationStaffAdminNewShiftPage() {
               <Label className="text-xs font-semibold">Shift Name *</Label>
               <Input
                 required
-                placeholder="e.g. Morning Shift, General Duty, Night Patrol"
+                placeholder="Morning Shift, General Duty, Night Patrol"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="h-9 text-xs"
@@ -272,7 +268,7 @@ export default function LocationStaffAdminNewShiftPage() {
             <div className="space-y-1">
               <Label className="text-xs font-semibold">Description (Optional)</Label>
               <Input
-                placeholder="e.g. Shared campus shift for front office & facilities"
+                placeholder="Shared campus shift for front office & facilities"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 className="h-9 text-xs"

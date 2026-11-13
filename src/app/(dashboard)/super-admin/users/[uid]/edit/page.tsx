@@ -81,7 +81,7 @@ export default function EditUserPage() {
           setRole((u.role as UserRole) ?? "PRINCIPAL");
           setPhotoUrl((u.profilePhotoUrl as string) || undefined);
         })
-        .catch(() => toast({ variant: "destructive", title: "Failed to load user" }))
+        .catch(() => toast({ variant: "destructive", title: "Unable to load user" }))
         .finally(() => setLoading(false));
     } else if (roleParamScope === "LOCATION") {
       // Administration or Accounts - profile lives at locations/{id}/locationUsers.
@@ -105,7 +105,7 @@ export default function EditUserPage() {
           setPhotoUrl((u.profilePhotoUrl as string) || undefined);
           setAcademicProfile((u.academicProfile as Partial<FacultyProfileFields>) ?? {});
         })
-        .catch(() => toast({ variant: "destructive", title: "Failed to load user" }))
+        .catch(() => toast({ variant: "destructive", title: "Unable to load user" }))
         .finally(() => setLoading(false));
     } else if (roleParamScope === "GLOBAL") {
       // Management, Finance, or Purchase - profile lives only in systemUsers.
@@ -124,7 +124,7 @@ export default function EditUserPage() {
           setPhotoUrl((u.profilePhotoUrl as string) || undefined);
           setAcademicProfile((u.academicProfile as Partial<FacultyProfileFields>) ?? {});
         })
-        .catch(() => toast({ variant: "destructive", title: "Failed to load user" }))
+        .catch(() => toast({ variant: "destructive", title: "Unable to load user" }))
         .finally(() => setLoading(false));
     } else {
       toast({ variant: "destructive", title: "Unknown role context" });
@@ -149,7 +149,7 @@ export default function EditUserPage() {
       setPhotoUrl(url);
       toast({ variant: "success", title: "Photo updated" });
     } catch {
-      toast({ variant: "destructive", title: "Failed to save photo" });
+      toast({ variant: "destructive", title: "Unable to save photo" });
     }
   }
 
@@ -169,7 +169,7 @@ export default function EditUserPage() {
       setPhotoUrl(undefined);
       toast({ variant: "success", title: "Photo removed" });
     } catch {
-      toast({ variant: "destructive", title: "Failed to remove photo" });
+      toast({ variant: "destructive", title: "Unable to remove photo" });
     }
   }
 
@@ -189,7 +189,7 @@ export default function EditUserPage() {
       if (!res.ok) throw new Error();
       toast({ variant: "success", title: "Saved" });
     } catch {
-      toast({ variant: "destructive", title: "Failed to save" });
+      toast({ variant: "destructive", title: "Unable to save" });
     } finally {
       setSaving(false);
     }
@@ -220,7 +220,7 @@ export default function EditUserPage() {
       toast({ variant: "success", title: "User updated" });
       router.push(`/super-admin/users/${uid}?role=${role}&collegeId=${collegeId}`);
     } catch {
-      toast({ variant: "destructive", title: "Failed to update user" });
+      toast({ variant: "destructive", title: "Unable to update user" });
     } finally {
       setSaving(false);
     }
@@ -292,9 +292,7 @@ export default function EditUserPage() {
                   </Select>
                 </div>
 
-                <p className="text-xs text-muted-foreground">
-                  Personal Details and Academic Profile are edited one section at a time from the profile view - use &quot;Back to Profile&quot; above.
-                </p>
+                <p className="text-xs text-muted-foreground">Personal Details and Academic Profile are edited one section at a time from the profile view. Use Back to Profile above.</p>
 
                 <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
                   <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
@@ -326,7 +324,7 @@ export default function EditUserPage() {
                 <Textarea
                   value={academicProfile.otherInformation ?? ""}
                   onChange={(e) => setAcademicProfile({ ...academicProfile, otherInformation: e.target.value })}
-                  placeholder="Anything not covered above - add it here"
+                  placeholder="Anything not covered above, add it here"
                   rows={4}
                 />
                 <div className="flex justify-end">

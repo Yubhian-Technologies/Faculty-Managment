@@ -139,7 +139,7 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
       }),
     });
     const json = (await res.json()) as { error?: string; errors?: string[] };
-    if (!res.ok) { setErrors(json.errors ?? [json.error ?? "Failed to save"]); return false; }
+    if (!res.ok) { setErrors(json.errors ?? [json.error ?? "Unable to save"]); return false; }
     return true;
   }
 
@@ -154,7 +154,7 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
             method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sectionIds: [...picked] }),
           });
           const json = (await res.json()) as { error?: string };
-          if (!res.ok) { setErrors([json.error ?? "Could not save the sections"]); return; }
+          if (!res.ok) { setErrors([json.error ?? "Unable to save the sections"]); return; }
           toast({ variant: "success", title: "Sections saved" });
         }
         onStep(2);
@@ -173,7 +173,7 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
           body: JSON.stringify({ deadlineId: deadline.id, subjectId: subject.id, branch, sectionIds: [...picked] }),
         });
         const json = (await res.json()) as { error?: string; bank?: { id: string } };
-        if (!res.ok || !json.bank) { setErrors([json.error ?? `Could not start the ${what}`]); onChanged(); return; }
+        if (!res.ok || !json.bank) { setErrors([json.error ?? `Unable to start the ${what}`]); onChanged(); return; }
         toast({ variant: "success", title: papers ? "Question papers started" : "Question bank started" });
         router.push(`/panel/mid-bank/${encodeURIComponent(json.bank.id)}`);
       }
@@ -415,13 +415,13 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
                           {inMid && <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-primary">Mid {deadline.midNumber}</span>}
                           {filled && <Check className="ml-auto h-4 w-4 text-emerald-600" aria-label="filled" />}
                         </div>
-                        <Input id={`unit-${i}`} value={t} disabled={readOnly} maxLength={LIMITS.unitTitle} placeholder="e.g. Linear data structures"
+                        <Input id={`unit-${i}`} value={t} disabled={readOnly} maxLength={LIMITS.unitTitle} placeholder="Linear data structures"
                           className="border-0 bg-transparent px-0 text-[15px] shadow-none focus-visible:ring-0"
                           onChange={(e) => setDraft((d) => ({ ...d, units: d.units.map((x, j) => (j === i ? e.target.value : x)) }))} />
                         <div className="mt-2 border-t pt-2">
                           <Label htmlFor={`unit-syl-${i}`} className="text-xs font-medium text-muted-foreground">Syllabus (topics of this unit)</Label>
                           <Textarea id={`unit-syl-${i}`} rows={3} value={draft.syllabi[i] ?? ""} disabled={readOnly} maxLength={LIMITS.unitSyllabus}
-                            placeholder="e.g. Arrays, linked lists - singly, doubly, circular; stacks and queues - applications"
+                            placeholder="Arrays, linked lists - singly, doubly, circular; stacks and queues - applications"
                             className="mt-1 min-h-20 resize-y bg-background text-sm"
                             onChange={(e) => setDraft((d) => ({ ...d, syllabi: d.units.map((_, j) => (j === i ? e.target.value : d.syllabi[j] ?? "")) }))} />
                         </div>
@@ -474,7 +474,7 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
                 Tick the POs and PSOs each CO contributes to, as per the syllabus. Every CO needs at least one. When you pick a CO for a question, its POs / PSOs are shown automatically.
               </StepHeading>
               <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>Hover a PO for its title · PSOs have a dashed border</span>
+                <span>Hover over a PO to see its title. PSOs have a dashed border.</span>
                 <span className={cn("rounded-full px-2.5 py-0.5 font-semibold", mappedCount === draft.cos.length ? "bg-emerald-100 text-emerald-800" : "bg-primary/10 text-primary")}>
                   {mappedCount} of {draft.cos.length} COs mapped
                 </span>

@@ -33,10 +33,10 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const locationId = searchParams.get("locationId") || session.locationId;
     if (!locationId) {
-      return NextResponse.json({ error: "locationId required" }, { status: 400 });
+      return NextResponse.json({ error: "Select a location." }, { status: 400 });
     }
     if (session.role !== "SUPER_ADMIN" && session.locationId !== locationId) {
-      return NextResponse.json({ error: "Unauthorized for this location" }, { status: 403 });
+      return NextResponse.json({ error: "You do not have access to this location." }, { status: 403 });
     }
 
     const today = istDateKey();
@@ -112,9 +112,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ from, to, rows });
   } catch (err) {
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[location/staff-attendance/report GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

@@ -59,7 +59,7 @@ export default function AdministrationCollegesPage() {
         }),
       });
       const json = (await res.json()) as { error?: string };
-      if (!res.ok) { toast({ variant: "destructive", title: "Couldn't save", description: json.error }); return; }
+      if (!res.ok) { toast({ variant: "destructive", title: "Unable to save", description: json.error }); return; }
       toast({ variant: "success", title: "Saved" });
       setEditing(null);
       loadAll();
@@ -76,7 +76,7 @@ export default function AdministrationCollegesPage() {
     try {
       const res = await fetch(`/api/administration/college-people/${deleting.person.uid}?collegeId=${deleting.collegeId}`, { method: "DELETE" });
       const json = (await res.json()) as { error?: string; mode?: string };
-      if (!res.ok) { toast({ variant: "destructive", title: "Couldn't remove", description: json.error }); return; }
+      if (!res.ok) { toast({ variant: "destructive", title: "Unable to remove", description: json.error }); return; }
       toast({
         variant: "success",
         title: json.mode === "deactivated" ? "Access removed" : "Deleted",
@@ -97,13 +97,13 @@ export default function AdministrationCollegesPage() {
     fetch("/api/admin/colleges")
       .then((r) => r.json() as Promise<{ colleges: College[] }>)
       .then((d) => setColleges(d.colleges ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load colleges" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load colleges" }))
       .finally(() => setIsLoading(false));
 
     fetch("/api/administration/principals")
       .then((r) => r.json() as Promise<{ principalsByCollege: Record<string, PrincipalRow[]> }>)
       .then((d) => setPrincipalMap(d.principalsByCollege ?? {}))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load principals" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load principals" }))
       .finally(() => setPrincipalsLoaded(true));
   }
 
@@ -136,7 +136,7 @@ export default function AdministrationCollegesPage() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Colleges" description="Colleges under this location" />
+        <PageHeader title="Colleges" description="Colleges under this location." />
         <div className="space-y-3">
           {[1, 2, 3].map((i) => <div key={i} className="h-16 bg-muted animate-pulse rounded-lg" />)}
         </div>
@@ -148,7 +148,7 @@ export default function AdministrationCollegesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Colleges"
-        description="Manage colleges and their principals in this location"
+        description="Manage the colleges in this location and their Principals."
         actions={
           <Button onClick={() => router.push("/administration/colleges/new")}>
             <Plus className="h-4 w-4 mr-2" />
@@ -251,7 +251,7 @@ export default function AdministrationCollegesPage() {
                   {!principalsLoaded ? (
                     <div className="h-8 w-32 bg-muted animate-pulse rounded" />
                   ) : !hasCollegeAdmin ? (
-                    <p className="text-sm text-muted-foreground">No College Admin yet.</p>
+                    <p className="text-sm text-muted-foreground">No College Admin has been appointed yet.</p>
                   ) : (
                     <div className="space-y-2">
                       {(principalList ?? []).filter((p) => p.roles.includes("COLLEGE_ADMIN")).map((p) => (
@@ -283,7 +283,7 @@ export default function AdministrationCollegesPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit {editing?.person.roles.map((r) => ROLE_NAMES[r] ?? r).join(" / ")}</DialogTitle>
-            <DialogDescription>Update the login details. Leave the password blank to keep it as it is.</DialogDescription>
+            <DialogDescription>Update the login details. Leave the password blank to keep the current password.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1.5"><Label>Name</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>

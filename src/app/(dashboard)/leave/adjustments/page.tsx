@@ -52,7 +52,7 @@ export default function LeaveAdjustmentsPage() {
     fetch("/api/leave/adjustment-requests")
       .then((r) => r.json() as Promise<{ items?: AdjustmentItem[] }>)
       .then((d) => setItems(d.items ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load adjustment requests" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load adjustment requests" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -83,11 +83,11 @@ export default function LeaveAdjustmentsPage() {
         }),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to respond");
+      if (!res.ok) throw new Error(data.error ?? "Unable to respond");
       toast({ variant: "success", title: declined.size === 0 ? "Accepted" : "Response sent" });
       load();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to respond" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to respond" });
     } finally {
       setBusyId(null);
     }
@@ -102,11 +102,11 @@ export default function LeaveAdjustmentsPage() {
         body: JSON.stringify({ response, declineReason: reasonByRequest[requestId] }),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to respond");
+      if (!res.ok) throw new Error(data.error ?? "Unable to respond");
       toast({ variant: "success", title: response === "ACCEPT" ? "Accepted" : "Declined" });
       load();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to respond" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to respond" });
     } finally {
       setBusyId(null);
     }
@@ -116,7 +116,7 @@ export default function LeaveAdjustmentsPage() {
     <div className="max-w-2xl space-y-6">
       <PageHeader
         title="Work Adjustments"
-        description="Requests from colleagues asking you to cover a class or be their point of contact while they're on leave."
+        description="Requests from colleagues to cover a class or act as their point of contact while they are on leave."
       />
       {isLoading ? (
         <div className="h-32 rounded-lg border bg-muted/30 animate-pulse" />
@@ -146,7 +146,7 @@ export default function LeaveAdjustmentsPage() {
 
                 {item.kind === "SUBSTITUTE" ? (
                   <>
-                    <p className="text-xs text-muted-foreground">Uncheck any period you can&rsquo;t cover - the rest are accepted as-is.</p>
+                    <p className="text-xs text-muted-foreground">Unselect any period you cannot cover; the others are accepted.</p>
                     <div className="space-y-1.5 rounded-lg border p-3">
                       {(item.periods ?? []).map((p) => {
                         const key = `${p.date}|${p.timetableSlotId}`;

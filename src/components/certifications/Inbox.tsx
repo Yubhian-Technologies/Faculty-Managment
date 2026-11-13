@@ -73,7 +73,7 @@ function LineRow({ request, line, busy, run }: {
         {check === "RESULT" && <ResultLine requestId={request.id} />}
         {clearance?.duesPending && (
           <span className="rounded bg-orange-100 px-1.5 py-0.5 text-xs text-orange-800 dark:bg-orange-950 dark:text-orange-200">
-            Dues pending: Rs. {clearance.duesPending.amount} - {clearance.duesPending.reason}
+            Dues pending: ₹{clearance.duesPending.amount} - {clearance.duesPending.reason}
           </span>
         )}
       </div>
@@ -92,13 +92,13 @@ function LineRow({ request, line, busy, run }: {
           <Button size="sm" variant="outline" disabled={busy} onClick={() => need("Say what the student must correct") && run({ action: "RETURN", branchKey: line.key, remarks: remarks.trim() }, "Sent back to the student")}>Send back</Button>
         )}
         {check !== "DUES" && (
-          <Button size="sm" variant="outline" disabled={busy} onClick={() => need("Please add a reason for rejecting") && run({ action: "REJECT", branchKey: line.key, remarks: remarks.trim() }, "Rejected")}>Reject</Button>
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => need("Add a reason for rejecting") && run({ action: "REJECT", branchKey: line.key, remarks: remarks.trim() }, "Rejected")}>Reject</Button>
         )}
       </div>
       {dues && (
         <div className="flex flex-wrap items-end gap-2">
-          <div className="space-y-1"><Label className="text-xs">Amount (Rs.)</Label><Input className="w-28" type="number" min={0} value={dues.amount} onChange={(e) => setDues({ ...dues, amount: e.target.value })} /></div>
-          <div className="space-y-1 flex-1 min-w-48"><Label className="text-xs">For what</Label><Input value={dues.reason} placeholder="e.g. Lost book - Data Structures" onChange={(e) => setDues({ ...dues, reason: e.target.value })} /></div>
+          <div className="space-y-1"><Label className="text-xs">Amount (₹)</Label><Input className="w-28" type="number" min={0} value={dues.amount} onChange={(e) => setDues({ ...dues, amount: e.target.value })} /></div>
+          <div className="space-y-1 flex-1 min-w-48"><Label className="text-xs">For what</Label><Input value={dues.reason} placeholder="Lost book, Data Structures" onChange={(e) => setDues({ ...dues, reason: e.target.value })} /></div>
           <Button size="sm" disabled={busy || !dues.amount || !dues.reason.trim()}
             onClick={() => run({ action: "DUES_PENDING", branchKey: line.key, amount: Number(dues.amount), remarks: dues.reason.trim() }, "Dues recorded - the student is told").then(() => setDues(null))}>Save dues</Button>
         </div>
@@ -133,7 +133,7 @@ function InboxCard({ request, onDecided, selected, onSelect }: { request: InboxR
 
   async function actSequential(action: "APPROVE" | "REJECT" | "RETURN") {
     if (action !== "APPROVE" && !remarks.trim()) {
-      toast({ variant: "destructive", title: action === "RETURN" ? "Say what the student must correct" : "Please add a reason for rejecting" });
+      toast({ variant: "destructive", title: action === "RETURN" ? "Say what the student must correct" : "Add a reason for rejecting" });
       return;
     }
     setBusy(true);
@@ -191,7 +191,7 @@ function InboxCard({ request, onDecided, selected, onSelect }: { request: InboxR
 
         {step?.type === "PARALLEL" && (
           <div className="space-y-2">
-            {lines.length === 0 && <p className="text-sm text-muted-foreground">Nothing left for you on this one.</p>}
+            {lines.length === 0 && <p className="text-sm text-muted-foreground">Nothing is pending for you on this request.</p>}
             {lines.map((line) => <LineRow key={line.key} request={request} line={line} busy={busy} run={run} />)}
           </div>
         )}
@@ -215,7 +215,7 @@ export function Inbox() {
       setRequests(await listRequests("inbox"));
       setSelected(new Set());
     } catch (e) {
-      toast({ variant: "destructive", title: errText(e, "Couldn't load your inbox") });
+      toast({ variant: "destructive", title: errText(e, "Unable to load your inbox") });
     } finally {
       setLoading(false);
     }
@@ -251,7 +251,7 @@ export function Inbox() {
       });
       load();
     } catch (e) {
-      toast({ variant: "destructive", title: errText(e, "Couldn't clear them") });
+      toast({ variant: "destructive", title: errText(e, "Unable to clear them") });
     } finally {
       setBulkBusy(false);
     }
@@ -302,7 +302,7 @@ export function Inbox() {
           )}
         </div>
       )}
-      {lineOptions.length > 1 && line === "ALL" && <p className="text-xs text-muted-foreground">Pick one of your lines above to clear many students at once.</p>}
+      {lineOptions.length > 1 && line === "ALL" && <p className="text-xs text-muted-foreground">Select one of your lines above to clear several students at once.</p>}
 
       {shown.map((r) => (
         <InboxCard key={r.id} request={r} onDecided={load} selected={selected.has(r.id)}

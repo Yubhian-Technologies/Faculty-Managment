@@ -61,7 +61,7 @@ export function AttendanceImportPage({ title, description, backHref, backLabel }
     const name = file.name.toLowerCase();
     const isExcel = name.endsWith(".xlsx");
     if (name.endsWith(".xls")) {
-      setParseError("Legacy .xls files aren't supported - please re-save as .xlsx or .csv and try again.");
+      setParseError("Legacy .xls files aren't supported - re-save as .xlsx or .csv and try again.");
       e.target.value = "";
       return;
     }
@@ -79,7 +79,7 @@ export function AttendanceImportPage({ title, description, backHref, backLabel }
         return;
       }
       if (!Object.values(keyMap).includes("employeeId")) {
-        setParseError("Couldn't find an \"Employee ID\" column. Check your file's header row against the template.");
+        setParseError("Unable to find an \"Employee ID\" column. Check your file's header row against the template.");
         return;
       }
 
@@ -99,7 +99,7 @@ export function AttendanceImportPage({ title, description, backHref, backLabel }
 
       setRows(dataRows);
     } catch {
-      setParseError(isExcel ? "Failed to parse the Excel file. Ensure it is a valid, uncorrupted .xlsx file." : "Failed to parse the file. Ensure it is a valid CSV.");
+      setParseError(isExcel ? "Unable to parse the Excel file. Ensure it is a valid, uncorrupted .xlsx file." : "Unable to parse the file. Ensure it is a valid CSV.");
     } finally {
       e.target.value = "";
     }
@@ -122,7 +122,7 @@ export function AttendanceImportPage({ title, description, backHref, backLabel }
         toast({ variant: "destructive", title: `Stopped after ${stoppedAt} of ${rows.length} rows`, description: `${json.created} imported. ${error ?? ""} Fix the problem and import again.` });
       }
       if (json.created > 0 && stoppedAt === null) {
-        toast({ variant: "success", title: `${json.created} attendance record${json.created !== 1 ? "s" : ""} imported successfully` });
+        toast({ variant: "success", title: `${json.created} attendance record${json.created !== 1 ? "s" : ""} imported` });
         setRows([]);
       }
     } catch {
@@ -154,9 +154,7 @@ export function AttendanceImportPage({ title, description, backHref, backLabel }
       <Card>
         <CardHeader><CardTitle className="text-base flex items-center gap-2"><span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">1</span>Download Template</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Download the CSV template, fill in old attendance records, and upload it below.
-          </p>
+          <p className="text-sm text-muted-foreground">Download the CSV template, enter past attendance records and upload it below.</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-muted-foreground bg-muted/40 rounded-lg p-3">
             {HINTS.map((h) => <p key={h} className="flex items-start gap-1"><span className="text-primary mt-0.5">•</span>{h}</p>)}
           </div>
@@ -179,7 +177,7 @@ export function AttendanceImportPage({ title, description, backHref, backLabel }
             <FileSpreadsheet className="h-10 w-10 text-muted-foreground" />
             <div className="text-center">
               <p className="font-medium text-sm">Click to select a CSV or Excel file</p>
-              <p className="text-xs text-muted-foreground mt-1">.csv or .xlsx supported - headers matched loosely, extra columns are ignored</p>
+              <p className="text-xs text-muted-foreground mt-1">CSV and XLSX files are supported. Column headings are matched flexibly and extra columns are ignored.</p>
             </div>
           </button>
           {parseError && (
@@ -190,7 +188,7 @@ export function AttendanceImportPage({ title, description, backHref, backLabel }
           )}
           {rows.length > 0 && (
             <p className="text-sm text-green-700 flex items-center gap-1">
-              <CheckCircle2 className="h-4 w-4" />{rows.length} row{rows.length !== 1 ? "s" : ""} parsed successfully
+              <CheckCircle2 className="h-4 w-4" />{rows.length} row{rows.length !== 1 ? "s" : ""} parsed
             </p>
           )}
           {ignoredHeaders.length > 0 && (

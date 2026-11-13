@@ -7,7 +7,7 @@ import { IssuanceQueue } from "@/components/certifications/IssuanceQueue";
 export default function CollegeOfficeCertificatesPage() {
   return (
     <div className="space-y-6">
-      <PageHeader title="Certificate Issuance" description="Fee verification and final issuance" />
+      <PageHeader title="Certificate Issuance" description="Fee verification and final issue of certificates." />
       <div>
         <h2 className="font-semibold mb-3">Fee Verification</h2>
         <Inbox />

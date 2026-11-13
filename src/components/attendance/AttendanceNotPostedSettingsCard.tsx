@@ -32,7 +32,7 @@ export function AttendanceNotPostedSettingsCard() {
       const json = await res.json() as { settings?: Settings };
       if (json.settings) setSettings({ enabled: json.settings.enabled, cutoffTime: json.settings.cutoffTime });
     } catch {
-      toast({ variant: "destructive", title: "Failed to load reminder settings" });
+      toast({ variant: "destructive", title: "Unable to load reminder settings" });
     } finally {
       setIsLoading(false);
     }
@@ -51,10 +51,10 @@ export function AttendanceNotPostedSettingsCard() {
         body: JSON.stringify(settings),
       });
       const json = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to save");
+      if (!res.ok) throw new Error(json.error ?? "Unable to save");
       toast({ variant: "success", title: "Saved" });
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to save" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" });
     } finally {
       setIsSaving(false);
     }
@@ -64,10 +64,7 @@ export function AttendanceNotPostedSettingsCard() {
     <Card>
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2"><BellRing className="h-4 w-4" />Attendance Not-Posted Reminder</CardTitle>
-        <CardDescription>
-          Once this time passes each day, any faculty with a class period still missing submitted attendance gets a
-          notification. Checked automatically on a schedule - nothing to run manually.
-        </CardDescription>
+        <CardDescription>After this time each day, faculty with a class period still missing attendance receive a notification. This is checked automatically.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {isLoading ? (

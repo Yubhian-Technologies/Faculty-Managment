@@ -107,7 +107,7 @@ function BeneficiaryDepartmentCard({
         </Button>
       </div>
       {entry.sections.length === 0 ? (
-        <p className="text-xs text-muted-foreground">No sections found for this course/year.</p>
+        <p className="text-xs text-muted-foreground">No sections found for this course and year.</p>
       ) : (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {entry.sections.map((s, i) => (
@@ -215,7 +215,7 @@ function AddBeneficiaryDepartment({
 
       {loading && <p className="text-xs text-muted-foreground">Loading sections…</p>}
       {!loading && year && sections.length === 0 && (
-        <p className="text-xs text-muted-foreground">No sections found for this course/year.</p>
+        <p className="text-xs text-muted-foreground">No sections found for this course and year.</p>
       )}
       {sections.length > 0 && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -445,7 +445,7 @@ export function TrainingEntryFields({ item: rawItem, update, ownerFacultyId, own
           </Select>
         </div>
         {item.type === "OTHER" && (
-          <TextInput label="Please specify type" value={item.pleaseSpecifyType} onChange={(v) => update({ pleaseSpecifyType: v })} />
+          <TextInput label="Specify type" value={item.pleaseSpecifyType} onChange={(v) => update({ pleaseSpecifyType: v })} />
         )}
         {item.type === "CERTIFICATION" ? (
           <div className="space-y-2">
@@ -522,7 +522,7 @@ export function TrainingEntryFields({ item: rawItem, update, ownerFacultyId, own
             </SelectContent>
           </Select>
         </div>
-        <TextInput label="Place" value={item.place} onChange={(v) => update({ place: v })} placeholder="e.g. Bhimavaram" />
+        <TextInput label="Place" value={item.place} onChange={(v) => update({ place: v })} placeholder="Bhimavaram" />
         <div className="space-y-2">
           <Label>Mode of the Program</Label>
           <Select value={item.modeOfTheProgram ?? ""} onValueChange={(v) => update({ modeOfTheProgram: v as TrainingProgramMode })}>
@@ -666,7 +666,7 @@ export function TrainingEntryFields({ item: rawItem, update, ownerFacultyId, own
               buttonText="Upload Brochure"
             />
           </div>
-          <p className="text-xs text-muted-foreground">PNG, JPG, or PDF · max 5 MB</p>
+          <p className="text-xs text-muted-foreground">PNG, JPG or PDF, up to 5 MB.</p>
         </div>
       </fieldset>
     </>

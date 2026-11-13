@@ -24,7 +24,7 @@ export function StudentPicker({ selected, onChange, max }: { selected: PickerStu
   const [results, setResults] = useState<PickerStudent[]>([]);
 
   useEffect(() => {
-    lookupSections().then(setSections).catch(() => toast({ variant: "destructive", title: "Couldn't load sections" }));
+    lookupSections().then(setSections).catch(() => toast({ variant: "destructive", title: "Unable to load sections" }));
   }, []);
 
   const chosen = useMemo(() => new Map(selected.map((s) => [s.id, s])), [selected]);
@@ -33,7 +33,7 @@ export function StudentPicker({ selected, onChange, max }: { selected: PickerStu
     setSectionId(id);
     setLoading(true);
     try { setRoster(await lookupRoster(id)); }
-    catch { toast({ variant: "destructive", title: "Couldn't load that section's students" }); setRoster([]); }
+    catch { toast({ variant: "destructive", title: "Unable to load that section's students" }); setRoster([]); }
     finally { setLoading(false); }
   }
 
@@ -74,7 +74,7 @@ export function StudentPicker({ selected, onChange, max }: { selected: PickerStu
         <div className="space-y-1.5">
           <Label htmlFor="roll-search">Or find by Regd. No</Label>
           <div className="flex gap-2">
-            <Input id="roll-search" className="h-11 sm:h-9" value={query} placeholder="e.g. 23YEC" autoCapitalize="characters" enterKeyHint="search" onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void search(); }} />
+            <Input id="roll-search" className="h-11 sm:h-9" value={query} placeholder="23YEC" autoCapitalize="characters" enterKeyHint="search" onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void search(); }} />
             <Button type="button" variant="outline" className="h-11 w-11 shrink-0 p-0 sm:h-9 sm:w-9" onClick={() => void search()} aria-label="Search"><Search className="h-4 w-4" /></Button>
           </div>
         </div>
@@ -127,7 +127,7 @@ export function StudentPicker({ selected, onChange, max }: { selected: PickerStu
           </span>
         </div>
         {selected.length === 0 ? (
-          <p className="text-sm text-muted-foreground">None yet — browse a section or search by Regd. No.</p>
+          <p className="text-sm text-muted-foreground">None yet. Browse a section or search by Regd. No.</p>
         ) : (
           <div className="flex flex-wrap gap-1.5">
             {selected.map((s) => (

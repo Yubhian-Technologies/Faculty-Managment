@@ -80,10 +80,10 @@ export async function GET(request: Request) {
     // full attendance scan below.
     const optionsOnlyParam = searchParams.get("optionsOnly") === "true";
     if ((summaryParam || optionsOnlyParam) && !sectionIdParam) {
-      return NextResponse.json({ error: "sectionId is required" }, { status: 400 });
+      return NextResponse.json({ error: "Select a section." }, { status: 400 });
     }
     if (fromParam && toParam && fromParam > toParam) {
-      return NextResponse.json({ error: "From date must be before the To date" }, { status: 400 });
+      return NextResponse.json({ error: "The From date must be before the To date." }, { status: 400 });
     }
     // From/to without a valid bound must never reach an unbounded
     // Firebase `.where("date", ...).get()` scan - be explicit and fail
@@ -111,7 +111,7 @@ export async function GET(request: Request) {
     if (summaryParam || optionsOnlyParam) {
       const sectionSnap = await collegeRef.collection("sections").doc(sectionIdParam!).get();
       if (!sectionSnap.exists) {
-        return NextResponse.json({ error: "Section not found" }, { status: 404 });
+        return NextResponse.json({ error: "Section not found. It may have been deleted." }, { status: 404 });
       }
       const section = sectionSnap.data() as Section;
       summarySection = section;
@@ -140,7 +140,7 @@ export async function GET(request: Request) {
       const facSnap = await collegeRef.collection("facultyMembers")
         .where("userUid", "==", requestedFacultyId).limit(1).get();
       if (facSnap.empty) {
-        return NextResponse.json({ error: "Faculty not found" }, { status: 404 });
+        return NextResponse.json({ error: "Faculty record not found. It may have been deleted." }, { status: 404 });
       }
       const facultyDept = (facSnap.docs[0].data() as { department?: string }).department ?? "";
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
@@ -374,9 +374,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ records });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/class-work-records GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

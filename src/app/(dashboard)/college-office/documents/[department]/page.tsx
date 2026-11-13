@@ -105,7 +105,7 @@ export default function CollegeOfficeDepartmentVacanciesPage() {
         built.sort((a, b) => (toDate(b.vacancy.createdAt)?.getTime() ?? 0) - (toDate(a.vacancy.createdAt)?.getTime() ?? 0));
         setEntries(built);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load hiring requests" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load hiring requests" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -145,7 +145,7 @@ export default function CollegeOfficeDepartmentVacanciesPage() {
 
       <div>
         <h1 className="text-xl font-bold">{decodedDepartment}</h1>
-        <p className="text-sm text-muted-foreground">Offer letter → document verification & joining letter → appointment letter → credentials & official email setup</p>
+        <p className="text-sm text-muted-foreground">Offer letter, document verification and joining letter, appointment letter, then login and official email setup.</p>
       </div>
 
       <div className="flex gap-2">
@@ -276,7 +276,7 @@ function DepartmentVacancyCard({
         ) : (
           <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
             <Clock className="h-4 w-4 shrink-0" />
-            Nothing for Office to action yet — still with HOD/Principal
+            No action needed from the Office yet; the request is with the HOD or Principal.
           </span>
         )}
       </div>

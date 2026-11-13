@@ -76,9 +76,9 @@ export function CameraCaptureModal({
       const message =
         err instanceof Error
           ? err.name === "NotAllowedError" || err.name === "PermissionDeniedError"
-            ? "Camera permission denied. Please allow camera access in your browser settings."
+            ? "Camera permission denied. Allow camera access in your browser settings."
             : err.message
-          : "Failed to access webcam.";
+          : "Unable to access webcam.";
       setErrorMsg(message);
     }
   };

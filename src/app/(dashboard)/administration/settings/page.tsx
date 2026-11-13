@@ -25,7 +25,7 @@ export default function AdministrationSettingsPage() {
           setForm({ name: loc.name ?? "", city: loc.city ?? "", state: loc.state ?? "", address: loc.address ?? "" });
         }
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load location" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load location" }))
       .finally(() => setLoading(false));
   }, []);
 
@@ -48,7 +48,7 @@ export default function AdministrationSettingsPage() {
       if (!res.ok) throw new Error();
       toast({ variant: "success", title: "Location information updated" });
     } catch {
-      toast({ variant: "destructive", title: "Failed to save changes" });
+      toast({ variant: "destructive", title: "Unable to save changes" });
     } finally {
       setSaving(false);
     }
@@ -64,7 +64,7 @@ export default function AdministrationSettingsPage() {
 
   return (
     <div className="space-y-6 max-w-2xl">
-      <PageHeader title="Settings" description="This location's own configuration" />
+      <PageHeader title="Settings" description="Configuration for this location." />
 
       <Card>
         <CardHeader>
@@ -80,12 +80,12 @@ export default function AdministrationSettingsPage() {
             <form onSubmit={handleSave} className="space-y-4">
               <div className="space-y-2">
                 <Label>Location Name <span className="text-destructive">*</span></Label>
-                <Input value={form.name} onChange={(e) => set({ name: e.target.value })} placeholder="e.g. Bhimavaram Campus" />
+                <Input value={form.name} onChange={(e) => set({ name: e.target.value })} placeholder="Bhimavaram Campus" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>City <span className="text-destructive">*</span></Label>
-                  <Input value={form.city} onChange={(e) => set({ city: e.target.value })} placeholder="e.g. Bhimavaram" />
+                  <Input value={form.city} onChange={(e) => set({ city: e.target.value })} placeholder="Bhimavaram" />
                 </div>
                 <div className="space-y-2">
                   <Label>State</Label>

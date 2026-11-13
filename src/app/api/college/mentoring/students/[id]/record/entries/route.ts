@@ -24,7 +24,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     let semester: number | null = null;
     if (section.perSemester) {
       semester = typeof body.semester === "number" ? body.semester : Number.NaN;
-      if (!Number.isInteger(semester) || semester < 1 || semester > 12) return NextResponse.json({ error: "Pick the semester" }, { status: 400 });
+      if (!Number.isInteger(semester) || semester < 1 || semester > 12) return NextResponse.json({ error: "Select the semester." }, { status: 400 });
     }
     const clean = cleanEntryValues(section, body.values);
     if (!clean.ok) return NextResponse.json({ error: clean.error }, { status: 400 });

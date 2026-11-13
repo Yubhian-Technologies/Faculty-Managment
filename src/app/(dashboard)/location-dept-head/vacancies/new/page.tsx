@@ -42,7 +42,7 @@ export default function NewDeptVacancyPage() {
       });
       const json = await res.json() as { id?: string; error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to submit", description: json.error });
+        toast({ variant: "destructive", title: "Unable to submit", description: json.error });
         return;
       }
       toast({ variant: "success", title: "Request submitted to HR Admin" });
@@ -56,7 +56,7 @@ export default function NewDeptVacancyPage() {
 
   return (
     <div className="max-w-2xl space-y-5">
-      <PageHeader title="New Hiring Request" description="Submit to HR Admin for review" />
+      <PageHeader title="New Hiring Request" description="Submit to HR Admin for review." />
       <form onSubmit={handleSubmit} className="space-y-5">
         <Card>
           <CardHeader className="pb-3">
@@ -66,7 +66,7 @@ export default function NewDeptVacancyPage() {
             <div className="space-y-2">
               <Label>Position</Label>
               <Input value="Faculty" disabled className="bg-muted text-muted-foreground" />
-              <p className="text-xs text-muted-foreground">All hiring requests are for Faculty positions.</p>
+              <p className="text-xs text-muted-foreground">All hiring requests are for faculty positions.</p>
             </div>
 
             <div className="space-y-2">
@@ -78,7 +78,7 @@ export default function NewDeptVacancyPage() {
             <div className="space-y-2">
               <Label>College <span className="text-destructive">*</span></Label>
               <LocationCollegeSelect value={collegeId} onChange={setCollegeId} className="h-9 w-full text-sm" />
-              <p className="text-xs text-muted-foreground">Which college this vacancy is for.</p>
+              <p className="text-xs text-muted-foreground">The college this vacancy is for.</p>
             </div>
 
             <div className="space-y-2">
@@ -86,7 +86,7 @@ export default function NewDeptVacancyPage() {
               <Input
                 value={qualification}
                 onChange={(e) => setQualification(e.target.value)}
-                placeholder="e.g. M.Tech / Ph.D in relevant field"
+                placeholder="M.Tech / Ph.D in relevant field"
               />
             </div>
 

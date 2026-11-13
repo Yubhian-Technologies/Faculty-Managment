@@ -74,7 +74,7 @@ export default function EditCollegePage() {
         setShape(cl?.shape ?? "none");
         setPolygonPoints(cl?.shape === "polygon" ? cl.points : []);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load college" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load college" }))
       .finally(() => setLoading(false));
   }, [collegeId, router]);
 
@@ -94,7 +94,7 @@ export default function EditCollegePage() {
         setLocating(false);
       },
       () => {
-        toast({ variant: "destructive", title: "Failed to get current location", description: "Check location permissions and try again" });
+        toast({ variant: "destructive", title: "Unable to get current location", description: "Check location permissions and try again" });
         setLocating(false);
       },
       { enableHighAccuracy: true, timeout: 10000 }
@@ -145,7 +145,7 @@ export default function EditCollegePage() {
       toast({ variant: "success", title: "College updated" });
       router.push("/super-admin/colleges");
     } catch {
-      toast({ variant: "destructive", title: "Failed to update college" });
+      toast({ variant: "destructive", title: "Unable to update college" });
     } finally {
       setSaving(false);
     }
@@ -161,7 +161,7 @@ export default function EditCollegePage() {
 
   return (
     <div className="max-w-xl">
-      <PageHeader title="Edit College" description="Update institution details" />
+      <PageHeader title="Edit College" description="Update the institution's details." />
 
       <Card>
         <CardHeader>
@@ -227,9 +227,7 @@ export default function EditCollegePage() {
             <div className="space-y-3 pt-2 border-t">
               <div className="pt-4">
                 <Label className="text-sm font-medium">Campus Location (Attendance Geofence)</Label>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Faculty must be inside this boundary to mark self-attendance. Super Admin only.
-                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">Faculty must be inside this boundary to mark their own attendance. Super Admin only.</p>
               </div>
 
               <div className="space-y-2">
@@ -239,7 +237,7 @@ export default function EditCollegePage() {
                   <SelectContent>
                     <SelectItem value="none">None (no geofence check)</SelectItem>
                     <SelectItem value="circle">Circle (center point + radius)</SelectItem>
-                    <SelectItem value="polygon">Polygon (draw the real boundary on a map)</SelectItem>
+                    <SelectItem value="polygon">Polygon (draw the boundary on a map)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

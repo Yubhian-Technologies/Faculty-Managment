@@ -20,7 +20,7 @@ export default function FinanceAuditPage() {
     collegeFetch("/api/college/finance-audit-logs")
       .then((r) => r.json() as Promise<{ logs: Row[] }>)
       .then((d) => setLogs(d.logs ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load audit logs" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load audit logs" }))
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -38,7 +38,7 @@ export default function FinanceAuditPage() {
     <div className="space-y-6">
       <PageHeader
         title="Audit & Compliance"
-        description="Financial audit trail - every budget, approval, payment, and clearance action"
+        description="Financial audit trail of every budget, approval, payment and clearance action."
       />
 
       <DataTable

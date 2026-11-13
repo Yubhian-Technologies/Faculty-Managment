@@ -59,12 +59,12 @@ function ModuleEditForm({ staff, moduleKey }: { staff: Partial<SupportingStaffMe
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error ?? "Failed to save");
+        throw new Error(data.error ?? "Unable to save");
       }
       toast({ variant: "success", title: "Saved" });
       router.push(backHref);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save" });
     } finally {
       setSaving(false);
     }

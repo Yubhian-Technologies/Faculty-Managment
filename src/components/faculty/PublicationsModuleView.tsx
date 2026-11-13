@@ -39,7 +39,7 @@ function PublicationRow({
   const isCoAuthorHere = !!viewerUid && (pub.internalAuthorUids ?? []).includes(viewerUid);
   const canEdit = isOwnProfile && (isSubmitter || isCoAuthorHere);
   const extras: { label: string; value: string | number | undefined }[] = [
-    { label: "Dept.", value: pub.department },
+    { label: "Department", value: pub.department },
     { label: "Author Position", value: pub.authorPosition },
     { label: "Indexed", value: pub.indexing },
     { label: "Journal / Conference / Book Chapter", value: pub.venueType },
@@ -187,13 +187,13 @@ function PublicationFormFields({
           });
       if (!res.ok) {
         const json = await res.json().catch(() => ({})) as { error?: string };
-        toast({ variant: "destructive", title: "Failed to save publication", description: json.error });
+        toast({ variant: "destructive", title: "Unable to save publication", description: json.error });
         return;
       }
       toast({ variant: "success", title: editingId ? "Resubmitted for verification" : "Submitted for verification" });
       onSaved();
     } catch {
-      toast({ variant: "destructive", title: "Network error. Please try again." });
+      toast({ variant: "destructive", title: "Network error. Try again." });
     } finally {
       setSaving(false);
     }

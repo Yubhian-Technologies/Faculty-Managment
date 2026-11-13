@@ -63,7 +63,7 @@ function CertificateCard({ request, collegeName, onDone }: { request: Certificat
       toast({ variant: "success", title: "Certificate issued" });
       onDone();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't generate the certificate" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to generate the certificate" });
     } finally {
       setBusy(false);
     }
@@ -71,7 +71,7 @@ function CertificateCard({ request, collegeName, onDone }: { request: Certificat
 
   async function handleReject() {
     if (!remarks.trim()) {
-      toast({ variant: "destructive", title: "Please add a reason for rejecting" });
+      toast({ variant: "destructive", title: "Add a reason for rejecting" });
       return;
     }
     setBusy(true);
@@ -133,7 +133,7 @@ export function IssuanceQueue() {
     try {
       setRequests(await listRequests("issuance-queue"));
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't load the issuance queue" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to load the issuance queue" });
     } finally {
       setLoading(false);
     }

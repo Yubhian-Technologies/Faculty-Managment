@@ -451,7 +451,7 @@ export function TeachingAssignmentsEditor({ value, onChange, department, previou
                       <SelectItem value={NO_SUBJECT}>None - leave periods empty</SelectItem>
                       {subjects.length === 0 && <div className="px-2 py-1.5 text-xs text-muted-foreground">No subjects for this year</div>}
                       {subjects.length > 0 && availableSubjects.length === 0 && (
-                        <div className="px-2 py-1.5 text-xs text-muted-foreground">All subjects for this year are already assigned</div>
+                        <div className="px-2 py-1.5 text-xs text-muted-foreground">All subjects for this year are already assigned.</div>
                       )}
                       {availableSubjects.map((s) => (
                         <SelectItem key={s.id} value={s.id}>{s.name} ({s.code}{s.regulation ? ` · ${s.regulation}` : ""})</SelectItem>
@@ -471,7 +471,7 @@ export function TeachingAssignmentsEditor({ value, onChange, department, previou
                   <Label className="text-xs">Hours Per Week</Label>
                   <p className="text-sm font-medium">{row.hoursPerWeek}</p>
                   <p className="text-[10px] text-muted-foreground">
-                    Set on the subject - edit it from Subjects if this needs to change.
+                    Set on the subject. Edit it in Subjects if it needs to change.
                   </p>
                 </div>
               </div>
@@ -484,7 +484,7 @@ export function TeachingAssignmentsEditor({ value, onChange, department, previou
                   <Input
                     value={row.assignmentAcademicYear ?? ""}
                     onChange={(e) => updateRow(row.localId, { assignmentAcademicYear: e.target.value })}
-                    placeholder="e.g. 2025-2026"
+                    placeholder="2025-2026"
                   />
                 </div>
                 <div className="space-y-1">
@@ -492,7 +492,7 @@ export function TeachingAssignmentsEditor({ value, onChange, department, previou
                   <Input
                     value={row.assignmentSemester ?? ""}
                     onChange={(e) => updateRow(row.localId, { assignmentSemester: e.target.value })}
-                    placeholder="e.g. I Semester"
+                    placeholder="I Semester"
                   />
                 </div>
                 {row.isPast && (
@@ -517,11 +517,10 @@ export function TeachingAssignmentsEditor({ value, onChange, department, previou
                     <Input
                       value={row.labBatch ?? ""}
                       onChange={(e) => updateRow(row.localId, { labBatch: e.target.value })}
-                      placeholder="e.g. Batch 1"
+                      placeholder="Batch 1"
                     />
                     <p className="text-[10px] text-muted-foreground">
-                      Label this row&rsquo;s periods as a lab sub-group - add a second row for the
-                      same subject/section with a different batch label and faculty to split it.
+                      Label this row&apos;s periods as a lab batch. To divide the lab, add a second row for the same subject and section with a different batch label and faculty member.
                     </p>
                   </div>
                 )}

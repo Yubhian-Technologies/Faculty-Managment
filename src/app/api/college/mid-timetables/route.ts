@@ -63,9 +63,9 @@ export async function POST(request: Request) {
     const refs = midTimetableRefs(db, session.collegeId);
 
     const course = courseKey ? await courseIdsForKey(db, session.collegeId, courseKey) : null;
-    if (!course || course.ids.length === 0) return NextResponse.json({ error: "Pick a course" }, { status: 400 });
+    if (!course || course.ids.length === 0) return NextResponse.json({ error: "Select a course." }, { status: 400 });
     if (!Number.isInteger(year) || year < 1 || year > (course.durationYears || 10)) return NextResponse.json({ error: "Pick the year" }, { status: 400 });
-    if (!Number.isInteger(semester) || semester < 1) return NextResponse.json({ error: "Pick the semester" }, { status: 400 });
+    if (!Number.isInteger(semester) || semester < 1) return NextResponse.json({ error: "Select the semester." }, { status: 400 });
     const midCount = Number((await refs.college.collection("examSettings").doc("mid").get()).get("midCount")) || 2;
     if (!Number.isInteger(midNumber) || midNumber < 1 || midNumber > midCount) return NextResponse.json({ error: `Pick a Mid from 1 to ${midCount}` }, { status: 400 });
 

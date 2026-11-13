@@ -34,7 +34,7 @@ export default function DeptHeadInterviewsPage() {
     fetch("/api/location/interviews")
       .then((r) => r.json() as Promise<{ interviews: LocationInterview[] }>)
       .then((d) => setInterviews(d.interviews ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load" }))
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -42,7 +42,7 @@ export default function DeptHeadInterviewsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="My Interviews" description="Interviews you are assigned to as a panel member" />
+      <PageHeader title="My Interviews" description="Interviews you are assigned to as a panel member." />
 
       {interviews.length === 0 ? (
         <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">

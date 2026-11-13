@@ -45,10 +45,10 @@ type IndentRow = {
   collegeId?: string;
   collegeName?: string;
 };
-// Both request types can put Purchase Dept in the loop - a freeform clearance
-// request, or a GOODS-type indent (NON_GOODS indents skip Purchase Dept
+// Both request types can put Purchase Department in the loop - a freeform clearance
+// request, or a GOODS-type indent (NON_GOODS indents skip Purchase Department
 // entirely, see IndentRequestType in src/types/indent.ts) - shown together so
-// Finance sees everything currently in flight with Purchase Dept in one list.
+// Finance sees everything currently in flight with Purchase Department in one list.
 type Row = ClearanceRow | IndentRow;
 
 const SCOPES = ["COLLEGE", "LOCATION", "ALL"] as const;
@@ -59,9 +59,9 @@ const SCOPE_LABELS: Record<ClearanceScope, string> = {
   ALL: "All Locations",
 };
 
-// Purchase Dept hasn't forwarded these to Finance yet (still with HOD/Purchase
+// Purchase Department hasn't forwarded these to Finance yet (still with HOD/Purchase
 // Dept), so Finance shouldn't see them at all - only PENDING_FINANCE_REVIEW
-// onward is actually "sent by Purchase Dept". Same status names for both the
+// onward is actually "sent by Purchase Department". Same status names for both the
 // clearance and indent state machines at this stage.
 const NOT_YET_SENT_TO_FINANCE = new Set(["PENDING_PURCHASE_REVIEW", "REJECTED_BY_PURCHASE", "RETURNED_TO_HOD"]);
 
@@ -124,7 +124,7 @@ export default function FinancePurchaseClearancePage() {
         setRequests(mergeRows(d.clearances ?? [], d.indents ?? [], true));
       }
     } catch {
-      toast({ variant: "destructive", title: "Failed to load purchase clearance requests" });
+      toast({ variant: "destructive", title: "Unable to load purchase clearance requests" });
     } finally {
       setIsLoading(false);
     }
@@ -174,7 +174,7 @@ export default function FinancePurchaseClearancePage() {
         const err = (await res.json()) as { error?: string };
         throw new Error(err.error ?? "Action failed");
       }
-      toast({ variant: "success", title: action === "APPROVE" ? "Request approved" : action === "REJECT" ? "Request rejected" : "Request returned to Purchase Dept" });
+      toast({ variant: "success", title: action === "APPROVE" ? "Request approved" : action === "REJECT" ? "Request rejected" : "Request returned to Purchase Department" });
       setReturnState(null);
       setRejectState(null);
       void load();
@@ -222,7 +222,7 @@ export default function FinancePurchaseClearancePage() {
       ) : requests.length === 0 ? (
         <EmptyState
           title="No purchase clearance requests"
-          description="Requests HODs raise, once quotations are sourced by Purchase Dept, will appear here for review."
+          description="Requests raised by HODs appear here for review once the Purchase Department has obtained quotations."
           icon={<ShoppingCart className="h-8 w-8" />}
         />
       ) : (
@@ -369,7 +369,7 @@ function ClearanceCard({
                 onClick={onStartReturn}
               >
                 <RotateCcw className="h-3.5 w-3.5 mr-1" />
-                Return to Purchase Dept
+                Return to Purchase Department
               </Button>
               <Button
                 size="sm"
@@ -385,7 +385,7 @@ function ClearanceCard({
 
           {returnState && (
             <div className="space-y-2 rounded-md border border-orange-300/60 bg-orange-50 p-3 pt-2 border-t">
-              <Label className="text-sm font-medium">Remarks for Purchase Dept</Label>
+              <Label className="text-sm font-medium">Remarks for Purchase Department</Label>
               <Textarea
                 value={returnState.remarks}
                 onChange={(e) => onReturnRemarksChange(e.target.value)}

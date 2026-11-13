@@ -46,7 +46,7 @@ export async function POST(request: Request) {
     const adv: Omit<SalaryAdvance, "id"> = {
       employeeKey: employee.employeeKey, employeeCode: employee.employeeCode, name: employee.name, ...input,
       status: "ACTIVE", recoveries: {}, rev: 1, createdAt: at, createdByName: session.email,
-      history: [{ at, byName: session.email, change: `Advance Rs. ${input.amount}${input.recoveredBefore ? ` (Rs. ${input.recoveredBefore} already recovered)` : ""}, Rs. ${input.instalment} a month from ${input.startMonth}` }],
+      history: [{ at, byName: session.email, change: `Advance ₹${input.amount}${input.recoveredBefore ? ` (₹${input.recoveredBefore} already recovered)` : ""}, ₹${input.instalment} a month from ${input.startMonth}` }],
     };
     await ref.set(adv);
     await writeAuditLogSafe(db, session.collegeId, {

@@ -397,7 +397,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
     fetch("/api/leave/balances")
       .then((r) => r.json() as Promise<{ leaveTypes: BalanceEntry[] }>)
       .then((data) => setTypes(data.leaveTypes ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load leave types" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load leave types" }))
       .finally(() => setIsLoadingTypes(false));
   }, []);
 
@@ -406,7 +406,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
     fetch(`/api/leave/applications/${extendId}`)
       .then((r) => r.json() as Promise<{ request?: LeaveRequest; error?: string }>)
       .then((data) => {
-        if (!data.request) { toast({ variant: "destructive", title: "Couldn't load the leave you're extending" }); return; }
+        if (!data.request) { toast({ variant: "destructive", title: "Unable to load the leave you're extending" }); return; }
         setExtendSource(data.request);
         // Extend picks its own From (day after the original ends) and, for
         // SH, its own To below - both independent of the one-day/range
@@ -423,7 +423,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
           setFromDate(dayAfterISO > todayISODate() ? dayAfterISO : todayISODate());
         }
       })
-      .catch(() => toast({ variant: "destructive", title: "Couldn't load the leave you're extending" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load the leave you're extending" }));
   }, [extendId]);
 
   const [editSource, setEditSource] = useState<LeaveRequest | null>(null);
@@ -432,7 +432,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
     fetch(`/api/leave/applications/${editId}`)
       .then((r) => r.json() as Promise<{ request?: LeaveRequest; error?: string }>)
       .then((data) => {
-        if (!data.request) { toast({ variant: "destructive", title: "Couldn't load this leave request" }); return; }
+        if (!data.request) { toast({ variant: "destructive", title: "Unable to load this leave request" }); return; }
         const r = data.request;
         setEditSource(r);
         setFullDayMode("RANGE");
@@ -444,7 +444,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
         setReason(r.reason ?? "");
         setPlaceOfVisit(r.placeOfVisit ?? "");
       })
-      .catch(() => toast({ variant: "destructive", title: "Couldn't load this leave request" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load this leave request" }));
   }, [editId]);
 
   // Once this edit's own periods load for the pre-filled dates (the effect
@@ -559,11 +559,11 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
             }),
           });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to submit");
+      if (!res.ok) throw new Error(data.error ?? "Unable to submit");
       toast({ variant: "success", title: editId ? "Leave request updated" : "Leave request submitted" });
       router.push(backHref);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to submit" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to submit" });
     } finally {
       setIsSubmitting(false);
     }
@@ -624,13 +624,11 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                 <SelectItem value="OTHER">Other</SelectItem>
               </SelectContent>
             </Select>
-            {extendId && <p className="text-xs text-muted-foreground">Kept the same as the leave you&rsquo;re extending.</p>}
+            {extendId && <p className="text-xs text-muted-foreground">Kept the same as the leave you are extending.</p>}
             {/* Explains why EL is missing from the list above, rather than
                 leaving it silently absent. */}
             {!!types.find((t) => t.code === "CL")?.remaining && (
-              <p className="text-xs text-muted-foreground">
-                Earned Leave becomes available once your Casual Leave balance is fully used.
-              </p>
+              <p className="text-xs text-muted-foreground">Earned Leave becomes available once your Casual Leave balance is used.</p>
             )}
             {/* Right after the leave type: the reasons offered depend on it (and are cleared when it changes),
                 so it only appears once a type is picked. */}
@@ -694,7 +692,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                   id="place-of-visit"
                   value={placeOfVisit}
                   onChange={(e) => setPlaceOfVisit(e.target.value)}
-                  placeholder="e.g. XYZ College, Hyderabad"
+                  placeholder="XYZ College, Hyderabad"
                 />
               </div>
             </div>
@@ -722,7 +720,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                 className={!isHalfDayEligible ? "cursor-not-allowed opacity-50" : undefined}
               />
               {!isHalfDayEligible && leaveTypeCode && (
-                <span className="text-xs text-muted-foreground">Half day not available for this leave type</span>
+                <span className="text-xs text-muted-foreground">Half day is not available for this leave type.</span>
               )}
             </div>
             {/* Full day's own sub-choice: a single date, or a From/To span.
@@ -789,9 +787,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                 </SelectContent>
               </Select>
               {isForenoonBlocked && (
-                <p className="text-xs text-muted-foreground">
-                  Forenoon is no longer available for today after 11am - only Afternoon can be selected.
-                </p>
+                <p className="text-xs text-muted-foreground">Forenoon is not available for today after 11 am; only Afternoon can be selected.</p>
               )}
             </div>
           )}
@@ -806,9 +802,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                 <Users className="h-4 w-4 text-muted-foreground" />
                 <Label>Work Adjustment</Label>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Choose a faculty member to take each of your classes during this leave. Only faculty who are free at that time are shown, and faculty from your department are listed first.
-              </p>
+              <p className="text-xs text-muted-foreground">Choose a faculty member to take each of your classes during this leave. Only faculty free at that time are shown, with faculty from your department listed first.</p>
               {substituteDepartments.length > 1 && (
                 <div className="flex items-center gap-2">
                   <Label className="text-xs text-muted-foreground shrink-0">Department</Label>
@@ -881,10 +875,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
           {HANDOVER_ENABLED && handoverCandidates.length > 0 && (
             <div className="space-y-2">
               <Label>Handover / point of contact (optional)</Label>
-              <p className="text-xs text-muted-foreground">
-                Name someone to handle anything else you look after while you&rsquo;re out - separate from any classes above.
-                Only people available on your dates are listed.
-              </p>
+              <p className="text-xs text-muted-foreground">Name someone to handle your other responsibilities while you are away, separate from the classes above. Only people available on your dates are listed.</p>
               <Select value={handoverToUid || "NONE"} onValueChange={(v) => setHandoverToUid(v === "NONE" ? "" : v)}>
                 <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
                 <SelectContent>

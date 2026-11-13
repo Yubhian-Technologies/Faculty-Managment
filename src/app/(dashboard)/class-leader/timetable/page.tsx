@@ -85,7 +85,7 @@ export default function ClassLeaderTimetablePage() {
           setSelectedSemester(d.resolvedSemester);
         }
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load timetable" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load timetable" }))
       .finally(() => setIsLoading(false));
   }, [weekStart, selectedSemester]);
 
@@ -161,7 +161,7 @@ export default function ClassLeaderTimetablePage() {
       ) : !section ? (
         <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground bg-muted/10">
           <p className="font-semibold text-foreground text-base">No Section Linked</p>
-          <p className="mt-1 text-xs">No class/section is linked to your login yet. Please contact your College Office or HOD to bind your section.</p>
+          <p className="mt-1 text-xs">No class/section is linked to your login yet. Contact your College Office or HOD to bind your section.</p>
         </div>
       ) : !timing ? (
         <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground bg-muted/10">

@@ -24,7 +24,7 @@ const VIEWS: { key: View; label: string }[] = [
 async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   const data = (await res.json().catch(() => ({}))) as T & { error?: string };
-  if (!res.ok) throw new Error(data.error || "Could not load this");
+  if (!res.ok) throw new Error(data.error || "Unable to load this");
   return data;
 }
 
@@ -44,7 +44,7 @@ export default function HodMentoringPage() {
     <div>
       <PageHeader
         title="Mentoring"
-        description="Assign faculty mentors to students and monitor their academic progress, attendance, results, and internal assessment performance."
+        description="Assign faculty mentors to students and monitor their academic progress, attendance, results and internal assessment."
       />
       <div className="flex flex-wrap gap-1 border-b mb-4">
         {VIEWS.map((v) => (
@@ -122,7 +122,7 @@ function AssignView({ onChanged }: { onChanged: () => void }) {
       setStudents(d.students);
     } catch (e) {
       setStudents([]);
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to load students" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to load students" });
     }
   }, []);
 
@@ -184,7 +184,7 @@ function AssignView({ onChanged }: { onChanged: () => void }) {
   async function post(body: unknown) {
     const res = await fetch("/api/college/mentoring/assign", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const d = (await res.json().catch(() => ({}))) as { assigned?: string[]; skipped?: { id: string; reason: string }[]; error?: string };
-    if (!res.ok) throw new Error(d.error || "Couldn't save the change");
+    if (!res.ok) throw new Error(d.error || "Unable to save the change");
     return d;
   }
 
@@ -204,7 +204,7 @@ function AssignView({ onChanged }: { onChanged: () => void }) {
       loadMentors(sectionId);
       await loadStudents(sectionId);
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't assign the students" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to assign the students" });
     } finally {
       setAssigning(false);
     }
@@ -219,7 +219,7 @@ function AssignView({ onChanged }: { onChanged: () => void }) {
       await loadStudents(sectionId);
       onChanged();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not remove the mentor" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to remove the mentor" });
     } finally {
       setRemoving(false);
     }
@@ -270,10 +270,7 @@ function AssignView({ onChanged }: { onChanged: () => void }) {
               </Select>
             </div>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Only sections whose year you run are listed - a year another department runs (the shared first year) is assigned by that department&apos;s HOD.
-            A student who already has a mentor must be removed from that mentor first.
-          </p>
+          <p className="text-xs text-muted-foreground">Only sections of years your department runs are listed; a year run by another department (the common first year) is assigned by that department&apos;s HOD. A student who already has a mentor must be removed from that mentor first.</p>
         </CardContent>
       </Card>
 
@@ -368,7 +365,7 @@ function BrowseView({ mentors }: { mentors: MentorOption[] }) {
   useEffect(() => {
     getJson<{ sections: AssignSection[] }>("/api/college/mentoring/sections?for=view")
       .then((d) => setSections(d.sections))
-      .catch((e: Error) => toast({ variant: "destructive", title: `Could not load your classes: ${e.message}` }))
+      .catch((e: Error) => toast({ variant: "destructive", title: `Unable to load your classes: ${e.message}` }))
       .finally(() => setSectionsLoaded(true));
   }, []);
 
@@ -486,7 +483,7 @@ function BrowseView({ mentors }: { mentors: MentorOption[] }) {
       {sectionsLoaded && sections.length === 0 && (
         <p className="text-sm text-amber-700">No classes were found for your department, so the Course, Year and Section lists are empty. Search by name or Regd. No meanwhile.</p>
       )}
-      {!plan && <p className="text-sm text-muted-foreground">Pick a course, year, section or mentor - or type at least 3 characters of a name or Regd. No.</p>}
+      {!plan && <p className="text-sm text-muted-foreground">Select a course, year, section or mentor, or type at least 3 characters of a name or Regd. No.</p>}
       {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
       {plan && !loading && (
         <div className="space-y-2">

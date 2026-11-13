@@ -41,7 +41,7 @@ export default function AssignShiftStaffPage() {
         setSelectedStaffIds(staff.filter((s) => s.shiftId === params.id).map((s) => s.id));
       })
       .catch(() => {
-        if (!isCancelled) toast({ variant: "destructive", title: "Failed to load shift" });
+        if (!isCancelled) toast({ variant: "destructive", title: "Unable to load shift" });
       })
       .finally(() => {
         if (!isCancelled) setIsLoading(false);
@@ -71,12 +71,12 @@ export default function AssignShiftStaffPage() {
           unassignedStaffIds: unassigned,
         }),
       });
-      if (!res.ok) throw new Error("Failed to update assignments");
+      if (!res.ok) throw new Error("Unable to update assignments");
 
       toast({ title: "Updated", description: `Assigned ${selectedStaffIds.length} staff to ${shift.name}` });
       router.push("/location-dept-head/shifts");
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to update assignments";
+      const msg = err instanceof Error ? err.message : "Unable to update assignments";
       toast({ variant: "destructive", title: "Error", description: msg });
     } finally {
       setIsSaving(false);
@@ -106,9 +106,7 @@ export default function AssignShiftStaffPage() {
             <UserPlus className="h-4 w-4 text-primary" />
             <span>Select Staff Members</span>
           </CardTitle>
-          <CardDescription className="text-xs">
-            Choose which staff members are assigned to this shift.
-          </CardDescription>
+          <CardDescription className="text-xs">Choose the staff members assigned to this shift.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-1.5">
           {isLoading ? (

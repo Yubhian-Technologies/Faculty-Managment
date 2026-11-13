@@ -36,7 +36,7 @@ export default function NewCollegePersonPage() {
       });
       const json = await res.json() as { uid?: string; error?: string; seatError?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to create", description: json.error });
+        toast({ variant: "destructive", title: "Unable to create", description: json.error });
         return;
       }
       toast({
@@ -58,7 +58,7 @@ export default function NewCollegePersonPage() {
     <div className="max-w-xl">
       <PageHeader
         title="Add College Admin"
-        description="Create the login that runs this college and appoint it College Admin in one step."
+        description="Create the College Admin login for this college."
       />
       <Card>
         <CardHeader>
@@ -66,9 +66,7 @@ export default function NewCollegePersonPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <p className="text-xs text-muted-foreground">
-              This login becomes College Admin. From there it appoints the Principal, departments, faculty and office staff, from Role Assignments.
-            </p>
+            <p className="text-xs text-muted-foreground">This login becomes the College Admin, who appoints the Principal, departments, faculty and office staff from Role Assignments.</p>
             <div className="space-y-2">
               <Label>College Email (their login) <span className="text-destructive">*</span></Label>
               <Input type="email" value={form.collegeEmail} onChange={(e) => set({ collegeEmail: e.target.value })} placeholder="admin@yourcollege.edu" />

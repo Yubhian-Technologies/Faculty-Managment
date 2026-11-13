@@ -82,12 +82,12 @@ function SeedFundingRow({
         <div className={`grid gap-2 ${FACT_GRID_COLS_4}`}>
           <Field label="Title" value={project.title} />
           <Field label="PI" value={project.piName} />
-          <Field label="Dept. of PI" value={project.piDepartment} />
+          <Field label="Department of PI" value={project.piDepartment} />
           <Field label="Status" value={project.projectStatus === "SANCTIONED" ? "Sanctioned" : "Completed"} />
           <Field label="Duration (Months)" value={project.durationMonths} />
-          <Field label="Total Amount Sanctioned (Rs.)" value={project.totalAmountSanctioned} />
-          <Field label="Recurring (Rs.)" value={project.recurringAmount} />
-          <Field label="Non-Recurring (Rs.)" value={project.nonRecurringAmount} />
+          <Field label="Total Amount Sanctioned (₹)" value={project.totalAmountSanctioned} />
+          <Field label="Recurring (₹)" value={project.recurringAmount} />
+          <Field label="Non-Recurring (₹)" value={project.nonRecurringAmount} />
         </div>
       </div>
       {project.objectives && (
@@ -275,13 +275,13 @@ function ProjectFormFields({
           });
       if (!res.ok) {
         const json = await res.json().catch(() => ({})) as { error?: string };
-        toast({ variant: "destructive", title: "Failed to save seed funding project", description: json.error });
+        toast({ variant: "destructive", title: "Unable to save seed funding project", description: json.error });
         return;
       }
       toast({ variant: "success", title: editingId ? "Resubmitted for verification" : "Submitted for verification" });
       onSaved();
     } catch {
-      toast({ variant: "destructive", title: "Network error. Please try again." });
+      toast({ variant: "destructive", title: "Network error. Try again." });
     } finally {
       setSaving(false);
     }
@@ -314,7 +314,7 @@ function ProjectFormFields({
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <TextInput label="Name of the PI" value={form.piName} onChange={(v) => set("piName", v)} required />
-            <TextInput label="Dept. of PI" value={form.piDepartment} onChange={(v) => set("piDepartment", v)} />
+            <TextInput label="Department of PI" value={form.piDepartment} onChange={(v) => set("piDepartment", v)} />
           </div>
         </div>
 
@@ -334,13 +334,13 @@ function ProjectFormFields({
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 rounded-lg border p-3">
               <DateInput label="Date of Project Sanctioned" value={form.dateSanctioned} onChange={(v) => set("dateSanctioned", v)} />
               <DateInput label="Date of Start" value={form.dateOfStart} onChange={(v) => set("dateOfStart", v)} />
-              <TextInput label="F.Y. of Start" value={form.financialYearOfStart} onChange={(v) => set("financialYearOfStart", v)} placeholder="e.g. 2024-25" />
+              <TextInput label="F.Y. of Start" value={form.financialYearOfStart} onChange={(v) => set("financialYearOfStart", v)} placeholder="2024-25" />
             </div>
           )}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <NumField label="Total Amount Sanctioned (Rs.)" value={form.totalAmountSanctioned} onChange={(v) => set("totalAmountSanctioned", v)} />
-            <NumField label="Recurring (Rs.)" value={form.recurringAmount} onChange={(v) => set("recurringAmount", v)} />
-            <NumField label="Non-Recurring (Rs.)" value={form.nonRecurringAmount} onChange={(v) => set("nonRecurringAmount", v)} />
+            <NumField label="Total Amount Sanctioned (₹)" value={form.totalAmountSanctioned} onChange={(v) => set("totalAmountSanctioned", v)} />
+            <NumField label="Recurring (₹)" value={form.recurringAmount} onChange={(v) => set("recurringAmount", v)} />
+            <NumField label="Non-Recurring (₹)" value={form.nonRecurringAmount} onChange={(v) => set("nonRecurringAmount", v)} />
           </div>
         </div>
 
@@ -439,7 +439,7 @@ function ProjectFormFields({
               ) },
               { header: "Upload Proof (Link/PDF)", render: (item, update) => {
                 const status = patentStatusKey(item.status);
-                if (!status) return <p className="text-xs text-muted-foreground pt-1.5">Select a status first</p>;
+                if (!status) return <p className="text-xs text-muted-foreground pt-1.5">Select a status first.</p>;
                 return (
                   <div className="space-y-1">
                     <p className="text-xs font-medium text-muted-foreground">{status} Proof</p>

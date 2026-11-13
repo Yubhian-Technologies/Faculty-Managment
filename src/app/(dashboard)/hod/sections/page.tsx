@@ -121,7 +121,7 @@ function HODSectionsContent() {
       setCourses((coursesRes.courses ?? []).sort((a, b) => a.name.localeCompare(b.name)));
       setDepartments(deptsRes.departments ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load sections" });
+      toast({ variant: "destructive", title: "Unable to load sections" });
     } finally {
       setIsLoading(false);
     }
@@ -324,7 +324,7 @@ function HODSectionsContent() {
       const res = await fetch(`/api/college/sections/${deleteTarget.id}`, { method: "DELETE" });
       const json = await res.json() as { error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to delete" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to delete" });
         return;
       }
       toast({ variant: "success", title: `Section ${deleteTarget.name} deleted` });
@@ -616,7 +616,7 @@ function HODSectionsContent() {
     <div className="space-y-6">
       <PageHeader
         title="Sections"
-        description="Manage class sections, assign faculty in-charge, and monitor student enrollment."
+        description="Manage class sections, assign the faculty in-charge and monitor student enrolment."
         actions={
           <Button onClick={openCreate} disabled={courses.length === 0}>
             <Plus className="h-4 w-4 mr-2" />Add Section
@@ -793,7 +793,7 @@ function HODSectionsContent() {
               <SelectContent>
                 <SelectItem value="all">All Departments</SelectItem>
                 {scopeDepartments.map((d) => (
-                  <SelectItem key={d} value={d}>{d}{freshmanDeptNames.has(d) ? " · Freshman's Dept" : ""}</SelectItem>
+                  <SelectItem key={d} value={d}>{d}{freshmanDeptNames.has(d) ? " · Freshman's Department" : ""}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

@@ -46,7 +46,7 @@ export async function POST(request: Request) {
       batch.set(col.doc(), {
         employeeKey: e.employeeKey, employeeCode: e.employeeCode, name: e.name, ...a, status: "ACTIVE", recoveries: {}, rev: 1,
         createdAt: at, createdByName: session.email,
-        history: [{ at, byName: session.email, change: `Imported: advance Rs. ${a.amount}, Rs. ${a.recoveredBefore} recovered before, Rs. ${a.instalment} a month from ${a.startMonth}` }],
+        history: [{ at, byName: session.email, change: `Imported: advance ₹${a.amount}, ₹${a.recoveredBefore} recovered before, ₹${a.instalment} a month from ${a.startMonth}` }],
       } satisfies Omit<SalaryAdvance, "id">);
     }
     await batch.commit();

@@ -9,7 +9,7 @@ import { PayrollRuleError, roundRupee, roundTo } from "./rules";
 //   87A rebate; surcharge; cess.
 // Taxable income is rounded to the nearest 10 (s.288A), tax to the nearest rupee.
 // Monthly TDS = (annual tax - TDS already deducted this year) / months left including this one, rounded to
-// the college's step (Rs. 100 on the sheet); March takes exactly what is left. Never negative.
+// the college's step (₹100 on the sheet); March takes exactly what is left. Never negative.
 
 const NEW_SURCHARGE: SurchargeSlab[] = [{ above: 5_000_000, rate: 10 }, { above: 10_000_000, rate: 15 }, { above: 20_000_000, rate: 25 }];
 

@@ -48,14 +48,14 @@ export async function PATCH(request: Request) {
       body.profilePhotoUrl !== "" &&
       !body.profilePhotoUrl.startsWith("https://firebasestorage.googleapis.com/")
     ) {
-      return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
+      return NextResponse.json({ error: "The photo link is not valid. Upload the photo again." }, { status: 400 });
     }
 
     const db = getAdminDb();
     const userRef = db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid);
     const userSnap = await userRef.get();
     if (!userSnap.exists) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return NextResponse.json({ error: "User not found. The account may have been deleted." }, { status: 404 });
     }
 
     // A faculty member's login email is changed by the College Office only (lib/faculty/changeCollegeEmail.ts).
@@ -121,9 +121,9 @@ export async function PATCH(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/users/me PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

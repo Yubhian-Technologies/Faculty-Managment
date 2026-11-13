@@ -51,7 +51,7 @@ export function MidBankRulesCard({ midCount, papers = false }: { midCount: numbe
     fetch("/api/college/mid-bank-rules")
       .then((r) => r.json() as Promise<{ rules?: MidBankRules[]; regulationsByCourse?: Record<string, string[]> }>)
       .then((d) => { setRules(d.rules ?? []); setRegulationsByCourse(d.regulationsByCourse ?? {}); })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load the question bank rules" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load the question bank rules" }));
   }
   useEffect(() => {
     load();
@@ -96,12 +96,12 @@ export function MidBankRulesCard({ midCount, papers = false }: { midCount: numbe
     try {
       const res = await fetch("/api/college/mid-bank-rules", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to save");
+      if (!res.ok) throw new Error(data.error ?? "Unable to save");
       toast({ variant: "success", title: `Rules saved for ${group.name}${payload.regulation === "ALL" ? "" : ` (${payload.regulation})`}` });
       reset();
       load();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to save" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" });
     } finally {
       setSaving(false);
     }
@@ -110,7 +110,7 @@ export function MidBankRulesCard({ midCount, papers = false }: { midCount: numbe
   async function remove() {
     if (!deleting) return;
     const res = await fetch(`/api/college/mid-bank-rules?id=${encodeURIComponent(deleting.id)}`, { method: "DELETE" });
-    if (!res.ok) toast({ variant: "destructive", title: "Failed to delete" });
+    if (!res.ok) toast({ variant: "destructive", title: "Unable to delete" });
     setDeleting(null);
     load();
   }
@@ -121,7 +121,7 @@ export function MidBankRulesCard({ midCount, papers = false }: { midCount: numbe
         <CardTitle className="text-base">{papers ? "Units per Mid" : "Mid Question Bank rules"}</CardTitle>
         <CardDescription>
           {papers
-            ? <>For each course, which units each Mid covers - a question paper part set &ldquo;per unit&rdquo; gets its questions for these units. A paper keeps the units it started with.</>
+            ? <>For each course, the units each Mid covers. A question paper part set per unit takes its questions from these units. A paper keeps the units it started with.</>
             : <>For each course, which units each Mid covers and how questions are set. Faculty write 10 questions per unit,
               with Bloom&rsquo;s levels L2, L3 and L4 each used at least 3 times. A bank keeps the rules it started with.</>}
         </CardDescription>
@@ -182,7 +182,7 @@ export function MidBankRulesCard({ midCount, papers = false }: { midCount: numbe
               {regulationOptions.map((r) => <option key={r} value={r}>{r}</option>)}
             </select>
             {courseKey && regulationOptions.length === 0 && (
-              <p className="text-xs text-muted-foreground">No regulations set for this course in Academics &gt; Regulation - the rule applies to all.</p>
+              <p className="text-xs text-muted-foreground">No regulations are set for this course in Academics &gt; Regulation; the rule applies to all.</p>
             )}
           </div>
           {mids.map((m) => (
@@ -192,11 +192,8 @@ export function MidBankRulesCard({ midCount, papers = false }: { midCount: numbe
             </div>
           ))}
           <fieldset className="space-y-2 sm:col-span-2">
-            <legend className="text-sm font-medium">Mid units by the subject&rsquo;s number of units</legend>
-            <p className="text-xs text-muted-foreground">
-              A subject uses the row for its own number of units (entered by the faculty in Course Outcomes); a blank row uses the default above.
-              E.g. 5 units: Mid 1 = 1, 2, 3 and Mid 2 = 3, 4, 5 &middot; 6 units: Mid 1 = 1, 2, 3 and Mid 2 = 4, 5, 6.
-            </p>
+            <legend className="text-sm font-medium">Mid Units by the Subject&apos;s Number of Units</legend>
+            <p className="text-xs text-muted-foreground">A subject uses the row for its number of units (entered in Course Outcomes); a blank row uses the default above. For example, 5 units: Mid 1 = 1, 2, 3 and Mid 2 = 3, 4, 5. 6 units: Mid 1 = 1, 2, 3 and Mid 2 = 4, 5, 6.</p>
             <div className="overflow-x-auto rounded-md border">
               <table className="w-full text-sm">
                 <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
@@ -229,7 +226,7 @@ export function MidBankRulesCard({ midCount, papers = false }: { midCount: numbe
           </div>
           <fieldset className="space-y-2 sm:col-span-2">
             <legend className="text-sm font-medium">Question types the faculty may use</legend>
-            <p className="text-xs text-muted-foreground">Tick every type allowed. Faculty pick one of them for each question; with one ticked, every question uses it.</p>
+            <p className="text-xs text-muted-foreground">Select every type allowed. Faculty choose one for each question; if only one is selected, every question uses it.</p>
             <div className="flex flex-wrap gap-2">
               {QUESTION_FORMATS.map((f) => {
                 const on = formats.includes(f);

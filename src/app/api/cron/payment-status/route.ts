@@ -25,7 +25,7 @@ function isAuthorized(request: Request): boolean {
 }
 
 export async function POST(request: Request) {
-  if (!isAuthorized(request)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!isAuthorized(request)) return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
   if (!paymentProxyConfigured()) return NextResponse.json({ skipped: "PAYMENT_PROXY_URL not set" });
   try {
     const db = getAdminDb();
@@ -52,6 +52,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ checked, changed, failed });
   } catch (err) {
     console.error("[cron/payment-status POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

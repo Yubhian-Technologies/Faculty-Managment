@@ -94,7 +94,7 @@ function ExamCellConfigureForm({ embedded }: { embedded: boolean }) {
           }
         }
       } catch {
-        toast({ variant: "destructive", title: "Failed to load academic data" });
+        toast({ variant: "destructive", title: "Unable to load academic data" });
       } finally {
         setIsLoadingData(false);
       }
@@ -212,7 +212,7 @@ function ExamCellConfigureForm({ embedded }: { embedded: boolean }) {
           setComponents([emptyComponent()]);
         }
       } catch {
-        toast({ variant: "destructive", title: "Failed to load configuration" });
+        toast({ variant: "destructive", title: "Unable to load configuration" });
       } finally {
         setIsLoadingConfig(false);
       }
@@ -240,7 +240,7 @@ function ExamCellConfigureForm({ embedded }: { embedded: boolean }) {
       method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: existingConfig.id, componentId, midNumber, cea }),
     });
     const json = (await res.json().catch(() => ({}))) as { error?: string };
-    if (!res.ok) toast({ variant: "destructive", title: json.error ?? "Couldn't save" });
+    if (!res.ok) toast({ variant: "destructive", title: json.error ?? "Unable to save" });
     else toast({ variant: "success", title: cea ? "Marks now come from CIE (the units added up and scaled)" : midNumber ? `Marks now come from the Mid ${midNumber} question paper` : "Marks are typed as one number" });
   }
 
@@ -301,11 +301,11 @@ function ExamCellConfigureForm({ embedded }: { embedded: boolean }) {
         }),
       });
       const json = (await res.json()) as { configuration?: ExamConfiguration; error?: string };
-      if (!res.ok || !json.configuration) throw new Error(json.error ?? "Failed to save configuration");
+      if (!res.ok || !json.configuration) throw new Error(json.error ?? "Unable to save configuration");
       setExistingConfig(json.configuration);
       toast({ variant: "success", title: "Examination configuration saved" });
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save configuration" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save configuration" });
     } finally {
       setSaving(false);
     }
@@ -314,11 +314,11 @@ function ExamCellConfigureForm({ embedded }: { embedded: boolean }) {
   return (
     <div className="space-y-6">
       {embedded ? (
-        <p className="text-sm text-muted-foreground">Select a course, year and branch, then set the Internal/External marks and breakdown that applies to every subject taught under it.</p>
+        <p className="text-sm text-muted-foreground">Select a course, year and branch, then set the Internal and External marks and their breakdown for every subject taught under it.</p>
       ) : (
         <PageHeader
           title="Configure Examination"
-          description="Select a course, year and branch, then set the Internal/External marks and breakdown that applies to every subject taught under it."
+          description="Select a course, year and branch, then set the Internal and External marks and their breakdown for every subject taught under it."
         />
       )}
 
@@ -409,11 +409,11 @@ function ExamCellConfigureForm({ embedded }: { embedded: boolean }) {
               <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Internal Maximum Marks</Label>
-                  <Input type="number" min={0} value={internalMaxMarks} onChange={(e) => setInternalMaxMarks(e.target.value)} placeholder="e.g. 30" disabled={isViewOnly} />
+                  <Input type="number" min={0} value={internalMaxMarks} onChange={(e) => setInternalMaxMarks(e.target.value)} placeholder="30" disabled={isViewOnly} />
                 </div>
                 <div className="space-y-2">
                   <Label>External Maximum Marks</Label>
-                  <Input type="number" min={0} value={externalMaxMarks} onChange={(e) => setExternalMaxMarks(e.target.value)} placeholder="e.g. 70" disabled={isViewOnly} />
+                  <Input type="number" min={0} value={externalMaxMarks} onChange={(e) => setExternalMaxMarks(e.target.value)} placeholder="70" disabled={isViewOnly} />
                 </div>
                 {(internalMax > 0 || Number(externalMaxMarks) > 0) && (
                   <p className="sm:col-span-2 text-xs text-muted-foreground">
@@ -435,7 +435,7 @@ function ExamCellConfigureForm({ embedded }: { embedded: boolean }) {
                         <Input
                           value={c.name}
                           onChange={(e) => updateComponent(c.id, { name: e.target.value })}
-                          placeholder="Component name (e.g. Quizzes)"
+                          placeholder="Component name (for example Quizzes)"
                           disabled={isViewOnly}
                         />
                         <Input

@@ -54,7 +54,7 @@ export function SectionLabBatchModes({ sectionId }: { sectionId: string }) {
       try {
         const res = await fetch(`/api/college/section-lab-batch-settings?sectionId=${encodeURIComponent(sectionId)}`);
         const json = (await res.json()) as { labs?: LabRow[]; batches?: string[]; error?: string };
-        if (!res.ok) throw new Error(json.error ?? "Failed to load labs");
+        if (!res.ok) throw new Error(json.error ?? "Unable to load labs");
         if (!cancelled) {
           setLabs(json.labs ?? []);
           setBatches(json.batches ?? []);
@@ -62,7 +62,7 @@ export function SectionLabBatchModes({ sectionId }: { sectionId: string }) {
       } catch (err) {
         if (!cancelled) {
           setLabs([]);
-          toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to load labs" });
+          toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to load labs" });
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -129,12 +129,12 @@ export function SectionLabBatchModes({ sectionId }: { sectionId: string }) {
         }),
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Could not save");
+      if (!res.ok) throw new Error(json.error ?? "Unable to save");
       setLabs((prev) => prev.map((l) => (l.subjectId === draft.subjectId ? draft : l)));
       toast({ variant: "success", title: "Saved", description: draft.subjectName });
       cancelEdit();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Could not save" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save" });
     } finally {
       setSaving(false);
     }
@@ -243,7 +243,7 @@ export function SectionLabBatchModes({ sectionId }: { sectionId: string }) {
                                   {lab.batchWise === true && (
                                     batches.length === 0 ? (
                                       <p className="text-xs text-amber-700">
-                                        No batch has students yet. Create a batch above, move students into it and press Update - it will then appear here to assign.
+                                        No batch has students yet. Create a batch above, move students into it and choose Update; it then appears here for assignment.
                                       </p>
                                     ) : (
                                       <div className="flex flex-wrap items-center gap-x-5 gap-y-2">

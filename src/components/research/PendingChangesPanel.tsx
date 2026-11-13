@@ -41,9 +41,7 @@ export function readPendingChanges(record: unknown): { changes: FieldChange[]; c
 function ChangesTable({ changes }: { changes: FieldChange[] }) {
   if (changes.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground">
-        It was edited, but every field has the same value as the verified version.
-      </p>
+      <p className="text-sm text-muted-foreground">It was edited, but every field has the same value as the verified version.</p>
     );
   }
   return (
@@ -82,7 +80,7 @@ export function PendingChangesPanel({ record }: { record: unknown }) {
     <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/20 p-4 space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <History className="h-4 w-4 text-amber-700" />
-        <p className="text-sm font-semibold">Edited after verification - changes to check</p>
+        <p className="text-sm font-semibold">Edited after verification: changes to review</p>
         <Badge variant="pending" className="text-xs">
           {trail.changes.length} field{trail.changes.length === 1 ? "" : "s"} changed
         </Badge>

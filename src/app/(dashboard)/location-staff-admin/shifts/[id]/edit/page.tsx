@@ -74,7 +74,7 @@ export default function LocationStaffAdminEditShiftPage({
         }
       })
       .catch(() => {
-        if (!isCancelled) toast({ variant: "destructive", title: "Failed to load shift" });
+        if (!isCancelled) toast({ variant: "destructive", title: "Unable to load shift" });
       })
       .finally(() => {
         if (!isCancelled) setIsLoading(false);
@@ -112,7 +112,7 @@ export default function LocationStaffAdminEditShiftPage({
       toast({
         variant: "destructive",
         title: "Department required",
-        description: "Please select at least one department or enable 'Campus-Wide'.",
+        description: "Select at least one department or enable 'Campus-Wide'.",
       });
       return;
     }
@@ -146,13 +146,13 @@ export default function LocationStaffAdminEditShiftPage({
 
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || "Failed to update shift");
+        throw new Error(data.error || "Unable to update shift");
       }
 
-      toast({ title: "Shift Updated", description: `${name} has been updated successfully.` });
+      toast({ title: "Shift Updated", description: `${name} has been updated.` });
       router.push(fallbackHref);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to update shift";
+      const msg = err instanceof Error ? err.message : "Unable to update shift";
       toast({ variant: "destructive", title: "Error", description: msg });
     } finally {
       setIsSubmitting(false);
@@ -171,13 +171,13 @@ export default function LocationStaffAdminEditShiftPage({
 
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || "Failed to delete shift");
+        throw new Error(data.error || "Unable to delete shift");
       }
 
       toast({ title: "Shift Deleted", description: `${name} has been removed.` });
       router.push(fallbackHref);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to delete shift";
+      const msg = err instanceof Error ? err.message : "Unable to delete shift";
       toast({ variant: "destructive", title: "Error", description: msg });
     } finally {
       setIsDeleting(false);
@@ -232,9 +232,7 @@ export default function LocationStaffAdminEditShiftPage({
             <Clock className="h-4 w-4 text-primary" />
             <span>Shift Timings & Scope</span>
           </CardTitle>
-          <CardDescription className="text-xs">
-            Manage reusable shift configuration and department access.
-          </CardDescription>
+          <CardDescription className="text-xs">Manage shift configurations and department access.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -309,7 +307,7 @@ export default function LocationStaffAdminEditShiftPage({
               <Label className="text-xs font-semibold">Shift Name *</Label>
               <Input
                 required
-                placeholder="e.g. Morning Shift, Night Patrol, General Duty"
+                placeholder="Morning Shift, Night Patrol, General Duty"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="h-9 text-xs"
@@ -358,7 +356,7 @@ export default function LocationStaffAdminEditShiftPage({
             <div className="space-y-1">
               <Label className="text-xs font-semibold">Description (Optional)</Label>
               <Input
-                placeholder="e.g. Main gate & perimeter security"
+                placeholder="Main gate & perimeter security"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 className="h-9 text-xs"

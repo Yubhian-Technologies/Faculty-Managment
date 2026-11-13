@@ -9,7 +9,7 @@ export default function EditCustomPage() {
   const collegeId = useSearchParams().get("collegeId") ?? "";
   return (
     <div className="space-y-6">
-      <PageHeader title="Edit page" description="Build the page this tab opens from simple blocks." />
+      <PageHeader title="Edit page" description="Build the page this tab opens from blocks." />
       {collegeId ? <PageEditor collegeId={collegeId} pageId={id} /> : <p className="text-sm text-destructive">Missing college. Open this page from Customise Dashboards.</p>}
     </div>
   );

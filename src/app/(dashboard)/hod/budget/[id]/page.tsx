@@ -38,7 +38,7 @@ export default function HODBudgetDetailPage() {
         if (!d.request) throw new Error(d.error ?? "Not found");
         setRequest(d.request);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load budget request" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load budget request" }))
       .finally(() => setIsLoading(false));
   }
 

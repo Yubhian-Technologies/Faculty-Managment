@@ -61,7 +61,7 @@ export function LeaveApprovalRoutingCard() {
         for (const role of ROUTABLE_REQUESTER_ROLES) full[role] = saved[role] ?? defaultApproverStage(role);
         setRouting(full);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load leave routing" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load leave routing" }))
       .finally(() => setIsLoading(false));
     loadHistory();
   }, []);
@@ -76,7 +76,7 @@ export function LeaveApprovalRoutingCard() {
       });
       if (!res.ok) {
         const j = await res.json() as { error?: string };
-        throw new Error(j.error ?? "Failed to save");
+        throw new Error(j.error ?? "Unable to save");
       }
       toast({ variant: "success", title: "Leave approval routing saved" });
       // Refreshed right away, not just on next page load, so whoever's
@@ -84,7 +84,7 @@ export function LeaveApprovalRoutingCard() {
       // in the history immediately.
       loadHistory();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to save" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" });
     } finally {
       setIsSaving(false);
     }
@@ -95,13 +95,7 @@ export function LeaveApprovalRoutingCard() {
       <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
         <div>
           <CardTitle className="text-base">Leave Approval Routing</CardTitle>
-          <CardDescription>
-            Choose who a leave request goes to first, for each role. It applies to leave submitted from now on -
-            requests already pending stay where they are. &ldquo;Head of Department&rdquo; only takes effect for someone
-            who belongs to a department; otherwise their request goes to the Principal. &ldquo;Principal&rdquo; and
-            &ldquo;Vice Principal&rdquo; route to that person specifically - the Principal can still step in on a
-            Vice-Principal-routed request, but not the other way around.
-          </CardDescription>
+          <CardDescription>Choose who receives each role&apos;s leave requests first. This applies to leave submitted from now on; pending requests are not affected. &quot;Head of Department&quot; applies only to someone who belongs to a department; otherwise the request goes to the Principal. &quot;Principal&quot; and &quot;Vice Principal&quot; route to that person. The Principal can act on a request routed to the Vice Principal, but not the other way round.</CardDescription>
         </div>
         <Button
           variant="ghost"
@@ -144,9 +138,7 @@ export function LeaveApprovalRoutingCard() {
                 );
               })}
             </div>
-            <p className="text-xs text-muted-foreground">
-              The Principal&apos;s own leave always goes to Management - there is no one else above them in the college.
-            </p>
+            <p className="text-xs text-muted-foreground">The Principal&apos;s own leave always goes to Management, as there is no higher authority within the college.</p>
             <div className="flex justify-end">
               <Button onClick={handleSave} loading={isSaving}>Save Routing</Button>
             </div>
@@ -158,7 +150,7 @@ export function LeaveApprovalRoutingCard() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Routing Change History</DialogTitle>
-            <DialogDescription>Who changed the Leave Approval Routing, and when.</DialogDescription>
+            <DialogDescription>Changes to the Leave Approval Routing, with who made them and when.</DialogDescription>
           </DialogHeader>
           {historyLoading ? (
             <div className="h-16 bg-muted animate-pulse rounded-lg" />

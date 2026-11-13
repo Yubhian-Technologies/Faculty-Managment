@@ -24,10 +24,10 @@ export default function StudentPaymentPage({ params }: { params: Promise<{ id: s
     try {
       const res = await fetch(`/api/college/payments/my/${encodeURIComponent(id)}/check`, { method: "POST" });
       const d = (await res.json()) as { payment?: Payment; changed?: boolean; error?: string };
-      if (!res.ok || !d.payment) throw new Error(d.error ?? "Couldn't check");
+      if (!res.ok || !d.payment) throw new Error(d.error ?? "Unable to check");
       setP(d.payment);
       toast({ variant: d.changed ? "success" : "default", title: d.changed ? "Updated from CCAvenue" : "No change yet - CCAvenue hasn't confirmed it" });
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't check" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to check" }); }
     finally { setChecking(false); }
   }
 
@@ -36,10 +36,10 @@ export default function StudentPaymentPage({ params }: { params: Promise<{ id: s
   const ok = p.status === "SUCCESS" || p.status === "REFUNDED" || p.status === "PARTIALLY_REFUNDED";
   const Icon = ok ? CheckCircle2 : p.status === "INITIATED" ? Clock : XCircle;
   const rows: [string, string | undefined][] = [
-    ["For", p.purpose.label], ["Amount", `Rs. ${p.amount}`],
+    ["For", p.purpose.label], ["Amount", `₹${p.amount}`],
     ...(p.receiptNo ? [["Receipt no.", p.receiptNo] as [string, string]] : []), ["Order no.", p.id], ["CCAvenue ref", p.trackingId], ["Bank ref", p.bankRefNo],
     ["Paid by", p.paymentMode], ["Date", new Date(p.settledAt ?? p.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })],
-    ...(p.refundedAmount ? [["Refunded", `Rs. ${p.refundedAmount}`] as [string, string]] : []),
+    ...(p.refundedAmount ? [["Refunded", `₹${p.refundedAmount}`] as [string, string]] : []),
   ];
   return (
     <div className="max-w-xl space-y-4">
@@ -54,12 +54,12 @@ export default function StudentPaymentPage({ params }: { params: Promise<{ id: s
         <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 text-sm">
           {rows.filter(([, v]) => v).map(([k, v]) => <div key={k} className="contents"><dt className="text-muted-foreground">{k}</dt><dd className="font-medium break-all">{v}</dd></div>)}
         </dl>
-        {!ok && <p className="text-xs text-muted-foreground">No money is taken for a failed or cancelled payment. If your bank shows a debit, it is reversed by the bank, or checked by the Accounts office.</p>}
+        {!ok && <p className="text-xs text-muted-foreground">No money is taken for a failed or cancelled payment. If your bank shows a debit, the bank reverses it, or the Accounts office checks it.</p>}
       </CardContent></Card>
       <div className="flex gap-2">
         <Button asChild><Link href="/student/certificates">Back to certificates</Link></Button>
         <Button asChild variant="outline"><Link href="/student/payments">My payments</Link></Button>
-        {ok && <Button variant="outline" onClick={() => void printFeeReceipt(`/api/college/payments/my/${encodeURIComponent(p.id)}/receipt`).catch((e: unknown) => toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't print" }))}>Print receipt</Button>}
+        {ok && <Button variant="outline" onClick={() => void printFeeReceipt(`/api/college/payments/my/${encodeURIComponent(p.id)}/receipt`).catch((e: unknown) => toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to print" }))}>Print receipt</Button>}
         {!ok && canCheck && <Button variant="outline" onClick={() => void checkAgain()} loading={checking}>Check again</Button>}
       </div>
     </div>

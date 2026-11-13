@@ -229,13 +229,13 @@ function RecordFormFields({
           });
       if (!res.ok) {
         const json = await res.json().catch(() => ({})) as { error?: string };
-        toast({ variant: "destructive", title: "Failed to save record", description: json.error });
+        toast({ variant: "destructive", title: "Unable to save record", description: json.error });
         return;
       }
       toast({ variant: "success", title: editingId ? "Resubmitted for verification" : "Submitted for verification" });
       onSaved();
     } catch {
-      toast({ variant: "destructive", title: "Network error. Please try again." });
+      toast({ variant: "destructive", title: "Network error. Try again." });
     } finally {
       setSaving(false);
     }
@@ -294,7 +294,7 @@ function RecordFormFields({
             <TextInput label="Phone Number of Scholar" type="tel" value={form.scholarPhone} onChange={(v) => set("scholarPhone", v)} />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <TextInput label="Year of Scholar Allocation" value={form.yearOfAllocation} onChange={(v) => setAndCount("yearOfAllocation", v)} placeholder="e.g. 2022" />
+            <TextInput label="Year of Scholar Allocation" value={form.yearOfAllocation} onChange={(v) => setAndCount("yearOfAllocation", v)} placeholder="2022" />
             {/* Derived, so it's shown read-only rather than as an input a
                 submitter could put a conflicting number into. */}
             <div className="space-y-2">
@@ -406,7 +406,7 @@ function RecordFormFields({
                 </Select>
               </div>
               <TextInput label="Name of Fellowship" value={form.fellowshipName} onChange={(v) => set("fellowshipName", v)} />
-              <NumField label="Amount Received (Rs.)" value={form.fellowshipAmount} onChange={(v) => set("fellowshipAmount", v)} />
+              <NumField label="Amount Received (₹)" value={form.fellowshipAmount} onChange={(v) => set("fellowshipAmount", v)} />
             </div>
           )}
         </div>

@@ -40,7 +40,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const collegeRef = db.collection("colleges").doc(session.collegeId);
     const studentRef = collegeRef.collection("students").doc(id);
     const studentSnap = await studentRef.get();
-    if (!studentSnap.exists) return NextResponse.json({ error: "Student not found" }, { status: 404 });
+    if (!studentSnap.exists) return NextResponse.json({ error: "Student not found. The record may have been deleted." }, { status: 404 });
     const student = studentSnap.data() as StudentRecord;
 
     if (session.role === "HOD") {
@@ -51,7 +51,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         const all = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentYearRow[];
         allowed = canHodEditDepartmentYear(scope, all, student.department, student.year);
       }
-      if (!allowed) return NextResponse.json({ error: "Outside your department" }, { status: 403 });
+      if (!allowed) return NextResponse.json({ error: "This record is outside your department." }, { status: 403 });
     }
 
     const now = new Date();
@@ -69,7 +69,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     } else if (action === "PLACE") {
       if (!body.targetSectionId) return NextResponse.json({ error: "Pick the section the student will repeat the year in" }, { status: 400 });
       const targetSnap = await collegeRef.collection("sections").doc(body.targetSectionId).get();
-      if (!targetSnap.exists) return NextResponse.json({ error: "Target section not found" }, { status: 404 });
+      if (!targetSnap.exists) return NextResponse.json({ error: "Target section not found. It may have been deleted." }, { status: 404 });
       const target = { id: targetSnap.id, ...(targetSnap.data() as object) } as Section;
       const courseIds = [student.courseId, target.courseId].filter((c): c is string => !!c);
       const catalogs = new Map<string, string | undefined>();
@@ -167,9 +167,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/students/[id]/lifecycle POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

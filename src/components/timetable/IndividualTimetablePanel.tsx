@@ -34,10 +34,10 @@ export function IndividualTimetablePanel({ scopeLabel = "in your department" }: 
       try {
         const res = await fetch("/api/college/faculty");
         const d = await res.json() as { faculty?: FacultyRow[]; error?: string };
-        if (!res.ok) throw new Error(d.error ?? "Failed to load faculty");
+        if (!res.ok) throw new Error(d.error ?? "Unable to load faculty");
         setFaculty(d.faculty ?? []);
       } catch (err) {
-        toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to load faculty" });
+        toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to load faculty" });
       } finally {
         setIsLoading(false);
       }
@@ -64,7 +64,7 @@ export function IndividualTimetablePanel({ scopeLabel = "in your department" }: 
         fetch("/api/college/departments"),
         fetch("/api/college/course-year-timings"),
       ]);
-      if (!assignRes.ok) throw new Error("Failed to load this faculty's timetable");
+      if (!assignRes.ok) throw new Error("Unable to load this faculty's timetable");
       const json = await assignRes.json() as { assignments?: TeachingAssignment[]; timetableSlots?: TimetableSlot[] };
       const assignments = json.assignments ?? [];
       const slots = json.timetableSlots ?? [];
@@ -134,7 +134,7 @@ export function IndividualTimetablePanel({ scopeLabel = "in your department" }: 
       toast({ title: "Timetable downloaded", description: `${facultyDisplayName(f)} - saved as PDF` });
     } catch (err) {
       console.error(err);
-      toast({ variant: "destructive", title: "Download failed", description: err instanceof Error ? err.message : "Failed to generate PDF" });
+      toast({ variant: "destructive", title: "Download failed", description: err instanceof Error ? err.message : "Unable to generate PDF" });
     } finally {
       setBusyId(null);
     }

@@ -67,7 +67,7 @@ export default function NewManagementUserPage() {
 
   return (
     <div className="max-w-xl">
-      <PageHeader title="Add Administrator" description="Assign a location-wise Administrator or Accounts contact" />
+      <PageHeader title="Add Administrator" description="Appoint an Administrator or Accounts contact for each location." />
       <Card>
         <CardHeader><CardTitle className="text-base">User Details</CardTitle></CardHeader>
         <CardContent>

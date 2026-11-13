@@ -75,7 +75,7 @@ export function ShiftRotationRosterView({
         setStaffList(stList);
       })
       .catch(() => {
-        if (!isCancelled) toast({ variant: "destructive", title: "Failed to load staff roster" });
+        if (!isCancelled) toast({ variant: "destructive", title: "Unable to load staff roster" });
       })
       .finally(() => {
         if (!isCancelled) setIsLoading(false);
@@ -130,7 +130,7 @@ export function ShiftRotationRosterView({
         body: JSON.stringify({ staffId, targetShiftId }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to switch shift");
+      if (!res.ok) throw new Error(data.error || "Unable to switch shift");
 
       toast({
         title: "Shift Updated",
@@ -138,7 +138,7 @@ export function ShiftRotationRosterView({
       });
       reload();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to switch shift";
+      const msg = err instanceof Error ? err.message : "Unable to switch shift";
       toast({ variant: "destructive", title: "Error", description: msg });
     } finally {
       setSingleRotatingId(null);
@@ -340,7 +340,7 @@ export function ShiftRotationRosterView({
             <div className="rounded-xl border border-dashed p-8 text-center bg-card/30">
               <Users className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-50" />
               <p className="font-semibold text-foreground text-sm">No staff found</p>
-              <p className="text-xs text-muted-foreground mt-1">Try clearing filters or search terms.</p>
+              <p className="text-xs text-muted-foreground mt-1">Clear the filters or search terms.</p>
             </div>
           ) : (
             <div className="divide-y border rounded-xl overflow-hidden bg-card">

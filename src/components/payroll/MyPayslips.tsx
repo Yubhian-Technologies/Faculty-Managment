@@ -30,15 +30,15 @@ export function MyPayslips() {
     try {
       const { payslip } = await payrollFetch<{ payslip: PayslipData }>(`/api/college/payroll/my/${month}`);
       await downloadPayslip(payslip);
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't download" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to download" }); }
     finally { setBusy(""); }
   }
 
   return (
     <div className="max-w-4xl space-y-6">
-      <PageHeader title="My Payslips" description="Your salary for each month once Accounts release it, and your income tax for the year." />
+      <PageHeader title="My Payslips" description="Your salary for each month once released by Accounts, and your income tax for the year." />
       {error ? <p className="text-sm text-destructive">{error}</p> : !d ? <div className="h-40 animate-pulse rounded-2xl bg-muted/40" /> : !d.employee ? (
-        <p className="text-sm text-muted-foreground">Your login isn&apos;t linked to a faculty or staff record, so there are no payslips to show. Ask the College Office.</p>
+        <p className="text-sm text-muted-foreground">Your login is not linked to a faculty or staff record, so there are no payslips to show. Contact the College Office.</p>
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-3">
@@ -100,7 +100,7 @@ function MyTaxStatement({ onClose }: { onClose: () => void }) {
       <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Income tax statement</DialogTitle>
-          <DialogDescription>Worked out by Accounts from your salary and the declarations they hold. Projected months assume your current pay.</DialogDescription>
+          <DialogDescription>Calculated by Accounts from your salary and your declarations on record. Projected months assume your current pay.</DialogDescription>
         </DialogHeader>
         <select aria-label="Financial year" className={`${selectClass} w-40`} value={fy} onChange={(e) => { setS(null); setFy(e.target.value); }}>
           {[now, prev].map((f) => <option key={f} value={f}>FY {f}</option>)}
@@ -133,8 +133,8 @@ function MyTaxStatement({ onClose }: { onClose: () => void }) {
         )}
         {s && (s.released.length > 0 || s.profile.opening) && (
           <ul className="space-y-0.5 border-t pt-3 text-xs">
-            {s.profile.opening && <li>Apr - {monthLabel(s.profile.opening.upToMonth)}: gross Rs. {rupees(s.profile.opening.gross)}, TDS Rs. {rupees(s.profile.opening.tds)}</li>}
-            {s.released.filter((m) => !m.beforeOpening).map((m) => <li key={m.month}>{monthLabel(m.month)}: gross Rs. {rupees(m.gross)}, TDS Rs. {rupees(m.tds)}</li>)}
+            {s.profile.opening && <li>Apr - {monthLabel(s.profile.opening.upToMonth)}: gross ₹{rupees(s.profile.opening.gross)}, TDS ₹{rupees(s.profile.opening.tds)}</li>}
+            {s.released.filter((m) => !m.beforeOpening).map((m) => <li key={m.month}>{monthLabel(m.month)}: gross ₹{rupees(m.gross)}, TDS ₹{rupees(m.tds)}</li>)}
           </ul>
         )}
         <DialogFooter><Button variant="outline" onClick={onClose}>Close</Button></DialogFooter>

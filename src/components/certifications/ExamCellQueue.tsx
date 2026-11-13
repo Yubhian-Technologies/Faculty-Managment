@@ -28,7 +28,7 @@ export function ExamCellQueue() {
     try {
       setRequests(await listRequests("exam-cell-queue"));
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't load the Exam Cell queue" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to load the Exam Cell queue" });
     } finally {
       setLoading(false);
     }

@@ -18,7 +18,7 @@ import { syncLinkedLoginName } from "@/lib/roles/loginSync";
 // name and photo. Everything the managing role controls (Employee ID, College Email, Designation, Department,
 // Category, Date of Joining, Status) is never accepted here.
 
-const UNLINKED_MESSAGE = "Your login is not linked to a staff record yet, so there are no staff details to show or edit. Please contact your HOD or College Office to link it.";
+const UNLINKED_MESSAGE = "Your login is not linked to a staff record yet, so there are no staff details to show or edit. Contact your HOD or College Office to link it.";
 
 async function findOwnRecord(db: FirebaseFirestore.Firestore, collegeId: string, uid: string) {
   const snap = await db.collection("colleges").doc(collegeId).collection("supportingStaff").where("userUid", "==", uid).limit(1).get();
@@ -35,10 +35,10 @@ export async function GET() {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/supporting-staff/me GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -78,7 +78,7 @@ export async function PATCH(request: Request) {
       (!body.profilePhotoUrl.startsWith("https://firebasestorage.googleapis.com/") ||
         !body.profilePhotoUrl.includes(encodeURIComponent(`profile-photos/${session.uid}_`)))
     ) {
-      return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
+      return NextResponse.json({ error: "The photo link is not valid. Upload the photo again." }, { status: 400 });
     }
 
     const updates: Record<string, unknown> = { updatedAt: new Date(), ...supportingStaffPersonalUpdate(body) };
@@ -115,9 +115,9 @@ export async function PATCH(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/supporting-staff/me PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

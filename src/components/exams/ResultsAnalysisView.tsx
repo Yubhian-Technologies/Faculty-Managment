@@ -145,7 +145,7 @@ export function ResultsAnalysisView({ title = "Results Analysis", description }:
         const list = d.classes ?? [];
         setClasses(list);
       })
-      .catch(() => { if (!cancelled) toast({ variant: "destructive", title: "Failed to load results" }); })
+      .catch(() => { if (!cancelled) toast({ variant: "destructive", title: "Unable to load results" }); })
       .finally(() => { if (!cancelled) setIsLoadingClasses(false); });
     return () => { cancelled = true; };
   }, []);
@@ -187,10 +187,10 @@ export function ResultsAnalysisView({ title = "Results Analysis", description }:
         const res = await fetch(`/api/college/exam-results/analytics?${q}`);
         const json = (await res.json()) as { analytics?: ExamAnalytics; sheets?: { id: string; title: string }[]; sections?: string[]; exams?: { key: string; label: string; examType: string }[]; error?: string };
         if (cancelled) return;
-        if (!res.ok || !json.analytics) { toast({ variant: "destructive", title: json.error ?? "Failed to load results" }); setData(null); }
+        if (!res.ok || !json.analytics) { toast({ variant: "destructive", title: json.error ?? "Unable to load results" }); setData(null); }
         else { setData({ analytics: json.analytics, sheets: json.sheets ?? [] }); setSections(json.sections ?? []); setExams(json.exams ?? []); }
       } catch {
-        if (!cancelled) toast({ variant: "destructive", title: "Failed to load results" });
+        if (!cancelled) toast({ variant: "destructive", title: "Unable to load results" });
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -258,7 +258,7 @@ export function ResultsAnalysisView({ title = "Results Analysis", description }:
           </select>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="ra-ys">Year - Sem</Label>
+          <Label htmlFor="ra-ys">Year and Semester</Label>
           <select id="ra-ys" className={selectClass} value={ys} onChange={(e) => { setYearSem(e.target.value); classChanged(); }} disabled={yearSemOptions.length === 0}>
             {yearSemOptions.map((k) => <option key={k} value={k}>{yearSemLabel(k)}</option>)}
           </select>
@@ -290,7 +290,7 @@ export function ResultsAnalysisView({ title = "Results Analysis", description }:
           </Button>
         </div>
       </div>
-      {section && <p className="-mt-3 text-xs text-muted-foreground">Section is each student&rsquo;s current section on their student record.</p>}
+      {section && <p className="-mt-3 text-xs text-muted-foreground">Section is each student&apos;s current section on their student record.</p>}
 
       {!picked ? (
         <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
@@ -326,7 +326,7 @@ export function ResultsAnalysisView({ title = "Results Analysis", description }:
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Branch comparison</CardTitle>
-                <CardDescription>Pass % now = students with no backlog of this semester.</CardDescription>
+                <CardDescription>Pass % (current) = students with no backlog in this semester.</CardDescription>
               </CardHeader>
               <CardContent className="overflow-x-auto">
                 <BranchTable rows={a.branches} fmt={fmt} />
@@ -348,7 +348,7 @@ export function ResultsAnalysisView({ title = "Results Analysis", description }:
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">SGPA bands</CardTitle>
-                <CardDescription>Students by SGPA. &ldquo;Withheld&rdquo; = not shown yet under the college&rsquo;s rules (a subject still to pass).</CardDescription>
+                <CardDescription>Students by SGPA. &quot;Withheld&quot; means not yet shown under the college&apos;s rules (a subject still to be passed).</CardDescription>
               </CardHeader>
               <CardContent>
                 <Columns items={a.sgpaBands.map((b) => ({ label: b.label, value: b.count, neutral: b.label === "Withheld", tip: `SGPA ${b.label}: ${b.count} student${b.count === 1 ? "" : "s"}` }))} />
@@ -400,7 +400,7 @@ export function ResultsAnalysisView({ title = "Results Analysis", description }:
                   })}
                 </tbody>
               </table>
-              <p className="mt-2 text-xs text-muted-foreground">Sorted by pass % now, lowest first.</p>
+              <p className="mt-2 text-xs text-muted-foreground">Sorted by current pass %, lowest first.</p>
             </CardContent>
           </Card>
 

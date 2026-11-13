@@ -93,7 +93,7 @@ export async function PATCH(
     const db = getAdminDb();
     const ref = db.collection("colleges").doc(session.collegeId).collection("sections").doc(id);
     const snap = await ref.get();
-    if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!snap.exists) return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
 
     const oldSection = snap.data() as { department?: string; name?: string; year?: number; courseId?: string; batch?: string };
     const sectionDept = oldSection.department ?? "";
@@ -131,7 +131,7 @@ export async function PATCH(
     let course: { name: string; durationYears: number; departmentId?: string; catalogId?: string } | null = null;
     if (courseId && (body.courseId != null || body.year != null || body.departmentId != null)) {
       const courseSnap = await db.collection("colleges").doc(session.collegeId).collection("courses").doc(courseId).get();
-      if (!courseSnap.exists) return NextResponse.json({ error: "Course not found" }, { status: 404 });
+      if (!courseSnap.exists) return NextResponse.json({ error: "Course not found. It may have been deleted." }, { status: 404 });
       course = courseSnap.data() as { name: string; durationYears: number; departmentId?: string; catalogId?: string };
       if (targetYear != null && (targetYear < 1 || targetYear > course.durationYears)) {
         return NextResponse.json({ error: `Year must be between 1 and ${course.durationYears} for ${course.name}` }, { status: 400 });
@@ -210,7 +210,7 @@ export async function PATCH(
       if (regulation) {
         if (!course) {
           const courseSnap = await db.collection("colleges").doc(session.collegeId).collection("courses").doc(courseId ?? "").get();
-          if (!courseSnap.exists) return NextResponse.json({ error: "Course not found" }, { status: 404 });
+          if (!courseSnap.exists) return NextResponse.json({ error: "Course not found. It may have been deleted." }, { status: 404 });
           course = courseSnap.data() as { name: string; durationYears: number; departmentId?: string; catalogId?: string };
         }
         if (!course.catalogId) {
@@ -269,7 +269,7 @@ export async function PATCH(
     // HOD; Principal/VP/College Office may target any department in the college.
     if (body.departmentId != null) {
       const targetDeptSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").doc(body.departmentId).get();
-      if (!targetDeptSnap.exists) return NextResponse.json({ error: "Department not found" }, { status: 404 });
+      if (!targetDeptSnap.exists) return NextResponse.json({ error: "Department not found. It may have been deleted." }, { status: 404 });
       const targetDept = targetDeptSnap.data() as {
         name?: string; parentDepartmentId?: string; assignedYears?: number[];
         secondaryDepartments?: string[]; courseScopes?: Record<string, DepartmentCourseScope>;
@@ -413,7 +413,7 @@ export async function PATCH(
         if (!course) {
           const batchCourseId = courseId ?? "";
           const courseSnap = await db.collection("colleges").doc(session.collegeId).collection("courses").doc(batchCourseId).get();
-          if (!courseSnap.exists) return NextResponse.json({ error: "Course not found" }, { status: 404 });
+          if (!courseSnap.exists) return NextResponse.json({ error: "Course not found. It may have been deleted." }, { status: 404 });
           course = courseSnap.data() as { name: string; durationYears: number; departmentId?: string; catalogId?: string };
         }
         updates.batch = deriveBatch(parsedBatchStart, course.durationYears);
@@ -557,10 +557,10 @@ export async function PATCH(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[sections/[id] PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -577,7 +577,7 @@ export async function DELETE(
     const db = getAdminDb();
     const ref = db.collection("colleges").doc(session.collegeId).collection("sections").doc(id);
     const snap = await ref.get();
-    if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!snap.exists) return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
 
     const data = snap.data() as { department?: string; name?: string; year?: number; courseId?: string; secondaryDepartments?: string[] };
 
@@ -680,9 +680,9 @@ export async function DELETE(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[sections/[id] DELETE]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

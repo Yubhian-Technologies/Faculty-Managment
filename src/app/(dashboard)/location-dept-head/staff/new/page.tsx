@@ -26,7 +26,7 @@ export default function NewDeptStaffMemberPage() {
         if (!isCancelled) setShifts(d.shifts ?? []);
       })
       .catch(() => {
-        if (!isCancelled) toast({ variant: "destructive", title: "Failed to load shifts" });
+        if (!isCancelled) toast({ variant: "destructive", title: "Unable to load shifts" });
       })
       .finally(() => {
         if (!isCancelled) setIsLoading(false);

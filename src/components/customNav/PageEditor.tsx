@@ -102,11 +102,11 @@ export function PageEditor({ collegeId, pageId }: { collegeId: string; pageId: s
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title, iconName, section: section ?? "", roles, enabled, blocks }),
       });
-      if (!res.ok) throw new Error(((await res.json().catch(() => null)) as { error?: string } | null)?.error ?? "Failed to save");
+      if (!res.ok) throw new Error(((await res.json().catch(() => null)) as { error?: string } | null)?.error ?? "Unable to save");
       setSaved(JSON.stringify(page));
       toast({ variant: "success", title: "Page saved" });
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to save" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" });
     } finally {
       setSaving(false);
     }
@@ -167,7 +167,7 @@ export function PageEditor({ collegeId, pageId }: { collegeId: string; pageId: s
                 </label>
               ))}
             </div>
-            <p className="text-xs text-muted-foreground">Per-role on/off for this tab also lives on the Dashboard tabs screen (the eye icon).</p>
+            <p className="text-xs text-muted-foreground">The tab can also be switched on or off for each role on the Dashboard Tabs screen (eye icon).</p>
           </div>
         </CardContent>
       </Card>
@@ -184,7 +184,7 @@ export function PageEditor({ collegeId, pageId }: { collegeId: string; pageId: s
             </Select>
           </CardHeader>
           <CardContent className="space-y-3">
-            {page.blocks.length === 0 && <p className="text-sm text-muted-foreground">No blocks yet. Use “Add block”.</p>}
+            {page.blocks.length === 0 && <p className="text-sm text-muted-foreground">No blocks yet. Use Add Block.</p>}
             {page.blocks.map((b, i) => (
               <div key={b.id} className="rounded-md border p-3 space-y-2">
                 <div className="flex items-center justify-between">

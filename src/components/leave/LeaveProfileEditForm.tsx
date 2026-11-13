@@ -38,7 +38,7 @@ export function LeaveProfileEditForm({ backHref }: LeaveProfileEditFormProps) {
         const doj = (p.dateOfJoining as unknown as { toDate?: () => Date }).toDate?.() ?? new Date(p.dateOfJoining as unknown as string);
         setDateOfJoining(doj.toISOString().slice(0, 10));
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load leave profile" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load leave profile" }))
       .finally(() => setIsLoading(false));
   }, [params.uid]);
 
@@ -51,11 +51,11 @@ export function LeaveProfileEditForm({ backHref }: LeaveProfileEditFormProps) {
         body: JSON.stringify({ uid: params.uid, staffCategory, dateOfJoining }),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to save");
+      if (!res.ok) throw new Error(data.error ?? "Unable to save");
       toast({ variant: "success", title: "Leave profile updated" });
       router.push(backHref);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save" });
     } finally {
       setIsSaving(false);
     }
@@ -72,7 +72,7 @@ export function LeaveProfileEditForm({ backHref }: LeaveProfileEditFormProps) {
 
   return (
     <div className="max-w-lg space-y-6">
-      <PageHeader title="Edit Leave Profile" description="Correct an auto-derived category or joining date" />
+      <PageHeader title="Edit Leave Profile" description="Correct a derived category or joining date." />
       <Card>
         <CardContent className="p-4 space-y-4">
           <div className="space-y-2">
@@ -86,10 +86,7 @@ export function LeaveProfileEditForm({ backHref }: LeaveProfileEditFormProps) {
                 <SelectItem value="non-vacation">Non-Vacation Staff (Supporting)</SelectItem>
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">
-              Auto-derived from their designation. The category this employee converts into once past the
-              college&apos;s new-joining threshold.
-            </p>
+            <p className="text-xs text-muted-foreground">Derived from the designation: the category this employee moves to after the college&apos;s new-joining period.</p>
           </div>
 
           <div className="space-y-2">

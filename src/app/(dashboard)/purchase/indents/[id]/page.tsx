@@ -50,7 +50,7 @@ export default function PurchaseIndentDetailPage() {
           setReceiptAmount(selected ? String(selected.price) : "");
         }
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load indent" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load indent" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -120,14 +120,14 @@ export default function PurchaseIndentDetailPage() {
       });
       if (!res.ok) {
         const err = (await res.json()) as { error?: string };
-        throw new Error(err.error ?? "Failed to save receipt");
+        throw new Error(err.error ?? "Unable to save receipt");
       }
 
       toast({ variant: "success", title: "Receipt uploaded - indent completed" });
       setReceiptFile(null);
       load();
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to upload receipt", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to upload receipt", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsUploadingReceipt(false);
     }
@@ -210,9 +210,7 @@ export default function PurchaseIndentDetailPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Finance has disbursed the funds. Once you&apos;ve bought the goods, upload the bill/receipt below to notify Finance and close out this indent.
-            </p>
+            <p className="text-sm text-muted-foreground">Finance has released the funds. Once the goods are bought, upload the bill or receipt below to notify Finance and close this indent.</p>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Amount Paid</Label>

@@ -39,7 +39,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
       if (body.action === "reassign") {
         const schedule = await loadSchedule(db, session.collegeId, duty.scheduleId);
-        if (!schedule) return NextResponse.json({ error: "Schedule not found" }, { status: 404 });
+        if (!schedule) return NextResponse.json({ error: "Schedule not found. It may have been deleted." }, { status: 404 });
         if (schedule.status !== "ACTIVE") return NextResponse.json({ error: "This schedule is closed" }, { status: 409 });
         const ctx = await slotContext(db, session.collegeId, schedule, { slotKey: duty.slotKey });
         if (!ctx) return NextResponse.json({ error: "That duty is no longer in the schedule" }, { status: 409 });
@@ -51,7 +51,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         });
         return NextResponse.json({ duty: d });
       }
-      return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+      return NextResponse.json({ error: "This action is not recognised. Reload the page and try again." }, { status: 400 });
     } catch (e) {
       if (e instanceof DutyRefused) return NextResponse.json({ error: e.message, issues: e.issues }, { status: 409 });
       throw e;

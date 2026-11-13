@@ -115,7 +115,7 @@ function PrincipalProfileModuleEditPageContent() {
       }
       router.push(`/principal/profile/${moduleKey}`);
     } catch {
-      toast({ variant: "destructive", title: "Failed to save" });
+      toast({ variant: "destructive", title: "Unable to save" });
     } finally {
       setSaving(false);
     }

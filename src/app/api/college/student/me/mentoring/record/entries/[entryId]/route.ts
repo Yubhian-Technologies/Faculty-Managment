@@ -16,7 +16,7 @@ import { entriesCol, toEntry } from "@/lib/mentoring/recordStore";
 
 async function ownRow(db: Firestore, collegeId: string, uid: string, entryId: string) {
   const own = await findOwnStudent(db, collegeId, uid);
-  if (!own.ok) return { error: NextResponse.json({ error: "Your login is not linked to a student record yet. Please contact your College Office." }, { status: 404 }) };
+  if (!own.ok) return { error: NextResponse.json({ error: "Your login is not linked to a student record yet. Contact your College Office." }, { status: 404 }) };
   if (passwordChangeRequired(own.student)) return { error: passwordChangeRequiredResponse() };
   const ref = entriesCol(db, collegeId, own.student.id).doc(entryId);
   const snap = await ref.get();

@@ -129,7 +129,7 @@ export default function FacultyCredentialsPage() {
           setSelected(new Set(list.filter((c) => preselectIds.has(c.applicationId)).map((c) => c.applicationId)));
         }
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load candidates" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load candidates" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -230,11 +230,11 @@ export default function FacultyCredentialsPage() {
         body: JSON.stringify({ action: "REVEAL_CREDENTIALS" }),
       });
       const data = await res.json() as { email?: string; password?: string; error?: string };
-      if (!res.ok || !data.password) throw new Error(data.error ?? "Failed to reveal credentials");
+      if (!res.ok || !data.password) throw new Error(data.error ?? "Unable to reveal credentials");
       setRevealed({ name: request.candidateName, email: data.email ?? request.assignedEmail ?? "", password: data.password });
       load();
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to reveal credentials", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to reveal credentials", description: err instanceof Error ? err.message : undefined });
     } finally {
       setRevealBusyId(null);
     }
@@ -262,7 +262,7 @@ export default function FacultyCredentialsPage() {
     <div className="space-y-8">
       <PageHeader
         title="Faculty Credentials"
-        description="Select one or more candidates whose appointment letter has been sent, and request their login from the Webmaster"
+        description="Select candidates whose appointment letter has been sent, and request their login from the Webmaster."
       />
 
       {eligible.length === 0 ? (
@@ -270,9 +270,7 @@ export default function FacultyCredentialsPage() {
           <CardContent className="p-12 text-center">
             <UserCog className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
             <p className="font-medium">No candidates awaiting an account request</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Candidates appear here once their appointment letter has been sent and no faculty account has been requested yet.
-            </p>
+            <p className="text-sm text-muted-foreground mt-1">Candidates appear here once their appointment letter is sent and no faculty account has been requested.</p>
           </CardContent>
         </Card>
       ) : (
@@ -430,7 +428,7 @@ function EmailFieldInput({
         </Button>
       </div>
       {status === "taken" && <p className="text-xs text-red-600">Already in use — pick a different email</p>}
-      {status === "available" && <p className="text-xs text-green-600">Available — you can now request the account</p>}
+      {status === "available" && <p className="text-xs text-green-600">Available. You can now request the account.</p>}
     </div>
   );
 }

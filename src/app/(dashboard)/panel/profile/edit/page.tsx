@@ -107,7 +107,7 @@ export default function EditMyProfileIdentityPage() {
         });
         setExtraPhones(m.additionalPhoneNumbers ?? []);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load profile" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load profile" }))
       .finally(() => setLoading(false));
   }, [router]);
 
@@ -158,12 +158,12 @@ export default function EditMyProfileIdentityPage() {
       });
       if (!res.ok) {
         const data = (await res.json()) as { error?: string };
-        throw new Error(data.error ?? "Failed to save changes");
+        throw new Error(data.error ?? "Unable to save changes");
       }
       toast({ variant: "success", title: "Profile updated" });
       router.push("/panel/profile");
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save changes" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save changes" });
     } finally {
       setSaving(false);
     }
@@ -268,12 +268,12 @@ export default function EditMyProfileIdentityPage() {
                   </SelectContent>
                 </Select>
                 {qualIsOther && (
-                  <Input value={form.highestQualification} onChange={(e) => set({ highestQualification: e.target.value })} placeholder="e.g. B.Ed, MCA" />
+                  <Input value={form.highestQualification} onChange={(e) => set({ highestQualification: e.target.value })} placeholder="B.Ed, MCA" />
                 )}
               </div>
               <div className="space-y-2">
                 <Label>Specialization</Label>
-                <Input value={form.specialization} onChange={(e) => set({ specialization: e.target.value })} placeholder="e.g. Machine Learning, VLSI" />
+                <Input value={form.specialization} onChange={(e) => set({ specialization: e.target.value })} placeholder="Machine Learning, VLSI" />
               </div>
             </div>
 
@@ -299,7 +299,7 @@ export default function EditMyProfileIdentityPage() {
                 <Label>Personal Email</Label>
                 <Input type="email" value={form.email} onChange={(e) => set({ email: e.target.value })} placeholder="faculty@example.com" />
                 {!!form.email.trim() && !EMAIL_REGEX.test(form.email.trim()) && (
-                  <p className="text-xs text-destructive">Doesn&rsquo;t look like a valid email address</p>
+                  <p className="text-xs text-destructive">Enter a valid email address.</p>
                 )}
               </div>
               <div className="space-y-2">
@@ -322,7 +322,7 @@ export default function EditMyProfileIdentityPage() {
                   placeholder="9876543210"
                 />
                 {!!form.mobileNo && !PHONE_REGEX.test(form.mobileNo) && (
-                  <p className="text-xs text-destructive">Must be exactly 10 digits, starting with 6, 7, 8 or 9</p>
+                  <p className="text-xs text-destructive">Must be 10 digits, starting with 6, 7, 8 or 9.</p>
                 )}
               </div>
             </div>
@@ -336,7 +336,7 @@ export default function EditMyProfileIdentityPage() {
                         label="Label (optional)"
                         value={item.label}
                         onChange={(v) => setExtraPhones((prev) => prev.map((p, idx) => (idx === i ? { ...p, label: v } : p)))}
-                        placeholder="e.g. Personal, WhatsApp, or a name"
+                        placeholder="Personal, WhatsApp, or a name"
                       />
                       <TextInput
                         label="Mobile Number"

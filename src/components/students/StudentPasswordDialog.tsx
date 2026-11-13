@@ -87,9 +87,7 @@ export function StudentPasswordDialog({
               </button>
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
-            <p className="text-xs text-muted-foreground">
-              This is not saved anywhere readable - note it down to give to the student. They can change it after signing in.
-            </p>
+            <p className="text-xs text-muted-foreground">This is not stored in readable form. Note it down to give to the student; they can change it after signing in.</p>
           </div>
 
           <DialogFooter>

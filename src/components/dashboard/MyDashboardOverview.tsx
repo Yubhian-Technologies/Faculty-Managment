@@ -97,7 +97,7 @@ export function MyDashboardOverview() {
             <UserCircle className="h-5 w-5 text-muted-foreground" />
             <div>
               <p className="text-sm font-medium">My profile</p>
-              <p className="text-xs text-muted-foreground">Personal details, research (R&amp;D), documents</p>
+              <p className="text-xs text-muted-foreground">Personal details, research (R&amp;D) and documents.</p>
             </div>
           </CardContent>
         </Card>

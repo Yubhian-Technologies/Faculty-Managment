@@ -123,7 +123,7 @@ describe("pinSlotWithChecks", () => {
     const fake = new FakeFirestore();
     const input = base(fake);
     await fake.doc(`${C}/teachingAssignments/a1`).delete();
-    expect(await pinSlotWithChecks(input)).toMatchObject({ ok: false, error: "Teaching assignment not found" });
+    expect(await pinSlotWithChecks(input)).toMatchObject({ ok: false, error: "Teaching assignment not found. It may have been deleted." });
     expect(slots(fake)).toHaveLength(0);
   });
 });

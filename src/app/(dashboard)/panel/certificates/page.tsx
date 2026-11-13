@@ -12,7 +12,7 @@ export default function PanelCertificatesPage() {
   const [tab, setTab] = useState("approvals");
   return (
     <div className="space-y-6">
-      <PageHeader title="Certificates" description="Students' certificate requests waiting on your approval" />
+      <PageHeader title="Certificates" description="Students' certificate requests awaiting your approval." />
       <SegmentedTabs value={tab} onChange={setTab} options={[{ key: "approvals", label: "Approvals" }, { key: "issue", label: "To issue" }]} />
       {tab === "approvals" ? <Inbox /> : <IssuanceQueue />}
     </div>

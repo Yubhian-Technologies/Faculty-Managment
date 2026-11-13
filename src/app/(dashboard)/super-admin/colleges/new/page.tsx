@@ -59,13 +59,13 @@ export default function NewCollegePage() {
       });
       const json = await res.json() as { collegeId?: string; error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to create college", description: json.error });
+        toast({ variant: "destructive", title: "Unable to create college", description: json.error });
         return;
       }
       toast({ variant: "success", title: "College created", description: `ID: ${json.collegeId}` });
       router.push("/super-admin/colleges");
     } catch {
-      toast({ variant: "destructive", title: "Network error. Please try again." });
+      toast({ variant: "destructive", title: "Network error. Try again." });
     } finally {
       setSaving(false);
     }
@@ -75,7 +75,7 @@ export default function NewCollegePage() {
     <div className="max-w-xl">
       <PageHeader
         title="Add College"
-        description="Register a new institution and assign it to a location"
+        description="Register a new institution and assign it to a location."
       />
 
       <Card>
@@ -93,7 +93,7 @@ export default function NewCollegePage() {
                 </SelectTrigger>
                 <SelectContent>
                   {locations.length === 0 && (
-                    <SelectItem value="_none" disabled>No locations found - add a location first</SelectItem>
+                    <SelectItem value="_none" disabled>No locations found. Add a location first.</SelectItem>
                   )}
                   {locations.map((l) => (
                     <SelectItem key={l.id} value={l.id}>
@@ -112,7 +112,7 @@ export default function NewCollegePage() {
               <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Vishnu Institute of Technology"
+                placeholder="Vishnu Institute of Technology"
               />
             </div>
 

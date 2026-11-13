@@ -320,12 +320,12 @@ export function AddStudentsImport() {
         body: JSON.stringify(rowPassword ? { ...payload, loginPassword: rowPassword } : payload),
       });
       const json = await res.json() as { id?: string; error?: string };
-      if (!res.ok) { setFixError(json.error ?? "Failed to save"); return; }
+      if (!res.ok) { setFixError(json.error ?? "Unable to save"); return; }
       toast({ variant: "success", title: `${form.name.trim()} imported` });
       setFailedRows((prev) => prev.map((r) => (r.row === fixTarget.row ? { ...r, status: "fixed" as const } : r)));
       setFixTarget(null);
     } catch {
-      setFixError("Network error - please try again");
+      setFixError("Network error - try again");
     } finally {
       setFixSaving(false);
     }
@@ -368,7 +368,7 @@ export function AddStudentsImport() {
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      setTemplateError("Couldn't build the Excel template. Please try again.");
+      setTemplateError("Unable to build the Excel template. Try again.");
     } finally {
       setIsBuildingTemplate(false);
     }
@@ -385,7 +385,7 @@ export function AddStudentsImport() {
     const name = file.name.toLowerCase();
     const isExcel = name.endsWith(".xlsx");
     if (name.endsWith(".xls")) {
-      setParseError("Legacy .xls files aren't supported - please re-save as .xlsx or .csv and try again.");
+      setParseError("Legacy .xls files aren't supported - re-save as .xlsx or .csv and try again.");
       e.target.value = "";
       return;
     }
@@ -429,7 +429,7 @@ export function AddStudentsImport() {
 
       setRows(dataRows);
     } catch {
-      setParseError(isExcel ? "Failed to parse the Excel file. Ensure it is a valid, uncorrupted .xlsx file." : "Failed to parse the file. Ensure it is a valid CSV.");
+      setParseError(isExcel ? "Unable to parse the Excel file. Ensure it is a valid, uncorrupted .xlsx file." : "Unable to parse the file. Ensure it is a valid CSV.");
     } finally {
       e.target.value = "";
     }
@@ -503,7 +503,7 @@ export function AddStudentsImport() {
       });
     }
     if (created > 0 && stoppedAt === null) {
-      toast({ variant: "success", title: `${created} students imported successfully` });
+      toast({ variant: "success", title: `${created} students imported` });
       setRows([]);
     }
   }
@@ -539,7 +539,7 @@ export function AddStudentsImport() {
 
       {!isLocked && (
         <Card>
-          <CardHeader><CardTitle className="text-base flex items-center gap-2"><span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">1</span>Select Course, Department &amp; Current year of Study</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base flex items-center gap-2"><span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">1</span>Select Course, Department and Current Year of Study</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
               Course, Department and Current year of Study are required for the whole file — set them once here instead of typing them per row. Every student in this import will belong to these values.
@@ -575,9 +575,7 @@ export function AddStudentsImport() {
       <Card>
         <CardHeader><CardTitle className="text-base flex items-center gap-2"><span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">{templateStep}</span>Download Template</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Download the template, fill in the student roster, and upload it below.
-          </p>
+          <p className="text-sm text-muted-foreground">Download the template, enter the student roster and upload it below.</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-muted-foreground bg-muted/40 rounded-lg p-3">
             {HINTS.filter((h) => !locked || (!h.startsWith("Department accepts") && !h.startsWith("Course is the programme") && !h.startsWith("A single file"))).map((h) => (
               <p key={h} className="flex items-start gap-1"><span className="text-primary mt-0.5">•</span>{h}</p>
@@ -602,7 +600,7 @@ export function AddStudentsImport() {
             <FileSpreadsheet className="h-10 w-10 text-muted-foreground" />
             <div className="text-center">
               <p className="font-medium text-sm">Click to select a CSV or Excel file</p>
-              <p className="text-xs text-muted-foreground mt-1">.csv or .xlsx supported - headers matched loosely (e.g. &quot;DOB&quot; for Date of Birth)</p>
+              <p className="text-xs text-muted-foreground mt-1">CSV and XLSX files are supported. Column headings are matched flexibly (for example, &quot;DOB&quot; for Date of Birth).</p>
             </div>
           </button>
           {parseError && (
@@ -613,7 +611,7 @@ export function AddStudentsImport() {
           )}
           {rows.length > 0 && (
             <p className="text-sm text-green-700 flex items-center gap-1">
-              <CheckCircle2 className="h-4 w-4" />{rows.length} row{rows.length !== 1 ? "s" : ""} parsed successfully
+              <CheckCircle2 className="h-4 w-4" />{rows.length} row{rows.length !== 1 ? "s" : ""} parsed
             </p>
           )}
         </CardContent>
@@ -780,9 +778,7 @@ export function AddStudentsImport() {
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Fix Row {fixTarget?.row}</DialogTitle>
-            <DialogDescription>
-              Correct the field(s) that failed and save - this imports just this one student, the same as adding one manually.
-            </DialogDescription>
+            <DialogDescription>Correct the fields that failed and save. Only this student is imported, in the same way as adding one manually.</DialogDescription>
           </DialogHeader>
 
           {fixTarget && (

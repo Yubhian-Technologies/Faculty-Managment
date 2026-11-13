@@ -74,12 +74,12 @@ export default function NewBudgetCyclePage() {
       });
       if (!res.ok) {
         const err = (await res.json()) as { error?: string };
-        throw new Error(err.error ?? "Failed to release budget cycle");
+        throw new Error(err.error ?? "Unable to release budget cycle");
       }
       toast({ variant: "success", title: "Budget cycle released", description: "Sent to the Principal for approval." });
       router.push("/finance/budget");
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to release budget cycle", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to release budget cycle", description: err instanceof Error ? err.message : undefined });
     } finally {
       setSaving(false);
     }
@@ -89,7 +89,7 @@ export default function NewBudgetCyclePage() {
     <div className="max-w-2xl">
       <PageHeader
         title="Release Budget Cycle"
-        description="Announce an institution-wide budget cycle for the Principal to approve. Once approved, every active department automatically gets a pending budget to fill in and submit."
+        description="Announce an institution-wide budget cycle for the Principal's approval. Once approved, every active department receives a budget to complete and submit."
       />
 
       <Card>
@@ -100,7 +100,7 @@ export default function NewBudgetCyclePage() {
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
               <Label>Budget Title *</Label>
-              <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Annual Budget 2026-27" />
+              <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Annual Budget 2026-27" />
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

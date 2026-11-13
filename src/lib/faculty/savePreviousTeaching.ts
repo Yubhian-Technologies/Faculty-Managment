@@ -22,7 +22,7 @@ export async function savePreviousTeachingAssignments(
     });
     if (res.ok) return null;
     const data = (await res.json().catch(() => ({}))) as { error?: string };
-    return data.error ?? "Failed to save previous teaching assignments";
+    return data.error ?? "Unable to save previous teaching assignments";
   } catch {
     return "Network error while saving previous teaching assignments";
   }

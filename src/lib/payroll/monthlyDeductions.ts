@@ -1,10 +1,10 @@
 import type { PayrollLine, PayrollSettings } from "@/types/payroll";
 import { importColumns, type ImportRow } from "./pay";
 
-// A month's "entered each month" deductions (MediClaim ...) from an Excel / CSV: Emp Code + one column per such
+// A month's "entered each month" deductions (MediClaim ...) from an Excel / CSV: Employee ID + one column per such
 // deduction. Pure - the route loads the month's lines and writes what this plans.
 //   blank cell = that deduction is left as it is on the line; a number (0 too) replaces it (0 = none this month)
-//   rows without an Emp Code are skipped (totals, headings); an Emp Code not in the month, repeated, or a bad
+//   rows without an Employee ID are skipped (totals, headings); an Employee ID not in the month, repeated, or a bad
 //   amount = an error, and any error = nothing saved. Other columns of the salary sheet (E.B, PF, Net ...) are ignored.
 
 export interface DeductionPlanRow {
@@ -59,11 +59,11 @@ export function planMonthlyDeductions(
   const out = used.map((r): DeductionPlanRow => {
     const code = r.code.trim().toUpperCase();
     const fail = (error: string): DeductionPlanRow => ({ row: r.row, code: r.code, status: "ERROR", error });
-    if (seen.has(code)) return fail(`Emp Code repeated (row ${seen.get(code)})`);
+    if (seen.has(code)) return fail(`Employee ID repeated (also in row ${seen.get(code)}).`);
     seen.set(code, r.row);
     const matches = byCode.get(code) ?? [];
-    if (matches.length === 0) return fail("Not in this month's salaries");
-    if (matches.length > 1) return fail("Two people in the month share this Emp Code");
+    if (matches.length === 0) return fail("Not in this month's salaries.");
+    if (matches.length > 1) return fail("Two people in this month have this Employee ID.");
     const line = matches[0];
     const before = { ...(line.manual ?? {}) };
     const after = { ...before };

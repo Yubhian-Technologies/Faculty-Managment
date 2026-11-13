@@ -187,7 +187,7 @@ function RegulationBatchesEditor({
       {hasOverlap && (
         <p className="flex items-start gap-1 text-[11px] text-red-700">
           <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
-          More than one regulation claims the same intake year - saving will be rejected until the overlap is fixed.
+          More than one regulation covers the same intake year. Correct the overlap before saving.
         </p>
       )}
 
@@ -196,7 +196,7 @@ function RegulationBatchesEditor({
           <Label htmlFor={`${listId}-code`} className="text-[11px]">Code</Label>
           <Input
             id={`${listId}-code`} value={code} onChange={(e) => setCode(e.target.value)}
-            placeholder="e.g. R23" className="w-24 uppercase" list={listId} disabled={editingCode != null}
+            placeholder="R23" className="w-24 uppercase" list={listId} disabled={editingCode != null}
             aria-invalid={fieldError?.field === "code" || undefined}
             aria-describedby={fieldError ? `${listId}-error` : undefined}
           />
@@ -234,7 +234,7 @@ function RegulationBatchesEditor({
       )}
       {showHint && !fieldError && (
         <p className="text-[11px] text-muted-foreground">
-          E.g. Starting Year 2023, 3 batches - the 2023, 2024 and 2025 intakes all follow this regulation.
+          For example, Starting Year 2023 with 3 batches: the 2023, 2024 and 2025 intakes follow this regulation.
         </p>
       )}
 
@@ -421,14 +421,14 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsOnly = 
             for (const list of grouped.values()) list.sort((a, b) => a.name.localeCompare(b.name));
             setDepartmentsByCatalogId(grouped);
           })
-          .catch(() => toast({ variant: "destructive", title: "Failed to load departments" }))
+          .catch(() => toast({ variant: "destructive", title: "Unable to load departments" }))
       : Promise.resolve();
 
     return Promise.all([
       fetch("/api/college/course-catalog")
         .then((r) => r.json() as Promise<{ items: CourseCatalogItem[] }>)
         .then((d) => setItems(d.items ?? []))
-        .catch(() => toast({ variant: "destructive", title: "Failed to load course catalog" })),
+        .catch(() => toast({ variant: "destructive", title: "Unable to load course catalog" })),
       departmentsLoad,
     ]).finally(() => setIsLoading(false));
   }
@@ -463,14 +463,14 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsOnly = 
       });
       if (!res.ok) {
         const j = await res.json() as { error?: string };
-        throw new Error(j.error ?? "Failed to add course");
+        throw new Error(j.error ?? "Unable to add course");
       }
       setNewDraft(EMPTY_DRAFT);
       setShowAddForm(false);
       toast({ variant: "success", title: "Course added to catalog" });
       load();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to add course" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to add course" });
     } finally {
       setIsAdding(false);
     }
@@ -509,13 +509,13 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsOnly = 
       });
       if (!res.ok) {
         const j = await res.json() as { error?: string };
-        throw new Error(j.error ?? "Failed to update course");
+        throw new Error(j.error ?? "Unable to update course");
       }
       setEditingId(null);
       toast({ variant: "success", title: "Course updated" });
       load();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to update course" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to update course" });
     } finally {
       setBusyId(null);
     }
@@ -536,7 +536,7 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsOnly = 
       setToggleTarget(null);
       load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to update status" });
+      toast({ variant: "destructive", title: "Unable to update status" });
     } finally {
       setIsToggling(false);
       setBusyId(null);
@@ -550,13 +550,13 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsOnly = 
       const res = await fetch(`/api/college/course-catalog/${deleteTarget.id}`, { method: "DELETE" });
       if (!res.ok) {
         const j = await res.json() as { error?: string };
-        throw new Error(j.error ?? "Failed to delete course");
+        throw new Error(j.error ?? "Unable to delete course");
       }
       toast({ variant: "success", title: "Course removed from catalog" });
       setDeleteTarget(null);
       load();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to delete course" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to delete course" });
     } finally {
       setIsDeleting(false);
     }
@@ -572,12 +572,7 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsOnly = 
             for itself. The Academics' regulations-only view keeps the blurb -
             the card is one of several there and has to say which part it owns. */}
         {!showDepartments && (
-          <CardDescription>
-            The fixed list of courses for your entire college. Create a course here first - departments can only select
-            from these (a department needs at least one), which keeps course names and codes consistent and prevents
-            duplicates. Each course&apos;s curriculum regulations (e.g. R23) are created right here too - give one a
-            starting year and a duration and it covers those years automatically.
-          </CardDescription>
+          <CardDescription>The fixed list of courses for the whole college. Create a course here first; departments select only from this list (each department needs at least one), which keeps course names and codes consistent. Each course&apos;s regulations (for example R23) are also created here; give a regulation a starting year and a duration and it covers those years.</CardDescription>
         )}
       </CardHeader>
       <CardContent className="space-y-5">
@@ -617,7 +612,7 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsOnly = 
                       <Input
                         value={newDraft.name}
                         onChange={(e) => setNewDraft((d) => ({ ...d, name: e.target.value }))}
-                        placeholder="e.g. Bachelor of Technology"
+                        placeholder="Bachelor of Technology"
                       />
                     </div>
                     <div className="space-y-1.5">
@@ -681,9 +676,7 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsOnly = 
             {[1, 2].map((i) => <div key={i} className="h-32 bg-muted animate-pulse rounded-lg" />)}
           </div>
         ) : items.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-4">
-            No courses yet. Add your college&apos;s courses above so departments can select them.
-          </p>
+          <p className="text-sm text-muted-foreground text-center py-4">No courses yet. Add your college&apos;s courses above so departments can select them.</p>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
             {items.map((item) => {

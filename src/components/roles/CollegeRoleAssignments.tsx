@@ -27,7 +27,7 @@ export function CollegeRoleAssignments({ collegesUrl }: { collegesUrl: string })
         setColleges(list);
         if (list.length === 1) setCollegeId(list[0].id);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load colleges" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load colleges" }))
       .finally(() => setLoaded(true));
   }, [collegesUrl]);
 
@@ -45,7 +45,7 @@ export function CollegeRoleAssignments({ collegesUrl }: { collegesUrl: string })
       {collegeId ? (
         <RoleAssignmentsPage key={collegeId} collegeId={collegeId} />
       ) : (
-        loaded && <p className="text-sm text-muted-foreground">Pick a college to manage its role assignments.</p>
+        loaded && <p className="text-sm text-muted-foreground">Select a college to manage its role assignments.</p>
       )}
     </div>
   );

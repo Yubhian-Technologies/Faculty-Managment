@@ -35,7 +35,7 @@ const escapeHtml = (v: unknown) =>
 
 export async function POST(request: Request) {
   const caller = await verifyToken(request);
-  if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!caller) return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
   if (!SENDER_ROLES.has(caller.role)) return NextResponse.json({ error: "Not allowed to send email" }, { status: 403 });
   const limited = rateLimit(`email-send:${caller.uid}`, 30, 60 * 60 * 1000);
   if (!limited.ok) {
@@ -102,6 +102,6 @@ export async function POST(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     console.error("[email/send]", err);
-    return NextResponse.json({ error: "Failed to send email" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to send email" }, { status: 500 });
   }
 }

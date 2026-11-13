@@ -17,7 +17,7 @@ export default function CustomPageView() {
     queryFn: async () => {
       const res = await fetch(`/api/college/custom-nav/pages/${encodeURIComponent(pageId)}`, { cache: "no-store" });
       if (res.status === 404) return null;
-      if (!res.ok) throw new Error("Failed to load page");
+      if (!res.ok) throw new Error("Unable to load page");
       return ((await res.json()) as { page: CustomPage }).page;
     },
     staleTime: 30_000,
@@ -26,8 +26,8 @@ export default function CustomPageView() {
   if (isLoading) {
     return <div className="space-y-4 max-w-3xl"><Skeleton className="h-8 w-1/3" /><Skeleton className="h-24 w-full" /><Skeleton className="h-24 w-full" /></div>;
   }
-  if (isError) return <p className="text-sm text-destructive">This page could not be loaded. Please try again.</p>;
-  if (!data) return <p className="text-sm text-muted-foreground">This page isn&apos;t available.</p>;
+  if (isError) return <p className="text-sm text-destructive">This page could not be loaded. Try again.</p>;
+  if (!data) return <p className="text-sm text-muted-foreground">This page is not available.</p>;
 
   return (
     <div className="space-y-6">

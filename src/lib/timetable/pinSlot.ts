@@ -65,7 +65,7 @@ export async function pinSlotWithChecks(input: PinSlotInput): Promise<PinSlotOut
       tx.get(slotsCol.where("sectionId", "==", sectionId).where("day", "==", day).where("periodNumber", "==", periodNumber)),
     ]);
 
-    if (!assignmentSnap.exists) return { ok: false, error: "Teaching assignment not found" };
+    if (!assignmentSnap.exists) return { ok: false, error: "Teaching assignment not found. It may have been deleted." };
 
     const facultyLive = facultySnap.docs
       .map((d) => ({ id: d.id, ...(d.data() as object) }) as StoredSlot & { id: string })

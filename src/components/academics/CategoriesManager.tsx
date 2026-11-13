@@ -40,11 +40,11 @@ export function CategoriesManager({ initialText = "", onChanged }: { initialText
     try {
       const res = await fetch("/api/college/subject-categories");
       const json = await res.json() as { categories?: CategoryDefinition[]; error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to load");
+      if (!res.ok) throw new Error(json.error ?? "Unable to load");
       setCategories(json.categories ?? []);
       setLoadError("");
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "Failed to load categories.");
+      setLoadError(err instanceof Error ? err.message : "Unable to load categories.");
     } finally {
       setIsLoading(false);
     }
@@ -86,7 +86,7 @@ export function CategoriesManager({ initialText = "", onChanged }: { initialText
         body: JSON.stringify({ categories: draft.accepted }),
       });
       const json = await res.json() as { error?: string };
-      if (!res.ok) { setAddError(json.error ?? "Couldn't add the categories."); return; }
+      if (!res.ok) { setAddError(json.error ?? "Unable to add the categories."); return; }
       toast({ variant: "success", title: `${draft.accepted.length} categor${draft.accepted.length === 1 ? "y" : "ies"} added` });
       setText("");
       await load();
@@ -110,7 +110,7 @@ export function CategoriesManager({ initialText = "", onChanged }: { initialText
         body: JSON.stringify({ code: editing.originalCode, fullForm: editing.fullForm, ...(codeChanged ? { newCode: editing.code } : {}) }),
       });
       const json = await res.json() as { error?: string };
-      if (!res.ok) { setEditError(json.error ?? "Couldn't save."); return; }
+      if (!res.ok) { setEditError(json.error ?? "Unable to save."); return; }
       setEditing(null);
       await load();
       onChanged?.();
@@ -128,7 +128,7 @@ export function CategoriesManager({ initialText = "", onChanged }: { initialText
       const res = await fetch(`/api/college/subject-categories?code=${encodeURIComponent(deleting.code)}`, { method: "DELETE" });
       const json = await res.json() as { error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Couldn't remove the category" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to remove the category" });
         return;
       }
       toast({ variant: "success", title: isStandardCategoryCode(deleting.code) ? `${deleting.code} reset to its default label` : `${deleting.code} removed` });
@@ -157,10 +157,7 @@ export function CategoriesManager({ initialText = "", onChanged }: { initialText
               placeholder={"PC: Professional Core\nES: Engineering Sciences\nBS&H: Basic Sciences and Humanities"}
               className="font-mono text-sm"
             />
-            <p className="text-xs text-muted-foreground">
-              Codes use letters, digits and &amp; - / . (up to 12 characters). You can paste two spreadsheet columns as they are.
-              The standard categories below are always available - edit one directly in its own row to relabel it.
-            </p>
+            <p className="text-xs text-muted-foreground">Codes may use letters, digits and &amp; - / . (up to 12 characters). You can paste two spreadsheet columns as they are. The standard categories below are always available; edit one in its own row to rename it.</p>
           </div>
           {(draft.errors.length > 0 || addError) && (
             <ul className="space-y-1 text-sm text-red-600">

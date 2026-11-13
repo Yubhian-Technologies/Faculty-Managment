@@ -39,10 +39,10 @@ export function BankReview({ id, editHref, writeHref, autoDownload }: { id: stri
     fetch(`/api/college/mid-question-banks/${encodeURIComponent(id)}`)
       .then(async (r) => {
         const d = (await r.json()) as MidBankDetail & { error?: string };
-        if (!r.ok) throw new Error(d.error ?? "Failed to load the question bank");
+        if (!r.ok) throw new Error(d.error ?? "Unable to load the question bank");
         setDetail(d);
       })
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load the question bank"));
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Unable to load the question bank"));
   }, [id, reloadKey]);
 
   const bank = detail?.bank ?? null;
@@ -84,7 +84,7 @@ export function BankReview({ id, editHref, writeHref, autoDownload }: { id: stri
         bank: detail.bank, outcomes: detail.outcomes, questions: detail.questions,
       });
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not make the PDF" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to make the PDF" });
     } finally {
       setDownloading(false);
     }
@@ -99,7 +99,7 @@ export function BankReview({ id, editHref, writeHref, autoDownload }: { id: stri
   // A college that prepares question papers: the papers' own review.
   if (detail.bank.kind === "PAPERS") return <PaperSetReview detail={detail} writeHref={writeHref} onChanged={() => setReloadKey((k) => k + 1)} />;
   if (!bank || !detail.outcomes) {
-    return <p className="rounded-lg border p-6 text-center text-sm text-muted-foreground">This question bank hasn&rsquo;t been started yet.</p>;
+    return <p className="rounded-lg border p-6 text-center text-sm text-muted-foreground">This question bank has not been started yet.</p>;
   }
 
   const drafts = detail.questions.filter((q) => q.state === "DRAFT").length;

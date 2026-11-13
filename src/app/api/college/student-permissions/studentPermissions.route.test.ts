@@ -87,7 +87,7 @@ describe("POST /api/college/student-permissions", () => {
     vi.mocked(service.createStudentRequest).mockRejectedValueOnce(new Error("firestore exploded: secret detail"));
     const res = await POST(post({}));
     expect(res.status).toBe(500);
-    expect(await res.json()).toEqual({ error: "Internal error" });
+    expect(await res.json()).toEqual({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." });
   });
 });
 

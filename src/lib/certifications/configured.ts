@@ -91,7 +91,7 @@ export async function submitConfigured(db: Firestore, user: ActingUser, raw: unk
   if (type.startedBy === "OFFICE") throw new CertificationError("INVALID", "The College Office starts this certificate for your class", 400);
 
   const student = await loadStudentByUid(db, user.collegeId, user.uid);
-  if (!student) throw new CertificationError("INVALID", "Your login isn't linked to a student record yet. Please contact your College Office.", 400);
+  if (!student) throw new CertificationError("INVALID", "Your login isn't linked to a student record yet. Contact your College Office.", 400);
   const problem = eligibilityProblem(type, student);
   if (problem) throw new CertificationError("NOT_ELIGIBLE", problem, 400);
 
@@ -109,7 +109,7 @@ export async function submitConfigured(db: Firestore, user: ActingUser, raw: unk
 
   const { steps, pendingRecipientUids } = await buildInitialStep(db, user.collegeId, type.flow, student.department, student.id);
   if (pendingRecipientUids.length === 0) {
-    throw new CertificationError("NO_APPROVER", `No one is set to approve "${type.flow[0].label}" for you yet - please contact the College Office.`, 409);
+    throw new CertificationError("NO_APPROVER", `No one is set to approve "${type.flow[0].label}" for you yet - contact the College Office.`, 409);
   }
   const now = new Date();
   const data: StoredRequest = {
@@ -293,7 +293,7 @@ export async function issueConfigured(db: Firestore, user: ActingUser, id: strin
   // A fee paid online (CCAvenue) is its own receipt; otherwise the issuer types the office receipt number.
   const typedReceipt = typeof body.feeReceiptNo === "string" ? body.feeReceiptNo.trim().slice(0, 60) : "";
   const feeReceiptNo = typedReceipt || (req.feePaid ? `Online - CCAvenue ${req.feePaid.trackingId}`.slice(0, 60) : "");
-  if ((req.feeAmount ?? 0) > 0 && !feeReceiptNo) throw new CertificationError("INVALID", `Enter the receipt number of the Rs. ${req.feeAmount} fee`, 400);
+  if ((req.feeAmount ?? 0) > 0 && !feeReceiptNo) throw new CertificationError("INVALID", `Enter the receipt number of the ₹${req.feeAmount} fee`, 400);
 
   const type = await loadType(db, user.collegeId, req.certificateTypeId!);
   const template = await loadTemplate(db, user.collegeId, req.templateId ?? "");

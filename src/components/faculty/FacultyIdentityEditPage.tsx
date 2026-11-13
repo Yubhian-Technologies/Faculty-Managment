@@ -106,7 +106,7 @@ export function FacultyIdentityEditPage({
   // submission; each tab here already saves independently on its own.
   type EditTabKey = "core" | ProfileModuleKey;
   const tabs: (ChromeStep & { key: EditTabKey })[] = [
-    { key: "core", label: "Identity & Employment", icon: User, description: "Official ID, department, designation and employment status" },
+    { key: "core", label: "Identity & Employment", icon: User, description: "Official ID, department, designation and employment status." },
     ...getFacultyProfileModules().map((m) => ({ key: m.key, label: m.label, icon: m.icon, description: m.description })),
   ];
   const [activeTab, setActiveTab] = useState<EditTabKey>("core");
@@ -176,7 +176,7 @@ export function FacultyIdentityEditPage({
         setExtraPhones((m.additionalPhoneNumbers as { label?: string; number: string }[]) ?? []);
         setPhotoUrl((m.profilePhotoUrl as string) || undefined);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load faculty record" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load faculty record" }))
       .finally(() => setLoading(false));
   }, [facultyId, listHref, router]);
 
@@ -261,7 +261,7 @@ export function FacultyIdentityEditPage({
       }
       toast({ variant: "success", title: "Saved" });
     } catch {
-      toast({ variant: "destructive", title: "Failed to save" });
+      toast({ variant: "destructive", title: "Unable to save" });
     } finally {
       setSavingModule(null);
     }
@@ -363,7 +363,7 @@ export function FacultyIdentityEditPage({
       });
       if (!res.ok) {
         const data = (await res.json()) as { error?: string };
-        throw new Error(data.error ?? "Failed to save changes");
+        throw new Error(data.error ?? "Unable to save changes");
       }
       // Only present when this save made them RESIGNED/RETIRED in a college with
       // read-only faculty access on: what happened to the seats they held.
@@ -381,7 +381,7 @@ export function FacultyIdentityEditPage({
       }
       router.push(detailHref);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save changes" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save changes" });
     } finally {
       setSaving(false);
     }
@@ -412,9 +412,7 @@ export function FacultyIdentityEditPage({
         <Card className="shadow-xs border-border/80 overflow-hidden">
           <WizardStepHeader step={tabs[0]} />
           <CardContent className="p-5 sm:p-6 space-y-5">
-            <p className="text-xs text-muted-foreground -mt-2">
-              Employee ID, College Email and the login password can&apos;t be changed here.
-            </p>
+            <p className="text-xs text-muted-foreground -mt-2">Employee ID, College Email and the login password cannot be changed here.</p>
 
             <div className="flex flex-col gap-5 pb-5 border-b sm:flex-row sm:items-start">
               <div className="flex shrink-0 flex-col items-center gap-2 sm:pt-6">
@@ -496,9 +494,7 @@ export function FacultyIdentityEditPage({
                   </SelectContent>
                 </Select>
                 {designationManaged && (
-                  <p className="text-xs text-muted-foreground">
-                    Managed by this faculty member&apos;s Promotion History - College Office updates it under Promotion &amp; Salary.
-                  </p>
+                  <p className="text-xs text-muted-foreground">Taken from this faculty member&apos;s promotion history. The College Office updates it under Promotion and Salary.</p>
                 )}
               </div>
               <div className="space-y-2">
@@ -561,12 +557,12 @@ export function FacultyIdentityEditPage({
                   </SelectContent>
                 </Select>
                 {qualIsOther && (
-                  <Input value={form.highestQualification} onChange={(e) => set({ highestQualification: e.target.value })} placeholder="e.g. B.Ed, MCA" />
+                  <Input value={form.highestQualification} onChange={(e) => set({ highestQualification: e.target.value })} placeholder="B.Ed, MCA" />
                 )}
               </div>
               <div className="space-y-2">
                 <Label>Specialization</Label>
-                <Input value={form.specialization} onChange={(e) => set({ specialization: e.target.value })} placeholder="e.g. Machine Learning, VLSI" />
+                <Input value={form.specialization} onChange={(e) => set({ specialization: e.target.value })} placeholder="Machine Learning, VLSI" />
               </div>
             </div>
 
@@ -592,7 +588,7 @@ export function FacultyIdentityEditPage({
                 <Label>Personal Email</Label>
                 <Input type="email" value={form.email} onChange={(e) => set({ email: e.target.value })} placeholder="faculty@example.com" />
                 {!!form.email.trim() && !EMAIL_REGEX.test(form.email.trim()) && (
-                  <p className="text-xs text-destructive">Doesn&rsquo;t look like a valid email address</p>
+                  <p className="text-xs text-destructive">Enter a valid email address.</p>
                 )}
               </div>
               <div className="space-y-2">
@@ -615,7 +611,7 @@ export function FacultyIdentityEditPage({
                   placeholder="9876543210"
                 />
                 {!!form.mobileNo && !PHONE_REGEX.test(form.mobileNo) && (
-                  <p className="text-xs text-destructive">Must be exactly 10 digits, starting with 6, 7, 8 or 9</p>
+                  <p className="text-xs text-destructive">Must be 10 digits, starting with 6, 7, 8 or 9.</p>
                 )}
               </div>
             </div>
@@ -629,7 +625,7 @@ export function FacultyIdentityEditPage({
                         label="Label (optional)"
                         value={item.label}
                         onChange={(v) => setExtraPhones((prev) => prev.map((p, idx) => (idx === i ? { ...p, label: v } : p)))}
-                        placeholder="e.g. Personal, WhatsApp, or a name"
+                        placeholder="Personal, WhatsApp, or a name"
                       />
                       <TextInput
                         label="Mobile Number"

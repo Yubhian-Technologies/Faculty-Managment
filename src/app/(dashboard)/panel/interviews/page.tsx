@@ -52,7 +52,7 @@ export default function PanelInterviewsPage() {
       fetch(url)
         .then((r) => r.json() as Promise<{ batches: BatchRow[] }>)
         .then((d) => setBatches(d.batches ?? []))
-        .catch(() => toast({ variant: "destructive", title: "Failed to load interviews" }))
+        .catch(() => toast({ variant: "destructive", title: "Unable to load interviews" }))
         .finally(() => setIsLoading(false));
     }
     load();
@@ -137,7 +137,7 @@ export default function PanelInterviewsPage() {
     <div className="space-y-6">
       <PageHeader
         title="My Interviews"
-        description="Assigned interview batches and feedback submissions"
+        description="Assigned interview batches and feedback submissions."
       />
 
       <div className="flex gap-2">

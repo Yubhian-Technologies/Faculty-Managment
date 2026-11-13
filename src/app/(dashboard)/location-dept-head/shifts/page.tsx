@@ -44,7 +44,7 @@ export default function LocationShiftsPage() {
         }),
     ])
       .catch(() => {
-        if (!isCancelled) toast({ variant: "destructive", title: "Failed to load shifts" });
+        if (!isCancelled) toast({ variant: "destructive", title: "Unable to load shifts" });
       })
       .finally(() => {
         if (!isCancelled) setIsLoading(false);
@@ -110,9 +110,7 @@ export default function LocationShiftsPage() {
         <div className="rounded-xl border border-dashed p-8 text-center bg-card/30">
           <Clock className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-50" />
           <p className="font-semibold text-foreground text-sm">No shifts configured for this department</p>
-          <p className="text-xs text-muted-foreground mt-1 max-w-md mx-auto">
-            Shifts are configured and scheduled by the Location Staff Admin. Once created, they will automatically appear here for staff assignment, roster rotation, and attendance.
-          </p>
+          <p className="text-xs text-muted-foreground mt-1 max-w-md mx-auto">Shifts are configured and scheduled by the Location Staff Admin. Once created, they appear here for staff assignment, roster rotation and attendance.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

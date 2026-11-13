@@ -98,7 +98,7 @@ export default function NewDepartmentPage() {
         }),
     ])
       .catch(() => {
-        if (!isCancelled) toast({ variant: "destructive", title: "Failed to load directory for head selection" });
+        if (!isCancelled) toast({ variant: "destructive", title: "Unable to load directory for head selection" });
       })
       .finally(() => {
         if (!isCancelled) setIsLoading(false);
@@ -224,11 +224,11 @@ export default function NewDepartmentPage() {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create department");
+      if (!res.ok) throw new Error(data.error || "Unable to create department");
 
       toast({
         title: "Department Created",
-        description: `Successfully created "${name}".`,
+        description: `Created "${name}".`,
       });
 
       if (data.credentialsCreated) {
@@ -242,7 +242,7 @@ export default function NewDepartmentPage() {
         router.push("/location-staff-admin/departments");
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to create department";
+      const msg = err instanceof Error ? err.message : "Unable to create department";
       toast({ variant: "destructive", title: "Creation Failed", description: msg });
     } finally {
       setIsSubmitting(false);
@@ -265,9 +265,7 @@ export default function NewDepartmentPage() {
             </div>
             <span>Create New Department</span>
           </h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Set up an operational location department and assign a supervising Department Head from staff.
-          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">Set up an operational location department and appoint a supervising Department Head from the staff.</p>
         </div>
       </div>
 
@@ -279,9 +277,7 @@ export default function NewDepartmentPage() {
               <Building2 className="h-4 w-4 text-primary" />
               <span>Department Information</span>
             </CardTitle>
-            <CardDescription className="text-xs">
-              Basic identification and classification details.
-            </CardDescription>
+            <CardDescription className="text-xs">Basic identification and classification details.</CardDescription>
           </CardHeader>
           <CardContent className="p-6 pt-2 space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -289,7 +285,7 @@ export default function NewDepartmentPage() {
                 <Label className="text-xs font-semibold">Department Name *</Label>
                 <Input
                   required
-                  placeholder="e.g. Security, Housekeeping, Electrical, Transport"
+                  placeholder="Security, Housekeeping, Electrical, Transport"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="h-10 text-xs rounded-xl border-border/60 bg-muted/20"
@@ -301,7 +297,7 @@ export default function NewDepartmentPage() {
                   Department Code <span className="text-muted-foreground font-normal">(Optional)</span>
                 </Label>
                 <Input
-                  placeholder="e.g. SEC, HSK"
+                  placeholder="SEC, HSK"
                   value={code}
                   onChange={(e) => setCode(e.target.value.toUpperCase())}
                   className="h-10 text-xs font-mono rounded-xl border-border/60 bg-muted/20 uppercase"
@@ -331,9 +327,7 @@ export default function NewDepartmentPage() {
                   <Shield className="h-4 w-4 text-primary" />
                   <span>Assign Department Head</span>
                 </CardTitle>
-                <CardDescription className="text-xs">
-                  Choose a staff member from your staff registry to supervise this department.
-                </CardDescription>
+                <CardDescription className="text-xs">Choose a staff member from the staff register to supervise this department.</CardDescription>
               </div>
 
               {/* Source Switcher Capsule */}
@@ -585,7 +579,7 @@ export default function NewDepartmentPage() {
           <DialogHeader>
             <DialogTitle className="text-base font-bold flex items-center gap-2 text-primary">
               <KeyRound className="h-5 w-5" />
-              Department Head Credentials Created!
+              Department Head Credentials Created
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
               Login account has been created for <strong>{createdCredentials?.headName}</strong> for the <strong>{createdCredentials?.deptName}</strong> department.

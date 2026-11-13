@@ -69,7 +69,7 @@ export function StepTimeline({ request }: { request: CertificateRequest }) {
           : b.check === "RESULT" ? `${bs.result?.outcome === "PASS" ? "Pass" : bs.result?.outcome === "FAIL" ? `Fail (${bs.result.backlogs.length} backlog${bs.result.backlogs.length === 1 ? "" : "s"})` : "No results"} - approved`
           : bs.outcome === "NO_DUES" ? "No dues" : bs.outcome === "NOT_APPLICABLE" ? "Not applicable" : "Approved";
         const sub = dues
-          ? `Dues pending: Rs. ${dues.amount} - ${dues.reason}. Pay it and ${b.label} will clear you.`
+          ? `Dues pending: ₹${dues.amount} - ${dues.reason}. Pay it and ${b.label} will clear you.`
           : bs?.decidedByName
             ? `${how} · ${bs.decidedByName} · ${when(bs.decidedAt)}${bs.remarks ? ` - ${bs.remarks}` : ""}`
             : state === "current" ? "Waiting" : undefined;

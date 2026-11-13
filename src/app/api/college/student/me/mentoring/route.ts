@@ -25,7 +25,7 @@ export async function GET(request: Request) {
     const db = getAdminDb();
     const own = await findOwnStudent(db, session.collegeId, session.uid);
     if (!own.ok) {
-      return NextResponse.json({ error: "Your login is not linked to a student record yet. Please contact your College Office." }, { status: 404 });
+      return NextResponse.json({ error: "Your login is not linked to a student record yet. Contact your College Office." }, { status: 404 });
     }
     if (passwordChangeRequired(own.student)) return passwordChangeRequiredResponse();
     const student = own.student;

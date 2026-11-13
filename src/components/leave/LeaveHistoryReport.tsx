@@ -376,7 +376,7 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
       const html = `<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial,Helvetica,sans-serif;margin:16px;}table{border-collapse:collapse;}</style></head><body><h3 style="margin:0 0 12px;text-align:center;">${title}</h3><table>${tableHead}${tableBody}</table></body></html>`;
       await renderHtmlToPdf(html, `${exportFilenameBase}.pdf`);
     } catch {
-      toast({ variant: "destructive", title: "Failed to export PDF" });
+      toast({ variant: "destructive", title: "Unable to export PDF" });
     } finally {
       setIsExportingPdf(false);
     }
@@ -445,9 +445,7 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
       </div>
 
       {filtersMoved && (
-        <p className="text-xs text-muted-foreground">
-          Filters have changed since this was loaded &mdash; press Reload to apply them.
-        </p>
+        <p className="text-xs text-muted-foreground">Filters have changed since this was loaded. Choose Reload to apply them.</p>
       )}
 
       {!applied ? (

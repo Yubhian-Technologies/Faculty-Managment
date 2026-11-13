@@ -17,8 +17,8 @@ import {
   type IndentRequest,
 } from "@/types";
 
-// Contacting Purchase Dept happens two ways: a freeform clearance request, or
-// a GOODS-type indent (NON_GOODS indents skip Purchase Dept entirely - see
+// Contacting Purchase Department happens two ways: a freeform clearance request, or
+// a GOODS-type indent (NON_GOODS indents skip Purchase Department entirely - see
 // IndentRequestType in src/types/indent.ts) - both are shown here together.
 type Row = Record<string, unknown> &
   (
@@ -74,7 +74,7 @@ export default function HODPurchaseClearancePage() {
           }));
         setRows([...clearanceRows, ...indentRows].sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt)));
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load purchase clearance requests" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load purchase clearance requests" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -114,7 +114,7 @@ export default function HODPurchaseClearancePage() {
     <div className="space-y-6">
       <PageHeader
         title="Purchase Clearance"
-        description="Goods indents and purchase clearance requests you've raised with Purchase Dept"
+        description="Goods indents and purchase clearance requests you have raised with the Purchase Department."
         actions={
           <>
             <Button variant="outline" size="sm" onClick={load} loading={isLoading}>

@@ -131,7 +131,7 @@ export function TimetableInchargePanel({
         : { kind: "MIXED" };
       setHolders((h) => ({ ...h, [unit.key]: holder }));
     } catch {
-      toast({ variant: "destructive", title: "Failed to load Timetable Incharge" });
+      toast({ variant: "destructive", title: "Unable to load Timetable Incharge" });
     }
   }, []);
 
@@ -182,7 +182,7 @@ export function TimetableInchargePanel({
           if (current) setSelectedKey(`${current.personType}_${current.id}`);
         }
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load faculty" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load faculty" }));
   }
 
   async function submitAssign() {
@@ -197,7 +197,7 @@ export function TimetableInchargePanel({
       });
       const json = (await res.json()) as { error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to assign Timetable Incharge", description: json.error });
+        toast({ variant: "destructive", title: "Unable to assign Timetable Incharge", description: json.error });
         return;
       }
       toast({ variant: "success", title: "Timetable Incharge assigned" });
@@ -222,7 +222,7 @@ export function TimetableInchargePanel({
       toast({ variant: "success", title: "Timetable Incharge removed" });
       await loadHolder(revokeUnit);
     } catch {
-      toast({ variant: "destructive", title: "Failed to remove Timetable Incharge" });
+      toast({ variant: "destructive", title: "Unable to remove Timetable Incharge" });
     } finally {
       setRevoking(false);
       setRevokeUnit(null);
@@ -235,9 +235,7 @@ export function TimetableInchargePanel({
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Timetable Incharge</CardTitle>
-        <CardDescription>
-          Who builds and publishes this year&rsquo;s timetable and teaching assignments. They get the same pages from their own dashboard; you keep full access too.
-        </CardDescription>
+        <CardDescription>Who builds and publishes this year&apos;s timetable and teaching assignments. They get the same pages on their own dashboard; you keep full access.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-2">
         {units.map((u) => {
@@ -249,7 +247,7 @@ export function TimetableInchargePanel({
                 <p className="text-sm">
                   {!holder ? <span className="text-muted-foreground">Loading…</span>
                     : holder.kind === "ONE" ? holder.incharge.facultyName
-                    : holder.kind === "MIXED" ? <span className="text-amber-600">Different people per branch - assign one to unify</span>
+                    : holder.kind === "MIXED" ? <span className="text-amber-600">Different people for each branch. Assign one person to cover all.</span>
                     : <span className="text-amber-600">Not assigned</span>}
                 </p>
               </div>
@@ -275,9 +273,7 @@ export function TimetableInchargePanel({
               {assignUnit && holders[assignUnit.key]?.kind === "NONE" ? "Assign" : "Change"} Timetable Incharge
               {assignUnit ? ` · ${ordinalYear(assignUnit.year)}${assignUnit.shared ? ` · ${assignUnit.ownerName}` : ""}` : ""}
             </DialogTitle>
-            <DialogDescription>
-              They&rsquo;ll be able to build, edit and publish this timetable and assign faculty to subjects from their own dashboard. You keep full access too.
-            </DialogDescription>
+            <DialogDescription>They will be able to build, edit and publish this timetable and assign faculty to subjects from their own dashboard. You keep full access.</DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             <Label>Faculty / Supporting Staff</Label>
@@ -334,7 +330,7 @@ export function TimetableInchargePanel({
         open={!!revokeUnit}
         onOpenChange={(o) => { if (!o) setRevokeUnit(null); }}
         title="Revoke Timetable Incharge?"
-        description="They will lose access to this year’s Timetable and Teaching Assignments pages. Anything they already did stays as-is - this only removes their access going forward."
+        description="They will lose access to this year's Timetable and Teaching Assignments pages. Work already done is kept; only their future access is removed."
         confirmLabel="Revoke"
         variant="destructive"
         loading={revoking}

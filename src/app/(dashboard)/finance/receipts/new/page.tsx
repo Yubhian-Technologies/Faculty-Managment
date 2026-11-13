@@ -52,7 +52,7 @@ export default function NewReceiptPage() {
       toast({ variant: "success", title: "Receipt recorded" });
       router.push("/finance/receipts");
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to record receipt", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to record receipt", description: err instanceof Error ? err.message : undefined });
     } finally {
       setSaving(false);
     }
@@ -62,7 +62,7 @@ export default function NewReceiptPage() {
     <div className="max-w-xl">
       <PageHeader
         title="New Receipt"
-        description="Record a receipt for a budget, expense, payment, or allocation"
+        description="Record a receipt for a budget, expense, payment or allocation."
       />
 
       <Card>

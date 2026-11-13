@@ -155,7 +155,7 @@ export default function HODTimetableSectionsPage() {
       })
       .catch(() => {
         setInchargeState({ kind: "NONE" });
-        toast({ variant: "destructive", title: "Failed to load Timetable Incharge" });
+        toast({ variant: "destructive", title: "Unable to load Timetable Incharge" });
       });
   }
 
@@ -189,7 +189,7 @@ export default function HODTimetableSectionsPage() {
         if (cancelled) return;
         setSections((sectionsData.sections ?? []).sort((a, b) => a.name.localeCompare(b.name)));
       } catch {
-        if (!cancelled) toast({ variant: "destructive", title: "Failed to load sections" });
+        if (!cancelled) toast({ variant: "destructive", title: "Unable to load sections" });
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -255,7 +255,7 @@ export default function HODTimetableSectionsPage() {
           if (current) setSelectedCandidateKey(`${current.personType}_${current.id}`);
         }
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load faculty" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load faculty" }));
   }
 
   async function handleAssignIncharge() {
@@ -270,7 +270,7 @@ export default function HODTimetableSectionsPage() {
       });
       const json = await res.json() as { error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to assign Timetable Incharge", description: json.error });
+        toast({ variant: "destructive", title: "Unable to assign Timetable Incharge", description: json.error });
         return;
       }
       toast({ variant: "success", title: "Timetable Incharge assigned" });
@@ -296,7 +296,7 @@ export default function HODTimetableSectionsPage() {
       toast({ variant: "success", title: "Timetable Incharge removed" });
       loadIncharge(activeUnit);
     } catch {
-      toast({ variant: "destructive", title: "Failed to remove Timetable Incharge" });
+      toast({ variant: "destructive", title: "Unable to remove Timetable Incharge" });
     } finally {
       setIsRevoking(false);
       setConfirmRevoke(false);
@@ -370,9 +370,9 @@ export default function HODTimetableSectionsPage() {
                 <span className="font-medium">{inchargeState.incharge.facultyName}</span>
               </p>
             ) : inchargeState.kind === "MIXED" ? (
-              <p className="text-sm text-amber-700">Different people cover different branches here - assign one to unify.</p>
+              <p className="text-sm text-amber-700">Different people cover different branches here. Assign one person to cover all.</p>
             ) : (
-              <p className="text-sm text-muted-foreground">No Timetable Incharge assigned for this year yet.</p>
+              <p className="text-sm text-muted-foreground">No Timetable Incharge has been assigned for this year.</p>
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">

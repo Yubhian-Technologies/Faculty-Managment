@@ -48,11 +48,11 @@ export function ClassRepresentativesCard({ section, students, canSetCount, onSav
         body: JSON.stringify({ sectionId: section.id, ...body }),
       });
       const json = await res.json() as { error?: string; classRepresentativeCount?: number; classRepresentatives?: Section["classRepresentatives"] };
-      if (!res.ok) throw new Error(json.error ?? "Could not save");
+      if (!res.ok) throw new Error(json.error ?? "Unable to save");
       onSaved({ classRepresentativeCount: json.classRepresentativeCount, classRepresentatives: json.classRepresentatives });
       toast({ variant: "success", title: "Class Representatives saved" });
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Could not save" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save" });
     } finally {
       setBusy(false);
     }

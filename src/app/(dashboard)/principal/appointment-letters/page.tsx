@@ -102,7 +102,7 @@ export default function PrincipalAppointmentLettersPage() {
         )
       );
     } catch {
-      toast({ variant: "destructive", title: "Failed to load candidates" });
+      toast({ variant: "destructive", title: "Unable to load candidates" });
     } finally {
       setIsLoading(false);
     }
@@ -170,7 +170,7 @@ export default function PrincipalAppointmentLettersPage() {
         }),
       });
       const data = await res.json() as { error?: string; ccEmails?: string[] };
-      if (!res.ok) throw new Error(data.error ?? "Failed to generate");
+      if (!res.ok) throw new Error(data.error ?? "Unable to generate");
 
       const letterFields = {
         candidateName: candidate.name,
@@ -194,16 +194,16 @@ export default function PrincipalAppointmentLettersPage() {
         const institution = collegeInfo.name || "the institution";
         const payLine =
           ctcAnnual != null && ctcAnnual > 0
-            ? `\nYour consolidated CTC is Rs. ${ctcAnnual.toLocaleString("en-IN")}/- per annum, with the date of joining on or before ${formatDate(new Date(form.joiningDate))}.\n`
+            ? `\nYour consolidated CTC is ₹${ctcAnnual.toLocaleString("en-IN")}/- per annum, with the date of joining on or before ${formatDate(new Date(form.joiningDate))}.\n`
             : "";
         const subject = `Appointment Order – ${form.designation} | ${institution}`;
         const body = `Dear ${candidate.name},
 
 Congratulations! With reference to your application and interview, you have been appointed as ${form.designation} in the Department of ${form.department} at ${institution}, effective from ${formatDate(new Date(form.joiningDate))}.
 ${payLine}
-Your appointment is subject to the Terms and Conditions set out in the attached Appointment Order - please read them carefully, in particular the two-year probation period, the pay scale and allowances, and the requirement to deposit your original certificates with the Principal at the time of joining.
+Your appointment is subject to the Terms and Conditions set out in the attached Appointment Order - read them carefully, in particular the two-year probation period, the pay scale and allowances, and the requirement to deposit your original certificates with the Principal at the time of joining.
 
-Please find your Appointment Order attached. You are requested to sign and return one copy acknowledging receipt and acceptance of these terms.
+Find your Appointment Order attached. You are requested to sign and return one copy acknowledging receipt and acceptance of these terms.
 
 Warm regards,
 ${institution}`;
@@ -224,7 +224,7 @@ ${institution}`;
       setGeneratedIds((prev) => new Set(prev).add(candidate.id));
     } catch (err) {
       mailWindow?.close();
-      toast({ variant: "destructive", title: "Failed to generate appointment letter", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to generate appointment letter", description: err instanceof Error ? err.message : undefined });
     } finally {
       setGeneratingId(null);
     }
@@ -263,7 +263,7 @@ ${institution}`;
     <div className="space-y-6">
       <PageHeader
         title="Appointment Letters"
-        description="Generate and release the formal appointment letter once the joining letter has been uploaded"
+        description="Generate and issue the formal appointment letter once the joining letter is uploaded."
       />
 
       {candidates.length === 0 ? (
@@ -271,9 +271,7 @@ ${institution}`;
           <CardContent className="p-12 text-center">
             <FileText className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
             <p className="font-medium">No candidates ready yet</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Candidates appear here once the office has uploaded their joining letter.
-            </p>
+            <p className="text-sm text-muted-foreground mt-1">Candidates appear here once the office has uploaded their joining letter.</p>
           </CardContent>
         </Card>
       ) : (
@@ -320,8 +318,8 @@ ${institution}`;
                       </div>
                       <div className="space-y-1.5">
                         <Label className="text-xs">Annual CTC (₹)</Label>
-                        <Input type="number" min="0" value={form.ctcAnnual} onChange={(e) => setForms((p) => ({ ...p, [candidate.id]: { ...p[candidate.id], ctcAnnual: e.target.value } }))} placeholder="e.g. 600000" />
-                        <p className="text-xs text-muted-foreground">From the accepted offer letter. Shown on the appointment letter.</p>
+                        <Input type="number" min="0" value={form.ctcAnnual} onChange={(e) => setForms((p) => ({ ...p, [candidate.id]: { ...p[candidate.id], ctcAnnual: e.target.value } }))} placeholder="600000" />
+                        <p className="text-xs text-muted-foreground">Taken from the accepted offer letter and shown on the appointment letter.</p>
                       </div>
                     </div>
                     <div className="space-y-1.5">
@@ -332,9 +330,7 @@ ${institution}`;
                         rows={10}
                         className="font-mono text-xs"
                       />
-                      <p className="text-xs text-muted-foreground">
-                        One clause per line — pre-filled from the Terms &amp; Conditions the Principal set during negotiation (falls back to the standard appointment order if none were set). Review before releasing.
-                      </p>
+                      <p className="text-xs text-muted-foreground">One clause per line, filled in from the terms and conditions the Principal set during negotiation (or the standard appointment order if none were set). Review before issuing.</p>
                     </div>
                     <div className="flex flex-wrap gap-2 pt-2 border-t">
                       <Button size="sm" variant="outline" onClick={() => void downloadPdf(candidate)}>

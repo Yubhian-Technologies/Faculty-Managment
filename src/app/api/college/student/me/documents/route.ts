@@ -31,10 +31,10 @@ export async function GET() {
     return NextResponse.json({ documents: snap.docs.map((d) => ({ id: d.id, ...d.data() }) as StudentDocument) });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/student/me/documents GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
     const studentSnap = await collegeRef.collection("students").where("uid", "==", session.uid).limit(1).get();
-    if (studentSnap.empty) return NextResponse.json({ error: "Student record not found" }, { status: 404 });
+    if (studentSnap.empty) return NextResponse.json({ error: "Student record not found. It may have been deleted." }, { status: 404 });
     const student = studentSnap.docs[0].data() as StudentRecord;
     if (passwordChangeRequired(student)) return passwordChangeRequiredResponse();
     const studentId = studentSnap.docs[0].id;
@@ -90,9 +90,9 @@ export async function POST(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/student/me/documents POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

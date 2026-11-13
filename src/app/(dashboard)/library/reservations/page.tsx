@@ -47,7 +47,7 @@ export default function LibraryReservationsPage() {
       setBooks(booksJson.books ?? []);
       setStudents(studentsJson.students ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load reservations" });
+      toast({ variant: "destructive", title: "Unable to load reservations" });
     } finally {
       setIsLoading(false);
     }
@@ -73,7 +73,7 @@ export default function LibraryReservationsPage() {
       });
       const json = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || !json.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to join queue" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to join queue" });
         return;
       }
       toast({ variant: "success", title: "Added to reservation queue" });
@@ -82,7 +82,7 @@ export default function LibraryReservationsPage() {
       setSelectedBookId("");
       void loadAll();
     } catch {
-      toast({ variant: "destructive", title: "Network error - please try again" });
+      toast({ variant: "destructive", title: "Network error - try again" });
     } finally {
       setIsSaving(false);
     }
@@ -111,7 +111,7 @@ export default function LibraryReservationsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Reservation Queue"
-        description="Students waiting for a book with no copies currently available"
+        description="Students waiting for a book with no copy currently available."
         actions={
           <Button onClick={() => setDialogOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
@@ -163,7 +163,7 @@ export default function LibraryReservationsPage() {
                   ))}
                 </SelectContent>
               </Select>
-              {unavailableBooks.length === 0 && <p className="text-xs text-muted-foreground">Every book currently has a copy available.</p>}
+              {unavailableBooks.length === 0 && <p className="text-xs text-muted-foreground">Every book has a copy available.</p>}
             </div>
           </div>
           <DialogFooter>

@@ -111,7 +111,7 @@ export default function LocationReportsPage() {
       }
       setLoadedTab(tab);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load report" });
+      toast({ variant: "destructive", title: "Unable to load report" });
     } finally {
       setIsLoading(false);
     }
@@ -124,7 +124,7 @@ export default function LocationReportsPage() {
     <div className="space-y-6 max-w-6xl mx-auto pb-24 md:pb-12 animate-in fade-in duration-300">
       <div className="bg-card/90 p-5 sm:p-6 rounded-3xl border border-border/60 shadow-xs">
         <h1 className="text-xl sm:text-2xl font-bold tracking-tight flex items-center gap-2"><BarChart3 className="h-6 w-6" /> Reports</h1>
-        <p className="text-xs text-muted-foreground mt-1">Pick filters, click Load, then download as CSV.</p>
+        <p className="text-xs text-muted-foreground mt-1">Select filters, choose Load, then download the CSV.</p>
       </div>
 
       <div className="flex gap-2 flex-wrap" role="tablist">

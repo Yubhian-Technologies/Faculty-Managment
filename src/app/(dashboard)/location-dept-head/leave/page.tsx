@@ -31,7 +31,7 @@ export default function LeavePage() {
         setLeaveRequests(d.leaveRequests ?? []);
       }
     } catch {
-      toast({ variant: "destructive", title: "Failed to load" });
+      toast({ variant: "destructive", title: "Unable to load" });
     } finally {
       setIsLoading(false);
     }
@@ -51,7 +51,7 @@ export default function LeavePage() {
         loadLeave();
       }
     } catch {
-      toast({ variant: "destructive", title: "Failed to update" });
+      toast({ variant: "destructive", title: "Unable to update" });
     }
   }
 

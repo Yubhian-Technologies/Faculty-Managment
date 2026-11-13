@@ -109,12 +109,12 @@ export function LeaveCalendar({ uid }: LeaveCalendarProps) {
       const res = await fetch(`/api/leave/attendance-calendar?${params.toString()}`);
       const json = (await res.json()) as { days?: CalendarDayInfo[]; error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to load calendar" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to load calendar" });
         return;
       }
       setDays(json.days ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load calendar" });
+      toast({ variant: "destructive", title: "Unable to load calendar" });
     } finally {
       setIsLoading(false);
     }

@@ -35,7 +35,7 @@ describe("monthly deductions file - rules", () => {
     const plan = planMonthlyDeductions(["Emp Code", "MediClaim"], [
       r(2, "VWU0806", { MediClaim: "1.5" }), r(3, "NOPE", { MediClaim: "1" }), r(4, "VWU0806", { MediClaim: "1" }),
     ], lines, settings);
-    expect(plan.rows.map((x) => x.error)).toEqual([expect.stringMatching(/whole rupee/), "Not in this month's salaries", "Emp Code repeated (row 2)"]);
+    expect(plan.rows.map((x) => x.error)).toEqual([expect.stringMatching(/whole rupee/), "Not in this month's salaries.", "Employee ID repeated (also in row 2)."]);
     expect(plan.errors).toBe(3);
     expect(planMonthlyDeductions(["Emp Code", "E.B"], [], lines, settings).problem).toMatch(/no column for a deduction entered each month/);
     expect(planMonthlyDeductions(["Emp Code", "MediClaim"], [], lines, defaultPayrollSettings()).unknownColumns).toEqual(["MediClaim"]);

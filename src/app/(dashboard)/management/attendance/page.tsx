@@ -378,7 +378,7 @@ export default function ManagementAttendancePage() {
       const res = await fetch(`/api/management/colleges/${selectedCollegeId}/monthly-export?${params.toString()}`);
       const d = await res.json() as { rows?: MonthlySummaryRow[]; department?: string; error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: d.error ?? "Failed to export" });
+        toast({ variant: "destructive", title: d.error ?? "Unable to export" });
         return;
       }
       if (!d.rows || d.rows.length === 0) {
@@ -389,7 +389,7 @@ export default function ManagementAttendancePage() {
       const label = scope === "college" ? collegeName : (d.department || selectedDepartmentName);
       exportRosterMonthlyCSV(d.rows, `attendance-${label}-${exportMonth}`);
     } catch {
-      toast({ variant: "destructive", title: "Failed to export" });
+      toast({ variant: "destructive", title: "Unable to export" });
     } finally {
       setExportingScope(null);
     }
@@ -433,7 +433,7 @@ export default function ManagementAttendancePage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Attendance" description="Location → College → Principal/Vice Principal → Department → Course → HOD → Faculty" />
+      <PageHeader title="Attendance" description="Location, College, Principal and Vice Principal, Department, Course, HOD and Faculty." />
 
       <Card>
         <CardContent className="p-5 space-y-4">
@@ -587,7 +587,7 @@ export default function ManagementAttendancePage() {
           </div>
 
           {selectedDepartmentId && !selectedCourse ? (
-            <EmptyState title="Select a course to view its HOD and faculty" />
+            <EmptyState title="Select a course to view its HOD and faculty." />
           ) : selectedCourse ? (
             isLoadingDeptRoster ? (
               <div className="h-48 rounded-lg border bg-muted/30 animate-pulse" />
@@ -598,7 +598,7 @@ export default function ManagementAttendancePage() {
                   {hodRow ? (
                     <RosterTable rows={[hodRow]} monthlyViewBasePath={`/management/faculty-attendance/${selectedCollegeId}`} />
                   ) : (
-                    <p className="text-sm text-muted-foreground">No HOD assigned for this department.</p>
+                    <p className="text-sm text-muted-foreground">No HOD has been assigned to this department.</p>
                   )}
                 </div>
 

@@ -93,5 +93,5 @@ export function innovationMissingFields(b: InnovationValidationInput): string[] 
 
 /** One sentence for an API 400. */
 export function innovationMissingMessage(missing: string[]): string {
-  return `Please complete the required fields: ${missing.join(", ")}`;
+  return `Complete the required fields: ${missing.join(", ")}`;
 }

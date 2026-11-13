@@ -34,7 +34,7 @@ export default function AuditLogsPage() {
         setColleges(c);
         if (c.length > 0) setSelectedCollegeId(c[0].id);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load colleges" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load colleges" }));
   }, []);
 
   // Reset loaded state when college changes - require explicit Load again
@@ -80,7 +80,7 @@ export default function AuditLogsPage() {
       .then((data) => setLogs(data.logs ?? []))
       .catch((err) => {
         if ((err as Error)?.name === "AbortError") return;
-        toast({ variant: "destructive", title: "Failed to load audit logs" });
+        toast({ variant: "destructive", title: "Unable to load audit logs" });
       })
       .finally(() => setIsLoading(false));
   }
@@ -151,7 +151,7 @@ export default function AuditLogsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Audit Logs"
-        description="System-wide action trail - last 100 events per college"
+        description="System-wide activity (last 100 events per college)."
       />
 
       {colleges.length > 0 && (

@@ -56,7 +56,7 @@ export default function NewSubDepartmentPage() {
       // A RESIGNED/RETIRED person (flagged by the API in read-only-access colleges) can no longer be a Sub-HOD.
       setHods((hodsRes.users ?? []).filter((u) => !u.facultyExited));
     } catch {
-      toast({ variant: "destructive", title: "Failed to load sub-departments" });
+      toast({ variant: "destructive", title: "Unable to load sub-departments" });
     } finally {
       setIsLoading(false);
     }
@@ -96,7 +96,7 @@ export default function NewSubDepartmentPage() {
         }),
       });
       const json = (await res.json()) as { error?: string; deptId?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to add sub-department");
+      if (!res.ok) throw new Error(json.error ?? "Unable to add sub-department");
 
       // The sub-department comes with its own HOD seat; put the chosen faculty
       // member in it.
@@ -119,7 +119,7 @@ export default function NewSubDepartmentPage() {
       toast({ variant: "success", title: "Sub-department added" });
       router.push(listHref);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to add sub-department" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to add sub-department" });
     } finally {
       setIsSubmitting(false);
     }
@@ -141,7 +141,7 @@ export default function NewSubDepartmentPage() {
   if (!ownDept) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Add Sub-Department" description="Create a sub-department under your department" />
+        <PageHeader title="Add Sub-Department" description="Create a sub-department under your department." />
         <Card>
           <CardContent className="py-16">
             <EmptyState
@@ -168,7 +168,7 @@ export default function NewSubDepartmentPage() {
           <CardContent className="py-16">
             <EmptyState
               title="Not available for a sub-department"
-              description="Sub-departments are one level deep only - your department can't be split further."
+              description="Sub-departments have only one level; your department cannot be divided further."
               icon={<Network className="h-8 w-8" />}
               action={
                 <Button asChild variant="outline">
@@ -236,7 +236,7 @@ export default function NewSubDepartmentPage() {
                 id="subdept-code"
                 value={code}
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
-                placeholder="e.g. BSM"
+                placeholder="BSM"
                 className="uppercase"
                 maxLength={10}
               />
@@ -247,10 +247,7 @@ export default function NewSubDepartmentPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Sub-HOD</CardTitle>
-            <CardDescription>
-              Optional - a Sub-HOD is a seat a person holds on top of their own faculty login, not a separate
-              account. You can appoint one later.
-            </CardDescription>
+            <CardDescription>Optional. A Sub-HOD is a role held in addition to the person&apos;s own faculty login, not a separate account. You can appoint one later.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             {hods.length > 0 ? (
@@ -268,9 +265,7 @@ export default function NewSubDepartmentPage() {
                 </SelectContent>
               </Select>
             ) : (
-              <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
-                No faculty in your department yet - add faculty first, then appoint one as Sub-HOD
-              </p>
+              <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">No faculty in your department yet. Add faculty first, then appoint a Sub-HOD.</p>
             )}
             <p className="text-xs text-muted-foreground rounded-md border p-2.5">
               This Sub-HOD gets full edit rights (overview, sections, assign faculty) over{" "}

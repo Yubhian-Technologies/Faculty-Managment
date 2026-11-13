@@ -163,7 +163,7 @@ export function StudentDetailsPage({ studentId, backHref, editable = false, life
       const res = await fetch(`/api/college/students/${studentId}`);
       const json = await res.json() as { student?: StudentRecord; error?: string };
       if (!res.ok) {
-        setError(json.error ?? "Failed to load student");
+        setError(json.error ?? "Unable to load student");
         return;
       }
       setStudent(json.student ?? null);
@@ -225,7 +225,7 @@ export function StudentDetailsPage({ studentId, backHref, editable = false, life
         <Card>
           <EmptyState
             icon={error ? <AlertCircle className="h-8 w-8" /> : <UserX className="h-8 w-8" />}
-            title={error ? "Couldn't load this student" : "Student not found"}
+            title={error ? "Unable to load this student" : "Student not found"}
             description={error ?? "This student may have been removed."}
             action={backButton}
           />

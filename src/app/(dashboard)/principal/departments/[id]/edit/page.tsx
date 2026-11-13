@@ -96,7 +96,7 @@ export default function EditDepartmentPage() {
         );
         reset({ name: dept.name, code: dept.code });
       } catch {
-        toast({ variant: "destructive", title: "Failed to load department" });
+        toast({ variant: "destructive", title: "Unable to load department" });
       } finally {
         setLoading(false);
       }
@@ -152,7 +152,7 @@ export default function EditDepartmentPage() {
       toast({ variant: "success", title: "Department updated" });
       router.push("/principal/courses?tab=departments");
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save" });
     } finally {
       setIsSubmitting(false);
     }
@@ -167,7 +167,7 @@ export default function EditDepartmentPage() {
       setExistingSectionsWarning(null);
       router.push("/principal/courses?tab=departments");
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save" });
     } finally {
       setIsSubmitting(false);
     }
@@ -205,7 +205,7 @@ export default function EditDepartmentPage() {
               <Input
                 id="dept-name"
                 {...register("name")}
-                placeholder="e.g. Computer Science"
+                placeholder="Computer Science"
               />
               {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
             </div>
@@ -215,11 +215,11 @@ export default function EditDepartmentPage() {
               <Input
                 id="dept-code"
                 {...register("code")}
-                placeholder="e.g. CS"
+                placeholder="CS"
                 className="uppercase"
                 maxLength={10}
               />
-              <p className="text-xs text-muted-foreground">2-10 uppercase letters, used in reports and batch IDs</p>
+              <p className="text-xs text-muted-foreground">2 to 10 capital letters, used in reports and batch IDs.</p>
               {errors.code && <p className="text-sm text-destructive">{errors.code.message}</p>}
             </div>
 
@@ -239,9 +239,7 @@ export default function EditDepartmentPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Core Departments available to link</CardTitle>
-            <CardDescription>
-              Optional. The head of each department picked gets view-only access to this department&apos;s sections and students.
-            </CardDescription>
+            <CardDescription>Optional. The head of each selected department gets read-only access to this department&apos;s sections and students.</CardDescription>
           </CardHeader>
           <CardContent>
             <YearsTaughtAndSecondaryFields
@@ -265,9 +263,7 @@ export default function EditDepartmentPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Structure</CardTitle>
-              <CardDescription>
-                How this department is organised and where its students begin.
-              </CardDescription>
+              <CardDescription>How this department is organised and where its students begin.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex items-start gap-2">
@@ -278,9 +274,7 @@ export default function EditDepartmentPage() {
                 />
                 <div className="space-y-1">
                   <Label htmlFor="dept-is-freshman" className="font-normal">Freshman&apos;s Department</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Shared first year - year-1 students can only be filed under this department (or its sub-departments).
-                  </p>
+                  <p className="text-xs text-muted-foreground">Common first year: first-year students can be filed only under this department or its sub-departments.</p>
                 </div>
               </div>
 
@@ -292,9 +286,7 @@ export default function EditDepartmentPage() {
                 />
                 <div className="space-y-1">
                   <Label htmlFor="dept-has-subdepts" className="font-normal">Has sub-departments</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Splits this department into smaller ones, each with its own head, managed from the HOD&apos;s Sub-Departments page.
-                  </p>
+                  <p className="text-xs text-muted-foreground">Divides this department into smaller departments, each with its own head, managed from the HOD&apos;s Sub-Departments page.</p>
                 </div>
               </div>
 
@@ -307,11 +299,9 @@ export default function EditDepartmentPage() {
                   />
                   <div className="space-y-1">
                     <Label htmlFor="dept-parent-runs-own-sections" className="font-normal">
-                      This department also has its own sections/students, separate from its sub-departments
+                      This department also has its own sections and students, separate from its sub-departments.
                     </Label>
-                    <p className="text-xs text-muted-foreground">
-                      Turn off only if every student belongs to a sub-department.
-                    </p>
+                    <p className="text-xs text-muted-foreground">Turn off only if every student belongs to a sub-department.</p>
                   </div>
                 </div>
               )}
@@ -335,7 +325,7 @@ export default function EditDepartmentPage() {
           setExistingSectionsWarning(null);
           setParentRunsOwnSections(true);
         }}
-        title="This department already has its own sections"
+        title="This department already has its own sections."
         description={existingSectionsWarning?.message}
         confirmLabel="Turn off anyway"
         cancelLabel="Keep it on"

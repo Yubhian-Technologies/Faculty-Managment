@@ -41,7 +41,7 @@ export default function HRCandidatesPage() {
     fetch("/api/location/candidates")
       .then((r) => r.json() as Promise<{ candidates: LocationCandidate[] }>)
       .then((d) => setCandidates(d.candidates ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load candidates" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load candidates" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -90,7 +90,7 @@ export default function HRCandidatesPage() {
       setPostInterviewRejectTarget(null);
       load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to update status" });
+      toast({ variant: "destructive", title: "Unable to update status" });
     } finally {
       setActionLoading(false);
     }
@@ -122,7 +122,7 @@ export default function HRCandidatesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Faculty Candidates"
-        description="Review candidates - shortlist for interview or reject"
+        description="Review candidates and shortlist them for interview or reject them."
         actions={<Button onClick={() => router.push("/hr-admin/candidates/new")}>+ Add Candidate</Button>}
       />
 
@@ -170,7 +170,7 @@ export default function HRCandidatesPage() {
             { key: "qualification", header: "Qualification", render: (r) => (r as unknown as LocationCandidate).qualification ?? "-" },
             { key: "email", header: "Email", render: (r) => (r as unknown as LocationCandidate).email ?? "-" },
             { key: "phone", header: "Phone", render: (r) => (r as unknown as LocationCandidate).phone ?? "-" },
-            { key: "addedByRole", header: "Added By", render: (r) => (r as unknown as LocationCandidate).addedByRole === "LOCATION_DEPT_HEAD" ? "Dept Head" : "HR Admin" },
+            { key: "addedByRole", header: "Added By", render: (r) => (r as unknown as LocationCandidate).addedByRole === "LOCATION_DEPT_HEAD" ? "Department Head" : "HR Admin" },
             { key: "createdAt", header: "Added", render: (r) => formatDate((r as unknown as LocationCandidate).createdAt as Parameters<typeof formatDate>[0]) },
             { key: "actions", header: "Action", render: (r) => renderActions(r as unknown as LocationCandidate) },
           ]}

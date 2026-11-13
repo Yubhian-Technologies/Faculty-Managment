@@ -54,7 +54,7 @@ export default function ExamSeatingPage() {
         setRooms(active);
         setRoomIds(active.map((x) => x.id));
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load seating data" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load seating data" }))
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -76,14 +76,14 @@ export default function ExamSeatingPage() {
         body: JSON.stringify({ sectionIds, roomIds, roomSections }),
       });
       const data = (await res.json()) as { id?: string; unplaced?: number; error?: string };
-      if (!res.ok || !data.id) throw new Error(data.error ?? "Failed to build the plan");
+      if (!res.ok || !data.id) throw new Error(data.error ?? "Unable to build the plan");
       toast({
         variant: data.unplaced ? "default" : "success",
         title: data.unplaced ? `Plan built - ${data.unplaced} student(s) need a seat` : "Plan built - review it next",
       });
       router.push(`/exam-cell/seating/${data.id}`);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to build the plan" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to build the plan" });
     } finally {
       setCreating(false);
     }
@@ -97,10 +97,10 @@ export default function ExamSeatingPage() {
         body: JSON.stringify({ roomIds: layRoomIds, mode: "LAYERED" }),
       });
       const data = (await res.json()) as { id?: string; error?: string };
-      if (!res.ok || !data.id) throw new Error(data.error ?? "Failed to create the plan");
+      if (!res.ok || !data.id) throw new Error(data.error ?? "Unable to create the plan");
       router.push(`/exam-cell/seating/${data.id}`);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to create the plan" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to create the plan" });
     } finally {
       setLayCreating(false);
     }
@@ -110,7 +110,7 @@ export default function ExamSeatingPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Exam Seating" description="Build a room-wise seating plan for an exam, review it, then print it." />
+      <PageHeader title="Exam Seating" description="Build a room-wise seating plan for an examination, review it and print it." />
 
       <PairedPlanCard rooms={rooms} />
 
@@ -118,7 +118,7 @@ export default function ExamSeatingPage() {
         <CardHeader><CardTitle className="text-base">Quick auto-fill plan</CardTitle></CardHeader>
         <CardContent className="space-y-5">
           <div className="space-y-2">
-            <Label>Sections taking this exam (seated in the order you tick them)</Label>
+            <Label>Sections taking this examination (seated in the order selected)</Label>
             {sections.length === 0 ? (
               <p className="text-sm text-muted-foreground">No sections found.</p>
             ) : (
@@ -139,9 +139,9 @@ export default function ExamSeatingPage() {
           </div>
 
           <div className="space-y-2">
-            <Label>Rooms (filled in block → floor → room order)</Label>
+            <Label>Rooms (filled in order of block, floor and room)</Label>
             {rooms.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No rooms yet - College Office adds them under Exam Rooms.</p>
+              <p className="text-sm text-muted-foreground">No rooms yet. The College Office adds them under Exam Rooms.</p>
             ) : (
               <div className="space-y-2 rounded-lg border p-3">
                 {rooms.map((r) => {
@@ -189,10 +189,7 @@ export default function ExamSeatingPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">New bench-wise plan</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Pick the rooms, then allot one section at a time: its students are divided into groups by bench count and
-            each group is sent to a room. Rooms with 2 or 3 per bench take that many different branches.
-          </p>
+          <p className="text-sm text-muted-foreground">Select the rooms, then allot one section at a time. Its students are divided into groups by bench count and each group is sent to a room. Rooms with 2 or 3 students per bench take that many different branches.</p>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3 max-h-56 overflow-y-auto rounded-lg border p-3">
@@ -203,7 +200,7 @@ export default function ExamSeatingPage() {
                 <span className="text-xs text-muted-foreground">{roomBenches(r)} benches × {roomPerBench(r)}</span>
               </label>
             ))}
-            {rooms.length === 0 && <p className="text-sm text-muted-foreground">No rooms yet - College Office adds them under Exam Rooms.</p>}
+            {rooms.length === 0 && <p className="text-sm text-muted-foreground">No rooms yet. The College Office adds them under Exam Rooms.</p>}
           </div>
           <Button disabled={layRoomIds.length === 0} loading={layCreating} onClick={() => void createLayered()}>
             <Armchair className="h-4 w-4 mr-1" /> Create and start allotting

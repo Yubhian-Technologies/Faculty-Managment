@@ -57,7 +57,7 @@ export default function ManagementBudgetDetailPage() {
           }))
         );
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load college budget activity" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load college budget activity" }))
       .finally(() => setIsLoading(false));
   }, [collegeId]);
 
@@ -70,7 +70,7 @@ export default function ManagementBudgetDetailPage() {
     <div className="space-y-6">
       <PageHeader
         title={college?.name ?? "College"}
-        description="Budget, indent, and purchase clearance activity for this college"
+        description="Budget, indent and purchase clearance activity for this college."
         actions={
           <Button variant="outline" onClick={() => router.push("/management/budget")}>
             <ArrowLeft className="h-4 w-4 mr-2" />All Colleges

@@ -43,7 +43,7 @@ export default function TopicsCoveredPage() {
         setSubjects(list);
         if (list.length === 1) setAssignmentId(list[0].assignmentId);
       } catch {
-        toast({ variant: "destructive", title: "Failed to load your subjects" });
+        toast({ variant: "destructive", title: "Unable to load your subjects" });
         setSubjects([]);
       }
     })();
@@ -60,12 +60,12 @@ export default function TopicsCoveredPage() {
         if (applied.to) qs.set("to", applied.to);
         const res = await fetch(`/api/college/topics-covered?${qs}`);
         const json = (await res.json()) as { rows?: TopicRow[]; error?: string };
-        if (!res.ok) throw new Error(json.error || "Failed to load");
+        if (!res.ok) throw new Error(json.error || "Unable to load");
         if (!cancelled) setRows(json.rows ?? []);
       } catch (e) {
         if (!cancelled) {
           setRows([]);
-          toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to load topics" });
+          toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to load topics" });
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -94,7 +94,7 @@ export default function TopicsCoveredPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Topics Covered" description="The class work you recorded while marking student attendance, day by day" />
+      <PageHeader title="Topics Covered" description="The class work you recorded while marking attendance, day by day." />
       {subjects === null ? (
         <div className="h-40 rounded-lg border bg-muted/30 animate-pulse" />
       ) : subjects.length === 0 ? (

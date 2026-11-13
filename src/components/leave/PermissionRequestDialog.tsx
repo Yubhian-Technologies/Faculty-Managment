@@ -54,14 +54,14 @@ export function PermissionRequestDialog({ onSubmitted }: { onSubmitted?: () => v
       });
       const json = await res.json() as { error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Couldn't send the request" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to send the request" });
         return;
       }
       toast({ variant: "success", title: "Permission requested", description: "Sent to your approver." });
       setOpen(false);
       onSubmitted?.();
     } catch {
-      toast({ variant: "destructive", title: "Network error, please try again" });
+      toast({ variant: "destructive", title: "Network error try again" });
     } finally {
       setSaving(false);
     }
@@ -78,9 +78,7 @@ export function PermissionRequestDialog({ onSubmitted }: { onSubmitted?: () => v
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Apply for Permission</DialogTitle>
-            <DialogDescription>
-              For arriving late or being away for part of a day. This goes to your approver for a decision.
-            </DialogDescription>
+            <DialogDescription>For arriving late or leaving for part of the day. The request is sent to your approver.</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">

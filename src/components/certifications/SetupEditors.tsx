@@ -56,7 +56,7 @@ export function FlowEditor({ flow, onChange, staff }: { flow: FlowStepDef[]; onC
         <div key={step.id} className="rounded-md border p-3 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-semibold text-muted-foreground w-12">Step {i + 1}</span>
-            <Input className="w-56" value={step.label} placeholder="Step name (e.g. HOD verification)" onChange={(e) => set(i, { ...step, label: e.target.value })} />
+            <Input className="w-56" value={step.label} placeholder="Step name (for example HOD verification)" onChange={(e) => set(i, { ...step, label: e.target.value })} />
             <Select value={step.type} onValueChange={(t) => set(i, t === "PARALLEL"
               ? { id: step.id, type: "PARALLEL", label: step.label, branches: [
                   { key: newId(), label: "", recipient: step.type === "SEQUENTIAL" ? step.recipient : { kind: "ROLE", role: "LIBRARY" } },
@@ -78,7 +78,7 @@ export function FlowEditor({ flow, onChange, staff }: { flow: FlowStepDef[]; onC
             <RecipientPicker idPrefix={step.id} value={step.recipient} staff={staff} onChange={(r) => set(i, { ...step, recipient: r })} />
           ) : (
             <div className="space-y-2 pl-4 border-l-2">
-              <p className="text-xs text-muted-foreground">Each works on their own; the request moves on once all are cleared. A dues check marks No dues, Dues pending (the student pays first) or Not applicable; an exam result shows Pass / Fail from published results, then approve or reject.</p>
+              <p className="text-xs text-muted-foreground">Each office works independently; the request moves on once all have cleared it. A dues check is marked No Dues, Dues Pending (the student pays first) or Not Applicable; an examination result check shows Pass or Fail from published results, then is approved or rejected.</p>
               {step.branches.map((b, j) => (
                 <div key={b.key} className="flex flex-wrap items-center gap-2">
                   <Input className="w-48" value={b.label} placeholder={recipientLabel(b.recipient)}
@@ -150,7 +150,7 @@ export function AttachmentListEditor({ items, onChange }: { items: CertificateAt
     <div className="space-y-2">
       {items.map((a, i) => (
         <div key={i} className="flex flex-wrap items-center gap-2">
-          <Input className="w-64" value={a.label} placeholder="Document (e.g. Fee receipt)" onChange={(e) => onChange(items.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} />
+          <Input className="w-64" value={a.label} placeholder="Document (for example Fee receipt)" onChange={(e) => onChange(items.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} />
           <label className="flex items-center gap-1.5 text-sm"><Checkbox checked={a.required} onCheckedChange={(c) => onChange(items.map((x, j) => (j === i ? { ...x, required: c === true } : x)))} /> Required</label>
           <Button size="icon" variant="ghost" onClick={() => onChange(items.filter((_, j) => j !== i))} aria-label="Remove document"><Trash2 className="h-4 w-4" /></Button>
         </div>

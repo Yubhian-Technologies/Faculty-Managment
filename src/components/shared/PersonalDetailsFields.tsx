@@ -268,7 +268,7 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
             <Input
               value={value.gender === "Other" ? "" : value.gender}
               onChange={(e) => set("gender", e.target.value || "Other")}
-              placeholder="Please specify"
+              placeholder="Specify"
             />
           )}
         </div>
@@ -310,7 +310,7 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
             <Input
               value={value.religion === "OTHER" ? "" : value.religion}
               onChange={(e) => set("religion", e.target.value || "OTHER")}
-              placeholder="Please specify"
+              placeholder="Specify"
             />
           )}
         </div>
@@ -334,7 +334,7 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
             <Input
               value={value.caste === "OTHER" ? "" : value.caste}
               onChange={(e) => set("caste", e.target.value || "OTHER")}
-              placeholder="Please specify"
+              placeholder="Specify"
             />
           )}
         </div>
@@ -356,12 +356,12 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
                 <Input
                   value={value.subCaste === "OTHER" ? "" : value.subCaste}
                   onChange={(e) => set("subCaste", e.target.value || "OTHER")}
-                  placeholder="Please specify"
+                  placeholder="Specify"
                 />
               )}
             </>
           ) : (
-            <Input value={value.subCaste ?? ""} onChange={(e) => set("subCaste", e.target.value)} placeholder="e.g. Reddy" />
+            <Input value={value.subCaste ?? ""} onChange={(e) => set("subCaste", e.target.value)} placeholder="Reddy" />
           )}
         </div>
         <div className="space-y-2">
@@ -387,7 +387,7 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
             className="uppercase"
           />
           {!!value.panNo && !PAN_REGEX.test(value.panNo) && (
-            <p className="text-xs text-destructive">PAN must be 5 letters, 4 digits, then 1 letter (e.g. ABCDE1234F)</p>
+            <p className="text-xs text-destructive">PAN must be 5 letters, 4 digits and 1 letter (for example, ABCDE1234F).</p>
           )}
         </div>
         <div className="space-y-2">
@@ -445,7 +445,7 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
             <Input
               value={value.motherTongue === "OTHER" ? "" : value.motherTongue}
               onChange={(e) => set("motherTongue", e.target.value || "OTHER")}
-              placeholder="Please specify"
+              placeholder="Specify"
             />
           )}
         </div>
@@ -458,20 +458,20 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
         <div className="space-y-2">
           <Label>Height</Label>
           <Input
-            placeholder="e.g. 5.7" className="w-28"
+            placeholder="5.7" className="w-28"
             value={value.height ?? ""}
             onChange={(e) => set("height", e.target.value)}
           />
-          <p className="text-xs text-muted-foreground">Feet.Inches - e.g. 5.7 = 5 ft 7 in, 5.11 = 5 ft 11 in</p>
+          <p className="text-xs text-muted-foreground">Feet.inches, for example 5.7 = 5 ft 7 in, 5.11 = 5 ft 11 in.</p>
           {!!value.height && !HEIGHT_REGEX.test(value.height) && (
-            <p className="text-xs text-destructive">Enter as feet.inches, e.g. 5.7 (inches 0-11)</p>
+            <p className="text-xs text-destructive">Enter as feet.inches, for example 5.7 (inches 0 to 11).</p>
           )}
         </div>
         <div className="space-y-2">
           <Label>Weight</Label>
           <div className="flex items-center gap-2">
             <Input
-              type="number" min={0} placeholder="e.g. 70" className="w-24"
+              type="number" min={0} placeholder="70" className="w-24"
               value={value.weightKg ?? ""}
               onChange={(e) => set("weightKg", e.target.value === "" ? undefined : Number(e.target.value))}
             />
@@ -481,7 +481,7 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
       </div>
 
       <div className="pt-2 pb-1 border-t">
-        <p className="text-sm font-medium text-muted-foreground">Family &amp; Other Details</p>
+        <p className="text-sm font-medium text-muted-foreground">Family and Other Details</p>
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
@@ -537,7 +537,7 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
         </Label>
       </div>
       {value.permanentAddressSameAsTemporary ? (
-        <p className="text-xs text-muted-foreground">Permanent Address will be saved as the Temporary Address above - no need to enter it separately.</p>
+        <p className="text-xs text-muted-foreground">The permanent address is saved as the temporary address above; there is no need to enter it separately.</p>
       ) : (
         <div className="space-y-2">
           <Label>Permanent Address <span className="text-muted-foreground font-normal">(required since it isn&rsquo;t the same as Temporary Address)</span></Label>
@@ -563,12 +563,12 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
             className="uppercase"
           />
           {!!value.ifscCode && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(value.ifscCode) && (
-            <p className="text-xs text-destructive">Doesn&rsquo;t look like a valid IFSC code</p>
+            <p className="text-xs text-destructive">Enter a valid IFSC code.</p>
           )}
         </div>
         <div className="space-y-2">
           <Label>Bank Name</Label>
-          <Input value={value.bankName ?? ""} onChange={(e) => set("bankName", e.target.value)} placeholder="e.g. State Bank of India" />
+          <Input value={value.bankName ?? ""} onChange={(e) => set("bankName", e.target.value)} placeholder="State Bank of India" />
         </div>
         <div className="space-y-2">
           <Label>Bank Branch</Label>
@@ -604,7 +604,7 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
         </div>
         <div className="space-y-2">
           <Label>Emergency Contact Relation</Label>
-          <Input value={value.emergencyContactRelation ?? ""} onChange={(e) => set("emergencyContactRelation", e.target.value)} placeholder="e.g. Spouse, Father, Brother" />
+          <Input value={value.emergencyContactRelation ?? ""} onChange={(e) => set("emergencyContactRelation", e.target.value)} placeholder="Spouse, Father, Brother" />
         </div>
         <div className="space-y-2">
           <Label>Emergency Contact Mobile No</Label>
@@ -617,7 +617,7 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
             maxLength={10}
           />
           {!!value.emergencyContactMobileNo && !PHONE_REGEX.test(value.emergencyContactMobileNo) && (
-            <p className="text-xs text-destructive">Doesn&rsquo;t look like a valid phone number</p>
+            <p className="text-xs text-destructive">Enter a valid phone number.</p>
           )}
         </div>
       </div>

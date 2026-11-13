@@ -6,7 +6,7 @@ export default function PrincipalShortageReportPage() {
   const who = useOwnerRoleLabel();
   return (
     <div className="space-y-6">
-      <PageHeader title={`Shortage Reports (${who})`} description="Students below threshold — college-wide." />
+      <PageHeader title={`Shortage Reports (${who})`} description="Students below the attendance threshold across the college." />
       <SectionReportsView title={`Shortage Report — ${who}`} />
     </div>
   );

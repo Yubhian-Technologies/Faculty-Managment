@@ -49,7 +49,7 @@ export function StaffAccountsSection() {
       setStaff(json.users ?? []);
       setDepartments(deptsJson.departments ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load staff" });
+      toast({ variant: "destructive", title: "Unable to load staff" });
     } finally {
       setIsLoading(false);
     }
@@ -74,7 +74,7 @@ export function StaffAccountsSection() {
       });
       if (!res.ok) {
         const json = await res.json() as { error?: string };
-        toast({ variant: "destructive", title: json.error ?? "Failed to update" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to update" });
         return;
       }
       toast({ variant: "success", title: `${u.name} ${u.isActive ? "deactivated" : "activated"}` });
@@ -97,7 +97,7 @@ export function StaffAccountsSection() {
         // The server refuses while the person still holds a role or heads a
         // department, and says which - worth showing in full rather than a
         // generic failure.
-        toast({ variant: "destructive", title: json.error ?? "Failed to delete" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to delete" });
         return;
       }
       toast({ variant: "success", title: `${u.name} deleted` });
@@ -126,7 +126,7 @@ export function StaffAccountsSection() {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h2 className="font-semibold text-lg">Staff Accounts</h2>
-          <p className="text-sm text-muted-foreground">Non-teaching and departmental leadership accounts for your college</p>
+          <p className="text-sm text-muted-foreground">Non-teaching and departmental leadership accounts for your college.</p>
         </div>
         <Button asChild>
           <Link href="/principal/staff/new"><Plus className="h-4 w-4 mr-2" />Add Staff</Link>

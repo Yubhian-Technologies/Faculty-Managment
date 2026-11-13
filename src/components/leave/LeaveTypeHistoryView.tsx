@@ -108,7 +108,7 @@ export function LeaveTypeHistoryView({ uid, backHref, type, showOtherLeaveCatego
               : all.filter((r) => r.leaveTypeCode === type);
         setRequests(filtered);
       })
-      .catch(() => toast({ variant: "destructive", title: `Failed to load ${label} history` }))
+      .catch(() => toast({ variant: "destructive", title: `Unable to load ${label} history` }))
       .finally(() => setIsLoading(false));
   }, [uid, type, label]);
 
@@ -131,7 +131,7 @@ export function LeaveTypeHistoryView({ uid, backHref, type, showOtherLeaveCatego
         body: JSON.stringify({ action: "CANCEL", reason: cancelReason.trim() }),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to cancel");
+      if (!res.ok) throw new Error(data.error ?? "Unable to cancel");
       toast({ variant: "success", title: "Leave request cancelled" });
       setRequests((prev) =>
         prev.map((r) => (r.id === cancelTarget.id ? { ...r, status: "CANCELLED", cancelReason: cancelReason.trim() } : r))
@@ -139,7 +139,7 @@ export function LeaveTypeHistoryView({ uid, backHref, type, showOtherLeaveCatego
       setCancelTarget(null);
       setCancelReason("");
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to cancel" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to cancel" });
     } finally {
       setCancelling(false);
     }

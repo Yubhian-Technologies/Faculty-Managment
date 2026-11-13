@@ -76,9 +76,7 @@ export function YearsTaughtAndSecondaryFields({
         <div className="space-y-2">
           <Label>Years Taught</Label>
           {yearOptions.length === 0 ? (
-            <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
-              Select a course above first.
-            </p>
+            <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">Select a course above first.</p>
           ) : (
             <div className="flex flex-wrap gap-3 border rounded-md px-3 py-2">
               {yearOptions.map((year) => (
@@ -122,13 +120,9 @@ export function YearsTaughtAndSecondaryFields({
               })}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
-              No other departments yet
-            </p>
+            <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">No other departments yet.</p>
           )}
-          <p className="text-xs text-muted-foreground">
-            Optional. The head of each department picked gets view-only access to this department&apos;s sections and students.
-          </p>
+          <p className="text-xs text-muted-foreground">Optional. The head of each selected department gets read-only access to this department&apos;s sections and students.</p>
         </div>
       ) : (
         <div className="space-y-2">

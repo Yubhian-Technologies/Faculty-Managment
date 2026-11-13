@@ -34,10 +34,10 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const locationId = searchParams.get("locationId") || session.locationId;
     if (!locationId) {
-      return NextResponse.json({ error: "locationId required" }, { status: 400 });
+      return NextResponse.json({ error: "Select a location." }, { status: 400 });
     }
     if (session.role !== "SUPER_ADMIN" && session.locationId !== locationId) {
-      return NextResponse.json({ error: "Unauthorized for this location" }, { status: 403 });
+      return NextResponse.json({ error: "You do not have access to this location." }, { status: 403 });
     }
 
     const date = searchParams.get("date") || istDateKey();
@@ -68,7 +68,7 @@ export async function GET(request: Request) {
         targetDeptId = await narrowToActiveLocationDept(session.uid, depts);
       }
       if (targetDeptId && depts.length > 0 && !depts.includes(targetDeptId)) {
-        return NextResponse.json({ error: "Unauthorized for this department" }, { status: 403 });
+        return NextResponse.json({ error: "You do not have access to this department." }, { status: 403 });
       }
     }
 
@@ -152,10 +152,10 @@ export async function GET(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[location/staff-attendance GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -186,10 +186,10 @@ export async function POST(request: Request) {
 
     const locationId = body.locationId || session.locationId;
     if (!locationId) {
-      return NextResponse.json({ error: "locationId required" }, { status: 400 });
+      return NextResponse.json({ error: "Select a location." }, { status: 400 });
     }
     if (session.role !== "SUPER_ADMIN" && session.locationId !== locationId) {
-      return NextResponse.json({ error: "Unauthorized for this location" }, { status: 403 });
+      return NextResponse.json({ error: "You do not have access to this location." }, { status: 403 });
     }
 
     const date = body.date || istDateKey();
@@ -236,7 +236,7 @@ export async function POST(request: Request) {
           emergencyReason: existing?.emergencyReason || "",
           dutyType: existing?.dutyType || "REGULAR",
           markedByUid: session.uid,
-          markedByName: (session as { name?: string }).name || session.email || "Dept Head",
+          markedByName: (session as { name?: string }).name || session.email || "Department Head",
           notes: body.notes || existing?.notes || "",
           createdAt: existing?.createdAt ?? now,
           updatedAt: now,
@@ -399,7 +399,7 @@ export async function POST(request: Request) {
         emergencyReason,
         dutyType,
         markedByUid: session.uid,
-        markedByName: (session as { name?: string }).name || session.email || "Dept Head",
+        markedByName: (session as { name?: string }).name || session.email || "Department Head",
         notes: body.notes !== undefined ? body.notes : (existing?.notes || ""),
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
@@ -421,10 +421,10 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: err.message.replace("BAD_REQUEST: ", "") }, { status: 400 });
       }
       if (err.message === "UNAUTHORIZED") {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
       }
     }
     console.error("[location/staff-attendance POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

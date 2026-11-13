@@ -57,10 +57,10 @@ export default function InternalExamPage() {
     try {
       const res = await fetch(`/api/college/mid-paper-choices/final?choiceId=${encodeURIComponent(choiceId)}`);
       const json = (await res.json()) as { final?: MidPaperFinal; error?: string };
-      if (!res.ok || !json.final) throw new Error(json.error ?? "Could not load the question paper");
+      if (!res.ok || !json.final) throw new Error(json.error ?? "Unable to load the question paper");
       const f = json.final;
       await downloadMidPaperFinalPdf(f, { fileName: `MID${f.exam.midNumber}_${f.exam.date}${f.sections.length ? `_${f.branchCode}` : ""}_${f.subject.code}` });
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not load the question paper" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to load the question paper" }); }
     finally { setViewing(""); }
   }
   const [questionDraft, setQuestionDraft] = useState<Record<string, Record<string, Record<string, string>>>>({});
@@ -72,11 +72,11 @@ export default function InternalExamPage() {
       setIsLoadingAssignments(true);
       try {
         const res = await fetch("/api/college/teaching-assignments");
-        if (!res.ok) throw new Error("Failed to load teaching assignments");
+        if (!res.ok) throw new Error("Unable to load teaching assignments");
         const json = (await res.json()) as { assignments?: TeachingAssignment[] };
         setAssignments((json.assignments ?? []).filter((a) => !a.isPast));
       } catch {
-        toast({ variant: "destructive", title: "Failed to load your teaching assignments" });
+        toast({ variant: "destructive", title: "Unable to load your teaching assignments" });
       } finally {
         setIsLoadingAssignments(false);
       }
@@ -160,7 +160,7 @@ export default function InternalExamPage() {
       });
       const json = (await res.json()) as { batch?: InternalExamMarksBatch; configuration?: ExamConfiguration; sheets?: Record<string, QuestionSheet>; error?: string };
       if (!res.ok || !json.batch || !json.configuration) {
-        setLoadError(json.error ?? "Failed to load students");
+        setLoadError(json.error ?? "Unable to load students");
         return;
       }
       setBatch(json.batch);
@@ -179,7 +179,7 @@ export default function InternalExamPage() {
         )
       );
     } catch {
-      setLoadError("Failed to load students");
+      setLoadError("Unable to load students");
     } finally {
       setIsLoadingStudents(false);
     }
@@ -237,11 +237,11 @@ export default function InternalExamPage() {
         method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entries: entriesToSend() }),
       });
       const json = (await res.json()) as { batch?: InternalExamMarksBatch; error?: string };
-      if (!res.ok || !json.batch) throw new Error(json.error ?? "Failed to save");
+      if (!res.ok || !json.batch) throw new Error(json.error ?? "Unable to save");
       setBatch(json.batch);
       toast({ variant: "success", title: "Marks saved as a draft" });
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save" });
     } finally {
       setIsSaving(false);
     }
@@ -258,11 +258,11 @@ export default function InternalExamPage() {
         body: JSON.stringify({ entries, submit: true }),
       });
       const json = (await res.json()) as { batch?: InternalExamMarksBatch; error?: string };
-      if (!res.ok || !json.batch) throw new Error(json.error ?? "Failed to submit marks");
+      if (!res.ok || !json.batch) throw new Error(json.error ?? "Unable to submit marks");
       setBatch(json.batch);
-      toast({ variant: "success", title: "Marks submitted successfully" });
+      toast({ variant: "success", title: "Marks submitted" });
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to submit marks" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to submit marks" });
     } finally {
       setIsSubmitting(false);
     }
@@ -440,7 +440,7 @@ export default function InternalExamPage() {
                                 </div>
                               </td>
                             ) : c.cea ? (
-                              <td key={c.id} className="px-4 py-2.5 font-medium" title="Worked out from the submitted CIE units">{componentValue(entry.studentId, c.id, c.maxMarks) ?? "-"}</td>
+                              <td key={c.id} className="px-4 py-2.5 font-medium" title="Calculated from the submitted CIE units.">{componentValue(entry.studentId, c.id, c.maxMarks) ?? "-"}</td>
                             ) : (
                               <td key={c.id} className="px-4 py-2.5">
                                 <Input
@@ -472,7 +472,7 @@ export default function InternalExamPage() {
                       <p>
                         {isReadOnly
                           ? "These marks have been submitted and are locked."
-                          : "Please review the marks before submitting."}
+                          : "Review the marks before submitting."}
                       </p>
                       <p>Once submitted, marks cannot be edited or modified.</p>
                     </div>

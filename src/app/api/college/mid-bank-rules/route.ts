@@ -46,7 +46,7 @@ export async function PUT(request: Request) {
     const courseName = String(body.courseName ?? "").trim();
     const regulation = String(body.regulation ?? "").trim().toUpperCase() || "ALL";
     const marks = Number(body.marks);
-    if (!courseKey || !courseName) return NextResponse.json({ error: "Pick a course" }, { status: 400 });
+    if (!courseKey || !courseName) return NextResponse.json({ error: "Select a course." }, { status: 400 });
     // The ticked question types (an older client may still send one `format`).
     const sent = Array.isArray(body.formats) ? body.formats : body.format ? null : [];
     const formats = sent === null ? allowedFormats({ format: body.format }) : QUESTION_FORMATS.filter((f) => sent.includes(f));
@@ -102,7 +102,7 @@ export async function DELETE(request: Request) {
   try {
     const session = await requireCollegeMember("EXAM_CELL", "SUPER_ADMIN");
     const id = new URL(request.url).searchParams.get("id") ?? "";
-    if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
+    if (!id) return NextResponse.json({ error: "The record to update is missing. Reload the page and try again." }, { status: 400 });
     await midBankRefs(getAdminDb(), session.collegeId).rules.doc(id).delete();
     return NextResponse.json({ ok: true });
   } catch (err) {

@@ -6,7 +6,7 @@ export default function TAndPAttendanceImportPage() {
   return (
     <AttendanceImportPage
       title="Import Attendance History"
-      description="Bulk-backfill old attendance records for T&P staff"
+      description="Record past attendance in bulk for T&P staff."
       backHref="/t-and-p/staff-attendance"
       backLabel="Back to Staff Attendance"
     />

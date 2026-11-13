@@ -46,10 +46,10 @@ async function fetchStrength(): Promise<FetchResult> {
   try {
     const res = await fetch("/api/college/student-strength", { cache: "no-store" });
     const json = (await res.json()) as StrengthPayload & { error?: string };
-    if (!res.ok) return { ok: false, error: json.error ?? "Failed to load student strength" };
+    if (!res.ok) return { ok: false, error: json.error ?? "Unable to load student strength" };
     return { ok: true, data: json };
   } catch {
-    return { ok: false, error: "Network error - please try again" };
+    return { ok: false, error: "Network error - try again" };
   }
 }
 
@@ -273,7 +273,7 @@ export function StudentStrengthDashboard() {
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
             <span>
-              Counts are always the live, current picture - past sessions aren&apos;t stored as snapshots, so there is nothing to fall out of date.
+              Counts always reflect the current position. Past sessions are not stored separately, so the figures are always up to date.
             </span>
             {(filtered || f.status !== "ENROLLED") && (
               <Button variant="ghost" size="sm" className="h-7" onClick={() => setFilters({ status: "ENROLLED" })}>Reset filters</Button>
@@ -287,7 +287,7 @@ export function StudentStrengthDashboard() {
           <CardContent className="flex flex-col items-center gap-2 py-14 text-center">
             <Users className="h-7 w-7 text-muted-foreground" />
             <p className="text-sm font-medium">No students yet</p>
-            <p className="text-xs text-muted-foreground">Strength appears here automatically as soon as students are added or imported.</p>
+            <p className="text-xs text-muted-foreground">Strength appears here as soon as students are added or imported.</p>
           </CardContent>
         </Card>
       ) : (
@@ -325,9 +325,7 @@ export function StudentStrengthDashboard() {
               <h2 className="text-base font-semibold">Strength report - Department × Year</h2>
             </div>
             {scoped && (
-              <p className="text-xs text-muted-foreground">
-                Only the students you are responsible for are counted. A branch you teach in one year (for example a shared first year) shows just those students - its other years belong to that branch&apos;s own HOD.
-              </p>
+              <p className="text-xs text-muted-foreground">Only the students you are responsible for are counted. A branch you teach in one year (for example, a common first year) shows only those students; its other years belong to that branch&apos;s own HOD.</p>
             )}
             {report.matrices.length === 0 ? (
               <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">0 students match this selection.</CardContent></Card>
@@ -542,7 +540,7 @@ function SectionTable({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-base font-semibold">Section-wise breakdown - Department → Year → Section</h2>
+        <h2 className="text-base font-semibold">Section-wise breakdown by department, year and section</h2>
         <div className="relative w-full sm:w-64">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input value={search} onChange={(e) => onSearch(e.target.value)} placeholder="Search department, year, section" className="h-9 pl-9" />

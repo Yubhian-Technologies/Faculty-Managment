@@ -122,18 +122,18 @@ export default function EvaluationPage({ params }: { params: Promise<{ batchId: 
           setPerson({ name: candidate.name ?? "Unknown", email: candidate.email ?? "", bioDataSubmitted: candidate.bioDataSubmitted });
         }
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load evaluation" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load evaluation" }))
       .finally(() => setIsLoading(false));
   }, [batchId, candidateId, myUid]);
 
   async function submitPanelFeedback() {
     const allRated = PANEL_CRITERIA.every(([key]) => panelForm.scores[key] != null);
     if (!allRated) {
-      toast({ variant: "destructive", title: "Please score all 5 criteria out of 10" });
+      toast({ variant: "destructive", title: "Score all 5 criteria out of 10" });
       return;
     }
     if (!panelForm.recommendation) {
-      toast({ variant: "destructive", title: "Please select a recommendation" });
+      toast({ variant: "destructive", title: "Select a recommendation" });
       return;
     }
     setIsSaving(true);
@@ -155,7 +155,7 @@ export default function EvaluationPage({ params }: { params: Promise<{ batchId: 
       toast({ variant: "success", title: "Evaluation submitted" });
       router.back();
     } catch {
-      toast({ variant: "destructive", title: "Failed to submit evaluation" });
+      toast({ variant: "destructive", title: "Unable to submit evaluation" });
     } finally {
       setIsSaving(false);
     }
@@ -244,9 +244,7 @@ export default function EvaluationPage({ params }: { params: Promise<{ batchId: 
           <CardContent className="p-8 text-center space-y-2">
             <Clock className="h-8 w-8 text-muted-foreground mx-auto" />
             <p className="font-medium">Scoring Not Yet Open</p>
-            <p className="text-sm text-muted-foreground">
-              Evaluation opens once the HOD opens panel scoring for this batch.
-            </p>
+            <p className="text-sm text-muted-foreground">Evaluation opens once the HOD starts panel scoring for this batch.</p>
           </CardContent>
         </Card>
       ) : alreadySubmitted ? (
@@ -254,9 +252,7 @@ export default function EvaluationPage({ params }: { params: Promise<{ batchId: 
           <CardContent className="p-8 text-center space-y-2">
             <CheckCircle2 className="h-8 w-8 text-green-600 mx-auto" />
             <p className="font-medium">Already Submitted</p>
-            <p className="text-sm text-muted-foreground">
-              You have already submitted your evaluation for this candidate.
-            </p>
+            <p className="text-sm text-muted-foreground">You have already submitted your evaluation for this candidate.</p>
             <Button variant="outline" onClick={() => router.back()}>Back</Button>
           </CardContent>
         </Card>

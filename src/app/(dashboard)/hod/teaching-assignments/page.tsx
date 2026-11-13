@@ -141,7 +141,7 @@ export default function TeachingAssignmentsPage() {
       fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>).then((d) => setDepartments(d.departments ?? [])),
       fetch("/api/college/faculty-assignment-requests").then((r) => r.json() as Promise<{ requests: FacultyAssignmentRequest[] }>).then((d) => setAssignmentRequests(d.requests ?? [])),
     ])
-      .catch(() => toast({ variant: "destructive", title: "Failed to load teaching data" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load teaching data" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -168,7 +168,7 @@ export default function TeachingAssignmentsPage() {
     fetch(`/api/college/courses${qs}`)
       .then((r) => r.json() as Promise<{ courses: Course[] }>)
       .then((d) => setOwnCourses(d.courses ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load courses" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load courses" }));
   }, [myDepartments, topDepartmentId]);
 
   // load()'s course fetch resolves to this HOD's own department only (or its
@@ -511,7 +511,7 @@ const effectiveSemester = semesterOptions.length === 0
       } catch {
         // Let Reload try again instead of leaving "Unstaffed Subjects" loading forever.
         semesterFilteredKeys.current.delete(filterKey);
-        toast({ variant: "destructive", title: "Failed to load subjects for this semester" });
+        toast({ variant: "destructive", title: "Unable to load subjects for this semester" });
       }
     })();
   }, [applied, key, year, activeCourseIds, effectiveSemester, course, courses]);
@@ -616,7 +616,7 @@ const effectiveSemester = semesterOptions.length === 0
         setTimingsCache((c) => ({ ...c, [k]: lists.flat() }));
       } catch {
         timingsRequested.current.delete(k);
-        toast({ variant: "destructive", title: "Failed to load semesters" });
+        toast({ variant: "destructive", title: "Unable to load semesters" });
       }
     })();
   }, [activeCourseIds, year, key, timingsCache]);
@@ -631,7 +631,7 @@ const effectiveSemester = semesterOptions.length === 0
         await ensureCourseYearData(activeCourseIds, key, year, effectiveSemester, course?.catalogId);
       } catch {
         fetchedKeys.current.delete(fetchKey);
-        toast({ variant: "destructive", title: "Failed to load sections and subjects" });
+        toast({ variant: "destructive", title: "Unable to load sections and subjects" });
       }
     })();
     // ensureCourseYearData is redefined every render but reads only its
@@ -873,7 +873,7 @@ const effectiveSemester = semesterOptions.length === 0
         });
         const json = await res.json() as { error?: string };
         if (!res.ok) {
-          toast({ variant: "destructive", title: `Failed to assign ${fac?.name ?? "faculty"}`, description: json.error });
+          toast({ variant: "destructive", title: `Unable to assign ${fac?.name ?? "faculty"}`, description: json.error });
           break;
         }
         done++;
@@ -908,7 +908,7 @@ const effectiveSemester = semesterOptions.length === 0
       });
       const json = await res.json() as { error?: string; created?: { departmentName: string }[]; skipped?: { departmentName: string; reason: string }[] };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to send request", description: json.error });
+        toast({ variant: "destructive", title: "Unable to send request", description: json.error });
         return;
       }
       const sent = json.created?.length ?? 0;
@@ -942,13 +942,13 @@ const effectiveSemester = semesterOptions.length === 0
       const res = await fetch(`/api/college/faculty-assignment-requests?id=${encodeURIComponent(req.id)}`, { method: "DELETE" });
       if (!res.ok) {
         const json = await res.json().catch(() => ({})) as { error?: string };
-        toast({ variant: "destructive", title: "Failed to delete request", description: json.error });
+        toast({ variant: "destructive", title: "Unable to delete request", description: json.error });
         return;
       }
       toast({ variant: "success", title: "Request deleted" });
       load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to delete request" });
+      toast({ variant: "destructive", title: "Unable to delete request" });
     }
   }
 
@@ -959,13 +959,13 @@ const effectiveSemester = semesterOptions.length === 0
       const res = await fetch(`/api/college/timetable/reset?sectionId=${encodeURIComponent(sectionId)}${semesterQuery}`, { method: "DELETE" });
       const json = await res.json().catch(() => ({})) as { error?: string; removedAssignments?: number };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to delete assignments", description: json.error });
+        toast({ variant: "destructive", title: "Unable to delete assignments", description: json.error });
         return;
       }
       toast({ variant: "success", title: "Section cleared", description: `${json.removedAssignments ?? 0} assignment(s) and their timetable removed.` });
       load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to delete assignments" });
+      toast({ variant: "destructive", title: "Unable to delete assignments" });
     } finally {
       setResetting(false);
       setResetTarget(null);
@@ -978,13 +978,13 @@ const effectiveSemester = semesterOptions.length === 0
       const res = await fetch(`/api/college/teaching-assignments?id=${id}`, { method: "DELETE" });
       if (!res.ok) {
         const json = await res.json().catch(() => ({})) as { error?: string };
-        toast({ variant: "destructive", title: "Failed to remove assignment", description: json.error ?? `Server answered ${res.status}` });
+        toast({ variant: "destructive", title: "Unable to remove assignment", description: json.error ?? `Server answered ${res.status}` });
         return;
       }
       toast({ variant: "success", title: "Assignment removed" });
       load();
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to remove assignment", description: err instanceof Error ? err.message : "Network error" });
+      toast({ variant: "destructive", title: "Unable to remove assignment", description: err instanceof Error ? err.message : "Network error" });
     } finally {
       setRemoving(false);
       setRemoveTarget(null);
@@ -1103,7 +1103,7 @@ const effectiveSemester = semesterOptions.length === 0
       toast({ title: "Report exported", description: "Saved as PDF" });
     } catch (err) {
       console.error(err);
-      toast({ variant: "destructive", title: "Export failed", description: "Failed to generate PDF" });
+      toast({ variant: "destructive", title: "Export failed", description: "Unable to generate PDF" });
     } finally {
       setIsExportingPdf(false);
     }
@@ -1166,7 +1166,7 @@ const effectiveSemester = semesterOptions.length === 0
       toast({ title: "Report exported", description: "Saved as Excel spreadsheet" });
     } catch (err) {
       console.error(err);
-      toast({ variant: "destructive", title: "Export failed", description: "Failed to export spreadsheet" });
+      toast({ variant: "destructive", title: "Export failed", description: "Unable to export spreadsheet" });
     } finally {
       setIsExportingXlsx(false);
     }
@@ -1176,7 +1176,7 @@ const effectiveSemester = semesterOptions.length === 0
     <div className="space-y-6">
       <PageHeader
         title="Subject Allocation"
-        description="Find staffing gaps and assign faculty to subjects, course &amp; year wise"
+        description="Find staffing gaps and assign faculty to subjects by course and year."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" variant="outline" onClick={handleExportPdf} disabled={isExportingPdf}>
@@ -1294,7 +1294,7 @@ const effectiveSemester = semesterOptions.length === 0
           <CardHeader className="pb-3"><CardTitle className="text-base">Unstaffed Subjects</CardTitle></CardHeader>
           <CardContent>
             {!applied ? (
-              <p className="text-sm text-muted-foreground text-center py-6">Select the course, year, semester and sub-department, then press Load to see staffing gaps.</p>
+              <p className="text-sm text-muted-foreground text-center py-6">Select the course, year, semester and sub-department, then choose Load to see staffing gaps.</p>
             ) : !subjectsSemesterReady ? (
               <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-14 bg-muted animate-pulse rounded-lg" />)}</div>
             ) : subjects.length === 0 ? (
@@ -1339,7 +1339,7 @@ const effectiveSemester = semesterOptions.length === 0
           <CardHeader className="pb-3"><CardTitle className="text-base">Assign Faculty</CardTitle></CardHeader>
           <CardContent>
             {!applied ? (
-              <p className="text-sm text-muted-foreground text-center py-6">Select the course, year, semester and sub-department, then press Load to assign faculty.</p>
+              <p className="text-sm text-muted-foreground text-center py-6">Select the course, year, semester and sub-department, then choose Load to assign faculty.</p>
             ) : sections.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-6">No sections created yet for {course?.name} · {ordinalYear(Number(year))}.</p>
             ) : (
@@ -1371,7 +1371,7 @@ const effectiveSemester = semesterOptions.length === 0
                         setResetTarget({ sectionId: assignForm.sectionId, label: sec ? sectionDisplayLabel(sec, departments) : "this section" });
                       }}
                     >
-                      <Trash2 className="h-3.5 w-3.5 mr-1" />Clear assignments &amp; requests for this section
+                      <Trash2 className="h-3.5 w-3.5 mr-1" />Clear Assignments and Requests for This Section
                     </Button>
                   )}
                 </div>
@@ -1447,9 +1447,7 @@ const effectiveSemester = semesterOptions.length === 0
                 >
                   {extraFacultyIds.length > 0 ? `Assign ${1 + extraFacultyIds.length} faculty` : "Assign"}
                 </Button>
-                <p className="text-xs text-muted-foreground">
-                  Periods for this subject are picked afterwards from the faculty member&rsquo;s Edit page.
-                </p>
+                <p className="text-xs text-muted-foreground">Periods for this subject are selected afterwards on the faculty member&apos;s Edit page.</p>
 
                 {assignForm.sectionId && assignForm.subjectId && (
                   <div className="pt-3 mt-3 border-t space-y-2">
@@ -1458,7 +1456,7 @@ const effectiveSemester = semesterOptions.length === 0
                         be asked of more departments later even if it already has faculty. */}
                     <div className="max-h-44 space-y-1 overflow-y-auto rounded-md border p-2">
                       {requestableDepartments.length === 0 ? (
-                        <p className="px-1 text-xs text-muted-foreground">No other departments</p>
+                        <p className="px-1 text-xs text-muted-foreground">No other departments.</p>
                       ) : requestableDepartments.map((d) => {
                         const parentName = d.parentDepartmentId ? departments.find((p) => p.id === d.parentDepartmentId)?.name : null;
                         const alreadyAsked = assignmentRequests.some((r) =>

@@ -37,7 +37,7 @@ export function SectionTimetable({ section }: { section: Section }) {
         setSubjects(d.subjects ?? []);
         setWorkingDays(d.workingDays ?? []);
       } catch {
-        if (!cancelled) toast({ variant: "destructive", title: "Failed to load timetable" });
+        if (!cancelled) toast({ variant: "destructive", title: "Unable to load timetable" });
       } finally {
         if (!cancelled) setLoadedFor(loadKey);
       }

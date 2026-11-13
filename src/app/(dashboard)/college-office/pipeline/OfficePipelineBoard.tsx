@@ -107,7 +107,7 @@ export function OfficePipelineBoard({ scope }: { scope: "active" | "closed" }) {
         built.sort((a, b) => (toDate(b.vacancy.createdAt)?.getTime() ?? 0) - (toDate(a.vacancy.createdAt)?.getTime() ?? 0));
         setEntries(built);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load hiring pipeline" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load hiring pipeline" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -285,7 +285,7 @@ function VacancyOfficeCard({
         ) : (
           <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
             <Clock className="h-4 w-4 shrink-0" />
-            Nothing for Office to action yet — still with HOD/Principal
+            No action needed from the Office yet; the request is with the HOD or Principal.
           </span>
         )}
       </div>

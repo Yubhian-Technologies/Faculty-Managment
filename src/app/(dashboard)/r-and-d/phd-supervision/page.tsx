@@ -36,7 +36,7 @@ export default function RAndDPhdSupervisionPage() {
       const data = await res.json() as { records: PhdSupervisionRow[] };
       setRecords(data.records ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load Ph.D. supervision records" });
+      toast({ variant: "destructive", title: "Unable to load Ph.D. supervision records" });
     } finally {
       setIsLoading(false);
     }
@@ -56,7 +56,7 @@ export default function RAndDPhdSupervisionPage() {
       setDeleteTarget(null);
       await load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to delete record" });
+      toast({ variant: "destructive", title: "Unable to delete record" });
     } finally {
       setDeleting(false);
     }
@@ -74,7 +74,7 @@ export default function RAndDPhdSupervisionPage() {
       toast({ variant: "success", title: "Record approved" });
       await load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to approve record" });
+      toast({ variant: "destructive", title: "Unable to approve record" });
     } finally {
       setApproving(null);
     }
@@ -95,7 +95,7 @@ export default function RAndDPhdSupervisionPage() {
       setRejectReason("");
       await load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to reject record" });
+      toast({ variant: "destructive", title: "Unable to reject record" });
     } finally {
       setRejecting(false);
     }
@@ -188,7 +188,7 @@ export default function RAndDPhdSupervisionPage() {
     <div className="space-y-6">
       <PageHeader
         title="Ph.D. Supervision"
-        description="Verify staff-submitted Ph.D. supervision & guidance records"
+        description="Verify Ph.D. supervision and guidance records submitted by staff."
       />
 
       <div className="flex gap-2 border-b">

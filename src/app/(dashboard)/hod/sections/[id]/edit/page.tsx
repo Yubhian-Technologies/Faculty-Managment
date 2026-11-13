@@ -140,7 +140,7 @@ export default function EditSectionPage() {
           classroomNumber: loaded.classroomNumber,
         });
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load section" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load section" }))
       .finally(() => setLoading(false));
   }, [sectionId, router, listHref]);
 
@@ -151,7 +151,7 @@ export default function EditSectionPage() {
     fetch(`/api/college/courses${qs}`)
       .then((r) => r.json() as Promise<{ courses: Course[] }>)
       .then((d) => setCourses((d.courses ?? []).sort((a, b) => a.name.localeCompare(b.name))))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load courses" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load courses" }));
   }, [ownerDept, departments]);
 
   function setF(patch: Partial<SectionForm>) {
@@ -229,14 +229,14 @@ export default function EditSectionPage() {
       });
       if (!res.ok) {
         const json = await res.json() as { error?: string };
-        toast({ variant: "destructive", title: json.error ?? "Failed to save" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to save" });
         return;
       }
 
       toast({ variant: "success", title: "Section updated" });
       router.push(listHref);
     } catch {
-      toast({ variant: "destructive", title: "Network error, please try again" });
+      toast({ variant: "destructive", title: "Network error try again" });
     } finally {
       setSaving(false);
     }
@@ -254,7 +254,7 @@ export default function EditSectionPage() {
     <div className="max-w-6xl">
       <PageHeader
         title={`Edit Section ${sectionName}`}
-        description="Update this section's details"
+        description="Update this section's details."
       />
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -274,14 +274,12 @@ export default function EditSectionPage() {
                   <div className="space-y-2">
                     <Label>Year</Label>
                     <ReadOnlyValue>{form.year ? ordinalYear(Number(form.year)) : "—"}</ReadOnlyValue>
-                    <p className="text-xs text-muted-foreground">
-                      Fixed once created - moving a cohort to the next year is a promotion, not an edit here.
-                    </p>
+                    <p className="text-xs text-muted-foreground">Fixed once created. Moving a cohort to the next year is done by promotion, not here.</p>
                   </div>
                   <div className="space-y-2">
                     <Label>Batch</Label>
                     <ReadOnlyValue>{form.batch || "—"}</ReadOnlyValue>
-                    <p className="text-xs text-muted-foreground">Admission year to passout year.</p>
+                    <p className="text-xs text-muted-foreground">Admission year to year of completion.</p>
                   </div>
                   <div className="space-y-2">
                     <Label>Regulation</Label>
@@ -301,9 +299,7 @@ export default function EditSectionPage() {
                         ))}
                       </SelectContent>
                     </Select>
-                    <p className="text-xs text-muted-foreground">
-                      Students in this section are promoted into this core department next year.
-                    </p>
+                    <p className="text-xs text-muted-foreground">Students in this section are promoted to this core department next year.</p>
                   </div>
                 )}
 
@@ -320,7 +316,7 @@ export default function EditSectionPage() {
                     />
                     <label className="flex items-center gap-2 pt-1 text-sm">
                       <Checkbox checked={isSingle} onCheckedChange={(c) => toggleSingle(c === true)} />
-                      Only one section (no letter like A, B)
+                      Only one section (no section letter such as A or B)
                     </label>
                     <p className="text-xs text-muted-foreground">
                       {isSingle ? "Saving renames the section and keeps all its students and data." : isBranchMode ? "e.g. CSE-A" : "e.g. A, B, C or CS-A"}
@@ -386,7 +382,7 @@ export default function EditSectionPage() {
                         <Input
                           value={form.classroomNumber}
                           maxLength={40}
-                          placeholder="e.g. B-204"
+                          placeholder="B-204"
                           onChange={(e) => setF({ classroomNumber: e.target.value })}
                         />
                       ) : (
@@ -395,7 +391,7 @@ export default function EditSectionPage() {
                     </div>
                   </div>
                   {editingClassDetails && (
-                    <p className="text-xs text-muted-foreground">Changes apply when you press Save Changes.</p>
+                    <p className="text-xs text-muted-foreground">Changes apply when you choose Save Changes.</p>
                   )}
                 </div>
               </CardContent>

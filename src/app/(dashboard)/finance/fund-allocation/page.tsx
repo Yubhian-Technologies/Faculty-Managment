@@ -33,7 +33,7 @@ export default function FinanceFundAllocationPage() {
       collegeFetch("/api/college/finance-fund-allocations").then((r) => r.json() as Promise<{ allocations: Row[] }>).then((d) => d.allocations ?? []),
       collegeFetch("/api/college/finance-budgets?status=ACTIVE").then((r) => r.json() as Promise<{ budgets: FinanceBudget[] }>).then((d) => d.budgets ?? []),
     ]).then(([a, b]) => { setAllocations(a); setBudgets(b); })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load allocations" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load allocations" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -57,7 +57,7 @@ export default function FinanceFundAllocationPage() {
     <div className="space-y-6">
       <PageHeader
         title="Fund Allocation"
-        description="Allocate approved budgets to departments, projects, events, and purchases"
+        description="Allocate approved budgets to departments, projects, events and purchases."
         actions={
           <Button onClick={() => router.push("/finance/fund-allocation/new")} disabled={budgets.length === 0}>
             <Plus className="h-4 w-4 mr-1" />

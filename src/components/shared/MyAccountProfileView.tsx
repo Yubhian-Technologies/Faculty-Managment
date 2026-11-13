@@ -28,7 +28,7 @@ export function MyAccountProfileView({ basePath, fetchEndpoint, photoEndpoint }:
   const [phone, setPhone] = useState<string | undefined>(undefined);
   // Only present for LOCATION-scoped roles - /api/location/users/me resolves
   // and returns both; /api/admin/users/me (GLOBAL roles) has neither, since a
-  // Super Admin/Management/Finance/Purchase Dept user isn't tied to one
+  // Super Admin/Management/Finance/Purchase Department user isn't tied to one
   // location, so both stay unset and their fields below stay hidden.
   const [department, setDepartment] = useState<string | undefined>(undefined);
   const [locationName, setLocationName] = useState<string | undefined>(undefined);
@@ -42,7 +42,7 @@ export function MyAccountProfileView({ basePath, fetchEndpoint, photoEndpoint }:
         setDepartment(d.user?.department);
         setLocationName(d.locationName);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load profile" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load profile" }))
       .finally(() => setLoading(false));
   }, [fetchEndpoint]);
 
@@ -52,7 +52,7 @@ export function MyAccountProfileView({ basePath, fetchEndpoint, photoEndpoint }:
     <div className="space-y-6">
       <PageHeader
         title="My Profile"
-        description="Manage your profile photo and account details"
+        description="Manage your profile photo and account details."
         actions={<ChangePasswordDialog />}
       />
       <Card>

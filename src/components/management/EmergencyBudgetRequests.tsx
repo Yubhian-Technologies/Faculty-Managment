@@ -35,7 +35,7 @@ export function EmergencyBudgetRequests() {
     fetch("/api/management/emergency-budget-requests")
       .then((r) => r.json() as Promise<{ requests: Row[] }>)
       .then((d) => setRequests(d.requests ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load emergency budget requests" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load emergency budget requests" }))
       .finally(() => setIsLoading(false));
   }
 

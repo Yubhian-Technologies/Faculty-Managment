@@ -70,7 +70,7 @@ export default function LocationDepartmentsPage() {
         if (!isCancelled) setDepartments(d.departments ?? []);
       })
       .catch(() => {
-        if (!isCancelled) toast({ variant: "destructive", title: "Failed to load departments" });
+        if (!isCancelled) toast({ variant: "destructive", title: "Unable to load departments" });
       })
       .finally(() => {
         if (!isCancelled) setIsLoading(false);
@@ -103,7 +103,7 @@ export default function LocationDepartmentsPage() {
         method: "DELETE",
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to delete department");
+      if (!res.ok) throw new Error(data.error || "Unable to delete department");
 
       toast({
         title: "Department Deleted",
@@ -171,9 +171,7 @@ export default function LocationDepartmentsPage() {
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1">
               Departments & Campus Staff Hub
             </h1>
-            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-              Manage non-teaching operational wings, appointed heads, shift associations, and roster directories.
-            </p>
+            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">Manage operational non-teaching departments, their heads, shifts and rosters.</p>
           </div>
         </div>
 
@@ -298,9 +296,7 @@ export default function LocationDepartmentsPage() {
                               {dept.description}
                             </p>
                           ) : (
-                            <p className="text-xs text-muted-foreground mt-0.5 italic">
-                              Operational wing
-                            </p>
+                            <p className="text-xs text-muted-foreground mt-0.5 italic">Operational department</p>
                           )}
                         </div>
                       </div>
@@ -456,9 +452,7 @@ export default function LocationDepartmentsPage() {
                 <UsersRound className="h-7 w-7 opacity-70" />
               </div>
               <h3 className="font-bold text-foreground text-base">No staff matching criteria</h3>
-              <p className="text-xs sm:text-sm text-muted-foreground mt-1 max-w-md mx-auto">
-                Try searching by staff name, father&apos;s name, phone number, or designation.
-              </p>
+              <p className="text-xs sm:text-sm text-muted-foreground mt-1 max-w-md mx-auto">Search by staff name, father&apos;s name, phone number or designation.</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -535,7 +529,7 @@ export default function LocationDepartmentsPage() {
 
                         <Button asChild size="sm" variant="outline" className="h-8 text-xs font-semibold text-primary border-primary/30 hover:bg-primary/10 rounded-full px-3.5 gap-1.5">
                           <Link href={`/location-staff-admin/departments/${staff.departmentId}?tab=staff`}>
-                            <span>Dept Hub</span>
+                            <span>Department Hub</span>
                             <ArrowRight className="h-3.5 w-3.5" />
                           </Link>
                         </Button>

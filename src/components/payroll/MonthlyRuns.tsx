@@ -49,7 +49,7 @@ export function MonthlyRuns({ collegeId }: { collegeId?: string }) {
       await payrollFetch(`/api/college/payroll/runs${collegeQs(collegeId)}`, { method: "POST", body: JSON.stringify({ month: prepMonth }) });
       toast({ variant: "success", title: `${monthLabel(prepMonth)} prepared` });
       setOpen(prepMonth); load();
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't prepare" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to prepare" }); }
     finally { setBusy(false); }
   }
 
@@ -59,7 +59,7 @@ export function MonthlyRuns({ collegeId }: { collegeId?: string }) {
       if (r.rows.length === 0) { toast({ title: `Nothing released in FY ${fy} yet` }); return; }
       const name = (await payrollFetch<{ collegeName?: string }>(`/api/college/payroll/runs/${r.rows[0].month}${collegeQs(collegeId)}`).catch(() => ({ collegeName: "College" }))).collegeName ?? "College";
       await downloadAnnualRegister(fy, r.rows, name);
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't build the register" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to build the register" }); }
   }
 
   if (open) return <RunView collegeId={collegeId} month={open} onBack={() => { setOpen(null); load(); }} />;
@@ -73,7 +73,7 @@ export function MonthlyRuns({ collegeId }: { collegeId?: string }) {
         <Card className="rounded-2xl"><CardContent className="flex flex-wrap items-end gap-3 p-5">
           <div className="space-y-1.5"><Label htmlFor="mr-month">Prepare salaries for</Label><Input id="mr-month" type="month" className="w-44" value={prepMonth} onChange={(e) => e.target.value && setPrepMonth(e.target.value)} /></div>
           <Button onClick={prepare} disabled={busy || list.runs.some((r) => r.month === prepMonth)}>{busy ? "Working..." : "Prepare month"}</Button>
-          <p className="text-xs text-muted-foreground">Pay days come from joining / relieving dates, the leave register&apos;s loss of pay and absences marked in attendance. You can adjust each line before submitting to Accounts.</p>
+          <p className="text-xs text-muted-foreground">Pay days are based on joining and relieving dates, loss of pay in the leave register and absences marked in attendance. You can adjust each line before submitting to Accounts.</p>
         </CardContent></Card>
       )}
       {list.role !== "PRINCIPAL" && list.role !== "VICE_PRINCIPAL" && list.runs.some((r) => r.status === "RELEASED") && (
@@ -148,7 +148,7 @@ function RunView({ collegeId, month, onBack }: { collegeId?: string; month: stri
       await payrollFetch(url, { method: "POST", body: JSON.stringify({ action, rev: run.rev, ...extra }) });
       toast({ variant: "success", title: { SUBMIT: "Sent to Accounts", RETURN: "Returned to the College Office", APPROVE: "Approved", REOPEN: "Reopened", RELEASE: "Released - the month is locked" }[action] ?? "Done" });
       setDialog(null); load();
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't do that" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to do that" }); }
     finally { setBusy(false); }
   }
   async function recalc() {
@@ -157,19 +157,19 @@ function RunView({ collegeId, month, onBack }: { collegeId?: string; month: stri
       const r = await payrollFetch<{ changed: number; removed: number; added: number }>(`/api/college/payroll/runs/${month}/recalculate${collegeQs(collegeId)}`, { method: "POST", body: JSON.stringify({ rev: run.rev }) });
       toast({ variant: "success", title: `Recalculated: ${r.changed} changed, ${r.added} added, ${r.removed} removed` });
       load();
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't recalculate" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to recalculate" }); }
     finally { setBusy(false); }
   }
   async function remove() {
     if (!window.confirm(`Remove the ${monthLabel(month)} draft? You can prepare it again.`)) return;
     try { await payrollFetch(url, { method: "DELETE" }); onBack(); }
-    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't remove" }); }
+    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to remove" }); }
   }
   async function statutory() {
     try {
       const problems = await downloadStatutory(run, d!.lines, d!.collegeName);
       if (problems.length) toast({ variant: "destructive", title: "Check before filing", description: problems.join(" · ") });
-    } catch { toast({ variant: "destructive", title: "Couldn't build the files" }); }
+    } catch { toast({ variant: "destructive", title: "Unable to build the files" }); }
   }
   function bank() {
     const missing = downloadBankFile(run, d!.lines);
@@ -222,12 +222,12 @@ function RunView({ collegeId, month, onBack }: { collegeId?: string; month: stri
         <details className="rounded-md border px-3 py-2 text-sm">
           <summary className="cursor-pointer font-medium"><AlertTriangle className="mr-1 inline h-4 w-4 text-amber-600" />{run.excluded.length} not in this month</summary>
           <ul className="mt-2 space-y-1 text-xs">{run.excluded.map((x) => <li key={x.employeeKey}><span className="font-mono">{x.employeeCode || "-"}</span> {x.name} - {x.reason}</li>)}</ul>
-          <p className="mt-2 text-xs text-muted-foreground">Accounts set pay in Pay structures, then Recalculate.</p>
+          <p className="mt-2 text-xs text-muted-foreground">Accounts set pay in Pay Structures; then choose Recalculate.</p>
         </details>
       )}
 
       <div className="flex flex-wrap items-end gap-3">
-        <div className="relative min-w-[14rem] flex-1"><Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input aria-label="Search" className="pl-8" placeholder="Emp Code, name, department" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+        <div className="relative min-w-[14rem] flex-1"><Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input aria-label="Search" className="pl-8" placeholder="Employee ID, name, department" value={q} onChange={(e) => setQ(e.target.value)} /></div>
         <select aria-label="Show" className={selectClass} value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)}>
           <option value="">Everyone</option><option value="TEACHING">Teaching</option><option value="NON_TEACHING">Non-teaching</option>
           <option value="ISSUES">Needs a look ({issues})</option><option value="CHANGED">Adjusted by hand</option>
@@ -238,7 +238,7 @@ function RunView({ collegeId, month, onBack }: { collegeId?: string; month: stri
         <table className="w-full min-w-[70rem] text-xs">
           <thead className="bg-muted/50 text-left uppercase tracking-wide text-muted-foreground">
             <tr>
-              <th className="px-2 py-2">Emp Code</th><th className="px-2 py-2">Name</th><th className="px-2 py-2 text-right">Pay Days</th><th className="px-2 py-2 text-right">Gross_Actual</th>
+              <th className="px-2 py-2">Employee ID</th><th className="px-2 py-2">Name</th><th className="px-2 py-2 text-right">Pay Days</th><th className="px-2 py-2 text-right">Gross_Actual</th>
               {earnings.map((e) => <th key={e.id} className="px-2 py-2 text-right">{e.label}</th>)}
               <th className="px-2 py-2 text-right">Other</th><th className="px-2 py-2 text-right">G. SAL</th>
               {deductions.map((x) => <th key={x.id} className="px-2 py-2 text-right">{x.label}</th>)}

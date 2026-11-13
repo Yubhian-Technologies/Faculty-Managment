@@ -25,10 +25,10 @@ function guardError(err: unknown, tag: string) {
   const badBody = badBodyResponse(err);
   if (badBody) return badBody;
   if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
   }
   console.error(tag, err);
-  return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
 }
 
 export async function GET(_request: Request, { params }: Params) {
@@ -40,7 +40,7 @@ export async function GET(_request: Request, { params }: Params) {
       batchesCol(db, session.collegeId).doc(id).get(),
       recordsCol(db, session.collegeId).where("batchId", "==", id).get(),
     ]);
-    if (!snap.exists) return NextResponse.json({ error: "Results sheet not found" }, { status: 404 });
+    if (!snap.exists) return NextResponse.json({ error: "Results sheet not found. It may have been deleted." }, { status: 404 });
     const batch = snap.data() as ExamResultBatch;
     const list = records.docs
       .map((d) => ({ ...(d.data() as ExamResultRecord), id: d.id }))
@@ -119,12 +119,12 @@ export async function PATCH(request: Request, { params }: Params) {
     const session = await requireCollegeMember("EXAM_CELL");
     const { id } = await params;
     const body = (await readJsonBody(request)) as { action?: string };
-    if (body.action !== "publish") return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+    if (body.action !== "publish") return NextResponse.json({ error: "This action is not recognised. Reload the page and try again." }, { status: 400 });
 
     const db = getAdminDb();
     const ref = batchesCol(db, session.collegeId).doc(id);
     const snap = await ref.get();
-    if (!snap.exists) return NextResponse.json({ error: "Results sheet not found" }, { status: 404 });
+    if (!snap.exists) return NextResponse.json({ error: "Results sheet not found. It may have been deleted." }, { status: 404 });
     const batch = snap.data() as ExamResultBatch;
     if (batch.status !== "DRAFT") return NextResponse.json({ error: "These results are already published" }, { status: 409 });
 
@@ -160,7 +160,7 @@ export async function DELETE(_request: Request, { params }: Params) {
     const db = getAdminDb();
     const ref = batchesCol(db, session.collegeId).doc(id);
     const snap = await ref.get();
-    if (!snap.exists) return NextResponse.json({ error: "Results sheet not found" }, { status: 404 });
+    if (!snap.exists) return NextResponse.json({ error: "Results sheet not found. It may have been deleted." }, { status: 404 });
     const batch = snap.data() as ExamResultBatch;
     const records = await recordsCol(db, session.collegeId).where("batchId", "==", id).get();
     const published = batch.status !== "DRAFT";

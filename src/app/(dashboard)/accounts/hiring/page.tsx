@@ -99,7 +99,7 @@ export default function AccountsHiringPage() {
         // A REJECTED offer shouldn't block a fresh one being sent.
         setExistingLetterIds(new Set((lRes.letters ?? []).filter((l) => l.status !== "REJECTED").map((l) => l.candidateId)));
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -183,7 +183,7 @@ export default function AccountsHiringPage() {
         }),
       });
       const data = await res.json() as { error?: string; ccEmails?: string[] };
-      if (!res.ok) throw new Error(data.error ?? "Failed to send offer");
+      if (!res.ok) throw new Error(data.error ?? "Unable to send offer");
 
       const letterFields = {
         candidateName: selected?.name ?? "",
@@ -209,7 +209,7 @@ export default function AccountsHiringPage() {
 
 Greetings from ${institution}.
 
-We are pleased to offer you the position of ${designation} in the ${department} department, effective from ${formatDate(new Date(joiningDate))}. Please find your offer letter attached.
+We are pleased to offer you the position of ${designation} in the ${department} department, effective from ${formatDate(new Date(joiningDate))}. Find your offer letter attached.
 ${coordinatorBlock}
 Congratulations, and welcome aboard!
 
@@ -229,7 +229,7 @@ ${institution}`;
       setSelected(null);
     } catch (err) {
       mailWindow?.close();
-      toast({ variant: "destructive", title: "Failed to send offer", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to send offer", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsSaving(false);
     }
@@ -242,7 +242,7 @@ ${institution}`;
     <div className="space-y-6">
       <PageHeader
         title="Hiring - Offer Letters"
-        description="Send offer letters to Principal-approved candidates"
+        description="Send offer letters to candidates approved by the Principal."
       />
 
       {isLoading ? (
@@ -307,14 +307,14 @@ ${institution}`;
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Send Offer Letter - {selected?.name}</DialogTitle>
-            <DialogDescription>Fill in employment details, then review and send the composed email.</DialogDescription>
+            <DialogDescription>Enter the employment details, then review and send the email.</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Designation *</Label>
-                <Input value={form.designation} onChange={(e) => setForm((f) => ({ ...f, designation: e.target.value }))} placeholder="e.g. Assistant Professor" />
+                <Input value={form.designation} onChange={(e) => setForm((f) => ({ ...f, designation: e.target.value }))} placeholder="Assistant Professor" />
               </div>
               <div className="space-y-1.5">
                 <Label>Department *</Label>
@@ -329,13 +329,13 @@ ${institution}`;
               </div>
               <div className="space-y-1.5">
                 <Label>Annual CTC (₹) *</Label>
-                <Input type="number" min="0" value={form.ctcAnnual} onChange={(e) => setForm((f) => ({ ...f, ctcAnnual: e.target.value }))} placeholder="e.g. 600000" />
+                <Input type="number" min="0" value={form.ctcAnnual} onChange={(e) => setForm((f) => ({ ...f, ctcAnnual: e.target.value }))} placeholder="600000" />
               </div>
             </div>
 
             <div className="space-y-1.5">
               <Label>Subjects (comma-separated)</Label>
-              <Input value={form.subjects} onChange={(e) => setForm((f) => ({ ...f, subjects: e.target.value }))} placeholder="e.g. Data Structures, Algorithms" />
+              <Input value={form.subjects} onChange={(e) => setForm((f) => ({ ...f, subjects: e.target.value }))} placeholder="Data Structures, Algorithms" />
             </div>
 
             <div className="space-y-1.5">
@@ -347,9 +347,7 @@ ${institution}`;
                 rows={3}
               />
             </div>
-            <p className="text-xs text-muted-foreground border-t pt-3">
-              Once the candidate accepts, College Office can request their login credentials — the Webmaster provisions the account from there.
-            </p>
+            <p className="text-xs text-muted-foreground border-t pt-3">Once the candidate accepts, the College Office can request their login credentials, and the Webmaster creates the account.</p>
           </div>
 
           <DialogFooter>

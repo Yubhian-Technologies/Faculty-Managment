@@ -135,7 +135,7 @@ export default function NewBatchPage() {
           return merged;
         });
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load data" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load data" }));
   }, [user?.uid, myDepartments]);
 
   // Only the HOD themself must always stay in selectedPanel - Principal/VP/
@@ -195,7 +195,7 @@ export default function NewBatchPage() {
       });
       const json = await res.json() as { id?: string; error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to create batch", description: json.error });
+        toast({ variant: "destructive", title: "Unable to create batch", description: json.error });
         return;
       }
       toast({ variant: "success", title: "Interview panel proposal submitted to Principal" });
@@ -211,7 +211,7 @@ export default function NewBatchPage() {
     <div className="max-w-2xl space-y-6">
       <PageHeader
         title="New Interview Batch"
-        description="Create an interview panel proposal and submit to Principal"
+        description="Create an interview panel proposal and submit it to the Principal."
       />
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -220,7 +220,7 @@ export default function NewBatchPage() {
           <CardHeader><CardTitle className="text-base">Hiring Request</CardTitle></CardHeader>
           <CardContent>
             {vacancies.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No approved hiring requests. Get a hiring request approved first.</p>
+              <p className="text-sm text-muted-foreground">No approved hiring requests. A hiring request must be approved first.</p>
             ) : prefilledVacancyId ? (
               // Locked card - came from pipeline; show vacancy details once loaded
               <div className="flex items-center justify-between rounded-lg border-2 border-primary bg-primary/5 px-4 py-3">
@@ -311,9 +311,7 @@ export default function NewBatchPage() {
                   />
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground mt-2">
-                Shared with the Principal for approval, and shown to panel members while they evaluate.
-              </p>
+              <p className="text-xs text-muted-foreground mt-2">Shared with the Principal for approval and shown to panel members during evaluation.</p>
             </CardContent>
           </Card>
         )}
@@ -334,14 +332,10 @@ export default function NewBatchPage() {
             {!selectedVacancyId ? (
               <p className="text-sm text-muted-foreground">Select a hiring request first.</p>
             ) : filteredApplications.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No shortlisted candidates without a batch for this hiring request. Attach and shortlist candidates first.
-              </p>
+              <p className="text-sm text-muted-foreground">No shortlisted candidates without a batch for this hiring request. Link and shortlist candidates first.</p>
             ) : (
               <div className="space-y-3">
-                <p className="text-xs text-muted-foreground">
-                  Every shortlisted candidate for this hiring request is included in the interview session.
-                </p>
+                <p className="text-xs text-muted-foreground">Every shortlisted candidate for this hiring request is included in the interview session.</p>
                 {filteredApplications.map((a) => {
                   const c = candidatesById.get(a.candidateId);
                   return (

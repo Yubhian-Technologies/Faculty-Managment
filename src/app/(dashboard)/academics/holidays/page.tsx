@@ -152,7 +152,7 @@ export default function AcademicsHolidaysPage() {
     fetch("/api/college/holidays")
       .then((r) => r.json() as Promise<{ holidays: Holiday[] }>)
       .then((d) => setHolidays(d.holidays ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load holidays" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load holidays" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -161,7 +161,7 @@ export default function AcademicsHolidaysPage() {
     fetch("/api/college/summer-holidays")
       .then((r) => r.json() as Promise<{ summerHolidays: SummerHoliday[] }>)
       .then((d) => setSummerHolidays(d.summerHolidays ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load summer holidays" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load summer holidays" }))
       .finally(() => setIsSummerLoading(false));
   }
 
@@ -170,7 +170,7 @@ export default function AcademicsHolidaysPage() {
     fetch("/api/college/sem-breaks")
       .then((r) => r.json() as Promise<{ semBreaks: SemBreak[] }>)
       .then((d) => setSemBreaks(d.semBreaks ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load sem breaks" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load sem breaks" }))
       .finally(() => setIsSemBreaksLoading(false));
   }
 
@@ -196,7 +196,7 @@ export default function AcademicsHolidaysPage() {
     fetch("/api/college/working-days")
       .then((r) => r.json() as Promise<{ workingDays: WorkingDayOverride[] }>)
       .then((d) => setWorkingDays(d.workingDays ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load working days" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load working days" }))
       .finally(() => setIsLoadingWorkingDays(false));
   }
 
@@ -230,13 +230,13 @@ export default function AcademicsHolidaysPage() {
         }),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to add working day");
+      if (!res.ok) throw new Error(data.error ?? "Unable to add working day");
       toast({ variant: "success", title: "Working day added" });
       setWorkingDayOpen(false);
       setWorkingDayForm(emptyWorkingDayForm());
       loadWorkingDays();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to add working day" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to add working day" });
     } finally {
       setIsSavingWorkingDay(false);
     }
@@ -252,7 +252,7 @@ export default function AcademicsHolidaysPage() {
       setWorkingDayDeleteTarget(null);
       loadWorkingDays();
     } catch {
-      toast({ variant: "destructive", title: "Failed to remove working day" });
+      toast({ variant: "destructive", title: "Unable to remove working day" });
     } finally {
       setIsDeletingWorkingDay(false);
     }
@@ -299,14 +299,14 @@ export default function AcademicsHolidaysPage() {
         }),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? (editing ? "Failed to update holiday" : "Failed to add holiday"));
+      if (!res.ok) throw new Error(data.error ?? (editing ? "Unable to update holiday" : "Unable to add holiday"));
       toast({ variant: "success", title: editing ? "Holiday updated" : "Holiday added" });
       setOpen(false);
       setEditing(null);
       setForm(emptyForm());
       load();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to add holiday" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to add holiday" });
     } finally {
       setIsSaving(false);
     }
@@ -322,7 +322,7 @@ export default function AcademicsHolidaysPage() {
       setDeleteTarget(null);
       load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to remove holiday" });
+      toast({ variant: "destructive", title: "Unable to remove holiday" });
     } finally {
       setIsDeleting(false);
     }
@@ -345,12 +345,12 @@ export default function AcademicsHolidaysPage() {
         body: JSON.stringify(semBreakForm),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to save sem break");
-      toast({ variant: "success", title: "Sem break saved" });
+      if (!res.ok) throw new Error(data.error ?? "Unable to save sem break");
+      toast({ variant: "success", title: "Semester break saved." });
       setSemBreakOpen(false);
       loadSemBreaks();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save sem break" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save sem break" });
     } finally {
       setIsSemBreakSaving(false);
     }
@@ -362,11 +362,11 @@ export default function AcademicsHolidaysPage() {
     try {
       const res = await fetch(`/api/college/sem-breaks/${semBreakDeleteTarget.id}`, { method: "DELETE" });
       if (!res.ok) throw new Error();
-      toast({ variant: "success", title: "Sem break removed" });
+      toast({ variant: "success", title: "Semester break removed." });
       setSemBreakDeleteTarget(null);
       loadSemBreaks();
     } catch {
-      toast({ variant: "destructive", title: "Failed to remove sem break" });
+      toast({ variant: "destructive", title: "Unable to remove sem break" });
     } finally {
       setIsSemBreakDeleting(false);
     }
@@ -410,12 +410,12 @@ export default function AcademicsHolidaysPage() {
         body: JSON.stringify(summerForm),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to save summer holidays");
+      if (!res.ok) throw new Error(data.error ?? "Unable to save summer holidays");
       toast({ variant: "success", title: "Summer holidays saved" });
       setSummerOpen(false);
       loadSummerHolidays();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save summer holidays" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save summer holidays" });
     } finally {
       setIsSummerSaving(false);
     }
@@ -431,7 +431,7 @@ export default function AcademicsHolidaysPage() {
       setSummerDeleteTarget(null);
       loadSummerHolidays();
     } catch {
-      toast({ variant: "destructive", title: "Failed to remove summer holidays" });
+      toast({ variant: "destructive", title: "Unable to remove summer holidays" });
     } finally {
       setIsSummerDeleting(false);
     }
@@ -442,7 +442,7 @@ export default function AcademicsHolidaysPage() {
       {inPrincipal && <PrincipalHolidaysTabs active="holidays" />}
       <PageHeader
         title={inPrincipal ? "Academic Calendar" : "Holidays"}
-        description="Holidays counted in the Leave History Report"
+        description="Holidays included in the Leave History Report."
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" asChild>
@@ -463,9 +463,7 @@ export default function AcademicsHolidaysPage() {
                 <Sun className="h-4 w-4 text-muted-foreground" />
                 Summer Vacation
               </p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                One summer break per academic year. A banner shows in everyone&rsquo;s Leave page from the day before it starts.
-              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">One summer break per academic year. A notice appears on everyone&apos;s Leave page from the day before it starts.</p>
             </div>
             <Button variant="outline" size="sm" onClick={() => openSummerDialog()}>
               <Plus className="h-3.5 w-3.5 mr-1.5" />Set Summer Vacation
@@ -474,7 +472,7 @@ export default function AcademicsHolidaysPage() {
           {isSummerLoading ? (
             <div className="h-10 bg-muted animate-pulse rounded-lg" />
           ) : summerHolidays.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No summer holidays set yet for any academic year.</p>
+            <p className="text-xs text-muted-foreground">No summer holidays have been set for any academic year.</p>
           ) : (
             <div className="space-y-2">
               {summerHolidays.map((s) => (
@@ -506,9 +504,7 @@ export default function AcademicsHolidaysPage() {
                 <Sun className="h-4 w-4 text-muted-foreground" />
                 Sem Breaks (students)
               </p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Winter and summer semester breaks. Classes close for students; faculty keep working.
-              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">Winter and summer semester breaks. Classes are suspended for students; faculty continue to work.</p>
             </div>
             <Button variant="outline" size="sm" onClick={() => { setSemBreakForm(emptySemBreakForm(academicSessionLabel(currentAcademicStartYear()))); setSemBreakOpen(true); }}>
               <Plus className="h-3.5 w-3.5 mr-1.5" />Set Sem Break
@@ -517,7 +513,7 @@ export default function AcademicsHolidaysPage() {
           {isSemBreaksLoading ? (
             <div className="h-10 bg-muted animate-pulse rounded-lg" />
           ) : semBreaks.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No sem breaks set yet.</p>
+            <p className="text-xs text-muted-foreground">No semester breaks have been set.</p>
           ) : (
             <div className="space-y-2">
               {semBreaks.map((s) => (
@@ -541,7 +537,7 @@ export default function AcademicsHolidaysPage() {
         <Card>
           <CardContent className="p-4 space-y-2">
             <p className="text-sm font-medium">Possible compensatory holidays</p>
-            <p className="text-xs text-muted-foreground">These days sit between two holidays. Declare one to give a long break; the Sunday in return is optional.</p>
+            <p className="text-xs text-muted-foreground">These days fall between two holidays. Declare one to give a longer break; a compensatory Sunday is optional.</p>
             <div className="flex flex-wrap gap-2">
               {bridgeSuggestions.map((k) => (
                 <Button key={k} variant="outline" size="sm" onClick={() => startBridge(k)}>
@@ -664,9 +660,7 @@ export default function AcademicsHolidaysPage() {
             <CardTitle className="text-base flex items-center gap-2">
               <CalendarCheck className="h-4 w-4" />Working Days
             </CardTitle>
-            <CardDescription>
-              Make a Sunday a working day for chosen roles. Everyone else keeps the day off.
-            </CardDescription>
+            <CardDescription>Make a Sunday a working day for selected roles. It remains a holiday for everyone else.</CardDescription>
           </div>
           <Button size="sm" onClick={() => setWorkingDayOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />Add Working Day
@@ -732,7 +726,7 @@ export default function AcademicsHolidaysPage() {
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? "Edit Holiday" : "Add Holiday"}</DialogTitle>
-            <DialogDescription>Added holidays count toward the Leave History Report&rsquo;s Holidays column for their month.</DialogDescription>
+            <DialogDescription>Added holidays are counted in the Holidays column of the Leave History Report for their month.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -796,7 +790,7 @@ export default function AcademicsHolidaysPage() {
                 </SelectContent>
               </Select>
               {form.appliesTo === "STUDENTS" && (
-                <p className="text-xs text-muted-foreground">Faculty keep working and their leave days are not affected.</p>
+                <p className="text-xs text-muted-foreground">Faculty continue to work and their leave is not affected.</p>
               )}
             </div>
             )}
@@ -844,7 +838,7 @@ export default function AcademicsHolidaysPage() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Set Summer Vacation</DialogTitle>
-            <DialogDescription>One range per academic year - setting it again for the same year overwrites the existing one.</DialogDescription>
+            <DialogDescription>One range per academic year. Setting it again for the same year replaces the existing range.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -877,8 +871,8 @@ export default function AcademicsHolidaysPage() {
       <Dialog open={semBreakOpen} onOpenChange={setSemBreakOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Set Sem Break</DialogTitle>
-            <DialogDescription>For students only. One winter and one summer break per academic year - setting it again overwrites.</DialogDescription>
+            <DialogTitle>Set Semester Break</DialogTitle>
+            <DialogDescription>For students only. One winter and one summer break per academic year; setting it again replaces the existing break.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
@@ -967,9 +961,7 @@ export default function AcademicsHolidaysPage() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Add Working Day</DialogTitle>
-            <DialogDescription>
-              Only the roles you pick below are required to work this date - everyone else keeps it as a day off.
-            </DialogDescription>
+            <DialogDescription>Only the roles selected below work on this date. It remains a holiday for everyone else.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -981,7 +973,7 @@ export default function AcademicsHolidaysPage() {
               <Input
                 value={workingDayForm.reason}
                 onChange={(e) => setWorkingDayForm((f) => ({ ...f, reason: e.target.value }))}
-                placeholder="e.g. NAAC Inspection"
+                placeholder="NAAC Inspection"
               />
             </div>
             <div className="space-y-2">

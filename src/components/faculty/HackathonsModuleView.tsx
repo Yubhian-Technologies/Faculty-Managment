@@ -263,13 +263,13 @@ function RecordFormFields({
           });
       if (!res.ok) {
         const json = await res.json().catch(() => ({})) as { error?: string };
-        toast({ variant: "destructive", title: "Failed to save record", description: json.error });
+        toast({ variant: "destructive", title: "Unable to save record", description: json.error });
         return;
       }
       toast({ variant: "success", title: editingId ? "Resubmitted for verification" : "Submitted for verification" });
       onSaved();
     } catch {
-      toast({ variant: "destructive", title: "Network error. Please try again." });
+      toast({ variant: "destructive", title: "Network error. Try again." });
     } finally {
       setSaving(false);
     }
@@ -291,7 +291,7 @@ function RecordFormFields({
         <div className="space-y-4">
           <SubLabel>Overview</SubLabel>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <TextInput label="Academic Year" value={form.academicYear} onChange={(v) => set("academicYear", v)} placeholder="e.g. 2024-25" required />
+            <TextInput label="Academic Year" value={form.academicYear} onChange={(v) => set("academicYear", v)} placeholder="2024-25" required />
             <TextInput label="Event Title" value={form.eventTitle} onChange={(v) => set("eventTitle", v)} required />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

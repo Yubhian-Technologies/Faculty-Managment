@@ -42,7 +42,7 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
     fetch(`/api/college/exam-seating/${id}`)
       .then((r) => r.json() as Promise<{ plan?: ExamSeatingPlan }>)
       .then((d) => { setPlan(d.plan ?? null); setDirty(false); })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load the plan" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load the plan" }));
   }
   useEffect(reload, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -75,12 +75,12 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
         method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to save");
+      if (!res.ok) throw new Error(data.error ?? "Unable to save");
       toast({ variant: "success", title: okMessage });
       setDirty(false);
       return true;
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save" });
       return false;
     } finally {
       setBusy(false);
@@ -186,7 +186,7 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
       }
       else await renderMultiHtmlToPdf(signatureSheetsHTML(c, plan!, await examsByGroup()), `${base}-signature-sheets.pdf`);
     } catch {
-      toast({ variant: "destructive", title: "Could not make the PDF" });
+      toast({ variant: "destructive", title: "Unable to make the PDF" });
     } finally {
       setPdfBusy(null);
     }
@@ -230,7 +230,7 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
               {plan.streams.map((st) => (
                 <span key={st.seat}><span className="font-semibold">Seat {SEAT_LETTERS[st.seat - 1]}:</span> {st.groups.map((g) => `${g.label} (${g.count})`).join(" → ")}</span>
               ))}
-              <span className="w-full text-xs text-muted-foreground">Seats are set by the build - to change them, delete this draft and build again.</span>
+              <span className="w-full text-xs text-muted-foreground">Seats are fixed when the plan is built. To change them, delete this draft and build it again.</span>
             </CardContent>
           </Card>
         )}

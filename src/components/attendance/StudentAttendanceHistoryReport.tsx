@@ -172,14 +172,14 @@ export function StudentAttendanceHistoryReport({
         setShownRangeLabel("entire history");
       }
       const res = await fetch(`/api/college/student-attendance-history?${params.toString()}`);
-      if (!res.ok) throw new Error("Failed to load attendance history");
+      if (!res.ok) throw new Error("Unable to load attendance history");
       const json = (await res.json()) as { student?: StudentInfo; subjects?: SubjectRow[]; total?: TotalRow; availableSemesters?: number[] };
       setStudent(json.student ?? null);
       setSubjects(json.subjects ?? []);
       setTotal(json.total ?? null);
       if (json.availableSemesters) setAvailableSemesters(json.availableSemesters);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load attendance history" });
+      toast({ variant: "destructive", title: "Unable to load attendance history" });
     } finally {
       setIsLoading(false);
     }
@@ -208,7 +208,7 @@ export function StudentAttendanceHistoryReport({
     <div className="space-y-6">
       <PageHeader
         title={`${studentName} — Attendance History`}
-        description="Cumulative subject-wise attendance, by month, a custom date range, or the student's entire history."
+        description="Cumulative subject-wise attendance by month, for a date range or for the student's entire record."
         actions={
           <Button variant="outline" onClick={() => (onBack ? onBack() : backHref ? router.push(backHref) : router.back())}>
             <ArrowLeft className="h-4 w-4 mr-2" />Back

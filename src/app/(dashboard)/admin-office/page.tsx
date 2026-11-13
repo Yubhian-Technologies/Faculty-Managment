@@ -35,7 +35,7 @@ export default function AdminOfficeDashboard() {
     <div className="space-y-6">
       <PageHeader
         title={`Welcome, ${user?.name ?? "Admin Office"}`}
-        description="Admin Office - location administrative support"
+        description="Administrative support for the location."
       />
 
       <div className="grid gap-4 sm:grid-cols-3">
@@ -68,9 +68,7 @@ export default function AdminOfficeDashboard() {
           </CardTitle>
         </CardHeader>
         <CardContent className="flex items-center justify-between gap-4">
-          <p className="text-sm text-muted-foreground">
-            Raise a faculty vacancy for any location department. It routes through HR Admin and Administration for approval, same as a Dept Head&apos;s request.
-          </p>
+          <p className="text-sm text-muted-foreground">Raise a faculty vacancy for any location department. It is routed through HR Admin and Administration for approval, in the same way as a Department Head&apos;s request.</p>
           <Button asChild className="shrink-0">
             <Link href="/admin-office/vacancies">
               View Requests

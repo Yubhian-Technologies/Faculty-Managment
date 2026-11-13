@@ -259,7 +259,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
       // An unpublished draft is what the HOD most likely came here to act on.
       if (draftData.draft && draftData.draft.status === "DRAFT") setModeState("draft");
     } catch {
-      toast({ variant: "destructive", title: "Failed to load timetable" });
+      toast({ variant: "destructive", title: "Unable to load timetable" });
     }
   }, [courseId, year, sectionId, semesterQuery]);
 
@@ -283,7 +283,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
         if (!cancelled) setOtherWeek({ key: weekKey, slots: d.slots ?? [] });
       } catch {
         if (!cancelled) {
-          toast({ variant: "destructive", title: "Failed to load timetable" });
+          toast({ variant: "destructive", title: "Unable to load timetable" });
           setOtherWeek({ key: weekKey, slots: [] });
         }
       }
@@ -323,7 +323,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
       setAssignments(prev);
       setSlots((list) => list.map((s) => (siblingIds.has(s.assignmentId) ? { ...s, cellColor: prev.find((a) => a.id === s.assignmentId)?.cellColor } : s)));
       const err = (await res.json().catch(() => ({}))) as { error?: string };
-      toast({ variant: "destructive", title: err.error ?? "Could not save the color" });
+      toast({ variant: "destructive", title: err.error ?? "Unable to save the color" });
     }
   };
 
@@ -376,7 +376,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
     });
     const json = (await res.json()) as { slots?: DraftSlot[]; error?: string };
     if (!res.ok) {
-      toast({ variant: "destructive", title: action === "merge" ? "Could not merge" : "Could not unmerge", description: json.error });
+      toast({ variant: "destructive", title: action === "merge" ? "Unable to merge" : "Unable to unmerge", description: json.error });
       return false;
     }
     setDraft((dr) => (dr ? { ...dr, slots: json.slots ?? dr.slots, status: "DRAFT" } : dr));
@@ -480,7 +480,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
       });
       const json = (await res.json().catch(() => ({}))) as { unlocked?: number; error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Could not unlock the pinned periods", description: json.error });
+        toast({ variant: "destructive", title: "Unable to unlock the pinned periods", description: json.error });
         return;
       }
       if ((json.unlocked ?? 0) > 0) {
@@ -490,7 +490,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
         toast({ title: "Nothing to unlock", description: "None of the pinned periods belong to the current semester." });
       }
     } catch {
-      toast({ variant: "destructive", title: "Could not unlock the pinned periods" });
+      toast({ variant: "destructive", title: "Unable to unlock the pinned periods" });
     } finally {
       setUnlocking(false);
     }
@@ -675,7 +675,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
       });
       const json = (await res.json()) as { error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Could not start a blank timetable" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to start a blank timetable" });
         return;
       }
       await loadAll();
@@ -777,7 +777,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
       const res = await fetch(`/api/college/timetable-slots/${encodeURIComponent(slotId)}`, { method: "DELETE" });
       if (!res.ok) {
         const json = (await res.json().catch(() => ({}))) as { error?: string };
-        toast({ variant: "destructive", title: "Could not remove", description: json.error });
+        toast({ variant: "destructive", title: "Unable to remove", description: json.error });
         return;
       }
       setSlots((prev) => prev.filter((x) => (x as TimetableSlot & { id?: string }).id !== slotId));
@@ -804,7 +804,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
       });
       const json = (await res.json()) as { slots?: DraftSlot[]; error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Could not remove", description: json.error });
+        toast({ variant: "destructive", title: "Unable to remove", description: json.error });
         return;
       }
       setDraft((d) => (d ? { ...d, slots: json.slots ?? d.slots, status: "DRAFT" } : d));
@@ -831,7 +831,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
         });
         const json = (await res.json()) as { error?: string };
         if (!res.ok) {
-          toast({ variant: "destructive", title: "Could not notify the requesting department", description: json.error });
+          toast({ variant: "destructive", title: "Unable to notify the requesting department", description: json.error });
           return;
         }
         toast({ variant: "success", title: "Requesting department notified", description: "They'll publish the timetable once everything is ready." });
@@ -876,7 +876,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
     try {
       const res = await fetch(`/api/college/timetable/draft?sectionId=${encodeURIComponent(sectionId)}${semesterQuery}`, { method: "DELETE" });
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Could not discard the draft" });
+        toast({ variant: "destructive", title: "Unable to discard the draft" });
         return;
       }
       toast({ variant: "success", title: "Draft discarded", description: "The published timetable is unchanged." });
@@ -899,7 +899,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
       const res = await fetch(`/api/college/timetable/reset?sectionId=${encodeURIComponent(sectionId)}${semesterQuery}`, { method: "DELETE" });
       const json = (await res.json().catch(() => ({}))) as { error?: string; removedAssignments?: number; removedSlots?: number };
       if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Could not delete the timetable" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to delete the timetable" });
         return;
       }
       toast({
@@ -998,7 +998,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
       });
       const json = (await res.json()) as { error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Could not save period timings", description: json.error });
+        toast({ variant: "destructive", title: "Unable to save period timings", description: json.error });
         return;
       }
       toast({ variant: "success", title: "Period timings saved", description: "Applies to every section of this course & year." });
@@ -1627,9 +1627,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
         <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4">
           <p className="text-sm font-semibold text-destructive">Danger zone</p>
           <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-muted-foreground">
-              Removes this section&rsquo;s published timetable, its draft, its teaching assignments and open assignment requests for this semester. This cannot be undone.
-            </p>
+            <p className="text-sm text-muted-foreground">Removes this section&apos;s published timetable, its draft, its teaching assignments and open assignment requests for this semester. This cannot be undone.</p>
             <Button size="sm" variant="destructive" onClick={() => setConfirmReset(true)} disabled={busy !== null}>
               <Trash2 className="h-4 w-4 mr-1.5" />Delete entire timetable
             </Button>
@@ -1695,7 +1693,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
               has shared the faculty's busy periods and pressed "Notify department & close". */}
           {heldBackList.length > 0 && (
             <div className="space-y-1 rounded-md border border-amber-200 bg-amber-50 p-3">
-              <p className="text-xs font-medium text-amber-900">Not available yet - waiting for the lending department</p>
+              <p className="text-xs font-medium text-amber-900">Not available yet; awaiting the lending department.</p>
               {heldBackList.map((a) => (
                 <p key={a.id} className="text-xs text-amber-900">
                   {a.subjectName} - {a.facultyName}

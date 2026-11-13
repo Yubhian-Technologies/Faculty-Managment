@@ -33,7 +33,7 @@ export function AccountsPayments() {
 
   return (
     <div className="max-w-6xl space-y-6">
-      <PageHeader title="Payments" description="Online fee payments through CCAvenue - one merchant account per college." />
+      <PageHeader title="Payments" description="Online fee payments through CCAvenue, with one merchant account for each college." />
       <div className="max-w-sm space-y-1.5">
         <Label htmlFor="pay-college">College</Label>
         <select id="pay-college" className={`${selectClass} w-full`} value={collegeId} onChange={(e) => setCollegeId(e.target.value)}>
@@ -71,11 +71,11 @@ function CcavenueCard({ collegeId, onProxy }: { collegeId: string; onProxy: (on:
     try {
       const res = await fetch(`/api/college/payments/settings${qs}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...form, apiKeys: apiKeys.map((k) => ({ label: k.label, accessCode: k.accessCode, workingKey: k.workingKey })) }) });
       const d = (await res.json()) as { settings?: CcavenueSettingsView; error?: string };
-      if (!res.ok || !d.settings) throw new Error(d.error ?? "Couldn't save");
+      if (!res.ok || !d.settings) throw new Error(d.error ?? "Unable to save");
       setS(d.settings); setForm((f) => ({ ...f, workingKey: "" }));
       setApiKeys((d.settings.apiKeys ?? []).map((k) => ({ ...k, workingKey: "" })));
       toast({ variant: "success", title: d.settings.enabled ? "Online payment is on" : "Saved - online payment is off" });
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't save" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" }); }
     finally { setBusy(false); }
   }
 
@@ -103,7 +103,7 @@ function CcavenueCard({ collegeId, onProxy }: { collegeId: string; onProxy: (on:
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <p className="text-sm font-medium">API keys for the static IPs (optional)</p>
-            <p className="text-xs text-muted-foreground">When CCAvenue gives each whitelisted proxy IP its own Access Code and Working Key, enter them here. Status checks and refunds try the key above first, then these.</p>
+            <p className="text-xs text-muted-foreground">If CCAvenue issues each whitelisted proxy IP its own Access Code and Working Key, enter them here. Status checks and refunds try the key above first, then these.</p>
           </div>
           {apiKeys.length < 5 && <Button size="sm" variant="outline" onClick={() => setApiKeys((k) => [...k, { label: "", accessCode: "", workingKey: "", hasWorkingKey: false }])}>Add key</Button>}
         </div>
@@ -136,10 +136,10 @@ function PaymentsList({ collegeId, proxyConfigured }: { collegeId: string; proxy
     try {
       const res = await fetch(`/api/college/payments/${encodeURIComponent(p.id)}/check?collegeId=${encodeURIComponent(collegeId)}`, { method: "POST" });
       const d = (await res.json()) as { payment?: Payment; changed?: boolean; error?: string };
-      if (!res.ok || !d.payment) throw new Error(d.error ?? "Couldn't check");
+      if (!res.ok || !d.payment) throw new Error(d.error ?? "Unable to check");
       toast({ variant: d.changed ? "success" : "default", title: d.changed ? `Now: ${PAYMENT_STATUS_LABEL[d.payment.status]}` : "No change from CCAvenue" });
       setRows((cur) => cur && cur.map((x) => (x.id === p.id ? d.payment! : x)));
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't check" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to check" }); }
     finally { setChecking(""); }
   }
   const [rows, setRows] = useState<Payment[] | null>(null);
@@ -181,7 +181,7 @@ function PaymentsList({ collegeId, proxyConfigured }: { collegeId: string; proxy
         <div className="space-y-1"><Label htmlFor="pf-f">From</Label><Input id="pf-f" type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
         <div className="space-y-1"><Label htmlFor="pf-t">To</Label><Input id="pf-t" type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
         <Button variant="outline" size="sm" onClick={exportCsv} disabled={!shown.length}><Download className="mr-1.5 h-4 w-4" />Export</Button>
-        <p className="ml-auto self-center text-sm">Collected: <b>Rs. {total.toFixed(2)}</b> <span className="text-xs text-muted-foreground">({paid.length} paid)</span></p>
+        <p className="ml-auto self-center text-sm">Collected: <b>₹{total.toFixed(2)}</b> <span className="text-xs text-muted-foreground">({paid.length} paid)</span></p>
       </div>
       {flagged.length > 0 && (
         <p className="flex items-center gap-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
@@ -210,7 +210,7 @@ function PaymentsList({ collegeId, proxyConfigured }: { collegeId: string; proxy
                   <td className="py-1.5 pr-3 text-xs">{p.trackingId ?? "-"}{p.bankRefNo ? <><br /><span className="text-muted-foreground">bank {p.bankRefNo}</span></> : null}</td>
                   <td className="py-1.5 whitespace-nowrap">
                     {(p.status === "SUCCESS" || p.status === "PARTIALLY_REFUNDED" || p.status === "REFUNDED") && (
-                      <Button size="sm" variant="ghost" title="Print the fee receipt" onClick={() => void printFeeReceipt(`/api/college/payments/${encodeURIComponent(p.id)}/receipt?collegeId=${encodeURIComponent(collegeId)}`).catch((e: unknown) => toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't print" }))}><Printer className="mr-1 h-3.5 w-3.5" />Receipt</Button>
+                      <Button size="sm" variant="ghost" title="Print the fee receipt" onClick={() => void printFeeReceipt(`/api/college/payments/${encodeURIComponent(p.id)}/receipt?collegeId=${encodeURIComponent(collegeId)}`).catch((e: unknown) => toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to print" }))}><Printer className="mr-1 h-3.5 w-3.5" />Receipt</Button>
                     )}
                     {(p.status === "SUCCESS" || p.status === "PARTIALLY_REFUNDED") && <Button size="sm" variant="outline" onClick={() => setRefunding(p)}><Undo2 className="mr-1 h-3.5 w-3.5" />Refund</Button>}
                     {proxyConfigured && (p.status === "INITIATED" || p.status === "FAILED" || p.status === "ABORTED") && (
@@ -242,10 +242,10 @@ function RefundDialog({ collegeId, payment, proxyConfigured, onClose, onDone }: 
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ via, amount, reference, reason }),
       });
       const d = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(d.error ?? "Couldn't record the refund");
+      if (!res.ok) throw new Error(d.error ?? "Unable to record the refund");
       toast({ variant: "success", title: via === "CCAVENUE" ? "Refunded through CCAvenue - the student is told" : "Refund recorded - the student is told" });
       onDone();
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't record the refund" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to record the refund" }); }
     finally { setBusy(false); }
   }
   return (
@@ -255,18 +255,18 @@ function RefundDialog({ collegeId, payment, proxyConfigured, onClose, onDone }: 
           <DialogTitle>Refund</DialogTitle>
           <DialogDescription>
             {via === "CCAVENUE"
-              ? `Order ${payment.id} is refunded now through CCAvenue. Up to Rs. ${left}.`
-              : `First refund order ${payment.id} in the CCAvenue dashboard (Orders > Refund), then record it here with CCAvenue's refund reference. Up to Rs. ${left}.`}
+              ? `Order ${payment.id} is refunded now through CCAvenue. Up to ₹${left}.`
+              : `First refund order ${payment.id} in the CCAvenue dashboard (Orders > Refund), then record it here with CCAvenue's refund reference. Up to ₹${left}.`}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           {proxyConfigured && (
             <div className="flex flex-col gap-1.5 text-sm">
               <label className="flex items-center gap-2"><input type="radio" name="rf-via" checked={via === "CCAVENUE"} onChange={() => setVia("CCAVENUE")} />Refund through CCAvenue now</label>
-              <label className="flex items-center gap-2"><input type="radio" name="rf-via" checked={via === "RECORDED"} onChange={() => setVia("RECORDED")} />Already refunded in the CCAvenue dashboard - record it</label>
+              <label className="flex items-center gap-2"><input type="radio" name="rf-via" checked={via === "RECORDED"} onChange={() => setVia("RECORDED")} />Already refunded in the CCAvenue dashboard. Record it here.</label>
             </div>
           )}
-          <div className="space-y-1.5"><Label htmlFor="rf-a">Amount refunded (Rs.)</Label><Input id="rf-a" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} /></div>
+          <div className="space-y-1.5"><Label htmlFor="rf-a">Amount refunded (₹)</Label><Input id="rf-a" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} /></div>
           {via === "RECORDED" && <div className="space-y-1.5"><Label htmlFor="rf-r">CCAvenue refund reference</Label><Input id="rf-r" value={reference} onChange={(e) => setReference(e.target.value)} /></div>}
           <div className="space-y-1.5"><Label htmlFor="rf-why">Reason</Label><Input id="rf-why" value={reason} onChange={(e) => setReason(e.target.value)} /></div>
         </div>

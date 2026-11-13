@@ -40,7 +40,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ empl
     await writeAuditLogSafe(db, session.collegeId, { action: "PAYROLL_TAX_PROFILE_SAVED", performedBy: session.uid, performedByName: session.email, targetId: `${fy}/${employeeKey}`, details: { fy, employeeKey, regime: saved.regime } });
     return NextResponse.json({ profile: saved });
   } catch (err) {
-    if (err instanceof Error && err.message === "BAD_FY") return NextResponse.json({ error: "Financial year must look like 2026-27" }, { status: 400 });
+    if (err instanceof Error && err.message === "BAD_FY") return NextResponse.json({ error: "Enter the financial year as YYYY-YY, for example 2026-27." }, { status: 400 });
     return payrollErrorResponse(err, "[college/payroll/tax/profiles/[employeeKey] PUT]");
   }
 }

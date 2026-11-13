@@ -36,7 +36,7 @@ export default function ReviseBudgetPage() {
         }
         setBudget(found);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load budget" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load budget" }))
       .finally(() => setLoading(false));
   }, [budgetId, router]);
 
@@ -57,7 +57,7 @@ export default function ReviseBudgetPage() {
       toast({ variant: "success", title: "Budget revised" });
       router.push("/finance/budget");
     } catch {
-      toast({ variant: "destructive", title: "Failed to revise budget" });
+      toast({ variant: "destructive", title: "Unable to revise budget" });
     } finally {
       setSaving(false);
     }
@@ -75,7 +75,7 @@ export default function ReviseBudgetPage() {
     <div className="max-w-xl">
       <PageHeader
         title={`Revise Budget - ${budget?.department ?? ""}`}
-        description="Adjust the allocated amount for this budget"
+        description="Adjust the allocated amount of this budget."
       />
 
       <Card>

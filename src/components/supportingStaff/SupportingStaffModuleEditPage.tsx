@@ -52,7 +52,7 @@ export function SupportingStaffModuleEditPage({ basePath }: Props) {
         }
         setRecord(supportingStaffRecordFromDoc(data.staff));
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load staff record" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load staff record" }))
       .finally(() => setLoading(false));
   }, [staffId, router, basePath]);
 
@@ -82,7 +82,7 @@ export function SupportingStaffModuleEditPage({ basePath }: Props) {
       toast({ variant: "success", title: "Saved" });
       router.push(`${basePath}/${staffId}/${moduleKey}`);
     } catch {
-      toast({ variant: "destructive", title: "Failed to save" });
+      toast({ variant: "destructive", title: "Unable to save" });
     } finally {
       setSaving(false);
     }

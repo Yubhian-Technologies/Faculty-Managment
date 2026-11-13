@@ -61,7 +61,7 @@ export default function LabBatchesPage() {
       if (!res.ok) throw new Error(d.error ?? "Failed");
       setStudents(d.students ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load students" });
+      toast({ variant: "destructive", title: "Unable to load students" });
     } finally {
       setIsLoadingStudents(false);
     }
@@ -87,7 +87,7 @@ export default function LabBatchesPage() {
         setSectionId(keep?.id ?? "");
         return loadStudentsOf(keep);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load students" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load students" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -184,7 +184,7 @@ export default function LabBatchesPage() {
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string; labBatches?: string[] };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Could not save the batches", description: json.error });
+        toast({ variant: "destructive", title: "Unable to save the batches", description: json.error });
         return false;
       }
       const saved = json.labBatches ?? list;
@@ -193,7 +193,7 @@ export default function LabBatchesPage() {
       setSavedVersion((v) => v + 1);
       return true;
     } catch {
-      toast({ variant: "destructive", title: "Network error - please try again" });
+      toast({ variant: "destructive", title: "Network error - try again" });
       return false;
     } finally {
       setIsSavingBatches(false);
@@ -260,7 +260,7 @@ export default function LabBatchesPage() {
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string; unassigned?: number; slotsStillUsingBatch?: number };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Could not delete the batch", description: json.error });
+        toast({ variant: "destructive", title: "Unable to delete the batch", description: json.error });
         return;
       }
       const slots = json.slotsStillUsingBatch ?? 0;
@@ -275,7 +275,7 @@ export default function LabBatchesPage() {
       setDeleteTarget(null);
       load();
     } catch {
-      toast({ variant: "destructive", title: "Network error - please try again" });
+      toast({ variant: "destructive", title: "Network error - try again" });
     } finally {
       setIsDeleting(false);
     }
@@ -297,7 +297,7 @@ export default function LabBatchesPage() {
         });
         const json = (await res.json().catch(() => ({}))) as { error?: string; updated?: number };
         if (!res.ok) {
-          toast({ variant: "destructive", title: "Could not save the changes", description: json.error });
+          toast({ variant: "destructive", title: "Unable to save the changes", description: json.error });
           return;
         }
         toast({ variant: "success", title: `Updated ${json.updated ?? pending.size} student${(json.updated ?? pending.size) === 1 ? "" : "s"}` });
@@ -306,7 +306,7 @@ export default function LabBatchesPage() {
       if (localBatches !== null && !(await persistBatches(localBatches))) return;
       load();
     } catch {
-      toast({ variant: "destructive", title: "Network error - please try again" });
+      toast({ variant: "destructive", title: "Network error - try again" });
     } finally {
       setIsSaving(false);
     }
@@ -317,7 +317,7 @@ export default function LabBatchesPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Lab Batches" description="Split your section's roster into lab sub-groups (Batch 1, Batch 2, ...)" />
+      <PageHeader title="Lab Batches" description="Divide your section's students into lab batches (Batch 1, Batch 2 and so on)." />
 
       {!isLoading && sections.length === 0 ? (
         <Card>
@@ -350,7 +350,7 @@ export default function LabBatchesPage() {
                       value={batchCount}
                       onChange={(e) => setBatchCount(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void handleSaveBatchCount(); } }}
-                      placeholder="e.g. 2"
+                      placeholder="2"
                       disabled={!selectedSection}
                     />
                     <Button type="button" onClick={() => void handleSaveBatchCount()} loading={isSavingBatches} disabled={!selectedSection || !batchCount.trim()}>
@@ -397,11 +397,11 @@ export default function LabBatchesPage() {
               {isLoading || isLoadingStudents ? (
                 <div className="h-64 bg-muted animate-pulse rounded-lg" />
               ) : !selectedSection ? (
-                <p className="text-sm text-muted-foreground text-center py-8">Select a section to get started.</p>
+                <p className="text-sm text-muted-foreground text-center py-8">Select a section to begin.</p>
               ) : (
                 <>
                   {batchOptions.length === 0 && (
-                    <p className="mb-3 text-xs text-muted-foreground">No batches yet - set the number of batches above and save.</p>
+                    <p className="mb-3 text-xs text-muted-foreground">No batches yet. Set the number of batches above and save.</p>
                   )}
                   <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                     {columns.map((col) => {

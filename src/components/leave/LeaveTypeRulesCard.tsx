@@ -46,7 +46,7 @@ export function LeaveTypeRulesCard() {
         setOverrides(settings.leaveTypeRuleOverrides ?? {});
         setWindows(settings.leaveBlackoutWindows ?? []);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load leave policy" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load leave policy" }))
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -72,11 +72,11 @@ export function LeaveTypeRulesCard() {
       });
       if (!res.ok) {
         const j = await res.json() as { error?: string };
-        throw new Error(j.error ?? "Failed to save");
+        throw new Error(j.error ?? "Unable to save");
       }
       toast({ variant: "success", title: "Leave policy saved" });
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to save" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" });
     } finally {
       setIsSaving(false);
     }
@@ -107,10 +107,7 @@ export function LeaveTypeRulesCard() {
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Leave Policy</CardTitle>
-        <CardDescription>
-          Customize each leave type&rsquo;s limits, carry-forward, half-day and reason rules for your college. Anything left
-          blank keeps the built-in default.
-        </CardDescription>
+        <CardDescription>Customise the limits, carry-forward, half-day and reason rules of each leave type for your college. Fields left blank keep the default.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <Accordion type="multiple" className="rounded-lg border">
@@ -363,10 +360,7 @@ export function LeaveTypeRulesCard() {
 
         <div className="space-y-2 border-t pt-4">
           <Label className="text-sm font-medium">Blackout windows</Label>
-          <p className="text-xs text-muted-foreground">
-            Date ranges leave can&rsquo;t be applied over (e.g. exam week). Leave &ldquo;applies to&rdquo; unset to block every
-            leave type, including &ldquo;Other&rdquo; requests.
-          </p>
+          <p className="text-xs text-muted-foreground">Date ranges during which leave cannot be applied (for example, examination week). Leave Applies To unset to block every leave type, including Other requests.</p>
           {windows.length > 0 && (
             <div className="divide-y rounded-lg border">
               {windows.map((w) => (
@@ -390,7 +384,7 @@ export function LeaveTypeRulesCard() {
             <Input type="date" value={newWindow.toDate} onChange={(e) => setNewWindow((p) => ({ ...p, toDate: e.target.value }))} />
             <Input
               className="sm:col-span-2"
-              placeholder="Reason (e.g. Exam week)"
+              placeholder="Reason (for example Exam week)"
               value={newWindow.reason}
               onChange={(e) => setNewWindow((p) => ({ ...p, reason: e.target.value }))}
             />

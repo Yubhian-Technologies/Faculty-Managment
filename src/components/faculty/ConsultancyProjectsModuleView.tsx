@@ -82,10 +82,10 @@ function ConsultancyProjectRow({
           <Field label="Status" value={project.projectStatus === "ONGOING" ? "Ongoing" : project.projectStatus === "COMPLETED" ? "Completed" : undefined} />
           <Field label={project.projectStatus === "ONGOING" ? "Tentative End Date" : "End Date"} value={project.endDate} />
           <Field label="Duration (Months)" value={project.durationMonths} />
-          <Field label="Approved Consultancy Amount (Rs.)" value={project.consultancyAmount} />
-          <Field label="Amount Received (Rs.)" value={project.amountReceived} />
-          <Field label="Institutional Share (Rs.)" value={project.institutionalShare} />
-          <Field label="Faculty Share (Rs.)" value={project.facultyShare} />
+          <Field label="Approved Consultancy Amount (₹)" value={project.consultancyAmount} />
+          <Field label="Amount Received (₹)" value={project.amountReceived} />
+          <Field label="Institutional Share (₹)" value={project.institutionalShare} />
+          <Field label="Faculty Share (₹)" value={project.facultyShare} />
         </div>
       </div>
       {project.problemStatement && (
@@ -321,13 +321,13 @@ function ProjectFormFields({
           });
       if (!res.ok) {
         const json = await res.json().catch(() => ({})) as { error?: string };
-        toast({ variant: "destructive", title: "Failed to save consultancy project", description: json.error });
+        toast({ variant: "destructive", title: "Unable to save consultancy project", description: json.error });
         return;
       }
       toast({ variant: "success", title: editingId ? "Resubmitted for verification" : "Submitted for verification" });
       onSaved();
     } catch {
-      toast({ variant: "destructive", title: "Network error. Please try again." });
+      toast({ variant: "destructive", title: "Network error. Try again." });
     } finally {
       setSaving(false);
     }
@@ -407,8 +407,8 @@ function ProjectFormFields({
         <div className="space-y-4">
           <SubLabel>Financials</SubLabel>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <NumField label="Approved Consultancy Amount (Rs.)" value={form.consultancyAmount} onChange={(v) => set("consultancyAmount", v)} />
-            <NumField label="Amount Received (Rs.)" value={form.amountReceived} onChange={(v) => set("amountReceived", v)} />
+            <NumField label="Approved Consultancy Amount (₹)" value={form.consultancyAmount} onChange={(v) => set("consultancyAmount", v)} />
+            <NumField label="Amount Received (₹)" value={form.amountReceived} onChange={(v) => set("amountReceived", v)} />
           </div>
           <DateInput label="Date of Amount Received" value={form.amountReceivedDate} onChange={(v) => set("amountReceivedDate", v)} />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -425,8 +425,8 @@ function ProjectFormFields({
             <NumField label={isOngoing ? "Tentative Total Hours Spent during Academic Hours" : "Total Hours Spent during Academic Hours"} value={form.hoursSpentDuringAcademicHours} onChange={(v) => set("hoursSpentDuringAcademicHours", v)} />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <NumField label="Institutional Share (Rs.)" value={form.institutionalShare} onChange={(v) => set("institutionalShare", v)} />
-            <NumField label="Faculty Share (Rs.)" value={form.facultyShare} onChange={(v) => set("facultyShare", v)} />
+            <NumField label="Institutional Share (₹)" value={form.institutionalShare} onChange={(v) => set("institutionalShare", v)} />
+            <NumField label="Faculty Share (₹)" value={form.facultyShare} onChange={(v) => set("facultyShare", v)} />
           </div>
         </div>
       </div>

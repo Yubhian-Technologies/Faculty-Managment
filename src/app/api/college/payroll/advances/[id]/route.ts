@@ -40,7 +40,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 300) : "";
           if (!reason) throw new PayrollRuleError("Give a reason for closing it");
           patch = { status: "CLOSED", closedNote: reason };
-          change = `Closed with Rs. ${advanceBalance(a)} unrecovered: ${reason}`;
+          change = `Closed with ₹${advanceBalance(a)} unrecovered: ${reason}`;
           break;
         }
         case "EDIT": {

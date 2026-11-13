@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     try {
       body = (await readJsonBody(request)) as typeof body;
     } catch (err) {
-      return badBodyResponse(err) ?? NextResponse.json({ error: "Invalid request" }, { status: 400 });
+      return badBodyResponse(err) ?? NextResponse.json({ error: "The request is not valid. Reload the page and try again." }, { status: 400 });
     }
 
     const parsed = parseRollMapRows(body.rows);
@@ -36,9 +36,9 @@ export async function POST(request: Request) {
     });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[students/map-roll-numbers/preview]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

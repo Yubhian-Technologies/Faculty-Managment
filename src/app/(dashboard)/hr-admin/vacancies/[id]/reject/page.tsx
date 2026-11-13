@@ -49,7 +49,7 @@ export default function RejectVacancyRequestPage() {
         setSelected(found);
       })
       .catch(() => {
-        toast({ variant: "destructive", title: "Failed to load hiring request" });
+        toast({ variant: "destructive", title: "Unable to load hiring request" });
         router.push("/hr-admin/vacancies");
       })
       .finally(() => setLoading(false));
@@ -68,7 +68,7 @@ export default function RejectVacancyRequestPage() {
         const json = await res.json() as { error?: string };
         throw new Error(json.error ?? "Failed");
       }
-      toast({ variant: "success", title: "Request Rejected", description: "Dept Head has been notified." });
+      toast({ variant: "success", title: "Request Rejected", description: "The Department Head has been notified." });
       router.push("/hr-admin/vacancies");
     } catch (err) {
       toast({ variant: "destructive", title: "Action failed", description: err instanceof Error ? err.message : undefined });

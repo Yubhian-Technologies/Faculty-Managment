@@ -105,7 +105,7 @@ export function SupportingStaffEditPage({
   const [activeTab, setActiveTab] = useState<EditTabKey>("core");
 
   const tabs: (ChromeStep & { key: EditTabKey })[] = useMemo(() => [
-    { key: "core", label: "Identity & Employment", icon: User, description: "Official ID, login email, designation and employment details" },
+    { key: "core", label: "Identity & Employment", icon: User, description: "Official ID, login email, designation and employment details." },
     ...getSupportingStaffProfileModules().map((m) => ({ key: m.key as EditTabKey, label: m.label, icon: m.icon })),
   ], []);
 
@@ -136,7 +136,7 @@ export function SupportingStaffEditPage({
         setExtraPhones((m.additionalPhoneNumbers as { label?: string; number: string }[]) ?? []);
         setPhotoUrl((m.profilePhotoUrl as string) || undefined);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load staff record" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load staff record" }))
       .finally(() => setLoading(false));
   }, [staffId, router, loadFailPath]);
 
@@ -189,7 +189,7 @@ export function SupportingStaffEditPage({
       toast({ variant: "success", title: "Staff record updated" });
       router.push(afterSavePath);
     } catch {
-      toast({ variant: "destructive", title: "Failed to update" });
+      toast({ variant: "destructive", title: "Unable to update" });
     } finally {
       setSaving(false);
     }
@@ -215,7 +215,7 @@ export function SupportingStaffEditPage({
       if (!res.ok) throw new Error();
       toast({ variant: "success", title: "Saved" });
     } catch {
-      toast({ variant: "destructive", title: "Failed to save" });
+      toast({ variant: "destructive", title: "Unable to save" });
     } finally {
       setSavingModule(null);
     }
@@ -319,7 +319,7 @@ export function SupportingStaffEditPage({
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="highestQualification">Highest Qualification *</Label>
-                  <Input id="highestQualification" value={form.highestQualification} onChange={(e) => set({ highestQualification: e.target.value })} placeholder="e.g. Diploma, B.Com, ITI" />
+                  <Input id="highestQualification" value={form.highestQualification} onChange={(e) => set({ highestQualification: e.target.value })} placeholder="Diploma, B.Com, ITI" />
                 </div>
                 <div className="space-y-2">
                   <Label>Status *</Label>
@@ -339,7 +339,7 @@ export function SupportingStaffEditPage({
                 <div className="space-y-2">
                   <Label htmlFor="joiningDate">Date of Joining *</Label>
                   <Input id="joiningDate" type="date" value={form.joiningDate} onChange={(e) => set({ joiningDate: e.target.value })} />
-                  <p className="text-xs text-muted-foreground">Total Years of Experience is calculated automatically from this date.</p>
+                  <p className="text-xs text-muted-foreground">Total years of experience is calculated from this date.</p>
                 </div>
               </div>
 
@@ -377,7 +377,7 @@ export function SupportingStaffEditPage({
                           label="Label (optional)"
                           value={item.label}
                           onChange={(v) => setExtraPhones((prev) => prev.map((p, idx) => (idx === i ? { ...p, label: v } : p)))}
-                          placeholder="e.g. Personal, WhatsApp, or a name"
+                          placeholder="Personal, WhatsApp, or a name"
                         />
                         <TextInput
                           label="Mobile Number"

@@ -43,7 +43,7 @@ export default function SuperAdminUserViewPage() {
         }
         setStaff(d.user);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load user" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load user" }))
       .finally(() => setIsLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid, collegeId, roleParam, router]);

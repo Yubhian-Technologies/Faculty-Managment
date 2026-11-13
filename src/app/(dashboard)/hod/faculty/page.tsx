@@ -235,7 +235,7 @@ function HODFacultyContent() {
         body: JSON.stringify({ deptId: removingSubHod.id, hodUid: "", hodName: "" }),
       });
       const json = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to remove Sub-HOD");
+      if (!res.ok) throw new Error(json.error ?? "Unable to remove Sub-HOD");
       toast({
         variant: "success",
         title: `${removingSubHod.hodName ?? "They"} is no longer Sub-HOD of ${removingSubHod.name}`,
@@ -247,7 +247,7 @@ function HODFacultyContent() {
         prev.map((d) => (d.id === removedId ? { ...d, hodUid: undefined, hodName: undefined } : d))
       );
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to remove Sub-HOD" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to remove Sub-HOD" });
     } finally {
       setIsRemovingSubHod(false);
     }
@@ -304,7 +304,7 @@ function HODFacultyContent() {
       const data = await res.json() as { faculty: FacultyRow[] };
       setFaculty(data.faculty ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load faculty" });
+      toast({ variant: "destructive", title: "Unable to load faculty" });
     } finally {
       setIsLoading(false);
     }
@@ -351,7 +351,7 @@ function HODFacultyContent() {
         // The API already explains exactly why (e.g. "still has active
         // teaching assignments or timetable slots" - 409) - surface that
         // instead of a blanket "failed" message that hides the real reason.
-        toast({ variant: "destructive", title: "Failed to delete faculty record", description: json.error });
+        toast({ variant: "destructive", title: "Unable to delete faculty record", description: json.error });
         return;
       }
       toast({ variant: "success", title: `${facultyDisplayName(deleteTarget)} removed from faculty register` });
@@ -364,7 +364,7 @@ function HODFacultyContent() {
       });
       void load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to delete faculty record", description: "Network error - please try again." });
+      toast({ variant: "destructive", title: "Unable to delete faculty record", description: "Network error. Try again." });
     } finally {
       setIsDeleting(false);
     }
@@ -375,7 +375,7 @@ function HODFacultyContent() {
     try {
       await downloadFacultyResume(row, collegeName, sections);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to generate resume" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to generate resume" });
     } finally {
       setDownloadingResumeId(null);
       setResumeTarget(null);
@@ -479,7 +479,7 @@ function HODFacultyContent() {
       body: JSON.stringify({ departmentId: arrangeDeptId, order }),
     });
     const json = await res.json().catch(() => ({})) as { error?: string };
-    if (!res.ok) throw new Error(json.error ?? "Failed to save the order");
+    if (!res.ok) throw new Error(json.error ?? "Unable to save the order");
   }
 
   function toggleArrange() {
@@ -514,7 +514,7 @@ function HODFacultyContent() {
     try {
       await putOrder(order);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save the order" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save the order" });
       void load();
     }
   }
@@ -524,7 +524,7 @@ function HODFacultyContent() {
       await putOrder([]);
       toast({ variant: "success", title: "Order reset to default" });
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to reset the order" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to reset the order" });
     }
     void load();
   }
@@ -818,9 +818,7 @@ function HODFacultyContent() {
         <Card>
           <CardContent className="p-4">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Sub-Department HODs</p>
-            <p className="text-xs text-muted-foreground mb-3">
-              Click a Sub-HOD to view their full faculty profile, or complete it if it hasn&apos;t been added yet.
-            </p>
+            <p className="text-xs text-muted-foreground mb-3">Select a Sub-HOD to view their faculty profile, or complete it if it has not been added.</p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {subDepartments.map((d) => {
                 const facultyId = d.hodUid ? facultyIdByUserUid.get(d.hodUid) : undefined;

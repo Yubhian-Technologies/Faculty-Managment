@@ -22,7 +22,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     const certRequest = await getRequest(db, user, id);
 
     const studentSnap = await db.collection("colleges").doc(user.collegeId).collection("students").doc(certRequest.studentId).get();
-    if (!studentSnap.exists) return NextResponse.json({ error: "Student record not found" }, { status: 404 });
+    if (!studentSnap.exists) return NextResponse.json({ error: "Student record not found. It may have been deleted." }, { status: 404 });
 
     const student = { ...(studentSnap.data() as StudentRecord), id: studentSnap.id };
     return NextResponse.json({ student });

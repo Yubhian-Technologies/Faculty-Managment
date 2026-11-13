@@ -51,7 +51,7 @@ export async function GET(
     const db = getAdminDb();
     const snap = await db.collection("colleges").doc(session.collegeId).collection("supportingStaff").doc(id).get();
     if (!snap.exists) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
     const staffData = snap.data() as { staffCategory?: SupportingStaffCategory; department?: string };
 
@@ -60,13 +60,13 @@ export async function GET(
     // SUPER_ADMIN see both, unrestricted).
     const requiredCategory = SUPPORTING_STAFF_ROLE_CATEGORY[session.role];
     if (requiredCategory && staffData.staffCategory !== requiredCategory) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
     if (session.role === "HOD" && !(await hodCanAccessStaff(db, session.collegeId, session.uid, staffData.department))) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
     if (session.role === "LIBRARY" && !libraryCanAccessStaff(staffData.department)) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
 
     return NextResponse.json({ staff: { id: snap.id, ...migrateSupportingStaffDoc(snap.data() ?? {}) } });
@@ -74,10 +74,10 @@ export async function GET(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/supporting-staff/[id] GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -143,12 +143,12 @@ export async function PATCH(
     const ref = db.collection("colleges").doc(session.collegeId).collection("supportingStaff").doc(id);
     const snap = await ref.get();
     if (!snap.exists) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
 
     const currentCategory = (snap.data() as { staffCategory?: SupportingStaffCategory }).staffCategory ?? "NON_TECHNICAL";
     if (!canRolePostCategory(session.role, currentCategory)) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
     // Category is locked to what the caller's role may touch - can't
     // reassign a record into another role's territory via edit.
@@ -158,19 +158,19 @@ export async function PATCH(
     if (session.role === "HOD") {
       const staffDept = (snap.data() as { department?: string }).department;
       if (!(await hodCanAccessStaff(db, session.collegeId, session.uid, staffDept))) {
-        return NextResponse.json({ error: "Not found" }, { status: 404 });
+        return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
       }
       if (body.department !== undefined) {
         const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
         if (!canHodManageFacultyDepartment(scope, body.department)) {
-          return NextResponse.json({ error: "That department is not yours or one of your sub-departments" }, { status: 403 });
+          return NextResponse.json({ error: "This department is not yours or one of your sub-departments." }, { status: 403 });
         }
       }
     }
     if (session.role === "LIBRARY") {
       const staffDept = (snap.data() as { department?: string }).department;
       if (!libraryCanAccessStaff(staffDept)) {
-        return NextResponse.json({ error: "Not found" }, { status: 404 });
+        return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
       }
       // Can't move a Library staff record out of Library via edit.
       if (body.department !== undefined && body.department !== unitLabelForHeadRole("LIBRARY")) {
@@ -193,7 +193,7 @@ export async function PATCH(
         ![id, staffUserUid].filter(Boolean).some((owner) =>
           body.profilePhotoUrl!.includes(encodeURIComponent(`profile-photos/${owner}_`))))
     ) {
-      return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
+      return NextResponse.json({ error: "The photo link is not valid. Upload the photo again." }, { status: 400 });
     }
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
@@ -361,10 +361,10 @@ export async function PATCH(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/supporting-staff/[id] PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -380,18 +380,18 @@ export async function DELETE(
     const ref = db.collection("colleges").doc(session.collegeId).collection("supportingStaff").doc(id);
     const snap = await ref.get();
     if (!snap.exists) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
     const staffData = migrateSupportingStaffDoc(snap.data() ?? {}) as { nameAsPerPan?: string; legalName?: string; userUid?: string; staffCategory?: SupportingStaffCategory; department?: string };
 
     if (!canRolePostCategory(session.role, staffData.staffCategory ?? "NON_TECHNICAL")) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
     if (session.role === "HOD" && !(await hodCanAccessStaff(db, session.collegeId, session.uid, staffData.department))) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
     if (session.role === "LIBRARY" && !libraryCanAccessStaff(staffData.department)) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
 
     await ref.delete();
@@ -423,9 +423,9 @@ export async function DELETE(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/supporting-staff/[id] DELETE]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

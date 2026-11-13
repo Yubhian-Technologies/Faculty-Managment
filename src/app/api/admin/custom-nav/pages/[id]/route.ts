@@ -20,14 +20,14 @@ export async function GET(request: Request, { params }: Ctx) {
     await requireSuperAdmin();
     const { id } = await params;
     const collegeId = collegeIdOf(request);
-    if (!collegeId) return NextResponse.json({ error: "collegeId is required" }, { status: 400 });
+    if (!collegeId) return NextResponse.json({ error: "Select a college." }, { status: 400 });
     const snap = await pageRef(getAdminDb(), collegeId, id).get();
-    if (!snap.exists) return NextResponse.json({ error: "Page not found" }, { status: 404 });
+    if (!snap.exists) return NextResponse.json({ error: "Page not found. It may have been deleted." }, { status: 404 });
     return NextResponse.json({ page: serializePage(snap.id, snap.data()!) });
   } catch (err) {
-    if (err instanceof Error && err.message === "UNAUTHORIZED") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (err instanceof Error && err.message === "UNAUTHORIZED") return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     console.error("[admin/custom-nav/pages/[id] GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -37,13 +37,13 @@ export async function PUT(request: Request, { params }: Ctx) {
     const session = await requireSuperAdmin();
     const { id } = await params;
     const collegeId = collegeIdOf(request);
-    if (!collegeId) return NextResponse.json({ error: "collegeId is required" }, { status: 400 });
+    if (!collegeId) return NextResponse.json({ error: "Select a college." }, { status: 400 });
     const parsed = pageUpdateSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid page" }, { status: 400 });
 
     const db = getAdminDb();
     const ref = pageRef(db, collegeId, id);
-    if (!(await ref.get()).exists) return NextResponse.json({ error: "Page not found" }, { status: 404 });
+    if (!(await ref.get()).exists) return NextResponse.json({ error: "Page not found. It may have been deleted." }, { status: 404 });
     const now = new Date();
     await ref.set({ ...parsed.data, section: parsed.data.section ?? null, collegeId, updatedAt: now, updatedByName: session.email || "Super Admin" }, { merge: true });
     await db.collection("auditLogs").add({
@@ -52,9 +52,9 @@ export async function PUT(request: Request, { params }: Ctx) {
     });
     return NextResponse.json({ success: true });
   } catch (err) {
-    if (err instanceof Error && err.message === "UNAUTHORIZED") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (err instanceof Error && err.message === "UNAUTHORIZED") return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     console.error("[admin/custom-nav/pages/[id] PUT]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -65,12 +65,12 @@ export async function DELETE(request: Request, { params }: Ctx) {
     const session = await requireSuperAdmin();
     const { id } = await params;
     const collegeId = collegeIdOf(request);
-    if (!collegeId) return NextResponse.json({ error: "collegeId is required" }, { status: 400 });
+    if (!collegeId) return NextResponse.json({ error: "Select a college." }, { status: 400 });
 
     const db = getAdminDb();
     const ref = pageRef(db, collegeId, id);
     const snap = await ref.get();
-    if (!snap.exists) return NextResponse.json({ error: "Page not found" }, { status: 404 });
+    if (!snap.exists) return NextResponse.json({ error: "Page not found. It may have been deleted." }, { status: 404 });
 
     const href = customPageHref(id);
     const roles = Object.keys(ROLE_LABELS);
@@ -96,8 +96,8 @@ export async function DELETE(request: Request, { params }: Ctx) {
     });
     return NextResponse.json({ success: true });
   } catch (err) {
-    if (err instanceof Error && err.message === "UNAUTHORIZED") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (err instanceof Error && err.message === "UNAUTHORIZED") return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     console.error("[admin/custom-nav/pages/[id] DELETE]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

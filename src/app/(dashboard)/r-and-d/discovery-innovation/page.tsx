@@ -42,7 +42,7 @@ export default function RAndDDiscoveryInnovationPage() {
       const data = await res.json() as { records: DiscoveryInnovationRow[] };
       setRecords(data.records ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load IPR records" });
+      toast({ variant: "destructive", title: "Unable to load IPR records" });
     } finally {
       setIsLoading(false);
     }
@@ -62,7 +62,7 @@ export default function RAndDDiscoveryInnovationPage() {
       setDeleteTarget(null);
       await load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to delete IPR record" });
+      toast({ variant: "destructive", title: "Unable to delete IPR record" });
     } finally {
       setDeleting(false);
     }
@@ -80,7 +80,7 @@ export default function RAndDDiscoveryInnovationPage() {
       toast({ variant: "success", title: "IPR record approved" });
       await load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to approve IPR record" });
+      toast({ variant: "destructive", title: "Unable to approve IPR record" });
     } finally {
       setApproving(null);
     }
@@ -101,7 +101,7 @@ export default function RAndDDiscoveryInnovationPage() {
       setRejectReason("");
       await load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to reject IPR record" });
+      toast({ variant: "destructive", title: "Unable to reject IPR record" });
     } finally {
       setRejecting(false);
     }
@@ -182,7 +182,7 @@ export default function RAndDDiscoveryInnovationPage() {
     <div className="space-y-6">
       <PageHeader
         title="Discovery & Innovation (IPR)"
-        description="Verify staff-submitted IPR records"
+        description="Verify IPR records submitted by staff."
       />
 
       <div className="flex gap-2 border-b">

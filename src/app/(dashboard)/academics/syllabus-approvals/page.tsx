@@ -33,8 +33,8 @@ export default function SyllabusApprovalsPage() {
 
   useEffect(() => {
     fetch("/api/college/syllabus-approvals")
-      .then(async (r) => { const d = (await r.json()) as { items?: Item[]; error?: string }; if (!r.ok) throw new Error(d.error ?? "Failed to load"); setItems(d.items ?? []); })
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load"));
+      .then(async (r) => { const d = (await r.json()) as { items?: Item[]; error?: string }; if (!r.ok) throw new Error(d.error ?? "Unable to load"); setItems(d.items ?? []); })
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Unable to load"));
   }, []);
 
   const count = (k: SubjectSyllabusStatus) => (items ?? []).filter((i) => i.status === k).length;
@@ -42,7 +42,7 @@ export default function SyllabusApprovalsPage() {
 
   return (
     <div className="max-w-5xl space-y-6">
-      <PageHeader title="Syllabus Approvals" description="The HODs prepare each subject's syllabus (units, COs, CO-PO mapping) and submit it here. Freeze it, or return it with remarks. Once frozen only you can change it, and every change is recorded." />
+      <PageHeader title="Syllabus Approvals" description="HODs prepare each subject's syllabus (units, COs and CO-PO mapping) and submit it here for approval. Freeze it or return it with remarks. A frozen syllabus can be changed only by Academics, and every change is recorded." />
       {error && <p className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive" role="alert">{error}</p>}
 
       <div className="flex flex-wrap gap-2" role="tablist">

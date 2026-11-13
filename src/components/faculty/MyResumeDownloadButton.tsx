@@ -79,7 +79,7 @@ export function MyResumeDownloadButton() {
       );
       setOpen(false);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to generate resume" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to generate resume" });
     } finally {
       setDownloading(false);
     }

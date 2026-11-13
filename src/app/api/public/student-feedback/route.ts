@@ -18,7 +18,7 @@ export async function GET(request: Request) {
     .collection("colleges").doc(collegeId)
     .collection("hiringBatches").doc(batchId)
     .get();
-  if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!snap.exists) return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
   return NextResponse.json({ demoComplete: snap.get("demoComplete") === true });
 }
 
@@ -26,7 +26,7 @@ export async function POST(request: Request) {
 
   const limited = rateLimit(`student-feedback:${clientIp(request)}`, 60, 3600000);
   if (!limited.ok) {
-    return NextResponse.json({ error: "Too many requests - please try again later" }, { status: 429, headers: { "Retry-After": String(limited.retryAfterSeconds) } });
+    return NextResponse.json({ error: "Too many requests. Wait a moment and try again." }, { status: 429, headers: { "Retry-After": String(limited.retryAfterSeconds) } });
   }
   try {
     const body = (await readJsonBody(request)) as {
@@ -60,7 +60,7 @@ export async function POST(request: Request) {
     const batchRef = db.collection("colleges").doc(collegeId).collection("hiringBatches").doc(batchId);
     const batchSnap = await batchRef.get();
     if (!batchSnap.exists) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
     if (batchSnap.get("demoComplete") === true) {
       return NextResponse.json({ error: "Demo class is complete; feedback is closed." }, { status: 403 });
@@ -96,6 +96,6 @@ export async function POST(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     console.error("[public/student-feedback POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

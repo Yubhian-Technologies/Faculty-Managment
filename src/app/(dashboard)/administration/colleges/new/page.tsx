@@ -36,7 +36,7 @@ export default function NewAdministrationCollegePage() {
       });
       const json = await res.json() as { collegeId?: string; error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to create college", description: json.error });
+        toast({ variant: "destructive", title: "Unable to create college", description: json.error });
         return;
       }
       toast({ variant: "success", title: "College created" });
@@ -50,7 +50,7 @@ export default function NewAdministrationCollegePage() {
 
   return (
     <div className="max-w-xl">
-      <PageHeader title="Add New College" description="Register a new institution in this location" />
+      <PageHeader title="Add New College" description="Register a new institution under this location." />
 
       <Card>
         <CardHeader>
@@ -63,7 +63,7 @@ export default function NewAdministrationCollegePage() {
               <Input
                 value={collegeForm.name}
                 onChange={(e) => set({ name: e.target.value })}
-                placeholder="e.g. Vishnu Institute of Technology"
+                placeholder="Vishnu Institute of Technology"
               />
             </div>
             <div className="space-y-2">

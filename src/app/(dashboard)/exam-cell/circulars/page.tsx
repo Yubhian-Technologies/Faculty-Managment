@@ -29,10 +29,10 @@ export default function ExamCellCircularsPage() {
     try {
       const res = await fetch("/api/college/exam-circulars");
       const data = (await res.json()) as { circulars?: ExamCircular[]; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to load");
+      if (!res.ok) throw new Error(data.error ?? "Unable to load");
       setCirculars(data.circulars ?? []);
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to load circulars" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to load circulars" });
     } finally {
       setIsLoading(false);
     }
@@ -45,7 +45,7 @@ export default function ExamCellCircularsPage() {
     const res = await fetch(`/api/college/exam-circulars/${deleteTarget.id}`, { method: "DELETE" });
     const data = (await res.json()) as { error?: string };
     if (!res.ok) {
-      toast({ variant: "destructive", title: data.error ?? "Failed to delete" });
+      toast({ variant: "destructive", title: data.error ?? "Unable to delete" });
       return;
     }
     toast({ variant: "success", title: "Circular removed" });
@@ -57,7 +57,7 @@ export default function ExamCellCircularsPage() {
     <div className="max-w-4xl space-y-6">
       <PageHeader
         title="Circulars"
-        description="Upload a PDF/Word notice as-is, or share a short structured notice typed in directly - both land in the same list below, newest first."
+        description="Upload a PDF or Word notice as it is, or type a short structured notice. Both appear in the list below, newest first."
         actions={
           <>
             <Button variant="outline" onClick={() => setUploadOpen(true)}><Upload className="h-4 w-4 mr-2" />Upload Circular</Button>
@@ -72,7 +72,7 @@ export default function ExamCellCircularsPage() {
         <Card>
           <CardContent className="py-10 text-center space-y-1">
             <p className="text-sm text-muted-foreground">No circulars uploaded yet.</p>
-            <p className="text-xs text-muted-foreground">Upload a PDF or Word file to get started.</p>
+            <p className="text-xs text-muted-foreground">Upload a PDF or Word file to begin.</p>
           </CardContent>
         </Card>
       ) : (
@@ -88,7 +88,7 @@ export default function ExamCellCircularsPage() {
                       <p className="text-sm font-semibold truncate">{c.title}</p>
                       {isNotice ? (
                         <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                          <Badge variant="outline" className="text-[10px]">{c.courseName} · Sem {c.semester}/{c.totalSemesters}</Badge>
+                          <Badge variant="outline" className="text-[10px]">{c.courseName} · Semester {c.semester}/{c.totalSemesters}</Badge>
                           <span className="inline-flex items-center gap-1"><CalendarClock className="h-3 w-3" />{c.noticeDate ? formatDMY(c.noticeDate) : "-"}</span>
                           <span>· {c.createdByName} · shared {formatDate(c.createdAt)}</span>
                         </p>
@@ -195,12 +195,12 @@ function UploadDialog({ open, onClose, onDone }: { open: boolean; onClose: () =>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Upload Circular</DialogTitle>
-          <DialogDescription>Shown exactly as uploaded - no text extraction.</DialogDescription>
+          <DialogDescription>Shown exactly as uploaded, without text extraction.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-2">
             <Label>Title <span className="font-normal text-muted-foreground">(optional, defaults to the file name)</span></Label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Revised Exam Timetable" disabled={busy} />
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Revised Exam Timetable" disabled={busy} />
           </div>
           <div className="space-y-2">
             <Label>File (PDF or Word .docx, max 10 MB)</Label>
@@ -255,12 +255,12 @@ function EditTitleDialog({
         body: JSON.stringify({ title: title.trim() }),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to save");
+      if (!res.ok) throw new Error(data.error ?? "Unable to save");
       toast({ variant: "success", title: "Circular updated" });
       onClose();
       await onDone();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save" });
     } finally {
       setBusy(false);
     }
@@ -271,7 +271,7 @@ function EditTitleDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Edit Circular Title</DialogTitle>
-          <DialogDescription>Renaming only - re-upload to replace the file itself.</DialogDescription>
+          <DialogDescription>This changes only the name. Upload the file again to replace it.</DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
           <Label>Title</Label>
@@ -323,7 +323,7 @@ function NoticeFormDialog({
         const data = (await res.json()) as { courses?: Course[] };
         setCourses(data.courses ?? []);
       } catch {
-        toast({ variant: "destructive", title: "Failed to load courses" });
+        toast({ variant: "destructive", title: "Unable to load courses" });
       }
     })();
   }, [open]);
@@ -376,13 +376,13 @@ function NoticeFormDialog({
         body: JSON.stringify(payload),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to save");
+      if (!res.ok) throw new Error(data.error ?? "Unable to save");
       toast({ variant: "success", title: circular ? "Circular updated" : "Circular shared" });
       if (!circular) reset();
       onClose();
       await onDone();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save" });
     } finally {
       setBusy(false);
     }
@@ -424,7 +424,7 @@ function NoticeFormDialog({
           </div>
           <div className="space-y-2">
             <Label>Subject <span className="font-normal text-muted-foreground">(the circular&apos;s own heading, not a course subject)</span></Label>
-            <Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="e.g. Revised Timetable for Mid-Semester Exams" disabled={busy} />
+            <Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Revised Timetable for Mid-Semester Exams" disabled={busy} />
           </div>
           <div className="space-y-2 sm:col-span-2">
             <Label>Body</Label>

@@ -26,6 +26,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
     });
   } catch (err) {
     console.error("[public/certificate-verify GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

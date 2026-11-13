@@ -87,7 +87,7 @@ export default function IncidentReportPage() {
         const configured = (yearsRes.academicYears ?? []).map((y) => y.yearNumber).filter(Boolean);
         setYears(selectableYears(configured, loadedCourses));
       } catch {
-        toast({ variant: "destructive", title: "Failed to load filter options" });
+        toast({ variant: "destructive", title: "Unable to load filter options" });
       }
     })();
   }, []);
@@ -98,12 +98,12 @@ export default function IncidentReportPage() {
       const res = await fetch("/api/college/incident-reports");
       const json = await res.json() as { reports?: IncidentReport[]; error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to load incident reports" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to load incident reports" });
         return;
       }
       setReports(json.reports ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load incident reports" });
+      toast({ variant: "destructive", title: "Unable to load incident reports" });
     } finally {
       setHistoryLoading(false);
     }
@@ -170,14 +170,14 @@ export default function IncidentReportPage() {
       });
       const json = await res.json().catch(() => ({})) as { id?: string; error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to save incident report" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to save incident report" });
         return;
       }
       toast({ variant: "success", title: "Incident report saved" });
       reset();
       setReports(null); // History re-reads on next open
     } catch {
-      toast({ variant: "destructive", title: "Failed to save incident report" });
+      toast({ variant: "destructive", title: "Unable to save incident report" });
     } finally {
       setIsSaving(false);
     }
@@ -231,7 +231,7 @@ export default function IncidentReportPage() {
                 {errors.description && <p className="text-xs text-destructive" role="alert">{errors.description}</p>}
               </div>
               <div className="space-y-3">
-                <p className="text-sm text-muted-foreground">Choose the category to get started. You can pick both.</p>
+                <p className="text-sm text-muted-foreground">Choose a category to begin. You can select both.</p>
                 <div className="grid gap-4 sm:grid-cols-2" role="group" aria-label="Affected category">
                   {([
                     { label: "Student", Icon: GraduationCap, on: includeStudents, toggle: toggleStudents },
@@ -338,7 +338,7 @@ export default function IncidentReportPage() {
             <>
               <DialogHeader>
                 <DialogTitle>{openReport.title}</DialogTitle>
-                <DialogDescription>Incident report</DialogDescription>
+                <DialogDescription>Incident Report</DialogDescription>
               </DialogHeader>
               <dl className="grid gap-3 text-sm sm:grid-cols-3">
                 <div><dt className="text-xs text-muted-foreground">Incident Date</dt><dd className="font-medium">{formatIncidentDate(openReport.incidentDate)}</dd></div>

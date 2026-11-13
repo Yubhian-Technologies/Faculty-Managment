@@ -239,7 +239,7 @@ function HodStudentsContent() {
       setMetaDepartmentNames(metaRes.departmentNames ?? []);
       setFreshmanDeptOptions(metaRes.freshmanDepartments ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load students" });
+      toast({ variant: "destructive", title: "Unable to load students" });
     } finally {
       setIsLoading(false);
     }
@@ -252,7 +252,7 @@ function HodStudentsContent() {
       setSections(res.sections ?? []);
       sectionsLoaded.current = true;
     } catch {
-      toast({ variant: "destructive", title: "Failed to load sections" });
+      toast({ variant: "destructive", title: "Unable to load sections" });
     }
   }
 
@@ -297,7 +297,7 @@ function HodStudentsContent() {
       const json = await res.json() as { students?: StudentRow[]; total?: number; unassignedTotal?: number; orderedIds?: string[]; page?: number; error?: string };
       if (seq !== requestSeq.current) return; // a newer search/filter/refresh superseded this one
       if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to load students" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to load students" });
         return;
       }
       const rows = json.students ?? [];
@@ -309,7 +309,7 @@ function HodStudentsContent() {
       setPage(json.page ?? targetPage);
       restorePageRef.current = 1;
     } catch {
-      if (seq === requestSeq.current) toast({ variant: "destructive", title: "Failed to load students" });
+      if (seq === requestSeq.current) toast({ variant: "destructive", title: "Unable to load students" });
     } finally {
       if (seq === requestSeq.current) setIsFetching(false);
     }
@@ -356,12 +356,12 @@ function HodStudentsContent() {
         const json = await res.json() as { students?: StudentRow[]; error?: string };
         if (seq !== requestSeq.current) return;
         if (!res.ok) {
-          toast({ variant: "destructive", title: json.error ?? "Failed to load students" });
+          toast({ variant: "destructive", title: json.error ?? "Unable to load students" });
           return;
         }
         for (const r of json.students ?? []) rowCache.current.set(r.id, r);
       } catch {
-        if (seq === requestSeq.current) toast({ variant: "destructive", title: "Failed to load students" });
+        if (seq === requestSeq.current) toast({ variant: "destructive", title: "Unable to load students" });
         return;
       } finally {
         if (seq === requestSeq.current) setIsFetching(false);
@@ -430,10 +430,10 @@ function HodStudentsContent() {
     try {
       const res = await fetch("/api/college/students?selectAll=1&unassigned=1");
       const json = await res.json() as { students?: StudentRow[]; error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to load unassigned students");
+      if (!res.ok) throw new Error(json.error ?? "Unable to load unassigned students");
       setUnassignedStudents(json.students ?? []);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to load unassigned students" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to load unassigned students" });
     } finally {
       setIsCohortLoading(false);
     }
@@ -826,7 +826,7 @@ function HodStudentsContent() {
     for (const [k, v] of Object.entries(extra)) params.set(k, v);
     const res = await fetch(`/api/college/students?${params.toString()}`);
     const json = await res.json() as { students?: StudentRow[]; truncated?: boolean; error?: string };
-    if (!res.ok) throw new Error(json.error ?? "Failed to load students");
+    if (!res.ok) throw new Error(json.error ?? "Unable to load students");
     return { students: json.students ?? [], truncated: !!json.truncated };
   }
 
@@ -843,7 +843,7 @@ function HodStudentsContent() {
           : `${matches.length} unassigned student${matches.length === 1 ? "" : "s"} selected`,
       });
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to select students" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to select students" });
     } finally {
       setIsSelecting(false);
     }
@@ -874,7 +874,7 @@ function HodStudentsContent() {
           : `${matches.length} student${matches.length === 1 ? "" : "s"} selected (Regd. No ${lo} - ${hi})`,
       });
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to select students" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to select students" });
     } finally {
       setIsSelecting(false);
     }
@@ -901,7 +901,7 @@ function HodStudentsContent() {
       const plan = await requestBulk(mode === "unassign" ? { unassign: true, dryRun: true } : { targetSectionId: sectionId, dryRun: true });
       setBulkPlan(plan);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to preview" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to preview" });
     } finally {
       setIsPreviewing(false);
     }
@@ -937,7 +937,7 @@ function HodStudentsContent() {
       closeBulk();
       void reload();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to move students" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to move students" });
     } finally {
       setIsBulkApplying(false);
     }
@@ -1021,13 +1021,13 @@ function HodStudentsContent() {
         body: JSON.stringify({ targetSectionId: assignSectionId }),
       });
       const json = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to assign section");
+      if (!res.ok) throw new Error(json.error ?? "Unable to assign section");
       toast({ variant: "success", title: `${assignTarget.name} assigned` });
       dropFromSelection(assignTarget.id);
       setAssignTarget(null);
       void reload();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to assign section" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to assign section" });
     } finally {
       setIsAssigning(false);
     }
@@ -1046,13 +1046,13 @@ function HodStudentsContent() {
         body: JSON.stringify({ unassign: true }),
       });
       const json = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to unassign");
+      if (!res.ok) throw new Error(json.error ?? "Unable to unassign");
       toast({ variant: "success", title: `${assignTarget.name} unassigned` });
       dropFromSelection(assignTarget.id);
       setAssignTarget(null);
       void reload();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to unassign" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to unassign" });
     } finally {
       setIsUnassigning(false);
     }
@@ -1068,14 +1068,14 @@ function HodStudentsContent() {
         body: JSON.stringify({ rollNumber: editRoll.trim(), status: editStatus, labBatch: editLabBatch.trim() }),
       });
       const json = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to update student");
+      if (!res.ok) throw new Error(json.error ?? "Unable to update student");
       toast({ variant: "success", title: "Student updated" });
       labBatchCache.current.delete(`${editTarget.department}|${editTarget.section}|${editTarget.year}`);
       dropFromSelection(editTarget.id);
       setEditTarget(null);
       void reload();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to update student" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to update student" });
     } finally {
       setIsSavingEdit(false);
     }
@@ -1113,7 +1113,7 @@ function HodStudentsContent() {
             }`
           );
         }
-        throw new Error(json.error ?? "Failed to distribute");
+        throw new Error(json.error ?? "Unable to distribute");
       }
       const summary = (json.sections ?? []).map((s) => `${s.sectionName}: ${s.studentCount}`).join(", ");
       toast({ variant: "success", title: `Distributed ${json.moved} students`, description: summary });
@@ -1123,7 +1123,7 @@ function HodStudentsContent() {
       setSelectedRows(new Map());
       void reload();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to distribute" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to distribute" });
     } finally {
       setIsDistributing(false);
     }
@@ -1218,7 +1218,7 @@ function HodStudentsContent() {
           <Button variant="ghost" size="sm" onClick={() => openAssign(r)} title={r.section ? "Move to a different section" : "Assign to a section"}>
             <ArrowRightLeft className="h-3.5 w-3.5" />
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => openEdit(r)} title="Set Regd. No / status / lab batch">
+          <Button variant="ghost" size="sm" onClick={() => openEdit(r)} title="Set Regd. No, status and lab batch">
             <Pencil className="h-3.5 w-3.5" />
           </Button>
         </div>
@@ -1234,7 +1234,7 @@ function HodStudentsContent() {
   const studentsHeader = (
     <PageHeader
       title="Students"
-      description="View and manage student records across your department and its associated branches."
+      description="View and manage the student records of your department and its associated branches."
       actions={<StudentsViewTabs tabs={HOD_VIEWS} value={view} onChange={setView} />}
     />
   );
@@ -1367,9 +1367,7 @@ function HodStudentsContent() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">
-                    This department has unassigned students declared for more than one course - pick which one to distribute.
-                  </p>
+                  <p className="text-xs text-muted-foreground">This department has unassigned students in more than one course. Choose the course to distribute.</p>
                 </div>
               )}
 
@@ -1563,9 +1561,7 @@ function HodStudentsContent() {
           <div className="flex flex-col items-center justify-center py-20 text-center border rounded-lg bg-card">
             <Users className="h-10 w-10 text-muted-foreground mb-3" />
             <p className="font-medium text-base">No Student Records Loaded</p>
-            <p className="text-sm text-muted-foreground mt-1 max-w-sm">
-              Select the required filters and click Load to view student records.
-            </p>
+            <p className="text-sm text-muted-foreground mt-1 max-w-sm">Select the filters and choose Load to view student records.</p>
           </div>
         ) : isFetching && students.length === 0 ? (
           <TableSkeleton rows={5} cols={visibleColumns.length} />
@@ -1685,7 +1681,7 @@ function HodStudentsContent() {
                   </p>
                 ) : bulkTargetSections.length === 0 ? (
                   <p className="text-xs text-amber-600">
-                    No section can take all of the selected students - they may belong to different branches, or no section exists yet for them. Select students of one branch, or create the section first.
+                    No section can take all the selected students; they may belong to different branches, or no section exists for them yet. Select students of one branch, or create the section first.
                   </p>
                 ) : null}
               </div>
@@ -1720,7 +1716,7 @@ function HodStudentsContent() {
                   </div>
                 )}
                 {bulkPlan.skipped.length > 0 && bulkPlan.moves.length > 0 && (
-                  <p className="text-xs text-muted-foreground">Skipped students are left exactly as they are.</p>
+                  <p className="text-xs text-muted-foreground">Skipped students are not changed.</p>
                 )}
               </div>
             )}

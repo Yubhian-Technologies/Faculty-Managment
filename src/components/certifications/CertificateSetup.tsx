@@ -102,7 +102,7 @@ function TypeEditor({ initial, id, templates, signatures, staff, college, onClos
   async function save() {
     setBusy(true);
     try { await saveType(t, id); toast({ variant: "success", title: "Saved" }); onSaved(); }
-    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't save" }); }
+    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" }); }
     finally { setBusy(false); }
   }
 
@@ -129,7 +129,7 @@ function TypeEditor({ initial, id, templates, signatures, staff, college, onClos
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="STUDENT">The student applies</SelectItem>
-                  <SelectItem value="OFFICE">The College Office starts it for classes (e.g. No Dues)</SelectItem>
+                  <SelectItem value="OFFICE">The College Office starts it for classes (for example, No Dues)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -194,7 +194,7 @@ function TypeEditor({ initial, id, templates, signatures, staff, college, onClos
                 <Input id="ct-number" value={t.numberFormat ?? ""} onChange={(e) => set("numberFormat", e.target.value)} />
                 <p className="text-xs text-muted-foreground">{"{CODE} {YYYY} {AY} {SEQ}"} - e.g. {sampleNo}</p>
               </div>
-              <div className="space-y-1.5"><Label htmlFor="ct-fee">Fee (Rs., 0 = free)</Label>
+              <div className="space-y-1.5"><Label htmlFor="ct-fee">Fee (₹; 0 = free)</Label>
                 <Input id="ct-fee" type="number" min={0} value={t.feeAmount ?? 0} onChange={(e) => set("feeAmount", Number(e.target.value))} />
               </div>
               <div className="space-y-1.5"><Label>Delivery</Label>
@@ -243,7 +243,7 @@ function TemplateEditor({ initial, id, signature, college, onClose, onSaved }: {
   async function save() {
     setBusy(true);
     try { await saveTemplate({ ...t, kind }, id); toast({ variant: "success", title: "Template saved" }); onSaved(); }
-    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't save" }); }
+    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" }); }
     finally { setBusy(false); }
   }
   const insert = (key: string) => set("body", `${t.body ?? ""}{{${key}}}`);
@@ -283,7 +283,7 @@ function TemplateEditor({ initial, id, signature, college, onClose, onSaved }: {
               <div className="space-y-1.5">
                 <Label htmlFor="tp-body">{kind === "MARKS" ? "Text above the marks (optional)" : "Certificate text *"}</Label>
                 <Textarea id="tp-body" rows={9} value={t.body ?? ""} onChange={(e) => set("body", e.target.value)} />
-                <p className="text-xs text-muted-foreground">A blank line starts a new paragraph. Click a value to add it:</p>
+                <p className="text-xs text-muted-foreground">A blank line starts a new paragraph. Select a value to insert it:</p>
                 {PLACEHOLDER_GROUPS.map((g) => (
                   <div key={g.title} className="flex flex-wrap gap-1">
                     {g.items.map((i) => <button key={i.key} type="button" onClick={() => insert(i.key)} className="rounded border px-1.5 py-0.5 text-xs hover:bg-muted" title={`{{${i.key}}}`}>{i.label}</button>)}
@@ -309,7 +309,7 @@ function TemplateEditor({ initial, id, signature, college, onClose, onSaved }: {
               <div className="space-y-1.5"><Label htmlFor="tp-footer">Note below (optional)</Label><Textarea id="tp-footer" rows={2} value={t.footer ?? ""} onChange={(e) => set("footer", e.target.value)} /></div>
             )}
             {kind !== "UPLOAD" && (
-              <label className="flex items-center gap-2 text-sm"><Checkbox checked={t.showClearances === true} onCheckedChange={(c) => set("showClearances", c === true)} /> Print every department&apos;s clearance as a table (No Dues)</label>
+              <label className="flex items-center gap-2 text-sm"><Checkbox checked={t.showClearances === true} onCheckedChange={(c) => set("showClearances", c === true)} /> Print each department&apos;s clearance as a table (No Dues)</label>
             )}
             <label className="flex items-center gap-2 text-sm"><Checkbox checked={t.showQr !== false} onCheckedChange={(c) => set("showQr", c === true)} /> Print the QR verification code</label>
           </div>
@@ -340,12 +340,12 @@ function SignaturesEditor({ settings, canEdit, onSaved }: { settings: Certificat
   async function save() {
     setBusy(true);
     try { await saveSignatures(list); toast({ variant: "success", title: "Signatures saved" }); onSaved(); }
-    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't save" }); }
+    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" }); }
     finally { setBusy(false); }
   }
   return (
     <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">The signature printed on certificates. A certificate type picks one; the first is used otherwise. Use a PNG with a transparent background (max 512 KB).</p>
+      <p className="text-sm text-muted-foreground">The signature printed on certificates. Each certificate type selects one; otherwise the first is used. Use a PNG with a transparent background (up to 512 KB).</p>
       {list.map((s, i) => (
         <Card key={s.id}><CardContent className="p-3 flex flex-wrap items-center gap-3">
           <div className="flex h-14 w-40 items-center justify-center rounded border bg-white">
@@ -384,7 +384,7 @@ export function CertificateSetup({ canEdit }: { canEdit: boolean }) {
 
   const load = useCallback(async () => {
     try { setData(await loadSetup()); }
-    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't load setup" }); }
+    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to load setup" }); }
   }, []);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { if (canEdit) loadStaff().then(setStaff).catch(() => setStaff([])); }, [canEdit]);
@@ -402,7 +402,7 @@ export function CertificateSetup({ canEdit }: { canEdit: boolean }) {
       const { added } = await installCatalog();
       toast({ variant: "success", title: added.types || added.templates ? `Added ${added.types} certificates and ${added.templates} templates` : "Everything in the starter list is already installed" });
       load();
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't install" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to install" }); }
     finally { setBusy(""); }
   }
 
@@ -410,14 +410,14 @@ export function CertificateSetup({ canEdit }: { canEdit: boolean }) {
     if (!window.confirm(`Put "${t.name}" and its template back to the starter version? Your edits to them are replaced.`)) return;
     setBusy(`reset:${t.id}`);
     try { await resetType(t.id); toast({ variant: "success", title: "Reset to the starter version" }); load(); }
-    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't reset" }); }
+    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to reset" }); }
     finally { setBusy(""); }
   }
 
   async function toggle(t: SetupType, on: boolean) {
     setBusy(t.id);
     try { await saveType({ ...t, isActive: on }, t.id); load(); }
-    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't change it" }); }
+    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to change it" }); }
     finally { setBusy(""); }
   }
 
@@ -427,7 +427,7 @@ export function CertificateSetup({ canEdit }: { canEdit: boolean }) {
     try {
       if (deleting.kind === "type") await deleteType(deleting.id); else await deleteTemplate(deleting.id);
       toast({ variant: "success", title: "Deleted" }); setDeleting(null); load();
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't delete" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to delete" }); }
     finally { setBusy(""); }
   }
 
@@ -470,12 +470,12 @@ export function CertificateSetup({ canEdit }: { canEdit: boolean }) {
                         {" → issued by "}{recipientLabel(t.issuer)} · {templateName.get(t.templateId) ?? "no template"}{t.startedBy === "OFFICE" ? " · started by the College Office" : ""}
                       </p>
                     </div>
-                    {t.feeAmount > 0 && <Badge variant="secondary">Rs. {t.feeAmount}</Badge>}
+                    {t.feeAmount > 0 && <Badge variant="secondary">₹{t.feeAmount}</Badge>}
                     {t.onceOnly && <Badge variant="outline">Once</Badge>}
                     {canEdit && (
                       <div className="flex gap-1">
                         <Button size="sm" variant="ghost" onClick={() => setEditingType({ initial: t, id: t.id })}><Pencil className="h-4 w-4 mr-1" /> Edit</Button>
-                        {!t.inUse && t.catalogKey && <Button size="sm" variant="ghost" loading={busy === `reset:${t.id}`} onClick={() => reset(t)} title="Put this certificate and its template back to the starter version">Reset</Button>}
+                        {!t.inUse && t.catalogKey && <Button size="sm" variant="ghost" loading={busy === `reset:${t.id}`} onClick={() => reset(t)} title="Restore this certificate and its template to the default version.">Reset</Button>}
                         {!t.inUse && <Button size="icon" variant="ghost" onClick={() => setDeleting({ kind: "type", id: t.id, name: t.name })} aria-label="Delete"><Trash2 className="h-4 w-4" /></Button>}
                       </div>
                     )}

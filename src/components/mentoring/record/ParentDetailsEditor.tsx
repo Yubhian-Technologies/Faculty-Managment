@@ -39,7 +39,7 @@ export function ParentDetailsEditor({ studentId, onSaved }: { studentId: string;
       setOpen(false);
       onSaved();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not save" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" });
     } finally {
       setSaving(false);
     }
@@ -54,7 +54,7 @@ export function ParentDetailsEditor({ studentId, onSaved }: { studentId: string;
         <DialogContent className="max-h-[90vh] max-w-xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Correct parent details</DialogTitle>
-            <DialogDescription>Saved on the student&apos;s own record, so every page shows the new details. Mobile numbers are 10 digits.</DialogDescription>
+            <DialogDescription>Saved on the student&apos;s record, so every page shows the updated details. Mobile numbers must be 10 digits.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             {GROUPS.map((g) => (

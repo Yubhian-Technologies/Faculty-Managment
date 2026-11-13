@@ -112,7 +112,7 @@ function MigrationBranchPicker({ open, onOpenChange, subDepartment, branches, on
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Move subjects &amp; students to core departments</DialogTitle>
+          <DialogTitle>Move Subjects and Students to Core Departments</DialogTitle>
           <DialogDescription>
             Moves &quot;{subDepartment.name}&quot;&apos;s sections, students, subjects, and timetable rows into each
             selected core department directly. Review before anything is written.
@@ -282,7 +282,7 @@ function MigrationReviewPage({ subDepartment, branchIds, allBranches, collegeSec
       <div className="flex items-center justify-between">
         <PageHeader
           title={`Review: move "${subDepartment.name}" into core departments`}
-          description="Nothing is written to the database until you confirm below."
+          description="Nothing is saved until you confirm below."
         />
         <Button variant="outline" size="sm" onClick={onBack}><ArrowLeft className="h-4 w-4 mr-1" />Back</Button>
       </div>
@@ -297,7 +297,7 @@ function MigrationReviewPage({ subDepartment, branchIds, allBranches, collegeSec
             <CardContent className="p-4 space-y-3">
               <p className="text-sm font-medium">Sections ({currentSections.length})</p>
               {currentSections.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No sections filed under this department.</p>
+                <p className="text-sm text-muted-foreground">No sections under this department.</p>
               ) : (
                 <>
                   <div className="overflow-x-auto">
@@ -559,7 +559,7 @@ function DepartmentDrillDown({ departments, courses, rootId, onExit }: {
         const res = await fetch("/api/college/sections").then((r) => r.json() as Promise<{ sections?: Section[] }>);
         setSections(res.sections ?? []);
       } catch {
-        toast({ variant: "destructive", title: "Failed to load sections" });
+        toast({ variant: "destructive", title: "Unable to load sections" });
       } finally {
         setIsLoading(false);
       }
@@ -811,7 +811,7 @@ export function DepartmentsPanel() {
       setDepartments(deptRes.departments ?? []);
       setCourses(coursesRes.courses ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load departments" });
+      toast({ variant: "destructive", title: "Unable to load departments" });
     } finally {
       setIsLoading(false);
     }
@@ -838,11 +838,11 @@ export function DepartmentsPanel() {
       // The server refuses a delete that would orphan data and says exactly
       // what is in the way ("still has sub-departments", "still has students
       // or sections", ...). That message was being swallowed here, leaving
-      // "Failed to remove department" with no way to tell what to clear first.
+      // "Unable to remove department" with no way to tell what to clear first.
       toast({
         variant: "destructive",
-        title: `Couldn't remove ${dept.name}`,
-        description: err instanceof Error ? err.message : "Please try again.",
+        title: `Unable to remove ${dept.name}`,
+        description: err instanceof Error ? err.message : "Try again.",
       });
     } finally {
       setDeletingDept(null);
@@ -870,7 +870,7 @@ export function DepartmentsPanel() {
     <div className="space-y-6">
       <PageHeader
         title="Departments"
-        description="Manage college departments and assign Heads of Department"
+        description="Manage college departments and assign HODs."
         actions={
           <>
             <Button variant="outline" onClick={() => router.push("/principal/departments/import")}>
@@ -977,7 +977,7 @@ export function DepartmentsPanel() {
                         {dept.assignedYears.map(yearOrdinalLabel).join(", ")}
                       </p>
                     ) : (
-                      <p className="text-xs text-muted-foreground">No courses configured</p>
+                      <p className="text-xs text-muted-foreground">No courses configured.</p>
                     )}
 
                     {subDeptCount > 0 && (

@@ -57,7 +57,7 @@ export function AddSubjectDialog({ open, onOpenChange, courseId, courseName, reg
         }),
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) { setError(json.error ?? "Couldn't save the subject."); return; }
+      if (!res.ok) { setError(json.error ?? "Unable to save the subject."); return; }
       toast({ variant: "success", title: `${form.code.trim().toUpperCase()} added` });
       setForm(EMPTY);
       onOpenChange(false);

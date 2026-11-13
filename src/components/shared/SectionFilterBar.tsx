@@ -45,7 +45,7 @@ export function SectionFilterBar({
     void (async () => {
       try {
         const res = await fetch("/api/college/sections");
-        if (!res.ok) throw new Error("Failed to load sections");
+        if (!res.ok) throw new Error("Unable to load sections");
         const json = (await res.json()) as { sections?: SectionListItem[] };
         setSections((json.sections ?? []).filter((s) => !!s.id));
         // Departments and courses carry the assigned years and the catalogue
@@ -60,7 +60,7 @@ export function SectionFilterBar({
           setCourseDocs(c.courses ?? []);
         } catch { /* falls back to the sections' own years */ }
       } catch {
-        toast({ variant: "destructive", title: "Failed to load sections" });
+        toast({ variant: "destructive", title: "Unable to load sections" });
       } finally {
         setIsLoading(false);
       }

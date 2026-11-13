@@ -32,7 +32,7 @@ export function HonorificsCatalogCard() {
     return fetch("/api/college/honorifics")
       .then((r) => r.json() as Promise<{ items: HonorificCatalogItem[] }>)
       .then((d) => setItems(d.items ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load honorifics" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load honorifics" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -57,13 +57,13 @@ export function HonorificsCatalogCard() {
       });
       if (!res.ok) {
         const j = await res.json() as { error?: string };
-        throw new Error(j.error ?? "Failed to add honorific");
+        throw new Error(j.error ?? "Unable to add honorific");
       }
       setNewName("");
       toast({ variant: "success", title: "Honorific added" });
       void load();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to add honorific" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to add honorific" });
     } finally {
       setIsAdding(false);
     }
@@ -86,13 +86,13 @@ export function HonorificsCatalogCard() {
       });
       if (!res.ok) {
         const j = await res.json() as { error?: string };
-        throw new Error(j.error ?? "Failed to update honorific");
+        throw new Error(j.error ?? "Unable to update honorific");
       }
       setEditingId(null);
       toast({ variant: "success", title: "Honorific updated" });
       void load();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to update honorific" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to update honorific" });
     } finally {
       setBusyId(null);
     }
@@ -109,7 +109,7 @@ export function HonorificsCatalogCard() {
       if (!res.ok) throw new Error();
       void load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to update status" });
+      toast({ variant: "destructive", title: "Unable to update status" });
     } finally {
       setBusyId(null);
     }
@@ -122,13 +122,13 @@ export function HonorificsCatalogCard() {
       const res = await fetch(`/api/college/honorifics/${deleteTarget.id}`, { method: "DELETE" });
       if (!res.ok) {
         const j = await res.json() as { error?: string };
-        throw new Error(j.error ?? "Failed to delete honorific");
+        throw new Error(j.error ?? "Unable to delete honorific");
       }
       toast({ variant: "success", title: "Honorific removed" });
       setDeleteTarget(null);
       void load();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to delete honorific" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to delete honorific" });
     } finally {
       setIsDeleting(false);
     }
@@ -140,9 +140,7 @@ export function HonorificsCatalogCard() {
         <CardTitle className="text-base flex items-center gap-2">
           <Contact className="h-4 w-4" /> Honorifics
         </CardTitle>
-        <CardDescription>
-          The name prefixes (Mr., Mrs., Dr., Prof., ...) available to pick across the college.
-        </CardDescription>
+        <CardDescription>The name prefixes (Mr., Mrs., Dr., Prof. and others) available across the college.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-muted/30 p-3">
@@ -151,7 +149,7 @@ export function HonorificsCatalogCard() {
             <Input
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              placeholder="e.g. Dr."
+              placeholder="Dr."
               onKeyDown={(e) => { if (e.key === "Enter") void addItem(); }}
             />
           </div>
@@ -165,9 +163,7 @@ export function HonorificsCatalogCard() {
             {[1, 2].map((i) => <div key={i} className="h-12 bg-muted animate-pulse rounded-lg" />)}
           </div>
         ) : items.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-4">
-            No honorifics yet. Add them above (e.g. Mr., Mrs., Dr., Prof.) so they can be selected elsewhere.
-          </p>
+          <p className="text-sm text-muted-foreground text-center py-4">No honorifics yet. Add them above (for example Mr., Mrs., Dr., Prof.) so they can be selected elsewhere.</p>
         ) : (
           <ul className="divide-y rounded-lg border">
             {items.map((item) => {

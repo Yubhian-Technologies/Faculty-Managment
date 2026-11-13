@@ -6,14 +6,14 @@ import { NextResponse } from "next/server";
 // handling, so existing messages are unchanged.
 
 const MAP: Record<string, { status: number; error: string }> = {
-  "auth/email-already-exists": { status: 409, error: "An account with this email already exists" },
+  "auth/email-already-exists": { status: 409, error: "An account with this email address already exists." },
   "auth/uid-already-exists": { status: 409, error: "An account for this user already exists" },
-  "auth/invalid-email": { status: 400, error: "Enter a valid email address" },
-  "auth/invalid-password": { status: 400, error: "Password must be at least 6 characters" },
+  "auth/invalid-email": { status: 400, error: "Enter a valid email address." },
+  "auth/invalid-password": { status: 400, error: "The password must be at least 6 characters." },
   "auth/weak-password": { status: 400, error: "Password is too weak - use at least 6 characters" },
   "auth/invalid-phone-number": { status: 400, error: "Enter a valid phone number" },
   "auth/user-not-found": { status: 404, error: "No login account found for this user" },
-  "auth/too-many-requests": { status: 429, error: "Too many attempts - please try again later" },
+  "auth/too-many-requests": { status: 429, error: "Too many attempts - try again later" },
 };
 
 export function firebaseAuthErrorResponse(err: unknown): NextResponse | null {

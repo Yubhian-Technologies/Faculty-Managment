@@ -47,7 +47,7 @@ export function TimetableSignatureSettingsCard({
       .then((d) => setGroups(d.groups ?? []))
       .catch((err) => {
         if ((err as Error)?.name === "AbortError") return;
-        toast({ variant: "destructive", title: "Failed to load signature authority" });
+        toast({ variant: "destructive", title: "Unable to load signature authority" });
       })
       .finally(() => setIsLoading(false));
     return () => ctrl.abort();
@@ -90,12 +90,12 @@ export function TimetableSignatureSettingsCard({
         body: JSON.stringify({ groups }),
       });
       const d = (await res.json().catch(() => ({}))) as { error?: string; groups?: SignatureGroup[] };
-      if (!res.ok) throw new Error(d.error || "Failed to save");
+      if (!res.ok) throw new Error(d.error || "Unable to save");
       if (d.groups) setGroups(d.groups);
       await queryClient.invalidateQueries({ queryKey: ["college-info"] });
       toast({ variant: "success", title: `${title} saved`, description: `Ticked groups print on ${printsOn} from now on.` });
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to save", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to save", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsSaving(false);
     }
@@ -135,7 +135,7 @@ export function TimetableSignatureSettingsCard({
         {isLoading ? (
           <Skeleton className="h-20 w-full" />
         ) : groups.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No groups yet - the default In-Charge / HOD / Principal row is printed.</p>
+          <p className="text-sm text-muted-foreground">No groups yet. The default In-Charge, HOD and Principal row is printed.</p>
         ) : (
           <div className="space-y-3">
             {groups.map((g) => (
@@ -152,7 +152,7 @@ export function TimetableSignatureSettingsCard({
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
-                {g.designations.length === 0 && <p className="text-xs text-muted-foreground">No designations yet - add some below.</p>}
+                {g.designations.length === 0 && <p className="text-xs text-muted-foreground">No designations yet. Add them below.</p>}
                 <div className="space-y-1.5">
                   {g.designations.map((d, j) => (
                     <div key={`${d.label}-${j}`} className="flex items-center gap-3">

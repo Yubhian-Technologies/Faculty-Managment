@@ -31,7 +31,7 @@ export function DepartmentSubjectsCard() {
       <CardContent className="space-y-3 p-5">
         <div>
           <h2 className="font-semibold">Subjects your department looks after</h2>
-          <p className="text-xs text-muted-foreground">Set by Academics. You prepare their syllabus (units, COs, CO-PO mapping) for Academics to freeze, and their question banks / papers come to you for approval from every branch they are taught in.</p>
+          <p className="text-xs text-muted-foreground">Set by Academics. You prepare their syllabus (units, COs, CO-PO mapping) for Academics to freeze, and their question banks and papers come to you for approval from every branch where they are taught.</p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">

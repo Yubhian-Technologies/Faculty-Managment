@@ -57,7 +57,7 @@ export async function GET(request: Request) {
     }
 
     if (!dept) {
-      return NextResponse.json({ error: "Department not found" }, { status: 400 });
+      return NextResponse.json({ error: "Department not found. It may have been deleted." }, { status: 400 });
     }
 
     // An HOD may only look at a department inside their own scope - the
@@ -67,7 +67,7 @@ export async function GET(request: Request) {
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid, { activeOnly: false });
       if (!editableDepartmentNames(scope).includes(dept)) {
-        return NextResponse.json({ error: "Outside your department" }, { status: 403 });
+        return NextResponse.json({ error: "This record is outside your department." }, { status: 403 });
       }
     }
 
@@ -234,9 +234,9 @@ export async function GET(request: Request) {
     return NextResponse.json(result);
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[faculty-requirement GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

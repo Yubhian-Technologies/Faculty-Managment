@@ -18,13 +18,13 @@ function isAuthorized(request: Request): boolean {
 }
 
 export async function POST(request: Request) {
-  if (!isAuthorized(request)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!isAuthorized(request)) return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
   try {
     const report = await runPermissionEscalation(getAdminDb());
     // Any failed college is a 500 so the scheduler retries and alerts; the sweep is idempotent.
     return NextResponse.json(report, { status: report.failedColleges.length ? 500 : 200 });
   } catch (err) {
     console.error("[cron/permission-escalation]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

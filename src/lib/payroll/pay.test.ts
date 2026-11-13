@@ -56,8 +56,8 @@ describe("salary sheet import", () => {
     expect(plan.rows.map((r) => r.status)).toEqual(["SAME", "NEW", "ERROR", "ERROR", "ERROR", "ERROR", "ERROR"]);
     expect(plan.rows[1]).toMatchObject({ employeeKey: "STAFF_b", exempt: ["PF"], grossActual: 26250 });
     expect(plan.rows.slice(2).map((r) => r.error)).toEqual([
-      "Emp Code repeated (row 2)", "No faculty or staff member has this Emp Code", "Two people share this Emp Code - fix their records first", "Emp Code is blank",
-      "No faculty or staff member has this Emp Code",
+      "Employee ID repeated (also in row 2).", "No faculty or staff member has this Employee ID.", "Two people have this Employee ID. Correct their records first.", "Employee ID is required.",
+      "No faculty or staff member has this Employee ID.",
     ]);
     expect(plan.errors).toBe(5);
     const changed = planPayImport(headers, [row(2, "SVECW0679", { "E.B": "17000", AGP: "6000" })], employees, settings, current);

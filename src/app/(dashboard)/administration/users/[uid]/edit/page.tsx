@@ -59,7 +59,7 @@ export default function EditLocationUserPage() {
         setLocationDeptIds((found as unknown as { locationDeptIds?: string[] }).locationDeptIds ?? []);
         setAllLocationDepts(!!(found as unknown as { allLocationDepts?: boolean }).allLocationDepts);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load staff member" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load staff member" }))
       .finally(() => setLoading(false));
   }, [uid, locationId, router]);
 
@@ -81,7 +81,7 @@ export default function EditLocationUserPage() {
       });
       const json = await res.json() as { error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Couldn't save", description: json.error });
+        toast({ variant: "destructive", title: "Unable to save", description: json.error });
         return;
       }
       toast({ variant: "success", title: "Saved" });
@@ -132,10 +132,7 @@ export default function EditLocationUserPage() {
             {MULTI_DEPT_ROLES.includes(target.role) && (
               <div className="space-y-2">
                 <Label>Departments</Label>
-                <p className="text-xs text-muted-foreground">
-                  Optional - which department(s) this staff member covers. Leave everything
-                  unchecked if they aren&apos;t tied to a specific department.
-                </p>
+                <p className="text-xs text-muted-foreground">Optional. The departments this staff member covers. Leave all unselected if they are not assigned to a specific department.</p>
                 <label className="flex items-center gap-2 text-sm cursor-pointer">
                   <Checkbox
                     checked={allLocationDepts}

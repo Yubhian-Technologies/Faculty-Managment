@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_STAFF");
     const body = (await readJsonBody(request)) as { sectionId?: string; semester?: number; effectiveDate?: string };
     const sectionId = body.sectionId;
-    if (!sectionId) return NextResponse.json({ error: "sectionId is required" }, { status: 400 });
+    if (!sectionId) return NextResponse.json({ error: "Select a section." }, { status: 400 });
     // The "w.e.f" date printed on the timetable - asked for at publish time.
     const effectiveDate = body.effectiveDate?.trim() || undefined;
     if (effectiveDate && (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveDate) || Number.isNaN(Date.parse(effectiveDate)))) {
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
     const collegeRef = db.collection("colleges").doc(session.collegeId);
 
     const sectionSnap = await collegeRef.collection("sections").doc(sectionId).get();
-    if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found" }, { status: 404 });
+    if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found. It may have been deleted." }, { status: 404 });
     const section = sectionSnap.data() as { department: string; courseId: string; year: number };
 
     // Every course-year's own timing, so both this section's own current
@@ -88,7 +88,7 @@ export async function POST(request: Request) {
     } else if (session.role === "PANEL_MEMBER" || session.role === "COLLEGE_STAFF") {
       const ok = await isTimetableIncharge(db, session.collegeId, session.uid, section.courseId, section.year);
       if (!ok) {
-        return NextResponse.json({ error: "You are not the Timetable Incharge for this course & year" }, { status: 403 });
+        return NextResponse.json({ error: "You are not the Timetable Incharge for this course and year." }, { status: 403 });
       }
     }
 
@@ -149,9 +149,9 @@ export async function POST(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/timetable/publish POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

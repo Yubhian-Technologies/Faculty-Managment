@@ -23,17 +23,17 @@ export async function GET(
     const db = getAdminDb();
     const snap = await db.collection("colleges").doc(session.collegeId).collection("emailRequests").doc(id).get();
     if (!snap.exists) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
     return NextResponse.json({ request: { id: snap.id, ...snap.data() } });
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/email-requests/[id] GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -55,7 +55,7 @@ export async function PATCH(
     const ref = db.collection("colleges").doc(session.collegeId).collection("emailRequests").doc(id);
     const snap = await ref.get();
     if (!snap.exists) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
     const reqData = snap.data() as {
       status?: string;
@@ -130,7 +130,7 @@ export async function PATCH(
       }
       if (session.role === "WEBMASTER") {
         // Webmaster does not raise or own requests — cancellation is the requester's call.
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
       }
 
       await ref.update({
@@ -144,14 +144,14 @@ export async function PATCH(
       return NextResponse.json({ ok: true });
     }
 
-    return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+    return NextResponse.json({ error: "This action is not recognised. Reload the page and try again." }, { status: 400 });
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/email-requests/[id] PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

@@ -99,12 +99,12 @@ export function SelfAttendancePage({ title, description }: SelfAttendancePagePro
     setIsLoading(true);
     try {
       const res = await fetch(`/api/college/attendance?year=${y}&month=${m}`);
-      if (!res.ok) throw new Error("Failed to load attendance");
+      if (!res.ok) throw new Error("Unable to load attendance");
       const json = await res.json() as { summary: AttendanceSummary | null; records: AttendanceRecord[] };
       setSummary(json.summary ?? null);
       setRecords(json.records ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load attendance records" });
+      toast({ variant: "destructive", title: "Unable to load attendance records" });
     } finally {
       setIsLoading(false);
     }
@@ -152,12 +152,10 @@ export function SelfAttendancePage({ title, description }: SelfAttendancePagePro
                 Today is a holiday{todayStatus.holidayName ? ` — ${todayStatus.holidayName}` : ""}. No attendance required.
               </p>
             ) : todayStatus?.isOnLeave ? (
-              <p className="text-sm text-muted-foreground">You&apos;re on approved leave today — attendance cannot be marked.</p>
+              <p className="text-sm text-muted-foreground">You are on approved leave today; attendance cannot be marked.</p>
             ) : faceRegistered === false ? (
               <>
-                <p className="text-sm text-muted-foreground">
-                  Register your face to start using facial attendance check-in.
-                </p>
+                <p className="text-sm text-muted-foreground">Register your face to use face recognition check-in.</p>
                 <Button onClick={() => setDialogMode("register")}>
                   <ScanFace className="h-4 w-4 mr-1.5" /> Register
                 </Button>
@@ -176,7 +174,7 @@ export function SelfAttendancePage({ title, description }: SelfAttendancePagePro
               </>
             ) : (
               <>
-                <p className="text-sm text-muted-foreground">You haven&apos;t marked attendance today.</p>
+                <p className="text-sm text-muted-foreground">You have not marked attendance today.</p>
                 <Button onClick={() => setDialogMode("check-in")}>
                   <LogIn className="h-4 w-4 mr-1.5" /> Check In
                 </Button>

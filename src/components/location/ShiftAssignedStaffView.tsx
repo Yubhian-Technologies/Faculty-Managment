@@ -80,7 +80,7 @@ export function ShiftAssignedStaffView({
         setStaffList(staff.filter((s) => s.shiftId === shiftId));
       })
       .catch(() => {
-        if (!isCancelled) toast({ variant: "destructive", title: "Failed to load shift details" });
+        if (!isCancelled) toast({ variant: "destructive", title: "Unable to load shift details" });
       })
       .finally(() => {
         if (!isCancelled) setIsLoading(false);
@@ -104,7 +104,7 @@ export function ShiftAssignedStaffView({
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to switch shift");
+      if (!res.ok) throw new Error(data.error || "Unable to switch shift");
 
       toast({
         title: "Shift Updated",
@@ -112,7 +112,7 @@ export function ShiftAssignedStaffView({
       });
       reload();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to switch shift";
+      const msg = err instanceof Error ? err.message : "Unable to switch shift";
       toast({ variant: "destructive", title: "Error", description: msg });
     } finally {
       setIsRotatingId(null);
@@ -260,9 +260,7 @@ export function ShiftAssignedStaffView({
               <p className="font-semibold text-foreground text-sm">
                 {search ? "No matching staff found" : "No staff assigned to this shift yet"}
               </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Assign campus staff members to this shift or rotate them from other shifts.
-              </p>
+              <p className="text-xs text-muted-foreground mt-1">Assign campus staff to this shift or move them from other shifts.</p>
               {!readOnly && assignMoreHref && (
                 <Button asChild size="sm" variant="outline" className="mt-3 text-xs rounded-full gap-1.5">
                   <Link href={assignMoreHref}>

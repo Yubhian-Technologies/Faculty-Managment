@@ -58,8 +58,8 @@ export default function AdministrationDashboard() {
   ].filter((a) => !isHidden(a.baseHref));
 
   const managementActions = [
-    { label: "Location Users", href: "/administration/users", baseHref: "/administration/users", icon: Users, desc: "Provision Staff Admin, HR Admin, Accounts & Dept Heads" },
-    { label: "Departments & Heads", href: "/location-staff-admin/departments", baseHref: "/location-staff-admin/departments", icon: Settings2, desc: "Manage campus departments and appoint Dept Heads" },
+    { label: "Location Users", href: "/administration/users", baseHref: "/administration/users", icon: Users, desc: "Provision Staff Admin, HR Admin, Accounts & Department Heads" },
+    { label: "Departments & Heads", href: "/location-staff-admin/departments", baseHref: "/location-staff-admin/departments", icon: Settings2, desc: "Manage campus departments and appoint Department Heads" },
     { label: "Campus Staff Directory", href: "/location-staff-admin/staff", baseHref: "/location-staff-admin/staff", icon: UsersRound, desc: "Browse full staff roster with filters & detailed profiles" },
     { label: "Staff Attendance", href: "/location-staff-admin/attendance", baseHref: "/location-staff-admin/attendance", icon: ClipboardCheck, desc: "Campus-wide check-in / check-out daily attendance records" },
     { label: "Colleges", href: `/administration/colleges${collegeQuery}`, baseHref: "/administration/colleges", icon: Building2, desc: "View colleges & assign Principals" },
@@ -69,7 +69,7 @@ export default function AdministrationDashboard() {
     <div className="space-y-6">
       <PageHeader
         title={`Welcome, ${user?.name ?? "Admin"}`}
-        description="Location-level administration overview"
+        description="Overview of location administration."
       />
 
       <div className="flex flex-col gap-1.5 sm:max-w-xs">
@@ -104,7 +104,7 @@ export default function AdministrationDashboard() {
 
         {managementActions.length > 0 && (
           <div>
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Location Staff & Campus Operations</p>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Location Staff and Campus Operations</p>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {managementActions.map((action) => (
                 <Card key={action.href} className="hover:shadow-md transition-shadow">

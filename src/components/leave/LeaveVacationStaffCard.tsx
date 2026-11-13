@@ -29,7 +29,7 @@ export function LeaveVacationStaffCard() {
         for (const role of ROUTABLE_REQUESTER_ROLES) full[role] = saved[role] ?? defaultIsVacation(role, true);
         setConfig(full);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load vacation staff settings" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load vacation staff settings" }))
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -50,11 +50,11 @@ export function LeaveVacationStaffCard() {
       });
       if (!res.ok) {
         const j = await res.json() as { error?: string };
-        throw new Error(j.error ?? "Failed to save");
+        throw new Error(j.error ?? "Unable to save");
       }
       toast({ variant: "success", title: "Vacation / non-vacation staff saved" });
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to save" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" });
     } finally {
       setIsSaving(false);
     }
@@ -64,12 +64,7 @@ export function LeaveVacationStaffCard() {
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Vacation / Non-Vacation Staff</CardTitle>
-        <CardDescription>
-          Choose which roles are vacation staff and which are non-vacation, for leave entitlements. A person follows
-          the highest seat they hold (a faculty member who is also an HOD follows the HOD setting). Leave balances
-          update the next time they are opened. A profile someone edited by hand on the Leave Profile screen keeps
-          its manual category.
-        </CardDescription>
+        <CardDescription>Choose which roles are vacation staff and which are non-vacation staff for leave entitlements. A person follows the highest role they hold (a faculty member who is also an HOD follows the HOD setting). Leave balances are updated the next time they are opened. A profile edited manually on the Leave Profile screen keeps its manual category.</CardDescription>
       </CardHeader>
       <CardContent>
         {isLoading ? (
@@ -93,9 +88,7 @@ export function LeaveVacationStaffCard() {
                 </div>
               ))}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Faculty left as vacation staff still follow their own record: a legacy technical designation stays non-vacation.
-            </p>
+            <p className="text-xs text-muted-foreground">Faculty left as vacation staff still follow their own record: an older technical designation stays non-vacation.</p>
             <div className="flex justify-end">
               <Button onClick={handleSave} loading={isSaving}>Save</Button>
             </div>

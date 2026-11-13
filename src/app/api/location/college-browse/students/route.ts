@@ -19,7 +19,7 @@ export async function GET(request: Request) {
     const db = getAdminDb();
     const collegeSnap = await db.collection("colleges").doc(collegeId).get();
     if (!collegeSnap.exists) {
-      return NextResponse.json({ error: "College not found" }, { status: 404 });
+      return NextResponse.json({ error: "College not found. It may have been deleted." }, { status: 404 });
     }
     const college = collegeSnap.data() as { locationId?: string };
     if (session.role === "ADMINISTRATION" && college.locationId !== session.locationId) {
@@ -45,9 +45,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ students });
   } catch (err) {
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[location/college-browse/students GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

@@ -65,7 +65,7 @@ export default function FinanceBrowseDepartmentsPage() {
           }))
         );
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load college activity" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load college activity" }))
       .finally(() => setIsLoading(false));
   }, [params.collegeId, params.locationId, setSelectedCollegeId]);
 
@@ -81,7 +81,7 @@ export default function FinanceBrowseDepartmentsPage() {
         <Button variant="ghost" size="icon" asChild>
           <Link aria-label="Back" href={`/finance/browse/${params.locationId}`}><ArrowLeft className="h-4 w-4" /></Link>
         </Button>
-        <PageHeader title={college?.name ?? "College Activity"} description="Budget, indent, and purchase clearance activity for this college" />
+        <PageHeader title={college?.name ?? "College Activity"} description="Budget, indent and purchase clearance activity for this college." />
       </div>
 
       {isLoading ? (

@@ -58,7 +58,7 @@ export function IndentItemsTable({ items, onChange, readOnly = false }: IndentIt
                   ) : (
                     <>
                       <td className="px-3 py-2">
-                        <Input value={item.description} onChange={(e) => updateItem(item.id, { description: e.target.value })} placeholder="e.g. A4 printer paper" />
+                        <Input value={item.description} onChange={(e) => updateItem(item.id, { description: e.target.value })} placeholder="A4 printer paper" />
                       </td>
                       <td className="px-3 py-2">
                         <Input type="number" min={1} value={item.quantity} onChange={(e) => updateItem(item.id, { quantity: Math.max(0, Number(e.target.value)) })} />

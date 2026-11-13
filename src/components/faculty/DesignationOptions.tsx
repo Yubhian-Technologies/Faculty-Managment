@@ -143,7 +143,7 @@ export function DesignationSelect({
         <Input
           value={value === "OTHER" ? "" : value}
           onChange={(e) => onChange(e.target.value || "OTHER")}
-          placeholder="Please specify"
+          placeholder="Specify"
         />
       )}
       {isOther && !allowOther && value && (

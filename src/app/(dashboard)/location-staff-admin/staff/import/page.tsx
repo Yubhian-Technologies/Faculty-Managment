@@ -75,7 +75,7 @@ export default function LocationStaffBulkImportPage() {
         .then((r) => (r.ok ? r.json() : Promise.resolve({ shifts: [] })))
         .then((d) => setShifts(d.shifts ?? [])),
     ])
-      .catch(() => toast({ variant: "destructive", title: "Failed to load campus departments and shifts" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load campus departments and shifts" }))
       .finally(() => setLoadingLookups(false));
   }, [userLocationId]);
 
@@ -148,7 +148,7 @@ export default function LocationStaffBulkImportPage() {
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error(err);
-      toast({ variant: "destructive", title: "Failed to generate Excel template" });
+      toast({ variant: "destructive", title: "Unable to generate Excel template" });
     } finally {
       setIsBuildingExcel(false);
     }
@@ -219,7 +219,7 @@ export default function LocationStaffBulkImportPage() {
       setRows(parsed);
     } catch (err) {
       console.error(err);
-      setParseError(err instanceof Error ? err.message : "Failed to parse file.");
+      setParseError(err instanceof Error ? err.message : "Unable to parse file.");
       setRows([]);
     } finally {
       setIsParsing(false);
@@ -280,7 +280,7 @@ export default function LocationStaffBulkImportPage() {
       const data = (await res.json()) as ImportResult & { error?: string };
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed to process bulk staff import");
+        throw new Error(data.error || "Unable to process bulk staff import");
       }
 
       setImportResult(data);
@@ -291,7 +291,7 @@ export default function LocationStaffBulkImportPage() {
             : "";
         toast({
           title: "Import Complete",
-          description: `Successfully registered ${data.created} staff member(s)${extraMsg}.`,
+          description: `Registered ${data.created} staff member(s)${extraMsg}.`,
         });
       }
     } catch (err) {
@@ -320,7 +320,7 @@ export default function LocationStaffBulkImportPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <PageHeader
           title="Bulk Import Staff"
-          description="Register multiple campus staff members simultaneously using CSV or Excel"
+          description="Register several campus staff members at once from a CSV or Excel file."
         />
         <div className="flex items-center gap-2 shrink-0">
           <Button asChild variant="outline" size="sm">
@@ -380,9 +380,7 @@ export default function LocationStaffBulkImportPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="p-4 sm:p-5 space-y-3 flex-1 flex flex-col justify-center">
-            <p className="text-xs text-muted-foreground">
-              Download pre-filled templates with your campus departments and shifts included as samples:
-            </p>
+            <p className="text-xs text-muted-foreground">Download templates with your campus departments and shifts filled in as examples:</p>
             <div className="space-y-2">
               <Button
                 type="button"
@@ -434,9 +432,7 @@ export default function LocationStaffBulkImportPage() {
             <h3 className="font-bold text-base text-foreground">
               {fileName ? fileName : "Upload Staff CSV or Excel Workbook"}
             </h3>
-            <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-              Select or drag and drop your completed spreadsheet to preview and validate records.
-            </p>
+            <p className="text-xs text-muted-foreground max-w-sm mx-auto">Select or drag and drop the completed spreadsheet to preview and validate the records.</p>
           </div>
 
           <div className="flex items-center justify-center gap-2">
@@ -655,7 +651,7 @@ export default function LocationStaffBulkImportPage() {
                                 <Badge
                                   variant="outline"
                                   className="text-[9px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 px-1 py-0 gap-0.5"
-                                  title="New department - will be created automatically on campus"
+                                  title="New department; it will be created on the campus."
                                 >
                                   <Sparkles className="h-2.5 w-2.5 inline" />
                                   New

@@ -38,7 +38,7 @@ export async function PATCH(
       const fresh = await tx.get(deptsColl);
       const all: ConnectionInput[] = fresh.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as ConnectionInput[];
       const dept = all.find((d) => d.id === deptId);
-      if (!dept) return { error: "Department not found", status: 404 as const };
+      if (!dept) return { error: "Department not found. It may have been deleted.", status: 404 as const };
 
       const plan = planNeighbourConnection(dept, all, body.neighbourDepartmentId);
       if ("error" in plan) return { error: plan.error, status: 400 as const };
@@ -88,9 +88,9 @@ export async function PATCH(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/departments/[id]/neighbour PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

@@ -400,6 +400,6 @@ export function periodWindowMessage(check: Exclude<PeriodWindowCheck, { ok: true
         ? `This period has not started yet (${check.startTime}–${check.endTime}).`
         : `Attendance closed at ${check.endTime}.`;
     case "PERIOD_MISMATCH":
-      return `This period has ended - Period ${check.activePeriodNumber} is now in session. Please reload to mark its attendance.`;
+      return `This period has ended - Period ${check.activePeriodNumber} is now in session. Reload to mark its attendance.`;
   }
 }

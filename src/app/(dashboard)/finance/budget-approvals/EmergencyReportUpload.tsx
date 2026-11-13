@@ -29,7 +29,7 @@ export function EmergencyReportUpload() {
     fetch("/api/finance/budget-requests/overview?status=FINANCE_APPROVED&isEmergency=true")
       .then((r) => r.json() as Promise<{ requests: Row[] }>)
       .then((d) => setRequests((d.requests ?? []).filter((r) => r.emergencyType === "NON_GOODS")))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load emergency requests" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load emergency requests" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -55,13 +55,13 @@ export function EmergencyReportUpload() {
       });
       if (!patchRes.ok) {
         const err = (await patchRes.json()) as { error?: string };
-        throw new Error(err.error ?? "Failed to attach report");
+        throw new Error(err.error ?? "Unable to attach report");
       }
 
       toast({ variant: "success", title: "Report sent to Principal" });
       load();
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to upload report", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to upload report", description: err instanceof Error ? err.message : undefined });
     } finally {
       setUploadingId(null);
     }

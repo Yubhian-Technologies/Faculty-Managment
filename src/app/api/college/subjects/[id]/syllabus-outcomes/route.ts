@@ -23,7 +23,7 @@ async function context(subjectId: string, roles: string[]) {
   const session = await requireCollegeMember(...roles);
   const db = getAdminDb();
   const subject = await loadSubject(db, session.collegeId, subjectId);
-  if (!subject) return { error: NextResponse.json({ error: "Subject not found" }, { status: 404 }) } as const;
+  if (!subject) return { error: NextResponse.json({ error: "Subject not found. It may have been deleted." }, { status: 404 }) } as const;
   const role = await syllabusRoleOf(db, session, subject);
   return { session, db, subject, ...role } as const;
 }
@@ -126,7 +126,7 @@ export async function POST(request: Request, { params }: Params) {
     if ("error" in c) return c.error;
     const body = (await readJsonBody(request)) as { action?: string; remarks?: string; baseVersion?: number };
     const action = String(body.action ?? "") as SyllabusAction;
-    if (!["SUBMIT", "FREEZE", "RETURN"].includes(action)) return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+    if (!["SUBMIT", "FREEZE", "RETURN"].includes(action)) return NextResponse.json({ error: "This action is not recognised. Reload the page and try again." }, { status: 400 });
     const actor: SyllabusActor | null = action === "SUBMIT" ? (c.isHod ? "HOD" : null) : (c.isAcademics ? "ACADEMICS" : null);
     if (!actor) return NextResponse.json({ error: action === "SUBMIT" ? "Only the HOD of this subject's department submits its syllabus" : "Only Academics freezes or returns a syllabus" }, { status: 403 });
     const remarks = String(body.remarks ?? "").trim().slice(0, 1000);

@@ -67,7 +67,7 @@ export function LeaveProfilesRoster({ editHrefBase, title = "Leave Profiles" }: 
     fetch("/api/leave/profiles")
       .then((r) => r.json() as Promise<{ roster: RosterEntry[] }>)
       .then((data) => setRoster(data.roster ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load leave profiles" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load leave profiles" }))
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -110,7 +110,7 @@ export function LeaveProfilesRoster({ editHrefBase, title = "Leave Profiles" }: 
     <div className="space-y-6">
       <PageHeader
         title={title}
-        description="Auto-set up from each person's staff details - edit only to correct a category"
+        description="Set automatically from each person's staff details. Edit only to correct a category."
       />
 
       <SegmentedTabs

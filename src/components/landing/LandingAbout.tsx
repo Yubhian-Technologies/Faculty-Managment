@@ -95,7 +95,7 @@ export function LandingAbout() {
             </h2>
 
             <h3 className="mt-4 text-xl font-bold leading-tight tracking-tight text-foreground sm:text-2xl lg:text-3xl">
-              Building a Community that Inspires, Innovates and Impact Lives
+              Building a Community that Inspires, Innovates and Impacts Lives
             </h3>
 
             <p className="mt-6 max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg">

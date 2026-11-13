@@ -39,7 +39,7 @@ export default function NewStaffMemberPage() {
         }),
     ])
       .catch(() => {
-        if (!isCancelled) toast({ variant: "destructive", title: "Failed to load departments/shifts" });
+        if (!isCancelled) toast({ variant: "destructive", title: "Unable to load departments/shifts" });
       })
       .finally(() => {
         if (!isCancelled) setIsLoading(false);
@@ -69,9 +69,7 @@ export default function NewStaffMemberPage() {
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
               <span>Register New Staff Member</span>
             </h1>
-            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-              Register non-teaching campus staff. Registered members can also be appointed as Department Heads.
-            </p>
+            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">Register non-teaching campus staff. Registered staff can also be appointed as Department Heads.</p>
           </div>
         </div>
       </div>

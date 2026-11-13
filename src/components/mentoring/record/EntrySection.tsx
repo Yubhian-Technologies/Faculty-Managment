@@ -165,7 +165,7 @@ function EntryForm({
           {group.title && (
             <div>
               <h4 className="text-sm font-semibold">{group.title}</h4>
-              {group.columns.some((c) => c.kind === "multiselect") && <p className="text-xs text-muted-foreground">Select all categories discussed during the meeting.</p>}
+              {group.columns.some((c) => c.kind === "multiselect") && <p className="text-xs text-muted-foreground">Select all categories discussed in the meeting.</p>}
             </div>
           )}
           <div className="grid gap-3 sm:grid-cols-2">
@@ -232,7 +232,7 @@ export function EntrySectionView({
       }
       setEditing(null);
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not save" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" });
     } finally {
       setSaving(false);
     }
@@ -244,7 +244,7 @@ export function EntrySectionView({
       await sendJson(`${api}/record/entries/${id}`, "DELETE");
       editor.remove(id);
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not remove" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to remove" });
     }
   }
 

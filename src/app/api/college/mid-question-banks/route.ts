@@ -110,7 +110,7 @@ export async function POST(request: Request) {
       teachingFor(db, session.collegeId, d),
       loadSubject(db, session.collegeId, subjectId),
     ]);
-    if (!subject) return NextResponse.json({ error: "Subject not found" }, { status: 404 });
+    if (!subject) return NextResponse.json({ error: "Subject not found. It may have been deleted." }, { status: 404 });
     // Units / COs / mapping come from the subject's frozen syllabus (HOD prepares, Academics freezes).
     const outcomesId = syllabusOutcomesId(subjectId);
     const [rules, outcomes, exception, settings, syllabus, subjectDepartments] = await Promise.all([

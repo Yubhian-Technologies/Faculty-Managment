@@ -5,7 +5,7 @@ describe("firebaseAuthErrorResponse", () => {
   it("maps known Auth codes to client-safe 4xx responses", async () => {
     const dup = firebaseAuthErrorResponse({ code: "auth/email-already-exists", message: "internal detail" })!;
     expect(dup.status).toBe(409);
-    expect(await dup.json()).toEqual({ error: "An account with this email already exists" });
+    expect(await dup.json()).toEqual({ error: "An account with this email address already exists." });
     expect(firebaseAuthErrorResponse({ code: "auth/weak-password" })!.status).toBe(400);
     expect(firebaseAuthErrorResponse({ code: "auth/user-not-found" })!.status).toBe(404);
   });

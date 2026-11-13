@@ -67,7 +67,7 @@ export default function HODTeachingPage() {
           fetch("/api/college/courses"),
           fetch("/api/college/departments"),
         ]);
-        if (!assignRes.ok) throw new Error("Failed to load teaching assignments");
+        if (!assignRes.ok) throw new Error("Unable to load teaching assignments");
         const json = await assignRes.json() as {
           assignments: TeachingAssignment[];
           timetableSlots: TimetableSlot[];
@@ -113,7 +113,7 @@ export default function HODTeachingPage() {
           setDepartments(deptsJson.departments ?? []);
         }
       } catch {
-        toast({ variant: "destructive", title: "Failed to load teaching load" });
+        toast({ variant: "destructive", title: "Unable to load teaching load" });
       } finally {
         setIsLoading(false);
       }
@@ -197,7 +197,7 @@ export default function HODTeachingPage() {
       toast({ title: "Timetable downloaded", description: "Saved as PDF" });
     } catch (err) {
       console.error(err);
-      toast({ variant: "destructive", title: "Download failed", description: "Failed to generate PDF" });
+      toast({ variant: "destructive", title: "Download failed", description: "Unable to generate PDF" });
     } finally {
       setIsExportingPdf(false);
     }
@@ -234,7 +234,7 @@ export default function HODTeachingPage() {
       toast({ title: "Timetable exported", description: "Saved as Excel spreadsheet" });
     } catch (err) {
       console.error(err);
-      toast({ variant: "destructive", title: "Export failed", description: "Failed to export spreadsheet" });
+      toast({ variant: "destructive", title: "Export failed", description: "Unable to export spreadsheet" });
     } finally {
       setIsExportingXlsx(false);
     }
@@ -245,7 +245,7 @@ export default function HODTeachingPage() {
     const html = buildSheetHtml();
     const printWindow = window.open("", "_blank");
     if (!printWindow) {
-      toast({ title: "Popup blocked", description: "Please allow popups to print", variant: "destructive" });
+      toast({ title: "Popup blocked", description: "Allow popups to print", variant: "destructive" });
       return;
     }
     printWindow.document.open();
@@ -262,7 +262,7 @@ export default function HODTeachingPage() {
       <div className="space-y-6">
         <PageHeader
           title="My Timetable"
-          description="Your subject allocations and weekly timetable, period by period"
+          description="Your subject allocations and weekly timetable, period by period."
         />
         <div className="h-96 rounded-lg border bg-muted/30 animate-pulse" />
       </div>
@@ -273,7 +273,7 @@ export default function HODTeachingPage() {
     <div className="space-y-6">
       <PageHeader
         title="My Timetable"
-        description="Your subject allocations and weekly timetable, period by period"
+        description="Your subject allocations and weekly timetable, period by period."
       />
 
       {filteredSlots.length === 0 ? (

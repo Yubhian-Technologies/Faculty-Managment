@@ -30,7 +30,7 @@ export default function ManagementCollegeDetailPage() {
     <div className="space-y-6">
       <PageHeader
         title={college?.name ?? "College"}
-        description="Institutional overview"
+        description="Institutional overview."
         actions={
           <Button variant="outline" onClick={() => router.push("/management/faculty")}>
             <ArrowLeft className="h-4 w-4 mr-2" />All Colleges

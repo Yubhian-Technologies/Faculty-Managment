@@ -11,7 +11,7 @@ export default function PdDashboard() {
     <div className="space-y-6">
       <PageHeader
         title={`Welcome, ${user ? nameFor("dashboardName", { uid: user.uid }, user.name) : "Physical Education Director"}`}
-        description="Physical Education - sports kit & equipment clearance"
+        description="Physical Education: clearance for sports kit and equipment."
       />
       <p className="text-muted-foreground text-sm">Physical Education features are being set up. Check back soon.</p>
     </div>

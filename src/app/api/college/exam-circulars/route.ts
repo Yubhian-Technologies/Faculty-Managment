@@ -40,10 +40,10 @@ export async function GET() {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/exam-circulars GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -68,7 +68,7 @@ async function postNotice(request: Request) {
     const { courseId, courseName, semester, totalSemesters, noticeDate, subject } = body;
     const noticeBody = body.body;
 
-    if (!courseName) return NextResponse.json({ error: "Course is required" }, { status: 400 });
+    if (!courseName) return NextResponse.json({ error: "Course is required." }, { status: 400 });
     if (!semester || !totalSemesters) return NextResponse.json({ error: "Semester is required" }, { status: 400 });
     if (!noticeDate) return NextResponse.json({ error: "Date is required" }, { status: 400 });
     if (isPastDate(noticeDate)) return NextResponse.json({ error: "Date cannot be in the past" }, { status: 400 });
@@ -102,10 +102,10 @@ async function postNotice(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/exam-circulars POST notice]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -120,7 +120,7 @@ async function postFile(request: Request) {
     const titleField = formData.get("title");
 
     if (!file || typeof file === "string") {
-      return NextResponse.json({ error: "No file provided" }, { status: 400 });
+      return NextResponse.json({ error: "Select a file to upload." }, { status: 400 });
     }
     const fileType = MIME_TO_TYPE[file.type];
     if (!fileType) {
@@ -129,7 +129,7 @@ async function postFile(request: Request) {
 
     const buffer = Buffer.from(await file.arrayBuffer());
     if (buffer.byteLength > MAX_SIZE) {
-      return NextResponse.json({ error: "File exceeds 10 MB limit" }, { status: 400 });
+      return NextResponse.json({ error: "The file is larger than 10 MB. Upload a smaller file." }, { status: 400 });
     }
 
     const originalName = (file as File).name || `circular.${fileType}`;
@@ -168,9 +168,9 @@ async function postFile(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/exam-circulars POST file]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

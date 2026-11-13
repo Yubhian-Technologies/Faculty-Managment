@@ -24,7 +24,7 @@ export function PermissionApprovalQueue() {
     try {
       const res = await fetch("/api/leave/permissions?scope=approvals");
       const data = (await res.json()) as { permissions?: (PermissionRequest & { id: string })[]; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to load permission requests");
+      if (!res.ok) throw new Error(data.error ?? "Unable to load permission requests");
       setRows(data.permissions ?? []);
     } catch {
       // Non-fatal: the leave queue above still works, this section just stays empty.
@@ -61,7 +61,7 @@ export function PermissionApprovalQueue() {
       toast({ variant: "success", title: approve ? "Permission approved" : "Permission rejected" });
       await load();
     } catch {
-      toast({ variant: "destructive", title: "Network error, please try again" });
+      toast({ variant: "destructive", title: "Network error try again" });
     } finally {
       setActingId(null);
     }

@@ -33,11 +33,11 @@ export default function FacultyAttendanceReportPage() {
     void (async () => {
       try {
         const res = await fetch("/api/college/class-work-records/sections");
-        if (!res.ok) throw new Error("Failed to load sections");
+        if (!res.ok) throw new Error("Unable to load sections");
         const json = (await res.json()) as { sections?: FacultySection[] };
         setSections(json.sections ?? []);
       } catch {
-        toast({ variant: "destructive", title: "Failed to load your sections" });
+        toast({ variant: "destructive", title: "Unable to load your sections" });
         setSections([]);
       }
     })();
@@ -61,7 +61,7 @@ export default function FacultyAttendanceReportPage() {
   if (!hasTeaching && !isIncharge) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Attendance Register" description="Attendance and class-work history for your sections." />
+        <PageHeader title="Attendance Register" description="Attendance and class work history of your sections." />
         <Card>
           <CardContent className="py-12 text-center text-sm text-muted-foreground">
             You have no assigned sections yet. Ask your HOD to assign you to a section and subject first.

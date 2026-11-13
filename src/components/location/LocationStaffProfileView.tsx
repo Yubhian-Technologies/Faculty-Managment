@@ -63,7 +63,7 @@ export function LocationStaffProfileView({ staffId, backHref }: LocationStaffPro
         setGateName(gates.find((g) => g.id === staffData?.reportAtLocationId)?.name ?? staffData?.reportAtLocationName ?? "");
       })
       .catch(() => {
-        if (!isCancelled) toast({ variant: "destructive", title: "Failed to load staff profile" });
+        if (!isCancelled) toast({ variant: "destructive", title: "Unable to load staff profile" });
       })
       .finally(() => {
         if (!isCancelled) setIsLoading(false);
@@ -85,7 +85,7 @@ export function LocationStaffProfileView({ staffId, backHref }: LocationStaffPro
       ) : !staff ? (
         <div className="rounded-3xl border border-dashed border-border/80 p-12 text-center bg-card/40">
           <p className="font-bold text-foreground text-base">Staff member not found</p>
-          <p className="text-xs text-muted-foreground mt-1">This personnel record may have been removed or reassigned.</p>
+          <p className="text-xs text-muted-foreground mt-1">This personnel record may have been deleted or reassigned.</p>
         </div>
       ) : (
         <Card className="rounded-3xl border-border/60 shadow-xs bg-card overflow-hidden">

@@ -73,7 +73,7 @@ export function FacultyModuleEditPage({
           resumeUrl: (m.resumeUrl as string) ?? "",
         });
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load faculty record" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load faculty record" }))
       .finally(() => setLoading(false));
   }, [facultyId, listHref, router]);
 
@@ -162,7 +162,7 @@ export function FacultyModuleEditPage({
       toast({ variant: "success", title: "Saved" });
       router.push(moduleHref);
     } catch {
-      toast({ variant: "destructive", title: "Failed to save" });
+      toast({ variant: "destructive", title: "Unable to save" });
     } finally {
       setSaving(false);
     }

@@ -85,14 +85,14 @@ export function IndentForm({ editingRequest, onCancel, onSaved }: IndentFormProp
 
       if (!res.ok) {
         const err = (await res.json()) as { error?: string };
-        throw new Error(err.error ?? "Failed to submit indent request");
+        throw new Error(err.error ?? "Unable to submit indent request");
       }
 
       toast({ variant: "success", title: editingRequest ? "Indent resubmitted" : "Indent submitted" });
       resetForm();
       onSaved();
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to submit", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to submit", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsSaving(false);
     }
@@ -114,7 +114,7 @@ export function IndentForm({ editingRequest, onCancel, onSaved }: IndentFormProp
         <CardContent className="space-y-5">
           <div className="space-y-2">
             <Label>Title / Purpose <span className="text-destructive">*</span></Label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Lab consumables restock" />
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Lab consumables restock" />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
@@ -137,7 +137,7 @@ export function IndentForm({ editingRequest, onCancel, onSaved }: IndentFormProp
                   <SelectValue placeholder="Select type" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="GOODS">{INDENT_REQUEST_TYPE_LABELS.GOODS} - sourced via Purchase Dept</SelectItem>
+                  <SelectItem value="GOODS">{INDENT_REQUEST_TYPE_LABELS.GOODS} - sourced via Purchase Department</SelectItem>
                   <SelectItem value="NON_GOODS">{INDENT_REQUEST_TYPE_LABELS.NON_GOODS} - goes directly to Finance</SelectItem>
                 </SelectContent>
               </Select>

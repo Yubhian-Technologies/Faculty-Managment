@@ -183,7 +183,7 @@ function PrincipalDepartmentFacultyContent() {
         body: JSON.stringify({ deptId: department.id, hodUid: "", hodName: "" }),
       });
       const json = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to remove HOD");
+      if (!res.ok) throw new Error(json.error ?? "Unable to remove HOD");
       toast({
         variant: "success",
         title: `${hod.name} is no longer HOD of ${department.name}`,
@@ -193,7 +193,7 @@ function PrincipalDepartmentFacultyContent() {
       await queryClient.invalidateQueries({ queryKey: ["principal-faculty-departments"] });
       await queryClient.invalidateQueries({ queryKey: ["principal-dept-hod"] });
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to remove HOD" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to remove HOD" });
     } finally {
       setIsRemoving(false);
     }
@@ -209,7 +209,7 @@ function PrincipalDepartmentFacultyContent() {
       const res = await fetch(`/api/college/faculty/${deleteTarget.id}`, { method: "DELETE" });
       const json = await res.json().catch(() => ({})) as { error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to delete faculty record", description: json.error });
+        toast({ variant: "destructive", title: "Unable to delete faculty record", description: json.error });
         return;
       }
       toast({ variant: "success", title: `${facultyDisplayName(deleteTarget)} removed from faculty register` });
@@ -223,7 +223,7 @@ function PrincipalDepartmentFacultyContent() {
       });
       await queryClient.invalidateQueries({ queryKey: ["principal-dept-faculty"] });
     } catch {
-      toast({ variant: "destructive", title: "Failed to delete faculty record", description: "Network error - please try again." });
+      toast({ variant: "destructive", title: "Unable to delete faculty record", description: "Network error. Try again." });
     } finally {
       setIsDeleting(false);
     }
@@ -234,7 +234,7 @@ function PrincipalDepartmentFacultyContent() {
     try {
       await downloadFacultyResume(row, collegeName, sections);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to generate resume" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to generate resume" });
     } finally {
       setDownloadingResumeId(null);
       setResumeTarget(null);

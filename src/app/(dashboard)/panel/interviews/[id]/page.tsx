@@ -78,7 +78,7 @@ export default function PanelInterviewDetailPage({ params }: { params: Promise<{
             });
           }
         })
-        .catch(() => toast({ variant: "destructive", title: "Failed to load interview" }))
+        .catch(() => toast({ variant: "destructive", title: "Unable to load interview" }))
         .finally(() => setIsLoading(false));
     }
     load();
@@ -206,9 +206,7 @@ export default function PanelInterviewDetailPage({ params }: { params: Promise<{
           <CardContent className="p-8 text-center space-y-2">
             <Clock className="h-8 w-8 text-muted-foreground mx-auto" />
             <p className="font-medium">Scoring Not Yet Open</p>
-            <p className="text-sm text-muted-foreground">
-              Evaluation opens once the HOD opens panel scoring for this batch.
-            </p>
+            <p className="text-sm text-muted-foreground">Evaluation opens once the HOD starts panel scoring for this batch.</p>
           </CardContent>
         </Card>
       ) : (

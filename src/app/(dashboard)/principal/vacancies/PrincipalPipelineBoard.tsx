@@ -232,7 +232,7 @@ function PipelineCard({
               Candidates ({candidates.length})
             </p>
             {candidates.length === 0 ? (
-              <p className="text-sm text-muted-foreground italic">No candidates linked to this request yet.</p>
+              <p className="text-sm text-muted-foreground italic">No candidates are linked to this request yet.</p>
             ) : (
               <div className="space-y-1.5">
                 {candidates.map((c) => (
@@ -399,7 +399,7 @@ export function PrincipalPipelineBoard({ scope, department }: { scope: "active" 
         );
         setEntries(built);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load hiring requests" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load hiring requests" }))
       .finally(() => setIsLoading(false));
   }
 

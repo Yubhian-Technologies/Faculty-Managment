@@ -148,7 +148,7 @@ export function PersonalDetailsView({ value, hideLegalName = false, hiddenFields
         p.temporaryAddress, p.permanentAddress, p.permanentAddressSameAsTemporary
       ) && (
         <div className="rounded-lg border bg-muted/20 shadow-sm p-3">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Family &amp; Other Details</p>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Family and Other Details</p>
           <div className="@container">
             <div className={`grid gap-4 ${FACT_GRID_COLS_4}`}>
               <Field label="Marital Status" value={p.maritalStatus} />

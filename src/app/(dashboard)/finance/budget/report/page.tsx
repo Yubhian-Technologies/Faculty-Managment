@@ -35,7 +35,7 @@ export default function FinanceBudgetReportPage() {
     collegeFetch("/api/college/budget-requests")
       .then((r) => r.json() as Promise<{ requests: BudgetRequest[] }>)
       .then((d) => setRequests(d.requests ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load budget requests" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load budget requests" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -62,7 +62,7 @@ export default function FinanceBudgetReportPage() {
         .then((r) => r.json() as Promise<{ requests: OverviewRequest[] }>);
       setOverviewRequests(data.requests ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load budget requests" });
+      toast({ variant: "destructive", title: "Unable to load budget requests" });
     } finally {
       setIsLoading(false);
     }
@@ -86,7 +86,7 @@ export default function FinanceBudgetReportPage() {
     <div className="space-y-6">
       <PageHeader
         title="Budget Report"
-        description="Department-wise breakdown of Non Recurring and Recurring budget items"
+        description="Department-wise breakdown of recurring and non-recurring budget items."
         actions={
           <div className="flex items-center gap-2">
             <Select value={scope} onValueChange={(v) => setScope(v as ReportScope)}>

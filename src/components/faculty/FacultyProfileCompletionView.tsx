@@ -193,13 +193,13 @@ export function FacultyProfileCompletionView({ role }: { role: "HOD" | "PRINCIPA
       if (role === "SUPER_ADMIN") params.set("collegeId", selectedCollegeId);
       const res = await fetch(`/api/college/faculty/profile-completion?${params.toString()}`, { signal: ctrl.signal });
       const data = await res.json() as { faculty?: FacultyCompletionRow[]; sections?: SectionDef[]; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to load");
+      if (!res.ok) throw new Error(data.error ?? "Unable to load");
       setRows(data.faculty ?? []);
       setSectionDefs(data.sections ?? []);
       setHasLoaded(true);
     } catch (err) {
       if ((err as Error)?.name === "AbortError") return;
-      toast({ variant: "destructive", title: "Failed to load profile completion", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to load profile completion", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsLoading(false);
     }
@@ -271,7 +271,7 @@ export function FacultyProfileCompletionView({ role }: { role: "HOD" | "PRINCIPA
             <Button onClick={() => handleLoad(selectedDept)} loading={isLoading} disabled={role === "SUPER_ADMIN" && !selectedCollegeId}>
               Load
             </Button>
-            {!hasLoaded && <p className="text-sm text-muted-foreground ml-auto">Pick a department (or leave All) and click Load.</p>}
+            {!hasLoaded && <p className="text-sm text-muted-foreground ml-auto">Select a department (or leave All) and choose Load.</p>}
           </CardContent>
         </Card>
       )}

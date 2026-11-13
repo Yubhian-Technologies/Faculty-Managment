@@ -36,7 +36,7 @@ export default function NewEmailRequestPage() {
         setFaculty(facultyRes.faculty ?? []);
         setExistingRequests(requestsRes.requests ?? []);
       } catch {
-        toast({ variant: "destructive", title: "Failed to load faculty" });
+        toast({ variant: "destructive", title: "Unable to load faculty" });
       } finally {
         setIsLoading(false);
       }
@@ -74,12 +74,12 @@ export default function NewEmailRequestPage() {
       });
       if (!res.ok) {
         const err = (await res.json()) as { error?: string };
-        throw new Error(err.error ?? "Failed to submit request");
+        throw new Error(err.error ?? "Unable to submit request");
       }
       toast({ variant: "success", title: "Request sent to Webmaster" });
       router.push("/college-office/email-requests");
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to submit request", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to submit request", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsSubmitting(false);
     }
@@ -89,7 +89,7 @@ export default function NewEmailRequestPage() {
     <div className="space-y-6 max-w-xl">
       <PageHeader
         title="Request Official Email"
-        description="Ask the Webmaster to provision an institutional email for a newly joined faculty member"
+        description="Request the Webmaster to create an institutional email account for a newly joined faculty member."
       />
 
       <Card>
@@ -128,7 +128,7 @@ export default function NewEmailRequestPage() {
               type="email"
               value={preferredEmail1}
               onChange={(e) => setPreferredEmail1(e.target.value)}
-              placeholder="e.g. dharani@college.edu"
+              placeholder="dharani@college.edu"
             />
           </div>
 
@@ -138,13 +138,11 @@ export default function NewEmailRequestPage() {
               type="email"
               value={preferredEmail2}
               onChange={(e) => setPreferredEmail2(e.target.value)}
-              placeholder="e.g. dharani.n@college.edu"
+              placeholder="dharani.n@college.edu"
             />
           </div>
 
-          <p className="text-xs text-muted-foreground">
-            These are suggestions only — the Webmaster will confirm availability and may assign a different address.
-          </p>
+          <p className="text-xs text-muted-foreground">These are suggestions only. The Webmaster confirms availability and may assign a different address.</p>
 
           <div className="flex gap-2 pt-2">
             <Button onClick={submit} loading={isSubmitting} disabled={!facultyId}>

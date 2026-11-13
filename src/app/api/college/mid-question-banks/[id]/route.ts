@@ -28,7 +28,7 @@ export async function GET(_request: Request, { params }: Params) {
     const { id } = await params;
     const db = getAdminDb();
     const access = await bankAccess(db, session, id);
-    if (!access) return NextResponse.json({ error: "Question bank not found" }, { status: 404 });
+    if (!access) return NextResponse.json({ error: "Question bank not found. It may have been deleted." }, { status: 404 });
     if (!access.canRead) return NextResponse.json({ error: "This question bank isn't yours" }, { status: 403 });
     const { bank, deadline } = access;
     const subject = await loadSubject(db, session.collegeId, bank.subjectId);
@@ -74,7 +74,7 @@ export async function PATCH(request: Request, { params }: Params) {
     const body = (await readJsonBody(request)) as { sectionIds?: string[] };
     const db = getAdminDb();
     const access = await bankAccess(db, session, id);
-    if (!access) return NextResponse.json({ error: "Question bank not found" }, { status: 404 });
+    if (!access) return NextResponse.json({ error: "Question bank not found. It may have been deleted." }, { status: 404 });
     if (!access.isOwner) return NextResponse.json({ error: "Only the faculty preparing this bank can change its sections" }, { status: 403 });
     if (!access.canWrite || !access.deadline) return NextResponse.json({ error: writeRefusal(access) }, { status: 403 });
     const { bank, deadline } = access;

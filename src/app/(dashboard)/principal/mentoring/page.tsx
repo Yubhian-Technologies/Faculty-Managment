@@ -29,7 +29,7 @@ export default function PrincipalMentoringPage() {
     fetch("/api/college/mentoring/overview")
       .then(async (res) => {
         const body = (await res.json().catch(() => ({}))) as { overview?: MentoringOverview; error?: string };
-        if (!res.ok || !body.overview) throw new Error(body.error || "Could not load the summary");
+        if (!res.ok || !body.overview) throw new Error(body.error || "Unable to load the summary");
         if (!cancelled) setData(body.overview);
       })
       .catch((e: Error) => { if (!cancelled) setError(e.message); });
@@ -45,7 +45,7 @@ export default function PrincipalMentoringPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Student Mentoring" description="Mentoring in your college: the numbers below, and any student's Mentoring Record (read-only) from the search." />
+      <PageHeader title="Student Mentoring" description="Mentoring figures for your college. Search for a student to view their Mentoring Record (read only)." />
 
       <StudentFinder byDepartment={data.byDepartment} byMentor={data.byMentor} />
 

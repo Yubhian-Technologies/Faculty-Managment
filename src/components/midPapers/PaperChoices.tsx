@@ -40,7 +40,7 @@ export function PaperChoices() {
     if (!planId) return;
     let off = false;
     fetch(`/api/college/mid-timetables/${encodeURIComponent(planId)}`).then((r) => r.json() as Promise<PlanDetail>).then((d) => { if (!off) setDetail(d); })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load the timetable" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load the timetable" }));
     return () => { off = true; };
   }, [planId]);
   const dates = useMemo(() => {
@@ -55,9 +55,9 @@ export function PaperChoices() {
     try {
       const res = await fetch(`/api/college/mid-paper-choices?${new URLSearchParams({ planId, date: d })}`);
       const json = (await res.json()) as PaperChoiceDay & { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Could not load");
+      if (!res.ok) throw new Error(json.error ?? "Unable to load");
       setDay(json);
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not load" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to load" }); }
     finally { setBusy(""); }
   }
 
@@ -69,10 +69,10 @@ export function PaperChoices() {
         body: JSON.stringify({ planId, date, subjectId: row.subjectId, branch: row.branch, ...(pick === "random" ? { random: true } : pick) }),
       });
       const json = (await res.json()) as { error?: string; choice?: PaperChoiceRow["choice"] };
-      if (!res.ok) throw new Error(json.error ?? "Could not save the choice");
+      if (!res.ok) throw new Error(json.error ?? "Unable to save the choice");
       setDay((d) => d && ({ ...d, rows: d.rows.map((r) => (r === row ? { ...r, choice: json.choice ?? null } : r)) }));
       toast({ variant: "success", title: `Question paper ${json.choice?.setNo} of ${row.papers.find((p) => p.bankId === json.choice?.bankId)?.ownerName ?? ""} chosen` });
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not save" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" }); }
     finally { setBusy(""); }
   }
 
@@ -88,12 +88,12 @@ export function PaperChoices() {
         body: JSON.stringify({ action: "finalize", planId, date, subjectId: row.subjectId, branch: row.branch, layout }),
       });
       const json = (await res.json()) as { final?: MidPaperFinal; error?: string };
-      if (!res.ok || !json.final) throw new Error(json.error ?? "Could not finalize the paper");
+      if (!res.ok || !json.final) throw new Error(json.error ?? "Unable to finalize the paper");
       const f = json.final;
       setDay((d) => d && ({ ...d, rows: d.rows.map((r) => (r === row ? { ...r, choice: r.choice && { ...r.choice, final: { at: f.at, byName: f.byName, layout: f.layout } } } : r)) }));
       await downloadMidPaperFinalPdf(f, { answerKey, fileName: `MID${f.exam.midNumber}_${f.exam.date}_${row.branchCode}_${f.subject.code}${answerKey ? "_answer-key" : ""}${f.layout.separateParts ? "_parts" : ""}` });
       setPrinting(null);
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not make the PDF" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to make the PDF" }); }
     finally { setBusy(""); }
   }
 
@@ -103,21 +103,21 @@ export function PaperChoices() {
     try {
       const res = await fetch(`/api/college/mid-paper-choices?${new URLSearchParams({ planId, date, subjectId: row.subjectId, branch: row.branch })}`, { method: "DELETE" });
       const json = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Could not un-finalize");
+      if (!res.ok) throw new Error(json.error ?? "Unable to un-finalize");
       setDay((d) => d && ({ ...d, rows: d.rows.map((r) => (r === row ? { ...r, choice: r.choice && { ...r.choice, final: null } } : r)) }));
       toast({ variant: "success", title: "Un-finalized - you can choose another paper" });
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not un-finalize" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to un-finalize" }); }
     finally { setBusy(""); }
   }
 
   return (
     <div className="max-w-5xl space-y-6">
-      <PageHeader title="Mid Question Paper" description="Choose, for every subject written on an exam day, which of the faculty's approved question papers is used - then download it and its answer key. Faculty don't see which one was chosen." />
+      <PageHeader title="Mid Question Paper" description="For every subject written on an examination day, choose which of the faculty's approved question papers is used, then download it and its answer key. Faculty are not told which paper was chosen." />
       <Card className="rounded-2xl"><CardContent className="grid gap-3 p-5 sm:grid-cols-3">
         <div className="space-y-1.5"><Label htmlFor="pc-plan">Mid timetable</Label>
           <select id="pc-plan" className={selectClass} value={planId} onChange={(e) => { setPlanId(e.target.value); setDetail(null); setDate(""); setDay(null); }}>
             <option value="">{plans === null ? "Loading..." : plans.length ? "Select a Mid timetable" : "No Mid timetable yet"}</option>
-            {(plans ?? []).map((p) => <option key={p.id} value={p.id}>{p.courseName} · {ordinalYearLabel(p.year)} · Sem {p.semester} · Mid {p.midNumber}</option>)}
+            {(plans ?? []).map((p) => <option key={p.id} value={p.id}>{p.courseName} · {ordinalYearLabel(p.year)} · Semester {p.semester} · Mid {p.midNumber}</option>)}
           </select>
         </div>
         <div className="space-y-1.5"><Label htmlFor="pc-date">Exam date</Label>

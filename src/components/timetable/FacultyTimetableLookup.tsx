@@ -69,7 +69,7 @@ export function FacultyTimetableLookup({ ownOnly = false, embedded = false }: { 
         const deptJson = await deptRes.json() as { departments?: Department[] };
         setDepartments(deptJson.departments ?? []);
       } catch {
-        toast({ variant: "destructive", title: "Failed to load departments" });
+        toast({ variant: "destructive", title: "Unable to load departments" });
       } finally {
         setIsLoadingOptions(false);
       }
@@ -87,10 +87,10 @@ export function FacultyTimetableLookup({ ownOnly = false, embedded = false }: { 
       try {
         const res = await fetch(`/api/college/faculty-schedule?departmentId=${encodeURIComponent(departmentId)}`);
         const json = await res.json() as { faculty?: { id: string; name: string }[]; error?: string };
-        if (!res.ok) throw new Error(json.error ?? "Failed to load faculty");
+        if (!res.ok) throw new Error(json.error ?? "Unable to load faculty");
         setFacultyOptions(json.faculty ?? []);
       } catch (err) {
-        toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to load faculty" });
+        toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to load faculty" });
         setFacultyOptions([]);
       } finally {
         setIsLoadingFaculty(false);
@@ -106,10 +106,10 @@ export function FacultyTimetableLookup({ ownOnly = false, embedded = false }: { 
       try {
         const res = await fetch(`/api/college/faculty-schedule?${ownOnly ? "me=1" : `facultyId=${encodeURIComponent(facultyId)}`}`);
         const json = await res.json() as { facultyName?: string; slots?: ScheduleSlot[]; periods?: PeriodTiming[]; error?: string };
-        if (!res.ok) throw new Error(json.error ?? "Failed to load schedule");
+        if (!res.ok) throw new Error(json.error ?? "Unable to load schedule");
         setSchedule({ facultyName: json.facultyName ?? "", slots: json.slots ?? [], periods: json.periods ?? [] });
       } catch (err) {
-        toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to load schedule" });
+        toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to load schedule" });
         setSchedule(null);
       } finally {
         setIsLoadingSchedule(false);
@@ -175,7 +175,7 @@ export function FacultyTimetableLookup({ ownOnly = false, embedded = false }: { 
         embedded && !isLoadingSchedule ? null : <EmptyState
           icon={<CalendarSearch className="h-8 w-8" />}
           title={isLoadingSchedule ? "Loading…" : ownOnly ? "No timetable found" : "Pick a department and a faculty member"}
-          description="Their real week shows here - every period they are already booked for, across every course and section."
+          description="Their full week is shown here: every period already booked, across every course and section."
         />
       ) : !readyForGrid ? (
         // No periods to draw means no course-year timings AND no bookings -
@@ -190,9 +190,7 @@ export function FacultyTimetableLookup({ ownOnly = false, embedded = false }: { 
               {schedule.facultyName} &mdash; {schedule.slots.length} period{schedule.slots.length === 1 ? "" : "s"} booked this week
             </p>
             {schedule.slots.some((sl) => sl.isDraft) && (
-              <p className="text-xs text-muted-foreground">
-                Dashed cells are from a timetable that has been built but not published yet.
-              </p>
+              <p className="text-xs text-muted-foreground">Dashed cells are from a timetable that has been built but not yet published.</p>
             )}
           </div>
           <div className="overflow-x-auto rounded-lg border">

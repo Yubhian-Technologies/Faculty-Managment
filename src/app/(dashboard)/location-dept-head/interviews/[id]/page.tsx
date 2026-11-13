@@ -103,7 +103,7 @@ export default function DeptHeadInterviewDetailPage() {
         }
         setScoreForms(pre);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -146,7 +146,7 @@ export default function DeptHeadInterviewDetailPage() {
       toast({ variant: "success", title: "Score submitted", description: `Feedback saved for ${candidateName}` });
       load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to submit score" });
+      toast({ variant: "destructive", title: "Unable to submit score" });
     } finally {
       setSubmittingFor(null);
     }
@@ -164,7 +164,7 @@ export default function DeptHeadInterviewDetailPage() {
 
   return (
     <div className="max-w-2xl space-y-5">
-      <PageHeader title={interview.title} description="Panel interview - score each candidate below" />
+      <PageHeader title={interview.title} description="Panel interview: score each candidate below." />
 
       <Card>
         <CardContent className="grid grid-cols-2 gap-3 text-sm pt-5">
@@ -192,9 +192,7 @@ export default function DeptHeadInterviewDetailPage() {
                 </span>
               )}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Panel Evaluation (70%) + Student Feedback (30%) - rate each criterion 1–5
-            </p>
+            <p className="text-xs text-muted-foreground">Panel evaluation (70%) and student feedback (30%). Rate each criterion from 1 to 5.</p>
           </CardHeader>
           <CardContent className="space-y-6">
             {(interview.candidatesInfo ?? []).map((c) => {

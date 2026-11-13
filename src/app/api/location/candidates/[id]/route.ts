@@ -13,9 +13,9 @@ export async function GET(_req: Request, { params }: Params) {
     const session = await verifySession();
     const allowed = ["SUPER_ADMIN", "ADMINISTRATION", "HR_ADMIN", "LOCATION_DEPT_HEAD"];
     if (!session || !allowed.includes(session.role)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
-    if (!session.locationId) return NextResponse.json({ error: "No location context" }, { status: 400 });
+    if (!session.locationId) return NextResponse.json({ error: "Your account is not linked to a location. Contact the administrator." }, { status: 400 });
 
     const db = getAdminDb();
     const doc = await db
@@ -25,13 +25,13 @@ export async function GET(_req: Request, { params }: Params) {
       .doc(id)
       .get();
 
-    if (!doc.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!doc.exists) return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     return NextResponse.json({ candidate: { id: doc.id, ...doc.data() } });
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     console.error("[location/candidates/[id] GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -39,8 +39,8 @@ export async function PATCH(request: Request, { params }: Params) {
   try {
     const { id } = await params;
     const session = await verifySession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    if (!session.locationId) return NextResponse.json({ error: "No location context" }, { status: 400 });
+    if (!session) return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
+    if (!session.locationId) return NextResponse.json({ error: "Your account is not linked to a location. Contact the administrator." }, { status: 400 });
 
     const body = (await readJsonBody(request)) as {
       action?: "SHORTLIST" | "REJECT_CANDIDATE";
@@ -56,7 +56,7 @@ export async function PATCH(request: Request, { params }: Params) {
       .doc(id);
 
     const snap = await ref.get();
-    if (!snap.exists) return NextResponse.json({ error: "Candidate not found" }, { status: 404 });
+    if (!snap.exists) return NextResponse.json({ error: "Candidate not found. The record may have been deleted." }, { status: 404 });
 
     const now = new Date();
 
@@ -79,7 +79,7 @@ export async function PATCH(request: Request, { params }: Params) {
     // HR Admin or Admin can update general status (SELECTED, OFFER_PENDING, etc.)
     if (body.status) {
       const canUpdate = session.role === "HR_ADMIN" || session.role === "ADMINISTRATION";
-      if (!canUpdate) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      if (!canUpdate) return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 403 });
       await ref.update({ status: body.status, updatedAt: now });
       return NextResponse.json({ ok: true });
     }
@@ -89,6 +89,6 @@ export async function PATCH(request: Request, { params }: Params) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     console.error("[location/candidates/[id] PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

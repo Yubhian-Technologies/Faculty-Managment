@@ -111,7 +111,7 @@ export function buildStudentSelfUpdate(student: Partial<StudentRecord>, details:
   }
   if (typeof prepared.email === "string") {
     const e = prepared.email.trim().toLowerCase();
-    if (!EMAIL_REGEX.test(e)) return { ok: false, status: 400, error: "Enter a valid email address" };
+    if (!EMAIL_REGEX.test(e)) return { ok: false, status: 400, error: "Enter a valid email address." };
     prepared.email = e;
   }
   if (typeof prepared.ifscCode === "string") {

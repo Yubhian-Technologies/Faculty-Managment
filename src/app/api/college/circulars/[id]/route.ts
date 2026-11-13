@@ -10,15 +10,15 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     const { id } = await params;
     const db = getAdminDb();
     const circular = await getCircular(db, session.collegeId, id);
-    if (!circular) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!circular) return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     // Drafts only visible to creator/principal
     if (circular.status === "DRAFT" && circular.createdBy !== session.uid && session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL") {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
     return NextResponse.json({ circular });
   } catch (err) {
-    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     console.error("[circulars/[id] GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

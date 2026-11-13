@@ -177,7 +177,7 @@ function RequestCard({
               <Badge
                 variant="outline"
                 className="border-amber-300 text-amber-800 text-xs rounded-md"
-                title="Raised with less than the preferred notice"
+                title="Raised with less than the preferred notice."
               >
                 <AlertTriangle className="h-3 w-3 mr-1" aria-hidden />
                 Short notice
@@ -513,7 +513,7 @@ export function RequestList({
   async function confirm() {
     if (!pending) return;
     if (pending.needsRemark && !remark.trim()) {
-      toast({ variant: "destructive", title: "Please add a reason" });
+      toast({ variant: "destructive", title: "Add a reason" });
       return;
     }
     setBusy(true);

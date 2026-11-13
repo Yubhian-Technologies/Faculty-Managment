@@ -23,7 +23,7 @@ import {
 type OverviewIndent = IndentRequest & { collegeName: string; locationId: string; locationName: string };
 type ClearanceRow = FinancePurchaseClearance & { id: string; status: string; collegeName: string; locationId: string; locationName: string };
 
-// Purchase Dept reviews and acts on every stage of these requests here -
+// Purchase Department reviews and acts on every stage of these requests here -
 // from initial quotation-sourcing through to purchase - instead of on a
 // separate Purchase Requests page.
 const CLEARANCE_STATUS_STYLES: Record<string, string> = {
@@ -64,7 +64,7 @@ export default function PurchaseIndentsPage() {
         setRequests(d.indents ?? []);
         setClearanceRequests(d.clearances ?? []);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load indent requests" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load indent requests" }))
       .finally(() => {
         setIsLoading(false);
         setIsLoadingClearance(false);

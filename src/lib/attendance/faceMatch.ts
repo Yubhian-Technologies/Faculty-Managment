@@ -55,7 +55,7 @@ export function loadImage(url: string): Promise<HTMLImageElement> {
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error("Failed to load reference photo"));
+    img.onerror = () => reject(new Error("Unable to load reference photo"));
     img.src = url;
   });
 }
@@ -302,7 +302,7 @@ export async function waitForGuidedBlink(
       }
     }
     if (!hintShown && Date.now() - start > hintDelayMs) {
-      onHint?.("Please blink a little more clearly.");
+      onHint?.("Blink a little more clearly.");
       hintShown = true;
     }
   }
@@ -335,7 +335,7 @@ export async function waitForGuidedTurn(
       }
     }
     if (!hintShown && Date.now() - start > hintDelayMs) {
-      onHint?.(excludeDirection ? "Please turn your head to the other side." : "Please turn your head a little more.");
+      onHint?.(excludeDirection ? "Turn your head to the other side." : "Turn your head a little more.");
       hintShown = true;
     }
   }
@@ -360,7 +360,7 @@ export async function waitForGuidedRecenter(
       return true;
     }
     if (!hintShown && Date.now() - start > hintDelayMs) {
-      onHint?.("Please face the camera directly.");
+      onHint?.("Face the camera directly.");
       hintShown = true;
     }
   }

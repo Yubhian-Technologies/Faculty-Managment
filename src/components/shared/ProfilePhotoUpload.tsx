@@ -54,7 +54,7 @@ export function ProfilePhotoUpload({ name, photoUrl, className, endpoint }: Prof
     remove(undefined, {
       onSuccess: () => toast({ variant: "success", title: "Profile photo removed" }),
       onError: (err) => {
-        toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to remove photo" });
+        toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to remove photo" });
       },
     });
   };

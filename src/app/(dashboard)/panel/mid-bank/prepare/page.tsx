@@ -35,10 +35,10 @@ function PrepareMidBank() {
     fetch(`/api/college/mid-question-banks/prepare?${params}`)
       .then(async (r) => {
         const d = (await r.json()) as MidBankPrepare & { error?: string };
-        if (!r.ok) throw new Error(d.error ?? "Failed to load");
+        if (!r.ok) throw new Error(d.error ?? "Unable to load");
         setData(d);
       })
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load"));
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Unable to load"));
   }, [q.deadlineId, q.subjectId, q.branch]);
   useEffect(() => { load(); }, [load]);
 

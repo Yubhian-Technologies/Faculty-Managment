@@ -69,7 +69,7 @@ export default function CandidateProfilePage() {
         setBatches(batchesRes.batches ?? []);
         setAccountRequests((acctRes.requests ?? []).filter((r) => r.candidateId === candidateId));
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load candidate profile" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load candidate profile" }))
       .finally(() => setIsLoading(false));
   }, [candidateId]);
 
@@ -110,7 +110,7 @@ export default function CandidateProfilePage() {
         termsAndConditions: offer.termsAndConditions,
       }, candidate?.name ?? offer.id);
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to generate offer letter", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to generate offer letter", description: err instanceof Error ? err.message : undefined });
     } finally {
       setDownloading(null);
     }
@@ -171,7 +171,7 @@ export default function CandidateProfilePage() {
         generatedByRole: user?.role ? ROLE_LABELS[user.realRole ?? user.role] : undefined,
       }, candidate.name);
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to generate candidate profile", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to generate candidate profile", description: err instanceof Error ? err.message : undefined });
     } finally {
       setDownloading(null);
     }
@@ -192,7 +192,7 @@ export default function CandidateProfilePage() {
         termsAndConditions: appt.termsAndConditions,
       }, candidate?.name ?? appt.id);
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to generate appointment letter", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to generate appointment letter", description: err instanceof Error ? err.message : undefined });
     } finally {
       setDownloading(null);
     }
@@ -285,7 +285,7 @@ export default function CandidateProfilePage() {
         <CardHeader><CardTitle className="text-base flex items-center gap-2"><User className="h-4 w-4" /> Bio-Data</CardTitle></CardHeader>
         <CardContent>
           {!candidate.bioDataSubmitted && !bio ? (
-            <p className="text-sm text-muted-foreground">Bio-data not submitted yet.</p>
+            <p className="text-sm text-muted-foreground">Bio-data has not been submitted yet.</p>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
               <Field label="Father's Name" value={bio?.fatherName} />
@@ -364,7 +364,7 @@ export default function CandidateProfilePage() {
                     </div>
                   )}
                   {feedbackForBatch.length === 0 ? (
-                    <p className="text-xs text-muted-foreground pt-2 border-t">No panel feedback submitted yet.</p>
+                    <p className="text-xs text-muted-foreground pt-2 border-t">No panel feedback has been submitted yet.</p>
                   ) : (
                     <div className="space-y-2 pt-2 border-t">
                       {feedbackForBatch.map((f) => {
@@ -403,7 +403,7 @@ export default function CandidateProfilePage() {
         <CardHeader><CardTitle className="text-base">Hiring &amp; Offer Documents</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           {applications.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Not attached to any hiring request yet.</p>
+            <p className="text-sm text-muted-foreground">Not linked to a hiring request yet.</p>
           ) : (
             applications.map((app) => {
               const offer = offers.find((o) => o.batchId === app.batchId);
@@ -448,7 +448,7 @@ export default function CandidateProfilePage() {
                       )}
                     </div>
                   ) : (
-                    <p className="text-xs text-muted-foreground pt-2 border-t">No offer documents generated yet — they appear here as each step completes.</p>
+                    <p className="text-xs text-muted-foreground pt-2 border-t">No offer documents generated yet. They appear here as each step is completed.</p>
                   )}
                 </div>
               );

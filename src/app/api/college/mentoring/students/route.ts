@@ -32,10 +32,10 @@ export async function GET(request: Request) {
     let students: (StudentRecord & { id: string })[] = [];
     if (sectionId) {
       const sectionSnap = await collegeRef.collection("sections").doc(sectionId).get();
-      if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found" }, { status: 404 });
+      if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found. It may have been deleted." }, { status: 404 });
       const section = sectionSnap.data() as Section;
       const allowed = searchParams.get("for") === "view" ? await canViewSection(section) : await canAssign(section);
-      if (!allowed) return NextResponse.json({ error: "Outside your department" }, { status: 403 });
+      if (!allowed) return NextResponse.json({ error: "This record is outside your department." }, { status: 403 });
       students = await fetchSectionStudents(collegeRef, {
         department: section.department,
         sectionName: section.name,

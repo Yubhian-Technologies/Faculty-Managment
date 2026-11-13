@@ -44,7 +44,7 @@ export default function HROffersPage() {
     fetch("/api/location/offers")
       .then((r) => r.json() as Promise<{ offers: LocationOffer[] }>)
       .then((d) => setOffers(d.offers ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load offers" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load offers" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -63,7 +63,7 @@ export default function HROffersPage() {
     <div className="space-y-6">
       <PageHeader
         title="Offer Letters"
-        description="Prepare offer letters for selected candidates - Administration approval required"
+        description="Prepare offer letters for selected candidates. Approval by Administration is required."
         actions={
           <Button onClick={() => router.push("/hr-admin/offers/new")} disabled={selectedCandidates.length === 0}>
             + Create Offer Letter

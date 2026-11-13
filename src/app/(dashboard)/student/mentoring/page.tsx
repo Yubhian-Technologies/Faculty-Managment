@@ -26,13 +26,13 @@ export default function StudentMentoringPage() {
     let cancelled = false;
     getJson<Overview>(`${API}?part=mentor`)
       .then((d) => { if (!cancelled) setData(d); })
-      .catch((e: Error) => { if (!cancelled) setError(e.message || "Couldn't load your mentoring record."); });
+      .catch((e: Error) => { if (!cancelled) setError(e.message || "Unable to load your mentoring record."); });
     return () => { cancelled = true; };
   }, []);
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Mentoring" description="Your mentor and your Student Mentoring Record. Your mentor keeps the record; you can add your scholarships, internships, placements, competitive exams, higher studies and achievements under Progress & activities." />
+      <PageHeader title="Mentoring" description="Your mentor and your Student Mentoring Record. Your mentor maintains the record; you can add scholarships, internships, placements, competitive examinations, higher studies and achievements under Progress and Activities." />
 
       {error && <p className="text-sm text-muted-foreground py-6">{error}</p>}
       {!error && !data && <p className="text-sm text-muted-foreground py-6">Loading…</p>}

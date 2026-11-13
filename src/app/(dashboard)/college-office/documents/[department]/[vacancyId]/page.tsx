@@ -109,7 +109,7 @@ export default function CollegeOfficeVacancyCandidatesPage() {
         });
         setCandidates(views);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load hiring request" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load hiring request" }))
       .finally(() => setIsLoading(false));
   }
 

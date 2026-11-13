@@ -71,8 +71,8 @@ export function QualificationFields({ value: rawValue, onChange, collegeType }: 
   if (collegeType === "SCHOOL") {
     return (
       <div className="space-y-5">
-        <TextInput label="Highest Qualification" value={value.highestQualification} onChange={(v) => set("highestQualification", v)} placeholder="e.g. B.Ed, M.A." />
-        <StringListInput label="Research Areas/Interests" values={value.researchAreasInterests} onChange={(v) => set("researchAreasInterests", v)} placeholder="e.g. Machine Learning - press Enter or Add" />
+        <TextInput label="Highest Qualification" value={value.highestQualification} onChange={(v) => set("highestQualification", v)} placeholder="B.Ed, M.A." />
+        <StringListInput label="Research Areas/Interests" values={value.researchAreasInterests} onChange={(v) => set("researchAreasInterests", v)} placeholder="Machine Learning, press Enter or Add" />
         <QualificationsFields
           items={value.educationalQualifications}
           levelOptions={SCHOOL_TEACHING_QUALIFICATION_LEVELS}
@@ -84,8 +84,8 @@ export function QualificationFields({ value: rawValue, onChange, collegeType }: 
 
   return (
     <div className="space-y-5">
-      <TextInput label="Highest Qualification" value={value.highestQualification} onChange={(v) => set("highestQualification", v)} placeholder="e.g. Ph.D" />
-      <StringListInput label="Research Areas/Interests" values={value.researchAreasInterests} onChange={(v) => set("researchAreasInterests", v)} placeholder="e.g. Machine Learning - press Enter or Add" />
+      <TextInput label="Highest Qualification" value={value.highestQualification} onChange={(v) => set("highestQualification", v)} placeholder="Ph.D" />
+      <StringListInput label="Research Areas/Interests" values={value.researchAreasInterests} onChange={(v) => set("researchAreasInterests", v)} placeholder="Machine Learning, press Enter or Add" />
       <QualifiedExamFields value={value} onChange={(next) => onChange(next as typeof value)} />
       <DegreeFields label="Secondary Education" level="HIGH_SCHOOL" value={value.secondaryEducation} onChange={(v) => set("secondaryEducation", v)} />
       <DegreeFields label="Intermediate / Diploma / ITI" level="INTERMEDIATE" value={value.intermediateDiplomaIti} onChange={(v) => set("intermediateDiplomaIti", v)} />
@@ -160,9 +160,7 @@ export function ExperienceFields({ value: rawValue, onChange, includeTeachingAss
         ))}
       </div>
       {includeTeachingAssignment && activeTab.key === "academic" && (
-        <p className="text-xs text-muted-foreground">
-          Subject-level teaching assignments (course, section, subject, weekly schedule) are managed from the &ldquo;Teaching Load&rdquo; module.
-        </p>
+        <p className="text-xs text-muted-foreground">Subject-level teaching assignments (course, section, subject, weekly schedule) are managed in the Teaching Load module.</p>
       )}
       <RepeatingGroup
         title={activeTab.label}
@@ -186,7 +184,7 @@ export function ExperienceFields({ value: rawValue, onChange, includeTeachingAss
           return (
             <>
               <TextInput label={activeTab.key === "academic" ? "Name of the Institution" : activeTab.key === "industry" ? "Name of the Industry" : "Name of the Research Organization"} value={item.institutionName} onChange={(v) => update({ institutionName: v })} />
-              <TextInput label={activeTab.key === "academic" ? "Location of the Institution" : activeTab.key === "industry" ? "Location of the Industry" : "Location of the Research Organization"} value={item.place} onChange={(v) => update({ place: v })} placeholder="e.g. Bhimavaram" />
+              <TextInput label={activeTab.key === "academic" ? "Location of the Institution" : activeTab.key === "industry" ? "Location of the Industry" : "Location of the Research Organization"} value={item.place} onChange={(v) => update({ place: v })} placeholder="Bhimavaram" />
               <TextInput label="Designation" value={item.designation} onChange={(v) => update({ designation: v })} />
               <DateInput
                 label="From Date"
@@ -261,9 +259,7 @@ export function ExperienceFields({ value: rawValue, onChange, includeTeachingAss
         Previous Experience Total (all 3 tabs combined): <span className="font-semibold">{formatDuration(previousExperienceTotal)}</span>
         <span className="text-xs text-muted-foreground"> — combined with time served since Date of Joining, this becomes the Total Years of Experience shown on this faculty member&rsquo;s profile.</span>
       </p>
-      <p className="text-xs text-muted-foreground rounded-md border bg-muted/20 p-2">
-        Promotion History is maintained by the College Office - it can no longer be edited here.
-      </p>
+      <p className="text-xs text-muted-foreground rounded-md border bg-muted/20 p-2">Promotion history is maintained by the College Office and cannot be edited here.</p>
     </div>
   );
 }
@@ -368,10 +364,7 @@ export function ResearchFields({ value, onChange }: ModuleFieldsProps) {
   }
   return (
     <div className="space-y-5">
-      <p className="text-xs text-muted-foreground">
-        Individual publication records are maintained by the R&amp;D office - view them on the Research &amp; Innovation module.
-        The fields below are self-reported summary metrics.
-      </p>
+      <p className="text-xs text-muted-foreground">Individual publication records are maintained by the R&amp;D office and shown in the Research and Innovation module. The fields below are self-reported summary figures.</p>
       {/* Hidden for now - Research Publications is getting a proper field
           redesign (see ResearchInnovationModule's sub-tabs); re-enable once
           that's in and these are re-decided as part of it, not before.
@@ -501,7 +494,7 @@ export function MentorshipFields({
               label="Membership Type"
               value={item.membershipType}
               onChange={(v) => update({ membershipType: v })}
-              placeholder="e.g. Senior Fellowship / Associate Fellowship / Fellowship"
+              placeholder="Senior Fellowship / Associate Fellowship / Fellowship"
             />
             <TextInput label="Membership ID" value={item.membershipId} onChange={(v) => update({ membershipId: v })} />
             <div className="space-y-2">
@@ -605,9 +598,7 @@ export function FinancialFields({ value: rawValue, onChange }: ModuleFieldsProps
           <NumInput label="Increments Awarded" value={value.incrementsAwarded} onChange={(v) => set("incrementsAwarded", v)} />
           <NumInput label="Funding/Consultancy Revenue Generation (₹)" value={value.fundingConsultancyRevenueGeneration} onChange={(v) => set("fundingConsultancyRevenueGeneration", v)} />
         </div>
-        <p className="text-xs text-muted-foreground">
-          Revenue brought in through research/consultancy grants, offsetting this faculty member&rsquo;s salary cost to the institution.
-        </p>
+        <p className="text-xs text-muted-foreground">Revenue from research and consultancy grants that offsets this faculty member&apos;s salary cost to the institution.</p>
       </div>
     </div>
   );
@@ -620,7 +611,7 @@ export function OthersFields({ value, onChange }: ModuleFieldsProps) {
       <Textarea
         value={value.otherInformation ?? ""}
         onChange={(e) => onChange({ ...value, otherInformation: e.target.value })}
-        placeholder="Anything not covered above - add it here"
+        placeholder="Anything not covered above, add it here"
         rows={4}
       />
     </div>

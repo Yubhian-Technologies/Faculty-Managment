@@ -120,7 +120,7 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint, sectionScoped
           displayName: typeof m.displayName === "string" ? m.displayName : "",
         });
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load profile" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load profile" }))
       .finally(() => setLoading(false));
   }, [ratificationHistory]);
 
@@ -166,7 +166,7 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint, sectionScoped
         toast({ variant: "success", title: "Saved" });
         router.push(backHref);
       } catch (err) {
-        toast({ variant: "destructive", title: err instanceof Error && err.message ? err.message : "Failed to save" });
+        toast({ variant: "destructive", title: err instanceof Error && err.message ? err.message : "Unable to save" });
       } finally {
         setSaving(false);
       }
@@ -225,7 +225,7 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint, sectionScoped
       }
       router.push(backHref);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error && err.message ? err.message : "Failed to save" });
+      toast({ variant: "destructive", title: err instanceof Error && err.message ? err.message : "Unable to save" });
     } finally {
       setSaving(false);
     }

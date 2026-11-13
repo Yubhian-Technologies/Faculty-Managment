@@ -36,7 +36,7 @@ export default function SupportingStaffCredentialsPage() {
         setStaffName(supportingStaffDisplayName({ legalName: s.legalName as string, nameAsPerPan: s.nameAsPerPan as string }));
         setEmail(((s.collegeEmail as string) || (s.email as string)) ?? "");
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load staff record" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load staff record" }))
       .finally(() => setLoading(false));
   }, [staffId, router]);
 
@@ -59,13 +59,13 @@ export default function SupportingStaffCredentialsPage() {
       });
       const json = await res.json() as { error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to create login" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to create login" });
         return;
       }
       toast({ variant: "success", title: `Login created for ${staffName}` });
       router.push("/college-office/non-technical-staff");
     } catch {
-      toast({ variant: "destructive", title: "Network error, please try again" });
+      toast({ variant: "destructive", title: "Network error try again" });
     } finally {
       setSaving(false);
     }
@@ -83,7 +83,7 @@ export default function SupportingStaffCredentialsPage() {
     <div className="max-w-xl">
       <PageHeader
         title={`Create Login - ${staffName}`}
-        description="This will create a system login account for this staff member. They can sign in as Supporting Staff."
+        description="Create a login for this staff member. They will sign in as Supporting Staff."
       />
 
       <Card>
@@ -100,7 +100,7 @@ export default function SupportingStaffCredentialsPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="name@college.edu.in"
               />
-              <p className="text-xs text-muted-foreground">Pre-filled from college email. Change if needed.</p>
+              <p className="text-xs text-muted-foreground">Filled in from the college email. Change it if needed.</p>
             </div>
             <div className="space-y-2">
               <Label>Password *</Label>
@@ -120,7 +120,7 @@ export default function SupportingStaffCredentialsPage() {
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
-              <p className="text-xs text-muted-foreground">Share this password with the staff member so they can log in.</p>
+              <p className="text-xs text-muted-foreground">Share this password with the staff member so they can sign in.</p>
             </div>
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">

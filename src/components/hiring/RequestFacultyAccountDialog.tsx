@@ -59,12 +59,12 @@ export function RequestFacultyAccountDialog({
         }),
       });
       const data = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to submit request");
+      if (!res.ok) throw new Error(data.error ?? "Unable to submit request");
       toast({ variant: "success", title: "Faculty account requested", description: "The Webmaster has been notified." });
       onOpenChange(false);
       onSubmitted();
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to submit request", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to submit request", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsSubmitting(false);
     }
@@ -99,11 +99,11 @@ export function RequestFacultyAccountDialog({
           </div>
           <div className="space-y-2">
             <Label>Specialization</Label>
-            <Input value={specialization} onChange={(e) => setSpecialization(e.target.value)} placeholder="e.g. Machine Learning" />
+            <Input value={specialization} onChange={(e) => setSpecialization(e.target.value)} placeholder="Machine Learning" />
           </div>
           <div className="space-y-2">
             <Label>Highest Qualification</Label>
-            <Input value={qualification} onChange={(e) => setQualification(e.target.value)} placeholder="e.g. Ph.D in Computer Science" />
+            <Input value={qualification} onChange={(e) => setQualification(e.target.value)} placeholder="Ph.D in Computer Science" />
           </div>
         </div>
         <DialogFooter>

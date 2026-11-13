@@ -40,7 +40,7 @@ export default function SuperAdminVacanciesPage() {
     fetch("/api/admin/general-admin-vacancies")
       .then((r) => r.json() as Promise<{ vacancyRequests: GeneralAdminVacancy[] }>)
       .then((d) => setVacancies(d.vacancyRequests ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load vacancies" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load vacancies" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -71,7 +71,7 @@ export default function SuperAdminVacanciesPage() {
     <div className="space-y-6">
       <PageHeader
         title="General Admin Vacancies"
-        description="Institution-wide General Admin hiring requests submitted by Vice Principals"
+        description="General administration hiring requests submitted by Vice Principals across the institution."
       />
 
       <div className="flex items-center gap-2 text-sm text-muted-foreground bg-amber-50 border border-amber-200 rounded-lg px-4 py-2">

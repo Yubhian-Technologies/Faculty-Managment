@@ -88,7 +88,7 @@ export function InchargeTimetableWorkspace({ basePath }: { basePath: string }) {
       }
     } catch {
       setSections([]);
-      toast({ variant: "destructive", title: "Failed to load sections" });
+      toast({ variant: "destructive", title: "Unable to load sections" });
     } finally {
       setIsLoadingSections(false);
     }
@@ -114,7 +114,7 @@ export function InchargeTimetableWorkspace({ basePath }: { basePath: string }) {
         const seen = new Set<string>();
         setAllSections(lists.flat().filter((sec) => !!sec.id && !seen.has(sec.id) && !!seen.add(sec.id)));
       } catch {
-        toast({ variant: "destructive", title: "Failed to load your Timetable responsibilities" });
+        toast({ variant: "destructive", title: "Unable to load your Timetable responsibilities" });
       } finally {
         setIsLoading(false);
       }
@@ -172,7 +172,7 @@ export function InchargeTimetableWorkspace({ basePath }: { basePath: string }) {
     <div className="space-y-6">
       <PageHeader
         title="Timetable"
-        description="Pick the course & year you are Timetable Incharge for, a semester and a section, then load its timetable"
+        description="Select the course and year you are Timetable Incharge for, a semester and a section, then load its timetable."
       />
 
       {isLoading ? (
@@ -193,7 +193,7 @@ export function InchargeTimetableWorkspace({ basePath }: { basePath: string }) {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Find a section</CardTitle>
-              <CardDescription>Nothing loads until you press Load.</CardDescription>
+              <CardDescription>Nothing is loaded until you choose Load.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

@@ -37,20 +37,20 @@ export default function PrincipalCircularsPage() {
   async function saveSettings() {
     const opts = messageFromOptions;
     const res = await fetch("/api/college/circular-settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messageFromOptions: opts }) });
-    if (!res.ok) toast({ variant: "destructive", title: "Failed to save settings" });
+    if (!res.ok) toast({ variant: "destructive", title: "Unable to save settings" });
     else toast({ variant: "success", title: "Settings saved" });
   }
   async function savePerms() {
     const uids = allowedUids.split(",").map((s) => s.trim()).filter(Boolean);
     const roles = allowedRoles.split(",").map((s) => s.trim()).filter(Boolean);
     const res = await fetch("/api/college/circular-permissions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ allowedUids: uids, allowedRoles: roles }) });
-    if (!res.ok) toast({ variant: "destructive", title: "Failed to save permissions" });
+    if (!res.ok) toast({ variant: "destructive", title: "Unable to save permissions" });
     else toast({ variant: "success", title: "Permissions saved" });
   }
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Circulars" description="Create, publish and manage circulars. Published circulars are notified to the selected audience." />
+      <PageHeader title="Circulars" description="Create, publish and manage circulars. The selected audience is notified when a circular is published." />
 
       <CircularForm onCreated={() => void load()} />
 
@@ -64,7 +64,7 @@ export default function PrincipalCircularsPage() {
               ))}
             </div>
             <div className="flex gap-2">
-              <Input value={newOption} onChange={(e) => setNewOption(e.target.value)} placeholder="Add new sender (e.g. Vice Principal)" />
+              <Input value={newOption} onChange={(e) => setNewOption(e.target.value)} placeholder="Add new sender (for example Vice Principal)" />
               <Button variant="outline" onClick={() => { if (newOption.trim()) { setMessageFromOptions((p) => [...p, newOption.trim()]); setNewOption(""); } }}>Add</Button>
             </div>
             <Button onClick={() => void saveSettings()}>Save Settings</Button>
@@ -74,7 +74,7 @@ export default function PrincipalCircularsPage() {
           <CardHeader><CardTitle className="text-base">RBAC — Who can send circulars</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             <div><Label>Allowed UIDs (comma separated HOD/faculty uids)</Label><Input value={allowedUids} onChange={(e) => setAllowedUids(e.target.value)} placeholder="uid1, uid2" /></div>
-            <div><Label>Allowed Roles (comma separated, e.g. HOD,PANEL_MEMBER)</Label><Input value={allowedRoles} onChange={(e) => setAllowedRoles(e.target.value)} placeholder="HOD" /></div>
+            <div><Label>Allowed Roles (comma separated, for example HOD,PANEL_MEMBER)</Label><Input value={allowedRoles} onChange={(e) => setAllowedRoles(e.target.value)} placeholder="HOD" /></div>
             <p className="text-xs text-muted-foreground">{who === "Principal" ? "Principal/Vice Principal" : "College Admin and the Principal/Vice Principal"} always allowed. Add HOD or specific faculty UIDs to delegate.</p>
             <Button onClick={() => void savePerms()}>Save Permissions</Button>
           </CardContent>

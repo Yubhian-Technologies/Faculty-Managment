@@ -35,7 +35,7 @@ export default function PrincipalStaffModulePage() {
         }
         setStaff(d.user);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load staff account" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load staff account" }))
       .finally(() => setIsLoading(false));
   }, [uid, moduleDef, router]);
 

@@ -13,7 +13,7 @@ export async function parseExcelFile(file: File): Promise<string[][]> {
   formData.append("file", file);
   const res = await fetch("/api/college/parse-excel", { method: "POST", body: formData });
   const json = await res.json() as { rows?: string[][]; error?: string };
-  if (!res.ok) throw new Error(json.error ?? "Failed to parse Excel file");
+  if (!res.ok) throw new Error(json.error ?? "Unable to parse Excel file");
   return json.rows ?? [];
 }
 
@@ -25,7 +25,7 @@ export async function parseExcelFileWithRowNumbers(file: File, endpoint = "/api/
   formData.append("file", file);
   const res = await fetch(endpoint, { method: "POST", body: formData });
   const json = await res.json() as { rows?: string[][]; rowNumbers?: number[]; error?: string };
-  if (!res.ok) throw new Error(json.error ?? "Failed to parse Excel file");
+  if (!res.ok) throw new Error(json.error ?? "Unable to parse Excel file");
   const rows = json.rows ?? [];
   return { rows, rowNumbers: json.rowNumbers ?? rows.map((_, i) => i + 1) };
 }
@@ -37,7 +37,7 @@ export async function parseExcelWorkbook(file: File): Promise<{ name: string; ro
   formData.append("allSheets", "1");
   const res = await fetch("/api/college/parse-excel", { method: "POST", body: formData });
   const json = await res.json() as { sheets?: { name: string; rows: string[][] }[]; error?: string };
-  if (!res.ok) throw new Error(json.error ?? "Failed to parse Excel file");
+  if (!res.ok) throw new Error(json.error ?? "Unable to parse Excel file");
   return json.sheets ?? [];
 }
 

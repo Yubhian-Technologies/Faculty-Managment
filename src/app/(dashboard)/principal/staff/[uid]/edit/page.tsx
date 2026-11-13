@@ -80,7 +80,7 @@ export default function EditStaffAccountPage() {
         setDesignation(user.designation ?? "");
         setPhotoUrl(user.profilePhotoUrl || undefined);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load staff account" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load staff account" }))
       .finally(() => setLoaded(true));
   }, [uid, router]);
 
@@ -108,13 +108,13 @@ export default function EditStaffAccountPage() {
       });
       if (!res.ok) {
         const json = await res.json() as { error?: string };
-        toast({ variant: "destructive", title: json.error ?? "Failed to update staff account" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to update staff account" });
         return;
       }
       toast({ variant: "success", title: "Staff account updated" });
       router.push(`/principal/staff/${uid}`);
     } catch {
-      toast({ variant: "destructive", title: "Network error, please try again" });
+      toast({ variant: "destructive", title: "Network error try again" });
     } finally {
       setSaving(false);
     }
@@ -138,7 +138,7 @@ export default function EditStaffAccountPage() {
         <ArrowLeft className="h-4 w-4 mr-1" />
         Back
       </Button>
-      <PageHeader title={`Edit ${ROLE_LABELS[role]}`} description="Update this staff member's account details" />
+      <PageHeader title={`Edit ${ROLE_LABELS[role]}`} description="Update this staff member's account details." />
 
       <Card>
         <CardHeader><CardTitle className="text-base">Account Details</CardTitle></CardHeader>
@@ -197,7 +197,7 @@ export default function EditStaffAccountPage() {
               {role === "COLLEGE_STAFF" && (
                 <div className="space-y-2">
                   <Label>Designation</Label>
-                  <Input value={designation} onChange={(e) => setDesignation(e.target.value)} placeholder="e.g. Academics - R&D, IQAC Coordinator" />
+                  <Input value={designation} onChange={(e) => setDesignation(e.target.value)} placeholder="Academics, R&D, IQAC Coordinator" />
                 </div>
               )}
             </div>

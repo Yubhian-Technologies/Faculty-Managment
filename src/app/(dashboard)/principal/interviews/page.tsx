@@ -15,7 +15,7 @@ export default function PrincipalInterviewsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Interviews & Decisions"
-        description="Review HOD interview panel proposals and make final hiring decisions"
+        description="Review interview panel proposals from HODs and make final hiring decisions."
       />
 
       <div className="flex gap-2">

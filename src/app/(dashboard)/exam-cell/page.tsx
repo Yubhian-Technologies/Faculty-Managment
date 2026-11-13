@@ -65,7 +65,7 @@ export default function ExamCellDashboard() {
     <div className="space-y-6">
       <PageHeader
         title="Exam Cell"
-        description="Configure Internal and External examination marks for every course, year and branch — applied automatically to every subject taught under it."
+        description="Configure the Internal and External examination marks for each course, year and branch. They apply to every subject taught under it."
         actions={
           !isHidden("/exam-cell/mid-configuration") && (
             <Button asChild>

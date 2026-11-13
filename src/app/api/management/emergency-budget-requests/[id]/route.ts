@@ -25,10 +25,10 @@ export async function PATCH(
     };
 
     if (!body.collegeId) {
-      return NextResponse.json({ error: "collegeId required" }, { status: 400 });
+      return NextResponse.json({ error: "Select a college." }, { status: 400 });
     }
     if (!body.action || !["APPROVE", "REJECT", "RETURN"].includes(body.action)) {
-      return NextResponse.json({ error: "action must be APPROVE, REJECT, or RETURN" }, { status: 400 });
+      return NextResponse.json({ error: "Choose Approve, Reject or Return." }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -42,18 +42,18 @@ export async function PATCH(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     if (err instanceof Error && err.message === "NOT_FOUND") {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
     if (err instanceof Error && err.message === "REMARKS_REQUIRED") {
-      return NextResponse.json({ error: "remarks required" }, { status: 400 });
+      return NextResponse.json({ error: "Enter remarks." }, { status: 400 });
     }
     if (err instanceof Error && (err.message === "NOT_PERMITTED" || err.message === "STALE_STATUS")) {
-      return NextResponse.json({ error: "Action not permitted in current state." }, { status: 409 });
+      return NextResponse.json({ error: "This action is not available at the current stage." }, { status: 409 });
     }
     console.error("[management/emergency-budget-requests/[id] PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

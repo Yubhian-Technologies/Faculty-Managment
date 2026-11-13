@@ -27,7 +27,7 @@ export function isPendingStatus(status: unknown): boolean {
 }
 
 export const DUPLICATE_SUBMISSION_MESSAGE =
-  "You already have a leave request pending approval. Please wait for it to be decided before applying again.";
+  "You already have a leave request pending approval. Wait for it to be decided before applying again.";
 
 export class DuplicateLeaveSubmissionError extends Error {
   constructor() {

@@ -72,13 +72,13 @@ export default function NewStaffPage() {
         return;
       }
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to create", description: json.error });
+        toast({ variant: "destructive", title: "Unable to create", description: json.error });
         return;
       }
       toast({ variant: "success", title: `${ROLE_LABELS[role]} account created` });
       router.push("/principal/staff");
     } catch {
-      toast({ variant: "destructive", title: "Network error, please try again" });
+      toast({ variant: "destructive", title: "Network error try again" });
     } finally {
       setSaving(false);
     }
@@ -86,7 +86,7 @@ export default function NewStaffPage() {
 
   return (
     <div className="max-w-xl">
-      <PageHeader title="Add Staff" description="Create a staff login for your college" />
+      <PageHeader title="Add Staff" description="Create a staff login for your college." />
       <Card>
         <CardHeader><CardTitle className="text-base">Staff Details</CardTitle></CardHeader>
         <CardContent>

@@ -30,6 +30,6 @@ export async function seatBlockReason(
     return null;
   } catch (err) {
     console.error("[seatEligibility] faculty status lookup failed", err);
-    return { message: "Couldn't check whether this person is still an active faculty member - please try again", status: 503 };
+    return { message: "Unable to check whether this person is still an active faculty member - try again", status: 503 };
   }
 }

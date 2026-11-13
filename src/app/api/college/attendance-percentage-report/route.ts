@@ -76,7 +76,7 @@ export async function GET(request: Request) {
     // in READ_ROLES. If the role list changes, an unknown role would otherwise
     // fall through to the section-scoped scan below - reject closed instead.
     if (!READ_ROLES.includes(session.role)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
 
     const { searchParams } = new URL(request.url);
@@ -119,7 +119,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "from and to must be valid dates (YYYY-MM-DD)" }, { status: 400 });
     }
     if (fromParam && toParam && fromParam > toParam) {
-      return NextResponse.json({ error: "From date must be before the To date" }, { status: 400 });
+      return NextResponse.json({ error: "The From date must be before the To date." }, { status: 400 });
     }
 
     const startedAt = Date.now();
@@ -140,7 +140,7 @@ export async function GET(request: Request) {
     let sections: Section[];
     if (sectionId) {
       const snap = await collegeRef.collection("sections").doc(sectionId).get();
-      if (!snap.exists) return NextResponse.json({ error: "Section not found" }, { status: 404 });
+      if (!snap.exists) return NextResponse.json({ error: "Section not found. It may have been deleted." }, { status: 404 });
       sections = [{ ...(snap.data() as Section), id: snap.id }];
     } else {
       // Include sub-departments (e.g. "Basic Science" covering its child
@@ -342,9 +342,9 @@ export async function GET(request: Request) {
     });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/attendance-percentage-report GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
